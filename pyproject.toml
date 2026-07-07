@@ -5,7 +5,12 @@ description = "Byte-exact decompiler for Borland Turbo Basic 1.0/1.1 MS-DOS exec
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
-dependencies = [
+dependencies = []
+
+[project.optional-dependencies]
+# Disassembly-based debugging tools (tbx.tools.cfgview and friends); the
+# core decompile pipeline needs no third-party packages.
+debug = [
     "iced-x86>=1.21.0",
 ]
 
@@ -28,6 +33,8 @@ ignore = ["E701", "E702", "E741"]
 [tool.ruff.lint.per-file-ignores]
 # Standalone debugging scripts that extend sys.path before importing the package.
 "tbx/tools/*.py" = ["E402"]
+# importorskip must run before importing tbx.tools.cfg (needs the `debug` extra).
+"tests/tbx/test_cfg.py" = ["E402"]
 # Package facades re-export their submodules' public surface.
 "tbx/ir/__init__.py" = ["F401"]
 "tbx/decode0/__init__.py" = ["F401"]
@@ -38,6 +45,7 @@ possibly-unresolved-reference = "error"
 
 [dependency-groups]
 dev = [
+    "iced-x86>=1.21.0",
     "pytest>=9.0.0",
     "ruff>=0.15.0",
     "ty>=0.0.56",

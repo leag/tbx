@@ -9,7 +9,13 @@ Provides:
 
 import re
 
-from iced_x86 import Decoder, Formatter, FormatterSyntax
+try:
+    from iced_x86 import Decoder, Formatter, FormatterSyntax
+except ImportError as e:
+    raise ImportError(
+        "the disassembly debugging tools need the 'debug' extra: "
+        "pip install 'tbx[debug]'"
+    ) from e
 
 # Conditional-jump mnemonic -> relational operator on the compare that set the
 # flags. Covers both unsigned (FP compare results reach the flags via

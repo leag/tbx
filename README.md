@@ -21,11 +21,18 @@ source = emit0.emit(decode0.decode_user_code(open("PROGRAM.EXE", "rb").read()))
 
 ## Installation
 
-Requires Python 3.11+. The only runtime dependency is
-[iced-x86](https://pypi.org/project/iced-x86/).
+Requires Python 3.11+. The core decompiler has no runtime dependencies.
 
 ```
 pip install .
+```
+
+The disassembly-based debugging tools (see below) need
+[iced-x86](https://pypi.org/project/iced-x86/), available via the `debug`
+extra:
+
+```
+pip install '.[debug]'
 ```
 
 or, for development (with [uv](https://docs.astral.sh/uv/)):
@@ -96,6 +103,25 @@ against committed golden files (`tests/fixtures/ops/`,
 the real Turbo Basic 1.0/1.1 compilers when it was added; validating new
 recoveries end-to-end requires access to the original DOS toolchain (e.g.
 under an emulator), which this repository does not include or automate.
+
+## Debugging tools
+
+The decoder fails loudly by design: an unrecognized compiler template raises
+`ValueError` with the offending byte and file offset. These tools exist to
+triage those failures and to maintain the golden fixtures — none of them are
+part of the decompile pipeline:
+
+- `tbx PROGRAM.EXE --ops` — dump the canonical op stream instead of source,
+  to see how far the statement scan got and what it recognized.
+- `python -m tbx.tools.cfgview PROGRAM.EXE [--out cfg.dot]` — disassemble
+  the user-code region as raw x86 (`tbx/tools/insns.py`, via iced-x86 from
+  the `debug` extra) and write a Graphviz CFG. This is the tool for
+  inspecting the bytes around an `unhandled byte ... at ...` error to work
+  out which compiler template the scanner is missing.
+- `python tbx/tools/dump_ops.py` and `python tbx/tools/dump_user_code.py` —
+  regenerate the golden fixtures under `tests/fixtures/ops/` and
+  `tests/fixtures/usercode/` from the corpus EXEs after an intended decoder
+  change.
 
 ## License
 

@@ -1,2 +1,0 @@
-10 SYSTEM
-20 END

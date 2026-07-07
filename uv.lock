@@ -106,22 +106,27 @@ wheels = [
 name = "tbx"
 version = "0.1.0"
 source = { editable = "." }
-dependencies = [
+
+[package.optional-dependencies]
+debug = [
     { name = "iced-x86" },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "iced-x86" },
     { name = "pytest" },
     { name = "ruff" },
     { name = "ty" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "iced-x86", specifier = ">=1.21.0" }]
+requires-dist = [{ name = "iced-x86", marker = "extra == 'debug'", specifier = ">=1.21.0" }]
+provides-extras = ["debug"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "iced-x86", specifier = ">=1.21.0" },
     { name = "pytest", specifier = ">=9.0.0" },
     { name = "ruff", specifier = ">=0.15.0" },
     { name = "ty", specifier = ">=0.0.56" },

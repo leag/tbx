@@ -2,7 +2,8 @@
 
 The core is representation-agnostic: `build_cfg` consumes a list of
 Insn(addr, flow, target). The `insns_from_decode` adapter derives those from
-(addr, kind, text) decode lines using tbx.insns for mnemonic classification
+(addr, kind, text) decode lines using tbx.tools.insns for mnemonic
+classification
 and target resolution.
 """
 
@@ -10,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from tbx import insns
+from tbx.tools import insns
 
 _UNCOND = {"jmp", "jmps"}
 _RET = {"ret", "retf"}

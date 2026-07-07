@@ -1,4 +1,8 @@
-from tbx import cfg
+import pytest
+
+pytest.importorskip("iced_x86", reason="debug extra not installed")
+
+from tbx.tools import cfg
 
 
 def test_insns_from_decode_classifies_flow():
