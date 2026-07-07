@@ -1,0 +1,9 @@
+# v10_t1_wait dialect=1.0 start=070B0
+070B3:movax:1
+070B6:movbxax
+070B8:movax:888
+070BB:movdxax
+070BD:wait_poll
+070C2:end
+070C5:epilogue
+# commits

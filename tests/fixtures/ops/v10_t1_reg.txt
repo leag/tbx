@@ -1,0 +1,11 @@
+# v10_t1_reg dialect=1.0 start=070B0
+070B3:movax:1
+070B6:fild:308
+070BB:reg_set
+070C0:movax:1
+070C3:fn_ax_ax:REG
+070C6:movm_ax:288
+070CA:end
+070CD:epilogue
+# commits
+070BE

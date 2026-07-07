@@ -1,0 +1,16 @@
+# v10_t1_onplay dialect=1.0 start=074E0
+074E3:trap_hook
+074E4:movax:4
+074E7:on_trap:124:29950
+074EE:trap_hook
+074EF:trap_ctl:150
+074F2:trap_hook
+074F3:trap_ctl:146
+074F6:trap_hook
+074F7:trap_ctl:148
+074FA:trap_hook
+074FB:end
+074FE:trap_hook
+074FF:retf
+07500:epilogue
+# commits

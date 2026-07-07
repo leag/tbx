@@ -1,0 +1,23 @@
+# t1_file2 dialect=1.1 start=08D50
+08D53:line_input:304
+08D59:movsi:296
+08D5C:strassign
+08D5E:movm_imm:96:2
+08D64:movsi:296
+08D67:rt:156
+08D69:movsi:308
+08D6C:rt:156
+08D6E:movax:128
+08D71:open
+08D74:movax:2
+08D77:movm_ax:96
+08D7B:read_file_num
+08D7E:fstp:292
+08D83:read_file_num
+08D86:fstp:288
+08D8D:movax:2
+08D90:close
+08D93:end
+08D96:epilogue
+# commits
+08D8B

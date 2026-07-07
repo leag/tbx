@@ -1,0 +1,12 @@
+# t1_viewcol dialect=1.1 start=088D0
+088D3:movax:10
+088D6:movm_imm:148:10
+088DC:movm_ax:136
+088E0:movax:100
+088E3:movm_imm:172:100
+088E9:movm_ax:160
+088ED:movm_imm:184:1
+088F3:view:6
+088F7:end
+088FA:epilogue
+# commits

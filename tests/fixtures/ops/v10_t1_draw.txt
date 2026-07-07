@@ -1,0 +1,7 @@
+# v10_t1_draw dialect=1.0 start=08C00
+08C03:movsi:292
+08C06:rt:156
+08C08:draw
+08C0B:end
+08C0E:epilogue
+# commits

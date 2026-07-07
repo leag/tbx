@@ -1,0 +1,9 @@
+# t1_delay dialect=1.1 start=08700
+08703:fld1
+08706:delay_init
+08709:delay_poll
+0870E:jcc:117:34569
+08710:end
+08713:epilogue
+# commits
+0870C

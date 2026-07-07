@@ -1,0 +1,8 @@
+# t1_sound dialect=1.1 start=08790
+08793:movax:440
+08796:fild:292
+0879B:sound
+087A0:end
+087A3:epilogue
+# commits
+0879E

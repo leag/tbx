@@ -1,0 +1,3 @@
+10 DATA "X","YZ"
+20 READ A$, B$
+30 END

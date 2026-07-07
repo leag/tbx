@@ -1,0 +1,19 @@
+# zz_x_rrxor dialect=1.1 start=08700
+08703:movm_imm:296:14
+08709:movm_imm:294:6
+0870F:movm_imm:292:9
+08715:movm_imm:290:12
+0871B:movax_m:290
+0871F:andax_m:292
+08723:movbxax
+08725:movax_m:294
+08729:andax_m:296
+0872D:xoraxbx
+0872F:movm_ax:288
+08733:fild:288
+08738:rt:187
+0873A:rt:184
+0873E:end
+08741:epilogue
+# commits
+0873C

@@ -1,0 +1,9 @@
+# t1_pmap dialect=1.1 start=087A0
+087A3:fld64:310
+087A8:xorax
+087AA:pmap
+087AD:fstp:288
+087B4:end
+087B7:epilogue
+# commits
+087B2

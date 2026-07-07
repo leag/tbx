@@ -1,0 +1,16 @@
+# v10_t1_fn_len dialect=1.0 start=070B0
+070B3:movsi:308
+070B6:rt:156
+070B8:movsi:288
+070BB:strassign
+070BD:movsi:288
+070C0:rt:156
+070C2:str2num:LEN
+070C5:movmem_ax:44
+070C8:fild:44
+070CD:rt:187
+070CF:rt:184
+070D3:end
+070D6:epilogue
+# commits
+070D1

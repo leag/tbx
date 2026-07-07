@@ -1,0 +1,15 @@
+# t1_onpen dialect=1.1 start=08840
+08843:trap_hook
+08844:on_trap:122:34907
+0884B:trap_hook
+0884C:trap_ctl:144
+0884F:trap_hook
+08850:trap_ctl:140
+08853:trap_hook
+08854:trap_ctl:142
+08857:trap_hook
+08858:end
+0885B:trap_hook
+0885C:retf
+0885D:epilogue
+# commits

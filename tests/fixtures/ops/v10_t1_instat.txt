@@ -1,0 +1,6 @@
+# v10_t1_instat dialect=1.0 start=07100
+07103:fn_ax0:INSTAT
+07106:movm_ax:288
+0710A:end
+0710D:epilogue
+# commits

@@ -1,0 +1,16 @@
+# zz_op_rel_eq dialect=1.1 start=08700
+08703:movm_imm:292:5
+08709:movm_imm:290:3
+0870F:movax_m:290
+08713:cmpax_m:292
+08717:movax:65535
+0871A:jcc:116:34589
+0871C:incax
+0871D:movm_ax:288
+08721:fild:288
+08726:rt:187
+08728:rt:184
+0872C:end
+0872F:epilogue
+# commits
+0872A

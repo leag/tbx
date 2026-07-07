@@ -1,0 +1,3 @@
+10 DATA 12,3
+20 READ A, B
+30 END

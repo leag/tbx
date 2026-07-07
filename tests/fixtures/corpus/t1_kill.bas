@@ -1,0 +1,2 @@
+10 KILL "X.DAT"
+20 END

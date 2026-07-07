@@ -1,0 +1,29 @@
+# zz_x_ldiv dialect=1.1 start=08700
+08703:fild32:310
+08708:fistp32:296
+0870F:fild:308
+08714:fistp32:292
+0871B:fild32:292
+08720:fistp:44
+08725:fwait
+08727:movaxmem:44
+0872A:fild32:296
+0872F:fistp:44
+08734:movbxax
+08736:fwait
+08738:movaxmem:44
+0873B:cwd
+0873C:idivbx
+0873E:movmem_ax:44
+08741:fild:44
+08746:fistp32:288
+0874D:fild32:288
+08752:rt:187
+08754:rt:184
+08758:end
+0875B:epilogue
+# commits
+0870D
+08719
+0874B
+08756

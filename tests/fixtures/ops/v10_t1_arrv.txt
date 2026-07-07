@@ -1,0 +1,30 @@
+# v10_t1_arrv dialect=1.0 start=070B0
+070B3:fild:360
+070B8:fstp:346
+070BF:fild:358
+070C4:fld:346
+070C9:fistp:44
+070CE:fwait
+070D0:movaxmem:44
+070D3:movsiax
+070D5:shlsi
+070D7:shlsi
+070D9:addsi:368
+070DD:fstp_si
+070E2:fld:372
+070E7:fld:346
+070EC:fistp:44
+070F1:fwait
+070F3:movaxmem:44
+070F6:movsiax
+070F8:shlsi
+070FA:shlsi
+070FC:addsi:368
+07100:fold_si:+
+07103:fstp:342
+0710A:end
+0710D:epilogue
+# commits
+070BD
+070E0
+07108

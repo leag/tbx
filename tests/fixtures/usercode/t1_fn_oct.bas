@@ -1,0 +1,2 @@
+10 PRINT OCT$(8)
+20 END

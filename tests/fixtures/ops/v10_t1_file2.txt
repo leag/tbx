@@ -1,0 +1,23 @@
+# v10_t1_file2 dialect=1.0 start=076F0
+076F3:line_input:304
+076F9:movsi:296
+076FC:strassign
+076FE:movm_imm:96:2
+07704:movsi:296
+07707:rt:156
+07709:movsi:308
+0770C:rt:156
+0770E:movax:128
+07711:open
+07714:movax:2
+07717:movm_ax:96
+0771B:read_file_num
+0771E:fstp:292
+07723:read_file_num
+07726:fstp:288
+0772D:movax:2
+07730:close
+07733:end
+07736:epilogue
+# commits
+0772B

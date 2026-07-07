@@ -1,0 +1,10 @@
+10 INPUT N
+20 PRINT "A"; N; "B"
+30 PRINT "X";
+40 PRINT USING "##.##"; N
+50 PRINT USING "#.# #.#"; N; N
+60 OPEN "O",#1,"R.TXT"
+70 PRINT #1, N
+80 PRINT #1, USING "##.##"; N; N
+90 CLOSE #1
+100 END

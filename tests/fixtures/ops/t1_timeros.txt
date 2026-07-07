@@ -1,0 +1,15 @@
+# t1_timeros dialect=1.1 start=08840
+08843:trap_hook
+08844:fild:292
+08849:on_trap:128:34910
+08852:trap_hook
+08853:trap_ctl:226
+08856:trap_hook
+08857:trap_ctl:228
+0885A:trap_hook
+0885B:end
+0885E:trap_hook
+0885F:retf
+08860:epilogue
+# commits
+08850

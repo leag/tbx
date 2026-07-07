@@ -1,0 +1,2 @@
+10 DEF FNFN1(A, B) = A + B
+20 PRINT FNFN1(3,4)

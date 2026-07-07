@@ -1,0 +1,25 @@
+# v10_t1_field dialect=1.0 start=07610
+07613:movm_imm:96:1
+07619:movsi:308
+0761C:rt:156
+0761E:movsi:312
+07621:rt:156
+07623:movax:128
+07626:open
+07629:movm_imm:96:1
+0762F:field
+07632:movax:10
+07635:movsi:292
+07638:movdx:152
+0763B:movesdx
+0763D:field_as
+07640:movax:20
+07643:movsi:288
+07646:movdx:152
+07649:movesdx
+0764B:field_as
+0764E:movax:1
+07651:close
+07654:end
+07657:epilogue
+# commits

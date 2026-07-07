@@ -1,0 +1,11 @@
+# v10_t1_write dialect=1.0 start=07100
+07103:fld1
+07106:write_item
+07109:write_sep
+0710C:fild:292
+07111:write_item
+07114:rt:184
+07118:end
+0711B:epilogue
+# commits
+07116

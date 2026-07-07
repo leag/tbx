@@ -1,0 +1,11 @@
+# v10_t1_swap dialect=1.0 start=070B0
+070B3:fld1
+070B6:fstp:292
+070BD:fild:308
+070C2:fstp:288
+070C9:swap:292:288
+070E1:end
+070E4:epilogue
+# commits
+070BB
+070C7

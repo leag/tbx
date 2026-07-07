@@ -1,0 +1,14 @@
+# v10_t1_trongoto dialect=1.0 start=07140
+07143:jmp:29012
+07146:trace_hook:30
+0714A:fld1
+0714D:fstp:292
+07154:trace_hook:40
+07158:fild:308
+0715D:fstp:288
+07164:trace_hook:50
+07168:end
+0716B:epilogue
+# commits
+07152
+07162

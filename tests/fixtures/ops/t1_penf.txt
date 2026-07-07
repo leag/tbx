@@ -1,0 +1,7 @@
+# t1_penf dialect=1.1 start=08700
+08703:xorax
+08705:fn_ax_ax:PEN
+08708:movm_ax:288
+0870C:end
+0870F:epilogue
+# commits

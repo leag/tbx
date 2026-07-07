@@ -1,0 +1,2 @@
+10 INPUT "X"; A
+20 END

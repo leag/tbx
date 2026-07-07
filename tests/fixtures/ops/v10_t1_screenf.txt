@@ -1,0 +1,9 @@
+# v10_t1_screenf dialect=1.0 start=07130
+07133:movax:1
+07136:movbxax
+07138:movax:2
+0713B:fn_screen
+0713E:movm_ax:288
+07142:end
+07145:epilogue
+# commits

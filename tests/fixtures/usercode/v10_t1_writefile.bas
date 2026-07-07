@@ -1,0 +1,4 @@
+10 OPEN "O",#1,"X.DAT"
+20 WRITE #1, 1, "A"
+30 CLOSE #1
+40 END

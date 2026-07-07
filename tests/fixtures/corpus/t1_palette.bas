@@ -1,0 +1,2 @@
+10 PALETTE 1, 2
+20 END

@@ -1,0 +1,2 @@
+10 A% = INSTAT
+20 END

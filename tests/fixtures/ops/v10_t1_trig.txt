@@ -1,0 +1,20 @@
+# v10_t1_trig dialect=1.0 start=07AB0
+07AB3:fld64:308
+07AB8:fn:ATN
+07ABB:fstp:300
+07AC2:fld64:308
+07AC7:fn:COS
+07ACA:fstp:296
+07AD1:fld64:308
+07AD6:fn:SIN
+07AD9:fstp:292
+07AE0:fld64:308
+07AE5:fn:TAN
+07AE8:fstp:288
+07AEF:end
+07AF2:epilogue
+# commits
+07AC0
+07ACF
+07ADE
+07AED

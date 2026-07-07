@@ -1,0 +1,16 @@
+# t1_fn_len dialect=1.1 start=08700
+08703:movsi:308
+08706:rt:156
+08708:movsi:288
+0870B:strassign
+0870D:movsi:288
+08710:rt:156
+08712:str2num:LEN
+08715:movmem_ax:44
+08718:fild:44
+0871D:rt:187
+0871F:rt:184
+08723:end
+08726:epilogue
+# commits
+08721

@@ -1,0 +1,9 @@
+# v10_t1_fresx dialect=1.0 start=070F0
+070F3:fld1
+070F6:fre_str
+070F9:popop:+
+070FC:fstp:288
+07103:end
+07106:epilogue
+# commits
+07101

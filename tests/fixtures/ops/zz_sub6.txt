@@ -1,0 +1,19 @@
+# zz_sub6 dialect=1.1 start=08700
+08703:jmp:34586
+08706:proc_enter
+08709:arg_ref:6
+0870C:far_fld_si
+08710:rt:187
+08712:rt:184
+08716:proc_ret:4
+0871A:fild:356
+0871F:fstp:372
+08726:movsi:372
+08729:movdx:151
+0872C:movesdx
+0872E:arg_push_arr
+08730:far_call:34566
+08735:epilogue
+# commits
+08714
+08724

@@ -1,0 +1,20 @@
+# zz_vm_larr_loop dialect=1.1 start=08700
+08703:movm_imm:346:0
+08709:jmp:34598
+0870C:fild32:356
+08711:movsim:346
+08715:shlsi
+08717:shlsi
+08719:addsi:368
+0871D:fstp_si32
+08722:inc_m:346
+08726:cmp_mi8:346:3
+0872B:jcc:126:34572
+0872D:fild32:368
+08732:rt:187
+08734:rt:184
+08738:end
+0873B:epilogue
+# commits
+08720
+08736

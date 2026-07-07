@@ -1,0 +1,9 @@
+# v10_t1_pmap dialect=1.0 start=07150
+07153:fld64:310
+07158:xorax
+0715A:pmap
+0715D:fstp:288
+07164:end
+07167:epilogue
+# commits
+07162

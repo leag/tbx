@@ -1,0 +1,8 @@
+10 OPTION BASE 1
+20 INPUT N
+30 DIM A(N,3)
+40 DIM K(N,2)
+50 I = 2
+60 A(K(I,1),K(I,2)) = 7
+70 X = A(K(I,1),1)
+80 END

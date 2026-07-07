@@ -1,0 +1,21 @@
+# v10_t1_fp dialect=1.0 start=070B0
+070B3:fld:316
+070B8:fstp:296
+070BF:fld:312
+070C4:fstp:292
+070CB:fld:308
+070D0:fstp:288
+070D7:fld:296
+070DC:rt:187
+070DE:fld:292
+070E3:rt:187
+070E5:fld:288
+070EA:rt:187
+070EC:rt:184
+070F0:end
+070F3:epilogue
+# commits
+070BD
+070C9
+070D5
+070EE

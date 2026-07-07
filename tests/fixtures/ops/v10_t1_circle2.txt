@@ -1,0 +1,10 @@
+# v10_t1_circle2 dialect=1.0 start=077C0
+077C3:fild:296
+077C8:fild:296
+077CD:fild:294
+077D2:movm_imm:136:2
+077D8:circle:8
+077DE:end
+077E1:epilogue
+# commits
+077DC

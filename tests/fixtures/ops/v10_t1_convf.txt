@@ -1,0 +1,14 @@
+# v10_t1_convf dialect=1.0 start=070B0
+070B3:fld64:324
+070B8:fstp64:296
+070BF:fld64:316
+070C4:fstp:292
+070CB:fld64:308
+070D0:fn:FIX
+070D3:fstp:288
+070DA:end
+070DD:epilogue
+# commits
+070BD
+070C9
+070D8

@@ -1,0 +1,10 @@
+# t1_eradr dialect=1.1 start=08700
+08703:fild32:110
+08708:fistp:44
+0870D:fwait
+0870F:movaxmem:44
+08712:movm_ax:288
+08718:end
+0871B:epilogue
+# commits
+08716

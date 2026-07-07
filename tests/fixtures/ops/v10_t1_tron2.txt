@@ -1,0 +1,10 @@
+# v10_t1_tron2 dialect=1.0 start=07140
+07143:trace_hook:20
+07147:movm_imm:292:1
+0714D:trace_hook:30
+07151:movm_imm:290:2
+07157:trace_hook:40
+0715B:movm_imm:288:3
+07161:end
+07164:epilogue
+# commits

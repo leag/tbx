@@ -1,0 +1,8 @@
+10 TRON
+20 A = 1
+30 TROFF
+37 B = 2
+44 C = 4
+51 TRON
+60 D = 3
+70 END

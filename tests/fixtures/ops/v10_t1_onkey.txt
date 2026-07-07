@@ -1,0 +1,13 @@
+# v10_t1_onkey dialect=1.0 start=071F0
+071F3:trap_hook
+071F4:movax:1
+071F7:on_trap:120:29193
+071FE:trap_hook
+071FF:movax:1
+07202:trap_ctl:94
+07205:trap_hook
+07206:end
+07209:trap_hook
+0720A:retf
+0720B:epilogue
+# commits

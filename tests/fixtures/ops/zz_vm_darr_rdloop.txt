@@ -1,0 +1,25 @@
+# zz_vm_darr_rdloop dialect=1.1 start=08700
+08703:fld64:376
+08708:fstp64:348
+0870F:movm_imm:346:0
+08715:jmp:34617
+08718:movsim:346
+0871C:shlsi
+0871E:shlsi
+08720:shlsi
+08722:addsi:384
+08726:fld_si64
+08729:fold64:+:348
+0872E:fstp64:348
+08735:inc_m:346
+08739:cmp_mi8:346:3
+0873E:jcc:126:34584
+08740:fld64:348
+08745:rt:187
+08747:rt:184
+0874B:end
+0874E:epilogue
+# commits
+0870D
+08733
+08749

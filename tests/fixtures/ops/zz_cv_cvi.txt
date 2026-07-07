@@ -1,0 +1,12 @@
+# zz_cv_cvi dialect=1.1 start=087A0
+087A3:movsi:292
+087A6:rt:156
+087A8:str2num:CVI
+087AA:movmem_ax:44
+087AD:fild:44
+087B2:rt:187
+087B4:rt:184
+087B8:end
+087BB:epilogue
+# commits
+087B6

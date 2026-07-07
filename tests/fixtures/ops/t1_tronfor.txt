@@ -1,0 +1,37 @@
+# t1_tronfor dialect=1.1 start=08790
+08793:trace_hook:20
+08797:fild:308
+0879C:fstp:296
+087A1:fld1
+087A4:fstp:292
+087A9:fld1
+087AC:fstp:300
+087B3:jmp:34777
+087B6:trace_hook:30
+087BA:fld:300
+087BF:fstp:288
+087C6:trace_hook:40
+087CA:fld:292
+087CF:fold:+:300
+087D4:fstp:300
+087D9:testw:294:32768
+087E1:jcc:116:34790
+087E3:jmp:34809
+087E6:fld:296
+087EB:fcomp:300
+087F0:fstsw
+087F4:jcc:115:34742
+087F6:jmp:34825
+087F9:fld:296
+087FE:fcomp:300
+08803:fstsw
+08807:jcc:118:34742
+08809:trace_hook:50
+0880D:end
+08810:epilogue
+# commits
+087B1
+087C4
+087DF
+087F2
+08805

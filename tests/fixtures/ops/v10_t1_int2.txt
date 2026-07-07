@@ -1,0 +1,31 @@
+# v10_t1_int2 dialect=1.0 start=070B0
+070B3:movm_imm:304:5
+070B9:movm_imm:302:2
+070BF:movax_m:302
+070C3:addax_m:304
+070C7:movm_ax:300
+070CB:movax_m:302
+070CF:negax
+070D1:addax_m:304
+070D5:movm_ax:298
+070D9:movax_m:302
+070DD:imul_m:304
+070E1:movm_ax:296
+070E5:movax:3
+070E8:addax_m:304
+070EC:movm_ax:294
+070F0:movax_m:302
+070F4:addax_m:304
+070F8:movmem_ax:44
+070FB:fild:44
+07100:fstp:290
+07107:fld:290
+0710C:fistp:44
+07111:fwait
+07113:movaxmem:44
+07116:movm_ax:288
+0711C:end
+0711F:epilogue
+# commits
+07105
+0711A

@@ -1,0 +1,6 @@
+10 OPTION BASE 1
+20 INPUT A%
+30 DIM V0(A%,3)
+40 V0(1,1) = A% + 2
+50 B = V0(1,1) * A%
+60 END

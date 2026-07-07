@@ -1,0 +1,7 @@
+10 OPTION BASE 1
+20 INPUT N
+30 DIM A(N,3)
+40 I = 2
+50 J = 1
+60 A(I,J) = A(I,J) + 4
+70 END

@@ -1,0 +1,4 @@
+10 DIM A(10)
+20 B% = UBOUND(A(1))
+30 C% = LBOUND(A(1))
+40 END

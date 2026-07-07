@@ -1,0 +1,7 @@
+# t1_one3 dialect=1.1 start=08760
+08763:data_read_num
+08766:fstp:288
+0876D:end
+08770:epilogue
+# commits
+0876B

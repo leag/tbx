@@ -1,0 +1,14 @@
+# t1_circarc dialect=1.1 start=097B0
+097B3:fild:300
+097B8:fild:300
+097BD:fild:298
+097C2:movm_imm:136:2
+097C8:fld1
+097CB:fstp:148
+097D0:fild:292
+097D5:fstp:160
+097DA:circle:14
+097E0:end
+097E3:epilogue
+# commits
+097DE

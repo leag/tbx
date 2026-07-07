@@ -1,0 +1,3 @@
+10 A$ = MKD$(2.5#)
+20 PRINT LEN(A$)
+30 END

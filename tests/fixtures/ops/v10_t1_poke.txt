@@ -1,0 +1,8 @@
+# v10_t1_poke dialect=1.0 start=070B0
+070B3:fild:294
+070B8:movax:1
+070BB:poke
+070C0:end
+070C3:epilogue
+# commits
+070BE

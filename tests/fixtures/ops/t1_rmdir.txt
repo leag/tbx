@@ -1,0 +1,7 @@
+# t1_rmdir dialect=1.1 start=08750
+08753:movsi:292
+08756:rt:156
+08758:rmdir
+0875B:end
+0875E:epilogue
+# commits

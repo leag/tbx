@@ -1,0 +1,10 @@
+# t1_fn_string dialect=1.1 start=08780
+08783:movax:3
+08786:movbxax
+08788:movax:42
+0878B:strfn:STRING$
+0878E:rt:190
+08790:rt:184
+08792:end
+08795:epilogue
+# commits

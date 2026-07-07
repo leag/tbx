@@ -1,0 +1,2 @@
+10 X$ = ENVIRON$("PATH")
+20 END

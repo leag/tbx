@@ -1,0 +1,2 @@
+10 A% = ERR: B% = ERL
+20 END

@@ -1,0 +1,21 @@
+# zz_vm_darr_loop dialect=1.1 start=08700
+08703:movm_imm:346:0
+08709:jmp:34600
+0870C:fld64:356
+08711:movsim:346
+08715:shlsi
+08717:shlsi
+08719:shlsi
+0871B:addsi:368
+0871F:fstp_si64
+08724:inc_m:346
+08728:cmp_mi8:346:3
+0872D:jcc:126:34572
+0872F:fld64:368
+08734:rt:187
+08736:rt:184
+0873A:end
+0873D:epilogue
+# commits
+08722
+08738

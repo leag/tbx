@@ -1,0 +1,16 @@
+# v10_t1_explog dialect=1.0 start=07AB0
+07AB3:fld64:316
+07AB8:fn:EXP
+07ABB:fstp:296
+07AC2:fld64:308
+07AC7:fn:LOG
+07ACA:fstp:292
+07AD1:fld64:308
+07AD6:fn:LOG10
+07AD9:fstp:288
+07AE0:end
+07AE3:epilogue
+# commits
+07AC0
+07ACF
+07ADE

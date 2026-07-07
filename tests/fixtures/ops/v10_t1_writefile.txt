@@ -1,0 +1,23 @@
+# v10_t1_writefile dialect=1.0 start=07670
+07673:movm_imm:96:1
+07679:movsi:296
+0767C:rt:156
+0767E:movsi:300
+07681:rt:156
+07683:movax:128
+07686:open
+07689:movax:1
+0768C:movm_ax:96
+07690:fld1
+07693:write_file_num
+07696:write_file_sep
+07699:movsi:292
+0769C:rt:156
+0769E:write_file_str
+076A1:rt:186
+076A5:movax:1
+076A8:close
+076AB:end
+076AE:epilogue
+# commits
+076A3

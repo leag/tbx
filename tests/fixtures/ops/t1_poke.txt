@@ -1,0 +1,8 @@
+# t1_poke dialect=1.1 start=08700
+08703:fild:294
+08708:movax:1
+0870B:poke
+08710:end
+08713:epilogue
+# commits
+0870E

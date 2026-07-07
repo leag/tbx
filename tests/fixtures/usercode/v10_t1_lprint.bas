@@ -1,0 +1,2 @@
+10 LPRINT 5
+20 END

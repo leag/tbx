@@ -1,0 +1,9 @@
+# zz_cv_ceil dialect=1.1 start=08700
+08703:fld64:292
+08708:fn:CEIL
+0870B:rt:187
+0870D:rt:184
+08711:end
+08714:epilogue
+# commits
+0870F

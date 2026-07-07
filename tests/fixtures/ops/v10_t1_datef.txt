@@ -1,0 +1,10 @@
+# v10_t1_datef dialect=1.0 start=07220
+07223:strfn:DATE$
+07226:movsi:292
+07229:strassign
+0722B:strfn:TIME$
+0722E:movsi:288
+07231:strassign
+07233:end
+07236:epilogue
+# commits

@@ -1,0 +1,2 @@
+10 PRINT CVL("ABCD")
+20 END

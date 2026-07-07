@@ -1,0 +1,9 @@
+10 A$ = "Hello"
+20 B$ = UCASE$(A$)
+30 C$ = LEFT$(B$,3)
+40 PRINT C$
+50 PRINT MID$(A$,2,3)
+60 PRINT INSTR(A$,"l")
+70 PRINT LEN(A$)
+80 PRINT STR$(42)
+90 END

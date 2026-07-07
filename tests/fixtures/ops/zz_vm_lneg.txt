@@ -1,0 +1,12 @@
+# zz_vm_lneg dialect=1.1 start=08700
+08703:fild32:308
+08708:fchs
+0870B:fistp32:288
+08712:fild32:288
+08717:rt:187
+08719:rt:184
+0871D:end
+08720:epilogue
+# commits
+08710
+0871B

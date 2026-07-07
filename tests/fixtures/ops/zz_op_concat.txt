@@ -1,0 +1,23 @@
+# zz_op_concat dialect=1.1 start=08700
+08703:movsi:312
+08706:rt:156
+08708:movsi:296
+0870B:strassign
+0870D:movsi:308
+08710:rt:156
+08712:movsi:292
+08715:strassign
+08717:movsi:296
+0871A:rt:156
+0871C:movsi:292
+0871F:rt:156
+08721:strconcat
+08723:movsi:288
+08726:strassign
+08728:movsi:288
+0872B:rt:156
+0872D:rt:190
+0872F:rt:184
+08731:end
+08734:epilogue
+# commits

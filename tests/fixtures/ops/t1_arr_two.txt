@@ -1,0 +1,14 @@
+# t1_arr_two dialect=1.1 start=08700
+08703:fild:408
+08708:fstp:452
+0870F:fild:404
+08714:fstp:424
+0871B:fld:424
+08720:fold:+:452
+08725:fstp:396
+0872C:end
+0872F:epilogue
+# commits
+0870D
+08719
+0872A

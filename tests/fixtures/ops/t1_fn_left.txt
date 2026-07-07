@@ -1,0 +1,14 @@
+# t1_fn_left dialect=1.1 start=08750
+08753:movsi:308
+08756:rt:156
+08758:movsi:288
+0875B:strassign
+0875D:movsi:288
+08760:rt:156
+08762:movax:2
+08765:strfn:LEFT$
+08767:rt:190
+08769:rt:184
+0876B:end
+0876E:epilogue
+# commits

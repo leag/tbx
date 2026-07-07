@@ -1,0 +1,14 @@
+# t1_trongoto dialect=1.1 start=08790
+08793:jmp:34724
+08796:trace_hook:30
+0879A:fld1
+0879D:fstp:292
+087A4:trace_hook:40
+087A8:fild:308
+087AD:fstp:288
+087B4:trace_hook:50
+087B8:end
+087BB:epilogue
+# commits
+087A2
+087B2

@@ -1,0 +1,9 @@
+# t1_name dialect=1.1 start=08770
+08773:movsi:296
+08776:rt:156
+08778:movsi:292
+0877B:rt:156
+0877D:name
+08780:end
+08783:epilogue
+# commits

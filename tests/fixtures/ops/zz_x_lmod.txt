@@ -1,0 +1,30 @@
+# zz_x_lmod dialect=1.1 start=08700
+08703:fild32:310
+08708:fistp32:296
+0870F:fild:308
+08714:fistp32:292
+0871B:fild32:292
+08720:fistp:44
+08725:fwait
+08727:movaxmem:44
+0872A:fild32:296
+0872F:fistp:44
+08734:movbxax
+08736:fwait
+08738:movaxmem:44
+0873B:cwd
+0873C:idivbx
+0873E:movaxdx
+08740:movmem_ax:44
+08743:fild:44
+08748:fistp32:288
+0874F:fild32:288
+08754:rt:187
+08756:rt:184
+0875A:end
+0875D:epilogue
+# commits
+0870D
+08719
+0874D
+08758

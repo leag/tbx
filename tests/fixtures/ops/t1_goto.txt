@@ -1,0 +1,14 @@
+# t1_goto dialect=1.1 start=08700
+08703:fld1
+08706:fstp:292
+0870D:jmp:34588
+08710:fild:310
+08715:fstp:292
+0871C:fild:308
+08721:fstp:288
+08728:end
+0872B:epilogue
+# commits
+0870B
+0871A
+08726

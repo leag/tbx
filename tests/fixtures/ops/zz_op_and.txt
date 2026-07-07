@@ -1,0 +1,13 @@
+# zz_op_and dialect=1.1 start=08700
+08703:movm_imm:292:12
+08709:movm_imm:290:10
+0870F:movax_m:290
+08713:andax_m:292
+08717:movm_ax:288
+0871B:fild:288
+08720:rt:187
+08722:rt:184
+08726:end
+08729:epilogue
+# commits
+08724

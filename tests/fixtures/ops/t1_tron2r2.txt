@@ -1,0 +1,20 @@
+# t1_tron2r2 dialect=1.1 start=08790
+08793:trace_hook:20
+08797:fld1
+0879A:fstp:300
+087A1:trace_hook:30
+087A5:fild:312
+087AA:fstp:296
+087B1:fild:310
+087B6:fstp:292
+087BD:trace_hook:60
+087C1:fild:308
+087C6:fstp:288
+087CD:trace_hook:70
+087D1:end
+087D4:epilogue
+# commits
+0879F
+087AF
+087BB
+087CB

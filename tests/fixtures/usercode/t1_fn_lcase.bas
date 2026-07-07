@@ -1,0 +1,3 @@
+10 A$ = "Hi"
+20 PRINT LCASE$(A$)
+30 END

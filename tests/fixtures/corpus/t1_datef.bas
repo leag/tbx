@@ -1,0 +1,3 @@
+10 A$ = DATE$
+20 B$ = TIME$
+30 END

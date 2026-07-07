@@ -1,0 +1,10 @@
+10 OPTION BASE 1
+20 INPUT N
+30 DIM A(N,3), B(N), C(2 * N)
+40 DIM D(N)
+50 I = 2
+60 B(I) = 4
+70 D(I) = B(I)
+80 A(I,1) = B(I) + C(I)
+90 PRINT A(I,1); D(N)
+100 END

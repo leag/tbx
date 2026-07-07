@@ -1,0 +1,26 @@
+# t1_troffin dialect=1.1 start=08790
+08793:trace_hook:20
+08797:fld1
+0879A:fcomp:296
+0879F:fstsw
+087A1:movax:65535
+087A4:jcc:119:34727
+087A6:incax
+087A7:orax
+087AB:jcc:117:34736
+087AD:jmp:34766
+087B0:trace_hook:30
+087B4:fld1
+087B7:fstp:292
+087BE:trace_hook:40
+087C2:fild:310
+087C7:fstp:292
+087CE:fild:308
+087D3:fstp:288
+087DA:end
+087DD:epilogue
+# commits
+087A9
+087BC
+087CC
+087D8

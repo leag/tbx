@@ -1,0 +1,12 @@
+# t1_circasp dialect=1.1 start=08DE0
+08DE3:fild:304
+08DE8:fild:304
+08DED:fild:302
+08DF2:movm_imm:136:2
+08DF8:fld64:292
+08DFD:fstp:172
+08E02:circle:9
+08E08:end
+08E0B:epilogue
+# commits
+08E06

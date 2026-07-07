@@ -1,0 +1,9 @@
+# t1_fn_str dialect=1.1 start=08700
+08703:fild:292
+08708:strfn:STR$
+0870B:rt:190
+0870D:rt:184
+08711:end
+08714:epilogue
+# commits
+0870F

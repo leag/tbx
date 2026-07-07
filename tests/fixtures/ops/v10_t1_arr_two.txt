@@ -1,0 +1,14 @@
+# v10_t1_arr_two dialect=1.0 start=070B0
+070B3:fild:408
+070B8:fstp:452
+070BF:fild:404
+070C4:fstp:424
+070CB:fld:424
+070D0:fold:+:452
+070D5:fstp:396
+070DC:end
+070DF:epilogue
+# commits
+070BD
+070C9
+070DA

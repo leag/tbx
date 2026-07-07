@@ -1,0 +1,9 @@
+# v10_t1_bload dialect=1.0 start=071B0
+071B3:movsi:292
+071B6:rt:156
+071B8:fldz
+071BB:bload
+071C0:end
+071C3:epilogue
+# commits
+071BE

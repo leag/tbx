@@ -1,0 +1,14 @@
+# v10_t1_goto dialect=1.0 start=070B0
+070B3:fld1
+070B6:fstp:292
+070BD:jmp:28876
+070C0:fild:310
+070C5:fstp:292
+070CC:fild:308
+070D1:fstp:288
+070D8:end
+070DB:epilogue
+# commits
+070BB
+070CA
+070D6

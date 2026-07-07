@@ -1,0 +1,2 @@
+10 CHAIN "PROG"
+20 END

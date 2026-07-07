@@ -1,0 +1,3218 @@
+## t1_and
+Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='B'), comma=False)
+IfGoto(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), target=5)
+Print(items=(Lit(value=0),), newline=True, file=None)
+Goto(target=6)
+Print(items=(Lit(value=1),), newline=True, file=None)
+End()
+
+## t1_arr1
+Dim(name='V0', bounds=(10,), also=())
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=5))
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=2),)), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=1),)), rhs=Lit(value=1)))
+Assign(target=Var(name='A'), value=ArrayRef(name='V0', indices=(Lit(value=2),)))
+End()
+
+## t1_arr2
+Dim(name='V0', bounds=(5, 5), also=())
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=2))), value=Lit(value=7))
+Assign(target=Var(name='A'), value=ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=2))))
+End()
+
+## t1_arr_mix
+Dim(name='V0', bounds=(3,), also=())
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B'), value=Lit(value=2))
+Assign(target=Var(name='C'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Var(name='B')))
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Var(name='C'))
+End()
+
+## t1_arr_two
+Dim(name='V0', bounds=(10,), also=())
+Dim(name='V1', bounds=(5,), also=())
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=5))
+Assign(target=ArrayRef(name='V1', indices=(Lit(value=2),)), value=Lit(value=6))
+Assign(target=Var(name='A'), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=1),)), rhs=ArrayRef(name='V1', indices=(Lit(value=2),))))
+End()
+
+## t1_arrv
+Dim(name='V0', bounds=(10,), also=())
+Assign(target=Var(name='A'), value=Lit(value=3))
+Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=Lit(value=2))
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Var(name='A'),)), rhs=ArrayRef(name='V0', indices=(Lit(value=1),))))
+End()
+
+## t1_beep
+Beep()
+End()
+
+## t1_bload
+Bload(file=StrLit(value='X.IMG'), offset=Lit(value=0))
+End()
+
+## t1_bound
+Dim(name='V0', bounds=(10,), also=())
+Assign(target=Var(name='A%'), value=Call(name='UBOUND', args=(ArrayRef(name='V0', indices=(Lit(value=1),)),)))
+Assign(target=Var(name='B%'), value=Call(name='LBOUND', args=(ArrayRef(name='V0', indices=(Lit(value=1),)),)))
+End()
+
+## t1_bsave
+Bsave(file=StrLit(value='X.IMG'), offset=Lit(value=0), length=Lit(value=100))
+End()
+
+## t1_calla
+Assign(target=Var(name='A%'), value=Lit(value=16384))
+CallAbsolute(addr=Var(name='A%'))
+End()
+
+## t1_calli
+RegSet(n=Lit(value=1), value=Lit(value=2))
+CallInterrupt(n=Lit(value=33))
+End()
+
+## t1_chain
+Chain(file=StrLit(value='PROG'))
+End()
+
+## t1_chdir
+Chdir(path=StrLit(value='\\TB'))
+End()
+
+## t1_circarc
+Circle(x=Lit(value=100), y=Lit(value=100), r=Lit(value=50), color=Lit(value=2), start=Lit(value=1), end=Lit(value=3), aspect=None, step=False)
+End()
+
+## t1_circasp
+Circle(x=Lit(value=100), y=Lit(value=100), r=Lit(value=50), color=Lit(value=2), start=None, end=None, aspect=SingleLit(value=0.5), step=False)
+End()
+
+## t1_circle
+Circle(x=Lit(value=100), y=Lit(value=100), r=Lit(value=50), color=None, start=None, end=None, aspect=None, step=False)
+End()
+
+## t1_circle2
+Circle(x=Lit(value=100), y=Lit(value=100), r=Lit(value=50), color=Lit(value=2), start=None, end=None, aspect=None, step=False)
+End()
+
+## t1_circst
+Circle(x=Lit(value=100), y=Lit(value=100), r=Lit(value=50), color=None, start=None, end=None, aspect=None, step=True)
+End()
+
+## t1_clear
+Clear()
+End()
+
+## t1_convf
+Assign(target=Var(name='A#'), value=DblLit(value=1.5))
+Assign(target=Var(name='B'), value=SingleLit(value=2.5))
+Assign(target=Var(name='C'), value=Call(name='FIX', args=(DblLit(value=2.7),)))
+End()
+
+## t1_csrlin
+Assign(target=Var(name='A%'), value=Nullary(name='CSRLIN'))
+End()
+
+## t1_d1line
+Data(items=(DataItem(text='1', is_str=False), DataItem(text='2', is_str=False), DataItem(text='3', is_str=False)))
+Read(targets=(Var(name='A'), Var(name='B'), Var(name='C')))
+End()
+
+## t1_d2line
+Data(items=(DataItem(text='1', is_str=False), DataItem(text='2', is_str=False), DataItem(text='3', is_str=False)))
+Read(targets=(Var(name='A'), Var(name='B'), Var(name='C')))
+End()
+
+## t1_datef
+Assign(target=Var(name='A$'), value=Nullary(name='DATE$'))
+Assign(target=Var(name='B$'), value=Nullary(name='TIME$'))
+End()
+
+## t1_dates
+DateTimeSet(name='DATE$', value=StrLit(value='07-02-2026'))
+End()
+
+## t1_defseg
+DefSeg(seg=Lit(value=0))
+Poke(addr=Lit(value=1040), value=Lit(value=1))
+DefSeg(seg=None)
+End()
+
+## t1_delay
+Delay(secs=Lit(value=1))
+End()
+
+## t1_dimm
+OptionBase(n=1)
+Input(prompt=None, var=Var(name='A'), comma=False)
+Dim(name='V3', bounds=(Var(name='A'), Lit(value=3)), also=(('V2', (Var(name='A'),)), ('V1', (BinOp(op='*', lhs=Lit(value=2), rhs=Var(name='A')),))))
+Dim(name='V0', bounds=(Var(name='A'),), also=())
+Assign(target=Var(name='B'), value=Lit(value=2))
+Assign(target=ArrayRef(name='V2', indices=(Var(name='B'),)), value=Lit(value=4))
+Assign(target=ArrayRef(name='V0', indices=(Var(name='B'),)), value=ArrayRef(name='V2', indices=(Var(name='B'),)))
+Assign(target=ArrayRef(name='V3', indices=(Var(name='B'), Lit(value=1))), value=BinOp(op='+', lhs=ArrayRef(name='V2', indices=(Var(name='B'),)), rhs=ArrayRef(name='V1', indices=(Var(name='B'),))))
+Print(items=(ArrayRef(name='V3', indices=(Var(name='B'), Lit(value=1))), ArrayRef(name='V0', indices=(Var(name='A'),))), newline=True, file=None)
+End()
+
+## t1_dimv
+Input(prompt=None, var=Var(name='A'), comma=False)
+Dim(name='V0', bounds=(Var(name='A'),), also=())
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=2))
+Print(items=(ArrayRef(name='V0', indices=(Lit(value=1),)),), newline=True, file=None)
+End()
+
+## t1_dimv2
+OptionBase(n=1)
+Input(prompt=None, var=Var(name='A%'), comma=False)
+Dim(name='V0', bounds=(Var(name='A%'), Lit(value=3)), also=())
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=1))), value=BinOp(op='+', lhs=Var(name='A%'), rhs=Lit(value=2)))
+Assign(target=Var(name='B'), value=BinOp(op='*', lhs=ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=1))), rhs=Var(name='A%')))
+End()
+
+## t1_dimw
+OptionBase(n=1)
+Input(prompt=None, var=Var(name='A'), comma=False)
+Dim(name='V1', bounds=(Var(name='A'), Lit(value=3)), also=())
+Dim(name='V0', bounds=(Var(name='A'),), also=())
+Assign(target=Var(name='B'), value=Lit(value=2))
+Assign(target=Var(name='C'), value=Lit(value=1))
+Assign(target=ArrayRef(name='V0', indices=(Var(name='B'),)), value=Lit(value=4))
+Assign(target=ArrayRef(name='V1', indices=(Var(name='B'), Var(name='C'))), value=BinOp(op='+', lhs=ArrayRef(name='V1', indices=(Var(name='C'), Var(name='B'))), rhs=ArrayRef(name='V0', indices=(Var(name='B'),))))
+End()
+
+## t1_dimw2
+OptionBase(n=1)
+Input(prompt=None, var=Var(name='A'), comma=False)
+Dim(name='V0', bounds=(Var(name='A'), Lit(value=3)), also=())
+Assign(target=Var(name='B'), value=Lit(value=2))
+Assign(target=Var(name='C'), value=Lit(value=1))
+Assign(target=ArrayRef(name='V0', indices=(Var(name='B'), Var(name='C'))), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Var(name='B'), Var(name='C'))), rhs=Lit(value=4)))
+End()
+
+## t1_dimw3
+OptionBase(n=1)
+Input(prompt=None, var=Var(name='A'), comma=False)
+Dim(name='V1', bounds=(Var(name='A'), Lit(value=3)), also=())
+Dim(name='V0', bounds=(Var(name='A'), Lit(value=2)), also=())
+Assign(target=Var(name='B'), value=Lit(value=2))
+Assign(target=ArrayRef(name='V1', indices=(ArrayRef(name='V0', indices=(Var(name='B'), Lit(value=1))), ArrayRef(name='V0', indices=(Var(name='B'), Lit(value=2))))), value=Lit(value=7))
+Assign(target=Var(name='C'), value=ArrayRef(name='V1', indices=(ArrayRef(name='V0', indices=(Var(name='B'), Lit(value=1))), Lit(value=1))))
+End()
+
+## t1_draw
+Draw(cmd=StrLit(value='U10R10D10L10'))
+End()
+
+## t1_environ
+Environ(s=StrLit(value='PATH=C:\\TB'))
+End()
+
+## t1_eradr
+Assign(target=Var(name='A%'), value=Nullary(name='ERADR'))
+End()
+
+## t1_erase
+Input(prompt=None, var=Var(name='A'), comma=False)
+Dim(name='V0', bounds=(Var(name='A'),), also=())
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=2))
+Erase(name='V0')
+Dim(name='V0', bounds=(Var(name='A'),), also=())
+End()
+
+## t1_errf
+Assign(target=Var(name='A%'), value=Err())
+Assign(target=Var(name='B%'), value=Erl())
+End()
+
+## t1_errml
+Assign(target=Var(name='A%'), value=Err())
+Assign(target=Var(name='B%'), value=Erl())
+End()
+
+## t1_errorn
+ErrorStmt(code=Lit(value=5))
+End()
+
+## t1_evoff
+OnTrap(event='TIMER', n=Lit(value=5), target=3)
+TrapCtl(event='TIMER', n=None, mode='ON')
+End()
+Return()
+
+## t1_evreg
+OnTrap(event='TIMER', n=Lit(value=5), target=5)
+TrapCtl(event='TIMER', n=None, mode='ON')
+Assign(target=Var(name='A%'), value=Lit(value=1))
+Assign(target=Var(name='B%'), value=Lit(value=2))
+End()
+Return()
+
+## t1_evtron
+OnTrap(event='TIMER', n=Lit(value=1), target=6)
+TrapCtl(event='TIMER', n=None, mode='ON')
+Tron()
+Assign(target=Var(name='A'), value=Lit(value=1))
+Troff()
+End()
+Return()
+
+## t1_explog
+Assign(target=Var(name='A'), value=Call(name='EXP', args=(DblLit(value=0.5),)))
+Assign(target=Var(name='B'), value=Call(name='LOG', args=(DblLit(value=2.5),)))
+Assign(target=Var(name='C'), value=Call(name='LOG10', args=(DblLit(value=2.5),)))
+End()
+
+## t1_field
+Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'))
+Field(num=1, fields=((Lit(value=10), Var(name='A$')), (Lit(value=20), Var(name='B$'))))
+Close(num=1)
+End()
+
+## t1_file
+Open(mode=StrLit(value='I'), num=1, file=StrLit(value='X.DAT'))
+InputFile(num=1, vars=(Var(name='A'),))
+InputFile(num=1, vars=(Var(name='B$'),))
+Close(num=1)
+End()
+
+## t1_file2
+LineInput(prompt=None, var=Var(name='A$'))
+Open(mode=StrLit(value='I'), num=2, file=Var(name='A$'))
+InputFile(num=2, vars=(Var(name='B'), Var(name='C')))
+Close(num=2)
+End()
+
+## t1_filef
+Assign(target=Var(name='A%'), value=Call(name='EOF', args=(Lit(value=1),)))
+Assign(target=Var(name='B%'), value=Call(name='LPOS', args=(Lit(value=0),)))
+End()
+
+## t1_files
+Files(spec=StrLit(value='*.*'))
+End()
+
+## t1_fn
+Input(prompt=None, var=Var(name='A'), comma=False)
+Assign(target=Var(name='B'), value=Call(name='ABS', args=(Var(name='A'),)))
+Assign(target=Var(name='C'), value=Call(name='SQR', args=(Var(name='A'),)))
+Assign(target=Var(name='D'), value=Call(name='INT', args=(Var(name='A'),)))
+Assign(target=Var(name='E'), value=Call(name='SGN', args=(Var(name='A'),)))
+Print(items=(BinOp(op='+', lhs=BinOp(op='+', lhs=BinOp(op='+', lhs=Var(name='B'), rhs=Var(name='C')), rhs=Var(name='D')), rhs=Var(name='E')),), newline=True, file=None)
+End()
+
+## t1_fn_asc
+Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
+Print(items=(Call(name='ASC', args=(Var(name='A$'),)),), newline=True, file=None)
+End()
+
+## t1_fn_bin
+Print(items=(Call(name='BIN$', args=(Lit(value=5),)),), newline=True, file=None)
+End()
+
+## t1_fn_chr
+Print(items=(Call(name='CHR$', args=(Lit(value=65),)),), newline=True, file=None)
+End()
+
+## t1_fn_hex
+Print(items=(Call(name='HEX$', args=(Lit(value=255),)),), newline=True, file=None)
+End()
+
+## t1_fn_instr
+Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
+Print(items=(Call(name='INSTR', args=(Var(name='A$'), StrLit(value='l'))),), newline=True, file=None)
+End()
+
+## t1_fn_lcase
+Assign(target=Var(name='A$'), value=StrLit(value='Hi'))
+Print(items=(Call(name='LCASE$', args=(Var(name='A$'),)),), newline=True, file=None)
+End()
+
+## t1_fn_left
+Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
+Print(items=(Call(name='LEFT$', args=(Var(name='A$'), Lit(value=2))),), newline=True, file=None)
+End()
+
+## t1_fn_len
+Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
+Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None)
+End()
+
+## t1_fn_mid
+Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
+Print(items=(Call(name='MID$', args=(Var(name='A$'), Lit(value=2), Lit(value=3))),), newline=True, file=None)
+End()
+
+## t1_fn_oct
+Print(items=(Call(name='OCT$', args=(Lit(value=8),)),), newline=True, file=None)
+End()
+
+## t1_fn_right
+Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
+Print(items=(Call(name='RIGHT$', args=(Var(name='A$'), Lit(value=2))),), newline=True, file=None)
+End()
+
+## t1_fn_space
+Print(items=(Call(name='SPACE$', args=(Lit(value=3),)),), newline=True, file=None)
+End()
+
+## t1_fn_str
+Print(items=(Call(name='STR$', args=(Lit(value=42),)),), newline=True, file=None)
+End()
+
+## t1_fn_string
+Print(items=(Call(name='STRING$', args=(Lit(value=3), Lit(value=42))),), newline=True, file=None)
+End()
+
+## t1_fn_ucase
+Assign(target=Var(name='A$'), value=StrLit(value='Hi'))
+Print(items=(Call(name='UCASE$', args=(Var(name='A$'),)),), newline=True, file=None)
+End()
+
+## t1_fn_val
+Print(items=(Call(name='VAL', args=(StrLit(value='42'),)),), newline=True, file=None)
+End()
+
+## t1_for
+Assign(target=Var(name='A'), value=Lit(value=0))
+For(var=Var(name='B'), init=Lit(value=1), limit=Lit(value=5), step=Lit(value=1))
+Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Var(name='B')))
+NextStmt(var=Var(name='B'))
+End()
+
+## t1_for2
+For(var=Var(name='A'), init=Lit(value=1), limit=Lit(value=3), step=Lit(value=1))
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=1)))
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=2)))
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=3)))
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=4)))
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=5)))
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=6)))
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=7)))
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=8)))
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=9)))
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=10)))
+NextStmt(var=Var(name='A'))
+Print(items=(Var(name='B'),), newline=True, file=None)
+End()
+
+## t1_fp
+Assign(target=Var(name='A'), value=Lit(value=0.5))
+Assign(target=Var(name='B'), value=Lit(value=1.3552527156068805e-20))
+Assign(target=Var(name='C'), value=Lit(value=24999999488.0))
+Print(items=(Var(name='A'), Var(name='B'), Var(name='C')), newline=True, file=None)
+End()
+
+## t1_fp2
+Assign(target=Var(name='A'), value=Lit(value=0.0))
+Assign(target=Var(name='B'), value=Lit(value=1.0))
+Assign(target=Var(name='C'), value=Lit(value=5.0))
+Print(items=(Var(name='A'), Var(name='B'), Var(name='C')), newline=True, file=None)
+End()
+
+## t1_fre
+Assign(target=Var(name='A'), value=Call(name='FRE', args=(Lit(value=0),)))
+Assign(target=Var(name='B'), value=Call(name='FRE', args=(StrLit(value=''),)))
+End()
+
+## t1_fres
+Assign(target=Var(name='A$'), value=StrLit(value='HI'))
+Assign(target=Var(name='B'), value=Call(name='FRE', args=(StrLit(value='HELLO'),)))
+Assign(target=Var(name='C'), value=Call(name='FRE', args=(StrLit(value=''),)))
+End()
+
+## t1_fres2
+Assign(target=Var(name='A$'), value=StrLit(value='Z'))
+Assign(target=Var(name='B'), value=Call(name='FRE', args=(StrLit(value='AA'),)))
+Assign(target=Var(name='C'), value=Call(name='FRE', args=(StrLit(value='BBB'),)))
+End()
+
+## t1_fresx
+Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Call(name='FRE', args=(StrLit(value='AB'),)), rhs=Lit(value=1)))
+End()
+
+## t1_getfile
+Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'))
+Get(num=1, pos=Lit(value=1))
+Close(num=1)
+End()
+
+## t1_getput
+Dim(name='V0%', bounds=(100,), also=())
+GetGfx(x1=Lit(value=0), y1=Lit(value=0), x2=Lit(value=10), y2=Lit(value=10), array='V0%')
+PutGfx(x=Lit(value=20), y=Lit(value=20), array='V0%', action=None)
+End()
+
+## t1_gosub
+Assign(target=Var(name='A'), value=Lit(value=1))
+Gosub(target=4)
+Assign(target=Var(name='A'), value=Lit(value=3))
+End()
+Assign(target=Var(name='B'), value=Lit(value=2))
+Return()
+
+## t1_goto
+Assign(target=Var(name='A'), value=Lit(value=1))
+Goto(target=3)
+Assign(target=Var(name='A'), value=Lit(value=2))
+Assign(target=Var(name='B'), value=Lit(value=3))
+End()
+
+## t1_if
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B'), value=Lit(value=2))
+IfGoto(cond=RelOp(op='>=', lhs=Var(name='A'), rhs=Var(name='B')), target=4)
+Assign(target=Var(name='C'), value=Lit(value=5))
+IfGoto(cond=RelOp(op='=', lhs=Var(name='A'), rhs=Var(name='B')), target=6)
+Assign(target=Var(name='C'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
+End()
+
+## t1_ifin
+Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='B'), comma=False)
+IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), body=(Assign(target=Var(name='C'), value=Lit(value=1)), Assign(target=Var(name='D'), value=Lit(value=2))))
+Print(items=(Var(name='C'), Var(name='D')), newline=True, file=None)
+End()
+
+## t1_inkey
+Assign(target=Var(name='A$'), value=Nullary(name='INKEY$'))
+End()
+
+## t1_inp
+Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='B$'), comma=False)
+Print(items=(Var(name='B$'),), newline=True, file=None)
+End()
+
+## t1_inp2
+Input(prompt=StrLit(value='X'), var=Var(name='A'), comma=False)
+End()
+
+## t1_inp3
+LineInput(prompt=None, var=Var(name='A$'))
+LineInput(prompt=StrLit(value='X'), var=Var(name='B$'))
+End()
+
+## t1_inp4
+Input(prompt=StrLit(value='X'), var=Var(name='A$'), comma=True)
+End()
+
+## t1_inpf
+Assign(target=Var(name='A'), value=Call(name='INP', args=(Lit(value=888),)))
+Print(items=(Var(name='A'),), newline=True, file=None)
+End()
+
+## t1_instat
+Assign(target=Var(name='A%'), value=Nullary(name='INSTAT'))
+End()
+
+## t1_int
+Assign(target=Var(name='A%'), value=Lit(value=5))
+Assign(target=Var(name='B%'), value=BinOp(op='+', lhs=Var(name='A%'), rhs=Lit(value=2)))
+Assign(target=Var(name='C'), value=Var(name='B%'))
+End()
+
+## t1_int2
+Assign(target=Var(name='A%'), value=Lit(value=5))
+Assign(target=Var(name='B%'), value=Lit(value=2))
+Assign(target=Var(name='C%'), value=BinOp(op='+', lhs=Var(name='A%'), rhs=Var(name='B%')))
+Assign(target=Var(name='D%'), value=BinOp(op='-', lhs=Var(name='A%'), rhs=Var(name='B%')))
+Assign(target=Var(name='E%'), value=BinOp(op='*', lhs=Var(name='A%'), rhs=Var(name='B%')))
+Assign(target=Var(name='F%'), value=BinOp(op='+', lhs=Var(name='A%'), rhs=Lit(value=3)))
+Assign(target=Var(name='G'), value=BinOp(op='+', lhs=Var(name='A%'), rhs=Var(name='B%')))
+Assign(target=Var(name='H%'), value=Var(name='G'))
+End()
+
+## t1_keylist
+KeyList()
+End()
+
+## t1_keyoff
+Key(on=False)
+End()
+
+## t1_keyon
+Key(on=True)
+End()
+
+## t1_keyos
+OnTrap(event='KEY', n=Lit(value=1), target=4)
+TrapCtl(event='KEY', n=Lit(value=1), mode='OFF')
+TrapCtl(event='KEY', n=Lit(value=1), mode='STOP')
+End()
+Return()
+
+## t1_kill
+Kill(file=StrLit(value='X.DAT'))
+End()
+
+## t1_line
+LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=None, box='', step1=False, step2=False, style=None)
+End()
+
+## t1_line2
+LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=Lit(value=2), box='', step1=False, step2=False, style=None)
+End()
+
+## t1_lineb
+LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=Lit(value=2), box='B', step1=False, step2=False, style=None)
+End()
+
+## t1_linebf
+LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=Lit(value=2), box='BF', step1=False, step2=False, style=None)
+End()
+
+## t1_linebst
+LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=Lit(value=2), box='B', step1=False, step2=False, style=HexLit(value=43690))
+End()
+
+## t1_lines
+LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=5), y2=Lit(value=5), color=None, box='', step1=False, step2=True, style=None)
+End()
+
+## t1_lines2
+LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=None, box='', step1=True, step2=False, style=None)
+End()
+
+## t1_linest
+LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=Lit(value=2), box='', step1=False, step2=False, style=HexLit(value=43690))
+End()
+
+## t1_linev
+Assign(target=Var(name='A'), value=Lit(value=5))
+LineStmt(x1=Var(name='A'), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=None, box='', step1=False, step2=False, style=None)
+End()
+
+## t1_linevb
+Assign(target=Var(name='A'), value=Lit(value=5))
+LineStmt(x1=Var(name='A'), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=Lit(value=2), box='B', step1=False, step2=False, style=None)
+End()
+
+## t1_lprint
+Lprint(items=(Lit(value=5),), newline=True)
+End()
+
+## t1_lset
+Assign(target=Var(name='A$'), value=StrLit(value='HELLO'))
+Lset(target=Var(name='A$'), source=StrLit(value='HI'))
+End()
+
+## t1_meta0
+Assign(target=Var(name='A%'), value=Lit(value=1))
+End()
+
+## t1_midas
+Assign(target=Var(name='A$'), value=StrLit(value='HELLO'))
+MidAssign(target=Var(name='A$'), start=Lit(value=2), source=StrLit(value='X'))
+End()
+
+## t1_mix
+OptionBase(n=1)
+Dim(name='V0', bounds=(4,), also=())
+Dim(name='V1', bounds=(3, 2), also=())
+Input(prompt=None, var=Var(name='A'), comma=False)
+Dim(name='V2', bounds=(Var(name='A'),), also=())
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=2))
+Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=2),)), rhs=Lit(value=1)))
+Assign(target=ArrayRef(name='V1', indices=(Lit(value=1), Lit(value=2))), value=ArrayRef(name='V0', indices=(Var(name='A'),)))
+Assign(target=ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=1))), value=Lit(value=4))
+Assign(target=ArrayRef(name='V2', indices=(Lit(value=1),)), value=ArrayRef(name='V1', indices=(Lit(value=1), Lit(value=1))))
+Print(items=(ArrayRef(name='V0', indices=(Var(name='A'),)), ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=2))), ArrayRef(name='V2', indices=(Var(name='A'),))), newline=True, file=None)
+End()
+
+## t1_mix2
+OptionBase(n=1)
+Dim(name='V0', bounds=(5,), also=())
+Dim(name='V1', bounds=(3, 2), also=())
+Input(prompt=None, var=Var(name='A'), comma=False)
+Dim(name='V2', bounds=(Var(name='A'),), also=())
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=2))
+Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=2),)), rhs=Lit(value=1)))
+Assign(target=ArrayRef(name='V1', indices=(Lit(value=1), Lit(value=2))), value=ArrayRef(name='V0', indices=(Var(name='A'),)))
+Assign(target=ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=1))), value=Lit(value=4))
+Assign(target=ArrayRef(name='V2', indices=(Lit(value=1),)), value=ArrayRef(name='V1', indices=(Lit(value=1), Lit(value=1))))
+Print(items=(ArrayRef(name='V0', indices=(Var(name='A'),)), ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=2))), ArrayRef(name='V2', indices=(Var(name='A'),))), newline=True, file=None)
+End()
+
+## t1_mix3
+OptionBase(n=1)
+Dim(name='V0', bounds=((0, 4),), also=())
+Dim(name='V1', bounds=((2, 3), (0, 2)), also=())
+Input(prompt=None, var=Var(name='A'), comma=False)
+Dim(name='V2', bounds=(Var(name='A'),), also=())
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=0),)), value=Lit(value=2))
+Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=2),)), rhs=Lit(value=1)))
+Assign(target=ArrayRef(name='V1', indices=(Lit(value=2), Lit(value=0))), value=ArrayRef(name='V0', indices=(Var(name='A'),)))
+Assign(target=ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=2))), value=Lit(value=4))
+Assign(target=ArrayRef(name='V2', indices=(Lit(value=1),)), value=ArrayRef(name='V1', indices=(Lit(value=3), Lit(value=1))))
+Print(items=(ArrayRef(name='V0', indices=(Var(name='A'),)), ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=2))), ArrayRef(name='V2', indices=(Var(name='A'),))), newline=True, file=None)
+End()
+
+## t1_mkdir
+Mkdir(path=StrLit(value='SUB'))
+End()
+
+## t1_mtimer
+Mtimer()
+End()
+
+## t1_mtimerf
+Assign(target=Var(name='A'), value=Nullary(name='MTIMER'))
+End()
+
+## t1_name
+Name(old=StrLit(value='X.DAT'), new=StrLit(value='Y.DAT'))
+End()
+
+## t1_notron
+Assign(target=Var(name='A%'), value=Lit(value=1))
+Assign(target=Var(name='B%'), value=Lit(value=2))
+Assign(target=Var(name='C%'), value=Lit(value=3))
+End()
+
+## t1_ob2
+Dim(name='V0', bounds=(10, 10), also=())
+Dim(name='V1', bounds=((1, 6), (1, 6)), also=())
+Assign(target=Var(name='A'), value=Lit(value=2))
+Assign(target=Var(name='B'), value=Lit(value=3))
+Assign(target=ArrayRef(name='V0', indices=(Var(name='A'), Var(name='B'))), value=Lit(value=5))
+Assign(target=ArrayRef(name='V1', indices=(Var(name='A'), Var(name='B'))), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Var(name='A'), Var(name='B'))), rhs=ArrayRef(name='V0', indices=(Var(name='B'), Var(name='A')))))
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=2))), value=ArrayRef(name='V1', indices=(Var(name='A'), Var(name='B'))))
+Print(items=(ArrayRef(name='V0', indices=(Var(name='A'), Var(name='B'))), ArrayRef(name='V1', indices=(Var(name='A'), Var(name='B')))), newline=True, file=None)
+End()
+
+## t1_ob3
+Dim(name='V0', bounds=((1, 6), (1, 6)), also=())
+Dim(name='V1', bounds=(10, 10), also=())
+Dim(name='V2', bounds=((1, 4),), also=())
+Assign(target=Var(name='A'), value=Lit(value=2))
+Assign(target=Var(name='B'), value=Lit(value=3))
+Assign(target=ArrayRef(name='V1', indices=(Var(name='A'), Var(name='B'))), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Var(name='A'), Var(name='B'))), rhs=ArrayRef(name='V2', indices=(Var(name='A'),))))
+Print(items=(ArrayRef(name='V1', indices=(Var(name='A'), Var(name='B'))),), newline=True, file=None)
+End()
+
+## t1_oncom
+OnTrap(event='COM', n=Lit(value=1), target=5)
+TrapCtl(event='COM', n=Lit(value=1), mode='ON')
+TrapCtl(event='COM', n=Lit(value=1), mode='OFF')
+TrapCtl(event='COM', n=Lit(value=1), mode='STOP')
+End()
+Return()
+
+## t1_one3
+Data(items=(DataItem(text='123', is_str=False),))
+Read(targets=(Var(name='A'),))
+End()
+
+## t1_onerr
+OnError(target=3)
+Print(items=(Lit(value=1),), newline=True, file=None)
+End()
+Resume(next_=False, target=None)
+
+## t1_onerr0
+OnError(target=None)
+End()
+
+## t1_ongosub
+Assign(target=Var(name='A'), value=Lit(value=1))
+OnGosub(selector=Var(name='A'), targets=(3, 4))
+End()
+Return()
+Return()
+
+## t1_ongoto
+Assign(target=Var(name='A'), value=Lit(value=1))
+OnGoto(selector=Var(name='A'), targets=(3, 4))
+End()
+End()
+End()
+
+## t1_onkey
+OnTrap(event='KEY', n=Lit(value=1), target=3)
+TrapCtl(event='KEY', n=Lit(value=1), mode='ON')
+End()
+Return()
+
+## t1_onpen
+OnTrap(event='PEN', n=None, target=5)
+TrapCtl(event='PEN', n=None, mode='ON')
+TrapCtl(event='PEN', n=None, mode='OFF')
+TrapCtl(event='PEN', n=None, mode='STOP')
+End()
+Return()
+
+## t1_onplay
+OnTrap(event='PLAY', n=Lit(value=4), target=5)
+TrapCtl(event='PLAY', n=None, mode='ON')
+TrapCtl(event='PLAY', n=None, mode='OFF')
+TrapCtl(event='PLAY', n=None, mode='STOP')
+End()
+Return()
+
+## t1_ontimer
+OnTrap(event='TIMER', n=Lit(value=5), target=3)
+TrapCtl(event='TIMER', n=None, mode='ON')
+End()
+Return()
+
+## t1_or
+Input(prompt=None, var=Var(name='A'), comma=False)
+IfGoto(cond=LogOp(op='OR', lhs=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=0)), rhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=9))), target=4)
+Print(items=(Lit(value=0),), newline=True, file=None)
+Goto(target=5)
+Print(items=(Lit(value=1),), newline=True, file=None)
+End()
+
+## t1_out
+Out(port=Lit(value=888), value=Lit(value=1))
+End()
+
+## t1_out2
+Assign(target=Var(name='A%'), value=Lit(value=5))
+Out(port=Lit(value=888), value=Var(name='A%'))
+End()
+
+## t1_paint
+Paint(x=Lit(value=50), y=Lit(value=50), paint=Lit(value=1), border=Lit(value=2))
+End()
+
+## t1_paintb
+Paint(x=Lit(value=50), y=Lit(value=50), paint=None, border=Lit(value=2))
+End()
+
+## t1_paintp
+Paint(x=Lit(value=50), y=Lit(value=50), paint=Lit(value=1), border=None)
+End()
+
+## t1_palette
+Palette(attr=Lit(value=1), color=Lit(value=2))
+End()
+
+## t1_peek
+Assign(target=Var(name='A'), value=Call(name='PEEK', args=(Lit(value=100),)))
+Print(items=(Var(name='A'),), newline=True, file=None)
+End()
+
+## t1_penf
+Assign(target=Var(name='A%'), value=Call(name='PEN', args=(Lit(value=0),)))
+End()
+
+## t1_play
+Play(music=StrLit(value='O5G8.G8.G8...'))
+End()
+
+## t1_playf
+Assign(target=Var(name='A%'), value=Call(name='PLAY', args=(Lit(value=0),)))
+End()
+
+## t1_pmap
+Assign(target=Var(name='A'), value=Call(name='PMAP', args=(DblLit(value=1.5), Lit(value=0))))
+End()
+
+## t1_point
+Assign(target=Var(name='A'), value=Call(name='POINT', args=(Lit(value=10), Lit(value=20))))
+Print(items=(Var(name='A'),), newline=True, file=None)
+End()
+
+## t1_poke
+Poke(addr=Lit(value=100), value=Lit(value=1))
+End()
+
+## t1_poke2
+Assign(target=Var(name='A%'), value=Lit(value=7))
+Poke(addr=Lit(value=100), value=Var(name='A%'))
+End()
+
+## t1_pos
+Assign(target=Var(name='A%'), value=Call(name='POS', args=(Lit(value=0),)))
+End()
+
+## t1_pr2
+Input(prompt=None, var=Var(name='A'), comma=False)
+Print(items=(StrLit(value='A'), Var(name='A'), StrLit(value='B')), newline=True, file=None)
+Print(items=(StrLit(value='X'),), newline=False, file=None)
+PrintUsing(fmt=StrLit(value='##.##'), values=(Var(name='A'),), file=None, newline=True)
+PrintUsing(fmt=StrLit(value='#.# #.#'), values=(Var(name='A'), Var(name='A')), file=None, newline=True)
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='R.TXT'))
+Print(items=(Var(name='A'),), newline=True, file=1)
+PrintUsing(fmt=StrLit(value='##.##'), values=(Var(name='A'), Var(name='A')), file=1, newline=True)
+Close(num=1)
+End()
+
+## t1_preset
+Pset(x=Lit(value=10), y=Lit(value=20), color=None, preset=True, step=False)
+End()
+
+## t1_preset2
+Pset(x=Lit(value=10), y=Lit(value=20), color=Lit(value=3), preset=False, step=False)
+End()
+
+## t1_presets
+Pset(x=Lit(value=10), y=Lit(value=20), color=None, preset=True, step=True)
+End()
+
+## t1_presetsc
+Pset(x=Lit(value=10), y=Lit(value=20), color=Lit(value=3), preset=False, step=True)
+End()
+
+## t1_print
+Assign(target=Var(name='A'), value=Lit(value=5))
+Print(items=(StrLit(value='HELLO'),), newline=True, file=None)
+Print(items=(Var(name='A'),), newline=True, file=None)
+Print(items=(BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)),), newline=True, file=None)
+End()
+
+## t1_print2
+Assign(target=Var(name='A'), value=Lit(value=5))
+Print(items=(StrLit(value='HELLO'),), newline=True, file=None)
+Print(items=(StrLit(value='WORLD!'),), newline=True, file=None)
+Print(items=(Var(name='A'),), newline=True, file=None)
+End()
+
+## t1_pset
+Pset(x=Lit(value=10), y=Lit(value=20), color=None, preset=False, step=False)
+End()
+
+## t1_pset2
+Pset(x=Lit(value=10), y=Lit(value=20), color=Lit(value=3), preset=False, step=False)
+End()
+
+## t1_psets
+Pset(x=Lit(value=10), y=Lit(value=20), color=None, preset=False, step=True)
+End()
+
+## t1_psetsc
+Pset(x=Lit(value=10), y=Lit(value=20), color=Lit(value=3), preset=False, step=True)
+End()
+
+## t1_putact
+Dim(name='V0%', bounds=(100,), also=())
+GetGfx(x1=Lit(value=0), y1=Lit(value=0), x2=Lit(value=10), y2=Lit(value=10), array='V0%')
+PutGfx(x=Lit(value=20), y=Lit(value=20), array='V0%', action=None)
+PutGfx(x=Lit(value=30), y=Lit(value=30), array='V0%', action='PSET')
+End()
+
+## t1_putact2
+Dim(name='V0%', bounds=(50,), also=())
+GetGfx(x1=Lit(value=0), y1=Lit(value=0), x2=Lit(value=5), y2=Lit(value=5), array='V0%')
+PutGfx(x=Lit(value=1), y=Lit(value=1), array='V0%', action='PRESET')
+PutGfx(x=Lit(value=2), y=Lit(value=2), array='V0%', action='AND')
+PutGfx(x=Lit(value=3), y=Lit(value=3), array='V0%', action='OR')
+End()
+
+## t1_putfile
+Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'))
+Put(num=1, pos=Lit(value=1))
+Close(num=1)
+End()
+
+## t1_randomize
+Randomize(seed=Lit(value=5))
+End()
+
+## t1_readafter
+Data(items=(DataItem(text='11', is_str=False), DataItem(text='22', is_str=False)))
+Read(targets=(Var(name='A'), Var(name='B')))
+End()
+
+## t1_readalt
+Data(items=(DataItem(text='4', is_str=False), DataItem(text='5', is_str=False), DataItem(text='6', is_str=False)))
+Read(targets=(Var(name='A'), Var(name='B'), Var(name='C')))
+End()
+
+## t1_readbig
+Data(items=(DataItem(text='100', is_str=False), DataItem(text='200', is_str=False), DataItem(text='300', is_str=False)))
+Read(targets=(Var(name='A'), Var(name='B'), Var(name='C')))
+End()
+
+## t1_readfp
+Data(items=(DataItem(text='1.5', is_str=False), DataItem(text='-2.25', is_str=False)))
+Read(targets=(Var(name='A'), Var(name='B')))
+End()
+
+## t1_readnum
+Data(items=(DataItem(text='1', is_str=False), DataItem(text='2', is_str=False), DataItem(text='3', is_str=False)))
+Read(targets=(Var(name='A'), Var(name='B'), Var(name='C')))
+End()
+
+## t1_readstr
+Data(items=(DataItem(text='X', is_str=True), DataItem(text='YZ', is_str=True)))
+Read(targets=(Var(name='A$'), Var(name='B$')))
+End()
+
+## t1_reg
+RegSet(n=Lit(value=1), value=Lit(value=512))
+Assign(target=Var(name='A%'), value=Call(name='REG', args=(Lit(value=1),)))
+End()
+
+## t1_relops
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B'), value=Lit(value=2))
+IfGoto(cond=RelOp(op='=', lhs=Var(name='A'), rhs=Var(name='B')), target=8)
+IfGoto(cond=RelOp(op='<>', lhs=Var(name='A'), rhs=Var(name='B')), target=8)
+IfGoto(cond=RelOp(op='<', lhs=Var(name='A'), rhs=Var(name='B')), target=8)
+IfGoto(cond=RelOp(op='<=', lhs=Var(name='A'), rhs=Var(name='B')), target=8)
+IfGoto(cond=RelOp(op='>', lhs=Var(name='A'), rhs=Var(name='B')), target=8)
+IfGoto(cond=RelOp(op='>=', lhs=Var(name='A'), rhs=Var(name='B')), target=8)
+End()
+
+## t1_reset
+Reset()
+End()
+
+## t1_restore
+Data(items=(DataItem(text='5', is_str=False), DataItem(text='6', is_str=False)))
+Read(targets=(Var(name='A'),))
+Restore(target=None)
+Read(targets=(Var(name='B'),))
+End()
+
+## t1_restoreline
+Data(items=(DataItem(text='7', is_str=False),))
+Data(items=(DataItem(text='8', is_str=False), DataItem(text='9', is_str=False)))
+Restore(target=1)
+Read(targets=(Var(name='A'),))
+End()
+
+## t1_resumel
+OnError(target=3)
+Print(items=(Lit(value=1),), newline=True, file=None)
+End()
+Resume(next_=False, target=1)
+
+## t1_resumen
+OnError(target=3)
+Print(items=(Lit(value=1),), newline=True, file=None)
+End()
+Resume(next_=True, target=None)
+
+## t1_rmdir
+Rmdir(path=StrLit(value='SUB'))
+End()
+
+## t1_rnd
+Assign(target=Var(name='A'), value=Nullary(name='RND'))
+Assign(target=Var(name='B'), value=Call(name='RND', args=(Lit(value=1),)))
+End()
+
+## t1_rset
+Assign(target=Var(name='A$'), value=StrLit(value='HELLO'))
+Rset(target=Var(name='A$'), source=StrLit(value='HI'))
+End()
+
+## t1_run
+Run()
+End()
+
+## t1_sarr
+Input(prompt=None, var=Var(name='A'), comma=False)
+Dim(name='V0$', bounds=(Var(name='A'),), also=())
+Assign(target=ArrayRef(name='V0$', indices=(Lit(value=1),)), value=StrLit(value='AB'))
+Assign(target=ArrayRef(name='V0$', indices=(Var(name='A'),)), value=StrLit(value='CD'))
+Assign(target=Var(name='B$'), value=ArrayRef(name='V0$', indices=(Var(name='A'),)))
+Print(items=(ArrayRef(name='V0$', indices=(Lit(value=1),)),), newline=True, file=None)
+End()
+
+## t1_sarr2
+Input(prompt=None, var=Var(name='A'), comma=False)
+Dim(name='V1$', bounds=(Var(name='A'),), also=())
+Dim(name='V0', bounds=(Var(name='A'), Lit(value=5)), also=())
+Open(mode=StrLit(value='I'), num=1, file=StrLit(value='X.DAT'))
+InputFile(num=1, vars=(ArrayRef(name='V0', indices=(Var(name='A'), Lit(value=5))), ArrayRef(name='V1$', indices=(Var(name='A'),))))
+Close(num=1)
+Print(items=(ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=1))), ArrayRef(name='V1$', indices=(Var(name='A'),))), newline=True, file=None)
+End()
+
+## t1_scr
+Cls()
+Locate(row=Lit(value=3), col=Lit(value=5), cursor=None)
+Color(fg=Lit(value=1), bg=None)
+Locate(row=Lit(value=10), col=Lit(value=20), cursor=None)
+Color(fg=Lit(value=7), bg=Lit(value=0))
+Print(items=(StrLit(value='HI'),), newline=True, file=None)
+End()
+
+## t1_scr2
+Locate(row=Lit(value=3), col=Lit(value=5), cursor=Lit(value=1))
+Locate(row=Lit(value=4), col=Lit(value=6), cursor=Lit(value=0))
+Color(fg=None, bg=Lit(value=2))
+End()
+
+## t1_screen
+Screen(mode=Lit(value=1))
+End()
+
+## t1_screenf
+Assign(target=Var(name='A%'), value=Call(name='SCREEN', args=(Lit(value=1), Lit(value=2))))
+End()
+
+## t1_seek
+Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'))
+Seek(num=1, pos=Lit(value=1))
+Close(num=1)
+End()
+
+## t1_shell
+Shell(cmd=StrLit(value='DIR'))
+End()
+
+## t1_shellvar
+Shell(cmd=Var(name='A$'))
+End()
+
+## t1_sound
+Sound(freq=Lit(value=440), dur=Lit(value=2))
+End()
+
+## t1_soundm
+Assign(target=Var(name='A%'), value=Lit(value=1))
+End()
+
+## t1_stack
+Assign(target=Var(name='A%'), value=Lit(value=1))
+End()
+
+## t1_stack4
+Assign(target=Var(name='A%'), value=Lit(value=1))
+End()
+
+## t1_stick
+Assign(target=Var(name='A%'), value=Call(name='STICK', args=(Lit(value=0),)))
+End()
+
+## t1_str
+Assign(target=Var(name='A$'), value=StrLit(value='HI'))
+Assign(target=Var(name='B$'), value=Var(name='A$'))
+Print(items=(Var(name='A$'),), newline=True, file=None)
+End()
+
+## t1_strigf
+Assign(target=Var(name='A%'), value=Call(name='STRIG', args=(Lit(value=0),)))
+End()
+
+## t1_strigoff
+TrapCtl(event='STRIG', n=None, mode='OFF')
+End()
+
+## t1_strigon
+TrapCtl(event='STRIG', n=None, mode='ON')
+End()
+
+## t1_strlib
+Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
+Assign(target=Var(name='B$'), value=Call(name='UCASE$', args=(Var(name='A$'),)))
+Assign(target=Var(name='C$'), value=Call(name='LEFT$', args=(Var(name='B$'), Lit(value=3))))
+Print(items=(Var(name='C$'),), newline=True, file=None)
+Print(items=(Call(name='MID$', args=(Var(name='A$'), Lit(value=2), Lit(value=3))),), newline=True, file=None)
+Print(items=(Call(name='INSTR', args=(Var(name='A$'), StrLit(value='l'))),), newline=True, file=None)
+Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None)
+Print(items=(Call(name='STR$', args=(Lit(value=42),)),), newline=True, file=None)
+End()
+
+## t1_swap
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B'), value=Lit(value=2))
+Swap(a=Var(name='A'), b=Var(name='B'))
+End()
+
+## t1_tab
+Input(prompt=None, var=Var(name='A'), comma=False)
+Print(items=(StrLit(value='A'), Call(name='TAB', args=(Lit(value=7),)), Var(name='A')), newline=True, file=None)
+Print(items=(Call(name='SPC', args=(Lit(value=3),)), StrLit(value='B')), newline=True, file=None)
+Print(items=(Call(name='TAB', args=(Var(name='A'),)), StrLit(value='C')), newline=True, file=None)
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='R.TXT'))
+Print(items=(StrLit(value='X'), Call(name='TAB', args=(Lit(value=7),)), StrLit(value='Y'), Call(name='SPC', args=(Lit(value=8),)), Var(name='A')), newline=True, file=1)
+Close(num=1)
+End()
+
+## t1_timerf
+Assign(target=Var(name='A'), value=Nullary(name='TIMER'))
+End()
+
+## t1_timeros
+OnTrap(event='TIMER', n=Lit(value=5), target=4)
+TrapCtl(event='TIMER', n=None, mode='OFF')
+TrapCtl(event='TIMER', n=None, mode='STOP')
+End()
+Return()
+
+## t1_times
+DateTimeSet(name='TIME$', value=StrLit(value='12:00:00'))
+End()
+
+## t1_trig
+Assign(target=Var(name='A'), value=Call(name='ATN', args=(DblLit(value=0.5),)))
+Assign(target=Var(name='B'), value=Call(name='COS', args=(DblLit(value=0.5),)))
+Assign(target=Var(name='C'), value=Call(name='SIN', args=(DblLit(value=0.5),)))
+Assign(target=Var(name='D'), value=Call(name='TAN', args=(DblLit(value=0.5),)))
+End()
+
+## t1_troffin
+Tron()
+IfBlock(arms=((RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=1)), (Assign(target=Var(name='B'), value=Lit(value=1)), Troff(), Assign(target=Var(name='B'), value=Lit(value=2)))),), else_body=None)
+Assign(target=Var(name='C'), value=Lit(value=3))
+End()
+
+## t1_tron
+Tron()
+End()
+
+## t1_tron2
+Tron()
+Assign(target=Var(name='A%'), value=Lit(value=1))
+Assign(target=Var(name='B%'), value=Lit(value=2))
+Troff()
+Assign(target=Var(name='C%'), value=Lit(value=3))
+End()
+
+## t1_tron2r
+Tron()
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B'), value=Lit(value=2))
+Assign(target=Var(name='C'), value=Lit(value=3))
+End()
+
+## t1_tron2r2
+Tron()
+Assign(target=Var(name='A'), value=Lit(value=1))
+Troff()
+Assign(target=Var(name='B'), value=Lit(value=2))
+Assign(target=Var(name='C'), value=Lit(value=4))
+Tron()
+Assign(target=Var(name='D'), value=Lit(value=3))
+End()
+
+## t1_troncase
+Assign(target=Var(name='A'), value=Lit(value=2))
+Tron()
+SelectCase(selector=Var(name='A'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=1)),), body=(Assign(target=Var(name='B'), value=Lit(value=1)),)),), case_else=(Assign(target=Var(name='B'), value=Lit(value=2)),))
+End()
+
+## t1_tronerb
+OnError(target=5)
+Tron()
+IfBlock(arms=((RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=0)), (Assign(target=Var(name='B'), value=Lit(value=1)),)),), else_body=(Assign(target=Var(name='B'), value=Lit(value=2)),))
+Troff()
+End()
+Resume(next_=False, target=None)
+
+## t1_tronerr
+OnError(target=6)
+Tron()
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B'), value=Lit(value=2))
+Troff()
+End()
+Resume(next_=False, target=5)
+
+## t1_tronfor
+Tron()
+For(var=Var(name='A'), init=Lit(value=1), limit=Lit(value=3), step=Lit(value=1))
+Assign(target=Var(name='B'), value=Var(name='A'))
+NextStmt(var=Var(name='A'))
+End()
+
+## t1_trongoto
+Goto(target=3)
+Tron()
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B'), value=Lit(value=2))
+End()
+
+## t1_tronif
+Assign(target=Var(name='A'), value=Lit(value=0))
+Tron()
+IfBlock(arms=((RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=0)), (Assign(target=Var(name='B'), value=Lit(value=1)),)),), else_body=(Assign(target=Var(name='B'), value=Lit(value=2)),))
+End()
+
+## t1_tronml
+Tron()
+Troff()
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B'), value=Lit(value=2))
+Tron()
+End()
+
+## t1_tronres
+OnError(target=6)
+Tron()
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B'), value=Lit(value=2))
+Troff()
+End()
+Resume(next_=False, target=None)
+
+## t1_tronsplit
+Tron()
+Assign(target=Var(name='A'), value=Lit(value=1))
+Troff()
+Assign(target=Var(name='B'), value=Lit(value=2))
+Assign(target=Var(name='C'), value=Lit(value=3))
+End()
+
+## t1_tronwh
+Tron()
+Do(kind='WHILE', cond=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=2)))
+Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
+Loop(kind=None, cond=None)
+End()
+
+## t1_two
+Data(items=(DataItem(text='12', is_str=False), DataItem(text='3', is_str=False)))
+Read(targets=(Var(name='A'), Var(name='B')))
+End()
+
+## t1_varptr
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B%'), value=Call(name='VARPTR', args=(Var(name='A'),)))
+Assign(target=Var(name='C%'), value=VarSeg())
+End()
+
+## t1_view
+View(x1=Lit(value=10), y1=Lit(value=10), x2=Lit(value=100), y2=Lit(value=100), screen=False, color=None, border=None)
+End()
+
+## t1_viewb
+View(x1=Lit(value=10), y1=Lit(value=10), x2=Lit(value=100), y2=Lit(value=100), screen=False, color=None, border=Lit(value=2))
+End()
+
+## t1_viewc
+View(x1=Lit(value=10), y1=Lit(value=10), x2=Lit(value=100), y2=Lit(value=100), screen=False, color=Lit(value=1), border=Lit(value=2))
+End()
+
+## t1_viewcol
+View(x1=Lit(value=10), y1=Lit(value=10), x2=Lit(value=100), y2=Lit(value=100), screen=False, color=Lit(value=1), border=None)
+End()
+
+## t1_views
+View(x1=Lit(value=10), y1=Lit(value=10), x2=Lit(value=100), y2=Lit(value=100), screen=True, color=None, border=None)
+End()
+
+## t1_wait
+Wait(port=Lit(value=888), mask=Lit(value=1), xor=None)
+End()
+
+## t1_wait3
+Wait(port=Lit(value=986), mask=Lit(value=8), xor=Lit(value=4))
+End()
+
+## t1_while
+Assign(target=Var(name='A'), value=Lit(value=0))
+Do(kind='WHILE', cond=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=5)))
+Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
+Loop(kind=None, cond=None)
+End()
+
+## t1_width
+Width(cols=Lit(value=80))
+End()
+
+## t1_window
+Window(x1=Lit(value=0), y1=Lit(value=0), x2=Lit(value=100), y2=Lit(value=100), screen=False)
+End()
+
+## t1_windows
+Window(x1=Lit(value=0), y1=Lit(value=0), x2=Lit(value=100), y2=Lit(value=100), screen=True)
+End()
+
+## t1_write
+Write(items=(Lit(value=1), Lit(value=2)), file=None)
+End()
+
+## t1_writefile
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='X.DAT'))
+Write(items=(Lit(value=1), StrLit(value='A')), file=1)
+Close(num=1)
+End()
+
+## tier0_trivial
+Assign(target=Var(name='A'), value=Lit(value=1))
+End()
+
+## tier1_expr
+Assign(target=Var(name='A'), value=Lit(value=5))
+Assign(target=Var(name='B'), value=Lit(value=2))
+Assign(target=Var(name='C'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Var(name='B')))
+Assign(target=Var(name='D'), value=BinOp(op='-', lhs=Var(name='A'), rhs=Var(name='B')))
+Assign(target=Var(name='E'), value=BinOp(op='*', lhs=Var(name='A'), rhs=Var(name='B')))
+Assign(target=Var(name='F'), value=BinOp(op='/', lhs=Var(name='A'), rhs=Var(name='B')))
+Assign(target=Var(name='G'), value=BinOp(op='+', lhs=BinOp(op='*', lhs=Var(name='B'), rhs=Var(name='C')), rhs=Var(name='A')))
+Assign(target=Var(name='H'), value=BinOp(op='*', lhs=Group(inner=BinOp(op='+', lhs=Var(name='A'), rhs=Var(name='B'))), rhs=Var(name='C')))
+End()
+
+## tier1_expr2
+Assign(target=Var(name='A'), value=Lit(value=5))
+Assign(target=Var(name='B'), value=Lit(value=2))
+Assign(target=Var(name='C'), value=BinOp(op='-', lhs=Group(inner=BinOp(op='+', lhs=Var(name='A'), rhs=Var(name='B'))), rhs=Var(name='B')))
+Assign(target=Var(name='D'), value=BinOp(op='/', lhs=Group(inner=BinOp(op='+', lhs=Var(name='A'), rhs=Var(name='B'))), rhs=Var(name='B')))
+Assign(target=Var(name='E'), value=BinOp(op='-', lhs=Var(name='A'), rhs=BinOp(op='*', lhs=Var(name='B'), rhs=Var(name='C'))))
+Assign(target=Var(name='F'), value=BinOp(op='/', lhs=Var(name='A'), rhs=Group(inner=BinOp(op='+', lhs=Var(name='B'), rhs=Var(name='C')))))
+Assign(target=Var(name='G'), value=Neg(operand=Var(name='A')))
+Assign(target=Var(name='H'), value=BinOp(op='*', lhs=Group(inner=BinOp(op='-', lhs=Var(name='A'), rhs=Var(name='B'))), rhs=Group(inner=BinOp(op='+', lhs=Var(name='C'), rhs=Var(name='D')))))
+End()
+
+## tier1_expr3
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='C'), rhs=Var(name='D')))
+Assign(target=Var(name='E'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
+Assign(target=Var(name='F'), value=BinOp(op='*', lhs=Lit(value=2), rhs=Var(name='A')))
+Assign(target=Var(name='G'), value=BinOp(op='+', lhs=Group(inner=BinOp(op='+', lhs=Var(name='A'), rhs=Var(name='B'))), rhs=Group(inner=BinOp(op='+', lhs=Var(name='E'), rhs=Var(name='F')))))
+Assign(target=Var(name='H'), value=BinOp(op='*', lhs=Var(name='A'), rhs=Lit(value=10)))
+End()
+
+## v10_t1_and
+Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='B'), comma=False)
+IfGoto(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), target=5)
+Print(items=(Lit(value=0),), newline=True, file=None)
+Goto(target=6)
+Print(items=(Lit(value=1),), newline=True, file=None)
+End()
+
+## v10_t1_arr1
+Dim(name='V0', bounds=(10,), also=())
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=5))
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=2),)), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=1),)), rhs=Lit(value=1)))
+Assign(target=Var(name='A'), value=ArrayRef(name='V0', indices=(Lit(value=2),)))
+End()
+
+## v10_t1_arr2
+Dim(name='V0', bounds=(5, 5), also=())
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=2))), value=Lit(value=7))
+Assign(target=Var(name='A'), value=ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=2))))
+End()
+
+## v10_t1_arr_mix
+Dim(name='V0', bounds=(3,), also=())
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B'), value=Lit(value=2))
+Assign(target=Var(name='C'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Var(name='B')))
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Var(name='C'))
+End()
+
+## v10_t1_arr_two
+Dim(name='V0', bounds=(10,), also=())
+Dim(name='V1', bounds=(5,), also=())
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=5))
+Assign(target=ArrayRef(name='V1', indices=(Lit(value=2),)), value=Lit(value=6))
+Assign(target=Var(name='A'), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=1),)), rhs=ArrayRef(name='V1', indices=(Lit(value=2),))))
+End()
+
+## v10_t1_arrv
+Dim(name='V0', bounds=(10,), also=())
+Assign(target=Var(name='A'), value=Lit(value=3))
+Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=Lit(value=2))
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Var(name='A'),)), rhs=ArrayRef(name='V0', indices=(Lit(value=1),))))
+End()
+
+## v10_t1_beep
+Beep()
+End()
+
+## v10_t1_bload
+Bload(file=StrLit(value='X.IMG'), offset=Lit(value=0))
+End()
+
+## v10_t1_bound
+Dim(name='V0', bounds=(10,), also=())
+Assign(target=Var(name='A%'), value=Call(name='UBOUND', args=(ArrayRef(name='V0', indices=(Lit(value=1),)),)))
+Assign(target=Var(name='B%'), value=Call(name='LBOUND', args=(ArrayRef(name='V0', indices=(Lit(value=1),)),)))
+End()
+
+## v10_t1_bsave
+Bsave(file=StrLit(value='X.IMG'), offset=Lit(value=0), length=Lit(value=100))
+End()
+
+## v10_t1_calla
+Assign(target=Var(name='A%'), value=Lit(value=16384))
+CallAbsolute(addr=Var(name='A%'))
+End()
+
+## v10_t1_calli
+RegSet(n=Lit(value=1), value=Lit(value=2))
+CallInterrupt(n=Lit(value=33))
+End()
+
+## v10_t1_chain
+Chain(file=StrLit(value='PROG'))
+End()
+
+## v10_t1_chdir
+Chdir(path=StrLit(value='\\TB'))
+End()
+
+## v10_t1_circarc
+Circle(x=Lit(value=100), y=Lit(value=100), r=Lit(value=50), color=Lit(value=2), start=Lit(value=1), end=Lit(value=3), aspect=None, step=False)
+End()
+
+## v10_t1_circasp
+Circle(x=Lit(value=100), y=Lit(value=100), r=Lit(value=50), color=Lit(value=2), start=None, end=None, aspect=SingleLit(value=0.5), step=False)
+End()
+
+## v10_t1_circle
+Circle(x=Lit(value=100), y=Lit(value=100), r=Lit(value=50), color=None, start=None, end=None, aspect=None, step=False)
+End()
+
+## v10_t1_circle2
+Circle(x=Lit(value=100), y=Lit(value=100), r=Lit(value=50), color=Lit(value=2), start=None, end=None, aspect=None, step=False)
+End()
+
+## v10_t1_circst
+Circle(x=Lit(value=100), y=Lit(value=100), r=Lit(value=50), color=None, start=None, end=None, aspect=None, step=True)
+End()
+
+## v10_t1_clear
+Clear()
+End()
+
+## v10_t1_convf
+Assign(target=Var(name='A#'), value=DblLit(value=1.5))
+Assign(target=Var(name='B'), value=SingleLit(value=2.5))
+Assign(target=Var(name='C'), value=Call(name='FIX', args=(DblLit(value=2.7),)))
+End()
+
+## v10_t1_csrlin
+Assign(target=Var(name='A%'), value=Nullary(name='CSRLIN'))
+End()
+
+## v10_t1_d1line
+Data(items=(DataItem(text='1', is_str=False), DataItem(text='2', is_str=False), DataItem(text='3', is_str=False)))
+Read(targets=(Var(name='A'), Var(name='B'), Var(name='C')))
+End()
+
+## v10_t1_d2line
+Data(items=(DataItem(text='1', is_str=False), DataItem(text='2', is_str=False), DataItem(text='3', is_str=False)))
+Read(targets=(Var(name='A'), Var(name='B'), Var(name='C')))
+End()
+
+## v10_t1_datef
+Assign(target=Var(name='A$'), value=Nullary(name='DATE$'))
+Assign(target=Var(name='B$'), value=Nullary(name='TIME$'))
+End()
+
+## v10_t1_dates
+DateTimeSet(name='DATE$', value=StrLit(value='07-02-2026'))
+End()
+
+## v10_t1_defseg
+DefSeg(seg=Lit(value=0))
+Poke(addr=Lit(value=1040), value=Lit(value=1))
+DefSeg(seg=None)
+End()
+
+## v10_t1_delay
+Delay(secs=Lit(value=1))
+End()
+
+## v10_t1_dimm
+OptionBase(n=1)
+Input(prompt=None, var=Var(name='A'), comma=False)
+Dim(name='V3', bounds=(Var(name='A'), Lit(value=3)), also=(('V2', (Var(name='A'),)), ('V1', (BinOp(op='*', lhs=Lit(value=2), rhs=Var(name='A')),))))
+Dim(name='V0', bounds=(Var(name='A'),), also=())
+Assign(target=Var(name='B'), value=Lit(value=2))
+Assign(target=ArrayRef(name='V2', indices=(Var(name='B'),)), value=Lit(value=4))
+Assign(target=ArrayRef(name='V0', indices=(Var(name='B'),)), value=ArrayRef(name='V2', indices=(Var(name='B'),)))
+Assign(target=ArrayRef(name='V3', indices=(Var(name='B'), Lit(value=1))), value=BinOp(op='+', lhs=ArrayRef(name='V2', indices=(Var(name='B'),)), rhs=ArrayRef(name='V1', indices=(Var(name='B'),))))
+Print(items=(ArrayRef(name='V3', indices=(Var(name='B'), Lit(value=1))), ArrayRef(name='V0', indices=(Var(name='A'),))), newline=True, file=None)
+End()
+
+## v10_t1_dimv
+Input(prompt=None, var=Var(name='A'), comma=False)
+Dim(name='V0', bounds=(Var(name='A'),), also=())
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=2))
+Print(items=(ArrayRef(name='V0', indices=(Lit(value=1),)),), newline=True, file=None)
+End()
+
+## v10_t1_dimv2
+OptionBase(n=1)
+Input(prompt=None, var=Var(name='A%'), comma=False)
+Dim(name='V0', bounds=(Var(name='A%'), Lit(value=3)), also=())
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=1))), value=BinOp(op='+', lhs=Var(name='A%'), rhs=Lit(value=2)))
+Assign(target=Var(name='B'), value=BinOp(op='*', lhs=ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=1))), rhs=Var(name='A%')))
+End()
+
+## v10_t1_dimw
+OptionBase(n=1)
+Input(prompt=None, var=Var(name='A'), comma=False)
+Dim(name='V1', bounds=(Var(name='A'), Lit(value=3)), also=())
+Dim(name='V0', bounds=(Var(name='A'),), also=())
+Assign(target=Var(name='B'), value=Lit(value=2))
+Assign(target=Var(name='C'), value=Lit(value=1))
+Assign(target=ArrayRef(name='V0', indices=(Var(name='B'),)), value=Lit(value=4))
+Assign(target=ArrayRef(name='V1', indices=(Var(name='B'), Var(name='C'))), value=BinOp(op='+', lhs=ArrayRef(name='V1', indices=(Var(name='C'), Var(name='B'))), rhs=ArrayRef(name='V0', indices=(Var(name='B'),))))
+End()
+
+## v10_t1_dimw2
+OptionBase(n=1)
+Input(prompt=None, var=Var(name='A'), comma=False)
+Dim(name='V0', bounds=(Var(name='A'), Lit(value=3)), also=())
+Assign(target=Var(name='B'), value=Lit(value=2))
+Assign(target=Var(name='C'), value=Lit(value=1))
+Assign(target=ArrayRef(name='V0', indices=(Var(name='B'), Var(name='C'))), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Var(name='B'), Var(name='C'))), rhs=Lit(value=4)))
+End()
+
+## v10_t1_dimw3
+OptionBase(n=1)
+Input(prompt=None, var=Var(name='A'), comma=False)
+Dim(name='V1', bounds=(Var(name='A'), Lit(value=3)), also=())
+Dim(name='V0', bounds=(Var(name='A'), Lit(value=2)), also=())
+Assign(target=Var(name='B'), value=Lit(value=2))
+Assign(target=ArrayRef(name='V1', indices=(ArrayRef(name='V0', indices=(Var(name='B'), Lit(value=1))), ArrayRef(name='V0', indices=(Var(name='B'), Lit(value=2))))), value=Lit(value=7))
+Assign(target=Var(name='C'), value=ArrayRef(name='V1', indices=(ArrayRef(name='V0', indices=(Var(name='B'), Lit(value=1))), Lit(value=1))))
+End()
+
+## v10_t1_draw
+Draw(cmd=StrLit(value='U10R10D10L10'))
+End()
+
+## v10_t1_environ
+Environ(s=StrLit(value='PATH=C:\\TB'))
+End()
+
+## v10_t1_eradr
+Assign(target=Var(name='A%'), value=Nullary(name='ERADR'))
+End()
+
+## v10_t1_erase
+Input(prompt=None, var=Var(name='A'), comma=False)
+Dim(name='V0', bounds=(Var(name='A'),), also=())
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=2))
+Erase(name='V0')
+Dim(name='V0', bounds=(Var(name='A'),), also=())
+End()
+
+## v10_t1_errf
+Assign(target=Var(name='A%'), value=Err())
+Assign(target=Var(name='B%'), value=Erl())
+End()
+
+## v10_t1_errml
+Assign(target=Var(name='A%'), value=Err())
+Assign(target=Var(name='B%'), value=Erl())
+End()
+
+## v10_t1_errorn
+ErrorStmt(code=Lit(value=5))
+End()
+
+## v10_t1_evoff
+OnTrap(event='TIMER', n=Lit(value=5), target=3)
+TrapCtl(event='TIMER', n=None, mode='ON')
+End()
+Return()
+
+## v10_t1_evreg
+OnTrap(event='TIMER', n=Lit(value=5), target=5)
+TrapCtl(event='TIMER', n=None, mode='ON')
+Assign(target=Var(name='A%'), value=Lit(value=1))
+Assign(target=Var(name='B%'), value=Lit(value=2))
+End()
+Return()
+
+## v10_t1_evtron
+OnTrap(event='TIMER', n=Lit(value=1), target=6)
+TrapCtl(event='TIMER', n=None, mode='ON')
+Tron()
+Assign(target=Var(name='A'), value=Lit(value=1))
+Troff()
+End()
+Return()
+
+## v10_t1_explog
+Assign(target=Var(name='A'), value=Call(name='EXP', args=(DblLit(value=0.5),)))
+Assign(target=Var(name='B'), value=Call(name='LOG', args=(DblLit(value=2.5),)))
+Assign(target=Var(name='C'), value=Call(name='LOG10', args=(DblLit(value=2.5),)))
+End()
+
+## v10_t1_field
+Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'))
+Field(num=1, fields=((Lit(value=10), Var(name='A$')), (Lit(value=20), Var(name='B$'))))
+Close(num=1)
+End()
+
+## v10_t1_file
+Open(mode=StrLit(value='I'), num=1, file=StrLit(value='X.DAT'))
+InputFile(num=1, vars=(Var(name='A'),))
+InputFile(num=1, vars=(Var(name='B$'),))
+Close(num=1)
+End()
+
+## v10_t1_file2
+LineInput(prompt=None, var=Var(name='A$'))
+Open(mode=StrLit(value='I'), num=2, file=Var(name='A$'))
+InputFile(num=2, vars=(Var(name='B'), Var(name='C')))
+Close(num=2)
+End()
+
+## v10_t1_filef
+Assign(target=Var(name='A%'), value=Call(name='EOF', args=(Lit(value=1),)))
+Assign(target=Var(name='B%'), value=Call(name='LPOS', args=(Lit(value=0),)))
+End()
+
+## v10_t1_files
+Files(spec=StrLit(value='*.*'))
+End()
+
+## v10_t1_fn
+Input(prompt=None, var=Var(name='A'), comma=False)
+Assign(target=Var(name='B'), value=Call(name='ABS', args=(Var(name='A'),)))
+Assign(target=Var(name='C'), value=Call(name='SQR', args=(Var(name='A'),)))
+Assign(target=Var(name='D'), value=Call(name='INT', args=(Var(name='A'),)))
+Assign(target=Var(name='E'), value=Call(name='SGN', args=(Var(name='A'),)))
+Print(items=(BinOp(op='+', lhs=BinOp(op='+', lhs=BinOp(op='+', lhs=Var(name='B'), rhs=Var(name='C')), rhs=Var(name='D')), rhs=Var(name='E')),), newline=True, file=None)
+End()
+
+## v10_t1_fn_asc
+Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
+Print(items=(Call(name='ASC', args=(Var(name='A$'),)),), newline=True, file=None)
+End()
+
+## v10_t1_fn_bin
+Print(items=(Call(name='BIN$', args=(Lit(value=5),)),), newline=True, file=None)
+End()
+
+## v10_t1_fn_chr
+Print(items=(Call(name='CHR$', args=(Lit(value=65),)),), newline=True, file=None)
+End()
+
+## v10_t1_fn_hex
+Print(items=(Call(name='HEX$', args=(Lit(value=255),)),), newline=True, file=None)
+End()
+
+## v10_t1_fn_instr
+Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
+Print(items=(Call(name='INSTR', args=(Var(name='A$'), StrLit(value='l'))),), newline=True, file=None)
+End()
+
+## v10_t1_fn_lcase
+Assign(target=Var(name='A$'), value=StrLit(value='Hi'))
+Print(items=(Call(name='LCASE$', args=(Var(name='A$'),)),), newline=True, file=None)
+End()
+
+## v10_t1_fn_left
+Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
+Print(items=(Call(name='LEFT$', args=(Var(name='A$'), Lit(value=2))),), newline=True, file=None)
+End()
+
+## v10_t1_fn_len
+Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
+Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None)
+End()
+
+## v10_t1_fn_mid
+Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
+Print(items=(Call(name='MID$', args=(Var(name='A$'), Lit(value=2), Lit(value=3))),), newline=True, file=None)
+End()
+
+## v10_t1_fn_oct
+Print(items=(Call(name='OCT$', args=(Lit(value=8),)),), newline=True, file=None)
+End()
+
+## v10_t1_fn_right
+Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
+Print(items=(Call(name='RIGHT$', args=(Var(name='A$'), Lit(value=2))),), newline=True, file=None)
+End()
+
+## v10_t1_fn_space
+Print(items=(Call(name='SPACE$', args=(Lit(value=3),)),), newline=True, file=None)
+End()
+
+## v10_t1_fn_str
+Print(items=(Call(name='STR$', args=(Lit(value=42),)),), newline=True, file=None)
+End()
+
+## v10_t1_fn_string
+Print(items=(Call(name='STRING$', args=(Lit(value=3), Lit(value=42))),), newline=True, file=None)
+End()
+
+## v10_t1_fn_ucase
+Assign(target=Var(name='A$'), value=StrLit(value='Hi'))
+Print(items=(Call(name='UCASE$', args=(Var(name='A$'),)),), newline=True, file=None)
+End()
+
+## v10_t1_fn_val
+Print(items=(Call(name='VAL', args=(StrLit(value='42'),)),), newline=True, file=None)
+End()
+
+## v10_t1_for
+Assign(target=Var(name='A'), value=Lit(value=0))
+For(var=Var(name='B'), init=Lit(value=1), limit=Lit(value=5), step=Lit(value=1))
+Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Var(name='B')))
+NextStmt(var=Var(name='B'))
+End()
+
+## v10_t1_for2
+For(var=Var(name='A'), init=Lit(value=1), limit=Lit(value=3), step=Lit(value=1))
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=1)))
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=2)))
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=3)))
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=4)))
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=5)))
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=6)))
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=7)))
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=8)))
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=9)))
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=10)))
+NextStmt(var=Var(name='A'))
+Print(items=(Var(name='B'),), newline=True, file=None)
+End()
+
+## v10_t1_fp
+Assign(target=Var(name='A'), value=Lit(value=0.5))
+Assign(target=Var(name='B'), value=Lit(value=1.3552527156068805e-20))
+Assign(target=Var(name='C'), value=Lit(value=24999999488.0))
+Print(items=(Var(name='A'), Var(name='B'), Var(name='C')), newline=True, file=None)
+End()
+
+## v10_t1_fp2
+Assign(target=Var(name='A'), value=Lit(value=0.0))
+Assign(target=Var(name='B'), value=Lit(value=1.0))
+Assign(target=Var(name='C'), value=Lit(value=5.0))
+Print(items=(Var(name='A'), Var(name='B'), Var(name='C')), newline=True, file=None)
+End()
+
+## v10_t1_fre
+Assign(target=Var(name='A'), value=Call(name='FRE', args=(Lit(value=0),)))
+Assign(target=Var(name='B'), value=Call(name='FRE', args=(StrLit(value=''),)))
+End()
+
+## v10_t1_fres
+Assign(target=Var(name='A$'), value=StrLit(value='HI'))
+Assign(target=Var(name='B'), value=Call(name='FRE', args=(StrLit(value='HELLO'),)))
+Assign(target=Var(name='C'), value=Call(name='FRE', args=(StrLit(value=''),)))
+End()
+
+## v10_t1_fres2
+Assign(target=Var(name='A$'), value=StrLit(value='Z'))
+Assign(target=Var(name='B'), value=Call(name='FRE', args=(StrLit(value='AA'),)))
+Assign(target=Var(name='C'), value=Call(name='FRE', args=(StrLit(value='BBB'),)))
+End()
+
+## v10_t1_fresx
+Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Call(name='FRE', args=(StrLit(value='AB'),)), rhs=Lit(value=1)))
+End()
+
+## v10_t1_getfile
+Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'))
+Get(num=1, pos=Lit(value=1))
+Close(num=1)
+End()
+
+## v10_t1_getput
+Dim(name='V0%', bounds=(100,), also=())
+GetGfx(x1=Lit(value=0), y1=Lit(value=0), x2=Lit(value=10), y2=Lit(value=10), array='V0%')
+PutGfx(x=Lit(value=20), y=Lit(value=20), array='V0%', action=None)
+End()
+
+## v10_t1_gosub
+Assign(target=Var(name='A'), value=Lit(value=1))
+Gosub(target=4)
+Assign(target=Var(name='A'), value=Lit(value=3))
+End()
+Assign(target=Var(name='B'), value=Lit(value=2))
+Return()
+
+## v10_t1_goto
+Assign(target=Var(name='A'), value=Lit(value=1))
+Goto(target=3)
+Assign(target=Var(name='A'), value=Lit(value=2))
+Assign(target=Var(name='B'), value=Lit(value=3))
+End()
+
+## v10_t1_if
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B'), value=Lit(value=2))
+IfGoto(cond=RelOp(op='>=', lhs=Var(name='A'), rhs=Var(name='B')), target=4)
+Assign(target=Var(name='C'), value=Lit(value=5))
+IfGoto(cond=RelOp(op='=', lhs=Var(name='A'), rhs=Var(name='B')), target=6)
+Assign(target=Var(name='C'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
+End()
+
+## v10_t1_ifin
+Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='B'), comma=False)
+IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), body=(Assign(target=Var(name='C'), value=Lit(value=1)), Assign(target=Var(name='D'), value=Lit(value=2))))
+Print(items=(Var(name='C'), Var(name='D')), newline=True, file=None)
+End()
+
+## v10_t1_inkey
+Assign(target=Var(name='A$'), value=Nullary(name='INKEY$'))
+End()
+
+## v10_t1_inp
+Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='B$'), comma=False)
+Print(items=(Var(name='B$'),), newline=True, file=None)
+End()
+
+## v10_t1_inp2
+Input(prompt=StrLit(value='X'), var=Var(name='A'), comma=False)
+End()
+
+## v10_t1_inp3
+LineInput(prompt=None, var=Var(name='A$'))
+LineInput(prompt=StrLit(value='X'), var=Var(name='B$'))
+End()
+
+## v10_t1_inp4
+Input(prompt=StrLit(value='X'), var=Var(name='A$'), comma=True)
+End()
+
+## v10_t1_inpf
+Assign(target=Var(name='A'), value=Call(name='INP', args=(Lit(value=888),)))
+Print(items=(Var(name='A'),), newline=True, file=None)
+End()
+
+## v10_t1_instat
+Assign(target=Var(name='A%'), value=Nullary(name='INSTAT'))
+End()
+
+## v10_t1_int
+Assign(target=Var(name='A%'), value=Lit(value=5))
+Assign(target=Var(name='B%'), value=BinOp(op='+', lhs=Var(name='A%'), rhs=Lit(value=2)))
+Assign(target=Var(name='C'), value=Var(name='B%'))
+End()
+
+## v10_t1_int2
+Assign(target=Var(name='A%'), value=Lit(value=5))
+Assign(target=Var(name='B%'), value=Lit(value=2))
+Assign(target=Var(name='C%'), value=BinOp(op='+', lhs=Var(name='A%'), rhs=Var(name='B%')))
+Assign(target=Var(name='D%'), value=BinOp(op='-', lhs=Var(name='A%'), rhs=Var(name='B%')))
+Assign(target=Var(name='E%'), value=BinOp(op='*', lhs=Var(name='A%'), rhs=Var(name='B%')))
+Assign(target=Var(name='F%'), value=BinOp(op='+', lhs=Var(name='A%'), rhs=Lit(value=3)))
+Assign(target=Var(name='G'), value=BinOp(op='+', lhs=Var(name='A%'), rhs=Var(name='B%')))
+Assign(target=Var(name='H%'), value=Var(name='G'))
+End()
+
+## v10_t1_keylist
+KeyList()
+End()
+
+## v10_t1_keyoff
+Key(on=False)
+End()
+
+## v10_t1_keyon
+Key(on=True)
+End()
+
+## v10_t1_keyos
+OnTrap(event='KEY', n=Lit(value=1), target=4)
+TrapCtl(event='KEY', n=Lit(value=1), mode='OFF')
+TrapCtl(event='KEY', n=Lit(value=1), mode='STOP')
+End()
+Return()
+
+## v10_t1_kill
+Kill(file=StrLit(value='X.DAT'))
+End()
+
+## v10_t1_line
+LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=None, box='', step1=False, step2=False, style=None)
+End()
+
+## v10_t1_line2
+LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=Lit(value=2), box='', step1=False, step2=False, style=None)
+End()
+
+## v10_t1_lineb
+LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=Lit(value=2), box='B', step1=False, step2=False, style=None)
+End()
+
+## v10_t1_linebf
+LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=Lit(value=2), box='BF', step1=False, step2=False, style=None)
+End()
+
+## v10_t1_linebst
+LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=Lit(value=2), box='B', step1=False, step2=False, style=HexLit(value=43690))
+End()
+
+## v10_t1_lines
+LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=5), y2=Lit(value=5), color=None, box='', step1=False, step2=True, style=None)
+End()
+
+## v10_t1_lines2
+LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=None, box='', step1=True, step2=False, style=None)
+End()
+
+## v10_t1_linest
+LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=Lit(value=2), box='', step1=False, step2=False, style=HexLit(value=43690))
+End()
+
+## v10_t1_linev
+Assign(target=Var(name='A'), value=Lit(value=5))
+LineStmt(x1=Var(name='A'), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=None, box='', step1=False, step2=False, style=None)
+End()
+
+## v10_t1_linevb
+Assign(target=Var(name='A'), value=Lit(value=5))
+LineStmt(x1=Var(name='A'), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=Lit(value=2), box='B', step1=False, step2=False, style=None)
+End()
+
+## v10_t1_lprint
+Lprint(items=(Lit(value=5),), newline=True)
+End()
+
+## v10_t1_lset
+Assign(target=Var(name='A$'), value=StrLit(value='HELLO'))
+Lset(target=Var(name='A$'), source=StrLit(value='HI'))
+End()
+
+## v10_t1_meta0
+Assign(target=Var(name='A%'), value=Lit(value=1))
+End()
+
+## v10_t1_midas
+Assign(target=Var(name='A$'), value=StrLit(value='HELLO'))
+MidAssign(target=Var(name='A$'), start=Lit(value=2), source=StrLit(value='X'))
+End()
+
+## v10_t1_mix
+OptionBase(n=1)
+Dim(name='V0', bounds=(4,), also=())
+Dim(name='V1', bounds=(3, 2), also=())
+Input(prompt=None, var=Var(name='A'), comma=False)
+Dim(name='V2', bounds=(Var(name='A'),), also=())
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=2))
+Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=2),)), rhs=Lit(value=1)))
+Assign(target=ArrayRef(name='V1', indices=(Lit(value=1), Lit(value=2))), value=ArrayRef(name='V0', indices=(Var(name='A'),)))
+Assign(target=ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=1))), value=Lit(value=4))
+Assign(target=ArrayRef(name='V2', indices=(Lit(value=1),)), value=ArrayRef(name='V1', indices=(Lit(value=1), Lit(value=1))))
+Print(items=(ArrayRef(name='V0', indices=(Var(name='A'),)), ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=2))), ArrayRef(name='V2', indices=(Var(name='A'),))), newline=True, file=None)
+End()
+
+## v10_t1_mix2
+OptionBase(n=1)
+Dim(name='V0', bounds=(5,), also=())
+Dim(name='V1', bounds=(3, 2), also=())
+Input(prompt=None, var=Var(name='A'), comma=False)
+Dim(name='V2', bounds=(Var(name='A'),), also=())
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=2))
+Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=2),)), rhs=Lit(value=1)))
+Assign(target=ArrayRef(name='V1', indices=(Lit(value=1), Lit(value=2))), value=ArrayRef(name='V0', indices=(Var(name='A'),)))
+Assign(target=ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=1))), value=Lit(value=4))
+Assign(target=ArrayRef(name='V2', indices=(Lit(value=1),)), value=ArrayRef(name='V1', indices=(Lit(value=1), Lit(value=1))))
+Print(items=(ArrayRef(name='V0', indices=(Var(name='A'),)), ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=2))), ArrayRef(name='V2', indices=(Var(name='A'),))), newline=True, file=None)
+End()
+
+## v10_t1_mix3
+OptionBase(n=1)
+Dim(name='V0', bounds=((0, 4),), also=())
+Dim(name='V1', bounds=((2, 3), (0, 2)), also=())
+Input(prompt=None, var=Var(name='A'), comma=False)
+Dim(name='V2', bounds=(Var(name='A'),), also=())
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=0),)), value=Lit(value=2))
+Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=2),)), rhs=Lit(value=1)))
+Assign(target=ArrayRef(name='V1', indices=(Lit(value=2), Lit(value=0))), value=ArrayRef(name='V0', indices=(Var(name='A'),)))
+Assign(target=ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=2))), value=Lit(value=4))
+Assign(target=ArrayRef(name='V2', indices=(Lit(value=1),)), value=ArrayRef(name='V1', indices=(Lit(value=3), Lit(value=1))))
+Print(items=(ArrayRef(name='V0', indices=(Var(name='A'),)), ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=2))), ArrayRef(name='V2', indices=(Var(name='A'),))), newline=True, file=None)
+End()
+
+## v10_t1_mkdir
+Mkdir(path=StrLit(value='SUB'))
+End()
+
+## v10_t1_mtimer
+Mtimer()
+End()
+
+## v10_t1_mtimerf
+Assign(target=Var(name='A'), value=Nullary(name='MTIMER'))
+End()
+
+## v10_t1_name
+Name(old=StrLit(value='X.DAT'), new=StrLit(value='Y.DAT'))
+End()
+
+## v10_t1_notron
+Assign(target=Var(name='A%'), value=Lit(value=1))
+Assign(target=Var(name='B%'), value=Lit(value=2))
+Assign(target=Var(name='C%'), value=Lit(value=3))
+End()
+
+## v10_t1_ob2
+Dim(name='V0', bounds=(10, 10), also=())
+Dim(name='V1', bounds=((1, 6), (1, 6)), also=())
+Assign(target=Var(name='A'), value=Lit(value=2))
+Assign(target=Var(name='B'), value=Lit(value=3))
+Assign(target=ArrayRef(name='V0', indices=(Var(name='A'), Var(name='B'))), value=Lit(value=5))
+Assign(target=ArrayRef(name='V1', indices=(Var(name='A'), Var(name='B'))), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Var(name='A'), Var(name='B'))), rhs=ArrayRef(name='V0', indices=(Var(name='B'), Var(name='A')))))
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=2))), value=ArrayRef(name='V1', indices=(Var(name='A'), Var(name='B'))))
+Print(items=(ArrayRef(name='V0', indices=(Var(name='A'), Var(name='B'))), ArrayRef(name='V1', indices=(Var(name='A'), Var(name='B')))), newline=True, file=None)
+End()
+
+## v10_t1_ob3
+Dim(name='V0', bounds=((1, 6), (1, 6)), also=())
+Dim(name='V1', bounds=(10, 10), also=())
+Dim(name='V2', bounds=((1, 4),), also=())
+Assign(target=Var(name='A'), value=Lit(value=2))
+Assign(target=Var(name='B'), value=Lit(value=3))
+Assign(target=ArrayRef(name='V1', indices=(Var(name='A'), Var(name='B'))), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Var(name='A'), Var(name='B'))), rhs=ArrayRef(name='V2', indices=(Var(name='A'),))))
+Print(items=(ArrayRef(name='V1', indices=(Var(name='A'), Var(name='B'))),), newline=True, file=None)
+End()
+
+## v10_t1_oncom
+OnTrap(event='COM', n=Lit(value=1), target=5)
+TrapCtl(event='COM', n=Lit(value=1), mode='ON')
+TrapCtl(event='COM', n=Lit(value=1), mode='OFF')
+TrapCtl(event='COM', n=Lit(value=1), mode='STOP')
+End()
+Return()
+
+## v10_t1_one3
+Data(items=(DataItem(text='123', is_str=False),))
+Read(targets=(Var(name='A'),))
+End()
+
+## v10_t1_onerr
+OnError(target=3)
+Print(items=(Lit(value=1),), newline=True, file=None)
+End()
+Resume(next_=False, target=None)
+
+## v10_t1_onerr0
+OnError(target=None)
+End()
+
+## v10_t1_ongosub
+Assign(target=Var(name='A'), value=Lit(value=1))
+OnGosub(selector=Var(name='A'), targets=(3, 4))
+End()
+Return()
+Return()
+
+## v10_t1_ongoto
+Assign(target=Var(name='A'), value=Lit(value=1))
+OnGoto(selector=Var(name='A'), targets=(3, 4))
+End()
+End()
+End()
+
+## v10_t1_onkey
+OnTrap(event='KEY', n=Lit(value=1), target=3)
+TrapCtl(event='KEY', n=Lit(value=1), mode='ON')
+End()
+Return()
+
+## v10_t1_onpen
+OnTrap(event='PEN', n=None, target=5)
+TrapCtl(event='PEN', n=None, mode='ON')
+TrapCtl(event='PEN', n=None, mode='OFF')
+TrapCtl(event='PEN', n=None, mode='STOP')
+End()
+Return()
+
+## v10_t1_onplay
+OnTrap(event='PLAY', n=Lit(value=4), target=5)
+TrapCtl(event='PLAY', n=None, mode='ON')
+TrapCtl(event='PLAY', n=None, mode='OFF')
+TrapCtl(event='PLAY', n=None, mode='STOP')
+End()
+Return()
+
+## v10_t1_ontimer
+OnTrap(event='TIMER', n=Lit(value=5), target=3)
+TrapCtl(event='TIMER', n=None, mode='ON')
+End()
+Return()
+
+## v10_t1_or
+Input(prompt=None, var=Var(name='A'), comma=False)
+IfGoto(cond=LogOp(op='OR', lhs=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=0)), rhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=9))), target=4)
+Print(items=(Lit(value=0),), newline=True, file=None)
+Goto(target=5)
+Print(items=(Lit(value=1),), newline=True, file=None)
+End()
+
+## v10_t1_out
+Out(port=Lit(value=888), value=Lit(value=1))
+End()
+
+## v10_t1_out2
+Assign(target=Var(name='A%'), value=Lit(value=5))
+Out(port=Lit(value=888), value=Var(name='A%'))
+End()
+
+## v10_t1_paint
+Paint(x=Lit(value=50), y=Lit(value=50), paint=Lit(value=1), border=Lit(value=2))
+End()
+
+## v10_t1_paintb
+Paint(x=Lit(value=50), y=Lit(value=50), paint=None, border=Lit(value=2))
+End()
+
+## v10_t1_paintp
+Paint(x=Lit(value=50), y=Lit(value=50), paint=Lit(value=1), border=None)
+End()
+
+## v10_t1_palette
+Palette(attr=Lit(value=1), color=Lit(value=2))
+End()
+
+## v10_t1_peek
+Assign(target=Var(name='A'), value=Call(name='PEEK', args=(Lit(value=100),)))
+Print(items=(Var(name='A'),), newline=True, file=None)
+End()
+
+## v10_t1_penf
+Assign(target=Var(name='A%'), value=Call(name='PEN', args=(Lit(value=0),)))
+End()
+
+## v10_t1_play
+Play(music=StrLit(value='O5G8.G8.G8...'))
+End()
+
+## v10_t1_playf
+Assign(target=Var(name='A%'), value=Call(name='PLAY', args=(Lit(value=0),)))
+End()
+
+## v10_t1_pmap
+Assign(target=Var(name='A'), value=Call(name='PMAP', args=(DblLit(value=1.5), Lit(value=0))))
+End()
+
+## v10_t1_point
+Assign(target=Var(name='A'), value=Call(name='POINT', args=(Lit(value=10), Lit(value=20))))
+Print(items=(Var(name='A'),), newline=True, file=None)
+End()
+
+## v10_t1_poke
+Poke(addr=Lit(value=100), value=Lit(value=1))
+End()
+
+## v10_t1_poke2
+Assign(target=Var(name='A%'), value=Lit(value=7))
+Poke(addr=Lit(value=100), value=Var(name='A%'))
+End()
+
+## v10_t1_pos
+Assign(target=Var(name='A%'), value=Call(name='POS', args=(Lit(value=0),)))
+End()
+
+## v10_t1_pr2
+Input(prompt=None, var=Var(name='A'), comma=False)
+Print(items=(StrLit(value='A'), Var(name='A'), StrLit(value='B')), newline=True, file=None)
+Print(items=(StrLit(value='X'),), newline=False, file=None)
+PrintUsing(fmt=StrLit(value='##.##'), values=(Var(name='A'),), file=None, newline=True)
+PrintUsing(fmt=StrLit(value='#.# #.#'), values=(Var(name='A'), Var(name='A')), file=None, newline=True)
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='R.TXT'))
+Print(items=(Var(name='A'),), newline=True, file=1)
+PrintUsing(fmt=StrLit(value='##.##'), values=(Var(name='A'), Var(name='A')), file=1, newline=True)
+Close(num=1)
+End()
+
+## v10_t1_preset
+Pset(x=Lit(value=10), y=Lit(value=20), color=None, preset=True, step=False)
+End()
+
+## v10_t1_preset2
+Pset(x=Lit(value=10), y=Lit(value=20), color=Lit(value=3), preset=False, step=False)
+End()
+
+## v10_t1_print
+Assign(target=Var(name='A'), value=Lit(value=5))
+Print(items=(StrLit(value='HELLO'),), newline=True, file=None)
+Print(items=(Var(name='A'),), newline=True, file=None)
+Print(items=(BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)),), newline=True, file=None)
+End()
+
+## v10_t1_print2
+Assign(target=Var(name='A'), value=Lit(value=5))
+Print(items=(StrLit(value='HELLO'),), newline=True, file=None)
+Print(items=(StrLit(value='WORLD!'),), newline=True, file=None)
+Print(items=(Var(name='A'),), newline=True, file=None)
+End()
+
+## v10_t1_pset
+Pset(x=Lit(value=10), y=Lit(value=20), color=None, preset=False, step=False)
+End()
+
+## v10_t1_pset2
+Pset(x=Lit(value=10), y=Lit(value=20), color=Lit(value=3), preset=False, step=False)
+End()
+
+## v10_t1_putact
+Dim(name='V0%', bounds=(100,), also=())
+GetGfx(x1=Lit(value=0), y1=Lit(value=0), x2=Lit(value=10), y2=Lit(value=10), array='V0%')
+PutGfx(x=Lit(value=20), y=Lit(value=20), array='V0%', action=None)
+PutGfx(x=Lit(value=30), y=Lit(value=30), array='V0%', action='PSET')
+End()
+
+## v10_t1_putact2
+Dim(name='V0%', bounds=(50,), also=())
+GetGfx(x1=Lit(value=0), y1=Lit(value=0), x2=Lit(value=5), y2=Lit(value=5), array='V0%')
+PutGfx(x=Lit(value=1), y=Lit(value=1), array='V0%', action='PRESET')
+PutGfx(x=Lit(value=2), y=Lit(value=2), array='V0%', action='AND')
+PutGfx(x=Lit(value=3), y=Lit(value=3), array='V0%', action='OR')
+End()
+
+## v10_t1_putfile
+Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'))
+Put(num=1, pos=Lit(value=1))
+Close(num=1)
+End()
+
+## v10_t1_randomize
+Randomize(seed=Lit(value=5))
+End()
+
+## v10_t1_readafter
+Data(items=(DataItem(text='11', is_str=False), DataItem(text='22', is_str=False)))
+Read(targets=(Var(name='A'), Var(name='B')))
+End()
+
+## v10_t1_readalt
+Data(items=(DataItem(text='4', is_str=False), DataItem(text='5', is_str=False), DataItem(text='6', is_str=False)))
+Read(targets=(Var(name='A'), Var(name='B'), Var(name='C')))
+End()
+
+## v10_t1_readbig
+Data(items=(DataItem(text='100', is_str=False), DataItem(text='200', is_str=False), DataItem(text='300', is_str=False)))
+Read(targets=(Var(name='A'), Var(name='B'), Var(name='C')))
+End()
+
+## v10_t1_readfp
+Data(items=(DataItem(text='1.5', is_str=False), DataItem(text='-2.25', is_str=False)))
+Read(targets=(Var(name='A'), Var(name='B')))
+End()
+
+## v10_t1_readnum
+Data(items=(DataItem(text='1', is_str=False), DataItem(text='2', is_str=False), DataItem(text='3', is_str=False)))
+Read(targets=(Var(name='A'), Var(name='B'), Var(name='C')))
+End()
+
+## v10_t1_readstr
+Data(items=(DataItem(text='X', is_str=True), DataItem(text='YZ', is_str=True)))
+Read(targets=(Var(name='A$'), Var(name='B$')))
+End()
+
+## v10_t1_reg
+RegSet(n=Lit(value=1), value=Lit(value=512))
+Assign(target=Var(name='A%'), value=Call(name='REG', args=(Lit(value=1),)))
+End()
+
+## v10_t1_relops
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B'), value=Lit(value=2))
+IfGoto(cond=RelOp(op='=', lhs=Var(name='A'), rhs=Var(name='B')), target=8)
+IfGoto(cond=RelOp(op='<>', lhs=Var(name='A'), rhs=Var(name='B')), target=8)
+IfGoto(cond=RelOp(op='<', lhs=Var(name='A'), rhs=Var(name='B')), target=8)
+IfGoto(cond=RelOp(op='<=', lhs=Var(name='A'), rhs=Var(name='B')), target=8)
+IfGoto(cond=RelOp(op='>', lhs=Var(name='A'), rhs=Var(name='B')), target=8)
+IfGoto(cond=RelOp(op='>=', lhs=Var(name='A'), rhs=Var(name='B')), target=8)
+End()
+
+## v10_t1_reset
+Reset()
+End()
+
+## v10_t1_restore
+Data(items=(DataItem(text='5', is_str=False), DataItem(text='6', is_str=False)))
+Read(targets=(Var(name='A'),))
+Restore(target=None)
+Read(targets=(Var(name='B'),))
+End()
+
+## v10_t1_restoreline
+Data(items=(DataItem(text='7', is_str=False),))
+Data(items=(DataItem(text='8', is_str=False), DataItem(text='9', is_str=False)))
+Restore(target=1)
+Read(targets=(Var(name='A'),))
+End()
+
+## v10_t1_resumel
+OnError(target=3)
+Print(items=(Lit(value=1),), newline=True, file=None)
+End()
+Resume(next_=False, target=1)
+
+## v10_t1_resumen
+OnError(target=3)
+Print(items=(Lit(value=1),), newline=True, file=None)
+End()
+Resume(next_=True, target=None)
+
+## v10_t1_rmdir
+Rmdir(path=StrLit(value='SUB'))
+End()
+
+## v10_t1_rnd
+Assign(target=Var(name='A'), value=Nullary(name='RND'))
+Assign(target=Var(name='B'), value=Call(name='RND', args=(Lit(value=1),)))
+End()
+
+## v10_t1_rset
+Assign(target=Var(name='A$'), value=StrLit(value='HELLO'))
+Rset(target=Var(name='A$'), source=StrLit(value='HI'))
+End()
+
+## v10_t1_run
+Run()
+End()
+
+## v10_t1_sarr
+Input(prompt=None, var=Var(name='A'), comma=False)
+Dim(name='V0$', bounds=(Var(name='A'),), also=())
+Assign(target=ArrayRef(name='V0$', indices=(Lit(value=1),)), value=StrLit(value='AB'))
+Assign(target=ArrayRef(name='V0$', indices=(Var(name='A'),)), value=StrLit(value='CD'))
+Assign(target=Var(name='B$'), value=ArrayRef(name='V0$', indices=(Var(name='A'),)))
+Print(items=(ArrayRef(name='V0$', indices=(Lit(value=1),)),), newline=True, file=None)
+End()
+
+## v10_t1_sarr2
+Input(prompt=None, var=Var(name='A'), comma=False)
+Dim(name='V1$', bounds=(Var(name='A'),), also=())
+Dim(name='V0', bounds=(Var(name='A'), Lit(value=5)), also=())
+Open(mode=StrLit(value='I'), num=1, file=StrLit(value='X.DAT'))
+InputFile(num=1, vars=(ArrayRef(name='V0', indices=(Var(name='A'), Lit(value=5))), ArrayRef(name='V1$', indices=(Var(name='A'),))))
+Close(num=1)
+Print(items=(ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=1))), ArrayRef(name='V1$', indices=(Var(name='A'),))), newline=True, file=None)
+End()
+
+## v10_t1_scr
+Cls()
+Locate(row=Lit(value=3), col=Lit(value=5), cursor=None)
+Color(fg=Lit(value=1), bg=None)
+Locate(row=Lit(value=10), col=Lit(value=20), cursor=None)
+Color(fg=Lit(value=7), bg=Lit(value=0))
+Print(items=(StrLit(value='HI'),), newline=True, file=None)
+End()
+
+## v10_t1_scr2
+Locate(row=Lit(value=3), col=Lit(value=5), cursor=Lit(value=1))
+Locate(row=Lit(value=4), col=Lit(value=6), cursor=Lit(value=0))
+Color(fg=None, bg=Lit(value=2))
+End()
+
+## v10_t1_screen
+Screen(mode=Lit(value=1))
+End()
+
+## v10_t1_screenf
+Assign(target=Var(name='A%'), value=Call(name='SCREEN', args=(Lit(value=1), Lit(value=2))))
+End()
+
+## v10_t1_seek
+Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'))
+Seek(num=1, pos=Lit(value=1))
+Close(num=1)
+End()
+
+## v10_t1_shell
+Shell(cmd=StrLit(value='DIR'))
+End()
+
+## v10_t1_shellvar
+Shell(cmd=Var(name='A$'))
+End()
+
+## v10_t1_sound
+Sound(freq=Lit(value=440), dur=Lit(value=2))
+End()
+
+## v10_t1_soundm
+Assign(target=Var(name='A%'), value=Lit(value=1))
+End()
+
+## v10_t1_stack
+Assign(target=Var(name='A%'), value=Lit(value=1))
+End()
+
+## v10_t1_stack4
+Assign(target=Var(name='A%'), value=Lit(value=1))
+End()
+
+## v10_t1_stick
+Assign(target=Var(name='A%'), value=Call(name='STICK', args=(Lit(value=0),)))
+End()
+
+## v10_t1_str
+Assign(target=Var(name='A$'), value=StrLit(value='HI'))
+Assign(target=Var(name='B$'), value=Var(name='A$'))
+Print(items=(Var(name='A$'),), newline=True, file=None)
+End()
+
+## v10_t1_strigf
+Assign(target=Var(name='A%'), value=Call(name='STRIG', args=(Lit(value=0),)))
+End()
+
+## v10_t1_strigoff
+TrapCtl(event='STRIG', n=None, mode='OFF')
+End()
+
+## v10_t1_strigon
+TrapCtl(event='STRIG', n=None, mode='ON')
+End()
+
+## v10_t1_strlib
+Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
+Assign(target=Var(name='B$'), value=Call(name='UCASE$', args=(Var(name='A$'),)))
+Assign(target=Var(name='C$'), value=Call(name='LEFT$', args=(Var(name='B$'), Lit(value=3))))
+Print(items=(Var(name='C$'),), newline=True, file=None)
+Print(items=(Call(name='MID$', args=(Var(name='A$'), Lit(value=2), Lit(value=3))),), newline=True, file=None)
+Print(items=(Call(name='INSTR', args=(Var(name='A$'), StrLit(value='l'))),), newline=True, file=None)
+Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None)
+Print(items=(Call(name='STR$', args=(Lit(value=42),)),), newline=True, file=None)
+End()
+
+## v10_t1_swap
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B'), value=Lit(value=2))
+Swap(a=Var(name='A'), b=Var(name='B'))
+End()
+
+## v10_t1_tab
+Input(prompt=None, var=Var(name='A'), comma=False)
+Print(items=(StrLit(value='A'), Call(name='TAB', args=(Lit(value=7),)), Var(name='A')), newline=True, file=None)
+Print(items=(Call(name='SPC', args=(Lit(value=3),)), StrLit(value='B')), newline=True, file=None)
+Print(items=(Call(name='TAB', args=(Var(name='A'),)), StrLit(value='C')), newline=True, file=None)
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='R.TXT'))
+Print(items=(StrLit(value='X'), Call(name='TAB', args=(Lit(value=7),)), StrLit(value='Y'), Call(name='SPC', args=(Lit(value=8),)), Var(name='A')), newline=True, file=1)
+Close(num=1)
+End()
+
+## v10_t1_timerf
+Assign(target=Var(name='A'), value=Nullary(name='TIMER'))
+End()
+
+## v10_t1_timeros
+OnTrap(event='TIMER', n=Lit(value=5), target=4)
+TrapCtl(event='TIMER', n=None, mode='OFF')
+TrapCtl(event='TIMER', n=None, mode='STOP')
+End()
+Return()
+
+## v10_t1_times
+DateTimeSet(name='TIME$', value=StrLit(value='12:00:00'))
+End()
+
+## v10_t1_trig
+Assign(target=Var(name='A'), value=Call(name='ATN', args=(DblLit(value=0.5),)))
+Assign(target=Var(name='B'), value=Call(name='COS', args=(DblLit(value=0.5),)))
+Assign(target=Var(name='C'), value=Call(name='SIN', args=(DblLit(value=0.5),)))
+Assign(target=Var(name='D'), value=Call(name='TAN', args=(DblLit(value=0.5),)))
+End()
+
+## v10_t1_troffin
+Tron()
+IfBlock(arms=((RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=1)), (Assign(target=Var(name='B'), value=Lit(value=1)), Troff(), Assign(target=Var(name='B'), value=Lit(value=2)))),), else_body=None)
+Assign(target=Var(name='C'), value=Lit(value=3))
+End()
+
+## v10_t1_tron
+Tron()
+End()
+
+## v10_t1_tron2
+Tron()
+Assign(target=Var(name='A%'), value=Lit(value=1))
+Assign(target=Var(name='B%'), value=Lit(value=2))
+Troff()
+Assign(target=Var(name='C%'), value=Lit(value=3))
+End()
+
+## v10_t1_tron2r
+Tron()
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B'), value=Lit(value=2))
+Assign(target=Var(name='C'), value=Lit(value=3))
+End()
+
+## v10_t1_tron2r2
+Tron()
+Assign(target=Var(name='A'), value=Lit(value=1))
+Troff()
+Assign(target=Var(name='B'), value=Lit(value=2))
+Assign(target=Var(name='C'), value=Lit(value=4))
+Tron()
+Assign(target=Var(name='D'), value=Lit(value=3))
+End()
+
+## v10_t1_troncase
+Assign(target=Var(name='A'), value=Lit(value=2))
+Tron()
+SelectCase(selector=Var(name='A'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=1)),), body=(Assign(target=Var(name='B'), value=Lit(value=1)),)),), case_else=(Assign(target=Var(name='B'), value=Lit(value=2)),))
+End()
+
+## v10_t1_tronerb
+OnError(target=5)
+Tron()
+IfBlock(arms=((RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=0)), (Assign(target=Var(name='B'), value=Lit(value=1)),)),), else_body=(Assign(target=Var(name='B'), value=Lit(value=2)),))
+Troff()
+End()
+Resume(next_=False, target=None)
+
+## v10_t1_tronerr
+OnError(target=6)
+Tron()
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B'), value=Lit(value=2))
+Troff()
+End()
+Resume(next_=False, target=5)
+
+## v10_t1_tronfor
+Tron()
+For(var=Var(name='A'), init=Lit(value=1), limit=Lit(value=3), step=Lit(value=1))
+Assign(target=Var(name='B'), value=Var(name='A'))
+NextStmt(var=Var(name='A'))
+End()
+
+## v10_t1_trongoto
+Goto(target=3)
+Tron()
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B'), value=Lit(value=2))
+End()
+
+## v10_t1_tronif
+Assign(target=Var(name='A'), value=Lit(value=0))
+Tron()
+IfBlock(arms=((RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=0)), (Assign(target=Var(name='B'), value=Lit(value=1)),)),), else_body=(Assign(target=Var(name='B'), value=Lit(value=2)),))
+End()
+
+## v10_t1_tronml
+Tron()
+Troff()
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B'), value=Lit(value=2))
+Tron()
+End()
+
+## v10_t1_tronres
+OnError(target=6)
+Tron()
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B'), value=Lit(value=2))
+Troff()
+End()
+Resume(next_=False, target=None)
+
+## v10_t1_tronsplit
+Tron()
+Assign(target=Var(name='A'), value=Lit(value=1))
+Troff()
+Assign(target=Var(name='B'), value=Lit(value=2))
+Assign(target=Var(name='C'), value=Lit(value=3))
+End()
+
+## v10_t1_tronwh
+Tron()
+Do(kind='WHILE', cond=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=2)))
+Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
+Loop(kind=None, cond=None)
+End()
+
+## v10_t1_two
+Data(items=(DataItem(text='12', is_str=False), DataItem(text='3', is_str=False)))
+Read(targets=(Var(name='A'), Var(name='B')))
+End()
+
+## v10_t1_varptr
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B%'), value=Call(name='VARPTR', args=(Var(name='A'),)))
+Assign(target=Var(name='C%'), value=VarSeg())
+End()
+
+## v10_t1_view
+View(x1=Lit(value=10), y1=Lit(value=10), x2=Lit(value=100), y2=Lit(value=100), screen=False, color=None, border=None)
+End()
+
+## v10_t1_viewb
+View(x1=Lit(value=10), y1=Lit(value=10), x2=Lit(value=100), y2=Lit(value=100), screen=False, color=None, border=Lit(value=2))
+End()
+
+## v10_t1_viewc
+View(x1=Lit(value=10), y1=Lit(value=10), x2=Lit(value=100), y2=Lit(value=100), screen=False, color=Lit(value=1), border=Lit(value=2))
+End()
+
+## v10_t1_viewcol
+View(x1=Lit(value=10), y1=Lit(value=10), x2=Lit(value=100), y2=Lit(value=100), screen=False, color=Lit(value=1), border=None)
+End()
+
+## v10_t1_views
+View(x1=Lit(value=10), y1=Lit(value=10), x2=Lit(value=100), y2=Lit(value=100), screen=True, color=None, border=None)
+End()
+
+## v10_t1_wait
+Wait(port=Lit(value=888), mask=Lit(value=1), xor=None)
+End()
+
+## v10_t1_wait3
+Wait(port=Lit(value=986), mask=Lit(value=8), xor=Lit(value=4))
+End()
+
+## v10_t1_while
+Assign(target=Var(name='A'), value=Lit(value=0))
+Do(kind='WHILE', cond=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=5)))
+Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
+Loop(kind=None, cond=None)
+End()
+
+## v10_t1_width
+Width(cols=Lit(value=80))
+End()
+
+## v10_t1_window
+Window(x1=Lit(value=0), y1=Lit(value=0), x2=Lit(value=100), y2=Lit(value=100), screen=False)
+End()
+
+## v10_t1_windows
+Window(x1=Lit(value=0), y1=Lit(value=0), x2=Lit(value=100), y2=Lit(value=100), screen=True)
+End()
+
+## v10_t1_write
+Write(items=(Lit(value=1), Lit(value=2)), file=None)
+End()
+
+## v10_t1_writefile
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='X.DAT'))
+Write(items=(Lit(value=1), StrLit(value='A')), file=1)
+Close(num=1)
+End()
+
+## v10_tier0_trivial
+Assign(target=Var(name='A'), value=Lit(value=1))
+End()
+
+## v10_tier1_expr
+Assign(target=Var(name='A'), value=Lit(value=5))
+Assign(target=Var(name='B'), value=Lit(value=2))
+Assign(target=Var(name='C'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Var(name='B')))
+Assign(target=Var(name='D'), value=BinOp(op='-', lhs=Var(name='A'), rhs=Var(name='B')))
+Assign(target=Var(name='E'), value=BinOp(op='*', lhs=Var(name='A'), rhs=Var(name='B')))
+Assign(target=Var(name='F'), value=BinOp(op='/', lhs=Var(name='A'), rhs=Var(name='B')))
+Assign(target=Var(name='G'), value=BinOp(op='+', lhs=BinOp(op='*', lhs=Var(name='B'), rhs=Var(name='C')), rhs=Var(name='A')))
+Assign(target=Var(name='H'), value=BinOp(op='*', lhs=Group(inner=BinOp(op='+', lhs=Var(name='A'), rhs=Var(name='B'))), rhs=Var(name='C')))
+End()
+
+## zz_bif1
+Assign(target=Var(name='A'), value=Lit(value=1))
+IfInline(cond=RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=1)), body=(Assign(target=Var(name='B'), value=Lit(value=2)), Assign(target=Var(name='C'), value=Lit(value=3))))
+End()
+
+## zz_bif2
+Assign(target=Var(name='A'), value=Lit(value=1))
+IfBlock(arms=((RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=1)), (Assign(target=Var(name='B'), value=Lit(value=2)),)),), else_body=(Assign(target=Var(name='B'), value=Lit(value=3)),))
+End()
+
+## zz_bif3
+Assign(target=Var(name='A'), value=Lit(value=1))
+IfBlock(arms=((RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=1)), (Assign(target=Var(name='B'), value=Lit(value=2)),)), (RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=2)), (Assign(target=Var(name='B'), value=Lit(value=3)),))), else_body=(Assign(target=Var(name='B'), value=Lit(value=4)),))
+End()
+
+## zz_bif4
+Assign(target=Var(name='A'), value=Lit(value=1))
+IfBlock(arms=((RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=1)), (IfInline(cond=RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=2)), body=(Assign(target=Var(name='B'), value=Lit(value=5)),)), Assign(target=Var(name='C'), value=Lit(value=6)))),), else_body=None)
+End()
+
+## zz_bifg
+Assign(target=Var(name='A'), value=Lit(value=1))
+IfGoto(cond=RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=1)), target=4)
+Assign(target=Var(name='B'), value=Lit(value=2))
+Goto(target=5)
+Assign(target=Var(name='B'), value=Lit(value=3))
+End()
+
+## zz_cv_ceil
+Print(items=(Call(name='CEIL', args=(DblLit(value=1.2),)),), newline=True, file=None)
+End()
+
+## zz_cv_cint
+Print(items=(Call(name='CINT', args=(DblLit(value=1.7),)),), newline=True, file=None)
+End()
+
+## zz_cv_clng
+Assign(target=Var(name='A&'), value=Call(name='CLNG', args=(DblLit(value=70000.4),)))
+Print(items=(Var(name='A&'),), newline=True, file=None)
+End()
+
+## zz_cv_cvd
+Print(items=(Call(name='CVD', args=(StrLit(value='ABCDEFGH'),)),), newline=True, file=None)
+End()
+
+## zz_cv_cvi
+Print(items=(Call(name='CVI', args=(StrLit(value='AB'),)),), newline=True, file=None)
+End()
+
+## zz_cv_cvl
+Print(items=(Call(name='CVL', args=(StrLit(value='ABCD'),)),), newline=True, file=None)
+End()
+
+## zz_cv_cvs
+Print(items=(Call(name='CVS', args=(StrLit(value='ABCD'),)),), newline=True, file=None)
+End()
+
+## zz_cv_mix
+Assign(target=Var(name='A$'), value=Call(name='MKL$', args=(Lit(value=70000),)))
+Assign(target=Var(name='B&'), value=Call(name='CVL', args=(Var(name='A$'),)))
+Print(items=(Call(name='CEIL', args=(DblLit(value=1.2),)), Call(name='CINT', args=(DblLit(value=2.7),)), Var(name='B&')), newline=True, file=None)
+End()
+
+## zz_cv_mkd
+Assign(target=Var(name='A$'), value=Call(name='MKD$', args=(DblLit(value=2.5),)))
+Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None)
+End()
+
+## zz_cv_mki
+Assign(target=Var(name='A$'), value=Call(name='MKI$', args=(Lit(value=258),)))
+Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None)
+End()
+
+## zz_cv_mkl
+Assign(target=Var(name='A$'), value=Call(name='MKL$', args=(Lit(value=70000),)))
+Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None)
+End()
+
+## zz_cv_mks
+Assign(target=Var(name='A$'), value=Call(name='MKS$', args=(DblLit(value=1.5),)))
+Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None)
+End()
+
+## zz_cv_single
+Assign(target=Var(name='A'), value=SingleLit(value=1.5))
+Print(items=(Var(name='A'),), newline=True, file=None)
+End()
+
+## zz_deffn1
+DefFn(name='FNFN1', params=('A',), body=BinOp(op='*', lhs=Var(name='A'), rhs=Lit(value=2)), is_block=False)
+Print(items=(FnCall(name='FNFN1', args=(Lit(value=21),)),), newline=True, file=None)
+
+## zz_deffn2
+DefFn(name='FNFN1', params=('A', 'B'), body=BinOp(op='+', lhs=Var(name='A'), rhs=Var(name='B')), is_block=False)
+Print(items=(FnCall(name='FNFN1', args=(Lit(value=3), Lit(value=4))),), newline=True, file=None)
+
+## zz_do2
+Assign(target=Var(name='A'), value=Lit(value=0))
+Do(kind='UNTIL', cond=RelOp(op='>=', lhs=Var(name='A'), rhs=Lit(value=5)))
+Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
+Loop(kind=None, cond=None)
+Print(items=(Var(name='A'),), newline=True, file=None)
+End()
+
+## zz_do3
+Assign(target=Var(name='A'), value=Lit(value=0))
+Do(kind=None, cond=None)
+Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
+Loop(kind='WHILE', cond=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=5)))
+Print(items=(Var(name='A'),), newline=True, file=None)
+End()
+
+## zz_do4
+Assign(target=Var(name='A'), value=Lit(value=0))
+Do(kind=None, cond=None)
+Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
+Loop(kind='UNTIL', cond=RelOp(op='>=', lhs=Var(name='A'), rhs=Lit(value=5)))
+Print(items=(Var(name='A'),), newline=True, file=None)
+End()
+
+## zz_do5
+Assign(target=Var(name='A'), value=Lit(value=0))
+Do(kind=None, cond=None)
+Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
+IfInline(cond=RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=3)), body=(ExitLoop(),))
+Loop(kind=None, cond=None)
+Print(items=(Var(name='A'),), newline=True, file=None)
+End()
+
+## zz_do7
+Assign(target=Var(name='A'), value=Lit(value=10))
+Do(kind=None, cond=None)
+Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
+Loop(kind='WHILE', cond=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=5)))
+Print(items=(Var(name='A'),), newline=True, file=None)
+End()
+
+## zz_efor
+For(var=Var(name='A'), init=Lit(value=1), limit=Lit(value=10), step=Lit(value=1))
+Print(items=(Var(name='A'),), newline=True, file=None)
+IfInline(cond=RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=5)), body=(ExitFor(),))
+NextStmt(var=Var(name='A'))
+Print(items=(StrLit(value='DONE'),), newline=True, file=None)
+
+## zz_ginf
+Assign(target=Var(name='A'), value=Lit(value=0))
+Do(kind=None, cond=None)
+Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
+Loop(kind=None, cond=None)
+End()
+
+## zz_godo
+Assign(target=Var(name='A'), value=Lit(value=0))
+Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
+IfGoto(cond=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=5)), target=1)
+Print(items=(Var(name='A'),), newline=True, file=None)
+End()
+
+## zz_mdeffn1
+DefFn(name='FNFN1', params=('A',), body=(FnResult(value=BinOp(op='*', lhs=Var(name='A'), rhs=Lit(value=2))),), is_block=True)
+Print(items=(FnCall(name='FNFN1', args=(Lit(value=21),)),), newline=True, file=None)
+
+## zz_mdeffn2
+DefFn(name='FNFN1', params=('A',), body=(IfInline(cond=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=0)), body=(ExitDef(),)), FnResult(value=BinOp(op='*', lhs=Var(name='A'), rhs=Lit(value=2)))), is_block=True)
+Print(items=(FnCall(name='FNFN1', args=(Lit(value=21),)),), newline=True, file=None)
+
+## zz_op_and
+Assign(target=Var(name='A%'), value=Lit(value=12))
+Assign(target=Var(name='B%'), value=Lit(value=10))
+Assign(target=Var(name='C%'), value=BinOp(op='AND', lhs=Var(name='A%'), rhs=Var(name='B%')))
+Print(items=(Var(name='C%'),), newline=True, file=None)
+End()
+
+## zz_op_concat
+Assign(target=Var(name='A$'), value=StrLit(value='foo'))
+Assign(target=Var(name='B$'), value=StrLit(value='bar'))
+Assign(target=Var(name='C$'), value=BinOp(op='+', lhs=Var(name='A$'), rhs=Var(name='B$')))
+Print(items=(Var(name='C$'),), newline=True, file=None)
+End()
+
+## zz_op_eqv
+Assign(target=Var(name='A%'), value=Lit(value=12))
+Assign(target=Var(name='B%'), value=Lit(value=10))
+Assign(target=Var(name='C%'), value=Not(operand=BinOp(op='XOR', lhs=Var(name='A%'), rhs=Var(name='B%'))))
+Print(items=(Var(name='C%'),), newline=True, file=None)
+End()
+
+## zz_op_idiv
+Assign(target=Var(name='A%'), value=Lit(value=7))
+Assign(target=Var(name='B%'), value=Lit(value=3))
+Assign(target=Var(name='C%'), value=BinOp(op='\\', lhs=Var(name='A%'), rhs=Var(name='B%')))
+Print(items=(Var(name='C%'),), newline=True, file=None)
+End()
+
+## zz_op_imp
+Assign(target=Var(name='A%'), value=Lit(value=12))
+Assign(target=Var(name='B%'), value=Lit(value=10))
+Assign(target=Var(name='C%'), value=BinOp(op='OR', lhs=Not(operand=Var(name='A%')), rhs=Var(name='B%')))
+Print(items=(Var(name='C%'),), newline=True, file=None)
+End()
+
+## zz_op_mix
+Assign(target=Var(name='A%'), value=Lit(value=12))
+Assign(target=Var(name='B%'), value=Lit(value=5))
+Assign(target=Var(name='C%'), value=BinOp(op='\\', lhs=Var(name='A%'), rhs=Var(name='B%')))
+Assign(target=Var(name='D%'), value=BinOp(op='MOD', lhs=Var(name='A%'), rhs=Lit(value=3)))
+Assign(target=Var(name='E%'), value=BinOp(op='>', lhs=Var(name='A%'), rhs=Var(name='B%')))
+Assign(target=Var(name='F%'), value=BinOp(op='=', lhs=Var(name='A%'), rhs=Var(name='B%')))
+Assign(target=Var(name='G$'), value=BinOp(op='+', lhs=StrLit(value='x'), rhs=StrLit(value='y')))
+Print(items=(Var(name='C%'), Var(name='D%'), Var(name='E%'), Var(name='F%'), Var(name='G$')), newline=True, file=None)
+End()
+
+## zz_op_mod
+Assign(target=Var(name='A%'), value=Lit(value=7))
+Assign(target=Var(name='B%'), value=Lit(value=3))
+Assign(target=Var(name='C%'), value=BinOp(op='MOD', lhs=Var(name='A%'), rhs=Var(name='B%')))
+Print(items=(Var(name='C%'),), newline=True, file=None)
+End()
+
+## zz_op_not
+Assign(target=Var(name='A%'), value=Lit(value=12))
+Assign(target=Var(name='B%'), value=Not(operand=Var(name='A%')))
+Print(items=(Var(name='B%'),), newline=True, file=None)
+End()
+
+## zz_op_or
+Assign(target=Var(name='A%'), value=Lit(value=12))
+Assign(target=Var(name='B%'), value=Lit(value=10))
+Assign(target=Var(name='C%'), value=BinOp(op='OR', lhs=Var(name='A%'), rhs=Var(name='B%')))
+Print(items=(Var(name='C%'),), newline=True, file=None)
+End()
+
+## zz_op_pow
+Assign(target=Var(name='A'), value=Lit(value=2))
+Assign(target=Var(name='B'), value=Lit(value=10))
+Assign(target=Var(name='C'), value=BinOp(op='^', lhs=Var(name='A'), rhs=Var(name='B')))
+Print(items=(Var(name='C'),), newline=True, file=None)
+End()
+
+## zz_op_rel_eq
+Assign(target=Var(name='A%'), value=Lit(value=5))
+Assign(target=Var(name='B%'), value=Lit(value=3))
+Assign(target=Var(name='C%'), value=BinOp(op='=', lhs=Var(name='A%'), rhs=Var(name='B%')))
+Print(items=(Var(name='C%'),), newline=True, file=None)
+End()
+
+## zz_op_rel_ge
+Assign(target=Var(name='A%'), value=Lit(value=5))
+Assign(target=Var(name='B%'), value=Lit(value=3))
+Assign(target=Var(name='C%'), value=BinOp(op='>=', lhs=Var(name='A%'), rhs=Var(name='B%')))
+Print(items=(Var(name='C%'),), newline=True, file=None)
+End()
+
+## zz_op_rel_gt
+Assign(target=Var(name='A%'), value=Lit(value=5))
+Assign(target=Var(name='B%'), value=Lit(value=3))
+Assign(target=Var(name='C%'), value=BinOp(op='>', lhs=Var(name='A%'), rhs=Var(name='B%')))
+Print(items=(Var(name='C%'),), newline=True, file=None)
+End()
+
+## zz_op_rel_le
+Assign(target=Var(name='A%'), value=Lit(value=5))
+Assign(target=Var(name='B%'), value=Lit(value=3))
+Assign(target=Var(name='C%'), value=BinOp(op='<=', lhs=Var(name='A%'), rhs=Var(name='B%')))
+Print(items=(Var(name='C%'),), newline=True, file=None)
+End()
+
+## zz_op_rel_lt
+Assign(target=Var(name='A%'), value=Lit(value=5))
+Assign(target=Var(name='B%'), value=Lit(value=3))
+Assign(target=Var(name='C%'), value=BinOp(op='<', lhs=Var(name='A%'), rhs=Var(name='B%')))
+Print(items=(Var(name='C%'),), newline=True, file=None)
+End()
+
+## zz_op_rel_ne
+Assign(target=Var(name='A%'), value=Lit(value=5))
+Assign(target=Var(name='B%'), value=Lit(value=3))
+Assign(target=Var(name='C%'), value=BinOp(op='<>', lhs=Var(name='A%'), rhs=Var(name='B%')))
+Print(items=(Var(name='C%'),), newline=True, file=None)
+End()
+
+## zz_op_xor
+Assign(target=Var(name='A%'), value=Lit(value=12))
+Assign(target=Var(name='B%'), value=Lit(value=10))
+Assign(target=Var(name='C%'), value=BinOp(op='XOR', lhs=Var(name='A%'), rhs=Var(name='B%')))
+Print(items=(Var(name='C%'),), newline=True, file=None)
+End()
+
+## zz_sc1
+Assign(target=Var(name='A'), value=Lit(value=2))
+SelectCase(selector=Var(name='A'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=1)),), body=(Print(items=(StrLit(value='ONE'),), newline=True, file=None),)), CaseArm(guards=(CaseValue(value=Lit(value=2)),), body=(Print(items=(StrLit(value='TWO'),), newline=True, file=None),))), case_else=(Print(items=(StrLit(value='OTHER'),), newline=True, file=None),))
+
+## zz_sc2
+Assign(target=Var(name='A'), value=Lit(value=3))
+SelectCase(selector=Var(name='A'), arms=(CaseArm(guards=(CaseRange(lo=Lit(value=1), hi=Lit(value=5)),), body=(Print(items=(StrLit(value='LOW'),), newline=True, file=None),)),), case_else=(Print(items=(StrLit(value='HIGH'),), newline=True, file=None),))
+
+## zz_sc3
+Assign(target=Var(name='A'), value=Lit(value=20))
+SelectCase(selector=Var(name='A'), arms=(CaseArm(guards=(CaseIs(op='>', value=Lit(value=10)),), body=(Print(items=(StrLit(value='BIG'),), newline=True, file=None),)),), case_else=(Print(items=(StrLit(value='SMALL'),), newline=True, file=None),))
+
+## zz_sc4
+Assign(target=Var(name='A'), value=Lit(value=3))
+SelectCase(selector=Var(name='A'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=1)), CaseValue(value=Lit(value=3)), CaseValue(value=Lit(value=5))), body=(Print(items=(StrLit(value='ODD'),), newline=True, file=None),)),), case_else=(Print(items=(StrLit(value='EVEN'),), newline=True, file=None),))
+
+## zz_sc5
+Assign(target=Var(name='A$'), value=StrLit(value='Y'))
+SelectCase(selector=Var(name='A$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='Y')),), body=(Print(items=(StrLit(value='YES'),), newline=True, file=None),)), CaseArm(guards=(CaseValue(value=StrLit(value='N')),), body=(Print(items=(StrLit(value='NO'),), newline=True, file=None),))), case_else=(Print(items=(StrLit(value='MAYBE'),), newline=True, file=None),))
+
+## zz_sc6
+Assign(target=Var(name='A'), value=Lit(value=1))
+SelectCase(selector=Var(name='A'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=1)),), body=(Print(items=(StrLit(value='ONE'),), newline=True, file=None),)), CaseArm(guards=(CaseValue(value=Lit(value=2)),), body=(Print(items=(StrLit(value='TWO'),), newline=True, file=None),))), case_else=None)
+
+## zz_sub0
+SubDef(name='SUB1', params=(), body=(Print(items=(StrLit(value='HI'),), newline=True, file=None),))
+CallStmt(name='SUB1', args=())
+
+## zz_sub1
+SubDef(name='SUB1', params=('A',), body=(Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1))),))
+Assign(target=Var(name='B'), value=Lit(value=5))
+CallStmt(name='SUB1', args=(Var(name='B'),))
+Print(items=(Var(name='B'),), newline=True, file=None)
+
+## zz_sub2
+SubDef(name='SUB1', params=('A', 'B'), body=(Print(items=(Var(name='A'), Var(name='B')), newline=True, file=None),))
+CallStmt(name='SUB1', args=(Lit(value=7), Lit(value=9)))
+
+## zz_sub3
+SubDef(name='SUB1', params=('A', 'B'), body=(Print(items=(Var(name='A'), Var(name='B')), newline=True, file=None),))
+Assign(target=Var(name='C'), value=Lit(value=3))
+Assign(target=Var(name='D'), value=Lit(value=4))
+CallStmt(name='SUB1', args=(BinOp(op='+', lhs=Var(name='C'), rhs=Lit(value=1)), BinOp(op='*', lhs=Var(name='D'), rhs=Lit(value=2))))
+
+## zz_sub4
+SubDef(name='SUB1', params=('A$',), body=(Print(items=(Var(name='A$'),), newline=True, file=None),))
+Assign(target=Var(name='B$'), value=StrLit(value='HI'))
+CallStmt(name='SUB1', args=(Var(name='B$'),))
+
+## zz_sub5
+SubDef(name='SUB1', params=('A$',), body=(Print(items=(Var(name='A$'),), newline=True, file=None),))
+CallStmt(name='SUB1', args=(StrLit(value='HI'),))
+
+## zz_sub6
+SubDef(name='SUB1', params=('A',), body=(Print(items=(Var(name='A'),), newline=True, file=None),))
+Dim(name='V0', bounds=(3,), also=())
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=5))
+CallStmt(name='SUB1', args=(ArrayRef(name='V0', indices=(Lit(value=1),)),))
+
+## zz_sub7
+SubDef(name='SUB1', params=('A',), body=(IfInline(cond=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=0)), body=(ExitSub(),)), Print(items=(Var(name='A'),), newline=True, file=None)))
+CallStmt(name='SUB1', args=(Lit(value=5),))
+
+## zz_vm_darith
+Assign(target=Var(name='A#'), value=DblLit(value=1.0))
+Assign(target=Var(name='B#'), value=DblLit(value=3.0))
+Assign(target=Var(name='C#'), value=BinOp(op='/', lhs=Var(name='A#'), rhs=Var(name='B#')))
+Print(items=(Var(name='C#'),), newline=True, file=None)
+End()
+
+## zz_vm_darr
+Dim(name='V0', bounds=(3,), also=())
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=DblLit(value=2.5))
+Print(items=(ArrayRef(name='V0', indices=(Lit(value=1),)),), newline=True, file=None)
+End()
+
+## zz_vm_darr_loop
+Dim(name='V0', bounds=(3,), also=())
+For(var=Var(name='A%'), init=Lit(value=0), limit=Lit(value=3), step=Lit(value=1))
+Assign(target=ArrayRef(name='V0', indices=(Var(name='A%'),)), value=DblLit(value=2.5))
+NextStmt(var=Var(name='A%'))
+Print(items=(ArrayRef(name='V0', indices=(Lit(value=0),)),), newline=True, file=None)
+End()
+
+## zz_vm_darr_rdloop
+Dim(name='V0', bounds=(3,), also=())
+Assign(target=Var(name='A#'), value=DblLit(value=0.0))
+For(var=Var(name='B%'), init=Lit(value=0), limit=Lit(value=3), step=Lit(value=1))
+Assign(target=Var(name='A#'), value=BinOp(op='+', lhs=Var(name='A#'), rhs=ArrayRef(name='V0', indices=(Var(name='B%'),))))
+NextStmt(var=Var(name='B%'))
+Print(items=(Var(name='A#'),), newline=True, file=None)
+End()
+
+## zz_vm_dlit
+Assign(target=Var(name='A#'), value=DblLit(value=1.5))
+Print(items=(Var(name='A#'),), newline=True, file=None)
+End()
+
+## zz_vm_dvar
+Assign(target=Var(name='A#'), value=DblLit(value=2.5))
+Assign(target=Var(name='B#'), value=Var(name='A#'))
+Print(items=(Var(name='B#'),), newline=True, file=None)
+End()
+
+## zz_vm_ladd
+Assign(target=Var(name='A&'), value=Lit(value=100000))
+Assign(target=Var(name='B&'), value=Lit(value=200000))
+Assign(target=Var(name='C&'), value=BinOp(op='+', lhs=Var(name='A&'), rhs=Var(name='B&')))
+Print(items=(Var(name='C&'),), newline=True, file=None)
+End()
+
+## zz_vm_larr
+Dim(name='V0&', bounds=(3,), also=())
+Assign(target=ArrayRef(name='V0&', indices=(Lit(value=1),)), value=Lit(value=100000))
+Print(items=(ArrayRef(name='V0&', indices=(Lit(value=1),)),), newline=True, file=None)
+End()
+
+## zz_vm_larr_loop
+Dim(name='V0&', bounds=(3,), also=())
+For(var=Var(name='A%'), init=Lit(value=0), limit=Lit(value=3), step=Lit(value=1))
+Assign(target=ArrayRef(name='V0&', indices=(Var(name='A%'),)), value=Lit(value=100000))
+NextStmt(var=Var(name='A%'))
+Print(items=(ArrayRef(name='V0&', indices=(Lit(value=0),)),), newline=True, file=None)
+End()
+
+## zz_vm_lmix
+Dim(name='V0&', bounds=(3,), also=())
+Assign(target=Var(name='A&'), value=Lit(value=100000))
+Assign(target=Var(name='B&'), value=Lit(value=5))
+Assign(target=Var(name='C&'), value=BinOp(op='+', lhs=BinOp(op='*', lhs=Var(name='B&'), rhs=Lit(value=2)), rhs=Var(name='A&')))
+Assign(target=ArrayRef(name='V0&', indices=(Lit(value=1),)), value=Var(name='C&'))
+Print(items=(Var(name='A&'), Var(name='C&'), ArrayRef(name='V0&', indices=(Lit(value=1),))), newline=True, file=None)
+End()
+
+## zz_vm_lmul
+Assign(target=Var(name='A&'), value=Lit(value=100000))
+Assign(target=Var(name='B&'), value=Lit(value=3))
+Assign(target=Var(name='C&'), value=BinOp(op='*', lhs=Var(name='A&'), rhs=Var(name='B&')))
+Print(items=(Var(name='C&'),), newline=True, file=None)
+End()
+
+## zz_vm_lneg
+Assign(target=Var(name='A&'), value=Neg(operand=Lit(value=100000)))
+Print(items=(Var(name='A&'),), newline=True, file=None)
+End()
+
+## zz_vm_long
+Assign(target=Var(name='A&'), value=Lit(value=100000))
+Print(items=(Var(name='A&'),), newline=True, file=None)
+End()
+
+## zz_vm_lsub
+Assign(target=Var(name='A&'), value=Lit(value=200000))
+Assign(target=Var(name='B&'), value=Lit(value=100000))
+Assign(target=Var(name='C&'), value=BinOp(op='-', lhs=Var(name='A&'), rhs=Var(name='B&')))
+Print(items=(Var(name='C&'),), newline=True, file=None)
+End()
+
+## zz_vm_mixed
+Assign(target=Var(name='A'), value=SingleLit(value=1.5))
+Assign(target=Var(name='B&'), value=Lit(value=100000))
+Print(items=(Var(name='A'),), newline=True, file=None)
+Print(items=(Var(name='B&'),), newline=True, file=None)
+End()
+
+## zz_x_ldiv
+Assign(target=Var(name='A&'), value=Lit(value=100000))
+Assign(target=Var(name='B&'), value=Lit(value=7))
+Assign(target=Var(name='C&'), value=BinOp(op='\\', lhs=Var(name='A&'), rhs=Var(name='B&')))
+Print(items=(Var(name='C&'),), newline=True, file=None)
+End()
+
+## zz_x_lmod
+Assign(target=Var(name='A&'), value=Lit(value=100000))
+Assign(target=Var(name='B&'), value=Lit(value=7))
+Assign(target=Var(name='C&'), value=BinOp(op='MOD', lhs=Var(name='A&'), rhs=Var(name='B&')))
+Print(items=(Var(name='C&'),), newline=True, file=None)
+End()
+
+## zz_x_mix
+Assign(target=Var(name='A%'), value=Lit(value=14))
+Assign(target=Var(name='B%'), value=Lit(value=6))
+Assign(target=Var(name='C%'), value=Lit(value=9))
+Assign(target=Var(name='D%'), value=Lit(value=12))
+Assign(target=Var(name='E%'), value=BinOp(op='-', lhs=BinOp(op='AND', lhs=Var(name='A%'), rhs=Var(name='B%')), rhs=Group(inner=BinOp(op='AND', lhs=Var(name='C%'), rhs=Var(name='D%')))))
+Assign(target=Var(name='F%'), value=BinOp(op='*', lhs=BinOp(op='AND', lhs=Var(name='A%'), rhs=Var(name='B%')), rhs=Group(inner=BinOp(op='AND', lhs=Var(name='C%'), rhs=Var(name='D%')))))
+Print(items=(Var(name='E%'), Var(name='F%')), newline=True, file=None)
+End()
+
+## zz_x_rradd
+Assign(target=Var(name='A%'), value=Lit(value=14))
+Assign(target=Var(name='B%'), value=Lit(value=6))
+Assign(target=Var(name='C%'), value=Lit(value=9))
+Assign(target=Var(name='D%'), value=Lit(value=12))
+Assign(target=Var(name='E%'), value=BinOp(op='+', lhs=BinOp(op='AND', lhs=Var(name='A%'), rhs=Var(name='B%')), rhs=Group(inner=BinOp(op='AND', lhs=Var(name='C%'), rhs=Var(name='D%')))))
+Print(items=(Var(name='E%'),), newline=True, file=None)
+End()
+
+## zz_x_rrand
+Assign(target=Var(name='A%'), value=Lit(value=14))
+Assign(target=Var(name='B%'), value=Lit(value=7))
+Assign(target=Var(name='C%'), value=Lit(value=13))
+Assign(target=Var(name='D%'), value=Lit(value=6))
+Assign(target=Var(name='E%'), value=BinOp(op='AND', lhs=BinOp(op='AND', lhs=Var(name='A%'), rhs=Var(name='B%')), rhs=Group(inner=BinOp(op='AND', lhs=Var(name='C%'), rhs=Var(name='D%')))))
+Print(items=(Var(name='E%'),), newline=True, file=None)
+End()
+
+## zz_x_rrmul
+Assign(target=Var(name='A%'), value=Lit(value=14))
+Assign(target=Var(name='B%'), value=Lit(value=6))
+Assign(target=Var(name='C%'), value=Lit(value=9))
+Assign(target=Var(name='D%'), value=Lit(value=12))
+Assign(target=Var(name='E%'), value=BinOp(op='*', lhs=BinOp(op='AND', lhs=Var(name='A%'), rhs=Var(name='B%')), rhs=Group(inner=BinOp(op='AND', lhs=Var(name='C%'), rhs=Var(name='D%')))))
+Print(items=(Var(name='E%'),), newline=True, file=None)
+End()
+
+## zz_x_rror
+Assign(target=Var(name='A%'), value=Lit(value=6))
+Assign(target=Var(name='B%'), value=Lit(value=3))
+Assign(target=Var(name='C%'), value=Lit(value=5))
+Assign(target=Var(name='D%'), value=Lit(value=2))
+Assign(target=Var(name='E%'), value=BinOp(op='OR', lhs=BinOp(op='AND', lhs=Var(name='A%'), rhs=Var(name='B%')), rhs=BinOp(op='AND', lhs=Var(name='C%'), rhs=Var(name='D%'))))
+Print(items=(Var(name='E%'),), newline=True, file=None)
+End()
+
+## zz_x_rrsub
+Assign(target=Var(name='A%'), value=Lit(value=14))
+Assign(target=Var(name='B%'), value=Lit(value=6))
+Assign(target=Var(name='C%'), value=Lit(value=9))
+Assign(target=Var(name='D%'), value=Lit(value=12))
+Assign(target=Var(name='E%'), value=BinOp(op='-', lhs=BinOp(op='AND', lhs=Var(name='A%'), rhs=Var(name='B%')), rhs=Group(inner=BinOp(op='AND', lhs=Var(name='C%'), rhs=Var(name='D%')))))
+Print(items=(Var(name='E%'),), newline=True, file=None)
+End()
+
+## zz_x_rrxor
+Assign(target=Var(name='A%'), value=Lit(value=14))
+Assign(target=Var(name='B%'), value=Lit(value=6))
+Assign(target=Var(name='C%'), value=Lit(value=9))
+Assign(target=Var(name='D%'), value=Lit(value=12))
+Assign(target=Var(name='E%'), value=BinOp(op='XOR', lhs=BinOp(op='AND', lhs=Var(name='A%'), rhs=Var(name='B%')), rhs=BinOp(op='AND', lhs=Var(name='C%'), rhs=Var(name='D%'))))
+Print(items=(Var(name='E%'),), newline=True, file=None)
+End()

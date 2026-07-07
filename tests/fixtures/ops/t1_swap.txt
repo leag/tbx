@@ -1,0 +1,11 @@
+# t1_swap dialect=1.1 start=08700
+08703:fld1
+08706:fstp:292
+0870D:fild:308
+08712:fstp:288
+08719:swap:292:288
+08731:end
+08734:epilogue
+# commits
+0870B
+08717

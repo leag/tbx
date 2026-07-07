@@ -1,0 +1,7 @@
+# v10_t1_files dialect=1.0 start=071C0
+071C3:movsi:292
+071C6:rt:156
+071C8:files
+071CB:end
+071CE:epilogue
+# commits

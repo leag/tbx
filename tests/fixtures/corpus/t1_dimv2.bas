@@ -1,0 +1,6 @@
+10 OPTION BASE 1
+20 INPUT N%
+30 DIM B(N%,3)
+40 B(1,1) = N% + 2
+50 C = B(1,1) * N%
+60 END

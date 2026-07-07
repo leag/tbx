@@ -1,0 +1,16 @@
+# t1_fn_asc dialect=1.1 start=08730
+08733:movsi:308
+08736:rt:156
+08738:movsi:288
+0873B:strassign
+0873D:movsi:288
+08740:rt:156
+08742:str2num:ASC
+08744:movmem_ax:44
+08747:fild:44
+0874C:rt:187
+0874E:rt:184
+08752:end
+08755:epilogue
+# commits
+08750

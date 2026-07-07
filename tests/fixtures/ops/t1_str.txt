@@ -1,0 +1,16 @@
+# t1_str dialect=1.1 start=08700
+08703:movsi:308
+08706:rt:156
+08708:movsi:292
+0870B:strassign
+0870D:movsi:292
+08710:rt:156
+08712:movsi:288
+08715:strassign
+08717:movsi:292
+0871A:rt:156
+0871C:rt:190
+0871E:rt:184
+08720:end
+08723:epilogue
+# commits

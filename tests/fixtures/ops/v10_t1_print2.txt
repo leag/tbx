@@ -1,0 +1,19 @@
+# v10_t1_print2 dialect=1.0 start=070B0
+070B3:fild:316
+070B8:fstp:288
+070BF:movsi:312
+070C2:rt:156
+070C4:rt:190
+070C6:rt:184
+070C8:movsi:308
+070CB:rt:156
+070CD:rt:190
+070CF:rt:184
+070D1:fld:288
+070D6:rt:187
+070D8:rt:184
+070DC:end
+070DF:epilogue
+# commits
+070BD
+070DA

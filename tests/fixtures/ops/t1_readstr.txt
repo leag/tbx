@@ -1,0 +1,10 @@
+# t1_readstr dialect=1.1 start=08760
+08763:data_read_str
+08766:movsi:292
+08769:strassign
+0876B:data_read_str
+0876E:movsi:288
+08771:strassign
+08773:end
+08776:epilogue
+# commits

@@ -1,0 +1,10 @@
+# t1_filef dialect=1.1 start=08780
+08783:movax:1
+08786:fn_ax_ax:EOF
+08789:movm_ax:290
+0878D:xorax
+0878F:fn_ax_ax:LPOS
+08792:movm_ax:288
+08796:end
+08799:epilogue
+# commits

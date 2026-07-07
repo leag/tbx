@@ -1,0 +1,10 @@
+# t1_varptr dialect=1.1 start=08700
+08703:fld1
+08706:fstp:292
+0870D:movm_imm:290:292
+08713:movaxds
+08715:movm_ax:288
+08719:end
+0871C:epilogue
+# commits
+0870B

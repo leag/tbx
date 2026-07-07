@@ -1,0 +1,2 @@
+10 NAME "X.DAT" AS "Y.DAT"
+20 END

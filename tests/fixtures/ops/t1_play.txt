@@ -1,0 +1,7 @@
+# t1_play dialect=1.1 start=08A00
+08A03:movsi:292
+08A06:rt:156
+08A08:play
+08A0B:end
+08A0E:epilogue
+# commits

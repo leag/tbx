@@ -1,0 +1,9 @@
+# t1_fresx dialect=1.1 start=08750
+08753:fld1
+08756:fre_str
+08759:popop:+
+0875C:fstp:288
+08763:end
+08766:epilogue
+# commits
+08761

@@ -1,0 +1,6 @@
+10 SUB SUB1(A)
+  A = A + 1
+END SUB
+20 B = 5
+30 CALL SUB1(B)
+40 PRINT B

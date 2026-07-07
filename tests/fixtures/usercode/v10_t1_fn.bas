@@ -1,0 +1,7 @@
+10 INPUT A
+20 B = ABS(A)
+30 C = SQR(A)
+40 D = INT(A)
+50 E = SGN(A)
+60 PRINT B + C + D + E
+70 END

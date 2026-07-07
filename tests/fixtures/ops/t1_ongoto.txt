@@ -1,0 +1,15 @@
+# t1_ongoto dialect=1.1 start=08700
+08703:fld1
+08706:fstp:288
+0870D:fld:288
+08712:fistp:44
+08717:fwait
+08719:movaxmem:44
+0871C:on_goto:34606:34609
+0872B:end
+0872E:end
+08731:end
+08734:epilogue
+# commits
+0870B
+08729

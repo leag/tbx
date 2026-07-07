@@ -1,0 +1,10 @@
+# v10_t1_fn_string dialect=1.0 start=07130
+07133:movax:3
+07136:movbxax
+07138:movax:42
+0713B:strfn:STRING$
+0713E:rt:190
+07140:rt:184
+07142:end
+07145:epilogue
+# commits

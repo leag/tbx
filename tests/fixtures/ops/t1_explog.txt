@@ -1,0 +1,16 @@
+# t1_explog dialect=1.1 start=090D0
+090D3:fld64:316
+090D8:fn:EXP
+090DB:fstp:296
+090E2:fld64:308
+090E7:fn:LOG
+090EA:fstp:292
+090F1:fld64:308
+090F6:fn:LOG10
+090F9:fstp:288
+09100:end
+09103:epilogue
+# commits
+090E0
+090EF
+090FE

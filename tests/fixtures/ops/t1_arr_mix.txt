@@ -1,0 +1,17 @@
+# t1_arr_mix dialect=1.1 start=08700
+08703:fld1
+08706:fstp:350
+0870D:fild:372
+08712:fstp:346
+08719:fld:346
+0871E:fold:+:350
+08723:fstp:342
+0872A:fld:342
+0872F:fstp:388
+08736:end
+08739:epilogue
+# commits
+0870B
+08717
+08728
+08734

@@ -1,0 +1,2 @@
+10 STRIG OFF
+20 END

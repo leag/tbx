@@ -1,0 +1,24 @@
+# zz_do4 dialect=1.1 start=08700
+08703:fldz
+08706:fstp:288
+0870D:fld1
+08710:fold:+:288
+08715:fstp:288
+0871C:fild:308
+08721:fcomp:288
+08726:fstsw
+08728:movax:65535
+0872B:jcc:118:34606
+0872D:incax
+0872E:orax
+08732:jcc:116:34573
+08734:fld:288
+08739:rt:187
+0873B:rt:184
+0873F:end
+08742:epilogue
+# commits
+0870B
+0871A
+08730
+0873D

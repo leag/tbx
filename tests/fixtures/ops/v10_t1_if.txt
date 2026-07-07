@@ -1,0 +1,29 @@
+# v10_t1_if dialect=1.0 start=070B0
+070B3:fld1
+070B6:fstp:296
+070BD:fild:310
+070C2:fstp:292
+070C9:fld:292
+070CE:fcomp:296
+070D3:fstsw
+070D7:jcc:119:28892
+070D9:jmp:28904
+070DC:fild:308
+070E1:fstp:288
+070E8:fld:292
+070ED:fcomp:296
+070F2:fstsw
+070F6:jcc:117:28923
+070F8:jmp:28938
+070FB:fld1
+070FE:fold:+:296
+07103:fstp:288
+0710A:end
+0710D:epilogue
+# commits
+070BB
+070C7
+070D5
+070E6
+070F4
+07108

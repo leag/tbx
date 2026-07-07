@@ -1,0 +1,9 @@
+# t1_screenf dialect=1.1 start=08790
+08793:movax:1
+08796:movbxax
+08798:movax:2
+0879B:fn_screen
+0879E:movm_ax:288
+087A2:end
+087A5:epilogue
+# commits

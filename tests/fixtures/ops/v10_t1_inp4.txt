@@ -1,0 +1,8 @@
+# v10_t1_inp4 dialect=1.0 start=071E0
+071E3:input:308:64
+071EA:read_str
+071ED:movsi:288
+071F0:strassign
+071F2:end
+071F5:epilogue
+# commits

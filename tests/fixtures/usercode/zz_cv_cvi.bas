@@ -1,0 +1,2 @@
+10 PRINT CVI("AB")
+20 END

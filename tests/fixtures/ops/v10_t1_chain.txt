@@ -1,0 +1,7 @@
+# v10_t1_chain dialect=1.0 start=0CE80
+0CE83:movsi:292
+0CE86:rt:156
+0CE88:chain
+0CE8B:end
+0CE8E:epilogue
+# commits

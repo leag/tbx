@@ -1,0 +1,25 @@
+# t1_field dialect=1.1 start=08C60
+08C63:movm_imm:96:1
+08C69:movsi:308
+08C6C:rt:156
+08C6E:movsi:312
+08C71:rt:156
+08C73:movax:128
+08C76:open
+08C79:movm_imm:96:1
+08C7F:field
+08C82:movax:10
+08C85:movsi:292
+08C88:movdx:152
+08C8B:movesdx
+08C8D:field_as
+08C90:movax:20
+08C93:movsi:288
+08C96:movdx:152
+08C99:movesdx
+08C9B:field_as
+08C9E:movax:1
+08CA1:close
+08CA4:end
+08CA7:epilogue
+# commits

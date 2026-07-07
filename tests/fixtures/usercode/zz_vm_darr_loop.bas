@@ -1,0 +1,6 @@
+10 DIM V0(3)
+20 FOR A% = 0 TO 3
+30 V0(A%) = 2.5#
+40 NEXT A%
+50 PRINT V0(0)
+60 END

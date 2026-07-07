@@ -1,0 +1,10 @@
+# t1_calli dialect=1.1 start=08700
+08703:movax:1
+08706:fild:294
+0870B:reg_set
+08710:movax:33
+08713:call_int
+08716:end
+08719:epilogue
+# commits
+0870E

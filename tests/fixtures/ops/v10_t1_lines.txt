@@ -1,0 +1,12 @@
+# v10_t1_lines dialect=1.0 start=074A0
+074A3:fild:296
+074A8:fild:294
+074AD:fstp:148
+074B2:fstp:136
+074B7:fild:292
+074BC:fild:292
+074C1:line:80
+074C7:end
+074CA:epilogue
+# commits
+074C5

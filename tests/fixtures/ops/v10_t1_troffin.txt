@@ -1,0 +1,26 @@
+# v10_t1_troffin dialect=1.0 start=07140
+07143:trace_hook:20
+07147:fld1
+0714A:fcomp:296
+0714F:fstsw
+07151:movax:65535
+07154:jcc:119:29015
+07156:incax
+07157:orax
+0715B:jcc:117:29024
+0715D:jmp:29054
+07160:trace_hook:30
+07164:fld1
+07167:fstp:292
+0716E:trace_hook:40
+07172:fild:310
+07177:fstp:292
+0717E:fild:308
+07183:fstp:288
+0718A:end
+0718D:epilogue
+# commits
+07159
+0716C
+0717C
+07188

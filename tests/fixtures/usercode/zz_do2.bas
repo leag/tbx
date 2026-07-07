@@ -1,0 +1,6 @@
+10 A = 0
+20 DO UNTIL A >= 5
+30 A = A + 1
+40 LOOP
+50 PRINT A
+60 END

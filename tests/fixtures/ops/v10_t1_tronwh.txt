@@ -1,0 +1,23 @@
+# v10_t1_tronwh dialect=1.0 start=07140
+07143:trace_hook:20
+07147:fild:310
+0714C:fcomp:288
+07151:fstsw
+07153:movax:65535
+07156:jcc:119:29017
+07158:incax
+07159:orax
+0715D:jcc:117:29026
+0715F:jmp:29051
+07162:trace_hook:30
+07166:fld1
+07169:fold:+:288
+0716E:fstp:288
+07175:trace_hook:40
+07179:jmps:28999
+0717B:trace_hook:50
+0717F:end
+07182:epilogue
+# commits
+0715B
+07173

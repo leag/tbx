@@ -1,0 +1,6 @@
+10 SUB SUB1(A, B)
+  PRINT A; B
+END SUB
+20 C = 3
+30 D = 4
+40 CALL SUB1(C + 1,D * 2)

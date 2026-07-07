@@ -1,0 +1,2 @@
+10 PRINT CINT(1.7#)
+20 END

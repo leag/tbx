@@ -1,0 +1,10 @@
+# v10_t1_calli dialect=1.0 start=070B0
+070B3:movax:1
+070B6:fild:294
+070BB:reg_set
+070C0:movax:33
+070C3:call_int
+070C6:end
+070C9:epilogue
+# commits
+070BE

@@ -1,0 +1,9 @@
+# t1_wait dialect=1.1 start=08700
+08703:movax:1
+08706:movbxax
+08708:movax:888
+0870B:movdxax
+0870D:wait_poll
+08712:end
+08715:epilogue
+# commits

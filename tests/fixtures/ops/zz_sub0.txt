@@ -1,0 +1,11 @@
+# zz_sub0 dialect=1.1 start=08700
+08703:jmp:34580
+08706:proc_enter
+08709:movsi:292
+0870C:rt:156
+0870E:rt:190
+08710:rt:184
+08712:proc_ret:0
+08714:far_call:34566
+08719:epilogue
+# commits

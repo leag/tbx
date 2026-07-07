@@ -1,0 +1,3 @@
+10 A = INP(888)
+20 PRINT A
+30 END

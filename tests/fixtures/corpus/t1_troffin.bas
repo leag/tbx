@@ -1,0 +1,8 @@
+10 TRON
+20 IF A < 1 THEN
+30 B = 1
+40 TROFF
+50 B = 2
+60 END IF
+70 C = 3
+80 END

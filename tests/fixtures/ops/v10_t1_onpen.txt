@@ -1,0 +1,15 @@
+# v10_t1_onpen dialect=1.0 start=071F0
+071F3:trap_hook
+071F4:on_trap:122:29195
+071FB:trap_hook
+071FC:trap_ctl:144
+071FF:trap_hook
+07200:trap_ctl:140
+07203:trap_hook
+07204:trap_ctl:142
+07207:trap_hook
+07208:end
+0720B:trap_hook
+0720C:retf
+0720D:epilogue
+# commits

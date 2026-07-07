@@ -1,0 +1,3 @@
+10 A$ = "HELLO"
+20 RSET A$ = "HI"
+30 END

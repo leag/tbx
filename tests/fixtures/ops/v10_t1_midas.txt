@@ -1,0 +1,15 @@
+# v10_t1_midas dialect=1.0 start=07150
+07153:movsi:312
+07156:rt:156
+07158:movsi:288
+0715B:strassign
+0715D:movax:2
+07160:movsi:308
+07163:rt:156
+07165:movsi:288
+07168:movdx:150
+0716B:movesdx
+0716D:midassign
+0716F:end
+07172:epilogue
+# commits

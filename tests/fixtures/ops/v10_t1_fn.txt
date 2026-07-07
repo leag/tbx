@@ -1,0 +1,33 @@
+# v10_t1_fn dialect=1.0 start=071E0
+071E3:input:320:16384
+071EA:read_num
+071ED:fstp:304
+071F4:fld:304
+071F9:fabs
+071FC:fstp:300
+07203:fld:304
+07208:fsqrt
+0720B:fstp:296
+07212:fld:304
+07217:fn:INT
+07219:fstp:292
+07220:fld:304
+07225:fn_ax:SGN
+07228:movmem_ax:44
+0722B:fild:44
+07230:fstp:288
+07237:fld:296
+0723C:fold:+:300
+07241:fold:+:292
+07246:fold:+:288
+0724B:rt:187
+0724D:rt:184
+07251:end
+07254:epilogue
+# commits
+071F2
+07201
+07210
+0721E
+07235
+0724F

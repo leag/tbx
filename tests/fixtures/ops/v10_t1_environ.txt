@@ -1,0 +1,7 @@
+# v10_t1_environ dialect=1.0 start=07190
+07193:movsi:292
+07196:rt:156
+07198:environ
+0719B:end
+0719E:epilogue
+# commits

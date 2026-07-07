@@ -1,0 +1,17 @@
+# v10_t1_seek dialect=1.0 start=075F0
+075F3:movm_imm:96:1
+075F9:movsi:292
+075FC:rt:156
+075FE:movsi:296
+07601:rt:156
+07603:movax:128
+07606:open
+07609:movm_imm:96:1
+0760F:fld1
+07612:seek
+07617:movax:1
+0761A:close
+0761D:end
+07620:epilogue
+# commits
+07615

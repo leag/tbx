@@ -1,0 +1,29 @@
+# zz_sub2 dialect=1.1 start=08700
+08703:jmp:34595
+08706:proc_enter
+08709:arg_ref:10
+0870C:far_fld_si
+08710:rt:187
+08712:arg_ref:6
+08715:far_fld_si
+08719:rt:187
+0871B:rt:184
+0871F:proc_ret:8
+08723:mov_mem_sp:102
+08727:sub_sp:8
+0872A:fild:294
+0872F:mov_si_sp
+08731:fstp_temp
+08735:arg_push_temp
+08737:fild:292
+0873C:movsi:8
+0873F:add_si_sp
+08741:fstp_temp
+08745:arg_push_temp
+08747:movm_imm:102:0
+0874F:far_call:34566
+08754:add_sp:8
+08757:epilogue
+# commits
+0871D
+0874D

@@ -1,0 +1,14 @@
+# t1_fres dialect=1.1 start=08750
+08753:movsi:312
+08756:rt:156
+08758:movsi:296
+0875B:strassign
+0875D:fre_str
+08760:fstp:292
+08767:fre_str
+0876A:fstp:288
+08771:end
+08774:epilogue
+# commits
+08765
+0876F

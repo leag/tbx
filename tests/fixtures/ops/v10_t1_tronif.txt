@@ -1,0 +1,30 @@
+# v10_t1_tronif dialect=1.0 start=07140
+07143:fldz
+07146:fstp:292
+0714D:trace_hook:30
+07151:fldz
+07154:fcomp:292
+07159:fstsw
+0715B:movax:65535
+0715E:jcc:114:29025
+07160:incax
+07161:orax
+07165:jcc:117:29034
+07167:jmp:29055
+0716A:trace_hook:40
+0716E:fld1
+07171:fstp:288
+07178:trace_hook:50
+0717C:jmp:29075
+0717F:trace_hook:60
+07183:fild:308
+07188:fstp:288
+0718F:trace_hook:70
+07193:trace_hook:80
+07197:end
+0719A:epilogue
+# commits
+0714B
+07163
+07176
+0718D

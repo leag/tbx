@@ -1,0 +1,14 @@
+# t1_window dialect=1.1 start=087A0
+087A3:fldz
+087A6:fldz
+087A9:fild:292
+087AE:fild:292
+087B3:fstp:172
+087B8:fstp:160
+087BD:fstp:148
+087C2:fstp:136
+087C7:window:1
+087CD:end
+087D0:epilogue
+# commits
+087CB

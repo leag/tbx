@@ -1,0 +1,2 @@
+10 PRINT VAL("42")
+20 END

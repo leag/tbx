@@ -1,0 +1,7 @@
+# v10_t1_inkey dialect=1.0 start=07100
+07103:strfn:INKEY$
+07106:movsi:288
+07109:strassign
+0710B:end
+0710E:epilogue
+# commits

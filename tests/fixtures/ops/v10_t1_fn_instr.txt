@@ -1,0 +1,18 @@
+# v10_t1_fn_instr dialect=1.0 start=07120
+07123:movsi:312
+07126:rt:156
+07128:movsi:288
+0712B:strassign
+0712D:movsi:288
+07130:rt:156
+07132:movsi:308
+07135:rt:156
+07137:str2num:INSTR
+0713A:movmem_ax:44
+0713D:fild:44
+07142:rt:187
+07144:rt:184
+07148:end
+0714B:epilogue
+# commits
+07146

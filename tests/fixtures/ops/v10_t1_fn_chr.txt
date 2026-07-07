@@ -1,0 +1,8 @@
+# v10_t1_fn_chr dialect=1.0 start=070E0
+070E3:movax:65
+070E6:strfn:CHR$
+070E8:rt:190
+070EA:rt:184
+070EC:end
+070EF:epilogue
+# commits

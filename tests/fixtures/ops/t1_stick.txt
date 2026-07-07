@@ -1,0 +1,7 @@
+# t1_stick dialect=1.1 start=08770
+08773:xorax
+08775:fn_ax_ax:STICK
+08778:movm_ax:288
+0877C:end
+0877F:epilogue
+# commits

@@ -1,0 +1,16 @@
+# v10_t1_tronerr dialect=1.0 start=07140
+07143:on_error:29039
+0714A:trace_hook:30
+0714E:fld1
+07151:fstp:292
+07158:trace_hook:40
+0715C:fild:308
+07161:fstp:288
+07168:trace_hook:50
+0716C:end
+0716F:resume_pre
+07172:jmps:29036
+07174:epilogue
+# commits
+07156
+07166

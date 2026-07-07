@@ -1,0 +1,11 @@
+# t1_reg dialect=1.1 start=08700
+08703:movax:1
+08706:fild:308
+0870B:reg_set
+08710:movax:1
+08713:fn_ax_ax:REG
+08716:movm_ax:288
+0871A:end
+0871D:epilogue
+# commits
+0870E

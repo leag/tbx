@@ -1,0 +1,9 @@
+# t1_out dialect=1.1 start=08700
+08703:movax:888
+08706:movbxax
+08708:movax:1
+0870B:movdxbx
+0870D:out
+0870E:end
+08711:epilogue
+# commits

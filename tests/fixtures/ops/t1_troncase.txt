@@ -1,0 +1,30 @@
+# t1_troncase dialect=1.1 start=08790
+08793:fild:310
+08798:fstp:292
+0879F:trace_hook:30
+087A3:fld:292
+087A8:fstp64:82
+087AF:trace_hook:40
+087B3:fld1
+087B6:fcomp64:82
+087BB:fstsw
+087BF:jcc:116:34756
+087C1:jmp:34777
+087C4:trace_hook:50
+087C8:fld1
+087CB:fstp:288
+087D2:trace_hook:60
+087D6:jmp:34797
+087D9:trace_hook:70
+087DD:fild:310
+087E2:fstp:288
+087E9:trace_hook:80
+087ED:trace_hook:90
+087F1:end
+087F4:epilogue
+# commits
+0879D
+087AD
+087BD
+087D0
+087E7

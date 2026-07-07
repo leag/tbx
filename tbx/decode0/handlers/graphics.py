@@ -1,0 +1,254 @@
+"""Screen output handlers: graphics primitives, boxes, PRINT/console.
+
+Handlers for ``decode_user_code``'s dispatch loop; each handler takes
+the shared :class:`~tbx.decode0.core.DecodeState` plus the current
+``op``/``addr``/``kind`` and returns ``True`` when it consumed the op.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from tbx import ir
+from tbx.decode0.const import (
+    _TABSPC_VECS,
+)
+
+if TYPE_CHECKING:
+    from tbx.decode0.core import DecodeState
+
+
+def graphics(state: DecodeState, op, addr, kind) -> bool:
+    """Dispatch family: screen, cls, line, pset, circle, paint, draw, palette, color_commit, locate, cursor, width."""
+    if kind == "screen":  # SCREEN mode (cell [0x88])
+        mode = state.color_cells.pop(0x88, None)
+        if mode is None:
+            raise ValueError(f"SCREEN without [0x88] mode store at {addr:#x}")
+        state.put(ir.Screen(mode), state.cur)
+        state.cur = None
+        state.k += 1
+        return True
+    if kind == "cls":
+        state.put(ir.Cls(), state.cur)
+        state.cur = None
+        state.k += 1
+        return True
+    if kind == "line":  # LINE [STEP](..)-[STEP](..)[,c][,B|BF][,style]
+        fl = op[2]
+        if fl & ~0x7F or not fl & 0x40 or (fl & 0x02 and not fl & 0x04):
+            raise ValueError(f"LINE flag {fl:02x} at {addr:#x} (unsupported)")
+        color = state.color_cells.pop(0xA0) if fl & 0x08 else None
+        style = state.color_cells.pop(0xAC) if fl & 0x01 else None
+        if isinstance(style, ir.Lit):  # style word reads as a bit pattern
+            style = ir.HexLit(style.value & 0xFFFF)
+        box = ("BF" if fl & 0x02 else "B") if fl & 0x04 else ""
+        y2 = state.stack.pop()
+        x2 = state.stack.pop()
+        x1 = state.color_cells.pop(0x88)
+        y1 = state.color_cells.pop(0x94)
+        state.put(
+            ir.LineStmt(
+                x1,
+                y1,
+                x2,
+                y2,
+                color,
+                box,
+                step1=bool(fl & 0x20),
+                step2=bool(fl & 0x10),
+                style=style,
+            ),
+            state.cur,
+        )
+        state.cur = None
+        state.k += 1
+        return True
+    if kind == "pset":  # PSET/PRESET [STEP] (x,y)[, color]
+        fl = op[2]
+        # Exactly one of 01=PRESET / 02=PSET / 04=color (color drops the
+        # PSET/PRESET bit -- explicit color overrides the default attr);
+        # 08=STEP composes with any of them.
+        if fl & ~0x0F or bin(fl & 0x07).count("1") != 1:
+            raise ValueError(f"PSET flag {fl:02x} at {addr:#x} (unsupported)")
+        color = state.color_cells.pop(0x88) if fl & 0x04 else None
+        y = state.stack.pop()
+        x = state.stack.pop()
+        state.put(
+            ir.Pset(x, y, color, preset=bool(fl & 0x01), step=bool(fl & 0x08)),
+            state.cur,
+        )
+        state.cur = None
+        state.k += 1
+        return True
+    if kind == "circle":  # CIRCLE [STEP] (x,y), r[,c][,s][,e][,asp]
+        fl = op[2]
+        if fl & ~0x1F:
+            raise ValueError(f"CIRCLE flag {fl:02x} at {addr:#x} (unsupported)")
+        color = state.color_cells.pop(0x88) if fl & 0x08 else None
+        cstart = state.color_cells.pop(0x94) if fl & 0x04 else None
+        cend = state.color_cells.pop(0xA0) if fl & 0x02 else None
+        aspect = state.color_cells.pop(0xAC) if fl & 0x01 else None
+        if isinstance(aspect, ir.DblLit):  # unsuffixed source literal:
+            aspect = ir.SingleLit(aspect.value)  # pooled f64, rendered plain
+        r = state.stack.pop()
+        y = state.stack.pop()
+        x = state.stack.pop()
+        state.put(
+            ir.Circle(x, y, r, color, cstart, cend, aspect, step=bool(fl & 0x10)),
+            state.cur,
+        )
+        state.cur = None
+        state.k += 1
+        return True
+    if kind == "paint":  # PAINT (x,y)[, paint][, border]
+        if op[2] & ~0x03:
+            raise ValueError(f"PAINT flag {op[2]:02x} at {addr:#x} (unsupported)")
+        paint = state.color_cells.pop(0x88) if op[2] & 0x02 else None
+        border = state.color_cells.pop(0x94) if op[2] & 0x01 else None
+        y = state.stack.pop()
+        x = state.stack.pop()
+        state.put(ir.Paint(x, y, paint, border), state.cur)
+        state.cur = None
+        state.k += 1
+        return True
+    if kind == "draw":  # DRAW cmd$
+        state.put(ir.Draw(state.sstack.pop()), state.cur)
+        state.cur = None
+        state.k += 1
+        return True
+    if kind == "palette":  # PALETTE attr(bx), color(ax)
+        state.put(ir.Palette(state.bx, state.ax), state.cur)
+        state.bx = state.ax = None
+        state.cur = None
+        state.k += 1
+        return True
+    if kind == "color_commit":  # COLOR fg(04)/bg(02) mask
+        fg, bg = (
+            state.color_cells.pop(0x88, None),
+            state.color_cells.pop(0x94, None),
+        )
+        want_mask = (4 if fg is not None else 0) | (2 if bg is not None else 0)
+        if op[2] != want_mask or state.color_cells:
+            raise ValueError(
+                f"COLOR mask {op[2]:02x} != cells {want_mask:02x} "
+                f"(+{state.color_cells}) at {addr:#x}"
+            )
+        state.put(ir.Color(fg, bg), state.cur)
+        state.cur = None
+        state.k += 1
+        return True
+    if kind == "locate":  # LOCATE row(bx),col(ax)
+        state.put(ir.Locate(state.bx, state.ax), state.cur)
+        state.bx = state.ax = None
+        state.cur = None
+        state.k += 1
+        return True
+    if kind == "cursor":  # trailing cursor arg -> attach
+        if (
+            not state.stmts
+            or not isinstance(state.stmts[-1], ir.Locate)
+            or state.stmts[-1].cursor is not None
+        ):
+            raise ValueError(f"cursor call without open LOCATE at {addr:#x}")
+        state.stmts[-1] = ir.Locate(state.stmts[-1].row, state.stmts[-1].col, state.ax)
+        state.ax = None
+        state.cur = None
+        state.k += 1
+        return True
+    if kind == "width":  # WIDTH cols (ax)
+        if state.ax is None or isinstance(state.ax, tuple):
+            raise ValueError(f"WIDTH without an ax argument at {addr:#x}")
+        state.put(ir.Width(state.ax), state.cur)
+        state.ax = None
+        state.cur = None
+        state.k += 1
+        return True
+    return False
+
+
+def graphics_box(state: DecodeState, op, addr, kind) -> bool:
+    """Dispatch family: view, window."""
+    if kind in ("view", "window"):  # coord cells -> (x1,y1)-(x2,y2)
+        fl = op[2]
+        base, scr_bit, extra = (
+            (0x04, 0x08, 0x03) if kind == "view" else (0x01, 0x02, 0x00)
+        )
+        if not fl & base or fl & ~(base | scr_bit | extra):
+            raise ValueError(
+                f"{kind.upper()} flag {fl:02x} at {addr:#x} (unsupported variant)"
+            )
+        try:
+            x1, y1, x2, y2 = (
+                state.color_cells.pop(c) for c in (0x88, 0x94, 0xA0, 0xAC)
+            )
+        except KeyError:
+            raise ValueError(f"{kind.upper()} coord cells incomplete at {addr:#x}")
+        if kind == "view":
+            vcolor = state.color_cells.pop(0xB8) if fl & 0x02 else None
+            vborder = state.color_cells.pop(0xC4) if fl & 0x01 else None
+            state.put(
+                ir.View(
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    screen=bool(fl & scr_bit),
+                    color=vcolor,
+                    border=vborder,
+                ),
+                state.cur,
+            )
+        else:
+            state.put(ir.Window(x1, y1, x2, y2, screen=bool(fl & scr_bit)), state.cur)
+        state.cur = None
+        state.k += 1
+        return True
+    return False
+
+
+def console(state: DecodeState, op, addr, kind) -> bool:
+    """Dispatch family: input, line_input, key_list, tabspc, swap."""
+    if kind == "input":  # INPUT prologue
+        prompt = None if op[2] == state.lay["pool_base"] - 4 else state._pool_str(op[2])
+        state.pend_input = (prompt, op[3])
+        state.k += 1
+        return True
+    if kind == "line_input":  # LINE INPUT
+        nxt = [o[1] for o in state.ops[state.k + 1 : state.k + 3]]
+        if nxt != ["movsi", "strassign"]:
+            raise ValueError(f"LINE INPUT template mismatch at {addr:#x}")
+        prompt = None if op[2] == state.lay["pool_base"] - 4 else state._pool_str(op[2])
+        state.put(ir.LineInput(prompt, state.loc(state.ops[state.k + 1][2])), state.cur)
+        state.cur = None
+        state.k += 3
+        return True
+    if kind == "key_list":  # KEY LIST
+        state.put(ir.KeyList(), state.cur)
+        state.cur = None
+        state.k += 1
+        return True
+    if kind == "tabspc":  # TAB(n)/SPC(n) item
+        name, isfile = _TABSPC_VECS[op[2]]
+        if state.ax is None or isinstance(state.ax, tuple):
+            raise ValueError(f"{name} without an ax argument at {addr:#x}")
+        if state.pend_using is not None:  # unwitnessed inside USING chains
+            state.flush_pending()
+        f = state.pend_fnum if isfile else None
+        if isfile and f is None:
+            raise ValueError(f"file {name} without [0060] at {addr:#x}")
+        if state.pend_print is not None and state.pend_print["file"] != f:
+            state.flush_pending()  # console/file leg change = new stmt
+        if state.pend_print is None:
+            state.pend_print = {"items": [], "file": f, "start": state.cur}
+        assert state.pend_print is not None  # just established above
+        state.pend_print["items"].append(ir.Call(name, (state.ax,)))
+        state.ax = None
+        state.cur = None
+        state.k += 1
+        return True
+    if kind == "swap":  # SWAP a, b (two scalar displacements)
+        state.put(ir.Swap(state.loc(op[2]), state.loc(op[3])), state.cur)
+        state.cur = None
+        state.k += 1
+        return True
+    return False

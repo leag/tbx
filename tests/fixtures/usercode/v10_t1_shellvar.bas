@@ -1,0 +1,2 @@
+10 SHELL A$
+20 END

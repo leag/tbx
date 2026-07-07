@@ -1,0 +1,12 @@
+# v10_t1_viewb dialect=1.0 start=07280
+07283:movax:10
+07286:movm_imm:148:10
+0728C:movm_ax:136
+07290:movax:100
+07293:movm_imm:172:100
+07299:movm_ax:160
+0729D:movm_imm:196:2
+072A3:view:5
+072A7:end
+072AA:epilogue
+# commits

@@ -1,0 +1,14 @@
+# f87_t1_arr1 dialect=1.1 start=069A0
+069A3:fild:358
+069A8:fstp:372
+069AF:fld1
+069B2:fold:+:372
+069B7:fstp:376
+069BE:fld:376
+069C3:fstp:342
+069CA:end
+069CD:epilogue
+# commits
+069AD
+069BC
+069C8

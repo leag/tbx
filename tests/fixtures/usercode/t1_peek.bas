@@ -1,0 +1,3 @@
+10 A = PEEK(100)
+20 PRINT A
+30 END

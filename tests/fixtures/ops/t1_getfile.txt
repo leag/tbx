@@ -1,0 +1,17 @@
+# t1_getfile dialect=1.1 start=08CC0
+08CC3:movm_imm:96:1
+08CC9:movsi:292
+08CCC:rt:156
+08CCE:movsi:296
+08CD1:rt:156
+08CD3:movax:128
+08CD6:open
+08CD9:movm_imm:96:1
+08CDF:fld1
+08CE2:get
+08CE7:movax:1
+08CEA:close
+08CED:end
+08CF0:epilogue
+# commits
+08CE5

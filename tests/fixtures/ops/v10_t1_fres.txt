@@ -1,0 +1,14 @@
+# v10_t1_fres dialect=1.0 start=070F0
+070F3:movsi:312
+070F6:rt:156
+070F8:movsi:296
+070FB:strassign
+070FD:fre_str
+07100:fstp:292
+07107:fre_str
+0710A:fstp:288
+07111:end
+07114:epilogue
+# commits
+07105
+0710F

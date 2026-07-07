@@ -1,0 +1,7 @@
+# v10_t1_rmdir dialect=1.0 start=07100
+07103:movsi:292
+07106:rt:156
+07108:rmdir
+0710B:end
+0710E:epilogue
+# commits

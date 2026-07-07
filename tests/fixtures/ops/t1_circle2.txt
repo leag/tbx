@@ -1,0 +1,10 @@
+# t1_circle2 dialect=1.1 start=08DE0
+08DE3:fild:296
+08DE8:fild:296
+08DED:fild:294
+08DF2:movm_imm:136:2
+08DF8:circle:8
+08DFE:end
+08E01:epilogue
+# commits
+08DFC

@@ -1,0 +1,10 @@
+# v10_t1_filef dialect=1.0 start=07130
+07133:movax:1
+07136:fn_ax_ax:EOF
+07139:movm_ax:290
+0713D:xorax
+0713F:fn_ax_ax:LPOS
+07142:movm_ax:288
+07146:end
+07149:epilogue
+# commits

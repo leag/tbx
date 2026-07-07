@@ -1,0 +1,4 @@
+10 OPEN "R",#1,"X.DAT"
+20 FIELD #1, 10 AS A$, 20 AS B$
+30 CLOSE #1
+40 END

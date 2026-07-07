@@ -1,0 +1,2 @@
+10 PRINT BIN$(5)
+20 END

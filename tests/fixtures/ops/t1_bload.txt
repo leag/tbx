@@ -1,0 +1,9 @@
+# t1_bload dialect=1.1 start=08800
+08803:movsi:292
+08806:rt:156
+08808:fldz
+0880B:bload
+08810:end
+08813:epilogue
+# commits
+0880E

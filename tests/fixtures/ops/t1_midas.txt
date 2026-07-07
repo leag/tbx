@@ -1,0 +1,15 @@
+# t1_midas dialect=1.1 start=087A0
+087A3:movsi:312
+087A6:rt:156
+087A8:movsi:288
+087AB:strassign
+087AD:movax:2
+087B0:movsi:308
+087B3:rt:156
+087B5:movsi:288
+087B8:movdx:150
+087BB:movesdx
+087BD:midassign
+087BF:end
+087C2:epilogue
+# commits

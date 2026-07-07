@@ -1,0 +1,19 @@
+# zz_op_pow dialect=1.1 start=09110
+09113:fild:310
+09118:fstp:296
+0911F:fild:308
+09124:fstp:292
+0912B:fld:292
+09130:fld:296
+09135:fpow
+09138:fstp:288
+0913F:fld:288
+09144:rt:187
+09146:rt:184
+0914A:end
+0914D:epilogue
+# commits
+0911D
+09129
+0913D
+09148

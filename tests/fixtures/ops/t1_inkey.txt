@@ -1,0 +1,7 @@
+# t1_inkey dialect=1.1 start=08750
+08753:strfn:INKEY$
+08756:movsi:288
+08759:strassign
+0875B:end
+0875E:epilogue
+# commits

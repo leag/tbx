@@ -1,0 +1,17 @@
+# t1_seek dialect=1.1 start=08C50
+08C53:movm_imm:96:1
+08C59:movsi:292
+08C5C:rt:156
+08C5E:movsi:296
+08C61:rt:156
+08C63:movax:128
+08C66:open
+08C69:movm_imm:96:1
+08C6F:fld1
+08C72:seek
+08C77:movax:1
+08C7A:close
+08C7D:end
+08C80:epilogue
+# commits
+08C75

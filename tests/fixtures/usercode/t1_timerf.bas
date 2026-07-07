@@ -1,0 +1,2 @@
+10 A = TIMER
+20 END

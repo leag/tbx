@@ -1,0 +1,11 @@
+# zz_vm_darr dialect=1.1 start=08700
+08703:fld64:356
+08708:fstp64:376
+0870F:fld64:376
+08714:rt:187
+08716:rt:184
+0871A:end
+0871D:epilogue
+# commits
+0870D
+08718

@@ -1,0 +1,16 @@
+# v10_t1_keyos dialect=1.0 start=071F0
+071F3:trap_hook
+071F4:movax:1
+071F7:on_trap:120:29200
+071FE:trap_hook
+071FF:movax:1
+07202:trap_ctl:90
+07205:trap_hook
+07206:movax:1
+07209:trap_ctl:92
+0720C:trap_hook
+0720D:end
+07210:trap_hook
+07211:retf
+07212:epilogue
+# commits

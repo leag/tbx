@@ -1,0 +1,10 @@
+# v10_t1_defseg dialect=1.0 start=070B0
+070B3:movm_imm:28:0
+070B9:fild:294
+070BE:movax:1
+070C1:poke
+070C6:defseg
+070CA:end
+070CD:epilogue
+# commits
+070C4

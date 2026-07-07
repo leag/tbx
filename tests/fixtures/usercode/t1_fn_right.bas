@@ -1,0 +1,3 @@
+10 A$ = "Hello"
+20 PRINT RIGHT$(A$,2)
+30 END

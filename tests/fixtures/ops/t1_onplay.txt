@@ -1,0 +1,16 @@
+# t1_onplay dialect=1.1 start=08B30
+08B33:trap_hook
+08B34:movax:4
+08B37:on_trap:124:35662
+08B3E:trap_hook
+08B3F:trap_ctl:150
+08B42:trap_hook
+08B43:trap_ctl:146
+08B46:trap_hook
+08B47:trap_ctl:148
+08B4A:trap_hook
+08B4B:end
+08B4E:trap_hook
+08B4F:retf
+08B50:epilogue
+# commits

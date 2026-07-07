@@ -1,0 +1,37 @@
+# v10_t1_tronfor dialect=1.0 start=07140
+07143:trace_hook:20
+07147:fild:308
+0714C:fstp:296
+07151:fld1
+07154:fstp:292
+07159:fld1
+0715C:fstp:300
+07163:jmp:29065
+07166:trace_hook:30
+0716A:fld:300
+0716F:fstp:288
+07176:trace_hook:40
+0717A:fld:292
+0717F:fold:+:300
+07184:fstp:300
+07189:testw:294:32768
+07191:jcc:116:29078
+07193:jmp:29097
+07196:fld:296
+0719B:fcomp:300
+071A0:fstsw
+071A4:jcc:115:29030
+071A6:jmp:29113
+071A9:fld:296
+071AE:fcomp:300
+071B3:fstsw
+071B7:jcc:118:29030
+071B9:trace_hook:50
+071BD:end
+071C0:epilogue
+# commits
+07161
+07174
+0718F
+071A2
+071B5

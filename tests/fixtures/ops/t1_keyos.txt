@@ -1,0 +1,16 @@
+# t1_keyos dialect=1.1 start=08840
+08843:trap_hook
+08844:movax:1
+08847:on_trap:120:34912
+0884E:trap_hook
+0884F:movax:1
+08852:trap_ctl:90
+08855:trap_hook
+08856:movax:1
+08859:trap_ctl:92
+0885C:trap_hook
+0885D:end
+08860:trap_hook
+08861:retf
+08862:epilogue
+# commits

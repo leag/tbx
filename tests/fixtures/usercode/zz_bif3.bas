@@ -1,0 +1,9 @@
+10 A = 1
+20 IF A = 1 THEN
+  B = 2
+ELSEIF A = 2 THEN
+  B = 3
+ELSE
+  B = 4
+END IF
+30 END

@@ -1,0 +1,23 @@
+# zz_do5 dialect=1.1 start=08700
+08703:fldz
+08706:fstp:288
+0870D:fld1
+08710:fold:+:288
+08715:fstp:288
+0871C:fild:308
+08721:fcomp:288
+08726:fstsw
+0872A:jcc:116:34607
+0872C:jmp:34610
+0872F:jmp:34612
+08732:jmps:34573
+08734:fld:288
+08739:rt:187
+0873B:rt:184
+0873F:end
+08742:epilogue
+# commits
+0870B
+0871A
+08728
+0873D

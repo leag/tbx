@@ -1,0 +1,30 @@
+# t1_tronerb dialect=1.1 start=08790
+08793:on_error:34791
+0879A:trace_hook:30
+0879E:fldz
+087A1:fcomp:292
+087A6:fstsw
+087A8:movax:65535
+087AB:jcc:114:34734
+087AD:incax
+087AE:orax
+087B2:jcc:117:34743
+087B4:jmp:34764
+087B7:trace_hook:40
+087BB:fld1
+087BE:fstp:288
+087C5:trace_hook:50
+087C9:jmp:34784
+087CC:trace_hook:60
+087D0:fild:308
+087D5:fstp:288
+087DC:trace_hook:70
+087E0:trace_hook:80
+087E4:end
+087E7:resume_pre
+087EA:resume_bare
+087ED:epilogue
+# commits
+087B0
+087C3
+087DA

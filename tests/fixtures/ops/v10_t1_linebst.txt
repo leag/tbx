@@ -1,0 +1,14 @@
+# v10_t1_linebst dialect=1.0 start=074A0
+074A3:fild:318
+074A8:fild:316
+074AD:fstp:148
+074B2:fstp:136
+074B7:fild:314
+074BC:fild:312
+074C1:movm_imm:160:2
+074C7:movm_imm:172:-21846
+074CD:line:77
+074D3:end
+074D6:epilogue
+# commits
+074D1

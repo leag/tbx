@@ -1,0 +1,8 @@
+# v10_t1_sound dialect=1.0 start=07140
+07143:movax:440
+07146:fild:292
+0714B:sound
+07150:end
+07153:epilogue
+# commits
+0714E

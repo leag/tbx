@@ -1,0 +1,3 @@
+10 A$ = MKI$(258)
+20 PRINT LEN(A$)
+30 END

@@ -1,0 +1,23 @@
+# t1_writefile dialect=1.1 start=08CC0
+08CC3:movm_imm:96:1
+08CC9:movsi:296
+08CCC:rt:156
+08CCE:movsi:300
+08CD1:rt:156
+08CD3:movax:128
+08CD6:open
+08CD9:movax:1
+08CDC:movm_ax:96
+08CE0:fld1
+08CE3:write_file_num
+08CE6:write_file_sep
+08CE9:movsi:292
+08CEC:rt:156
+08CEE:write_file_str
+08CF1:rt:186
+08CF5:movax:1
+08CF8:close
+08CFB:end
+08CFE:epilogue
+# commits
+08CF3

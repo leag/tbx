@@ -1,0 +1,2 @@
+10 PRINT CEIL(1.2#)
+20 END

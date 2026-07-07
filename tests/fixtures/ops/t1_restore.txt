@@ -1,0 +1,11 @@
+# t1_restore dialect=1.1 start=08760
+08763:data_read_num
+08766:fstp:292
+0876D:movm_imm:120:0
+08773:data_read_num
+08776:fstp:288
+0877D:end
+08780:epilogue
+# commits
+0876B
+0877B

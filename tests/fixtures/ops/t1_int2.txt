@@ -1,0 +1,31 @@
+# t1_int2 dialect=1.1 start=08700
+08703:movm_imm:304:5
+08709:movm_imm:302:2
+0870F:movax_m:302
+08713:addax_m:304
+08717:movm_ax:300
+0871B:movax_m:302
+0871F:negax
+08721:addax_m:304
+08725:movm_ax:298
+08729:movax_m:302
+0872D:imul_m:304
+08731:movm_ax:296
+08735:movax:3
+08738:addax_m:304
+0873C:movm_ax:294
+08740:movax_m:302
+08744:addax_m:304
+08748:movmem_ax:44
+0874B:fild:44
+08750:fstp:290
+08757:fld:290
+0875C:fistp:44
+08761:fwait
+08763:movaxmem:44
+08766:movm_ax:288
+0876C:end
+0876F:epilogue
+# commits
+08755
+0876A

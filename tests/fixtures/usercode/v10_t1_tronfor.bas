@@ -1,0 +1,5 @@
+10 TRON
+20 FOR A = 1 TO 3
+30 B = A
+40 NEXT A
+50 END

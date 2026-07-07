@@ -1,0 +1,6 @@
+# t1_instat dialect=1.1 start=08750
+08753:fn_ax0:INSTAT
+08756:movm_ax:288
+0875A:end
+0875D:epilogue
+# commits

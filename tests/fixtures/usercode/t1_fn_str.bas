@@ -1,0 +1,2 @@
+10 PRINT STR$(42)
+20 END

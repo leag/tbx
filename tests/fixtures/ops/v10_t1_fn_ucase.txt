@@ -1,0 +1,13 @@
+# v10_t1_fn_ucase dialect=1.0 start=07140
+07143:movsi:308
+07146:rt:156
+07148:movsi:288
+0714B:strassign
+0714D:movsi:288
+07150:rt:156
+07152:strfn:UCASE$
+07155:rt:190
+07157:rt:184
+07159:end
+0715C:epilogue
+# commits

@@ -1,0 +1,33 @@
+# t1_fn dialect=1.1 start=08830
+08833:input:320:16384
+0883A:read_num
+0883D:fstp:304
+08844:fld:304
+08849:fabs
+0884C:fstp:300
+08853:fld:304
+08858:fsqrt
+0885B:fstp:296
+08862:fld:304
+08867:fn:INT
+08869:fstp:292
+08870:fld:304
+08875:fn_ax:SGN
+08878:movmem_ax:44
+0887B:fild:44
+08880:fstp:288
+08887:fld:296
+0888C:fold:+:300
+08891:fold:+:292
+08896:fold:+:288
+0889B:rt:187
+0889D:rt:184
+088A1:end
+088A4:epilogue
+# commits
+08842
+08851
+08860
+0886E
+08885
+0889F

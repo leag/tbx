@@ -1,0 +1,15 @@
+# fst_t1_gosub dialect=1.1 start=08700
+08703:fld1
+08706:fstp:292
+0870D:call:34594
+08713:fild:310
+08718:fstp:292
+0871F:end
+08722:fild:308
+08727:fstp:288
+0872E:ret
+08730:epilogue
+# commits
+0870B
+0871D
+0872C

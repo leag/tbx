@@ -1,0 +1,18 @@
+# zz_vm_ladd dialect=1.1 start=08700
+08703:fild32:312
+08708:fistp32:296
+0870F:fild32:308
+08714:fistp32:292
+0871B:fild32:292
+08720:ifold32:+:296
+08725:fistp32:288
+0872C:fild32:288
+08731:rt:187
+08733:rt:184
+08737:end
+0873A:epilogue
+# commits
+0870D
+08719
+0872A
+08735

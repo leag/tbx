@@ -1,0 +1,10 @@
+# v10_t1_out2 dialect=1.0 start=070B0
+070B3:movm_imm:288:5
+070B9:movax:888
+070BC:movbxax
+070BE:movax_m:288
+070C2:movdxbx
+070C4:out
+070C5:end
+070C8:epilogue
+# commits

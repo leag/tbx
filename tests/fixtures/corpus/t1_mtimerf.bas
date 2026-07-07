@@ -1,0 +1,2 @@
+10 A = MTIMER
+20 END

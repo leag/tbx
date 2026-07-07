@@ -1,0 +1,18 @@
+# v10_t1_bound dialect=1.0 start=070F0
+070F3:movax:288
+070F6:movbxax
+070F8:movax:1
+070FB:movdx:151
+070FE:movesdx
+07100:fn_bound:UBOUND
+07103:movm_ax:344
+07107:movax:288
+0710A:movbxax
+0710C:movax:1
+0710F:movdx:151
+07112:movesdx
+07114:fn_bound:LBOUND
+07117:movm_ax:342
+0711B:end
+0711E:epilogue
+# commits

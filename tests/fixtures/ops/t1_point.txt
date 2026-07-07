@@ -1,0 +1,15 @@
+# t1_point dialect=1.1 start=087C0
+087C3:fild:310
+087C8:fild:308
+087CD:fn_ax2:POINT
+087D0:movmem_ax:44
+087D3:fild:44
+087D8:fstp:288
+087DF:fld:288
+087E4:rt:187
+087E6:rt:184
+087EA:end
+087ED:epilogue
+# commits
+087DD
+087E8

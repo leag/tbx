@@ -1,0 +1,16 @@
+# t1_inpf dialect=1.1 start=08700
+08703:movax:888
+08706:movdxax
+08708:xorah
+0870A:in_al
+0870B:movmem_ax:44
+0870E:fild:44
+08713:fstp:288
+0871A:fld:288
+0871F:rt:187
+08721:rt:184
+08725:end
+08728:epilogue
+# commits
+08718
+08723

@@ -1,0 +1,23 @@
+# zz_bif1 dialect=1.1 start=08700
+08703:fld1
+08706:fstp:296
+0870D:fld1
+08710:fcomp:296
+08715:fstsw
+08717:movax:65535
+0871A:jcc:116:34589
+0871C:incax
+0871D:orax
+08721:jcc:117:34598
+08723:jmp:34622
+08726:fild:310
+0872B:fstp:292
+08732:fild:308
+08737:fstp:288
+0873E:end
+08741:epilogue
+# commits
+0870B
+0871F
+08730
+0873C

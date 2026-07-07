@@ -1,0 +1,22 @@
+# t1_scr dialect=1.1 start=088C0
+088C3:cls
+088C6:movax:3
+088C9:movbxax
+088CB:movax:5
+088CE:locate
+088D0:movm_imm:136:1
+088D6:color_commit:4
+088DA:movax:10
+088DD:movbxax
+088DF:movax:20
+088E2:locate
+088E4:movm_imm:136:7
+088EA:movm_imm:148:0
+088F0:color_commit:6
+088F4:movsi:292
+088F7:rt:156
+088F9:rt:190
+088FB:rt:184
+088FD:end
+08900:epilogue
+# commits

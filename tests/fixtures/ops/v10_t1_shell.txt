@@ -1,0 +1,7 @@
+# v10_t1_shell dialect=1.0 start=07250
+07253:movsi:292
+07256:rt:156
+07258:shell
+0725B:end
+0725E:epilogue
+# commits

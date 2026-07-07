@@ -1,0 +1,14 @@
+# v10_t1_circarc dialect=1.0 start=081C0
+081C3:fild:300
+081C8:fild:300
+081CD:fild:298
+081D2:movm_imm:136:2
+081D8:fld1
+081DB:fstp:148
+081E0:fild:292
+081E5:fstp:160
+081EA:circle:14
+081F0:end
+081F3:epilogue
+# commits
+081EE

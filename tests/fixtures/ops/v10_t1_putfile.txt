@@ -1,0 +1,17 @@
+# v10_t1_putfile dialect=1.0 start=07670
+07673:movm_imm:96:1
+07679:movsi:292
+0767C:rt:156
+0767E:movsi:296
+07681:rt:156
+07683:movax:128
+07686:open
+07689:movm_imm:96:1
+0768F:fld1
+07692:put
+07697:movax:1
+0769A:close
+0769D:end
+076A0:epilogue
+# commits
+07695

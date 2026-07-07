@@ -1,0 +1,7 @@
+10 A = 1
+20 B = 2
+30 IF A >= B THEN 50
+40 C = 5
+50 IF A = B THEN 70
+60 C = A + 1
+70 END

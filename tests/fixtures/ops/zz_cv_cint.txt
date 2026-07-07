@@ -1,0 +1,13 @@
+# zz_cv_cint dialect=1.1 start=08700
+08703:fld64:292
+08708:fistp:44
+0870D:fwait
+0870F:movaxmem:44
+08712:movmem_ax:44
+08715:fild:44
+0871A:rt:187
+0871C:rt:184
+08720:end
+08723:epilogue
+# commits
+0871E

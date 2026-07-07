@@ -1,0 +1,6 @@
+10 TRON
+20 TROFF
+22 A = 1
+24 B = 2
+26 TRON
+30 END

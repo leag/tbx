@@ -1,0 +1,8 @@
+10 INPUT N
+20 DIM V$(N)
+30 DIM W(N,5)
+40 OPEN "I",#1,"X.DAT"
+50 INPUT #1, W(N,5), V$(N)
+60 CLOSE #1
+70 PRINT W(1,1); V$(N)
+80 END

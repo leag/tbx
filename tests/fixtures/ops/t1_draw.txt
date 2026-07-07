@@ -1,0 +1,7 @@
+# t1_draw dialect=1.1 start=0A180
+0A183:movsi:292
+0A186:rt:156
+0A188:draw
+0A18B:end
+0A18E:epilogue
+# commits

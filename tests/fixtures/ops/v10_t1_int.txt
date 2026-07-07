@@ -1,0 +1,11 @@
+# v10_t1_int dialect=1.0 start=070B0
+070B3:movm_imm:294:5
+070B9:movax:2
+070BC:addax_m:294
+070C0:movm_ax:292
+070C4:fild:292
+070C9:fstp:288
+070D0:end
+070D3:epilogue
+# commits
+070CE

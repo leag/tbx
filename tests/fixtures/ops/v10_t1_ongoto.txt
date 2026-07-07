@@ -1,0 +1,15 @@
+# v10_t1_ongoto dialect=1.0 start=070B0
+070B3:fld1
+070B6:fstp:288
+070BD:fld:288
+070C2:fistp:44
+070C7:fwait
+070C9:movaxmem:44
+070CC:on_goto:28894:28897
+070DB:end
+070DE:end
+070E1:end
+070E4:epilogue
+# commits
+070BB
+070D9

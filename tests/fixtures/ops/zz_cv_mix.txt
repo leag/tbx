@@ -1,0 +1,28 @@
+# zz_cv_mix dialect=1.1 start=087F0
+087F3:fild32:324
+087F8:strfn:MKL$
+087FA:movsi:292
+087FD:strassign
+08801:movsi:292
+08804:rt:156
+08806:str2num:CVL
+08808:fistp32:288
+0880F:fld64:316
+08814:fn:CEIL
+08817:rt:187
+08819:fld64:308
+0881E:fistp:44
+08823:fwait
+08825:movaxmem:44
+08828:movmem_ax:44
+0882B:fild:44
+08830:rt:187
+08832:fild32:288
+08837:rt:187
+08839:rt:184
+0883D:end
+08840:epilogue
+# commits
+087FF
+0880D
+0883B

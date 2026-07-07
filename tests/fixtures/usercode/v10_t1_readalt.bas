@@ -1,0 +1,3 @@
+10 DATA 4,5,6
+20 READ A, B, C
+30 END

@@ -1,0 +1,11 @@
+# t1_rnd dialect=1.1 start=087C0
+087C3:fn_fp0:RND
+087C6:fstp:292
+087CD:fld1
+087D0:fn:RND
+087D3:fstp:288
+087DA:end
+087DD:epilogue
+# commits
+087CB
+087D8

@@ -1,0 +1,30 @@
+# tier1_expr3 dialect=1.1 start=08700
+08703:fld1
+08706:fstp:316
+0870D:fld:304
+08712:fold:+:308
+08717:fstp:312
+0871E:fld1
+08721:fold:+:316
+08726:fstp:300
+0872D:fld:316
+08732:ifold:*:326
+08737:fstp:296
+0873E:fld:296
+08743:fold:+:300
+08748:fld:312
+0874D:fold:+:316
+08752:popop:+
+08755:fstp:292
+0875C:fild:324
+08761:fold:*:316
+08766:fstp:288
+0876D:end
+08770:epilogue
+# commits
+0870B
+0871C
+0872B
+0873C
+0875A
+0876B

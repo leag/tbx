@@ -1,0 +1,22 @@
+# v10_t1_scr dialect=1.0 start=07260
+07263:cls
+07266:movax:3
+07269:movbxax
+0726B:movax:5
+0726E:locate
+07270:movm_imm:136:1
+07276:color_commit:4
+0727A:movax:10
+0727D:movbxax
+0727F:movax:20
+07282:locate
+07284:movm_imm:136:7
+0728A:movm_imm:148:0
+07290:color_commit:6
+07294:movsi:292
+07297:rt:156
+07299:rt:190
+0729B:rt:184
+0729D:end
+072A0:epilogue
+# commits

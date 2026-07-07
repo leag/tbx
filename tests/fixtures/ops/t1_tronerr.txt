@@ -1,0 +1,16 @@
+# t1_tronerr dialect=1.1 start=08790
+08793:on_error:34751
+0879A:trace_hook:30
+0879E:fld1
+087A1:fstp:292
+087A8:trace_hook:40
+087AC:fild:308
+087B1:fstp:288
+087B8:trace_hook:50
+087BC:end
+087BF:resume_pre
+087C2:jmps:34748
+087C4:epilogue
+# commits
+087A6
+087B6

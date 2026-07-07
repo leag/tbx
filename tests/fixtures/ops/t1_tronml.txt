@@ -1,0 +1,12 @@
+# t1_tronml dialect=1.1 start=08790
+08793:trace_hook:20
+08797:fld1
+0879A:fstp:292
+087A1:fild:308
+087A6:fstp:288
+087AD:trace_hook:30
+087B1:end
+087B4:epilogue
+# commits
+0879F
+087AB

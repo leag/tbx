@@ -1,0 +1,11 @@
+# t1_write dialect=1.1 start=08750
+08753:fld1
+08756:write_item
+08759:write_sep
+0875C:fild:292
+08761:write_item
+08764:rt:184
+08768:end
+0876B:epilogue
+# commits
+08766

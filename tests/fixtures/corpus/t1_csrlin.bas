@@ -1,0 +1,2 @@
+10 A% = CSRLIN
+20 END

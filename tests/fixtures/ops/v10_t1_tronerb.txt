@@ -1,0 +1,30 @@
+# v10_t1_tronerb dialect=1.0 start=07140
+07143:on_error:29079
+0714A:trace_hook:30
+0714E:fldz
+07151:fcomp:292
+07156:fstsw
+07158:movax:65535
+0715B:jcc:114:29022
+0715D:incax
+0715E:orax
+07162:jcc:117:29031
+07164:jmp:29052
+07167:trace_hook:40
+0716B:fld1
+0716E:fstp:288
+07175:trace_hook:50
+07179:jmp:29072
+0717C:trace_hook:60
+07180:fild:308
+07185:fstp:288
+0718C:trace_hook:70
+07190:trace_hook:80
+07194:end
+07197:resume_pre
+0719A:resume_bare
+0719D:epilogue
+# commits
+07160
+07173
+0718A

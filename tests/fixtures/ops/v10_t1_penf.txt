@@ -1,0 +1,7 @@
+# v10_t1_penf dialect=1.0 start=070B0
+070B3:xorax
+070B5:fn_ax_ax:PEN
+070B8:movm_ax:288
+070BC:end
+070BF:epilogue
+# commits

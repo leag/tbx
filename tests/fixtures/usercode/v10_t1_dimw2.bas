@@ -1,0 +1,7 @@
+10 OPTION BASE 1
+20 INPUT A
+30 DIM V0(A,3)
+40 B = 2
+50 C = 1
+60 V0(B,C) = V0(B,C) + 4
+70 END

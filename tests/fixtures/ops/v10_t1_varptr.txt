@@ -1,0 +1,10 @@
+# v10_t1_varptr dialect=1.0 start=070B0
+070B3:fld1
+070B6:fstp:292
+070BD:movm_imm:290:292
+070C3:movaxds
+070C5:movm_ax:288
+070C9:end
+070CC:epilogue
+# commits
+070BB

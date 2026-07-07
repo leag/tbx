@@ -1,0 +1,14 @@
+# t1_peek dialect=1.1 start=08700
+08703:fild:308
+08708:fn_ax:PEEK
+0870B:movmem_ax:44
+0870E:fild:44
+08713:fstp:288
+0871A:fld:288
+0871F:rt:187
+08721:rt:184
+08725:end
+08728:epilogue
+# commits
+08718
+08723

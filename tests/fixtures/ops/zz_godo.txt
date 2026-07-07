@@ -1,0 +1,20 @@
+# zz_godo dialect=1.1 start=08700
+08703:fldz
+08706:fstp:288
+0870D:fld1
+08710:fold:+:288
+08715:fstp:288
+0871C:fild:308
+08721:fcomp:288
+08726:fstsw
+0872A:jcc:119:34573
+0872C:fld:288
+08731:rt:187
+08733:rt:184
+08737:end
+0873A:epilogue
+# commits
+0870B
+0871A
+08728
+08735

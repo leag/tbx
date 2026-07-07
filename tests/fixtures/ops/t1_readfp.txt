@@ -1,0 +1,9 @@
+# t1_readfp dialect=1.1 start=08760
+08763:data_read_num
+08766:fstp:292
+0876B:data_read_num
+0876E:fstp:288
+08775:end
+08778:epilogue
+# commits
+08773

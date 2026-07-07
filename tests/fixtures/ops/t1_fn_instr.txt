@@ -1,0 +1,18 @@
+# t1_fn_instr dialect=1.1 start=087B0
+087B3:movsi:312
+087B6:rt:156
+087B8:movsi:288
+087BB:strassign
+087BD:movsi:288
+087C0:rt:156
+087C2:movsi:308
+087C5:rt:156
+087C7:str2num:INSTR
+087CA:movmem_ax:44
+087CD:fild:44
+087D2:rt:187
+087D4:rt:184
+087D8:end
+087DB:epilogue
+# commits
+087D6

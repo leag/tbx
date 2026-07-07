@@ -1,0 +1,12 @@
+# v10_t1_circasp dialect=1.0 start=077C0
+077C3:fild:304
+077C8:fild:304
+077CD:fild:302
+077D2:movm_imm:136:2
+077D8:fld64:292
+077DD:fstp:172
+077E2:circle:9
+077E8:end
+077EB:epilogue
+# commits
+077E6

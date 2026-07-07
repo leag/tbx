@@ -1,0 +1,8 @@
+# v10_t1_fn_space dialect=1.0 start=070E0
+070E3:movax:3
+070E6:strfn:SPACE$
+070E9:rt:190
+070EB:rt:184
+070ED:end
+070F0:epilogue
+# commits

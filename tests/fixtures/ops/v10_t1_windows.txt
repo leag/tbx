@@ -1,0 +1,14 @@
+# v10_t1_windows dialect=1.0 start=07150
+07153:fldz
+07156:fldz
+07159:fild:292
+0715E:fild:292
+07163:fstp:172
+07168:fstp:160
+0716D:fstp:148
+07172:fstp:136
+07177:window:3
+0717D:end
+07180:epilogue
+# commits
+0717B

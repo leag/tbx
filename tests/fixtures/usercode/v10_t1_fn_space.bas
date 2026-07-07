@@ -1,0 +1,2 @@
+10 PRINT SPACE$(3)
+20 END

@@ -1,0 +1,10 @@
+# t1_inp3 dialect=1.1 start=08750
+08753:line_input:304
+08759:movsi:292
+0875C:strassign
+0875E:line_input:308
+08764:movsi:288
+08767:strassign
+08769:end
+0876C:epilogue
+# commits

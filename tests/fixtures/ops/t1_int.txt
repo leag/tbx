@@ -1,0 +1,11 @@
+# t1_int dialect=1.1 start=08700
+08703:movm_imm:294:5
+08709:movax:2
+0870C:addax_m:294
+08710:movm_ax:292
+08714:fild:292
+08719:fstp:288
+08720:end
+08723:epilogue
+# commits
+0871E

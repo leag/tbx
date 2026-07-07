@@ -1,0 +1,26 @@
+# zz_deffn2 dialect=1.1 start=08700
+08703:jmp:34580
+08706:fld_bp:8
+0870A:fold_bp:+:4
+0870E:fstp_bp:0
+08712:fn_ret
+08714:push_bp
+08715:mov_mem_sp:104
+08719:sub_sp:12
+0871C:mov_bp_sp
+0871E:fild:294
+08723:fstp_bp:4
+08727:fild:292
+0872C:fstp_bp:8
+08730:movm_imm:104:0
+08738:fn_call:34566
+0873F:fld_bp:0
+08743:fwait
+08745:add_sp:12
+08748:pop_bp
+08749:rt:187
+0874B:rt:184
+0874F:epilogue
+# commits
+08736
+0874D

@@ -1,0 +1,8 @@
+# v10_t1_inp2 dialect=1.0 start=071E0
+071E3:input:308:16384
+071EA:read_num
+071ED:fstp:288
+071F4:end
+071F7:epilogue
+# commits
+071F2

@@ -1,0 +1,7 @@
+# v10_t1_stick dialect=1.0 start=07120
+07123:xorax
+07125:fn_ax_ax:STICK
+07128:movm_ax:288
+0712C:end
+0712F:epilogue
+# commits

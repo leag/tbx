@@ -1,0 +1,20 @@
+# t1_trig dialect=1.1 start=090D0
+090D3:fld64:308
+090D8:fn:ATN
+090DB:fstp:300
+090E2:fld64:308
+090E7:fn:COS
+090EA:fstp:296
+090F1:fld64:308
+090F6:fn:SIN
+090F9:fstp:292
+09100:fld64:308
+09105:fn:TAN
+09108:fstp:288
+0910F:end
+09112:epilogue
+# commits
+090E0
+090EF
+090FE
+0910D

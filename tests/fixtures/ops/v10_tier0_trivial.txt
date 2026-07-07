@@ -1,0 +1,7 @@
+# v10_tier0_trivial dialect=1.0 start=070B0
+070B3:fld1
+070B6:fstp:288
+070BD:end
+070C0:epilogue
+# commits
+070BB

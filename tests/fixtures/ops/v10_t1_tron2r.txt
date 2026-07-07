@@ -1,0 +1,17 @@
+# v10_t1_tron2r dialect=1.0 start=07140
+07143:trace_hook:20
+07147:fld1
+0714A:fstp:296
+07151:trace_hook:30
+07155:fild:310
+0715A:fstp:292
+07161:trace_hook:60
+07165:fild:308
+0716A:fstp:288
+07171:trace_hook:70
+07175:end
+07178:epilogue
+# commits
+0714F
+0715F
+0716F

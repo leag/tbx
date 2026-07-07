@@ -1,0 +1,10 @@
+10 DIM M(10,10)
+20 OPTION BASE 1
+30 DIM A(6,6)
+40 I = 2
+50 J = 3
+60 M(I,J) = 5
+70 A(I,J) = M(I,J) + M(J,I)
+80 M(1,2) = A(I,J)
+90 PRINT M(I,J); A(I,J)
+100 END

@@ -1,0 +1,22 @@
+# v10_t1_while dialect=1.0 start=070B0
+070B3:fldz
+070B6:fstp:288
+070BD:fild:310
+070C2:fcomp:288
+070C7:fstsw
+070C9:movax:65535
+070CC:jcc:119:28879
+070CE:incax
+070CF:orax
+070D3:jcc:117:28888
+070D5:jmp:28905
+070D8:fld1
+070DB:fold:+:288
+070E0:fstp:288
+070E7:jmps:28861
+070E9:end
+070EC:epilogue
+# commits
+070BB
+070D1
+070E5

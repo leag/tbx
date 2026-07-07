@@ -1,0 +1,6 @@
+10 A = 1
+20 GOSUB 50
+30 A = 3
+40 END
+50 B = 2
+60 RETURN

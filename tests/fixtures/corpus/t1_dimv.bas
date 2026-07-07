@@ -1,0 +1,5 @@
+10 INPUT N
+20 DIM A(N)
+30 A(1) = 2
+40 PRINT A(1)
+50 END

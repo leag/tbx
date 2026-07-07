@@ -1,0 +1,4 @@
+10 A = 1
+20 B% = VARPTR(A)
+30 C% = VARSEG(C%)
+40 END

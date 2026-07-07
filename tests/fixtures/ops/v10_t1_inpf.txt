@@ -1,0 +1,16 @@
+# v10_t1_inpf dialect=1.0 start=070B0
+070B3:movax:888
+070B6:movdxax
+070B8:xorah
+070BA:in_al
+070BB:movmem_ax:44
+070BE:fild:44
+070C3:fstp:288
+070CA:fld:288
+070CF:rt:187
+070D1:rt:184
+070D5:end
+070D8:epilogue
+# commits
+070C8
+070D3

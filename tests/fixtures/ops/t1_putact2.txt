@@ -1,0 +1,34 @@
+# t1_putact2 dialect=1.1 start=087E0
+087E3:fldz
+087E6:fldz
+087E9:fild:362
+087EE:fild:362
+087F3:movsi:288
+087F6:movdx:154
+087F9:movesdx
+087FB:get_gfx:0
+08801:fld1
+08804:fld1
+08807:movsi:288
+0880A:movdx:154
+0880D:movesdx
+0880F:put_gfx:4
+08815:fild:358
+0881A:fild:358
+0881F:movsi:288
+08822:movdx:154
+08825:movesdx
+08827:put_gfx:2
+0882D:fild:356
+08832:fild:356
+08837:movsi:288
+0883A:movdx:154
+0883D:movesdx
+0883F:put_gfx:1
+08845:end
+08848:epilogue
+# commits
+087FF
+08813
+0882B
+08843

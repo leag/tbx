@@ -1,0 +1,14 @@
+# t1_lset dialect=1.1 start=08780
+08783:movsi:312
+08786:rt:156
+08788:movsi:288
+0878B:strassign
+0878D:movsi:308
+08790:rt:156
+08792:movsi:288
+08795:movdx:150
+08798:movesdx
+0879A:lset
+0879C:end
+0879F:epilogue
+# commits

@@ -1,0 +1,7 @@
+# t1_kill dialect=1.1 start=08790
+08793:movsi:292
+08796:rt:156
+08798:kill
+0879B:end
+0879E:epilogue
+# commits

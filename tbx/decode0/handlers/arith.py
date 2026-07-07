@@ -1,0 +1,485 @@
+"""Integer and floating-point arithmetic / bit-op / stack handlers.
+
+Handlers for ``decode_user_code``'s dispatch loop; each handler takes
+the shared :class:`~tbx.decode0.core.DecodeState` plus the current
+``op``/``addr``/``kind`` and returns ``True`` when it consumed the op.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from tbx import ir
+from tbx.decode0.const import (
+    ARR_BLOCK,
+    _FREAD,
+    _PREC,
+    _READDATA,
+)
+from tbx.decode0.scan import _grp, _orient, _rgrp
+
+if TYPE_CHECKING:
+    from tbx.decode0.core import DecodeState
+
+
+def int_alu(state: DecodeState, op, addr, kind) -> bool:
+    """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addsiax, subax_m, imul_m, idivbx, cmpax_m, inc_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
+    if kind == "movdx_m":  # IMP left operand -> dx
+        state.dx = state.loc(op[2])
+        state.k += 1
+        return True
+    if kind == "movdxax":  # WAIT/INP port: ax -> dx
+        state.dx, state.ax = state.ax, None
+        state.k += 1
+        return True
+    if kind == "movdxbx":  # OUT port: bx -> dx
+        state.dx, state.bx = state.bx, None
+        state.k += 1
+        return True
+    if kind == "movbxax":  # LOCATE row -> bx
+        state.bx, state.ax = state.ax, None
+        state.k += 1
+        return True
+    if kind == "movaxdx":  # promote the \ quotient to MOD
+        if not (isinstance(state.ax, ir.BinOp) and state.ax.op == "\\"):
+            raise ValueError(f"movaxdx not following idiv at {addr:#x}")
+        state.ax = ir.BinOp("MOD", state.ax.lhs, state.ax.rhs)
+        state.k += 1
+        return True
+    if kind == "movrr":  # spill-protocol shuttle
+        regs = {"ax": state.ax, "bx": state.bx, "cx": state.cx, "si": state.si}
+        regs[op[2]], regs[op[3]] = regs[op[3]], None
+        state.ax, state.bx, state.cx, state.si = (
+            regs["ax"],
+            regs["bx"],
+            regs["cx"],
+            regs["si"],
+        )
+        state.k += 1
+        return True
+    if kind == "movsim":
+        # mov si,[disp16]: FOR-loop variable as a raw element index.
+        state.si = state.loc(op[2])
+        state.k += 1
+        return True
+    if kind == "addax_m":  # fold LEFT; neg-aware = subtraction
+        if isinstance(state.ax, ir.Neg):
+            state.ax = ir.BinOp("-", state.loc(op[2]), _rgrp("-", state.ax.operand))
+        else:
+            state.ax = ir.BinOp("+", state.loc(op[2]), _rgrp("+", state.ax))
+        state.k += 1
+        return True
+    if kind == "addsiax":
+        if not (isinstance(state.si, tuple) and state.si[0] == "jspan"):
+            raise ValueError(f"add si,ax with si={state.si} ax={state.ax} at {addr:#x}")
+        if (
+            isinstance(state.ax, tuple)
+            and state.ax[0] == "inorm"
+            and state.ax[1] == state.si[1]
+        ):
+            i_expr = state.ax[2]
+        elif not isinstance(state.ax, tuple) and state.ax is not None:
+            i_expr = state.ax  # base-0: no i-lo sub
+        else:
+            raise ValueError(f"add si,ax with si={state.si} ax={state.ax} at {addr:#x}")
+        state.si = ("idx", state.si[1], (i_expr, state.si[2]))
+        state.ax = None
+        state.k += 1
+        return True
+    if kind == "subax_m":
+        blk = next((b for b in state.slot_info if b <= op[2] < b + ARR_BLOCK), None)
+        if blk is None:
+            raise ValueError(f"sub ax,[{op[2]:#x}] outside array blocks at {addr:#x}")
+        off = op[2] - blk
+        if isinstance(state.ax, tuple) or state.ax is None:
+            raise ValueError(f"far-IDX normalization of non-Expr ax at {addr:#x}")
+        if off == 0x0E:  # j - lo2, then * span
+            if (
+                state.k + 1 >= len(state.ops)
+                or state.ops[state.k + 1][1] != "imul_m"
+                or state.ops[state.k + 1][2] != blk + 0x0C
+            ):
+                raise ValueError(f"jspan without imul at {addr:#x}")
+            state.slot_info[blk]["subful"] = True  # lo-sub witness
+            state.ax = ("jspan", blk, state.ax)
+            state.k += 2
+            return True
+        if off == 0x08:  # i - lo1
+            state.slot_info[blk]["subful"] = True  # lo-sub witness
+            state.ax = ("inorm", blk, state.ax)
+            state.k += 1
+            return True
+        raise ValueError(f"sub ax from unexpected cell offset {off:#x} at {addr:#x}")
+    if kind == "imul_m":
+        blk = next((b for b in state.slot_info if op[2] == b + 0x0C), None)
+        if blk is not None:  # bare span multiply: OPTION BASE 0
+            if isinstance(state.ax, tuple) or state.ax is None:  # far-IDX j-leg
+                raise ValueError(f"span imul of non-Expr ax at {addr:#x}")
+            state.ax = ("jspan", blk, state.ax)
+        else:
+            state.ax = ir.BinOp("*", state.loc(op[2]), _rgrp("*", state.ax))
+        state.k += 1
+        return True
+    if kind == "idivbx":  # ax (dividend) \ bx (divisor) -> ax
+        if state.bx is None:
+            raise ValueError(f"idivbx without a bx divisor at {addr:#x}")
+        state.ax = ir.BinOp("\\", state.ax, _rgrp("\\", state.bx))
+        state.bx = None
+        state.k += 1
+        return True
+    if kind == "cmpax_m":  # record compare: relational value
+        state.pend_icmp = (state.loc(op[2]), state.ax)  # source LHS = mem, RHS = ax
+        state.ax = None
+        state.k += 1
+        return True
+    if kind == "inc_m":
+        # Integer FOR-NEXT increment -- implicit in BASIC; consume silently
+        # (the NEXT stmt is emitted on the cmp_mi8 guard above).
+        if not state.fors or state.fors[-1]["v"] != op[2]:
+            raise ValueError(f"inc_m outside integer FOR loop at {addr:#x}")
+        state.k += 1
+        return True
+    if kind == "negax":  # subtraction setup
+        state.ax = ir.Neg(state.ax)
+        state.k += 1
+        return True
+    if kind == "notax":  # unary NOT of the accumulator
+        state.ax = ir.Not(state.ax)
+        state.k += 1
+        return True
+    if kind == "notdx":  # NOT the dx operand in place
+        state.dx = ir.Not(state.dx)
+        state.k += 1
+        return True
+    if kind == "oraxdx":  # completes IMP as `(NOT A) OR B`
+        state.ax = ir.BinOp("OR", state.dx, _rgrp("OR", state.ax))
+        state.dx = None
+        state.k += 1
+        return True
+    if kind == "xorax":  # xor ax,ax = literal 0
+        state.ax = ir.Lit(0)
+        state.k += 1
+        return True
+    if kind == "xorah":  # INP result widen: lift no-op
+        state.k += 1
+        return True
+    if kind == "shlsi":
+        # `shl si; shl si[; shl si]; (moves_m blk | addsi base); <terminal>` --
+        # the optional third shl appears for 64-bit (x8 stride) elements.
+        if state.k + 3 >= len(state.ops) or state.ops[state.k + 1][1] != "shlsi":
+            raise ValueError(f"shl si outside an element access at {addr:#x}")
+        ao = (
+            3
+            if state.k + 3 < len(state.ops) and state.ops[state.k + 2][1] == "shlsi"
+            else 2
+        )
+        if state.k + ao + 1 >= len(state.ops) or state.ops[state.k + ao][1] not in (
+            "moves_m",
+            "addsi",
+        ):
+            raise ValueError(f"shl si outside an element access at {addr:#x}")
+        far = state.ops[state.k + ao][1] == "moves_m"
+        if far:
+            blk = state.ops[state.k + ao][2]
+        else:  # near static: add si, <base>
+            blk = next(
+                (
+                    b
+                    for b, v in state.slot_info.items()
+                    if v.get("base") == state.ops[state.k + ao][2]
+                ),
+                None,
+            )
+            if blk is None:
+                raise ValueError(
+                    f"add si,{state.ops[state.k + ao][2]:#x} matches no static "
+                    f"base at {addr:#x}"
+                )
+        if not isinstance(state.si, tuple) and state.si is not None:
+            # raw index in si: a plain subscript. 1-D, or a
+            # Bounds checked access where the earlier dims were stashed in
+            # bchk_subs (F3.5): si is the final (first-source) subscript, the
+            # stash the rest in reverse (column-major collects dim-N..dim-1).
+            if state.bchk_subs:
+                subs = tuple(reversed(state.bchk_subs + [state.si]))
+                state.bchk_subs = []
+                if blk not in state.slot_info or state.slot_info[blk]["rank"] != len(
+                    subs
+                ):
+                    raise ValueError(
+                        f"bounds subscript count != array rank at {addr:#x}"
+                    )
+                state.si = ("idx", blk, subs)
+            else:
+                if blk not in state.slot_info or state.slot_info[blk]["rank"] != 1:
+                    raise ValueError(
+                        f"raw element index on non-rank-1 block at {addr:#x}"
+                    )
+                state.si = ("idx", blk, (state.si,))
+        if (
+            not (isinstance(state.si, tuple) and state.si[0] == "idx")
+            or state.si[1] != blk
+        ):
+            raise ValueError(f"shl si outside an element access at {addr:#x}")
+        a = state.slot_info[blk]
+        if any(not isinstance(e, ir.Lit) for e in state.si[2]):
+            a["varacc"] = True  # variable-subscript witness
+        ref = ir.ArrayRef(a["name"], state.si[2])
+        state.si = None
+        sik = state.ops[state.k + ao + 1]
+        pre = "far_" if far else ""
+        if sik[1] in ("far_spush", "far_strassign"):
+            if not a.get("str"):
+                raise ValueError(f"string op on numeric array at {addr:#x}")
+            if sik[1] == "far_spush":
+                state.sstack.append(ref)
+            else:
+                v = state.sstack.pop()
+                if v is _FREAD:  # INPUT# far string target
+                    state._fread_target(ref)
+                else:
+                    state.put(ir.Assign(ref, v), state.cur)
+                state.cur = None
+        elif sik[1] in (pre + "fld_si", pre + "fld_si64", pre + "fild_si32"):
+            state.stack.append(ref)
+        elif sik[1] in (pre + "fstp_si", pre + "fstp_si64", pre + "fstp_si32"):
+            v = state.stack.pop()
+            if v is _FREAD:  # INPUT# far numeric target
+                state._fread_target(ref)
+            elif v is _READDATA:  # READ far numeric target
+                state._readdata_target(ref)
+            else:
+                state.put(ir.Assign(ref, v), state.cur)
+            state.cur = None
+        elif sik[1] == pre + "fold_si":
+            state.stack.append(_orient(sik[2], ref, state.stack.pop()))
+        elif sik[1] == pre + "fold_n_si":  # mem = RIGHT operand
+            state.stack.append(ir.BinOp(sik[2], state.stack.pop(), ref))
+        elif sik[1] == pre + "fcomp_si":  # IF on an array element
+            state.pend_cmp = (ref, state.stack.pop())
+        else:
+            raise ValueError(f"element access: unexpected op {sik[1]} at {sik[0]:#x}")
+        state.k += ao + 2
+        return True
+    if kind == "movmem_ax":  # int->FP bridge
+        nxt = state.ops[state.k + 1] if state.k + 1 < len(state.ops) else None
+        if op[2] != 0x2C or nxt is None or nxt[1] != "fild" or nxt[2] != 0x2C:
+            raise ValueError(f"unexpected mov [imm],ax at {addr:#x}")
+        # A round-trip flagged by the fistp[2C] arm is CINT(x); a bare int
+        # bridge (ASC-style, no preceding fistp) pushes the value as-is.
+        if state.cint_round:
+            state.cint_round = False
+            state.stack.append(ir.Call("CINT", (state.ax,)))
+        else:
+            state.stack.append(state.ax)
+        state.ax = None
+        state.k += 2
+        return True
+    if kind == "reg_set":  # REG n, value
+        state.put(ir.RegSet(state.ax, state.stack.pop()), state.cur)
+        state.ax = None
+        state.cur = None
+        state.k += 1
+        return True
+    return False
+
+
+def int_bitwise_m(state: DecodeState, op, addr, kind) -> bool:
+    """Dispatch family: andax_m, orax_m, xorax_m."""
+    if kind in ("andax_m", "orax_m", "xorax_m"):  # bitwise fold, mem on the left
+        comb = {"andax_m": "AND", "orax_m": "OR", "xorax_m": "XOR"}[kind]
+        state.ax = ir.BinOp(comb, state.loc(op[2]), _rgrp(comb, state.ax))
+        state.k += 1
+        return True
+    return False
+
+
+def int_bitwise_bx(state: DecodeState, op, addr, kind) -> bool:
+    """Dispatch family: andaxbx, oraxbx, xoraxbx, addaxbx, subaxbx, imulbx."""
+    if kind in ("andaxbx", "oraxbx", "xoraxbx", "addaxbx", "subaxbx", "imulbx"):
+        # Reg-reg combine: TB evaluates the RIGHT operand first, saves it to bx
+        # (movbxax), then computes the LEFT into ax — so `ax <op> bx` = left <op> right.
+        comb = {
+            "andaxbx": "AND",
+            "oraxbx": "OR",
+            "xoraxbx": "XOR",
+            "addaxbx": "+",
+            "subaxbx": "-",
+            "imulbx": "*",
+        }[kind]
+        if state.ax is None or state.bx is None:
+            raise ValueError(f"ax,bx combine with empty regs at {addr:#x}")
+        state.ax = ir.BinOp(comb, state.ax, _rgrp(comb, state.bx))
+        state.bx = None
+        state.k += 1
+        return True
+    return False
+
+
+def fp_math(state: DecodeState, op, addr, kind) -> bool:
+    """Dispatch family: fistp, fpow, fwait, fstp_temp."""
+    if kind == "fistp":  # IDX% scratch: array idx OR FP->int
+        if op[2] != 0x2C:
+            raise ValueError(f"FISTP to unexpected scratch [{op[2]:#x}]")
+        idx = state.stack.pop()
+        nxt3 = [o[1] for o in state.ops[state.k + 1 : state.k + 4]]
+        if nxt3 == ["fwait", "movaxmem", "movm_ax"]:  # FP->int assign
+            if state.ops[state.k + 2][2] != 0x2C:
+                raise ValueError(f"FP->int bridge mismatch at {addr:#x}")
+            tgt = state.ops[state.k + 3][2]
+            if (
+                state.dim_frame is not None
+                and state.dim_frame["block"]
+                <= tgt
+                < state.dim_frame["block"] + ARR_BLOCK
+            ):
+                state.dim_frame["cells"][tgt - state.dim_frame["block"]] = idx  # bound
+            else:
+                state.put(ir.Assign(state.loc(tgt), idx), state.cur)
+                state.cur = None
+            state.k += 4
+            return True
+        # Element-subscript bridge: optional spill shuttles (the a1 below clobbers
+        # ax, so in-flight tokens move through bx/cx first), then
+        # fwait + a1 2c lands the integer in ax; the symbolic machine (subax_m /
+        # movsiax / addsiax / shlsi) takes it from there, ending in either the
+        # far (moves_m) or the near static (addsi) terminal.
+        j = state.k + 1
+        while j < len(state.ops) and state.ops[j][1] in ("movrr", "movbxax"):
+            j += 1
+        nxt2 = state.ops[j + 2][1] if j + 2 < len(state.ops) else None
+        if (
+            [o[1] for o in state.ops[j : j + 2]] == ["fwait", "movaxmem"]
+            and state.ops[j + 1][2] == 0x2C
+            and nxt2 != "movm_ax"
+        ):
+            # CINT(x): the round-trip tail is movmem_ax[0x2C]; fild[0x2C] (round
+            # FP->int->FP). Flag it so the movmem_ax bridge wraps the value in
+            # CINT(). A genuine subscript bridge continues with other ops here,
+            # and the ASC-style int bridge has no preceding fistp at all.
+            if (
+                j + 3 < len(state.ops)
+                and state.ops[j + 2][1] == "movmem_ax"
+                and state.ops[j + 2][2] == 0x2C
+                and state.ops[j + 3][1] == "fild"
+                and state.ops[j + 3][2] == 0x2C
+            ):
+                state.cint_round = True
+            for sh in state.ops[state.k + 1 : j]:  # apply the shuttles in order
+                regs = {
+                    "ax": state.ax,
+                    "bx": state.bx,
+                    "cx": state.cx,
+                    "si": state.si,
+                }
+                dst, src = ("bx", "ax") if sh[1] == "movbxax" else (sh[2], sh[3])
+                regs[dst], regs[src] = regs[src], None
+                state.ax, state.bx, state.cx, state.si = (
+                    regs["ax"],
+                    regs["bx"],
+                    regs["cx"],
+                    regs["si"],
+                )
+            state.ax = idx
+            state.k = j + 2
+            return True
+        raise ValueError(f"IDX% bridge mismatch at {addr:#x}")
+    if kind == "fpow":  # ^ : top = base, below = exponent
+        lhs = state.stack.pop()
+        rhs = state.stack.pop()
+        state.stack.append(ir.BinOp("^", lhs, _grp(rhs)))
+        state.k += 1
+        return True
+    if kind == "fwait":  # stray x87 sync: no semantics
+        state.k += 1  # (bridge templates consume their
+        return True
+    if kind == "fstp_temp":  # FSTP [ss:si]: materialized literal CALL arg
+        state.pend_args.append(state.stack.pop())
+        state.cur = None
+        state.k += 1
+        return True
+    return False
+
+
+def fp_bp(state: DecodeState, op, addr, kind) -> bool:
+    """Dispatch family: fld_bp, fstp_bp, fold_bp, fold_n_bp, fcomp_bp."""
+    if kind in ("fld_bp", "fstp_bp", "fold_bp", "fold_n_bp", "fcomp_bp"):
+        bp_off = op[2] if kind in ("fld_bp", "fstp_bp", "fcomp_bp") else op[3]
+        if state.fn_frame is not None:  # DEF FN body: param read / result / fold
+            if bp_off > state.fn_frame["max_off"]:
+                state.fn_frame["max_off"] = bp_off
+            pvar = ir.Var(f"P{bp_off:02X}")
+            if kind == "fld_bp":
+                state.stack.append(pvar)
+            elif kind == "fstp_bp":
+                if bp_off != 0:
+                    raise ValueError(f"FSTP [bp+{bp_off}] in DEF FN body at {addr:#x}")
+                if state.fn_frame["block"]:  # multi-line: `FN = expr` result statement
+                    state.put(ir.FnResult(state.stack.pop()), state.cur)
+                    state.cur = None
+                else:  # single-line: inline result expr
+                    state.fn_frame["result"] = state.stack.pop()
+            elif kind == "fold_bp":  # param as LEFT operand
+                state.stack.append(_orient(op[2], pvar, state.stack.pop()))
+            elif kind == "fold_n_bp":  # non-R: param is the RIGHT operand
+                top = state.stack.pop()
+                if isinstance(top, ir.BinOp) and _PREC[top.op] < _PREC[op[2]]:
+                    top = ir.Group(top)
+                state.stack.append(ir.BinOp(op[2], top, pvar))
+            else:  # fcomp_bp (EXIT DEF tests)
+                state.pend_cmp = (pvar, state.stack.pop())
+        else:  # main frame: FN-call staging
+            if kind == "fstp_bp":  # stage a literal/computed call arg
+                state.fn_args[bp_off] = state.stack.pop()
+            elif kind == "fld_bp":  # reload of the FN result: redundant glue
+                pass
+            else:
+                raise ValueError(f"unexpected {kind} in main body at {addr:#x}")
+        state.k += 1
+        return True
+    return False
+
+
+def far_fp(state: DecodeState, op, addr, kind) -> bool:
+    """Dispatch family: far_fld, far_fstp, far_fold."""
+    if kind in ("far_fld", "far_fstp", "far_fold"):  # 1-D const subscript
+        if state.pend_es is None:
+            raise ValueError(f"far FP op without ES at {addr:#x}")
+        a = state.r_arrs[state.pend_es]
+        if a["rank"] != 1:
+            raise ValueError(f"direct-disp far access on rank-{a['rank']} array")
+        disp = op[2] if kind != "far_fold" else op[3]
+        ref = ir.ArrayRef(a["name"], (ir.Lit(disp // 4 + a["lo"][0]),))
+        state.pend_es = None
+        if kind == "far_fld":
+            state.stack.append(ref)
+        elif kind == "far_fstp":
+            state.put(ir.Assign(ref, state.stack.pop()), state.cur)
+            state.cur = None
+        else:
+            state.stack.append(_orient(op[2], ref, state.stack.pop()))
+        state.k += 1
+        return True
+    return False
+
+
+def stack_ops(state: DecodeState, op, addr, kind) -> bool:
+    """Dispatch family: mov_si_sp, add_si_sp, sub_sp, add_sp, arg_push_temp, mov_bx_sp, les_si_ss_bx, str_temp_free, push_bp, pop_bp, mov_bp_sp, str_free_temp, bchk_base."""
+    if kind in (
+        "mov_si_sp",
+        "add_si_sp",
+        "sub_sp",
+        "add_sp",
+        "arg_push_temp",
+        "mov_bx_sp",
+        "les_si_ss_bx",
+        "str_temp_free",
+        "push_bp",
+        "pop_bp",
+        "mov_bp_sp",
+        "str_free_temp",
+        "bchk_base",  # Bounds: array-descriptor setup (F3.4)
+    ):
+        state.k += 1
+        return True
+    return False

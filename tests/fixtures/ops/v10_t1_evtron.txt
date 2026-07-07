@@ -1,0 +1,19 @@
+# v10_t1_evtron dialect=1.0 start=07270
+07273:trap_hook
+07274:fld1
+07277:on_trap:128:29339
+07280:trap_hook
+07281:trap_ctl:230
+07284:trace_hook:40
+07288:trap_hook
+07289:fld1
+0728C:fstp:288
+07293:trace_hook:50
+07297:trap_hook
+07298:end
+0729B:trap_hook
+0729C:retf
+0729D:epilogue
+# commits
+0727E
+07291

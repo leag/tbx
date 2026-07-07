@@ -1,0 +1,5 @@
+10 A = 0
+20 FOR B = 1 TO 5
+30 A = A + B
+40 NEXT B
+50 END

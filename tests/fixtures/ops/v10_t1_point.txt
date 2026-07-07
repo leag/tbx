@@ -1,0 +1,15 @@
+# v10_t1_point dialect=1.0 start=07170
+07173:fild:310
+07178:fild:308
+0717D:fn_ax2:POINT
+07180:movmem_ax:44
+07183:fild:44
+07188:fstp:288
+0718F:fld:288
+07194:rt:187
+07196:rt:184
+0719A:end
+0719D:epilogue
+# commits
+0718D
+07198

@@ -1,0 +1,10 @@
+# v10_t1_readstr dialect=1.0 start=07110
+07113:data_read_str
+07116:movsi:292
+07119:strassign
+0711B:data_read_str
+0711E:movsi:288
+07121:strassign
+07123:end
+07126:epilogue
+# commits

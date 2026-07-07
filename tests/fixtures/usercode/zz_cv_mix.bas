@@ -1,0 +1,4 @@
+10 A$ = MKL$(70000)
+20 B& = CVL(A$)
+30 PRINT CEIL(1.2#); CINT(2.7#); B&
+40 END

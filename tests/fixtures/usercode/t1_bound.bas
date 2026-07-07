@@ -1,0 +1,4 @@
+10 DIM V0(10)
+20 A% = UBOUND(V0(1))
+30 B% = LBOUND(V0(1))
+40 END

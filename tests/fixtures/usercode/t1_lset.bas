@@ -1,0 +1,3 @@
+10 A$ = "HELLO"
+20 LSET A$ = "HI"
+30 END

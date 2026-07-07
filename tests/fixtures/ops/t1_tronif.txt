@@ -1,0 +1,30 @@
+# t1_tronif dialect=1.1 start=08790
+08793:fldz
+08796:fstp:292
+0879D:trace_hook:30
+087A1:fldz
+087A4:fcomp:292
+087A9:fstsw
+087AB:movax:65535
+087AE:jcc:114:34737
+087B0:incax
+087B1:orax
+087B5:jcc:117:34746
+087B7:jmp:34767
+087BA:trace_hook:40
+087BE:fld1
+087C1:fstp:288
+087C8:trace_hook:50
+087CC:jmp:34787
+087CF:trace_hook:60
+087D3:fild:308
+087D8:fstp:288
+087DF:trace_hook:70
+087E3:trace_hook:80
+087E7:end
+087EA:epilogue
+# commits
+0879B
+087B3
+087C6
+087DD

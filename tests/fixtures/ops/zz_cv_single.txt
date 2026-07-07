@@ -1,0 +1,11 @@
+# zz_cv_single dialect=1.1 start=08700
+08703:fld64:308
+08708:fstp:288
+0870F:fld:288
+08714:rt:187
+08716:rt:184
+0871A:end
+0871D:epilogue
+# commits
+0870D
+08718

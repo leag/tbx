@@ -1,0 +1,7 @@
+# v10_t1_play dialect=1.0 start=073B0
+073B3:movsi:292
+073B6:rt:156
+073B8:play
+073BB:end
+073BE:epilogue
+# commits

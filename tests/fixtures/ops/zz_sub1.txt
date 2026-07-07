@@ -1,0 +1,21 @@
+# zz_sub1 dialect=1.1 start=08700
+08703:jmp:34592
+08706:proc_enter
+08709:fld1
+0870C:arg_ref:6
+0870F:far_fold_si:+
+08713:arg_ref:6
+08716:far_fstp_si
+0871C:proc_ret:4
+08720:fild:308
+08725:fstp:288
+0872C:arg_push_ref:288
+08731:far_call:34566
+08736:fld:288
+0873B:rt:187
+0873D:rt:184
+08741:epilogue
+# commits
+0871A
+0872A
+0873F

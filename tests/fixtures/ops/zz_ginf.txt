@@ -1,0 +1,12 @@
+# zz_ginf dialect=1.1 start=08700
+08703:fldz
+08706:fstp:288
+0870D:fld1
+08710:fold:+:288
+08715:fstp:288
+0871C:jmps:34573
+0871E:end
+08721:epilogue
+# commits
+0870B
+0871A

@@ -1,0 +1,4 @@
+10 OPEN "R",#1,"X.DAT"
+20 GET #1, 1
+30 CLOSE #1
+40 END

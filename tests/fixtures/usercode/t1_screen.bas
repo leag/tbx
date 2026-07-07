@@ -1,0 +1,2 @@
+10 SCREEN 1
+20 END

@@ -1,0 +1,17 @@
+# v10_t1_arr_mix dialect=1.0 start=070B0
+070B3:fld1
+070B6:fstp:350
+070BD:fild:372
+070C2:fstp:346
+070C9:fld:346
+070CE:fold:+:350
+070D3:fstp:342
+070DA:fld:342
+070DF:fstp:388
+070E6:end
+070E9:epilogue
+# commits
+070BB
+070C7
+070D8
+070E4

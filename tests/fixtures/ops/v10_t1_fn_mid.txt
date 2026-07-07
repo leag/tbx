@@ -1,0 +1,16 @@
+# v10_t1_fn_mid dialect=1.0 start=07150
+07153:movsi:308
+07156:rt:156
+07158:movsi:288
+0715B:strassign
+0715D:movsi:288
+07160:rt:156
+07162:movax:2
+07165:movbxax
+07167:movax:3
+0716A:strfn:MID$
+0716C:rt:190
+0716E:rt:184
+07170:end
+07173:epilogue
+# commits

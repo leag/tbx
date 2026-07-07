@@ -1,0 +1,2 @@
+10 CHDIR "\TB"
+20 END

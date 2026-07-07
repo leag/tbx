@@ -1,0 +1,20 @@
+# t1_getput dialect=1.1 start=087E0
+087E3:fldz
+087E6:fldz
+087E9:fild:358
+087EE:fild:358
+087F3:movsi:288
+087F6:movdx:152
+087F9:movesdx
+087FB:get_gfx:0
+08801:fild:356
+08806:fild:356
+0880B:movsi:288
+0880E:movdx:152
+08811:movesdx
+08813:put_gfx:0
+08819:end
+0881C:epilogue
+# commits
+087FF
+08817

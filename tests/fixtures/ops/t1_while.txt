@@ -1,0 +1,22 @@
+# t1_while dialect=1.1 start=08700
+08703:fldz
+08706:fstp:288
+0870D:fild:310
+08712:fcomp:288
+08717:fstsw
+08719:movax:65535
+0871C:jcc:119:34591
+0871E:incax
+0871F:orax
+08723:jcc:117:34600
+08725:jmp:34617
+08728:fld1
+0872B:fold:+:288
+08730:fstp:288
+08737:jmps:34573
+08739:end
+0873C:epilogue
+# commits
+0870B
+08721
+08735

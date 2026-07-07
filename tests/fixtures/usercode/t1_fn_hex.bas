@@ -1,0 +1,2 @@
+10 PRINT HEX$(255)
+20 END

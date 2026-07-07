@@ -1,0 +1,30 @@
+# t1_arrv dialect=1.1 start=08700
+08703:fild:360
+08708:fstp:346
+0870F:fild:358
+08714:fld:346
+08719:fistp:44
+0871E:fwait
+08720:movaxmem:44
+08723:movsiax
+08725:shlsi
+08727:shlsi
+08729:addsi:368
+0872D:fstp_si
+08732:fld:372
+08737:fld:346
+0873C:fistp:44
+08741:fwait
+08743:movaxmem:44
+08746:movsiax
+08748:shlsi
+0874A:shlsi
+0874C:addsi:368
+08750:fold_si:+
+08753:fstp:342
+0875A:end
+0875D:epilogue
+# commits
+0870D
+08730
+08758

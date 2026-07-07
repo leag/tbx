@@ -1,0 +1,17 @@
+# zz_cv_mkl dialect=1.1 start=08750
+08753:fild32:308
+08758:strfn:MKL$
+0875A:movsi:288
+0875D:strassign
+08761:movsi:288
+08764:rt:156
+08766:str2num:LEN
+08769:movmem_ax:44
+0876C:fild:44
+08771:rt:187
+08773:rt:184
+08777:end
+0877A:epilogue
+# commits
+0875F
+08775

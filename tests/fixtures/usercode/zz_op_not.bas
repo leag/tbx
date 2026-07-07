@@ -1,0 +1,4 @@
+10 A% = 12
+20 B% = NOT A%
+30 PRINT B%
+40 END

@@ -1,0 +1,2 @@
+10 BLOAD "X.IMG", 0
+20 END

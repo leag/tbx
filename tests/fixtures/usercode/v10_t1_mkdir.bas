@@ -1,0 +1,2 @@
+10 MKDIR "SUB"
+20 END

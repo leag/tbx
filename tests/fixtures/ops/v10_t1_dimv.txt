@@ -1,0 +1,32 @@
+# v10_t1_dimv dialect=1.0 start=07370
+07373:input:352:16384
+0737A:read_num
+0737D:fstp:342
+07384:movsi:288
+07387:movdx:154
+0738A:movesdx
+0738C:dim_begin
+0738F:fld:342
+07394:fistp:44
+07399:fwait
+0739B:movaxmem:44
+0739E:movm_ax:298
+073A2:movm_imm:296:0
+073A8:movsi:288
+073AB:movdx:154
+073AE:movesdx
+073B0:dim_end
+073B5:fild:356
+073BA:moves_m:288
+073BE:far_fstp:4
+073C6:moves_m:288
+073CA:far_fld:4
+073D0:rt:187
+073D2:rt:184
+073D6:end
+073D9:epilogue
+# commits
+07382
+073B3
+073C4
+073D4

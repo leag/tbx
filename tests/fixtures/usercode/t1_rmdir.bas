@@ -1,0 +1,2 @@
+10 RMDIR "SUB"
+20 END

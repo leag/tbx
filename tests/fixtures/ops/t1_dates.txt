@@ -1,0 +1,7 @@
+# t1_dates dialect=1.1 start=087C0
+087C3:movsi:292
+087C6:rt:156
+087C8:dateset
+087CB:end
+087CE:epilogue
+# commits

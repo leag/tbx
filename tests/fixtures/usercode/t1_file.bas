@@ -1,0 +1,5 @@
+10 OPEN "I",#1,"X.DAT"
+20 INPUT #1, A
+30 INPUT #1, B$
+40 CLOSE #1
+50 END

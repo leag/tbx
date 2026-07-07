@@ -1,0 +1,15 @@
+# t1_tronsplit dialect=1.1 start=08790
+08793:trace_hook:20
+08797:fld1
+0879A:fstp:296
+087A1:trace_hook:30
+087A5:fild:310
+087AA:fstp:292
+087B1:fild:308
+087B6:fstp:288
+087BD:end
+087C0:epilogue
+# commits
+0879F
+087AF
+087BB

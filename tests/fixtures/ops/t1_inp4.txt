@@ -1,0 +1,8 @@
+# t1_inp4 dialect=1.1 start=08830
+08833:input:308:64
+0883A:read_str
+0883D:movsi:288
+08840:strassign
+08842:end
+08845:epilogue
+# commits

@@ -1,0 +1,14 @@
+# t1_arr1 dialect=1.1 start=08700
+08703:fild:358
+08708:fstp:372
+0870F:fld1
+08712:fold:+:372
+08717:fstp:376
+0871E:fld:376
+08723:fstp:342
+0872A:end
+0872D:epilogue
+# commits
+0870D
+0871C
+08728

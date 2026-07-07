@@ -1,0 +1,5 @@
+10 A = 0
+20 A = A + 1
+30 IF A < 5 THEN 20
+40 PRINT A
+50 END

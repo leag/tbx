@@ -1,0 +1,14 @@
+# zz_op_eqv dialect=1.1 start=08700
+08703:movm_imm:292:12
+08709:movm_imm:290:10
+0870F:movax_m:290
+08713:xorax_m:292
+08717:notax
+08719:movm_ax:288
+0871D:fild:288
+08722:rt:187
+08724:rt:184
+08728:end
+0872B:epilogue
+# commits
+08726

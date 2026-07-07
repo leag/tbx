@@ -1,0 +1,11 @@
+# t1_resumel dialect=1.1 start=08700
+08703:on_error:34582
+0870A:fld1
+0870D:rt:187
+0870F:rt:184
+08713:end
+08716:resume_pre
+08719:jmps:34570
+0871B:epilogue
+# commits
+08711

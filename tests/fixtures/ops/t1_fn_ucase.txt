@@ -1,0 +1,13 @@
+# t1_fn_ucase dialect=1.1 start=08820
+08823:movsi:308
+08826:rt:156
+08828:movsi:288
+0882B:strassign
+0882D:movsi:288
+08830:rt:156
+08832:strfn:UCASE$
+08835:rt:190
+08837:rt:184
+08839:end
+0883C:epilogue
+# commits

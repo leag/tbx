@@ -1,0 +1,6 @@
+10 A = 1
+20 B = 2
+30 IF A < B THEN C = 5
+40 IF A = B THEN 60
+50 C = A + 1
+60 END

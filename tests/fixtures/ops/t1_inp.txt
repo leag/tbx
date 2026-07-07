@@ -1,0 +1,16 @@
+# t1_inp dialect=1.1 start=08830
+08833:input:304:16384
+0883A:read_num
+0883D:fstp:288
+08844:input:304:0
+0884B:read_str
+0884E:movsi:292
+08851:strassign
+08853:movsi:292
+08856:rt:156
+08858:rt:190
+0885A:rt:184
+0885C:end
+0885F:epilogue
+# commits
+08842

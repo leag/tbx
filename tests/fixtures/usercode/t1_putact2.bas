@@ -1,0 +1,6 @@
+10 DIM V0%(50)
+20 GET (0,0)-(5,5), V0%
+30 PUT (1,1), V0%, PRESET
+40 PUT (2,2), V0%, AND
+50 PUT (3,3), V0%, OR
+60 END

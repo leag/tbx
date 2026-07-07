@@ -1,0 +1,9 @@
+# v10_t1_paintb dialect=1.0 start=07C00
+07C03:fild:294
+07C08:fild:294
+07C0D:movm_imm:148:2
+07C13:paint:1
+07C19:end
+07C1C:epilogue
+# commits
+07C17

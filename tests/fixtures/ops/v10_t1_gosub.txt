@@ -1,0 +1,15 @@
+# v10_t1_gosub dialect=1.0 start=070B0
+070B3:fld1
+070B6:fstp:292
+070BD:call:28879
+070C0:fild:310
+070C5:fstp:292
+070CC:end
+070CF:fild:308
+070D4:fstp:288
+070DB:ret
+070DC:epilogue
+# commits
+070BB
+070CA
+070D9

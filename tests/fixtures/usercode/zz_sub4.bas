@@ -1,0 +1,5 @@
+10 SUB SUB1(A$)
+  PRINT A$
+END SUB
+20 B$ = "HI"
+30 CALL SUB1(B$)

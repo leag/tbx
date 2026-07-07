@@ -1,0 +1,7 @@
+10 INPUT A
+20 DIM V0$(A)
+30 V0$(1) = "AB"
+40 V0$(A) = "CD"
+50 B$ = V0$(A)
+60 PRINT V0$(1)
+70 END

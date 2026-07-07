@@ -1,0 +1,16 @@
+# v10_t1_getput dialect=1.0 start=07190
+07193:fldz
+07196:fldz
+07199:fild:358
+0719E:fild:358
+071A3:movsi:288
+071A6:get_gfx:0
+071AC:fild:356
+071B1:fild:356
+071B6:movsi:288
+071B9:put_gfx:0
+071BF:end
+071C2:epilogue
+# commits
+071AA
+071BD

@@ -1,0 +1,12 @@
+# t1_defseg dialect=1.1 start=08700
+08703:fldz
+08706:defseg_set
+0870B:fild:294
+08710:movax:1
+08713:poke
+08718:defseg
+0871C:end
+0871F:epilogue
+# commits
+08709
+08716

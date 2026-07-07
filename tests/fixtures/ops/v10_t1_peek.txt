@@ -1,0 +1,14 @@
+# v10_t1_peek dialect=1.0 start=070B0
+070B3:fild:308
+070B8:fn_ax:PEEK
+070BB:movmem_ax:44
+070BE:fild:44
+070C3:fstp:288
+070CA:fld:288
+070CF:rt:187
+070D1:rt:184
+070D5:end
+070D8:epilogue
+# commits
+070C8
+070D3

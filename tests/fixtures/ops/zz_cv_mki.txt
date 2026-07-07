@@ -1,0 +1,16 @@
+# zz_cv_mki dialect=1.1 start=08750
+08753:movax:258
+08756:strfn:MKI$
+08758:movsi:288
+0875B:strassign
+0875D:movsi:288
+08760:rt:156
+08762:str2num:LEN
+08765:movmem_ax:44
+08768:fild:44
+0876D:rt:187
+0876F:rt:184
+08773:end
+08776:epilogue
+# commits
+08771

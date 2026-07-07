@@ -1,0 +1,16 @@
+# v10_t1_fn_asc dialect=1.0 start=070E0
+070E3:movsi:308
+070E6:rt:156
+070E8:movsi:288
+070EB:strassign
+070ED:movsi:288
+070F0:rt:156
+070F2:str2num:ASC
+070F4:movmem_ax:44
+070F7:fild:44
+070FC:rt:187
+070FE:rt:184
+07102:end
+07105:epilogue
+# commits
+07100

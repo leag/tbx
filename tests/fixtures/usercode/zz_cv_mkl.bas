@@ -1,0 +1,3 @@
+10 A$ = MKL$(70000)
+20 PRINT LEN(A$)
+30 END

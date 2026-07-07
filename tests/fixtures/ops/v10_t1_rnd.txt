@@ -1,0 +1,11 @@
+# v10_t1_rnd dialect=1.0 start=07170
+07173:fn_fp0:RND
+07176:fstp:292
+0717D:fld1
+07180:fn:RND
+07183:fstp:288
+0718A:end
+0718D:epilogue
+# commits
+0717B
+07188

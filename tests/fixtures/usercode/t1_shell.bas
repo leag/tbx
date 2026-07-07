@@ -1,0 +1,2 @@
+10 SHELL "DIR"
+20 END

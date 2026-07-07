@@ -1,0 +1,12 @@
+# t1_lines2 dialect=1.1 start=08AD0
+08AD3:fild:298
+08AD8:fild:296
+08ADD:fstp:148
+08AE2:fstp:136
+08AE7:fild:294
+08AEC:fild:292
+08AF1:line:96
+08AF7:end
+08AFA:epilogue
+# commits
+08AF5

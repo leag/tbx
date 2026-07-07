@@ -1,0 +1,26 @@
+# v10_t1_putact2 dialect=1.0 start=07190
+07193:fldz
+07196:fldz
+07199:fild:362
+0719E:fild:362
+071A3:movsi:288
+071A6:get_gfx:0
+071AC:fld1
+071AF:fld1
+071B2:movsi:288
+071B5:put_gfx:4
+071BB:fild:358
+071C0:fild:358
+071C5:movsi:288
+071C8:put_gfx:2
+071CE:fild:356
+071D3:fild:356
+071D8:movsi:288
+071DB:put_gfx:1
+071E1:end
+071E4:epilogue
+# commits
+071AA
+071B9
+071CC
+071DF

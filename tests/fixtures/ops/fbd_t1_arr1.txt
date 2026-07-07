@@ -1,0 +1,14 @@
+# fbd_t1_arr1 dialect=1.1 start=08780
+08783:fild:358
+08788:fstp:372
+0878F:fld1
+08792:fold:+:372
+08797:fstp:376
+0879E:fld:376
+087A3:fstp:342
+087AA:end
+087AD:epilogue
+# commits
+0878D
+0879C
+087A8
