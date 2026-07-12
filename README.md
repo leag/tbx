@@ -116,18 +116,23 @@ tbx PROGRAM.EXE --emit-c -o program.c
 cc program.c -lm -o program        # gcc or clang (labels-as-values is used)
 ```
 
-The generated file embeds a small runtime that follows Turbo Basic semantics:
-GW-BASIC-style PRINT layout with per-channel TAB/SPC columns, CINT banker's
-rounding, 16-bit integer operators (`\` `MOD` `AND` `OR` `XOR` `NOT`),
-single-precision default variables, DATA/READ/RESTORE, sequential file I/O
-(OPEN/CLOSE/PRINT#/INPUT#/WRITE/EOF), error trapping (ON ERROR GOTO / ERR /
-ERL / RESUME, untrapped errors abort with TB's code and line), SUB/CALL with
-by-reference parameters, and LOCATE/COLOR mapped to ANSI escapes. Fidelity is
-behavioral, not byte-exact, and the back end is fail-loud like the decoder:
-programs using constructs outside the implemented vocabulary (graphics, sound,
-event traps, random-access files, machine access) are rejected rather than
-mistranslated. About 62% of the fixture corpus recompiles and runs natively
-today.
+The generated file embeds a runtime that follows Turbo Basic semantics:
+GW-BASIC-style PRINT and PRINT USING layout with per-channel TAB/SPC columns,
+CINT banker's rounding, 16-bit integer operators, single-precision default
+variables, DATA/READ/RESTORE, sequential and random-access file I/O
+(FIELD/LSET/RSET/GET/PUT, MKx$/CVx), error trapping (ON ERROR GOTO / ERR /
+ERL / RESUME; untrapped errors abort with TB's code and line), SUB/CALL with
+by-reference parameters, multi-line DEF FN, ON TIMER traps polled at statement
+boundaries, and graphics (PSET/LINE/CIRCLE/PAINT/GET/PUT/VIEW/WINDOW/DRAW/
+POINT/PMAP/PALETTE) rendered into an in-memory CGA/EGA framebuffer — set
+`TB_SCREEN_PPM=out.ppm` to dump the final image. Terminal statements map to
+ANSI escapes; device statements with no modern counterpart (KEY LIST, PLAY,
+SOUND, WIDTH) are no-ops, and device functions read as absent (STICK/STRIG/
+PEN = 0). Fidelity is behavioral, not byte-exact, and the back end stays
+fail-loud where a faithful translation is impossible: machine access
+(PEEK/POKE/OUT/WAIT/INP/REG/CALL ABSOLUTE/BLOAD/BSAVE/DEF SEG) and CHAIN are
+rejected rather than mistranslated. 534 of the 564 fixture-corpus programs
+(95%) recompile and run natively today; the other 30 all use machine access.
 
 ## Debugging tools
 

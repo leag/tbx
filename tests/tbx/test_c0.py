@@ -70,6 +70,10 @@ _PINNED = {
     "zz_sub2": " 7  9 \n",  # literal args pass by value copy
     "zz_sub7": " 5 \n",  # EXIT SUB on the negative branch, not taken
     "t1_filef": "",  # EOF(1) on a closed file returns -1, no output
+    "zz_mdeffn1": " 42 \n",  # multi-line DEF FN: FNFN1(21) = 42
+    "zz_mdeffn2": " 42 \n",  # ... with an EXIT DEF branch not taken
+    "zz_cv_cvi": " 16961 \n",  # CVI("AB") = 0x4241 little-endian
+    "t1_point": " 0 \n",  # POINT on a fresh framebuffer reads attribute 0
 }
 
 
@@ -85,6 +89,15 @@ def test_tab_and_file_print(tmp_path):
     out = _run("t1_tab", tmp_path, stdin="3\n")
     assert out == "? A      3 \n   B\n  C\n"
     assert (tmp_path / "R.TXT").read_text() == "X     Y         3 \n"
+
+
+@pytest.mark.skipif(_CC is None, reason="no host C compiler")
+def test_print_using(tmp_path):
+    # t1_pr2: PRINT USING "#.#"-family fields on console and into a file;
+    # the format cycles when values outnumber fields
+    out = _run("t1_pr2", tmp_path, stdin="3\n")
+    assert out == "? A 3 B\nX 3.00\n3.0 3.0\n"
+    assert (tmp_path / "R.TXT").read_text() == " 3 \n 3.00 3.00\n"
 
 
 @pytest.mark.skipif(_CC is None, reason="no host C compiler")
@@ -108,13 +121,15 @@ def test_transpile_coverage_floor():
             ok += 1
         except ValueError:
             pass
-    # 348/564 as of the error-trapping/SUB/file-IO batch; keep some slack for
-    # intended decoder changes, but a real regression in c0 shows up as a big drop.
-    assert ok >= 330, f"c0 transpile coverage regressed: {ok}/{total}"
+    # 534/564 as of the graphics/traps/random-access batch (the remaining 30
+    # are machine access: PEEK/POKE/OUT/WAIT/INP/REG/CALL ABSOLUTE/BLOAD/
+    # BSAVE/CHAIN/DEF SEG, deliberately fail-loud). Slack allows intended
+    # decoder changes; a real regression in c0 shows up as a big drop.
+    assert ok >= 510, f"c0 transpile coverage regressed: {ok}/{total}"
 
 
 def test_unsupported_raises():
     # fail-loud: a program using an unimplemented construct must raise,
-    # never mistranslate (t1_line uses graphics LINE).
+    # never mistranslate (t1_poke touches machine memory via POKE).
     with pytest.raises(ValueError):
-        c0.emit_c(_decode("t1_line"))
+        c0.emit_c(_decode("t1_poke"))
