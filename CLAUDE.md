@@ -26,7 +26,7 @@ python tbx/tools/dump_user_code.py                    # tests/fixtures/usercode/
 uv run python tests/tbx/test_ir_snapshot.py --write   # tests/fixtures/ir_snapshot.txt
 ```
 
-Requires Python 3.11+. There is no CI — pytest, ruff, and ty run locally and all three must pass.
+Requires Python 3.11+. CI (`.github/workflows/ci.yml`) runs ruff, ty, and pytest on Python 3.11–3.13 for pushes to main and pull requests; all three must pass.
 
 The core package (`tbx.decode0`, `tbx.ir`, `tbx.emit0`, `tbx.cli`) has **zero runtime dependencies**; keep it that way. Only `tbx/tools/` may use iced-x86 (the `debug` extra), and `tests/tbx/test_cfg.py` guards it with `pytest.importorskip`.
 
