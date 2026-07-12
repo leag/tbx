@@ -7,6 +7,9 @@ license = "MIT"
 requires-python = ">=3.11"
 dependencies = []
 
+[project.urls]
+Repository = "https://github.com/leag/tbx"
+
 [project.optional-dependencies]
 # Disassembly-based debugging tools (tbx.tools.cfgview and friends); the
 # core decompile pipeline needs no third-party packages.

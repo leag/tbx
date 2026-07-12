@@ -1,5 +1,7 @@
 # tbx — a byte-exact decompiler for Borland Turbo Basic 1.0/1.1
 
+[![CI](https://github.com/leag/tbx/actions/workflows/ci.yml/badge.svg)](https://github.com/leag/tbx/actions/workflows/ci.yml)
+
 `tbx` recovers Turbo Basic source from 16-bit MS-DOS EXEs compiled by Borland
 Turbo Basic 1.0 or 1.1. Its correctness standard is unusual for a decompiler:
 a recovery counts only if **recompiling the emitted source in the original

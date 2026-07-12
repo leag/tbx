@@ -53,12 +53,14 @@ IDE compiler toggles (Keyboard break, Bounds, Overflow, Stack test, 8087) have n
 
 ## Tests and fixtures
 
-Regression layers:
+Regression layers, all swept on every pytest run:
 
-- `tests/fixtures/ir_snapshot.txt` — **the sweep gate**: one `repr()` per IR statement for every corpus EXE that has a usercode golden; any decoder drift fails here with the exact program and statement line (`test_ir_snapshot.py`).
-- `tests/fixtures/usercode/*.bas` — golden emitted source per corpus EXE. Only spot-checked directly (two files in `test_cli.py`); their main roles are selecting the snapshot sweep and making regeneration diffs reviewable.
-- `tests/fixtures/ops/*.txt` — canonical op-stream dumps. **Not test-gated at all**: regenerate them so the git diff documents scan-level changes, and review that diff carefully.
+- `tests/fixtures/ops/*.txt` — canonical op-stream dump per corpus EXE, gated by `test_goldens.py` (which reuses `dump_ops.canon`, so tool and test can't drift apart). Scan-level drift fails here.
+- `tests/fixtures/ir_snapshot.txt` — one `repr()` per IR statement for every corpus EXE that has a usercode golden; decoder drift fails with the exact program and statement line (`test_ir_snapshot.py`).
+- `tests/fixtures/usercode/*.bas` — golden emitted source, swept by `test_goldens.py`. Emit-level drift fails here.
 - Hand-written per-feature tests in `tests/tbx/` that pin exact IR for specific fixtures — the strongest guard, since goldens can be regenerated but pinned IR must be edited deliberately.
+
+Golden regeneration is only for **intended** changes; review the git diff it produces as carefully as code. `dump_user_code.py` deliberately skips flag fixtures (non-empty `Program.toggles`) — they carry no `.bas` golden because their source is identical to the unflagged program's, and `test_goldens.py` enforces that absence.
 
 Corpus naming (`tests/fixtures/corpus/`): `.exe` files are compiled fixtures, `.bas` alongside them are the authored originals. Prefixes: plain `t1_`/`tier*`/`zz_` = TB 1.1; `v10_` = the same program compiled with TB 1.0 (dialect tests assert identical IR across both); `f<code>_` = compiled with one IDE Options toggle ON (fkb=Keyboard break, fbd=Bounds, fov=Overflow, fst=Stack test, f87=8087) — these carry no `.bas` golden so the sweep skips them, and `test_flags.py` pins them directly.
 
