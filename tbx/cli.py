@@ -55,6 +55,12 @@ def main(argv=None) -> int:
         action="store_true",
         help="dump the canonical op stream instead of source",
     )
+    ap.add_argument(
+        "--emit-c",
+        action="store_true",
+        help="recompile to portable C for modern platforms (experimental; "
+        "build the output with `cc out.c -lm`)",
+    )
     args = ap.parse_args(argv)
 
     try:
@@ -65,6 +71,10 @@ def main(argv=None) -> int:
     try:
         if args.ops:
             text = _dump_ops(exe)
+        elif args.emit_c:
+            from tbx import c0
+
+            text = c0.emit_c(decode0.decode_user_code(exe))
         else:
             prog = decode0.decode_user_code(exe)
             text = emit0.emit(prog)

@@ -106,6 +106,25 @@ the real Turbo Basic 1.0/1.1 compilers when it was added; validating new
 recoveries end-to-end requires access to the original DOS toolchain (e.g.
 under an emulator), which this repository does not include or automate.
 
+## Native recompilation (experimental)
+
+Beyond source recovery, `tbx` can recompile a decoded program for modern
+platforms by emitting a self-contained C translation unit:
+
+```
+tbx PROGRAM.EXE --emit-c -o program.c
+cc program.c -lm -o program        # gcc or clang (labels-as-values is used)
+```
+
+The generated file embeds a small runtime that follows Turbo Basic semantics:
+GW-BASIC-style PRINT layout, CINT banker's rounding, 16-bit integer operators
+(`\` `MOD` `AND` `OR` `XOR` `NOT`), single-precision default variables, and
+DATA/READ/RESTORE. Fidelity is behavioral, not byte-exact, and the back end is
+fail-loud like the decoder: programs using constructs outside the implemented
+vocabulary (file I/O, graphics, sound, event traps, error trapping, SUBs) are
+rejected rather than mistranslated. About half of the fixture corpus
+recompiles and runs natively today.
+
 ## Debugging tools
 
 The decoder fails loudly by design: an unrecognized compiler template raises
