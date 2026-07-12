@@ -26,6 +26,8 @@ python tbx/tools/dump_user_code.py                    # tests/fixtures/usercode/
 uv run python tests/tbx/test_ir_snapshot.py --write   # tests/fixtures/ir_snapshot.txt
 ```
 
+Requires Python 3.11+. There is no CI — pytest, ruff, and ty run locally and all three must pass.
+
 The core package (`tbx.decode0`, `tbx.ir`, `tbx.emit0`, `tbx.cli`) has **zero runtime dependencies**; keep it that way. Only `tbx/tools/` may use iced-x86 (the `debug` extra), and `tests/tbx/test_cfg.py` guards it with `pytest.importorskip`.
 
 ## Architecture
@@ -39,6 +41,8 @@ The pipeline is EXE bytes → op stream → typed IR → canonical source:
 
 `tbx/ir/` is the shared IR: immutable dataclasses, pure data, pattern-matched by analyses. `unparse(parse_expr(s)) == s` is a checked invariant (`test_ir.py`). Both `tbx.ir` and `tbx.decode0` re-export their submodules' surface through `__init__.py`, so callers use `ir.Foo` / `decode0.bar`.
 
+**The decoder→emitter contract**: `decode_user_code` returns `Program` (`decode0/meta.py`), a `list` subclass of IR statements carrying side-channel attributes that `emit0.emit` reads via `getattr` (so plain statement lists also emit, as tests exploit): `lines` (original line numbers when the error-trap line table makes them byte-significant; `None` = renumber freely), `metas` (`(stmt_index, text)` pairs for $STACK/$SOUND/$EVENT, emitted unnumbered before the indexed statement), `toggles` (IDE Options letters, reported out-of-band by the CLI), and the TRON trio `hook_seq`/`traced`/`trace_partial` (per-physical-line trace-hook numbering). Changes to any of these must keep both sides in sync.
+
 ## The calibration rule (most important convention)
 
 The decoder is **fail-loud**: any byte pattern outside the calibrated vocabulary raises `ValueError` (with offending byte and file offset) rather than guessing. A byte pattern joins the vocabulary only after a fixture program in `tests/fixtures/corpus/` witnesses it and its decompile-recompile round trip was verified byte-exact against the real Turbo Basic compilers. Do not add speculative decodings. Verifying *new* fixtures end-to-end requires the original DOS toolchain (under an emulator), which this repo does not include or automate — existing goldens encode past verifications.
@@ -49,13 +53,12 @@ IDE compiler toggles (Keyboard break, Bounds, Overflow, Stack test, 8087) have n
 
 ## Tests and fixtures
 
-Three regression layers, coarsest to finest:
+Regression layers:
 
-- `tests/fixtures/usercode/*.bas` — golden emitted source per corpus EXE (checked via CLI tests and used to select the snapshot sweep).
-- `tests/fixtures/ir_snapshot.txt` — one `repr()` per IR statement for every corpus EXE that has a usercode golden; drift fails here first with the exact program and line (`test_ir_snapshot.py`).
-- `tests/fixtures/ops/*.txt` — canonical op-stream dumps.
-
-Plus hand-written per-feature tests in `tests/tbx/` that pin exact IR for specific fixtures.
+- `tests/fixtures/ir_snapshot.txt` — **the sweep gate**: one `repr()` per IR statement for every corpus EXE that has a usercode golden; any decoder drift fails here with the exact program and statement line (`test_ir_snapshot.py`).
+- `tests/fixtures/usercode/*.bas` — golden emitted source per corpus EXE. Only spot-checked directly (two files in `test_cli.py`); their main roles are selecting the snapshot sweep and making regeneration diffs reviewable.
+- `tests/fixtures/ops/*.txt` — canonical op-stream dumps. **Not test-gated at all**: regenerate them so the git diff documents scan-level changes, and review that diff carefully.
+- Hand-written per-feature tests in `tests/tbx/` that pin exact IR for specific fixtures — the strongest guard, since goldens can be regenerated but pinned IR must be edited deliberately.
 
 Corpus naming (`tests/fixtures/corpus/`): `.exe` files are compiled fixtures, `.bas` alongside them are the authored originals. Prefixes: plain `t1_`/`tier*`/`zz_` = TB 1.1; `v10_` = the same program compiled with TB 1.0 (dialect tests assert identical IR across both); `f<code>_` = compiled with one IDE Options toggle ON (fkb=Keyboard break, fbd=Bounds, fov=Overflow, fst=Stack test, f87=8087) — these carry no `.bas` golden so the sweep skips them, and `test_flags.py` pins them directly.
 
