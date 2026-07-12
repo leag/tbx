@@ -117,13 +117,17 @@ cc program.c -lm -o program        # gcc or clang (labels-as-values is used)
 ```
 
 The generated file embeds a small runtime that follows Turbo Basic semantics:
-GW-BASIC-style PRINT layout, CINT banker's rounding, 16-bit integer operators
-(`\` `MOD` `AND` `OR` `XOR` `NOT`), single-precision default variables, and
-DATA/READ/RESTORE. Fidelity is behavioral, not byte-exact, and the back end is
-fail-loud like the decoder: programs using constructs outside the implemented
-vocabulary (file I/O, graphics, sound, event traps, error trapping, SUBs) are
-rejected rather than mistranslated. About half of the fixture corpus
-recompiles and runs natively today.
+GW-BASIC-style PRINT layout with per-channel TAB/SPC columns, CINT banker's
+rounding, 16-bit integer operators (`\` `MOD` `AND` `OR` `XOR` `NOT`),
+single-precision default variables, DATA/READ/RESTORE, sequential file I/O
+(OPEN/CLOSE/PRINT#/INPUT#/WRITE/EOF), error trapping (ON ERROR GOTO / ERR /
+ERL / RESUME, untrapped errors abort with TB's code and line), SUB/CALL with
+by-reference parameters, and LOCATE/COLOR mapped to ANSI escapes. Fidelity is
+behavioral, not byte-exact, and the back end is fail-loud like the decoder:
+programs using constructs outside the implemented vocabulary (graphics, sound,
+event traps, random-access files, machine access) are rejected rather than
+mistranslated. About 62% of the fixture corpus recompiles and runs natively
+today.
 
 ## Debugging tools
 
