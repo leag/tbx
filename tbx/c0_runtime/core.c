@@ -1,22 +1,24 @@
+#include "tb_runtime.h"
+
 /* --- error trapping (ON ERROR GOTO / ERR / ERL / RESUME) --- */
-static jmp_buf tb_env;
-static void *tb_handler = 0;  /* installed handler label, 0 = none */
-static void *tb_stmt = 0;     /* start of current statement (RESUME) */
-static void *tb_next = 0;     /* following statement (RESUME NEXT) */
-static int tb_err = 0, tb_erl = 0;
-static void tb_error(int n) {
+jmp_buf tb_env;
+void *tb_handler = 0;  /* installed handler label, 0 = none */
+void *tb_stmt = 0;     /* start of current statement (RESUME) */
+void *tb_next = 0;     /* following statement (RESUME NEXT) */
+int tb_err = 0, tb_erl = 0;
+void tb_error(int n) {
     tb_err = n;
     if (tb_handler) longjmp(tb_env, 1);
     fprintf(stderr, "\nError %d in line %d\n", n, tb_erl);
     exit(n);
 }
 
-static FILE *tb_out = 0;  /* current PRINT sink; stdout unless PRINT #n */
-static int tb_ch = 0;     /* current PRINT channel: 0 = console, n = file #n */
-static int tb_cols[16];   /* print column per channel (TAB/POS) */
-static int tb_row = 0;    /* console cursor row (CSRLIN), LOCATE-aware */
+FILE *tb_out = 0;  /* current PRINT sink; stdout unless PRINT #n */
+int tb_ch = 0;     /* current PRINT channel: 0 = console, n = file #n */
+int tb_cols[16];   /* print column per channel (TAB/POS) */
+int tb_row = 0;    /* console cursor row (CSRLIN), LOCATE-aware */
 #define tb_col tb_cols[tb_ch]
-static void tb_ps(const char *s) {
+void tb_ps(const char *s) {
     if (!tb_out) tb_out = stdout;
     for (; *s; s++) {
         fputc(*s, tb_out);
@@ -28,20 +30,20 @@ static void tb_ps(const char *s) {
         }
     }
 }
-static void tb_nl(void) { tb_ps("\n"); }
-static const char *tb_s(const char *s) { return s ? s : ""; }
+void tb_nl(void) { tb_ps("\n"); }
+const char *tb_s(const char *s) { return s ? s : ""; }
 /* --- clock offsets (DATE$/TIME$ assignment shifts a process-local clock) --- */
 static double tb_clk_off = 0;
 static time_t tb_now_wall(void) { return time(NULL) + (time_t)tb_clk_off; }
 static struct tm *tb_now_tm(void) { time_t t = tb_now_wall(); return localtime(&t); }
-static void tb_set_time(const char *s) {
+void tb_set_time(const char *s) {
     int h = 0, m = 0, sec = 0;
     sscanf(tb_s(s), "%d:%d:%d", &h, &m, &sec);
     struct tm *lt = tb_now_tm();
     tb_clk_off += (h * 3600 + m * 60 + sec)
         - (lt->tm_hour * 3600 + lt->tm_min * 60 + lt->tm_sec);
 }
-static void tb_set_date(const char *s) {
+void tb_set_date(const char *s) {
     int mo = 1, d = 1, y = 1980;
     sscanf(tb_s(s), "%d-%d-%d", &mo, &d, &y);
     struct tm want = *tb_now_tm();
@@ -50,7 +52,7 @@ static void tb_set_date(const char *s) {
 }
 /* GW-BASIC family number image: integral -> no point; else 7 significant
    digits (single precision) with the leading zero of "0.5" stripped. */
-static void tb_fmt(double v, char *out) {
+void tb_fmt(double v, char *out) {
     if (v == floor(v) && fabs(v) < 1e15) { sprintf(out, "%.0f", v); return; }
     char b[48]; sprintf(b, "%.7G", v);
     char *p = b, *o = out;
@@ -58,29 +60,29 @@ static void tb_fmt(double v, char *out) {
     if (p[0] == '0' && p[1] == '.') p++;
     strcpy(o, p);
 }
-static void tb_pn(double v) {
+void tb_pn(double v) {
     char b[64]; tb_fmt(v, b);
     if (v >= 0) tb_ps(" ");
     tb_ps(b); tb_ps(" ");
 }
-static void tb_tab(double n) { while (tb_col < (int)n - 1) tb_ps(" "); }
-static void tb_spc(double n) { for (int i = 0; i < (int)n; i++) tb_ps(" "); }
+void tb_tab(double n) { while (tb_col < (int)n - 1) tb_ps(" "); }
+void tb_spc(double n) { for (int i = 0; i < (int)n; i++) tb_ps(" "); }
 /* CINT: round half to even (the x87/IEEE default nearbyint mode). */
-static double tb_cint(double v) { return nearbyint(v); }
-static long tb_i(double v) { return (long)tb_cint(v); }
-static double tb_div(double a, double b) { if (b == 0) tb_error(11); return a / b; }
-static double tb_idiv(double a, double b) { if (tb_i(b) == 0) tb_error(11); return (double)(tb_i(a) / tb_i(b)); }
-static double tb_mod(double a, double b) { if (tb_i(b) == 0) tb_error(11); return (double)(tb_i(a) % tb_i(b)); }
-static double tb_and(double a, double b) { return (double)(short)(tb_i(a) & tb_i(b)); }
-static double tb_or(double a, double b) { return (double)(short)(tb_i(a) | tb_i(b)); }
-static double tb_xor(double a, double b) { return (double)(short)(tb_i(a) ^ tb_i(b)); }
-static double tb_not(double a) { return (double)(short)~tb_i(a); }
-static double tb_sgn(double v) { return v > 0 ? 1 : v < 0 ? -1 : 0; }
-static double tb_timer(void) {
+double tb_cint(double v) { return nearbyint(v); }
+long tb_i(double v) { return (long)tb_cint(v); }
+double tb_div(double a, double b) { if (b == 0) tb_error(11); return a / b; }
+double tb_idiv(double a, double b) { if (tb_i(b) == 0) tb_error(11); return (double)(tb_i(a) / tb_i(b)); }
+double tb_mod(double a, double b) { if (tb_i(b) == 0) tb_error(11); return (double)(tb_i(a) % tb_i(b)); }
+double tb_and(double a, double b) { return (double)(short)(tb_i(a) & tb_i(b)); }
+double tb_or(double a, double b) { return (double)(short)(tb_i(a) | tb_i(b)); }
+double tb_xor(double a, double b) { return (double)(short)(tb_i(a) ^ tb_i(b)); }
+double tb_not(double a) { return (double)(short)~tb_i(a); }
+double tb_sgn(double v) { return v > 0 ? 1 : v < 0 ? -1 : 0; }
+double tb_timer(void) {
     struct tm *lt = tb_now_tm();
     return lt->tm_hour * 3600.0 + lt->tm_min * 60.0 + lt->tm_sec;
 }
-static void tb_delay(double secs) {
+void tb_delay(double secs) {
 #ifdef _WIN32
     Sleep((DWORD)(secs * 1000));
 #else
@@ -88,46 +90,46 @@ static void tb_delay(double secs) {
     nanosleep(&ts, NULL);
 #endif
 }
-static char *tb_alloc(size_t n) {
+char *tb_alloc(size_t n) {
     char *p = malloc(n + 1);
     if (!p) { fputs("out of memory\n", stderr); exit(1); }
     p[n] = 0; return p;
 }
-static char *tb_dup(const char *s) { char *p = tb_alloc(strlen(s)); strcpy(p, s); return p; }
-static char *tb_cat(const char *a, const char *b) {
+char *tb_dup(const char *s) { char *p = tb_alloc(strlen(s)); strcpy(p, s); return p; }
+char *tb_cat(const char *a, const char *b) {
     a = tb_s(a); b = tb_s(b);
     char *p = tb_alloc(strlen(a) + strlen(b));
     strcpy(p, a); strcat(p, b); return p;
 }
-static double tb_len(const char *s) { return (double)strlen(tb_s(s)); }
-static double tb_asc(const char *s) { return (double)(unsigned char)tb_s(s)[0]; }
-static double tb_val(const char *s) { return strtod(tb_s(s), NULL); }
-static char *tb_chr(double c) { char *p = tb_alloc(1); p[0] = (char)tb_i(c); return p; }
-static char *tb_strS(double v) {
+double tb_len(const char *s) { return (double)strlen(tb_s(s)); }
+double tb_asc(const char *s) { return (double)(unsigned char)tb_s(s)[0]; }
+double tb_val(const char *s) { return strtod(tb_s(s), NULL); }
+char *tb_chr(double c) { char *p = tb_alloc(1); p[0] = (char)tb_i(c); return p; }
+char *tb_strS(double v) {
     char b[64]; tb_fmt(v, b);
     char *p = tb_alloc(strlen(b) + 1);
     if (v >= 0) { p[0] = ' '; strcpy(p + 1, b); } else strcpy(p, b);
     return p;
 }
-static char *tb_space(double n) {
+char *tb_space(double n) {
     long k = tb_i(n) < 0 ? 0 : tb_i(n);
     char *p = tb_alloc(k); memset(p, ' ', k); return p;
 }
-static char *tb_stringS(double n, double c) {
+char *tb_stringS(double n, double c) {
     long k = tb_i(n) < 0 ? 0 : tb_i(n);
     char *p = tb_alloc(k); memset(p, (char)tb_i(c), k); return p;
 }
-static char *tb_left(const char *s, double n) {
+char *tb_left(const char *s, double n) {
     s = tb_s(s); size_t L = strlen(s), k = tb_i(n) < 0 ? 0 : (size_t)tb_i(n);
     if (k > L) k = L;
     char *p = tb_alloc(k); memcpy(p, s, k); return p;
 }
-static char *tb_right(const char *s, double n) {
+char *tb_right(const char *s, double n) {
     s = tb_s(s); size_t L = strlen(s), k = tb_i(n) < 0 ? 0 : (size_t)tb_i(n);
     if (k > L) k = L;
     return tb_dup(s + (L - k));
 }
-static char *tb_mid(const char *s, double start, double len) {
+char *tb_mid(const char *s, double start, double len) {
     s = tb_s(s); size_t L = strlen(s);
     long st = tb_i(start); if (st < 1) st = 1;
     if ((size_t)st > L) return tb_dup("");
@@ -135,32 +137,32 @@ static char *tb_mid(const char *s, double start, double len) {
     if (k > avail) k = avail;
     char *p = tb_alloc(k); memcpy(p, s + st - 1, k); return p;
 }
-static double tb_instr(double start, const char *a, const char *b) {
+double tb_instr(double start, const char *a, const char *b) {
     a = tb_s(a); b = tb_s(b);
     long st = tb_i(start); if (st < 1) st = 1;
     if ((size_t)st > strlen(a)) return 0;
     const char *hit = strstr(a + st - 1, b);
     return hit ? (double)(hit - a + 1) : 0;
 }
-static char *tb_ucase(const char *s) {
+char *tb_ucase(const char *s) {
     char *p = tb_dup(tb_s(s));
     for (char *q = p; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
     return p;
 }
-static char *tb_lcase(const char *s) {
+char *tb_lcase(const char *s) {
     char *p = tb_dup(tb_s(s));
     for (char *q = p; *q; q++) if (*q >= 'A' && *q <= 'Z') *q += 32;
     return p;
 }
-static char *tb_ltrim(const char *s) { s = tb_s(s); while (*s == ' ') s++; return tb_dup(s); }
-static char *tb_rtrim(const char *s) {
+char *tb_ltrim(const char *s) { s = tb_s(s); while (*s == ' ') s++; return tb_dup(s); }
+char *tb_rtrim(const char *s) {
     char *p = tb_dup(tb_s(s));
     for (size_t L = strlen(p); L && p[L - 1] == ' '; L--) p[L - 1] = 0;
     return p;
 }
-static char *tb_hex(double v) { char b[24]; sprintf(b, "%lX", tb_i(v) & 0xFFFF); return tb_dup(b); }
-static char *tb_oct(double v) { char b[24]; sprintf(b, "%lo", tb_i(v) & 0xFFFF); return tb_dup(b); }
-static double tb_input_num(const char *prompt, int mark) {
+char *tb_hex(double v) { char b[24]; sprintf(b, "%lX", tb_i(v) & 0xFFFF); return tb_dup(b); }
+char *tb_oct(double v) { char b[24]; sprintf(b, "%lo", tb_i(v) & 0xFFFF); return tb_dup(b); }
+double tb_input_num(const char *prompt, int mark) {
     if (prompt) tb_ps(prompt);
     if (mark) tb_ps("? ");
     char line[256];
@@ -168,7 +170,7 @@ static double tb_input_num(const char *prompt, int mark) {
     tb_col = 0;
     return strtod(line, NULL);
 }
-static char *tb_input_str(const char *prompt, int mark) {
+char *tb_input_str(const char *prompt, int mark) {
     if (prompt) tb_ps(prompt);
     if (mark) tb_ps("? ");
     char line[256];
@@ -177,17 +179,17 @@ static char *tb_input_str(const char *prompt, int mark) {
     line[strcspn(line, "\r\n")] = 0;
     return tb_dup(line);
 }
-static char *tb_dateS(void) {
+char *tb_dateS(void) {
     struct tm *lt = tb_now_tm(); char b[40];
     sprintf(b, "%02d-%02d-%04d", lt->tm_mon + 1, lt->tm_mday, lt->tm_year + 1900);
     return tb_dup(b);
 }
-static char *tb_timeS(void) {
+char *tb_timeS(void) {
     struct tm *lt = tb_now_tm(); char b[16];
     sprintf(b, "%02d:%02d:%02d", lt->tm_hour, lt->tm_min, lt->tm_sec);
     return tb_dup(b);
 }
-static void *tb_calloc(long n, size_t w) {
+void *tb_calloc(long n, size_t w) {
     void *p = calloc(n > 0 ? n : 1, w);
     if (!p) { fputs("out of memory\n", stderr); exit(1); }
     return p;

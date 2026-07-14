@@ -1,15 +1,17 @@
+#include "tb_runtime.h"
+
 /* --- graphics: in-memory framebuffer with CGA/EGA geometry ---
    There is no screen on a headless modern host, so SCREEN n allocates a
    byte-per-pixel framebuffer instead; a first graphics call without SCREEN
    enters mode 1 (320x200) implicitly. Set TB_SCREEN_PPM=file.ppm to dump
    the final image (CGA palette) at exit. */
-static int tb_gw = 0, tb_gh = 0, tb_maxattr = 3;
-static unsigned char *tb_fb = 0;
+int tb_gw = 0, tb_gh = 0, tb_maxattr = 3;
+unsigned char *tb_fb = 0;
 static double tb_lastx = 0, tb_lasty = 0;                /* STEP reference */
 static int tb_vx1, tb_vy1, tb_vx2, tb_vy2, tb_vabs = 0;  /* viewport */
 static int tb_wset = 0, tb_wabs = 0;
 static double tb_wx1, tb_wy1, tb_wx2, tb_wy2;            /* WINDOW rect */
-static int tb_pal[16] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
+int tb_pal[16] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
 #if TB_FILE_DEVICES
 static void tb_ppm_dump(void) {
     const char *path = getenv("TB_SCREEN_PPM");
@@ -26,7 +28,7 @@ static void tb_ppm_dump(void) {
     fclose(f);
 }
 #endif
-static void tb_screen(double mode) {
+void tb_screen(double mode) {
     static const struct { int m, w, h, a; } md[] = {
         {1,320,200,3},{2,640,200,1},{7,320,200,15},{8,640,200,15},
         {9,640,350,15},{10,640,350,3}};
@@ -62,7 +64,7 @@ static void tb_px(long x, long y, int c) {
     if (!tb_fb || x < tb_vx1 || x > tb_vx2 || y < tb_vy1 || y > tb_vy2) return;
     tb_fb[y * tb_gw + x] = (unsigned char)(c & 15);
 }
-static double tb_pointf(double x, double y) {
+double tb_pointf(double x, double y) {
     long px, py;
     tb_gfx(); tb_map(x, y, &px, &py);
     if (px < 0 || px >= tb_gw || py < 0 || py >= tb_gh) return -1;
@@ -71,7 +73,7 @@ static double tb_pointf(double x, double y) {
 static void tb_step(double *x, double *y, int step) {
     if (step) { *x += tb_lastx; *y += tb_lasty; }
 }
-static void tb_pset(double x, double y, int step, int has_c, double c, int preset) {
+void tb_pset(double x, double y, int step, int has_c, double c, int preset) {
     long px, py;
     tb_gfx(); tb_step(&x, &y, step);
     tb_map(x, y, &px, &py);
@@ -91,7 +93,7 @@ static void tb_line_px(long x1, long y1, long x2, long y2, int c, unsigned style
         if (e2 <= dx) { err += dx; y1 += sy; }
     }
 }
-static void tb_linestmt(double x1, double y1, int s1, double x2, double y2, int s2,
+void tb_linestmt(double x1, double y1, int s1, double x2, double y2, int s2,
                         int has_c, double c, int box, int fill, unsigned style) {
     long px1, py1, px2, py2;
     tb_gfx();
@@ -113,7 +115,7 @@ static void tb_linestmt(double x1, double y1, int s1, double x2, double y2, int 
     }
     tb_lastx = x2; tb_lasty = y2;
 }
-static void tb_circle(double x, double y, double r, int step, int has_c, double c,
+void tb_circle(double x, double y, double r, int step, int has_c, double c,
                       double sa, double ea, double aspect) {
     long cx, cy;
     tb_gfx(); tb_step(&x, &y, step);
@@ -134,7 +136,7 @@ static void tb_circle(double x, double y, double r, int step, int has_c, double 
     if (line_e) tb_line_px(cx, cy, lround(cx + rx * cos(ea)), lround(cy - ry * sin(ea)), col, 0xFFFF);
     tb_lastx = x; tb_lasty = y;
 }
-static void tb_paint(double x, double y, int has_p, double p, int has_b, double b) {
+void tb_paint(double x, double y, int has_p, double p, int has_b, double b) {
     long sx, sy;
     tb_gfx(); tb_map(x, y, &sx, &sy);
     int paint = has_p ? (int)p : tb_fg, border = has_b ? (int)b : paint;
@@ -158,7 +160,7 @@ static void tb_paint(double x, double y, int has_p, double p, int has_b, double 
 }
 /* GET/PUT blit: internal layout [long w][long h][one byte per pixel] laid
    into the array's storage, clipped to its capacity in bytes */
-static void tb_getgfx(void *buf, long cap, double x1, double y1, double x2, double y2) {
+void tb_getgfx(void *buf, long cap, double x1, double y1, double x2, double y2) {
     long px1, py1, px2, py2;
     tb_gfx(); tb_map(x1, y1, &px1, &py1); tb_map(x2, y2, &px2, &py2);
     if (px1 > px2) { long t = px1; px1 = px2; px2 = t; }
@@ -176,7 +178,7 @@ static void tb_getgfx(void *buf, long cap, double x1, double y1, double x2, doub
                        ? tb_fb[fy * tb_gw + fx] : 0;
         }
 }
-static void tb_putgfx(void *buf, long cap, double x, double y, int pset_action) {
+void tb_putgfx(void *buf, long cap, double x, double y, int pset_action) {
     long px, py, w, h;
     tb_gfx(); tb_map(x, y, &px, &py);
     unsigned char *p = buf;
@@ -198,7 +200,7 @@ static void tb_putgfx(void *buf, long cap, double x, double y, int pset_action) 
                  : (unsigned char)((*dst ^ v) & 15);
         }
 }
-static void tb_view(int has_rect, double x1, double y1, double x2, double y2,
+void tb_view(int has_rect, double x1, double y1, double x2, double y2,
                     int absolute, int has_c, double c, int has_b, double b) {
     tb_gfx();
     if (!has_rect) {
@@ -223,13 +225,13 @@ static void tb_view(int has_rect, double x1, double y1, double x2, double y2,
         tb_vx1 = ox1; tb_vy1 = oy1; tb_vx2 = ox2; tb_vy2 = oy2;
     }
 }
-static void tb_window(int has_rect, double x1, double y1, double x2, double y2, int absolute) {
+void tb_window(int has_rect, double x1, double y1, double x2, double y2, int absolute) {
     tb_gfx();
     if (!has_rect) { tb_wset = 0; return; }
     tb_wset = 1; tb_wabs = absolute;
     tb_wx1 = x1; tb_wy1 = y1; tb_wx2 = x2; tb_wy2 = y2;
 }
-static void tb_draw(const char *cmd) {
+void tb_draw(const char *cmd) {
     tb_gfx();
     const char *p = tb_s(cmd);
     double scale = 1;
@@ -284,7 +286,7 @@ static void tb_draw(const char *cmd) {
         if (!back) { tb_lastx = nx; tb_lasty = ny; }
     }
 }
-static double tb_pmap(double v, double n) {
+double tb_pmap(double v, double n) {
     long px, py;
     tb_gfx();
     switch ((int)n) {

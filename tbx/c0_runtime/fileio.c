@@ -1,10 +1,12 @@
+#include "tb_runtime.h"
+
 /* --- sequential file I/O --- */
 static FILE *tb_files[16];
-static FILE *tb_file(int n) {
+FILE *tb_file(int n) {
     if (n < 1 || n > 15 || !tb_files[n]) tb_error(52);  /* bad file number */
     return tb_files[n];
 }
-static void tb_open(const char *mode, int n, const char *name) {
+void tb_open(const char *mode, int n, const char *name) {
     if (n < 1 || n > 15) tb_error(52);
     if (tb_files[n]) tb_error(55);                       /* file already open */
     FILE *f = fopen(tb_s(name), mode);
@@ -24,15 +26,15 @@ static void tb_drop_fields(int n) {
         if (tb_fields[i].file != n) tb_fields[k++] = tb_fields[i];
     tb_nfields = k;
 }
-static void tb_close(int n) {
+void tb_close(int n) {
     if (n >= 1 && n <= 15 && tb_files[n]) {
         fclose(tb_files[n]); tb_files[n] = 0;
         free(tb_recbuf[n]); tb_recbuf[n] = 0;
         tb_drop_fields(n);
     }
 }
-static void tb_reset(void) { for (int i = 1; i < 16; i++) tb_close(i); }
-static void tb_open_r(int n, const char *name) {
+void tb_reset(void) { for (int i = 1; i < 16; i++) tb_close(i); }
+void tb_open_r(int n, const char *name) {
     if (n < 1 || n > 15) tb_error(52);
     if (tb_files[n]) tb_error(55);
     FILE *f = fopen(tb_s(name), "r+b");
@@ -43,7 +45,7 @@ static void tb_open_r(int n, const char *name) {
     tb_recbuf[n] = tb_alloc(128);
     memset(tb_recbuf[n], ' ', 128);
 }
-static double tb_eof(double n) {
+double tb_eof(double n) {
     FILE *f = ((int)n >= 1 && (int)n <= 15) ? tb_files[(int)n] : 0;
     if (!f) return -1;
     int c = fgetc(f);
@@ -51,14 +53,14 @@ static double tb_eof(double n) {
     ungetc(c, f);
     return 0;
 }
-static double tb_finput_num(int n) {
+double tb_finput_num(int n) {
     FILE *f = tb_file(n); double v = 0;
     if (fscanf(f, " %lf", &v) != 1) tb_error(62);        /* input past end */
     int c = fgetc(f);
     if (c != ',' && c != EOF && c != '\n') ungetc(c, f);
     return v;
 }
-static char *tb_finput_str(int n) {
+char *tb_finput_str(int n) {
     FILE *f = tb_file(n); int c;
     while ((c = fgetc(f)) == ' ') ;
     if (c == EOF) tb_error(62);
@@ -76,19 +78,19 @@ static char *tb_finput_str(int n) {
     buf[k] = 0;
     return tb_dup(buf);
 }
-static void tb_field_start(int n) {
+void tb_field_start(int n) {
     tb_file(n);
     tb_fieldoff[n] = 0;
     tb_drop_fields(n);
 }
-static void tb_field_reg(int n, char **var, long w) {
+void tb_field_reg(int n, char **var, long w) {
     if (tb_nfields >= 128 || !tb_recbuf[n] || tb_fieldoff[n] + w > tb_reclen[n])
         tb_error(50);                                    /* field overflow */
     tb_fields[tb_nfields++] = (tb_fielddef){n, var, tb_fieldoff[n], w};
     tb_fieldoff[n] += w;
     *var = tb_space(w);
 }
-static void tb_lsetrset(char **var, const char *src, int right) {
+void tb_lsetrset(char **var, const char *src, int right) {
     src = tb_s(src);
     tb_fielddef *fd = 0;
     for (int i = 0; i < tb_nfields; i++)
@@ -102,7 +104,7 @@ static void tb_lsetrset(char **var, const char *src, int right) {
     if (fd) memcpy(tb_recbuf[fd->file] + fd->off, out, w);
     *var = out;
 }
-static void tb_getrec(int n, double rec) {
+void tb_getrec(int n, double rec) {
     FILE *f = tb_file(n);
     if (!tb_recbuf[n]) tb_error(52);
     fseek(f, (long)(tb_i(rec) - 1) * tb_reclen[n], SEEK_SET);
@@ -115,7 +117,7 @@ static void tb_getrec(int n, double rec) {
             *tb_fields[i].var = v;
         }
 }
-static void tb_putrec(int n, double rec) {
+void tb_putrec(int n, double rec) {
     FILE *f = tb_file(n);
     if (!tb_recbuf[n]) tb_error(52);
     fseek(f, (long)(tb_i(rec) - 1) * tb_reclen[n], SEEK_SET);
@@ -123,14 +125,14 @@ static void tb_putrec(int n, double rec) {
     fflush(f);
 }
 /* WRITE layout: comma separators, quoted strings, numbers without padding */
-static void tb_wnum(double v) { char b[64]; tb_fmt(v, b); tb_ps(b); }
-static void tb_wstr(const char *s) { tb_ps("\""); tb_ps(tb_s(s)); tb_ps("\""); }
+void tb_wnum(double v) { char b[64]; tb_fmt(v, b); tb_ps(b); }
+void tb_wstr(const char *s) { tb_ps("\""); tb_ps(tb_s(s)); tb_ps("\""); }
 /* PRINT USING: the # / . / + numeric-field subset; other format characters
    raise error 5 rather than misformat */
 static const char *tb_puf = "";
 static size_t tb_pup = 0;
-static void tb_pu_begin(const char *f) { tb_puf = tb_s(f); tb_pup = 0; }
-static void tb_pu_val(double v) {
+void tb_pu_begin(const char *f) { tb_puf = tb_s(f); tb_pup = 0; }
+void tb_pu_val(double v) {
     const char *f = tb_puf;
     size_t L = strlen(f);
     int guard = 0;
@@ -172,16 +174,16 @@ static void tb_cvbytes(const char *s, void *out, size_t n) {
     if (L > n) L = n;
     memset(out, 0, n); memcpy(out, s, L);
 }
-static char *tb_mki(double v) { short x = (short)tb_i(v); return tb_mkbytes(&x, 2); }
-static char *tb_mkl(double v) { int x = (int)tb_i(v); return tb_mkbytes(&x, 4); }
-static char *tb_mks(double v) { float x = (float)v; return tb_mkbytes(&x, 4); }
-static char *tb_mkd(double v) { return tb_mkbytes(&v, 8); }
-static double tb_cvi(const char *s) { short x; tb_cvbytes(s, &x, 2); return x; }
-static double tb_cvl(const char *s) { int x; tb_cvbytes(s, &x, 4); return x; }
-static double tb_cvs(const char *s) { float x; tb_cvbytes(s, &x, 4); return x; }
-static double tb_cvd(const char *s) { double x; tb_cvbytes(s, &x, 8); return x; }
+char *tb_mki(double v) { short x = (short)tb_i(v); return tb_mkbytes(&x, 2); }
+char *tb_mkl(double v) { int x = (int)tb_i(v); return tb_mkbytes(&x, 4); }
+char *tb_mks(double v) { float x = (float)v; return tb_mkbytes(&x, 4); }
+char *tb_mkd(double v) { return tb_mkbytes(&v, 8); }
+double tb_cvi(const char *s) { short x; tb_cvbytes(s, &x, 2); return x; }
+double tb_cvl(const char *s) { int x; tb_cvbytes(s, &x, 4); return x; }
+double tb_cvs(const char *s) { float x; tb_cvbytes(s, &x, 4); return x; }
+double tb_cvd(const char *s) { double x; tb_cvbytes(s, &x, 8); return x; }
 /* MKDIR: the POSIX form takes a mode argument, the Windows CRT form does not */
-static void tb_mkdir(const char *path) {
+void tb_mkdir(const char *path) {
 #ifdef _WIN32
     if (mkdir(path)) {}
 #else

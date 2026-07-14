@@ -1,7 +1,0 @@
-# tbx/c0_runtime/*.c are ordered fragments of one generated translation unit
-# (concatenated by tbx/c0.py), not standalone files; clangd cannot parse them
-# in isolation, so suppress the resulting noise.
-If:
-  PathMatch: tbx/c0_runtime/.*
-Diagnostics:
-  Suppress: '*'

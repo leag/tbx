@@ -1,3 +1,5 @@
+#include "tb_runtime.h"
+
 /* --- PLAY: decode a GW-BASIC-compatible MML string into audio ---
    There is no audio device on a headless host, so PLAY renders its Music
    Macro Language into a mono 16-bit 44.1kHz square-wave buffer and, like
@@ -52,7 +54,7 @@ static double tb_pl_dur(long l, const char **p) {
     while (**p == '.') { d += add; add /= 2; (*p)++; }
     return d;
 }
-static void tb_play(const char *mml) {
+void tb_play(const char *mml) {
     static const int semi[7] = {9, 11, 0, 2, 4, 5, 7};  /* A B C D E F G */
 #if TB_FILE_DEVICES
     static int reg = 0;

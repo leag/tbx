@@ -1,5 +1,7 @@
-static double tb_rnd(void) { return rand() / ((double)RAND_MAX + 1); }
-static double tb_instat(void) {
+#include "tb_runtime.h"
+
+double tb_rnd(void) { return rand() / ((double)RAND_MAX + 1); }
+double tb_instat(void) {
 #ifdef _WIN32
     if (!_isatty(0)) {
         int c = getchar();
@@ -16,7 +18,7 @@ static double tb_instat(void) {
 /* --- terminal control (ANSI mapping of the CGA text interface) --- */
 /* ANSI escapes bypass tb_ps so they don't disturb column tracking; the
    Windows console needs virtual-terminal processing switched on first */
-static void tb_esc(const char *s) {
+void tb_esc(const char *s) {
 #ifdef _WIN32
     static int vt = 0;
     if (!vt) {
@@ -28,13 +30,13 @@ static void tb_esc(const char *s) {
 #endif
     fputs(s, stdout);
 }
-static void tb_locate(double r, double c) {
+void tb_locate(double r, double c) {
     char b[32]; sprintf(b, "\033[%d;%dH", (int)r, (int)c);
     tb_esc(b); tb_cols[0] = (int)c - 1; tb_row = (int)r - 1;
 }
 static const int tb_cga[8] = {0, 4, 2, 6, 1, 5, 3, 7};  /* CGA -> ANSI hue */
-static int tb_fg = 3;                                    /* graphics foreground */
-static void tb_color(int has_fg, double fg, int has_bg, double bg) {
+int tb_fg = 3;                                    /* graphics foreground */
+void tb_color(int has_fg, double fg, int has_bg, double bg) {
     char b[24];
     if (has_fg) {
         int f = (int)fg & 15;
@@ -43,7 +45,7 @@ static void tb_color(int has_fg, double fg, int has_bg, double bg) {
     }
     if (has_bg) { sprintf(b, "\033[4%dm", tb_cga[(int)bg & 7]); tb_esc(b); }
 }
-static char *tb_inkey(void) {
+char *tb_inkey(void) {
 #ifdef _WIN32
     int ch;
     if (!_isatty(0)) {
@@ -94,7 +96,7 @@ static int tb_match(const char *pat, const char *s) {
 #else
 #define tb_fnmatch(p, n) fnmatch(p, n, FNM_CASEFOLD)
 #endif
-static void tb_files_(const char *spec) {
+void tb_files_(const char *spec) {
     const char *pat = tb_s(spec);
     if (!*pat || !strcmp(pat, "*.*")) pat = "*";
     DIR *d = opendir(".");
@@ -107,7 +109,7 @@ static void tb_files_(const char *spec) {
     }
     closedir(d);
 }
-static char *tb_bin(double v) {
+char *tb_bin(double v) {
     char b[20]; int k = 19; b[k] = 0;
     unsigned x = (unsigned)tb_i(v) & 0xFFFF;
     do { b[--k] = (char)('0' + (x & 1)); x >>= 1; } while (x);
