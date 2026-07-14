@@ -116,6 +116,10 @@ tbx PROGRAM.EXE --emit-c -o program.c
 cc program.c -lm -o program        # gcc or clang (labels-as-values is used)
 ```
 
+The output compiles unchanged on Windows with MinGW-w64 gcc or clang (not
+MSVC) — the runtime carries `#ifdef _WIN32` paths for its keyboard, console,
+directory, and timing pieces.
+
 The generated file embeds a runtime that follows Turbo Basic semantics:
 GW-BASIC-style PRINT and PRINT USING layout with per-channel TAB/SPC columns,
 CINT banker's rounding, 16-bit integer operators, single-precision default
@@ -124,12 +128,17 @@ variables, DATA/READ/RESTORE, sequential and random-access file I/O
 ERL / RESUME; untrapped errors abort with TB's code and line), SUB/CALL with
 by-reference parameters, multi-line DEF FN, ON TIMER traps polled at statement
 boundaries, and graphics (PSET/LINE/CIRCLE/PAINT/GET/PUT/VIEW/WINDOW/DRAW/
-POINT/PMAP/PALETTE) rendered into an in-memory CGA/EGA framebuffer — set
-`TB_SCREEN_PPM=out.ppm` to dump the final image. Terminal statements map to
-ANSI escapes; device statements with no modern counterpart (KEY LIST, PLAY,
-SOUND, WIDTH) are no-ops, and device functions read as absent (STICK/STRIG/
-PEN = 0). Fidelity is behavioral, not byte-exact, and the back end stays
-fail-loud where a faithful translation is impossible: machine access
+POINT/PMAP/PALETTE) rendered into an in-memory CGA/EGA framebuffer, and PLAY
+decoded to audio. Devices with no modern counterpart are rendered to files
+instead of replicated: `TB_SCREEN_PPM=out.ppm` dumps the final framebuffer
+image and `TB_PLAY_WAV=out.wav` dumps the PLAY audio (mono 16-bit PCM), each
+at exit. These file surrogates are gated at compile time — build with
+`-DTB_FILE_DEVICES=0` to omit them and leave the devices absent (silent PLAY,
+no screen dump). Terminal statements map to ANSI escapes; the remaining
+device statements (KEY LIST, SOUND, WIDTH) are no-ops, and device functions
+read as absent (STICK/STRIG/PEN = 0). Fidelity is behavioral, not byte-exact,
+and the back end stays fail-loud where a faithful translation is impossible:
+machine access
 (PEEK/POKE/OUT/WAIT/INP/REG/CALL ABSOLUTE/BLOAD/BSAVE/DEF SEG) and CHAIN are
 rejected rather than mistranslated. 534 of the 564 fixture-corpus programs
 (95%) recompile and run natively today; the other 30 all use machine access.
