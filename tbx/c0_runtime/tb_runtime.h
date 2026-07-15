@@ -10,7 +10,7 @@
    this header or to a documented surrogate behavior (see README.md in this
    directory): a generated --no-runtime program only links against a
    libtbrt.a built from the same version. */
-#define TB_RT_VERSION 1
+#define TB_RT_VERSION 2
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -152,7 +152,10 @@ void tb_rmdir(const char *path);
 void tb_seek(int n, double pos);
 
 /* --- terminal.c: RND, INSTAT, ANSI terminal control, INKEY$, FILES --- */
+extern unsigned int tb_rseed;     /* TB's exact LCG state (see terminal.c) */
 double tb_rnd(void);
+double tb_rndf(double x);         /* RND(x): 0 = repeat last, <0 = reseed */
+void tb_randomize(double n);
 double tb_instat(void);
 void tb_esc(const char *s);
 void tb_locate(double r, double c);

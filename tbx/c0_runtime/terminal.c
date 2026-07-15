@@ -1,6 +1,24 @@
 #include "tb_runtime.h"
 
-double tb_rnd(void) { return rand() / ((double)RAND_MAX + 1); }
+/* TB's exact generator, reversed from the runtime's INT ED sub 3E handler
+   and pinned by the t1_rnd fixture: Borland's 32-bit LCG
+   state = state*08088405h + 1, result = (state>>1) * 2^-31. A program
+   starts with state FFFFFFFFh, and RANDOMIZE n stores the IEEE-754
+   single-precision bit pattern of n as the new state. */
+unsigned int tb_rseed = 0xFFFFFFFFu;
+double tb_rnd(void) {
+    tb_rseed = tb_rseed * 0x08088405u + 1u;
+    return (double)(tb_rseed >> 1) / 2147483648.0;
+}
+double tb_rndf(double x) {
+    if (x == 0) return (double)(tb_rseed >> 1) / 2147483648.0;  /* repeat last */
+    if (x < 0) tb_randomize(x);                    /* reseed, then draw */
+    return tb_rnd();
+}
+void tb_randomize(double n) {
+    float f = (float)n;
+    memcpy(&tb_rseed, &f, sizeof tb_rseed);
+}
 double tb_instat(void) {
     int k = tb_sdl_instat();          /* -1: no SDL window, use the terminal */
     if (k >= 0) return k ? -1 : 0;

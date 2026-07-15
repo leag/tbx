@@ -107,7 +107,7 @@ _NUM_FUNCS = {
     ("CVL", 1): "tb_cvl({0})",
     ("CVS", 1): "tb_cvs({0})",
     ("CVD", 1): "tb_cvd({0})",
-    ("RND", 1): "tb_rnd()",
+    ("RND", 1): "tb_rndf({0})",
     ("PMAP", 2): "tb_pmap({0}, {1})",
     # SCREEN(row,col) reads a text cell; there is no text buffer on this
     # host, so every cell reads as a blank
@@ -793,7 +793,7 @@ class _Gen:
         if isinstance(s, ir.Delay):
             return [f"tb_delay({self.num(s.secs)});"]
         if isinstance(s, ir.Randomize):
-            return [f"srand((unsigned)tb_i({self.num(s.seed)}));"]
+            return [f"tb_randomize({self.num(s.seed)});"]
         if isinstance(s, ir.MidAssign):
             tgt = self.var(s.target.name)
             n = self.uid()
