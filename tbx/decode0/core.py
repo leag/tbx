@@ -166,13 +166,13 @@ class DecodeState:
                 r = (disp - a["base"]) // esz
                 if a["rank"] == 1:
                     return ir.ArrayRef(a["name"], (ir.Lit(a["lo"][0] + r),))
-                return ir.ArrayRef(
-                    a["name"],
-                    (
-                        ir.Lit(a["lo"][0] + r % a["span"]),
-                        ir.Lit(a["lo"][1] + r // a["span"]),
-                    ),
-                )
+                # column-major: r = (i1-lo1) + (i2-lo2)*span1 + (i3-lo3)*span2
+                spans = [1, *(a.get("spans") or [a["span"]])]
+                subs = []
+                for d in range(a["rank"]):
+                    ext = a["hi"][d] - a["lo"][d] + 1
+                    subs.append(ir.Lit(a["lo"][d] + (r // spans[d]) % ext))
+                return ir.ArrayRef(a["name"], tuple(subs))
         raise ValueError(f"displacement {disp:#x} is neither scalar nor array element")
 
     def flush_pending(self):
@@ -706,7 +706,18 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     elif kind == "popop":
         last = state.stack.pop()  # last-pushed is the textual LEFT
         first = state.stack.pop()  # (R-form FSUBRP: st1=st0-st1, and
-        state.stack.append(ir.BinOp(op[2], _grp(last), _grp(first)))  # R-first
+        if op[2] in "+*" and all(
+            isinstance(e, ir.BinOp) and _PREC[e.op] > _PREC[op[2]]
+            for e in (last, first)
+        ):
+            # Two BARE higher-precedence fold chains (I*100 + J*10): TB
+            # evaluates these left-to-right, and they must re-emit without
+            # parens -- a grouped operand compiles right-first, so adding
+            # them would flip the push order (witnessed t1_dim3v; the
+            # grouped/call shapes below are tier1_expr/expr2, t1_fresx).
+            state.stack.append(ir.BinOp(op[2], first, last))
+        else:
+            state.stack.append(ir.BinOp(op[2], _grp(last), _grp(first)))  # R-first
     elif kind == "popop_n":  # non-R: first-pushed is LEFT
         rhs = state.stack.pop()
         lhs = state.stack.pop()
@@ -1424,9 +1435,11 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 if state.dim_frame is None or state.dim_frame["block"] != block:
                     raise ValueError(f"unbalanced DIM bracket at {addr:#x}")
                 cells = state.dim_frame["cells"]
-                rank = 2 if 0x10 in cells else 1
-                lows = [cells.get(0x08), cells.get(0x0E)][:rank]
-                ups = [cells.get(0x0A), cells.get(0x10)][:rank]
+                # bound cells per dim: (+08,+0A), (+0E,+10), (+14,+16) --
+                # rank-3 witnessed t1_dim3v
+                rank = 3 if 0x16 in cells else 2 if 0x10 in cells else 1
+                lows = [cells.get(0x08), cells.get(0x0E), cells.get(0x14)][:rank]
+                ups = [cells.get(0x0A), cells.get(0x10), cells.get(0x16)][:rank]
                 if any(v is None for v in lows + ups) or len(cells) != 2 * rank:
                     raise ValueError(
                         f"DIM bound cells incomplete at {addr:#x}: {cells}"
@@ -1438,7 +1451,9 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 order = list(cells)
                 expl = [
                     order.index(lo_c) < order.index(hi_c)
-                    for lo_c, hi_c in (((0x08, 0x0A), (0x0E, 0x10))[:rank])
+                    for lo_c, hi_c in (
+                        ((0x08, 0x0A), (0x0E, 0x10), (0x14, 0x16))[:rank]
+                    )
                 ]
                 base_vals = {v.value for d, v in enumerate(lows) if not expl[d]}
                 if base_vals - {0, 1}:

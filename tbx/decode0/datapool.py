@@ -84,14 +84,18 @@ def _read_data_pool(exe: bytes) -> list[ir.DataItem]:
 
 def _parse_static_slot(exe: bytes, pos: int) -> dict[str, Any] | None:
     """Parse a populated static slot record at file `pos`:
-    +0 base-para, +2 04|rank, +4 count, +6 type (04 single / 0A string),
-    +8/+A lo1/hi1, +C span, +E/+10 lo2/hi2. None if the bytes don't validate."""
+    +0 base-para, +2 04|rank, +4 count, +6 type (04 single / 0A string), then
+    per dimension `lo/hi` with a CUMULATIVE element span between dims --
+    rank 1: +8/+A lo1/hi1 (12 bytes); rank 2: ... +C span1, +E/+10 lo2/hi2
+    (18 bytes); rank 3: ... +12 span2, +14/+16 lo3/hi3 (24 bytes, witnessed
+    t1_dim3: span1 = ext1, span2 = span1*ext2, count = span2*ext3).
+    None if the bytes don't validate."""
     para, rt, count, esz = struct.unpack_from("<4H", exe, pos)
     # Type byte: 0x00 = integer (esz 2, witnessed t1_getput), 0x02 = long integer,
     # 0x04 = single, 0x06 = double, 0x0A = string; element size 2 (int),
     # 4 (single/long/string desc) or 8 (double).
     if (
-        rt >> 8 not in (1, 2)
+        rt >> 8 not in (1, 2, 3)
         or rt & 0xFF not in (0x00, 0x02, 0x04, 0x06, 0x0A)
         or esz not in (2, 4, 8)
         or count <= 1
@@ -99,20 +103,24 @@ def _parse_static_slot(exe: bytes, pos: int) -> dict[str, Any] | None:
     ):
         return None
     rank = rt >> 8
-    lo1, hi1, span, lo2, hi2 = struct.unpack_from("<5H", exe, pos + 8)
-    if rank == 1:
-        if count != hi1 - lo1 + 1 or hi1 < lo1:
+    lo, hi, spans = [], [], []
+    p, span = pos + 8, 1
+    for d in range(rank):
+        lo_d, hi_d = struct.unpack_from("<2H", exe, p)
+        if hi_d < lo_d:
             return None
-        lo, hi = [lo1], [hi1]
-    else:
-        if (
-            span != hi1 - lo1 + 1
-            or count != span * (hi2 - lo2 + 1)
-            or hi1 < lo1
-            or hi2 < lo2
-        ):
-            return None
-        lo, hi = [lo1, lo2], [hi1, hi2]
+        lo.append(lo_d)
+        hi.append(hi_d)
+        p += 4
+        if d < rank - 1:
+            (span_d,) = struct.unpack_from("<H", exe, p)
+            if span_d != span * (hi_d - lo_d + 1):
+                return None
+            spans.append(span_d)
+            span = span_d
+            p += 2
+    if count != span * (hi[-1] - lo[-1] + 1):
+        return None
     return {
         "name": None,
         "rank": rank,
@@ -120,7 +128,8 @@ def _parse_static_slot(exe: bytes, pos: int) -> dict[str, Any] | None:
         "count": count,
         "lo": lo,
         "hi": hi,
-        "span": span,
+        "span": spans[0] if spans else count,  # rank-2 compat: span1
+        "spans": spans,  # cumulative spans, one per dim after the first
         "base": para << 4,
         "esz": esz,
         "long": rt & 0xFF == 0x02,  # pre-seed; confirmed in _layout finish
@@ -135,6 +144,6 @@ def _is_rt_slot(exe: bytes, pos: int) -> bool:
         para == 0
         and count == 0
         and esz in (2, 4, 8)
-        and rt >> 8 in (1, 2)
+        and rt >> 8 in (1, 2, 3)
         and rt & 0xFF in (0x00, 0x02, 0x04, 0x06, 0x0A)
     )

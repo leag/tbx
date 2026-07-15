@@ -151,10 +151,10 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
         a window-bounded floating scan covers both. Window order == slot order."""
         out, pos, end = [], ds + vb, ds + sb
         while pos < end - 11 and len(out) < n_want:
-            rec = _parse_static_slot(exe, pos) if pos + 18 <= len(exe) else None
+            rec = _parse_static_slot(exe, pos) if pos + 24 <= len(exe) else None
             if rec is not None:
                 out.append(rec)
-                pos += 18 if rec["rank"] == 2 else 12
+                pos += 6 * rec["rank"] + 6  # 12 / 18 / 24 bytes
             else:
                 pos += 2
         return out if len(out) == n_want else None
@@ -236,7 +236,9 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
         # Anchor ds on the slot grid itself: every runtime block must
         # show the bare rank+type record, every static slot a populated record.
         pat = tuple(
-            struct.pack("<HH", 0, (r << 8) | t) for r in (1, 2) for t in (0x04, 0x0A)
+            struct.pack("<HH", 0, (r << 8) | t)
+            for r in (1, 2, 3)
+            for t in (0x04, 0x0A)
         )
         need = rt_blocks[-1] + 18  # last record byte we must read
         for pos in range(0, len(exe) - 18, 2):

@@ -70,7 +70,22 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         state.k += 1
         return True
     if kind == "addsiax":
-        if not (isinstance(state.si, tuple) and state.si[0] == "jspan"):
+        # accumulate index legs, highest dim first (column-major):
+        # rank 2: si=jspan + ax=i -> idx(i, j)
+        # rank 3: si=kspan + ax=jspan -> jk(j, k); si=jk + ax=i -> idx(i, j, k)
+        # (rank-3 witnessed t1_dim3v)
+        if (
+            isinstance(state.si, tuple)
+            and state.si[0] == "kspan"
+            and isinstance(state.ax, tuple)
+            and state.ax[0] == "jspan"
+            and state.ax[1] == state.si[1]
+        ):
+            state.si = ("jk", state.si[1], (state.ax[2], state.si[2]))
+            state.ax = None
+            state.k += 1
+            return True
+        if not (isinstance(state.si, tuple) and state.si[0] in ("jspan", "jk")):
             raise ValueError(f"add si,ax with si={state.si} ax={state.ax} at {addr:#x}")
         if (
             isinstance(state.ax, tuple)
@@ -82,7 +97,8 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             i_expr = state.ax  # base-0: no i-lo sub
         else:
             raise ValueError(f"add si,ax with si={state.si} ax={state.ax} at {addr:#x}")
-        state.si = ("idx", state.si[1], (i_expr, state.si[2]))
+        rest = state.si[2] if state.si[0] == "jk" else (state.si[2],)
+        state.si = ("idx", state.si[1], (i_expr, *rest))
         state.ax = None
         state.k += 1
         return True
@@ -93,15 +109,16 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         off = op[2] - blk
         if isinstance(state.ax, tuple) or state.ax is None:
             raise ValueError(f"far-IDX normalization of non-Expr ax at {addr:#x}")
-        if off == 0x0E:  # j - lo2, then * span
+        if off in (0x0E, 0x14):  # j - lo2 (or k - lo3), then * cumulative span
+            span_off = 0x0C if off == 0x0E else 0x12  # span1 / span2 cell
             if (
                 state.k + 1 >= len(state.ops)
                 or state.ops[state.k + 1][1] != "imul_m"
-                or state.ops[state.k + 1][2] != blk + 0x0C
+                or state.ops[state.k + 1][2] != blk + span_off
             ):
                 raise ValueError(f"jspan without imul at {addr:#x}")
             state.slot_info[blk]["subful"] = True  # lo-sub witness
-            state.ax = ("jspan", blk, state.ax)
+            state.ax = ("jspan" if off == 0x0E else "kspan", blk, state.ax)
             state.k += 2
             return True
         if off == 0x08:  # i - lo1
@@ -111,11 +128,17 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             return True
         raise ValueError(f"sub ax from unexpected cell offset {off:#x} at {addr:#x}")
     if kind == "imul_m":
-        blk = next((b for b in state.slot_info if op[2] == b + 0x0C), None)
+        blk = next(
+            (b for b in state.slot_info if op[2] in (b + 0x0C, b + 0x12)), None
+        )
         if blk is not None:  # bare span multiply: OPTION BASE 0
             if isinstance(state.ax, tuple) or state.ax is None:  # far-IDX j-leg
                 raise ValueError(f"span imul of non-Expr ax at {addr:#x}")
-            state.ax = ("jspan", blk, state.ax)
+            state.ax = (
+                "jspan" if op[2] == blk + 0x0C else "kspan",  # span2: t1_dim3v
+                blk,
+                state.ax,
+            )
         else:
             state.ax = ir.BinOp("*", state.loc(op[2]), _rgrp("*", state.ax))
         state.k += 1

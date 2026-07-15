@@ -306,8 +306,8 @@ class _Gen:
         Each DIM bound is an int upper bound (lower comes from OPTION BASE), an
         explicit `(lo, hi)` pair (`DIM A(0:4)`), or Exprs for runtime bounds."""
         rank = len(bounds)
-        if rank > 2:
-            raise _Unsupported("DIM rank > 2")
+        if rank > 3:
+            raise _Unsupported("DIM rank > 3 (no witness)")
         ty = _suffix_ty(name)
         norm = [b if isinstance(b, tuple) else (self.option_base, b) for b in bounds]
         if all(isinstance(lo, int) and isinstance(hi, int) for lo, hi in norm):
@@ -478,10 +478,15 @@ class _Gen:
                 idx.append(f"({raw} - {lo})")
         if rank == 1:
             return f"{m}[{idx[0]}]"
-        stride = (
-            str(dims[1][1] - dims[1][0] + 1) if dims is not None else f"{m}_n2"
-        )
-        return f"{m}[({idx[0]}) * {stride} + ({idx[1]})]"
+        # row-major private layout; TB's own is column-major, but the order
+        # is unobservable short of byte-level blits over rank>=2 arrays
+        def ext(k):
+            return str(dims[k - 1][1] - dims[k - 1][0] + 1) if dims is not None else f"{m}_n{k}"
+
+        flat = idx[0]
+        for k in range(2, rank + 1):
+            flat = f"({flat}) * {ext(k)} + ({idx[k - 1]})"
+        return f"{m}[{flat}]"
 
     def cond(self, e) -> str:
         if isinstance(e, ir.RelOp):
