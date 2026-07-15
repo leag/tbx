@@ -50,8 +50,15 @@ def calls(state: DecodeState, op, addr, kind) -> bool:
     if kind == "fn_call":  # drain staged args (offset order) -> FnCall
         args = tuple(state.fn_args[o] for o in sorted(state.fn_args))
         state.fn_args.clear()
-        state.stack.append(ir.FnCall(state.proc_names[op[2]], args))
-        state.k += 1
+        call = ir.FnCall(state.proc_names[op[2]], args)
+        nxt = state.ops[state.k + 1] if state.k + 1 < len(state.ops) else None
+        if nxt is not None and nxt[1] == "fnres_spush":
+            # string FN: INT 9F pushes the result descriptor (t1_fnstr)
+            state.sstack.append(call)
+            state.k += 2
+        else:
+            state.stack.append(call)
+            state.k += 1
         return True
     return False
 

@@ -119,6 +119,10 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         ops.append((p, "arg_ref", struct.unpack_from("<b", exe, p + 2)[0]))
         p += 3
         return p
+    if b == 0xC4 and exe[p + 1] == 0xB6:  # les si,[bp+off16]: same, wide disp
+        ops.append((p, "arg_ref", struct.unpack_from("<h", exe, p + 2)[0]))
+        p += 4  # (string DEF FN param temp free -- t1_fnstr)
+        return p
     if (
         b == 0x1E and exe[p + 1] == 0xB8 and exe[p + 4] == 0x50
     ):  # push ds; mov ax,off; push ax
@@ -488,6 +492,18 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
         return p
     if vec == 0x9D:  # far string element push ES:[SI]
         ops.append((p, "far_spush"))
+        p += 2
+        return p
+    if vec == 0x9E:  # push string at [bp+si]: DEF FN string param (t1_fnstr)
+        ops.append((p, "spush_bp"))
+        p += 2
+        return p
+    if vec == 0x9F:  # push a string FN call's result descriptor (t1_fnstr)
+        ops.append((p, "fnres_spush"))
+        p += 2
+        return p
+    if vec == 0xA2:  # pop string store to [bp+si]: FN result (si=0) or a
+        ops.append((p, "strassign_bp"))  # staged string call arg (t1_fnstr)
         p += 2
         return p
     if vec == 0xA1:  # far string element assign

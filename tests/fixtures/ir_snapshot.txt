@@ -392,6 +392,16 @@ End()
 Print(items=(Call(name='VAL', args=(StrLit(value='42'),)),), newline=True, file=None)
 End()
 
+## t1_fnstr
+DefFn(name='FNFN1$', params=('A$', 'B'), body=BinOp(op='+', lhs=Var(name='A$'), rhs=Call(name='STR$', args=(Var(name='B'),))), is_block=False)
+Print(items=(FnCall(name='FNFN1$', args=(StrLit(value='X'), Lit(value=3))),), newline=True, file=None)
+End()
+
+## t1_fnstrb
+DefFn(name='FNFN1$', params=('A$',), body=(FnResult(value=BinOp(op='+', lhs=Var(name='A$'), rhs=StrLit(value='!'))),), is_block=True)
+Print(items=(FnCall(name='FNFN1$', args=(StrLit(value='HI'),)),), newline=True, file=None)
+End()
+
 ## t1_for
 Assign(target=Var(name='A'), value=Lit(value=0))
 For(var=Var(name='B'), init=Lit(value=1), limit=Lit(value=5), step=Lit(value=1))

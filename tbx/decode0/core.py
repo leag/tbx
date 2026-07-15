@@ -1160,6 +1160,8 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 "max_off": 0,
                 "exit": next(o[0] for o in state.ops[state.k :] if o[1] == "fn_ret"),
                 "block": False,
+                "str": False,  # string-valued FN (result stored via INT A2)
+                "str_offs": set(),  # bp offsets of string params (INT 9E)
             }
             state.cur = None  # fall through to lift this op into the body
         if kind == "proc_enter":
@@ -1205,9 +1207,19 @@ def decode_user_code(exe: bytes) -> list[Any]:
         if handlers.calls(state, op, addr, kind):
             continue
         # --- DEF FN body & value-returning FN call ---
-        if kind == "mov_bp_imm":  # [bp+0/2]=0 result-slot init: multi-line DEF FN
-            assert state.fn_frame is not None  # only appears inside an open DEF FN body
-            state.fn_frame["block"] = True
+        if kind == "mov_bp_imm":  # [bp+n]=0 result-slot init in a DEF FN body:
+            # numeric/block FNs zero [bp+0] AND [bp+2]; a single-line STRING
+            # FN zeroes only [bp+2] (the descriptor's pointer word) -- so
+            # only the [bp+0] init marks the multi-line form (t1_fnstr).
+            if state.fn_frame is not None:
+                if op[2] == 0:
+                    state.fn_frame["block"] = True
+                elif op[2] != 2:
+                    raise ValueError(f"[bp+{op[2]}] init in DEF FN body at {addr:#x}")
+            elif op[3] != 0:  # caller: zero-init of a staged string-arg
+                raise ValueError(  # descriptor slot (t1_fnstr)
+                    f"mov [bp+{op[2]}],{op[3]} outside a DEF FN body at {addr:#x}"
+                )
             state.k += 1
             continue
         if kind == "fn_ret":  # close the open DEF FN body
@@ -1215,9 +1227,12 @@ def decode_user_code(exe: bytes) -> list[Any]:
             nparams = (
                 state.fn_frame["max_off"] // 4
             )  # P04 = 1, P08 = 2, ... (off 0 = result)
-            params = tuple(f"P{4 + 4 * i:02X}" for i in range(nparams))
+            params = tuple(
+                f"P{off:02X}$" if off in state.fn_frame["str_offs"] else f"P{off:02X}"
+                for off in (4 + 4 * i for i in range(nparams))
+            )
             state.nfn += 1
-            name = f"FNFN{state.nfn}"
+            name = f"FNFN{state.nfn}" + ("$" if state.fn_frame["str"] else "")
             state.proc_names[state.fn_frame["entry"]] = name
             if state.fn_frame["block"]:  # multi-line DEF FN ... END DEF
                 _apply_exit_folds(
@@ -1622,6 +1637,30 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 state.sstack.append(
                     state.loc(d) if d in state.lay["strs"] else state._pool_str(d)
                 )
+                state.k += 2
+                continue
+            if nxt == ("spush_bp",):  # push string param [bp+si]: DEF FN body
+                assert state.fn_frame is not None  # (witnessed t1_fnstr)
+                if d > state.fn_frame["max_off"]:
+                    state.fn_frame["max_off"] = d
+                state.fn_frame["str_offs"].add(d)
+                state.sstack.append(ir.Var(f"P{d:02X}$"))
+                state.k += 2
+                continue
+            if nxt == ("strassign_bp",):  # pop-store string to [bp+si]
+                if state.fn_frame is not None:  # FN result desc at [bp+0]
+                    if d != 0:
+                        raise ValueError(
+                            f"string store to [bp+{d}] in DEF FN body at {addr:#x}"
+                        )
+                    state.fn_frame["str"] = True
+                    if state.fn_frame["block"]:  # FNx$ = expr statement
+                        state.put(ir.FnResult(state.sstack.pop()), state.cur)
+                        state.cur = None
+                    else:  # single-line body expr
+                        state.fn_frame["result"] = state.sstack.pop()
+                else:  # caller: stage a string FN-call arg
+                    state.fn_args[d] = state.sstack.pop()
                 state.k += 2
                 continue
             if nxt == ("strassign",):  # pop-assign into a string var

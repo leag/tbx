@@ -251,6 +251,8 @@ class _Gen:
         self.option_base = 0  # current OPTION BASE for int-bound DIMs
         self.fns: list[str] = []  # hoisted inline DEF FN definitions
         self.fn_names: set[str] = set()
+        self.fn_params: dict[str, tuple[str, ...]] = {}  # FN name -> params
+        self.def_str = False  # the open DEF FN body is string-valued
         self.data: list[tuple[str, bool]] = []
         self.data_offset: dict[int, int] = {}  # top-level stmt index -> data cursor
         self.labels: set[int] = set()
@@ -404,6 +406,8 @@ class _Gen:
             return self.call(e, _STR_FUNCS)
         if isinstance(e, ir.Nullary):
             return self._nullary_str(e)
+        if isinstance(e, ir.FnCall) and e.name.endswith("$"):
+            return self.fncall(e)
         raise _Unsupported(f"string expression {type(e).__name__}")
 
     def call(self, e, table) -> str:
@@ -449,11 +453,16 @@ class _Gen:
         return f"(double)({m}_lo{k} + {m}_n{k} - 1)"
 
     def fncall(self, e) -> str:
-        if e.name.endswith("$"):
-            raise _Unsupported("string DEF FN")
         if e.name not in self.fn_names:
             raise _Unsupported(f"call to undefined {e.name}")
-        return f"fn_{_base(e.name)}({', '.join(self.num(a) for a in e.args)})"
+        params = self.fn_params[e.name]
+        if len(params) != len(e.args):
+            raise _Unsupported(f"{e.name}: arity mismatch")
+        args = [
+            self.s(a) if p.endswith("$") else self.num(a)
+            for p, a in zip(params, e.args)
+        ]
+        return f"fn_{_base(e.name)}({', '.join(args)})"
 
     def aref(self, e) -> str:
         # array names are slot-unique too: a SUB-local array got its own DIM
@@ -577,7 +586,8 @@ class _Gen:
         if isinstance(s, ir.FnResult):
             if not self.in_def:
                 raise _Unsupported("FN result store outside DEF FN")
-            return [f"fn_result = {self.num(s.value)};"]
+            v = self.s(s.value) if self.def_str else self.num(s.value)
+            return [f"fn_result = {v};"]
         if isinstance(s, ir.ExitDef):
             if not self.in_def:
                 raise _Unsupported("EXIT DEF outside DEF FN")
@@ -1064,19 +1074,23 @@ class _Gen:
         raise _Unsupported(f"statement {type(s).__name__}")
 
     def gen_deffn(self, s) -> None:
-        if s.name.endswith("$") or any(p.endswith("$") for p in s.params):
-            raise _Unsupported("string DEF FN")
+        is_str = s.name.endswith("$")
         old = self.params
         self.params = {p: f"p_{_base(p)}" for p in s.params}
-        args = ", ".join(f"double p_{_base(p)}" for p in s.params) or "void"
+        args = ", ".join(
+            f"{'char *' if p.endswith('$') else 'double '}p_{_base(p)}"
+            for p in s.params
+        ) or "void"
+        rty, zero = ("char *", '""') if is_str else ("double ", "0")
         try:
             if not s.is_block:
-                body = self.num(s.body)
+                body = self.s(s.body) if is_str else self.num(s.body)
                 self.fns.append(
-                    f"static double fn_{_base(s.name)}({args}) {{ return {body}; }}"
+                    f"static {rty}fn_{_base(s.name)}({args}) {{ return {body}; }}"
                 )
             else:
                 self.in_def = True
+                self.def_str = is_str
                 try:
                     lines = self.gen_body(s.body, [])
                 finally:
@@ -1084,8 +1098,8 @@ class _Gen:
                 self.fns.append(
                     "\n".join(
                         [
-                            f"static double fn_{_base(s.name)}({args}) {{",
-                            "    double fn_result = 0;",
+                            f"static {rty}fn_{_base(s.name)}({args}) {{",
+                            f"    {rty}fn_result = {zero};",
                             *("    " + ln for ln in lines),
                             "    return fn_result;",
                             "}",
@@ -1095,6 +1109,7 @@ class _Gen:
         finally:
             self.params = old
         self.fn_names.add(s.name)
+        self.fn_params[s.name] = s.params
 
     def gen_subdef(self, s, idx) -> None:
         if self.in_sub:
