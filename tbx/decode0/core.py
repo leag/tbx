@@ -237,11 +237,83 @@ class DecodeState:
         return int(node.name[1:].rstrip("%&#"), 16)
 
 
+def _region_refs(node) -> tuple[list[str], list[str]]:
+    """(scalar placeholder names, array names) referenced in an IR fragment,
+    each in first-appearance order. Dim counts as an array mention (it is one
+    at compile time: a runtime DIM in main makes the array main's)."""
+    vs: dict[str, None] = {}
+    ars: dict[str, None] = {}
+
+    def flat(v):
+        if isinstance(v, tuple):
+            for x in v:
+                yield from flat(x)
+        else:
+            yield v
+
+    def w(n):
+        if isinstance(n, ir.Var):
+            vs.setdefault(n.name)
+        elif isinstance(n, ir.ArrayRef):
+            ars.setdefault(n.name)
+        elif isinstance(n, ir.Erase):
+            ars.setdefault(n.name)
+        elif isinstance(n, (ir.GetGfx, ir.PutGfx)):
+            ars.setdefault(n.array)
+        elif isinstance(n, ir.Dim):
+            ars.setdefault(n.name)
+            for nm, _ in n.also:
+                ars.setdefault(nm)
+        for f in getattr(n, "__dataclass_fields__", ()):
+            for item in flat(getattr(n, f)):
+                if hasattr(item, "__dataclass_fields__"):
+                    w(item)
+
+    for s in flat(node) if isinstance(node, (tuple, list)) else (node,):
+        w(s)
+    return list(vs), list(ars)
+
+
+def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, int]]:
+    """Slot-scope attribution for SUB bodies (witnessed t1_subsh/t1_subarr/
+    t1_subad): TB gives every non-SHARED SUB variable/array its own local
+    static slot, so a slot referenced both inside a SUB body and anywhere
+    else can only be SHARED -- synthesize the declaration at body top.
+    Returns ({top index -> Shared statement for that SUB}, {array name ->
+    top index of the SUB it is local to} -- their synthesized DIM belongs
+    inside that body). DEF FN bodies need no treatment: their unlisted
+    variables are the main program's (existing DEF FN fixtures round-trip
+    with no declarations)."""
+    regions: list[tuple[int, list[str], list[str]]] = []
+    for i, s in enumerate(state.stmts):
+        if isinstance(s, ir.SubDef):
+            vs, ars = _region_refs(s.body)
+            regions.append((i, vs, ars))
+    main_stmts = [s for s in state.stmts if not isinstance(s, ir.SubDef)]
+    mvs, mars = _region_refs(tuple(main_stmts))
+    shared_subs: dict[int, ir.Shared] = {}
+    sub_local_arrays: dict[str, int] = {}
+    for i, vs, ars in regions:
+        other_v = set(mvs)
+        other_a = set(mars)
+        for j, ovs, oars in regions:
+            if j != i:
+                other_v |= set(ovs)
+                other_a |= set(oars)
+        names = [v for v in vs if v in other_v]
+        names += [a + "()" for a in ars if a in other_a]
+        sub_local_arrays.update({a: i for a in ars if a not in other_a})
+        if names:
+            shared_subs[i] = ir.Shared(tuple(names))
+    return shared_subs, sub_local_arrays
+
+
 def _finalize(state: DecodeState, addr) -> Program:
     """Program epilogue: static-DIM re-emit, control-flow folds, target
     resolution and canonical rename -> the finished Program."""
+    shared_subs, sub_local_arrays = _scope_procs(state)
     ob = state.option_base if state.option_base is not None else 0
-    dims, cur_ob = [], 0  # BASIC default at program top
+    dims, local_dims, cur_ob = [], {}, 0  # BASIC default at program top
     for a in reversed(state.arrs):
         if ob == 1 and set(a["lo"]) == {0} and a.get("varacc") and not a.get("subful"):
             # lo=0 record with SUB-FREE variable access in an OB1 program:
@@ -254,12 +326,42 @@ def _finalize(state: DecodeState, addr) -> Program:
             bounds = tuple(
                 h if lo == ob else (lo, h) for lo, h in zip(a["lo"], a["hi"])
             )
+        if a["name"] in sub_local_arrays:
+            # A SUB-local static array: its DIM belongs inside that body. Its
+            # record precedes every main record (SUB bodies are textually
+            # first, and records allocate in first-mention order), so
+            # splitting it out cannot reorder allocations -- checked below.
+            if want != cur_ob:
+                raise ValueError(
+                    "OPTION BASE change around a SUB-local array (no witness)"
+                )
+            if dims:
+                raise ValueError(
+                    "SUB-local array record after a main array record "
+                    "(allocation order would flip; no witness)"
+                )
+            local_dims.setdefault(sub_local_arrays[a["name"]], []).append(
+                ir.Dim(a["name"], bounds)
+            )
+            continue
         if want != cur_ob:
             dims.append(ir.OptionBase(want))
             cur_ob = want
         dims.append(ir.Dim(a["name"], bounds))
     if state.option_base == 1 and cur_ob != 1:  # runtime DIMs witness OB1
         dims.append(ir.OptionBase(1))  # (lo-store order)
+    # Rebuild SUB bodies: SHARED declaration first, then local static DIMs,
+    # then the decoded body (canonical order; verified byte-exact against the
+    # t1_subsh/t1_subarr/t1_subad witnesses).
+    for i, s in enumerate(state.stmts):
+        if not isinstance(s, ir.SubDef):
+            continue
+        prefix = []
+        if i in shared_subs:
+            prefix.append(shared_subs[i])
+        prefix.extend(local_dims.get(i, ()))
+        if prefix:
+            state.stmts[i] = ir.SubDef(s.name, s.params, tuple(prefix) + s.body)
     ins = 0  # static DIMs follow any proc definitions
     while ins < len(state.stmts) and isinstance(
         state.stmts[ins], (ir.SubDef, ir.DefFn)
@@ -385,7 +487,11 @@ def _finalize(state: DecodeState, addr) -> Program:
             "pooled string literals left unattached after the "
             "fre_str sites were served (unsupported shape)"
         )
-    prog = Program(canonical_rename(_resolve_targets(state.stmts, state.addrs)))
+    prog = Program(
+        canonical_rename(
+            _resolve_targets(state.stmts, state.addrs, state.stmt_addr)
+        )
+    )
     prog.metas = tuple((0, m) for m in state.metas) + tuple(ev_metas)
     prog.toggles = state.toggles
     if fixed_lines is not None:
@@ -455,7 +561,11 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     elif kind == "fild":
         if op[2] == 0x2C:
             raise ValueError(f"FILD [002C] without a bridge at {addr:#x}")
-        if op[2] in state.lay["scalars"]:
+        if op[2] == 0x74:  # runtime cells, not user slots (FP-context
+            state.stack.append(ir.Err())  # read, e.g. PRINT ERR --
+        elif op[2] == 0x72:  # witnessed t1_suberr)
+            state.stack.append(ir.Erl())
+        elif op[2] in state.lay["scalars"]:
             state.stack.append(state.loc(op[2]))  # integer variable read
         else:
             state.stack.append(state.pool_lit(op[2]))
@@ -731,7 +841,9 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 and isinstance(state.stmts[-1].target, tuple)
             ):
                 state.exit_folds.append((exit_stmt, state.stmts[-1].target[1], t))
-            state.put(ir.Goto(("addr", t)), state.cur)
+                state.put(ir.Goto(("addr", t)), state.cur)
+            else:  # bare (unconditional) EXIT SUB/DEF (witnessed t1_subgsb)
+                state.put(exit_stmt, state.cur)
         else:
             state.put(ir.Goto(("addr", t)), state.cur)
         state.cur = None
@@ -1058,6 +1170,9 @@ def decode_user_code(exe: bytes) -> list[Any]:
             )  # EXIT SUB fold (Task 3.5), body-local
             state.exit_folds.clear()
             body = tuple(state.stmts[state.proc_frame["idx"] :])
+            for st, ad in zip(body, state.addrs[state.proc_frame["idx"] :]):
+                if ad is not None:  # keep body addrs: GOSUB targets a body
+                    state.stmt_addr[id(st)] = ad  # line (t1_subgsb)
             del (
                 state.stmts[state.proc_frame["idx"] :],
                 state.addrs[state.proc_frame["idx"] :],
@@ -1099,6 +1214,9 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 )  # EXIT DEF fold (body-local)
                 state.exit_folds.clear()
                 body = tuple(state.stmts[state.fn_frame["idx"] :])
+                for st, ad in zip(body, state.addrs[state.fn_frame["idx"] :]):
+                    if ad is not None:  # keep body addrs (as in the SUB fold)
+                        state.stmt_addr[id(st)] = ad
                 del (
                     state.stmts[state.fn_frame["idx"] :],
                     state.addrs[state.fn_frame["idx"] :],

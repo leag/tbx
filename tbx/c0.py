@@ -258,7 +258,15 @@ class _Gen:
         self.params: dict[str, str] = {}  # active DEF FN / SUB param name -> C lvalue
         self.subs: dict[str, tuple[str, ...]] = {}  # SUB name -> params
         self.in_sub = False
+        self.sub_idx: int | None = None  # top-level index of the open SubDef
         self.in_def = False  # inside a multi-line DEF FN body
+        # main labels referenced from inside SUB bodies (GOTO/ON ERROR out of
+        # a SUB, witnessed t1_subgoto/t1_suberr): main() stores &&L{t} into a
+        # tb_xl{t} pointer at startup, and a cross-function GOTO longjmps back
+        # into main's dispatch (setjmp value 2; tb_error uses 1)
+        self.xlabels: set[int] = set()
+        self.uses_xgoto = False
+        self.body_labels: set[tuple[int, int]] = set()  # BodyLine jump targets
         self.uses_eh = False  # ON ERROR / RESUME / ERROR / ERR / ERL present
         self.uses_timer = False  # ON TIMER present: poll at statement boundaries
         self.uses_clear = False  # CLEAR / RUN present: generate tb_clear_all()
@@ -278,10 +286,10 @@ class _Gen:
     def var(self, name: str) -> str:
         if name in self.params:
             return self.params[name]
-        if self.in_sub:
-            # no corpus witness pins TB's local/shared default for SUB-body
-            # variables, so only parameters are allowed inside a SUB for now
-            raise _Unsupported(f"non-parameter variable {name} in SUB")
+        # Inside a SUB this is a local static (TB's default, witnessed
+        # t1_subdef: values persist across calls) or a SHARED main variable
+        # (t1_subsh) -- either way the decoder gave the slot a program-unique
+        # name, so one file-scope static per name is exactly TB's storage.
         cty, pre, zero = _VTYPES[_suffix_ty(name)]
         m = pre + _base(name)
         self.vars.setdefault(m, f"static {cty}{'' if cty.endswith('*') else ' '}{m} = {zero};")
@@ -448,8 +456,8 @@ class _Gen:
         return f"fn_{_base(e.name)}({', '.join(self.num(a) for a in e.args)})"
 
     def aref(self, e) -> str:
-        if self.in_sub:
-            raise _Unsupported("array access inside SUB (no SHARED witness)")
+        # array names are slot-unique too: a SUB-local array got its own DIM
+        # inside the body (t1_subad), a SHARED one is the main array (t1_subarr)
         ty, dims, rank = self.array(e.name, len(e.indices))
         if rank != len(e.indices):
             raise _Unsupported(f"rank mismatch on array {e.name}")
@@ -549,12 +557,18 @@ class _Gen:
         """C lines for one statement. `loops` is the open FOR/DO/WHILE label stack
         (shared across nesting so flat FOR..NEXT pairs match); `idx` is the
         top-level statement index or None inside a block body."""
-        if (self.in_sub or self.in_def) and isinstance(
+        if self.in_def and isinstance(
             s,
             (ir.Goto, ir.IfGoto, ir.Gosub, ir.Return, ir.OnGoto, ir.OnGosub,
              ir.OnError, ir.Resume),
         ):
-            raise _Unsupported(f"{type(s).__name__} inside a procedure (targets main labels)")
+            raise _Unsupported(f"{type(s).__name__} inside a DEF FN (targets main labels)")
+        if self.in_sub and isinstance(
+            s, (ir.OnGoto, ir.OnGosub, ir.Resume)
+        ):
+            raise _Unsupported(f"{type(s).__name__} inside a SUB")
+        if self.in_sub and isinstance(s, (ir.Goto, ir.IfGoto, ir.Gosub, ir.OnError)):
+            return self.gen_sub_flow(s)
         if isinstance(s, ir.FnResult):
             if not self.in_def:
                 raise _Unsupported("FN result store outside DEF FN")
@@ -573,6 +587,10 @@ class _Gen:
             return ["exit(0);"]
         if isinstance(s, (ir.Tron, ir.Troff)):
             return []
+        if isinstance(s, (ir.Goto, ir.IfGoto, ir.Gosub)) and isinstance(
+            s.target, ir.BodyLine
+        ):
+            raise _Unsupported("jump into a procedure body from main")
         if isinstance(s, ir.Goto):
             return [f"goto L{s.target};"]
         if isinstance(s, ir.IfGoto):
@@ -774,7 +792,11 @@ class _Gen:
             self.gen_deffn(s)
             return []
         if isinstance(s, ir.SubDef):
-            self.gen_subdef(s)
+            self.gen_subdef(s, idx)
+            return []
+        if isinstance(s, ir.Shared):
+            # scope declaration only: the decoder already resolved every name
+            # to its program-unique slot, so there is nothing to generate
             return []
         if isinstance(s, ir.CallStmt):
             return self.gen_call(s)
@@ -1069,17 +1091,34 @@ class _Gen:
             self.params = old
         self.fn_names.add(s.name)
 
-    def gen_subdef(self, s) -> None:
+    def gen_subdef(self, s, idx) -> None:
         if self.in_sub:
             raise _Unsupported("nested SUB")
         self.subs[s.name] = s.params
         old = self.params
         self.params = {p: f"(*p_{_base(p)})" for p in s.params}
         self.in_sub = True
+        self.sub_idx = idx
         try:
-            body = self.gen_body(s.body, [])
+            body, loops, multi = [], [], False
+            for k, b in enumerate(s.body):
+                if (idx, k + 1) in self.body_labels:
+                    # a GOSUB/GOTO targets this body physical line (t1_subgsb);
+                    # phys == k+1 only holds while every prior body statement
+                    # is single-line, as the decoder enforced at fold time
+                    if multi:
+                        raise _Unsupported(
+                            "body-line label past a multi-line statement in SUB"
+                        )
+                    body.append(f"LB{idx}_{k + 1}:;")
+                if isinstance(b, (ir.IfBlock, ir.SelectCase)):
+                    multi = True
+                body.extend(self.gen(b, loops, None))
+            if loops:
+                raise _Unsupported("unclosed loop in SUB body")
         finally:
             self.in_sub = False
+            self.sub_idx = None
             self.params = old
         sig = []
         for p in s.params:
@@ -1087,6 +1126,41 @@ class _Gen:
             sig.append(f"{cty}{'' if cty.endswith('*') else ' '}*p_{_base(p)}")
         head = f"static void sub_{_base(s.name)}({', '.join(sig) or 'void'}) {{"
         self.fns.append("\n".join([head, *("    " + ln for ln in body), "}"]))
+
+    def gen_sub_flow(self, s) -> list[str]:
+        """GOTO/GOSUB/ON ERROR inside a SUB body (witnessed t1_subgoto,
+        t1_subgsb, t1_suberr). Body-line targets stay function-local labels;
+        main-label targets go through the tb_xl* pointers. GOSUB can only
+        target the SUB's own body: labels-as-values cannot RETURN into
+        another function, and no probe witnesses TB accepting more."""
+        if isinstance(s, ir.OnError):
+            if s.target is None:
+                return ["tb_handler = 0;"]
+            if isinstance(s.target, ir.BodyLine):
+                raise _Unsupported("ON ERROR GOTO a procedure body line")
+            return [f"tb_handler = {self.xlabel(s.target)};"]
+        if isinstance(s, ir.Gosub):
+            if not isinstance(s.target, ir.BodyLine) or s.target.stmt != self.sub_idx:
+                raise _Unsupported("GOSUB out of a SUB body (no witness)")
+            n = self.uid()
+            return [
+                f"tb_gstack[tb_gsp++] = &&R{n}; "
+                f"goto LB{s.target.stmt}_{s.target.phys}; R{n}:;"
+            ]
+        if isinstance(s.target, ir.BodyLine):  # Goto / IfGoto within this SUB
+            if s.target.stmt != self.sub_idx:
+                raise _Unsupported("GOTO into another procedure body")
+            g = f"goto LB{s.target.stmt}_{s.target.phys};"
+        else:
+            self.uses_xgoto = True
+            g = f"tb_xgoto = {self.xlabel(s.target)}; longjmp(tb_env, 2);"
+        if isinstance(s, ir.IfGoto):
+            return [f"if {self.cond(s.cond)} {{ {g} }}"]
+        return [g]
+
+    def xlabel(self, t: int) -> str:
+        self.xlabels.add(t)
+        return f"tb_xl{t}"
 
     def gen_call(self, s) -> list[str]:
         if s.name not in self.subs:
@@ -1126,6 +1200,8 @@ class _Gen:
             if isinstance(node, (ir.Goto, ir.IfGoto, ir.Gosub)):
                 if isinstance(node.target, int):
                     self.labels.add(node.target)
+                elif isinstance(node.target, ir.BodyLine):
+                    self.body_labels.add((node.target.stmt, node.target.phys))
             if isinstance(node, (ir.OnGoto, ir.OnGosub)):
                 self.labels.update(t for t in node.targets if isinstance(t, int))
             if isinstance(node, (ir.OnError, ir.Resume)):
@@ -1199,11 +1275,24 @@ class _Gen:
                 for k in range(1, rank + 1):
                     parts.append(f"static long {m}_lo{k} = 0, {m}_n{k} = 0;")
         parts.extend(self.vars[k] for k in sorted(self.vars))
+        for t in sorted(self.xlabels):
+            parts.append(f"static void *tb_xl{t};")
+        if self.uses_xgoto:
+            parts.append("static void *tb_xgoto;")
         if self.uses_clear:
             parts.append("static void tb_clear_all(void);")
         parts.extend(self.fns)
         parts.append("int main(void) {")
-        if self.uses_eh:
+        for t in sorted(self.xlabels):
+            # main-label addresses for GOTO/ON ERROR inside SUB bodies
+            parts.append(f"    tb_xl{t} = &&L{t};")
+        if self.uses_xgoto:
+            # tb_error longjmps with 1, a cross-function GOTO with 2
+            parts.append(
+                "    switch (setjmp(tb_env)) "
+                "{ case 1: goto *tb_handler; case 2: goto *tb_xgoto; default:; }"
+            )
+        elif self.uses_eh:
             # tb_error longjmps here; the installed handler label takes over
             parts.append("    if (setjmp(tb_env)) goto *tb_handler;")
         parts.extend("    " + ln for ln in body)

@@ -1,0 +1,29 @@
+# v10_subdef dialect=1.0 start=070B0
+070B3:jmp:28892
+070B6:proc_enter
+070B9:fld1
+070BC:fold:+:292
+070C1:fstp:292
+070C8:movsi:312
+070CB:rt:156
+070CD:rt:190
+070CF:fld:292
+070D4:rt:187
+070D6:rt:184
+070DA:proc_ret:0
+070DC:fild:316
+070E1:fstp:288
+070E8:far_call:28854
+070ED:far_call:28854
+070F2:movsi:308
+070F5:rt:156
+070F7:rt:190
+070F9:fld:288
+070FE:rt:187
+07100:rt:184
+07104:epilogue
+# commits
+070C6
+070D8
+070E6
+07102

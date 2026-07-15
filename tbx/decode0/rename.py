@@ -275,6 +275,12 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.Rset(walk(s.target), walk(s.source))
         if isinstance(s, ir.MidAssign):
             return ir.MidAssign(walk(s.target), walk(s.start), walk(s.source))
+        if isinstance(s, ir.Shared):
+            # scalar names are V#### placeholders; array names ('V0()') are
+            # already canonical
+            return ir.Shared(
+                tuple(n if n.endswith("()") else name(n) for n in s.names)
+            )
         if isinstance(s, ir.SubDef):
             params = tuple(
                 name(p) for p in s.params

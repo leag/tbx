@@ -29,6 +29,39 @@ def emit(stmts) -> str:
         else {i: 10 * (i + 1) for i in range(len(stmts))}
     )
 
+    # Jump targets INSIDE a SUB/DEF FN body (ir.BodyLine): physical line k of
+    # the block at top-level index i is numbered line[i] + k, and only that
+    # targeted line is emitted numbered (witnessed t1_subgsb).
+    def flat(v):
+        if isinstance(v, tuple):
+            for x in v:
+                yield from flat(x)
+        else:
+            yield v
+
+    body_targets: set[tuple[int, int]] = set()
+
+    def scan(n):
+        for f in getattr(n, "__dataclass_fields__", ()):
+            for item in flat(getattr(n, f)):
+                if isinstance(item, ir.BodyLine):
+                    body_targets.add((item.stmt, item.phys))
+                elif hasattr(item, "__dataclass_fields__"):
+                    scan(item)
+
+    for s in stmts:
+        scan(s)
+
+    def L(t):
+        if isinstance(t, ir.BodyLine):
+            nxt = line.get(t.stmt + 1)
+            if nxt is not None and line[t.stmt] + t.phys >= nxt:
+                raise ValueError(
+                    f"body-line target {t} does not fit the line-number gap"
+                )
+            return line[t.stmt] + t.phys
+        return line[t]
+
     def block_lines(body, render):
         """Indent each body statement two spaces; multi-line statements indent every line."""
         out = []
@@ -39,22 +72,22 @@ def emit(stmts) -> str:
 
     def txt(s):
         if isinstance(s, ir.Goto):
-            return f"GOTO {line[s.target]}"
+            return f"GOTO {L(s.target)}"
         if isinstance(s, ir.IfGoto):
-            return f"IF {ir.unparse_cond(s.cond)} THEN {line[s.target]}"
+            return f"IF {ir.unparse_cond(s.cond)} THEN {L(s.target)}"
         if isinstance(s, ir.Gosub):
-            return f"GOSUB {line[s.target]}"
+            return f"GOSUB {L(s.target)}"
         if isinstance(s, (ir.OnGoto, ir.OnGosub)):
             kw = "GOTO" if isinstance(s, ir.OnGoto) else "GOSUB"
-            lines = ", ".join(str(line[t]) for t in s.targets)
+            lines = ", ".join(str(L(t)) for t in s.targets)
             return f"ON {ir.unparse(s.selector)} {kw} {lines}"
         if isinstance(s, ir.OnError):
-            return f"ON ERROR GOTO {0 if s.target is None else line[s.target]}"
+            return f"ON ERROR GOTO {0 if s.target is None else L(s.target)}"
         if isinstance(s, ir.OnTrap):
             n = "" if s.n is None else f"({ir.unparse(s.n)})"
-            return f"ON {s.event}{n} GOSUB {line[s.target]}"
+            return f"ON {s.event}{n} GOSUB {L(s.target)}"
         if isinstance(s, ir.Resume) and s.target is not None:
-            return f"RESUME {line[s.target]}"
+            return f"RESUME {L(s.target)}"
         if isinstance(s, ir.While):
             return f"WHILE {ir.unparse_cond(s.cond)}"
         if isinstance(s, ir.IfInline):
@@ -137,6 +170,19 @@ def emit(stmts) -> str:
             nums, hooks = hooks[:nt], hooks[nt:]
             out.extend(f"{n} {ln.strip()}\n" for n, ln in zip(nums, body[:nt]))
             out.extend(f"{ln}\n" for ln in body[nt:])  # untraced tail keeps its indent
+        elif any(t[0] in range(i, j) for t in body_targets):
+            # a body physical line is a jump target: emit it numbered
+            if j != i + 1:
+                raise ValueError("body-line target in a line-grouped statement")
+            body = text.split("\n")
+            targeted = {k for (si, k) in body_targets if si == i}
+            if not all(0 < k < len(body) for k in targeted):
+                raise ValueError(f"body-line target out of range at stmt {i}")
+            out.append(f"{line[i]} {body[0]}\n")
+            out.extend(
+                f"{line[i] + k} {ln.strip()}\n" if k in targeted else f"{ln}\n"
+                for k, ln in enumerate(body[1:], 1)
+            )
         else:
             out.append(f"{line[i]} {text}\n")
         i = j

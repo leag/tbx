@@ -1,0 +1,8 @@
+10 SUB SUB1
+  SHARED A
+  A = A + 1
+  PRINT "S"; A
+END SUB
+20 A = 5
+30 CALL SUB1
+40 PRINT "M"; A

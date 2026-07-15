@@ -802,6 +802,28 @@ class SubDef:
 
 
 @dataclass(frozen=True)
+class Shared:
+    """SHARED v[, v(), ...] -- inside a SUB/DEF FN body, binds names to the main
+    program's slots instead of procedure-local statics. Synthesized by the decoder
+    for any slot a procedure body references that is also referenced outside it
+    (TB gives every other procedure variable its own local-static slot, so a
+    cross-region slot can only mean SHARED -- witnessed t1_subsh/t1_subarr).
+    Array names carry a '()' suffix."""
+
+    names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class BodyLine:
+    """A jump target INSIDE a SUB/DEF FN body: physical line `phys` (1-based,
+    counting the header as 0) of the block at top-level statement index `stmt`.
+    emit0 numbers that body line `line[stmt] + phys` (witnessed t1_subgsb)."""
+
+    stmt: int
+    phys: int
+
+
+@dataclass(frozen=True)
 class CallStmt:
     """CALL name[(args)] -- invoke a SUB. Named CallStmt to avoid clashing with the
     expression `Call` (built-in intrinsics)."""

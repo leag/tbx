@@ -114,6 +114,7 @@ from tbx.ir.stmt_nodes import (
     Run,
     Screen,
     Seek,
+    Shared,
     Shell,
     Sound,
     Swap,
@@ -256,6 +257,8 @@ def _us_decl(s) -> str | None:
         return f"OPTION BASE {s.n}"
     if isinstance(s, Erase):
         return f"ERASE {s.name}"
+    if isinstance(s, Shared):
+        return "SHARED " + ", ".join(s.names)
 
 
 def _us_output(s) -> str | None:

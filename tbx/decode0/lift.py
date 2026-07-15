@@ -384,10 +384,37 @@ def _lift_midblock_troff(stmts, addrs, trace_tbl, orphans, stmt_addr, hook_seq):
     return new_s, new_a, fixed_lines, partial
 
 
-def _resolve_targets(stmts, addrs) -> list[Any]:
+def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
     """Replace ("addr", a) jump targets with statement indices. (Synthesized statements
-    like Dim carry a None address and are never jump targets.)"""
-    index = {a: i for i, a in enumerate(addrs) if a is not None}
+    like Dim carry a None address and are never jump targets.)
+
+    A target inside a SUB/DEF FN body resolves to ir.BodyLine(top_idx, phys):
+    emit0 numbers that body physical line. Body statement addresses ride in
+    `stmt_addr` (id(stmt) -> addr, captured at fold time). phys is the 1-based
+    physical-line offset from the header, so it is only computable while every
+    preceding body statement renders as one physical line -- anything else
+    raises loudly (only the witnessed flat-body shape, t1_subgsb)."""
+    index: dict[Any, Any] = {a: i for i, a in enumerate(addrs) if a is not None}
+    if stmt_addr:
+        for i, s in enumerate(stmts):
+            body = (
+                s.body
+                if isinstance(s, ir.SubDef)
+                or (isinstance(s, ir.DefFn) and s.is_block)
+                else ()
+            )
+            multi = False
+            for k, b in enumerate(body):
+                a = stmt_addr.get(id(b))
+                if a is not None and a not in index:
+                    if multi:
+                        raise ValueError(
+                            f"jump target {a:#x}: body line not addressable past "
+                            "a multi-line statement"
+                        )
+                    index[a] = ir.BodyLine(i, k + 1)
+                if isinstance(b, (ir.IfBlock, ir.SelectCase, ir.SubDef, ir.DefFn)):
+                    multi = True
 
     def fix(s):
         if isinstance(s, (ir.Goto, ir.IfGoto, ir.Gosub)):
@@ -438,6 +465,10 @@ def _resolve_targets(stmts, addrs) -> list[Any]:
             )
             ce = None if s.case_else is None else tuple(fix(b) for b in s.case_else)
             return ir.SelectCase(s.selector, arms, ce)
+        if isinstance(s, ir.SubDef):
+            return ir.SubDef(s.name, s.params, tuple(fix(b) for b in s.body))
+        if isinstance(s, ir.DefFn) and s.is_block:
+            return ir.DefFn(s.name, s.params, tuple(fix(b) for b in s.body), True)
         return s
 
     return [fix(s) for s in stmts]
