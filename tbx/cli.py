@@ -58,8 +58,8 @@ def main(argv=None) -> int:
     ap.add_argument(
         "--emit-c",
         action="store_true",
-        help="recompile to portable C for modern platforms (experimental; "
-        "build the output with `cc out.c -lm`)",
+        help="recompile to portable C for modern platforms "
+        "(build the output with `cc out.c -lm`)",
     )
     ap.add_argument(
         "--no-runtime",

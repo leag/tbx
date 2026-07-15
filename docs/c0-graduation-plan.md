@@ -105,6 +105,20 @@ Acceptance: `test_transpile_coverage_floor` stays 100% over the *grown*
 corpus; no `_Unsupported` message is reachable from a program real TB
 accepts, or it's documented why.
 
+**Status (2026-07-15): met.** SUB body variables are local-static by
+default (t1_subdef; STATIC is a byte-level no-op alias), SHARED is
+inferred from cross-region slot references and re-emitted (t1_subsh,
+t1_subarr), SUB-local arrays get their DIM inside the body (t1_subad) --
+all eight t1_sub* probes byte-exact verified, plus the v10_subdef dialect
+pair. String DEF FN landed both forms (t1_fnstr/t1_fnstrb, new INT
+9E/9F/A2 scan vectors), DIM rank 3 landed (t1_dim3/t1_dim3v; the
+variable-index probe also exposed and fixed a popop operand-orientation
+hole). TB accepts GOTO/GOSUB/ON ERROR inside procedures (probed): GOTO
+and ON ERROR out of a SUB and GOSUB within one are implemented
+(t1_subgoto/t1_suberr/t1_subgsb); the rest remain documented refusals --
+see the `_Unsupported` docstring in c0.py for the raise-site
+classification. Coverage floor: 100% over the grown corpus.
+
 ## Phase 3 — fix the silent divergences
 
 Ordered by user-visible impact:
@@ -134,6 +148,17 @@ Ordered by user-visible impact:
    in C double vs TB's 80-bit stack); optionally offer `long double`
    arithmetic on x86 builds if Phase 1 goldens show visible drift.
 
+**Status (2026-07-15): met (items 1-5).** RND is TB's exact generator,
+reversed from the runtime (an IVT-PEEK + BSAVE probe dumped the live code
+segment): Borland's 32-bit LCG `state*08088405h + 1`, output
+`(state>>1)*2^-31`, boot state FFFFFFFFh, RANDOMIZE stores the IEEE
+single bit pattern of its argument, RND(0) repeats, RND(<0) reseeds --
+native output matches the real machine digit-for-digit
+(t1_rndseq/t1_rndfn). Strings are binary-safe tb_str descriptors with
+statement-arena temporaries and owned-heap variable stores (t1_strnul;
+the zz_cv_mk* waivers are gone); Bounds/Overflow landed earlier; the x87
+divergence is documented in c0_runtime/README.md. TB_RT_VERSION 3.
+
 ## Phase 4 — platform CI and the release gate
 
 1. CI matrix for c0: Linux gcc + clang with SDL2 installed (the SDL
@@ -150,6 +175,12 @@ Ordered by user-visible impact:
 4. Drop "experimental" from README/CLI help when: Phase 1 goldens ≥90%
    and green, Phase 2 raises all witnessed-or-documented, Phase 3 items
    1–4 landed, CI matrix green.
+
+**Status (2026-07-15): met.** Items 1 and 3 landed earlier (platform
+matrix; TB_RT_VERSION + the surrogate contract in c0_runtime/README.md);
+item 2 is docs/release-checklist.md. With every gate satisfied and the
+matrix green, "experimental" is gone from the README and --emit-c help.
+The plan is complete.
 
 ## Sequencing and effort
 
