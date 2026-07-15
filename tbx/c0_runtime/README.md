@@ -58,15 +58,29 @@ mode, 75/76 path errors). Random-access records are the calibrated 128
 bytes; a never-FIELDed PUT writes a space-filled buffer where real DOS
 exposed live DGROUP memory (t1_putfile waiver).
 
+## Strings
+
+Strings are binary-safe length-carrying descriptors (`tb_str`, mirroring
+TB's own length+bytes string space): MK*$ images, CHR$(0) and INKEY$
+extended keys (`CHR$(0)+scan`) carry embedded NULs (zz_cv_mk*, t1_strnul
+dosout). Expression temporaries live in a statement-scoped arena that
+generated code resets at every top-level statement (never inside a SUB/
+DEF FN body, so CALL/FN argument temporaries survive the callee); variable
+and array-element stores take an owned heap copy through `tb_sstore`, so
+long-running programs no longer accumulate per-statement garbage. Every
+runtime-allocated buffer stays NUL-terminated for the OS-call view
+(`tb_cs`), but no string operation depends on termination.
+
 ## Known divergences (open plan items)
 
-- **Strings are NUL-terminated `char *`**: MK*$ images and CHR$(0) truncate
-  (zz_cv_mk* waivers). The string-descriptor refactor (graduation plan
-  phase 3) removes this class. String temporaries are never freed —
-  short-lived programs only.
-- **RND/RANDOMIZE** is the host `rand()`, not TB's generator (plan phase 3
-  pins the real sequence via oracle probes).
-- **Numerics evaluate in C double**, not TB's 80-bit x87 stack.
+- **Numerics evaluate in C double**, not TB's 80-bit x87 stack: TB keeps
+  intermediates at extended precision, so a chained expression can round
+  differently in the last few of its 16 printed digits. The dosout
+  comparison already clips to 13 significant digits for TB's own ~1e-14
+  conversion noise, which absorbs the difference everywhere witnessed; a
+  program that prints a full-precision chained result may still show a
+  tail-digit delta. (On x86 builds `long double` arithmetic could close
+  this; no golden has needed it.)
 - **TB 1.1's CASE IS codegen bug is not reproduced** (zz_sc3 waiver): c0
   keeps the handbook semantics until probes pin the compiled shape's
   behavior across DGROUP layouts.

@@ -278,15 +278,6 @@ _DOS_WAIVED: dict[str, str] = {
     "materialized boolean, so A=20 falls to CASE ELSE. c0 keeps the "
     "handbook semantics (20 > 10 -> BIG); reproducing the bug needs phase-2 "
     "probes to pin the hidden slot",
-    # the known binary-strings divergence, resolved by the string-descriptor
-    # refactor (graduation plan phase 3): MK*$ images embed NUL bytes that
-    # the runtime's NUL-terminated strings truncate
-    "zz_cv_mkd": "MKD$(2.5#) embeds NULs; native LEN 0, TB says 8 "
-    "(NUL-terminated string surrogate)",
-    "zz_cv_mkl": "MKL$(70000) embeds NULs; native LEN 3, TB says 4 "
-    "(NUL-terminated string surrogate)",
-    "zz_cv_mks": "MKS$(1.5#) embeds NULs; native LEN 0, TB says 4 "
-    "(NUL-terminated string surrogate)",
 }
 # file-comparison waivers: the screen still must match
 _DOS_FILE_WAIVED = {

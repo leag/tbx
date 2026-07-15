@@ -70,10 +70,10 @@ void tb_callabs(double off) {
 }
 
 /* BSAVE image header (GW-BASIC family): FD, seg, offset, length words */
-void tb_bsave(const char *f, double off, double len) {
+void tb_bsave(tb_str f, double off, double len) {
     unsigned long a = tb_addr(off);
     unsigned long n = (unsigned long)tb_i(len) & 0xFFFF;
-    FILE *fp = fopen(tb_s(f), "wb");
+    FILE *fp = fopen(tb_cs(f), "wb");
     if (!fp) tb_error(75);                              /* path/file access */
     unsigned char hdr[7] = {0xFD, (unsigned char)tb_seg,
                             (unsigned char)(tb_seg >> 8)};
@@ -84,8 +84,8 @@ void tb_bsave(const char *f, double off, double len) {
     fwrite(tb_mem + a, 1, n, fp);
     fclose(fp);
 }
-void tb_bload(const char *f, double off) {
-    FILE *fp = fopen(tb_s(f), "rb");
+void tb_bload(tb_str f, double off) {
+    FILE *fp = fopen(tb_cs(f), "rb");
     if (!fp) tb_error(53);                              /* file not found */
     unsigned char hdr[7];
     if (fread(hdr, 1, 7, fp) != 7 || hdr[0] != 0xFD) {
@@ -98,11 +98,11 @@ void tb_bload(const char *f, double off) {
     fclose(fp);
 }
 
-void tb_chain(const char *f) {
+void tb_chain(tb_str f) {
     /* DOS loads the chained program from the current directory, so exec
        "./name"; retry lowercased, the usual spelling of a recompiled file */
     char name[512];
-    const char *s = tb_s(f);
+    const char *s = tb_cs(f);
     fflush(NULL);
     for (int pass = 0; pass < 2; pass++) {
         size_t k = 0;

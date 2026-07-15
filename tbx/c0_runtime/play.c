@@ -54,13 +54,13 @@ static double tb_pl_dur(long l, const char **p) {
     while (**p == '.') { d += add; add /= 2; (*p)++; }
     return d;
 }
-void tb_play(const char *mml) {
+void tb_play(tb_str mml) {
     static const int semi[7] = {9, 11, 0, 2, 4, 5, 7};  /* A B C D E F G */
 #if TB_FILE_DEVICES
     static int reg = 0;
     if (!reg) { reg = 1; atexit(tb_wav_dump); }
 #endif
-    const char *p = tb_s(mml);
+    const char *p = tb_cs(mml);
     while (*p) {
         int c = *p++;
         if (c >= 'a' && c <= 'z') c -= 32;

@@ -6,10 +6,10 @@ FILE *tb_file(int n) {
     if (n < 1 || n > 15 || !tb_files[n]) tb_error(52);  /* bad file number */
     return tb_files[n];
 }
-void tb_open(const char *mode, int n, const char *name) {
+void tb_open(const char *mode, int n, tb_str name) {
     if (n < 1 || n > 15) tb_error(52);
     if (tb_files[n]) tb_error(55);                       /* file already open */
-    FILE *f = fopen(tb_s(name), mode);
+    FILE *f = fopen(tb_cs(name), mode);
     if (!f) tb_error(53);                                /* file not found */
     tb_files[n] = f;
 }
@@ -17,7 +17,7 @@ void tb_open(const char *mode, int n, const char *name) {
    FIELD vars snapshot the record buffer on GET and write into it on LSET/RSET */
 static char *tb_recbuf[16];
 static long tb_reclen[16], tb_fieldoff[16];
-typedef struct { int file; char **var; long off, w; } tb_fielddef;
+typedef struct { int file; tb_str *var; long off, w; } tb_fielddef;
 static tb_fielddef tb_fields[128];
 static int tb_nfields = 0;
 static void tb_drop_fields(int n) {
@@ -34,15 +34,15 @@ void tb_close(int n) {
     }
 }
 void tb_reset(void) { for (int i = 1; i < 16; i++) tb_close(i); }
-void tb_open_r(int n, const char *name) {
+void tb_open_r(int n, tb_str name) {
     if (n < 1 || n > 15) tb_error(52);
     if (tb_files[n]) tb_error(55);
-    FILE *f = fopen(tb_s(name), "r+b");
-    if (!f) f = fopen(tb_s(name), "w+b");
+    FILE *f = fopen(tb_cs(name), "r+b");
+    if (!f) f = fopen(tb_cs(name), "w+b");
     if (!f) tb_error(53);
     tb_files[n] = f;
     tb_reclen[n] = 128;
-    tb_recbuf[n] = tb_alloc(128);
+    tb_recbuf[n] = tb_halloc(128);                       /* persists across statements */
     memset(tb_recbuf[n], ' ', 128);
 }
 double tb_eof(double n) {
@@ -61,7 +61,7 @@ double tb_finput_num(int n) {
     if (c != ',' && c != EOF && c != '\n') ungetc(c, f);
     return v;
 }
-char *tb_finput_str(int n) {
+tb_str tb_finput_str(int n) {
     FILE *f = tb_file(n); int c;
     while ((c = fgetc(f)) == ' ') ;
     if (c == EOF) tb_error(62);
@@ -76,34 +76,38 @@ char *tb_finput_str(int n) {
         }
     }
     if (c != ',' && c != EOF && c != '\n') ungetc(c, f);
-    buf[k] = 0;
-    return tb_dup(buf);
+    tb_str r = tb_new(k);
+    memcpy(r.p, buf, k);
+    return r;
 }
 void tb_field_start(int n) {
     tb_file(n);
     tb_fieldoff[n] = 0;
     tb_drop_fields(n);
 }
-void tb_field_reg(int n, char **var, long w) {
+void tb_field_reg(int n, tb_str *var, long w) {
     if (tb_nfields >= 128 || !tb_recbuf[n] || tb_fieldoff[n] + w > tb_reclen[n])
         tb_error(50);                                    /* field overflow */
     tb_fields[tb_nfields++] = (tb_fielddef){n, var, tb_fieldoff[n], w};
     tb_fieldoff[n] += w;
-    *var = tb_space(w);
+    char *p = tb_halloc((size_t)w);                      /* owned, like any var */
+    memset(p, ' ', (size_t)w);
+    free(var->p);
+    *var = (tb_str){w, p};
 }
-void tb_lsetrset(char **var, const char *src, int right) {
-    src = tb_s(src);
+void tb_lsetrset(tb_str *var, tb_str src, int right) {
     tb_fielddef *fd = 0;
     for (int i = 0; i < tb_nfields; i++)
         if (tb_fields[i].var == var) { fd = &tb_fields[i]; break; }
-    long w = fd ? fd->w : (long)strlen(tb_s(*var));
-    long L = (long)strlen(src);
+    long w = fd ? fd->w : var->n;
+    long L = src.n;
     if (L > w) L = w;
-    char *out = tb_alloc(w);
-    memset(out, ' ', w);
-    memcpy(right ? out + (w - L) : out, src, L);
-    if (fd) memcpy(tb_recbuf[fd->file] + fd->off, out, w);
-    *var = out;
+    char *out = tb_halloc((size_t)w);
+    memset(out, ' ', (size_t)w);
+    if (L) memcpy(right ? out + (w - L) : out, src.p, (size_t)L);
+    if (fd) memcpy(tb_recbuf[fd->file] + fd->off, out, (size_t)w);
+    free(var->p);
+    *var = (tb_str){w, out};
 }
 void tb_getrec(int n, double rec) {
     FILE *f = tb_file(n);
@@ -113,9 +117,10 @@ void tb_getrec(int n, double rec) {
     if (fread(tb_recbuf[n], 1, (size_t)tb_reclen[n], f)) {}
     for (int i = 0; i < tb_nfields; i++)
         if (tb_fields[i].file == n) {
-            char *v = tb_alloc(tb_fields[i].w);
-            memcpy(v, tb_recbuf[n] + tb_fields[i].off, tb_fields[i].w);
-            *tb_fields[i].var = v;
+            char *v = tb_halloc((size_t)tb_fields[i].w);
+            memcpy(v, tb_recbuf[n] + tb_fields[i].off, (size_t)tb_fields[i].w);
+            free(tb_fields[i].var->p);
+            *tb_fields[i].var = (tb_str){tb_fields[i].w, v};
         }
 }
 void tb_putrec(int n, double rec) {
@@ -133,15 +138,20 @@ void tb_wnum(double v) {
     char b[64]; tb_fmt(v, b); tb_ps(b);
     if (tb_ch == 0) tb_ps(" ");
 }
-void tb_wstr(const char *s) { tb_ps("\""); tb_ps(tb_s(s)); tb_ps("\""); }
+void tb_wstr(tb_str s) { tb_ps("\""); tb_pss(s); tb_ps("\""); }
 /* PRINT USING: the # / . / + numeric-field subset; other format characters
    raise error 5 rather than misformat */
-static const char *tb_puf = "";
+static tb_str tb_puf = {0, 0};
 static size_t tb_pup = 0;
-void tb_pu_begin(const char *f) { tb_puf = tb_s(f); tb_pup = 0; }
+void tb_pu_begin(tb_str f) {
+    /* the format outlives the (arena) temporary it may arrive in */
+    free(tb_puf.p);
+    tb_puf = tb_sstore((tb_str){0, 0}, f);
+    tb_pup = 0;
+}
 void tb_pu_val(double v) {
-    const char *f = tb_puf;
-    size_t L = strlen(f);
+    const char *f = tb_cs(tb_puf);
+    size_t L = (size_t)tb_puf.n;
     int guard = 0;
     if (!L) tb_error(5);
     for (;; tb_pup++) {                                  /* literals up to the field */
@@ -169,48 +179,47 @@ void tb_pu_val(double v) {
     for (; pad > 0; pad--) tb_ps(" ");
     tb_ps(num);
 }
-/* MKx$/CVx: raw little-endian bytes in a string. Caveat of the C string
-   model: interior zero bytes truncate, so round trips through string ops
-   are only exact when the encoded bytes avoid embedded NULs. */
-static char *tb_mkbytes(const void *p, size_t n) {
-    char *s = tb_alloc(n); memcpy(s, p, n); return s;
+/* MKx$/CVx: raw little-endian bytes in a string -- binary-safe now that
+   descriptors carry their length (MKI$(256) holds its embedded NUL). */
+static tb_str tb_mkbytes(const void *p, size_t n) {
+    tb_str s = tb_new(n); memcpy(s.p, p, n); return s;
 }
-static void tb_cvbytes(const char *s, void *out, size_t n) {
-    s = tb_s(s);
-    size_t L = strlen(s);
+static void tb_cvbytes(tb_str s, void *out, size_t n) {
+    size_t L = (size_t)s.n;
     if (L > n) L = n;
-    memset(out, 0, n); memcpy(out, s, L);
+    memset(out, 0, n);
+    if (L) memcpy(out, s.p, L);
 }
-char *tb_mki(double v) { short x = (short)tb_i(v); return tb_mkbytes(&x, 2); }
-char *tb_mkl(double v) { int x = (int)tb_i(v); return tb_mkbytes(&x, 4); }
-char *tb_mks(double v) { float x = (float)v; return tb_mkbytes(&x, 4); }
-char *tb_mkd(double v) { return tb_mkbytes(&v, 8); }
-double tb_cvi(const char *s) { short x; tb_cvbytes(s, &x, 2); return x; }
-double tb_cvl(const char *s) { int x; tb_cvbytes(s, &x, 4); return x; }
-double tb_cvs(const char *s) { float x; tb_cvbytes(s, &x, 4); return x; }
-double tb_cvd(const char *s) { double x; tb_cvbytes(s, &x, 8); return x; }
+tb_str tb_mki(double v) { short x = (short)tb_i(v); return tb_mkbytes(&x, 2); }
+tb_str tb_mkl(double v) { int x = (int)tb_i(v); return tb_mkbytes(&x, 4); }
+tb_str tb_mks(double v) { float x = (float)v; return tb_mkbytes(&x, 4); }
+tb_str tb_mkd(double v) { return tb_mkbytes(&v, 8); }
+double tb_cvi(tb_str s) { short x; tb_cvbytes(s, &x, 2); return x; }
+double tb_cvl(tb_str s) { int x; tb_cvbytes(s, &x, 4); return x; }
+double tb_cvs(tb_str s) { float x; tb_cvbytes(s, &x, 4); return x; }
+double tb_cvd(tb_str s) { double x; tb_cvbytes(s, &x, 8); return x; }
 /* MKDIR: the POSIX form takes a mode argument, the Windows CRT form does not */
-void tb_mkdir(const char *path) {
+void tb_mkdir(tb_str path) {
 #ifdef _WIN32
-    if (mkdir(path)) {}
+    if (mkdir(tb_cs(path))) {}
 #else
-    if (mkdir(path, 0777)) {}
+    if (mkdir(tb_cs(path), 0777)) {}
 #endif
 }
 /* DOS paths spell the separator '\' */
-static const char *tb_dospath(const char *path) {
+static const char *tb_dospath(tb_str path) {
     static char buf[512];
-    size_t n = strlen(tb_s(path));
+    size_t n = (size_t)path.n;
     if (n >= sizeof buf) n = sizeof buf - 1;
     for (size_t i = 0; i < n; i++) {
-        char c = tb_s(path)[i];
+        char c = path.p[i];
         buf[i] = c == '\\' ? '/' : c;
     }
     buf[n] = 0;
     return buf;
 }
 /* CHDIR to a missing path is TB error 76, Path not found (t1_chdir dosout) */
-void tb_chdir(const char *path) {
+void tb_chdir(tb_str path) {
 #ifdef _WIN32
     if (_chdir(tb_dospath(path))) tb_error(76);
 #else
@@ -219,7 +228,7 @@ void tb_chdir(const char *path) {
 }
 /* RMDIR of a missing (or non-empty) directory is TB error 75, Path/File
    access error (t1_rmdir dosout) */
-void tb_rmdir(const char *path) {
+void tb_rmdir(tb_str path) {
 #ifdef _WIN32
     if (_rmdir(tb_dospath(path))) tb_error(75);
 #else

@@ -46,21 +46,32 @@ FILE *tb_lpt(void) {
     }
     return f;
 }
-const char *tb_s(const char *s) { return s ? s : ""; }
+void tb_pss(tb_str s) {
+    if (!tb_out) tb_out = stdout;
+    for (long i = 0; i < s.n; i++) {
+        fputc(s.p[i], tb_out);
+        if (s.p[i] == '\n') {
+            tb_col = 0;
+            if (tb_ch == 0) tb_row++;
+        } else {
+            tb_col++;
+        }
+    }
+}
 /* --- clock offsets (DATE$/TIME$ assignment shifts a process-local clock) --- */
 static double tb_clk_off = 0;
 static time_t tb_now_wall(void) { return time(NULL) + (time_t)tb_clk_off; }
 static struct tm *tb_now_tm(void) { time_t t = tb_now_wall(); return localtime(&t); }
-void tb_set_time(const char *s) {
+void tb_set_time(tb_str s) {
     int h = 0, m = 0, sec = 0;
-    sscanf(tb_s(s), "%d:%d:%d", &h, &m, &sec);
+    sscanf(tb_cs(s), "%d:%d:%d", &h, &m, &sec);
     struct tm *lt = tb_now_tm();
     tb_clk_off += (h * 3600 + m * 60 + sec)
         - (lt->tm_hour * 3600 + lt->tm_min * 60 + lt->tm_sec);
 }
-void tb_set_date(const char *s) {
+void tb_set_date(tb_str s) {
     int mo = 1, d = 1, y = 1980;
-    sscanf(tb_s(s), "%d-%d-%d", &mo, &d, &y);
+    sscanf(tb_cs(s), "%d-%d-%d", &mo, &d, &y);
     struct tm want = *tb_now_tm();
     want.tm_mon = mo - 1; want.tm_mday = d; want.tm_year = y - 1900;
     tb_clk_off += difftime(mktime(&want), tb_now_wall());
@@ -143,78 +154,155 @@ void tb_delay(double secs) {
     nanosleep(&ts, NULL);
 #endif
 }
+/* Statement-scoped arena for expression temporaries: generated code calls
+   tb_sr() at every top-level statement (never inside a SUB/DEF FN body,
+   so CALL/FN argument temps outlive the callee's statements). A statement
+   needing more than the current block grows into a chained block that the
+   next tb_sr() releases. */
+static char *tb_ar = 0;                     /* primary block */
+static size_t tb_ar_cap = 0, tb_ar_off = 0;
+static struct tb_arblk { struct tb_arblk *next; } *tb_ar_extra = 0;
 char *tb_alloc(size_t n) {
+    if (!tb_ar) {
+        tb_ar_cap = (size_t)1 << 20;
+        tb_ar = malloc(tb_ar_cap);
+        if (!tb_ar) { fputs("out of memory\n", stderr); exit(1); }
+    }
+    if (tb_ar_off + n + 1 > tb_ar_cap) {    /* oversize: dedicated block */
+        struct tb_arblk *b = malloc(sizeof *b + n + 1);
+        if (!b) { fputs("out of memory\n", stderr); exit(1); }
+        b->next = tb_ar_extra;
+        tb_ar_extra = b;
+        char *p = (char *)(b + 1);
+        p[n] = 0;
+        return p;
+    }
+    char *p = tb_ar + tb_ar_off;
+    tb_ar_off += n + 1;
+    p[n] = 0;
+    return p;
+}
+void tb_sr(void) {
+    while (tb_ar_extra) {
+        struct tb_arblk *b = tb_ar_extra;
+        tb_ar_extra = b->next;
+        free(b);
+    }
+    tb_ar_off = 0;
+}
+char *tb_halloc(size_t n) {
     char *p = malloc(n + 1);
     if (!p) { fputs("out of memory\n", stderr); exit(1); }
     p[n] = 0; return p;
 }
-char *tb_dup(const char *s) { char *p = tb_alloc(strlen(s)); strcpy(p, s); return p; }
-char *tb_cat(const char *a, const char *b) {
-    a = tb_s(a); b = tb_s(b);
-    char *p = tb_alloc(strlen(a) + strlen(b));
-    strcpy(p, a); strcat(p, b); return p;
+tb_str tb_new(size_t n) { return (tb_str){ (long)n, tb_alloc(n) }; }
+/* Variable store: copy the value into an owned heap buffer, then release
+   the previous one. Copy-before-free keeps self-assignment (A$ = A$ + ...
+   already copied to the arena; plain A$ = A$ aliases) safe. */
+tb_str tb_sstore(tb_str old, tb_str val) {
+    char *p = tb_halloc((size_t)val.n);
+    if (val.n) memcpy(p, val.p, (size_t)val.n);
+    free(old.p);
+    return (tb_str){ val.n, p };
 }
-double tb_len(const char *s) { return (double)strlen(tb_s(s)); }
-double tb_asc(const char *s) { return (double)(unsigned char)tb_s(s)[0]; }
-double tb_val(const char *s) { return strtod(tb_s(s), NULL); }
-char *tb_chr(double c) { char *p = tb_alloc(1); p[0] = (char)tb_i(c); return p; }
-char *tb_strS(double v) {
+tb_str tb_borrow(const char *z) { return (tb_str){ (long)strlen(z), (char *)z }; }
+long tb_cmp(tb_str a, tb_str b) {
+    long n = a.n < b.n ? a.n : b.n;
+    int c = n ? memcmp(a.p, b.p, (size_t)n) : 0;
+    return c ? c : a.n - b.n;
+}
+tb_str tb_cat(tb_str a, tb_str b) {
+    tb_str r = tb_new((size_t)(a.n + b.n));
+    if (a.n) memcpy(r.p, a.p, (size_t)a.n);
+    if (b.n) memcpy(r.p + a.n, b.p, (size_t)b.n);
+    return r;
+}
+double tb_len(tb_str s) { return (double)s.n; }
+double tb_asc(tb_str s) { return s.n ? (double)(unsigned char)s.p[0] : 0; }
+double tb_val(tb_str s) { return strtod(tb_cs(s), NULL); }
+tb_str tb_chr(double c) { tb_str r = tb_new(1); r.p[0] = (char)tb_i(c); return r; }
+tb_str tb_strS(double v) {
     char b[64]; tb_fmt(v, b);
-    char *p = tb_alloc(strlen(b) + 1);
-    if (v >= 0) { p[0] = ' '; strcpy(p + 1, b); } else strcpy(p, b);
-    return p;
+    size_t L = strlen(b);
+    if (v >= 0) {
+        tb_str r = tb_new(L + 1);
+        r.p[0] = ' '; memcpy(r.p + 1, b, L);
+        return r;
+    }
+    tb_str r = tb_new(L); memcpy(r.p, b, L); return r;
 }
-char *tb_space(double n) {
+tb_str tb_space(double n) {
     long k = tb_i(n) < 0 ? 0 : tb_i(n);
-    char *p = tb_alloc(k); memset(p, ' ', k); return p;
+    tb_str r = tb_new((size_t)k); memset(r.p, ' ', (size_t)k); return r;
 }
-char *tb_stringS(double n, double c) {
+tb_str tb_stringS(double n, double c) {
     long k = tb_i(n) < 0 ? 0 : tb_i(n);
-    char *p = tb_alloc(k); memset(p, (char)tb_i(c), k); return p;
+    tb_str r = tb_new((size_t)k); memset(r.p, (char)tb_i(c), (size_t)k); return r;
 }
-char *tb_left(const char *s, double n) {
-    s = tb_s(s); size_t L = strlen(s), k = tb_i(n) < 0 ? 0 : (size_t)tb_i(n);
-    if (k > L) k = L;
-    char *p = tb_alloc(k); memcpy(p, s, k); return p;
+tb_str tb_left(tb_str s, double n) {
+    long k = tb_i(n) < 0 ? 0 : tb_i(n);
+    if (k > s.n) k = s.n;
+    tb_str r = tb_new((size_t)k);
+    if (k) memcpy(r.p, s.p, (size_t)k);
+    return r;
 }
-char *tb_right(const char *s, double n) {
-    s = tb_s(s); size_t L = strlen(s), k = tb_i(n) < 0 ? 0 : (size_t)tb_i(n);
-    if (k > L) k = L;
-    return tb_dup(s + (L - k));
+tb_str tb_right(tb_str s, double n) {
+    long k = tb_i(n) < 0 ? 0 : tb_i(n);
+    if (k > s.n) k = s.n;
+    tb_str r = tb_new((size_t)k);
+    if (k) memcpy(r.p, s.p + (s.n - k), (size_t)k);
+    return r;
 }
-char *tb_mid(const char *s, double start, double len) {
-    s = tb_s(s); size_t L = strlen(s);
+tb_str tb_mid(tb_str s, double start, double len) {
     long st = tb_i(start); if (st < 1) st = 1;
-    if ((size_t)st > L) return tb_dup("");
-    size_t avail = L - (st - 1), k = len < 0 ? avail : (size_t)tb_i(len);
+    if (st > s.n) return tb_new(0);
+    long avail = s.n - (st - 1), k = len < 0 ? avail : tb_i(len);
     if (k > avail) k = avail;
-    char *p = tb_alloc(k); memcpy(p, s + st - 1, k); return p;
+    if (k < 0) k = 0;
+    tb_str r = tb_new((size_t)k);
+    if (k) memcpy(r.p, s.p + st - 1, (size_t)k);
+    return r;
 }
-double tb_instr(double start, const char *a, const char *b) {
-    a = tb_s(a); b = tb_s(b);
+double tb_instr(double start, tb_str a, tb_str b) {
     long st = tb_i(start); if (st < 1) st = 1;
-    if ((size_t)st > strlen(a)) return 0;
-    const char *hit = strstr(a + st - 1, b);
-    return hit ? (double)(hit - a + 1) : 0;
+    if (st > a.n) return 0;
+    if (b.n == 0) return (double)st;  /* empty needle hits at the start */
+    for (long i = st - 1; i + b.n <= a.n; i++)
+        if (!memcmp(a.p + i, b.p, (size_t)b.n)) return (double)(i + 1);
+    return 0;
 }
-char *tb_ucase(const char *s) {
-    char *p = tb_dup(tb_s(s));
-    for (char *q = p; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
-    return p;
+static tb_str tb_mapcase(tb_str s, int up) {
+    tb_str r = tb_new((size_t)s.n);
+    for (long i = 0; i < s.n; i++) {
+        char c = s.p[i];
+        if (up && c >= 'a' && c <= 'z') c -= 32;
+        if (!up && c >= 'A' && c <= 'Z') c += 32;
+        r.p[i] = c;
+    }
+    return r;
 }
-char *tb_lcase(const char *s) {
-    char *p = tb_dup(tb_s(s));
-    for (char *q = p; *q; q++) if (*q >= 'A' && *q <= 'Z') *q += 32;
-    return p;
+tb_str tb_ucase(tb_str s) { return tb_mapcase(s, 1); }
+tb_str tb_lcase(tb_str s) { return tb_mapcase(s, 0); }
+tb_str tb_ltrim(tb_str s) {
+    long i = 0;
+    while (i < s.n && s.p[i] == ' ') i++;
+    tb_str r = tb_new((size_t)(s.n - i));
+    if (r.n) memcpy(r.p, s.p + i, (size_t)r.n);
+    return r;
 }
-char *tb_ltrim(const char *s) { s = tb_s(s); while (*s == ' ') s++; return tb_dup(s); }
-char *tb_rtrim(const char *s) {
-    char *p = tb_dup(tb_s(s));
-    for (size_t L = strlen(p); L && p[L - 1] == ' '; L--) p[L - 1] = 0;
-    return p;
+tb_str tb_rtrim(tb_str s) {
+    long L = s.n;
+    while (L && s.p[L - 1] == ' ') L--;
+    tb_str r = tb_new((size_t)L);
+    if (L) memcpy(r.p, s.p, (size_t)L);
+    return r;
 }
-char *tb_hex(double v) { char b[24]; sprintf(b, "%lX", tb_i(v) & 0xFFFF); return tb_dup(b); }
-char *tb_oct(double v) { char b[24]; sprintf(b, "%lo", tb_i(v) & 0xFFFF); return tb_dup(b); }
+static tb_str tb_from_c(const char *b) {
+    size_t L = strlen(b);
+    tb_str r = tb_new(L); memcpy(r.p, b, L); return r;
+}
+tb_str tb_hex(double v) { char b[24]; sprintf(b, "%lX", tb_i(v) & 0xFFFF); return tb_from_c(b); }
+tb_str tb_oct(double v) { char b[24]; sprintf(b, "%lo", tb_i(v) & 0xFFFF); return tb_from_c(b); }
 /* TB's INPUT echoes the typed characters and the Enter newline to the
    screen itself. Under a terminal the tty layer already does that; with
    redirected stdin nothing would, so echo the read line then -- keeping
@@ -229,29 +317,29 @@ static void tb_input_line(char *line, size_t n) {
 #endif
     tb_col = 0;
 }
-double tb_input_num(const char *prompt, int mark) {
-    if (prompt) tb_ps(prompt);
+double tb_input_num(tb_str prompt, int mark) {
+    if (prompt.p) tb_pss(prompt);
     if (mark) tb_ps("? ");
     char line[256];
     tb_input_line(line, sizeof line);
     return strtod(line, NULL);
 }
-char *tb_input_str(const char *prompt, int mark) {
-    if (prompt) tb_ps(prompt);
+tb_str tb_input_str(tb_str prompt, int mark) {
+    if (prompt.p) tb_pss(prompt);
     if (mark) tb_ps("? ");
     char line[256];
     tb_input_line(line, sizeof line);
-    return tb_dup(line);
+    return tb_from_c(line);
 }
-char *tb_dateS(void) {
+tb_str tb_dateS(void) {
     struct tm *lt = tb_now_tm(); char b[40];
     sprintf(b, "%02d-%02d-%04d", lt->tm_mon + 1, lt->tm_mday, lt->tm_year + 1900);
-    return tb_dup(b);
+    return tb_from_c(b);
 }
-char *tb_timeS(void) {
+tb_str tb_timeS(void) {
     struct tm *lt = tb_now_tm(); char b[16];
     sprintf(b, "%02d:%02d:%02d", lt->tm_hour, lt->tm_min, lt->tm_sec);
-    return tb_dup(b);
+    return tb_from_c(b);
 }
 void *tb_calloc(long n, size_t w) {
     void *p = calloc(n > 0 ? n : 1, w);

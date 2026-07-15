@@ -241,9 +241,9 @@ void tb_window(int has_rect, double x1, double y1, double x2, double y2, int abs
     tb_wset = 1; tb_wabs = absolute;
     tb_wx1 = x1; tb_wy1 = y1; tb_wx2 = x2; tb_wy2 = y2;
 }
-void tb_draw(const char *cmd) {
+void tb_draw(tb_str cmd) {
     tb_gfx();
-    const char *p = tb_s(cmd);
+    const char *p = tb_cs(cmd);
     double scale = 1;
     while (*p) {
         char op = *p >= 'a' && *p <= 'z' ? (char)(*p - 32) : *p;

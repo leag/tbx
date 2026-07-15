@@ -1179,6 +1179,18 @@ Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None
 Print(items=(Call(name='STR$', args=(Lit(value=42),)),), newline=True, file=None)
 End()
 
+## t1_strnul
+Assign(target=Var(name='A$'), value=Call(name='MKI$', args=(Lit(value=256),)))
+Print(items=(Call(name='LEN', args=(Var(name='A$'),)), Call(name='CVI', args=(Var(name='A$'),))), newline=True, file=None)
+Assign(target=Var(name='B$'), value=BinOp(op='+', lhs=Call(name='CHR$', args=(Lit(value=0),)), rhs=StrLit(value='X')))
+Print(items=(Call(name='LEN', args=(Var(name='B$'),)), Call(name='ASC', args=(Call(name='RIGHT$', args=(Var(name='B$'), Lit(value=1))),))), newline=True, file=None)
+Assign(target=Var(name='C$'), value=StrLit(value=''))
+For(var=Var(name='D'), init=Lit(value=1), limit=Lit(value=100), step=Lit(value=1))
+Assign(target=Var(name='C$'), value=BinOp(op='+', lhs=Var(name='C$'), rhs=StrLit(value='AB')))
+NextStmt(var=Var(name='D'))
+Print(items=(Call(name='LEN', args=(Var(name='C$'),)), Call(name='INSTR', args=(Var(name='B$'), Call(name='CHR$', args=(Lit(value=0),))))), newline=True, file=None)
+End()
+
 ## t1_subad
 SubDef(name='SUB1', params=(), body=(Dim(name='V0', bounds=(10,), also=()), Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=42)), Print(items=(StrLit(value='S'), ArrayRef(name='V0', indices=(Lit(value=1),))), newline=True, file=None)))
 Dim(name='V1', bounds=(10,), also=())

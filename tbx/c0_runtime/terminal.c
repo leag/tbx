@@ -65,23 +65,25 @@ void tb_color(int has_fg, double fg, int has_bg, double bg) {
     }
     if (has_bg) { sprintf(b, "\033[4%dm", tb_cga[(int)bg & 7]); tb_esc(b); }
 }
-char *tb_inkey(void) {
+static tb_str tb_key1(int c) { tb_str r = tb_new(1); r.p[0] = (char)c; return r; }
+tb_str tb_inkey(void) {
     int k = tb_sdl_inkey();           /* -1: no SDL window, use the terminal */
-    if (k >= 0) {
-        char b[2] = {(char)k, 0};
-        return tb_dup(k ? b : "");
-    }
+    if (k >= 0) return k ? tb_key1(k) : tb_new(0);
 #ifdef _WIN32
     int ch;
     if (!_isatty(0)) {
         ch = getchar();
-        if (ch == EOF) return tb_dup("");
+        if (ch == EOF) return tb_new(0);
     } else {
-        if (!_kbhit()) return tb_dup("");
+        if (!_kbhit()) return tb_new(0);
         ch = _getch();
-        /* extended key: TB would return CHR$(0)+scan, but the C string model
-           truncates at NUL, so swallow the scan byte and report no key */
-        if (ch == 0 || ch == 0xE0) { _getch(); return tb_dup(""); }
+        if (ch == 0 || ch == 0xE0) {
+            /* extended key: CHR$(0) + scan code, TB's two-byte form --
+               descriptors carry the embedded NUL */
+            tb_str r = tb_new(2);
+            r.p[0] = 0; r.p[1] = (char)_getch();
+            return r;
+        }
     }
 #else
     int fl = fcntl(0, F_GETFL);
@@ -96,10 +98,9 @@ char *tb_inkey(void) {
     char ch; long n = read(0, &ch, 1);
     fcntl(0, F_SETFL, fl);
     if (tty) tcsetattr(0, TCSANOW, &old);
-    if (n != 1) return tb_dup("");
+    if (n != 1) return tb_new(0);
 #endif
-    char b[2] = {(char)ch, 0};
-    return tb_dup(b);
+    return tb_key1((unsigned char)ch);
 }
 #ifdef _WIN32
 /* DOS wildcard match (* and ?), case-insensitive: the fnmatch surrogate */
@@ -121,8 +122,8 @@ static int tb_match(const char *pat, const char *s) {
 #else
 #define tb_fnmatch(p, n) fnmatch(p, n, FNM_CASEFOLD)
 #endif
-void tb_files_(const char *spec) {
-    const char *pat = tb_s(spec);
+void tb_files_(tb_str spec) {
+    const char *pat = tb_cs(spec);
     if (!*pat || !strcmp(pat, "*.*")) pat = "*";
     DIR *d = opendir(".");
     if (!d) tb_error(76);                                /* path not found */
@@ -134,9 +135,11 @@ void tb_files_(const char *spec) {
     }
     closedir(d);
 }
-char *tb_bin(double v) {
-    char b[20]; int k = 19; b[k] = 0;
+tb_str tb_bin(double v) {
+    char b[20]; int k = 19;
     unsigned x = (unsigned)tb_i(v) & 0xFFFF;
     do { b[--k] = (char)('0' + (x & 1)); x >>= 1; } while (x);
-    return tb_dup(b + k);
+    tb_str r = tb_new((size_t)(19 - k));
+    memcpy(r.p, b + k, (size_t)r.n);
+    return r;
 }

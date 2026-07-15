@@ -173,7 +173,7 @@ _VTYPES = {
     "INT": ("short", "i_", "0"),
     "LNG": ("int", "l_", "0"),  # TB `&` long: 32-bit signed
     "DBL": ("double", "d_", "0"),
-    "STR": ("char *", "s_", '""'),
+    "STR": ("tb_str", "s_", "{0, 0}"),
 }
 # store conversion applied on assignment, per TB variable type
 _STORE_CAST = {
@@ -234,7 +234,22 @@ def _is_str(e) -> bool:
 
 
 class _Unsupported(ValueError):
-    pass
+    """Fail-loud refusal to translate. The remaining raise sites fall into
+    three classes (graduation-plan phase 2.5 sweep):
+
+    1. Internal-consistency guards, unreachable from decoded IR: the decoder
+       is itself fail-loud over the same vocabulary, so mismatched NEXT/WEND/
+       LOOP, undefined FN/SUB calls, arity/rank mismatches, RESTORE to a
+       non-DATA index, unknown statement/expression nodes and the like can
+       only arise from hand-built IR, never from a corpus EXE.
+    2. TB-illegal constructs the compiler rejects at compile time (nested
+       SUB, SWAP across types): no EXE can witness them.
+    3. TB-legal but unwitnessed corners, each with the probe status in a
+       comment at the site (DIM rank > 3, GOSUB out of a SUB body,
+       OnGoto/OnGosub/Resume inside procedures, jumps into procedure
+       bodies): these stay refusals -- never mistranslations -- until a
+       probe pins the semantics and a fixture witnesses the bytes.
+    """
 
 
 class _Gen:
@@ -389,11 +404,11 @@ class _Gen:
         raise _Unsupported(f"string intrinsic {e.name}")
 
     def s(self, e) -> str:
-        """Render e as a C char*-valued expression."""
+        """Render e as a C tb_str-valued expression."""
         if isinstance(e, _Raw):
             return e.code
         if isinstance(e, ir.StrLit):
-            return _cstr(e.value)
+            return f"TB_S({_cstr(e.value)})"
         if isinstance(e, ir.Var):
             return self.var(e.name)
         if isinstance(e, ir.ArrayRef):
@@ -501,7 +516,7 @@ class _Gen:
         if isinstance(e, ir.RelOp):
             op = {"=": "==", "<>": "!="}.get(e.op, e.op)
             if _is_str(e.lhs) or _is_str(e.rhs):
-                return f"(strcmp(tb_s({self.s(e.lhs)}), tb_s({self.s(e.rhs)})) {op} 0)"
+                return f"(tb_cmp({self.s(e.lhs)}, {self.s(e.rhs)}) {op} 0)"
             return f"({self.num(e.lhs)} {op} {self.num(e.rhs)})"
         if isinstance(e, ir.LogOp):
             c = "&&" if e.op == "AND" else "||"
@@ -519,7 +534,16 @@ class _Gen:
         else:
             raise _Unsupported(f"assign target {type(target).__name__}")
         if ty == "STR":
-            return f"{dst} = {self.s(value)};"
+            # every string slot owns a heap copy (tb_sstore frees the old
+            # one) -- EXCEPT a DEF FN by-value param, whose current value is
+            # the caller's (arena/literal) buffer and must not be freed
+            if (
+                isinstance(target, ir.Var)
+                and target.name in self.params
+                and not self.in_sub
+            ):
+                return f"{dst} = {self.s(value)};"
+            return f"{dst} = tb_sstore({dst}, {self.s(value)});"
         return f"{dst} = {self.store_cast(ty).format(self.num(value))};"
 
     def store_cast(self, ty: str) -> str:
@@ -533,7 +557,7 @@ class _Gen:
             if isinstance(item, ir.Call) and item.name in ("TAB", "SPC"):
                 out.append(f"tb_{item.name.lower()}({self.num(item.args[0])});")
             elif _is_str(item):
-                out.append(f"tb_ps(tb_s({self.s(item)}));")
+                out.append(f"tb_pss({self.s(item)});")
             else:
                 out.append(f"tb_pn({self.num(item)});")
         if s.newline:
@@ -704,25 +728,29 @@ class _Gen:
             n = self.uid()
             is_str = _is_str(s.selector)
             sel = f"tb_sel{n}"
-            self.vars[sel] = f"static {'char *' if is_str else 'double '}{sel} = {'0' if is_str else '0'};"
+            self.vars[sel] = (
+                f"static tb_str {sel} = {{0, 0}};"
+                if is_str
+                else f"static double {sel} = 0;"
+            )
             lines = [f"{sel} = {self.s(s.selector) if is_str else self.num(s.selector)};"]
 
             def guard(g) -> str:
                 if isinstance(g, ir.CaseValue):
                     if is_str:
-                        return f"(strcmp(tb_s({sel}), tb_s({self.s(g.value)})) == 0)"
+                        return f"(tb_cmp({sel}, {self.s(g.value)}) == 0)"
                     return f"({sel} == {self.num(g.value)})"
                 if isinstance(g, ir.CaseRange):
                     if is_str:
                         return (
-                            f"(strcmp(tb_s({sel}), tb_s({self.s(g.lo)})) >= 0 && "
-                            f"strcmp(tb_s({sel}), tb_s({self.s(g.hi)})) <= 0)"
+                            f"(tb_cmp({sel}, {self.s(g.lo)}) >= 0 && "
+                            f"tb_cmp({sel}, {self.s(g.hi)}) <= 0)"
                         )
                     return f"({sel} >= {self.num(g.lo)} && {sel} <= {self.num(g.hi)})"
                 if isinstance(g, ir.CaseIs):
                     op = {"=": "==", "<>": "!="}.get(g.op, g.op)
                     if is_str:
-                        return f"(strcmp(tb_s({sel}), tb_s({self.s(g.value)})) {op} 0)"
+                        return f"(tb_cmp({sel}, {self.s(g.value)}) {op} 0)"
                     return f"({sel} {op} {self.num(g.value)})"
                 raise _Unsupported(f"case guard {type(g).__name__}")
 
@@ -757,9 +785,9 @@ class _Gen:
                     else "NUM"
                 )
                 src = (
-                    "tb_dup(tb_data[tb_data_p++])"
+                    "tb_borrow(tb_data[tb_data_p++])"
                     if ty == "STR"
-                    else "tb_val(tb_data[tb_data_p++])"
+                    else "tb_val(tb_borrow(tb_data[tb_data_p++]))"
                 )
                 out.append(self.assign(t, _Raw(src, ty == "STR")))
             return out
@@ -770,11 +798,19 @@ class _Gen:
             return [f"tb_data_p = {off};"]
         if isinstance(s, ir.Input):
             fn = "tb_input_str" if _suffix_ty(s.var.name) == "STR" else "tb_input_num"
-            prompt = _cstr(s.prompt.value) if s.prompt is not None else "NULL"
+            prompt = (
+                f"TB_S({_cstr(s.prompt.value)})"
+                if s.prompt is not None
+                else "((tb_str){0, 0})"
+            )
             mark = "0" if (s.prompt is not None and s.comma) else "1"
             return [self.assign(s.var, _Raw(f"{fn}({prompt}, {mark})", fn.endswith("str")))]
         if isinstance(s, ir.LineInput):
-            prompt = _cstr(s.prompt.value) if s.prompt is not None else "NULL"
+            prompt = (
+                f"TB_S({_cstr(s.prompt.value)})"
+                if s.prompt is not None
+                else "((tb_str){0, 0})"
+            )
             return [self.assign(s.var, _Raw(f"tb_input_str({prompt}, 0)", True))]
         if isinstance(s, ir.Swap):
             a, b = self.var(s.a.name), self.var(s.b.name)
@@ -795,13 +831,15 @@ class _Gen:
         if isinstance(s, ir.Randomize):
             return [f"tb_randomize({self.num(s.seed)});"]
         if isinstance(s, ir.MidAssign):
+            # in-place overlay: the target keeps its length; the owned
+            # buffer is writable, so patch it directly
             tgt = self.var(s.target.name)
             n = self.uid()
             return [
-                f"{{ char *t{n} = tb_dup(tb_s({tgt})); const char *m{n} = tb_s({self.s(s.source)});",
-                f"  long p{n} = tb_i({self.num(s.start)}) - 1, L{n} = (long)strlen(t{n});",
-                f"  for (long k{n} = 0; m{n}[k{n}] && p{n} + k{n} < L{n}; k{n}++) t{n}[p{n} + k{n}] = m{n}[k{n}];",
-                f"  {tgt} = t{n}; }}",
+                f"{{ tb_str m{n} = {self.s(s.source)};",
+                f"  long p{n} = tb_i({self.num(s.start)}) - 1;",
+                f"  for (long k{n} = 0; k{n} < m{n}.n && p{n} + k{n} < {tgt}.n; k{n}++)"
+                f" {tgt}.p[p{n} + k{n}] = m{n}.p[k{n}]; }}",
             ]
         if isinstance(s, ir.DefFn):
             self.gen_deffn(s)
@@ -889,18 +927,19 @@ class _Gen:
             has_bg = "1" if s.bg is not None else "0"
             return [f"tb_color({has_fg}, {fg}, {has_bg}, {bg});"]
         if isinstance(s, ir.Shell):
-            return [f"if (system({self.s(s.cmd)})) {{}}"]
+            return [f"if (system(tb_cs({self.s(s.cmd)}))) {{}}"]
         if isinstance(s, ir.Chdir):
             # a missing path is TB error 76 (witnessed: t1_chdir dosout)
             return [f"tb_chdir({self.s(s.path)});"]
         if isinstance(s, ir.Environ):
-            return [f"putenv(tb_dup({self.s(s.s)}));"]
+            # putenv keeps the pointer: hand it an owned heap copy
+            return [f"putenv(tb_sstore((tb_str){{0, 0}}, {self.s(s.s)}).p);"]
         if isinstance(s, ir.Kill):
             # a missing file is TB error 53 (witnessed: t1_kill dosout)
-            return [f"if (remove({self.s(s.file)})) tb_error(53);"]
+            return [f"if (remove(tb_cs({self.s(s.file)}))) tb_error(53);"]
         if isinstance(s, ir.Name):
             # a missing source file is TB error 53 (witnessed: t1_name dosout)
-            return [f"if (rename({self.s(s.old)}, {self.s(s.new)})) tb_error(53);"]
+            return [f"if (rename(tb_cs({self.s(s.old)}), tb_cs({self.s(s.new)}))) tb_error(53);"]
         if isinstance(s, ir.Files):
             return [f"tb_files_({self.s(s.spec)});"]
         if isinstance(s, ir.DateTimeSet):
@@ -1078,10 +1117,10 @@ class _Gen:
         old = self.params
         self.params = {p: f"p_{_base(p)}" for p in s.params}
         args = ", ".join(
-            f"{'char *' if p.endswith('$') else 'double '}p_{_base(p)}"
+            f"{'tb_str ' if p.endswith('$') else 'double '}p_{_base(p)}"
             for p in s.params
         ) or "void"
-        rty, zero = ("char *", '""') if is_str else ("double ", "0")
+        rty, zero = ("tb_str ", "{0, 0}") if is_str else ("double ", "0")
         try:
             if not s.is_block:
                 body = self.s(s.body) if is_str else self.num(s.body)
@@ -1204,12 +1243,22 @@ class _Gen:
             else:
                 cty, _, _ = _VTYPES[ty]
                 t = f"t{self.uid()}"
-                val = self.s(a) if ty == "STR" else self.store_cast(ty).format(self.num(a))
+                if ty == "STR":
+                    # the temp must be an OWNED slot: the SUB may assign
+                    # through the reference (tb_sstore frees the old buffer)
+                    val = f"tb_sstore((tb_str){{0, 0}}, {self.s(a)})"
+                else:
+                    val = self.store_cast(ty).format(self.num(a))
                 tmps.append(f"{cty}{'' if cty.endswith('*') else ' '}{t} = {val};")
                 args.append(f"&{t}")
         call = f"sub_{_base(s.name)}({', '.join(args)});"
         if tmps:
-            return ["{", *tmps, call, "}"]
+            frees = [
+                f"free({t.split()[1]}.p);"
+                for t in tmps
+                if t.startswith("tb_str ")
+            ]
+            return ["{", *tmps, call, *frees, "}"]
         return [call]
 
     # --- whole program ---
@@ -1267,6 +1316,10 @@ class _Gen:
                     f"if (tb_timer_due()) {{ tb_gstack[tb_gsp++] = &&T{i}; "
                     f"goto *tb_timer_hdl; }} T{i}:;"
                 )
+            # statement boundary: release string-expression temporaries
+            # (top level only -- SUB/DEF FN bodies run inside the caller's
+            # statement, so their temps must survive until it ends)
+            body.append("tb_sr();")
             body.extend(self.gen(st, loops, i))
         if self.uses_eh:
             body.append(f"L{len(self.stmts)}:;")
@@ -1321,8 +1374,10 @@ class _Gen:
         if self.uses_clear:
             clr = ["static void tb_clear_all(void) {", "    tb_reset();"]
             for m in sorted(self.vars):
-                zero = '""' if "char *" in self.vars[m] else "0"
-                clr.append(f"    {m} = {zero};")
+                if "tb_str" in self.vars[m]:
+                    clr.append(f"    free({m}.p); {m} = (tb_str){{0, 0}};")
+                else:
+                    clr.append(f"    {m} = 0;")
             for name, (ty, dims, rank) in sorted(self.arrays.items()):
                 _, pre, _ = _VTYPES[ty]
                 m = f"a{pre}{_base(name)}"
