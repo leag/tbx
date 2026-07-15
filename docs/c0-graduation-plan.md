@@ -69,6 +69,18 @@ Acceptance: ≥90% of the corpus carries a dosout golden and passes; every
 waiver names its surrogate; the ~25 hand-pinned expectations become
 derived from (or checked against) captured goldens.
 
+**Status (2026-07-15): met.** The full sweep captured 297/321 eligible
+stems (92.5%); the 24 absences are documented in `dump_dos_output.SKIP`
+with verified structural reasons (TRON EXEs stall in their trace hook on
+the real machine, RUN/`zz_ginf` never exit, graphics modes lose the text
+screen, bare LINE INPUT has no prompt to key on, two runs complete on
+screen but the harness cannot confirm the DOS prompt returned). All
+goldens pass `test_c0.py::test_dos_golden`; waivers name their surrogate.
+Notable finds along the way: TB 1.1's CASE IS codegen bug (zz_sc3), \/MOD
+16-bit FIST-indefinite conversion, WRITE's console-only trailing space,
+the floating-bus INP(255), and ~1e-14 tail noise in TB's own
+binary->decimal conversion.
+
 ## Phase 2 — close the vocabulary holes with witnesses
 
 Author probe .BAS programs, oracle-compile them (TB 1.1 + TB 1.0 for the

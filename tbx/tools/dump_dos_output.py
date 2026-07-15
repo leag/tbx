@@ -62,12 +62,38 @@ KEYS = {
 }
 
 
-# bare LINE INPUT prints no prompt, so there is nothing on the screen to
-# synchronize the keystrokes on -- and keys sent on a timer get dropped by
-# the statement's startup. No golden until the harness can see the cursor.
+# Stems with no capturable golden, so --missing does not retry them. The
+# 2026-07 full sweep captured 297/321 eligible stems; every absence below
+# has a verified structural reason.
+_TRON_HANG = (
+    "TRON EXE stalls in the trace hook on the real machine (witnessed: "
+    "t1_tron prints its first [line] marker and never returns to DOS)"
+)
 SKIP = {
+    # bare LINE INPUT prints no prompt, so there is nothing on the screen to
+    # synchronize the keystrokes on -- and keys sent on a timer get dropped
+    # by the statement's startup. No golden until the harness sees the cursor.
     "t1_inp3": "bare LINE INPUT: no screen marker to synchronize keys on",
     "t1_file2": "bare LINE INPUT: no screen marker to synchronize keys on",
+    # programs that never return to the DOS prompt
+    "t1_run": "RUN restarts the program forever",
+    "zz_ginf": "infinite DO loop by design",
+    "t1_calla": "CALL ABSOLUTE at a bare address: no machine code there",
+    "t1_screen": "SCREEN 1 enters a graphics mode; the text screen is lost",
+    "t1_scr": "runs to completion on screen (HI at 10,20) but the harness "
+    "never sees the DOS prompt return after CLS/LOCATE -- no confirmed-"
+    "complete capture",
+    "t1_shell": "SHELL DIR completes on screen but the sub-shell confuses "
+    "the harness's prompt-return detection -- no confirmed-complete capture",
+    **{
+        s: _TRON_HANG
+        for s in (
+            "t1_tron", "t1_tron2", "t1_tron2r", "t1_tron2r2", "t1_troncase",
+            "t1_tronerb", "t1_tronerr", "t1_tronfor", "t1_trongoto",
+            "t1_tronif", "t1_tronml", "t1_tronres", "t1_tronsplit",
+            "t1_tronwh", "t1_troffin", "t1_evtron",
+        )
+    },
 }
 
 
