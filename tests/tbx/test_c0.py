@@ -17,6 +17,7 @@ video backend run under SDL's dummy driver.
 
 import glob
 import os
+import re
 import shutil
 import subprocess
 
@@ -97,8 +98,9 @@ def test_recompiled_output(stem, tmp_path):
 @pytest.mark.skipif(_CC is None, reason="no host C compiler")
 def test_tab_and_file_print(tmp_path):
     # t1_tab: TAB/SPC on the console and inside PRINT #1 (per-channel columns)
+    # piped stdin: INPUT echoes the line like TB's screen would
     out = _run("t1_tab", tmp_path, stdin="3\n")
-    assert out == "? A      3 \n   B\n  C\n"
+    assert out == "? 3\nA      3 \n   B\n  C\n"
     assert (tmp_path / "R.TXT").read_text() == "X     Y         3 \n"
 
 
@@ -107,7 +109,7 @@ def test_print_using(tmp_path):
     # t1_pr2: PRINT USING "#.#"-family fields on console and into a file;
     # the format cycles when values outnumber fields
     out = _run("t1_pr2", tmp_path, stdin="3\n")
-    assert out == "? A 3 B\nX 3.00\n3.0 3.0\n"
+    assert out == "? 3\nA 3 B\nX 3.00\n3.0 3.0\n"
     assert (tmp_path / "R.TXT").read_text() == " 3 \n 3.00 3.00\n"
 
 
@@ -240,6 +242,76 @@ def test_sdl_backend_runs_headless(tmp_path):
         )
         assert r.returncode == 0, r.stderr
         assert r.stdout == expect
+
+
+# --- DOS behavior goldens (tests/fixtures/dosout/) ---
+# Captured from the ORIGINAL corpus EXEs running on the real (emulated)
+# machine by tbx/tools/dump_dos_output.py -- the c0 analog of the byte-exact
+# rule: the recompiled native binary must reproduce what the original EXE
+# visibly did. Normalization: lines rstripped on both sides (the screen
+# mirror right-strips), native stdout+stderr combined (TB prints runtime
+# errors to the screen; natively they go to stderr), produced files compared
+# after CRLF->LF. Waivers name the documented surrogate that makes an exact
+# match impossible.
+
+_DOSOUT = os.path.join(_ROOT, "fixtures", "dosout")
+_DOS_WAIVED: dict[str, str] = {}
+# file-comparison waivers: the screen still must match
+_DOS_FILE_WAIVED = {
+    "t1_bsave": "BSAVE writes the real DGROUP segment and its live memory; "
+    "the emulated machine (machine.c) is zero-filled with a synthetic segment",
+}
+
+# untrapped runtime errors: TB prints "Error N  at pgm-ctr: X" (no line table
+# in these EXEs), the native runtime "Error N in line L" -- same error, other
+# locator; both normalize to "Error N"
+_ERR_RE = re.compile(r"^(Error \d+)( +at pgm-ctr: \d+| in line \d+)$")
+
+
+def _dos_stems():
+    return sorted(
+        os.path.basename(p)[: -len(".txt")]
+        for p in glob.glob(os.path.join(_DOSOUT, "*.txt"))
+    )
+
+
+def _norm_lines(text):
+    lines = [ln.rstrip() for ln in text.splitlines()]
+    lines = [_ERR_RE.sub(r"\1", ln) for ln in lines]
+    while lines and not lines[-1]:
+        lines.pop()
+    while lines and not lines[0]:
+        lines.pop(0)
+    return lines
+
+
+@pytest.mark.skipif(_CC is None, reason="no host C compiler")
+@pytest.mark.parametrize("stem", _dos_stems())
+def test_dos_golden(stem, tmp_path):
+    if stem in _DOS_WAIVED:
+        pytest.skip(_DOS_WAIVED[stem])
+    from tbx.tools.dump_dos_output import native_stdin
+
+    golden = open(os.path.join(_DOSOUT, f"{stem}.txt")).read()
+    exe = _build(stem, tmp_path)
+    r = subprocess.run(
+        [str(exe)],
+        input=native_stdin(stem),
+        capture_output=True,
+        text=True,
+        timeout=10,
+        cwd=str(tmp_path),
+    )
+    assert _norm_lines(r.stdout + r.stderr) == _norm_lines(golden)
+    if stem in _DOS_FILE_WAIVED:
+        return
+    for fgold in glob.glob(os.path.join(_DOSOUT, f"{stem}.file.*")):
+        name = os.path.basename(fgold).split(".file.", 1)[1]
+        native = tmp_path / name
+        assert native.is_file(), f"native run did not produce {name}"
+        want = open(fgold, "rb").read().replace(b"\r\n", b"\n")
+        got = native.read_bytes().replace(b"\r\n", b"\n")
+        assert got == want, f"{name} differs"
 
 
 def test_transpile_coverage_floor():

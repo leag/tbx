@@ -162,21 +162,32 @@ char *tb_rtrim(const char *s) {
 }
 char *tb_hex(double v) { char b[24]; sprintf(b, "%lX", tb_i(v) & 0xFFFF); return tb_dup(b); }
 char *tb_oct(double v) { char b[24]; sprintf(b, "%lo", tb_i(v) & 0xFFFF); return tb_dup(b); }
+/* TB's INPUT echoes the typed characters and the Enter newline to the
+   screen itself. Under a terminal the tty layer already does that; with
+   redirected stdin nothing would, so echo the read line then -- keeping
+   the visible output identical to a real DOS run (the dosout goldens). */
+static void tb_input_line(char *line, size_t n) {
+    if (!fgets(line, n, stdin)) { line[0] = 0; }
+    line[strcspn(line, "\r\n")] = 0;
+#ifdef _WIN32
+    if (!_isatty(0)) { tb_ps(line); tb_ps("\n"); return; }
+#else
+    if (!isatty(0)) { tb_ps(line); tb_ps("\n"); return; }
+#endif
+    tb_col = 0;
+}
 double tb_input_num(const char *prompt, int mark) {
     if (prompt) tb_ps(prompt);
     if (mark) tb_ps("? ");
     char line[256];
-    if (!fgets(line, sizeof line, stdin)) return 0;
-    tb_col = 0;
+    tb_input_line(line, sizeof line);
     return strtod(line, NULL);
 }
 char *tb_input_str(const char *prompt, int mark) {
     if (prompt) tb_ps(prompt);
     if (mark) tb_ps("? ");
     char line[256];
-    if (!fgets(line, sizeof line, stdin)) return tb_dup("");
-    tb_col = 0;
-    line[strcspn(line, "\r\n")] = 0;
+    tb_input_line(line, sizeof line);
     return tb_dup(line);
 }
 char *tb_dateS(void) {
