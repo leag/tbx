@@ -126,7 +126,13 @@ void tb_putrec(int n, double rec) {
     fflush(f);
 }
 /* WRITE layout: comma separators, quoted strings, numbers without padding */
-void tb_wnum(double v) { char b[64]; tb_fmt(v, b); tb_ps(b); }
+/* WRITE numbers drop the leading sign-space of the number image; on the
+   CONSOLE they keep its trailing space ("1 ,2 ", t1_write dosout) while
+   WRITE # writes compactly ("1,\"A\"", t1_writefile dosout) */
+void tb_wnum(double v) {
+    char b[64]; tb_fmt(v, b); tb_ps(b);
+    if (tb_ch == 0) tb_ps(" ");
+}
 void tb_wstr(const char *s) { tb_ps("\""); tb_ps(tb_s(s)); tb_ps("\""); }
 /* PRINT USING: the # / . / + numeric-field subset; other format characters
    raise error 5 rather than misformat */

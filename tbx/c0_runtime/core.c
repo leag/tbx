@@ -96,6 +96,25 @@ void tb_spc(double n) { for (int i = 0; i < (int)n; i++) tb_ps(" "); }
 /* CINT: round half to even (the x87/IEEE default nearbyint mode). */
 double tb_cint(double v) { return nearbyint(v); }
 long tb_i(double v) { return (long)tb_cint(v); }
+/* IDE Options toggles, honored as compiled (Program.toggles): c0 emits
+   these only when the source EXE had the toggle ON, matching TB's
+   compile-in-or-not behavior.  Bounds: every subscript range-checks to
+   error 9.  Overflow: integer stores range-check to error 6 (with the
+   toggle off both TB and the C cast wrap silently). */
+long tb_bix(long i, long lo, long n) {
+    if (i < lo || i >= lo + n) tb_error(9);       /* subscript out of range */
+    return i - lo;
+}
+short tb_ichk(double v) {
+    double r = tb_cint(v);
+    if (r < -32768.0 || r > 32767.0) tb_error(6); /* overflow */
+    return (short)r;
+}
+int tb_lchk(double v) {
+    double r = tb_cint(v);
+    if (r < -2147483648.0 || r > 2147483647.0) tb_error(6);
+    return (int)r;
+}
 double tb_div(double a, double b) { if (b == 0) tb_error(11); return a / b; }
 double tb_idiv(double a, double b) { if (tb_i(b) == 0) tb_error(11); return (double)(tb_i(a) / tb_i(b)); }
 double tb_mod(double a, double b) { if (tb_i(b) == 0) tb_error(11); return (double)(tb_i(a) % tb_i(b)); }

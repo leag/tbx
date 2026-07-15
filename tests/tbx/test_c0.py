@@ -272,6 +272,15 @@ _DOS_WAIVED: dict[str, str] = {
     "t1_shellvar": "SHELL with an empty command starts the resident shell "
     "(the FreeCom banner in the golden); natively system('') is a no-op -- "
     "the child shell is environmental",
+    # the known binary-strings divergence, resolved by the string-descriptor
+    # refactor (graduation plan phase 3): MK*$ images embed NUL bytes that
+    # the runtime's NUL-terminated strings truncate
+    "zz_cv_mkd": "MKD$(2.5#) embeds NULs; native LEN 0, TB says 8 "
+    "(NUL-terminated string surrogate)",
+    "zz_cv_mkl": "MKL$(70000) embeds NULs; native LEN 3, TB says 4 "
+    "(NUL-terminated string surrogate)",
+    "zz_cv_mks": "MKS$(1.5#) embeds NULs; native LEN 0, TB says 4 "
+    "(NUL-terminated string surrogate)",
 }
 # file-comparison waivers: the screen still must match
 _DOS_FILE_WAIVED = {
@@ -354,6 +363,62 @@ def test_dos_golden(stem, tmp_path):
         want = open(fgold, "rb").read().replace(b"\r\n", b"\n")
         got = native.read_bytes().replace(b"\r\n", b"\n")
         assert got == want, f"{name} differs"
+
+
+# --- IDE Options toggles (Program.toggles) ---
+# Bounds and Overflow are honored as compiled, like TB itself: the flagged
+# corpus fixture gets the checks, its unflagged twin does not, and a flagged
+# in-range program behaves identically to the unflagged one. The error
+# branches (TB errors 9 and 6) have no corpus witness that trips them, so
+# synthetic programs pin them against the handbook semantics.
+
+
+@pytest.mark.skipif(_CC is None, reason="no host C compiler")
+def test_options_toggles(tmp_path):
+    from tbx import ir
+
+    assert _CC is not None
+    # standalone=False: only the generated code, not the embedded runtime.
+    # (fov_t1_and, the Overflow-flagged fixture, has no integer stores, so
+    # its emitted code is identical to the unflagged twin's -- the Overflow
+    # error branch is pinned by the synthetic program below instead.)
+    assert "tb_bix" in c0.emit_c(_decode("fbd_t1_arr1"), standalone=False)
+    assert "tb_bix" not in c0.emit_c(_decode("t1_arr1"), standalone=False)
+    assert c0.emit_c(_decode("fov_t1_and"), standalone=False) == c0.emit_c(
+        _decode("t1_and"), standalone=False
+    )
+    d1, d2 = tmp_path / "flagged", tmp_path / "plain"
+    d1.mkdir(), d2.mkdir()
+    assert _run("fbd_t1_arr1", d1) == _run("t1_arr1", d2)
+
+    cc = _CC
+
+    def run_flagged(name, stmts, toggles):
+        prog = list(stmts)
+        prog = type("_Flagged", (list,), {"toggles": toggles})(prog)
+        src = tmp_path / f"{name}.c"
+        src.write_text(c0.emit_c(prog))
+        exe = tmp_path / name
+        subprocess.run([cc, str(src), "-lm", "-o", str(exe)], check=True)
+        return subprocess.run(
+            [str(exe)], capture_output=True, text=True, timeout=10,
+            cwd=str(tmp_path),
+        )
+
+    oob = [
+        ir.Dim(name="A", bounds=(5,)),
+        ir.Assign(target=ir.ArrayRef(name="A", indices=(ir.Lit(7),)), value=ir.Lit(1)),
+        ir.End(),
+    ]
+    assert "Error 9" in run_flagged("oob", oob, "B").stderr
+    ovf = [
+        ir.Assign(target=ir.Var(name="A%"), value=ir.Lit(40000)),
+        ir.End(),
+    ]
+    assert "Error 6" in run_flagged("ovf", ovf, "O").stderr
+    # unflagged, the same store wraps silently -- TB's own default
+    r = run_flagged("ovf0", ovf, "")
+    assert r.returncode == 0 and r.stderr == ""
 
 
 def test_transpile_coverage_floor():

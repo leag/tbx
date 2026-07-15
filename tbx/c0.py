@@ -183,6 +183,9 @@ _STORE_CAST = {
     "LNG": "(int)tb_cint({0})",
     "DBL": "({0})",
 }
+# ... and with the IDE Overflow toggle ON (Program.toggles 'O'): integer
+# stores range-check to TB error 6 instead of wrapping
+_STORE_CAST_OVF = {**_STORE_CAST, "INT": "tb_ichk({0})", "LNG": "tb_lchk({0})"}
 
 _INT_BINOPS = {"\\": "tb_idiv", "MOD": "tb_mod", "AND": "tb_and", "OR": "tb_or", "XOR": "tb_xor"}
 
@@ -259,6 +262,12 @@ class _Gen:
         self.uses_eh = False  # ON ERROR / RESUME / ERROR / ERR / ERL present
         self.uses_timer = False  # ON TIMER present: poll at statement boundaries
         self.uses_clear = False  # CLEAR / RUN present: generate tb_clear_all()
+        # IDE Options toggles ride on Program.toggles and are honored as
+        # compiled, like TB: Bounds gates subscript checks (error 9),
+        # Overflow gates integer-store checks (error 6); both default OFF
+        tg = getattr(stmts, "toggles", "")
+        self.bounds = "B" in tg
+        self.overflow = "O" in tg
 
     def uid(self) -> int:
         self.n += 1
@@ -449,7 +458,16 @@ class _Gen:
         idx = []
         for k, i in enumerate(e.indices, 1):
             lo = str(dims[k - 1][0]) if dims is not None else f"{m}_lo{k}"
-            idx.append(f"((long)tb_cint({self.num(i)}) - {lo})")
+            raw = f"(long)tb_cint({self.num(i)})"
+            if self.bounds:
+                n = (
+                    str(dims[k - 1][1] - dims[k - 1][0] + 1)
+                    if dims is not None
+                    else f"{m}_n{k}"
+                )
+                idx.append(f"tb_bix({raw}, {lo}, {n})")
+            else:
+                idx.append(f"({raw} - {lo})")
         if rank == 1:
             return f"{m}[{idx[0]}]"
         stride = (
@@ -480,7 +498,10 @@ class _Gen:
             raise _Unsupported(f"assign target {type(target).__name__}")
         if ty == "STR":
             return f"{dst} = {self.s(value)};"
-        return f"{dst} = {_STORE_CAST[ty].format(self.num(value))};"
+        return f"{dst} = {self.store_cast(ty).format(self.num(value))};"
+
+    def store_cast(self, ty: str) -> str:
+        return (_STORE_CAST_OVF if self.overflow else _STORE_CAST)[ty]
 
     def gen_print(self, s) -> list[str]:
         out = []
@@ -590,7 +611,7 @@ class _Gen:
                 if loops[j][0] == "FOR" and loops[j][2] == s.var.name:
                     _, n, _ = loops.pop(j)
                     v = self.var(s.var.name)
-                    cast = _STORE_CAST[_suffix_ty(s.var.name)]
+                    cast = self.store_cast(_suffix_ty(s.var.name))
                     stv = f"{v} = {cast.format(f'{v} + tb_st{n}')};"
                     return [stv, f"goto FCHK{n};", f"FDONE{n}:;"]
             raise _Unsupported(f"NEXT {s.var.name} without open FOR")
@@ -1089,7 +1110,7 @@ class _Gen:
             else:
                 cty, _, _ = _VTYPES[ty]
                 t = f"t{self.uid()}"
-                val = self.s(a) if ty == "STR" else _STORE_CAST[ty].format(self.num(a))
+                val = self.s(a) if ty == "STR" else self.store_cast(ty).format(self.num(a))
                 tmps.append(f"{cty}{'' if cty.endswith('*') else ' '}{t} = {val};")
                 args.append(f"&{t}")
         call = f"sub_{_base(s.name)}({', '.join(args)});"
