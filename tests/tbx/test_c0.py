@@ -321,9 +321,12 @@ def _clip_fp(m):
 
 
 def _dos_stems():
+    # skip the produced-file goldens (<stem>.file.<NAME>): a DOS 8.3 name like
+    # R.TXT matches *.txt on Windows' case-insensitive glob
     return sorted(
         os.path.basename(p)[: -len(".txt")]
         for p in glob.glob(os.path.join(_DOSOUT, "*.txt"))
+        if ".file." not in os.path.basename(p)
     )
 
 
