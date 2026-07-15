@@ -1,0 +1,13 @@
+FreeCom version 0.82 pl 3 XMS_Swap [Dec 10 2003 06:49:21]
+
+Internal commands available:
+ALIAS     BEEP      BREAK     CALL      CD        CHDIR     CDD       CHCP
+CLS       COPY      CTTY      DATE      DEL       DIR       DIRS      DOSKEY
+ECHO      ERASE     EXIT      FOR       GOTO      HISTORY   IF        LH
+LOADHIGH  MEMORY    MD        MKDIR     PATH      PAUSE     PROMPT    PUSHD
+POPD      RD        REM       REN       RENAME    RMDIR     SET       SHIFT
+TIME      TRUENAME  TYPE      VER       VERIFY    VOL       ?         WHICH
+
+Features available:
+[aliases] [enhanced input] [history] [filename completion] [last dir] [XMS swap]
+ [default to swap] [installable commands] [DOS NLS] [directory stack (PUSHD)]

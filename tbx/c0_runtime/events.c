@@ -1,5 +1,13 @@
 #include "tb_runtime.h"
 
+/* PEN(n) with the light-pen event disabled raises Illegal function call
+   (witnessed: t1_penf dosout); enabled, the absent device reads 0 */
+int tb_pen_on = 0;
+double tb_penf(void) {
+    if (!tb_pen_on) tb_error(5);
+    return 0;
+}
+
 /* --- ON TIMER trapping (polled at statement boundaries, like TB) --- */
 double tb_mono(void) {
 #ifdef _WIN32

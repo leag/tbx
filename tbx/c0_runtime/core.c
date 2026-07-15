@@ -31,6 +31,21 @@ void tb_ps(const char *s) {
     }
 }
 void tb_nl(void) { tb_ps("\n"); }
+/* the LPRINT sink: a printer never shows on the screen (t1_lprint dosout);
+   TB_LPRINT_TXT=file captures the output, otherwise it is discarded */
+FILE *tb_lpt(void) {
+    static FILE *f = 0;
+    if (!f) {
+        const char *p = getenv("TB_LPRINT_TXT");
+        if (p) f = fopen(p, "w");
+#ifdef _WIN32
+        if (!f) f = fopen("NUL", "w");
+#else
+        if (!f) f = fopen("/dev/null", "w");
+#endif
+    }
+    return f;
+}
 const char *tb_s(const char *s) { return s ? s : ""; }
 /* --- clock offsets (DATE$/TIME$ assignment shifts a process-local clock) --- */
 static double tb_clk_off = 0;
@@ -50,15 +65,26 @@ void tb_set_date(const char *s) {
     want.tm_mon = mo - 1; want.tm_mday = d; want.tm_year = y - 1900;
     tb_clk_off += difftime(mktime(&want), tb_now_wall());
 }
-/* GW-BASIC family number image: integral -> no point; else 7 significant
-   digits (single precision) with the leading zero of "0.5" stripped. */
+/* TB number image (witnessed: t1_fp dosout): integral -> no point
+   ("24999999488"); else up to 16 significant digits with the leading zero
+   of "0.5" stripped and a sign + THREE-digit exponent
+   ("1.355252715606894E-020"). TB expands even singles to 16 digits, but
+   its conversion carries ~1e-14 relative noise in the tail (t1_fp prints
+   ...894 where the stored float32 is exactly ...881); we print the
+   correctly-rounded value and test_c0 compares 13 significant digits. */
 void tb_fmt(double v, char *out) {
-    if (v == floor(v) && fabs(v) < 1e15) { sprintf(out, "%.0f", v); return; }
-    char b[48]; sprintf(b, "%.7G", v);
+    if (v == floor(v) && fabs(v) < 1e16) { sprintf(out, "%.0f", v); return; }
+    char b[48]; sprintf(b, "%.16G", v);
     char *p = b, *o = out;
     if (*p == '-') *o++ = *p++;
     if (p[0] == '0' && p[1] == '.') p++;
-    strcpy(o, p);
+    for (; *p && *p != 'E'; p++) *o++ = *p;
+    if (*p == 'E') {                      /* E+x / E+xx -> E+0xx */
+        long e = strtol(p + 1, NULL, 10);
+        sprintf(o, "E%+04ld", e);
+        return;
+    }
+    *o = 0;
 }
 void tb_pn(double v) {
     char b[64]; tb_fmt(v, b);

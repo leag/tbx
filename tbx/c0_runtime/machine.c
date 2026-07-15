@@ -6,7 +6,8 @@
    BSAVE/BLOAD round-trip through files with the real 7-byte header, but
    nothing else lives there -- BIOS/DOS structures a program expects at a
    magic address read as 0.  I/O ports are 64 K one-byte latches: OUT
-   stores, INP reads back the last OUT (0 if none), and WAIT returns
+   stores, INP reads back the last OUT -- or 255 if none, the floating
+   ISA bus (witnessed: t1_inpf dosout) -- and WAIT returns
    immediately since no device will ever flip a latch.  The REG buffer is
    real storage but CALL INTERRUPT is a no-op (there is no DOS/BIOS behind
    it: registers pass through unchanged), and CALL ABSOLUTE aborts -- the
@@ -38,9 +39,15 @@ void tb_poke(double off, double v) {
 void tb_defseg(int has, double seg) {
     tb_seg = has ? (unsigned)tb_i(seg) & 0xFFFF : TB_DGROUP;
 }
-double tb_inp(double port) { return tb_ports[(unsigned)tb_i(port) & 0xFFFF]; }
+/* a port no OUT ever latched reads as the floating bus, 0xFF */
+static unsigned char *tb_port(double port) {
+    static int init = 0;
+    if (!init) { memset(tb_ports, 0xFF, sizeof tb_ports); init = 1; }
+    return &tb_ports[(unsigned)tb_i(port) & 0xFFFF];
+}
+double tb_inp(double port) { return *tb_port(port); }
 void tb_outp(double port, double v) {
-    tb_ports[(unsigned)tb_i(port) & 0xFFFF] = (unsigned char)tb_i(v);
+    *tb_port(port) = (unsigned char)tb_i(v);
 }
 void tb_wait(double port, double mask, double xr) {
     /* WAIT spins until (INP(port) XOR xr) AND mask <> 0; a latch never

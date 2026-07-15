@@ -19,6 +19,7 @@
 #include <conio.h>
 #include <io.h>
 #include <process.h>
+#include <direct.h>
 #include <dirent.h>
 #else
 #include <unistd.h>
@@ -64,6 +65,7 @@ extern int tb_cols[16];           /* print column per channel (TAB/POS) */
 extern int tb_row;                /* console cursor row (CSRLIN) */
 void tb_ps(const char *s);
 void tb_nl(void);
+FILE *tb_lpt(void);
 const char *tb_s(const char *s);
 void tb_set_time(const char *s);
 void tb_set_date(const char *s);
@@ -136,6 +138,9 @@ double tb_cvl(const char *s);
 double tb_cvs(const char *s);
 double tb_cvd(const char *s);
 void tb_mkdir(const char *path);
+void tb_chdir(const char *path);
+void tb_rmdir(const char *path);
+void tb_seek(int n, double pos);
 
 /* --- terminal.c: RND, INSTAT, ANSI terminal control, INKEY$, FILES --- */
 double tb_rnd(void);
@@ -195,6 +200,8 @@ void tb_bload(const char *f, double off);
 void tb_chain(const char *f);
 
 /* --- events.c: ON TIMER polling, MTIMER, the GOSUB label stack --- */
+extern int tb_pen_on;
+double tb_penf(void);
 double tb_mono(void);
 extern double tb_mt0;             /* MTIMER epoch */
 double tb_mtread(void);

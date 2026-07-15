@@ -2,9 +2,9 @@
 
 /* --- graphics: in-memory framebuffer with CGA/EGA geometry ---
    There is no screen on a headless modern host, so SCREEN n allocates a
-   byte-per-pixel framebuffer instead; a first graphics call without SCREEN
-   enters mode 1 (320x200) implicitly. Set TB_SCREEN_PPM=file.ppm to dump
-   the final image (CGA palette) at exit. */
+   byte-per-pixel framebuffer instead; a graphics call without a SCREEN mode
+   raises error 5, as real TB does. Set TB_SCREEN_PPM=file.ppm to dump the
+   final image (CGA palette) at exit. */
 int tb_gw = 0, tb_gh = 0, tb_maxattr = 3;
 unsigned char *tb_fb = 0;
 static double tb_lastx = 0, tb_lasty = 0;                /* STEP reference */
@@ -28,6 +28,10 @@ static void tb_ppm_dump(void) {
     fclose(f);
 }
 #endif
+/* graphics statements in text mode raise Illegal function call: witnessed
+   by the t1_circle/t1_draw dosout goldens (no corpus fixture sets a mode,
+   and on real TB they all abort with error 5) */
+static void tb_gfx(void) { if (!tb_fb) tb_error(5); }
 void tb_screen(double mode) {
     static const struct { int m, w, h, a; } md[] = {
         {1,320,200,3},{2,640,200,1},{7,320,200,15},{8,640,200,15},
@@ -51,7 +55,6 @@ void tb_screen(double mode) {
         }
     tb_error(5);                                         /* illegal function call */
 }
-static void tb_gfx(void) { if (!tb_fb) tb_screen(1); }
 static void tb_map(double x, double y, long *px, long *py) {
     if (tb_wset) {
         x = tb_vx1 + (x - tb_wx1) * (tb_vx2 - tb_vx1) / (tb_wx2 - tb_wx1);

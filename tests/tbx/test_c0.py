@@ -75,13 +75,11 @@ _PINNED = {
     "zz_sub1": " 6 \n",  # CALL SUB1(B) increments B: by-reference proof
     "zz_sub2": " 7  9 \n",  # literal args pass by value copy
     "zz_sub7": " 5 \n",  # EXIT SUB on the negative branch, not taken
-    "t1_filef": "",  # EOF(1) on a closed file returns -1, no output
     "zz_mdeffn1": " 42 \n",  # multi-line DEF FN: FNFN1(21) = 42
     "zz_mdeffn2": " 42 \n",  # ... with an EXIT DEF branch not taken
     "zz_cv_cvi": " 16961 \n",  # CVI("AB") = 0x4241 little-endian
-    "t1_point": " 0 \n",  # POINT on a fresh framebuffer reads attribute 0
     "t1_peek": " 0 \n",  # emulated memory is zero-filled
-    "t1_inpf": " 0 \n",  # a port never OUT-latched reads 0
+    "t1_inpf": " 255 \n",  # a port never OUT-latched reads the floating bus
     "t1_poke2": "",  # POKE into the emulated memory: silent success
     "t1_defseg": "",  # DEF SEG rebases POKE, bare form restores DGROUP
     "t1_wait3": "",  # WAIT returns at once: the absent device is "ready"
@@ -224,24 +222,37 @@ def test_runtime_builds_as_library(tmp_path):
 )
 def test_sdl_backend_runs_headless(tmp_path):
     # the SDL2 video backend, exercised under SDL's dummy driver: window,
-    # texture upload, event pump, and the POINT read all still line up
+    # texture upload, event pump, and the POINT read all still line up.
+    # Synthetic program (no corpus fixture sets a SCREEN mode): SCREEN 1,
+    # PSET a pixel, read it back with POINT.
+    from tbx import ir
+
     assert _CC is not None and _SDL2_CONFIG is not None
     flags = subprocess.run(
         [_SDL2_CONFIG, "--cflags", "--libs"],
         capture_output=True, text=True, check=True,
     ).stdout.split()
-    for stem, expect in [("t1_point", " 0 \n"), ("t1_circle", "")]:
-        src = tmp_path / f"{stem}.c"
-        src.write_text(c0.emit_c(_decode(stem), sdl=True))
-        exe = tmp_path / stem
-        subprocess.run([_CC, str(src), "-lm", *flags, "-o", str(exe)], check=True)
-        env = dict(os.environ, SDL_VIDEODRIVER="dummy", TB_SDL_HOLD="0")
-        r = subprocess.run(
-            [str(exe)], capture_output=True, text=True, timeout=15,
-            env=env, cwd=str(tmp_path),
-        )
-        assert r.returncode == 0, r.stderr
-        assert r.stdout == expect
+    prog = [
+        ir.Screen(mode=ir.Lit(1)),
+        ir.Pset(x=ir.Lit(10), y=ir.Lit(10), step=False, color=ir.Lit(3), preset=False),
+        ir.Circle(
+            x=ir.Lit(160), y=ir.Lit(100), r=ir.Lit(40), step=False,
+            color=ir.Lit(2), start=None, end=None, aspect=None,
+        ),
+        ir.Print(items=(ir.Call("POINT", (ir.Lit(10), ir.Lit(10))),), newline=True, file=None),
+        ir.End(),
+    ]
+    src = tmp_path / "gfx.c"
+    src.write_text(c0.emit_c(prog, sdl=True))
+    exe = tmp_path / "gfx"
+    subprocess.run([_CC, str(src), "-lm", *flags, "-o", str(exe)], check=True)
+    env = dict(os.environ, SDL_VIDEODRIVER="dummy", TB_SDL_HOLD="0")
+    r = subprocess.run(
+        [str(exe)], capture_output=True, text=True, timeout=15,
+        env=env, cwd=str(tmp_path),
+    )
+    assert r.returncode == 0, r.stderr
+    assert r.stdout == " 3 \n"
 
 
 # --- DOS behavior goldens (tests/fixtures/dosout/) ---
@@ -255,17 +266,43 @@ def test_sdl_backend_runs_headless(tmp_path):
 # match impossible.
 
 _DOSOUT = os.path.join(_ROOT, "fixtures", "dosout")
-_DOS_WAIVED: dict[str, str] = {}
+_DOS_WAIVED: dict[str, str] = {
+    "t1_files": "FILES lists the host directory: contents and layout are "
+    "environmental (DOS floppy vs the native working directory)",
+    "t1_shellvar": "SHELL with an empty command starts the resident shell "
+    "(the FreeCom banner in the golden); natively system('') is a no-op -- "
+    "the child shell is environmental",
+}
 # file-comparison waivers: the screen still must match
 _DOS_FILE_WAIVED = {
     "t1_bsave": "BSAVE writes the real DGROUP segment and its live memory; "
     "the emulated machine (machine.c) is zero-filled with a synthetic segment",
+    "t1_putfile": "PUT of a never-FIELDed record writes the live DGROUP "
+    "bytes of the record buffer; the native runtime's buffer is space-filled",
 }
 
 # untrapped runtime errors: TB prints "Error N  at pgm-ctr: X" (no line table
 # in these EXEs), the native runtime "Error N in line L" -- same error, other
 # locator; both normalize to "Error N"
 _ERR_RE = re.compile(r"^(Error \d+)( +at pgm-ctr: \d+| in line \d+)$")
+
+# TB's binary->decimal conversion carries ~1e-14 relative noise: t1_fp's
+# single prints as ...715606894E-020 where the stored float32 is exactly
+# ...7156068805e-20 (C prints the correctly-rounded ...881). Digits past 13
+# are conversion noise on TB's side, so both sides are clipped to 13
+# significant digits before comparing; the digits kept still pin tb_fmt's
+# format (leading-zero strip, integral path, the E+0xx exponent shape).
+_FP_RE = re.compile(r"(\d*)\.(\d+)(E[-+]\d+)?")
+
+
+def _clip_fp(m):
+    intpart, frac, exp = m.group(1), m.group(2), m.group(3) or ""
+    digits = intpart + frac
+    lead = len(digits) - len(digits.lstrip("0"))
+    if len(digits) - lead <= 13:
+        return m.group(0)
+    digits = digits[: lead + 13]
+    return digits[: len(intpart)] + "." + digits[len(intpart):] + exp
 
 
 def _dos_stems():
@@ -276,8 +313,13 @@ def _dos_stems():
 
 
 def _norm_lines(text):
+    # the DOS golden is a text screen: it has no BEL, no cursor motion --
+    # drop ANSI escapes and control characters from the native side
+    text = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", text)
+    text = re.sub(r"[\x00-\x08\x0b-\x1f]", "", text)
     lines = [ln.rstrip() for ln in text.splitlines()]
     lines = [_ERR_RE.sub(r"\1", ln) for ln in lines]
+    lines = [_FP_RE.sub(_clip_fp, ln) for ln in lines]
     while lines and not lines[-1]:
         lines.pop()
     while lines and not lines[0]:

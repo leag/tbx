@@ -115,7 +115,8 @@ _NUM_FUNCS = {
     # joystick / light pen / music queue: devices absent on a modern host
     ("STICK", 1): "0.0",
     ("STRIG", 1): "0.0",
-    ("PEN", 1): "0.0",
+    # ... but PEN errors while PEN OFF (t1_penf dosout)
+    ("PEN", 1): "tb_penf()",
     ("PLAY", 1): "0.0",
     # VARPTR: a DGROUP offset with no modern counterpart
     ("VARPTR", 1): "0.0",
@@ -782,7 +783,8 @@ class _Gen:
         if isinstance(s, ir.Put):
             return [f"tb_putrec({s.num}, {self.num(s.pos)});"]
         if isinstance(s, ir.Seek):
-            return [f"fseek(tb_file({s.num}), (long)tb_i({self.num(s.pos)}) - 1, SEEK_SET);"]
+            # SEEK on a random-mode channel is TB error 54 (t1_seek dosout)
+            return [f"tb_seek({s.num}, {self.num(s.pos)});"]
         if isinstance(s, ir.Close):
             return [f"tb_close({s.num});"]
         if isinstance(s, ir.Reset):
@@ -831,13 +833,16 @@ class _Gen:
         if isinstance(s, ir.Shell):
             return [f"if (system({self.s(s.cmd)})) {{}}"]
         if isinstance(s, ir.Chdir):
-            return [f"if (chdir({self.s(s.path)})) {{}}"]
+            # a missing path is TB error 76 (witnessed: t1_chdir dosout)
+            return [f"tb_chdir({self.s(s.path)});"]
         if isinstance(s, ir.Environ):
             return [f"putenv(tb_dup({self.s(s.s)}));"]
         if isinstance(s, ir.Kill):
-            return [f"remove({self.s(s.file)});"]
+            # a missing file is TB error 53 (witnessed: t1_kill dosout)
+            return [f"if (remove({self.s(s.file)})) tb_error(53);"]
         if isinstance(s, ir.Name):
-            return [f"rename({self.s(s.old)}, {self.s(s.new)});"]
+            # a missing source file is TB error 53 (witnessed: t1_name dosout)
+            return [f"if (rename({self.s(s.old)}, {self.s(s.new)})) tb_error(53);"]
         if isinstance(s, ir.Files):
             return [f"tb_files_({self.s(s.spec)});"]
         if isinstance(s, ir.DateTimeSet):
@@ -922,6 +927,9 @@ class _Gen:
                 if s.mode == "ON":
                     return ["tb_timer_on = 1; tb_timer_due_at = tb_mono() + tb_timer_iv;"]
                 return ["tb_timer_on = 0;"]
+            if s.event == "PEN":
+                # tracked so PEN(n) can error while OFF (t1_penf dosout)
+                return [f"tb_pen_on = {int(s.mode == 'ON')};"]
             return [f"/* {s.event} {s.mode}: no {s.event} event source on this host */"]
         if isinstance(s, ir.Clear):
             self.uses_clear = True
@@ -941,8 +949,14 @@ class _Gen:
         if isinstance(s, ir.Mtimer):
             return ["tb_mt0 = tb_mono();"]
         if isinstance(s, ir.Lprint):
-            # no printer on a modern host: LPRINT falls back to the console
-            return self.gen_print(ir.Print(items=s.items, newline=s.newline))
+            # LPRINT reaches the printer, never the screen (t1_lprint dosout:
+            # empty). Sink: TB_LPRINT_TXT=file captures it, else discarded.
+            # Channel 15 keeps its own TAB/SPC column like a real LPT.
+            return [
+                "tb_out = tb_lpt(); tb_ch = 15;",
+                *self.gen_print(ir.Print(items=s.items, newline=s.newline)),
+                "tb_out = stdout; tb_ch = 0;",
+            ]
         if isinstance(s, ir.PrintUsing):
             out = []
             if s.file is not None:
@@ -957,12 +971,20 @@ class _Gen:
         if isinstance(s, ir.Mkdir):
             return [f"tb_mkdir({self.s(s.path)});"]
         if isinstance(s, ir.Rmdir):
-            return [f"if (rmdir({self.s(s.path)})) {{}}"]
+            # a missing directory is TB error 75 (witnessed: t1_rmdir dosout)
+            return [f"tb_rmdir({self.s(s.path)});"]
         if isinstance(s, ir.Play):
             # decode the MML to PCM; TB_PLAY_WAV=out.wav dumps it at exit
             return [f"tb_play({self.s(s.music)});"]
-        if isinstance(s, (ir.KeyList, ir.Sound, ir.Width)):
-            # no soft-key display, audio device, or fixed-width console here
+        if isinstance(s, ir.KeyList):
+            # KEY LIST prints the twelve (empty) soft keys (t1_keylist dosout)
+            n = self.uid()
+            return [
+                f'for (int k{n} = 1; k{n} <= 12; k{n}++) '
+                f'{{ char b{n}[8]; sprintf(b{n}, "F%d ", k{n}); tb_ps(b{n}); tb_nl(); }}'
+            ]
+        if isinstance(s, (ir.Sound, ir.Width)):
+            # no audio device or fixed-width console here
             return [f"/* {type(s).__name__}: no device counterpart on this host */"]
         if isinstance(s, ir.Poke):
             return [f"tb_poke({self.num(s.addr)}, {self.num(s.value)});"]

@@ -47,7 +47,8 @@ void tb_open_r(int n, const char *name) {
 }
 double tb_eof(double n) {
     FILE *f = ((int)n >= 1 && (int)n <= 15) ? tb_files[(int)n] : 0;
-    if (!f) return -1;
+    if (!f) tb_error(52);       /* EOF on a closed channel: Bad file number
+                                   (witnessed: t1_filef dosout) */
     int c = fgetc(f);
     if (c == EOF) return -1;
     ungetc(c, f);
@@ -189,4 +190,40 @@ void tb_mkdir(const char *path) {
 #else
     if (mkdir(path, 0777)) {}
 #endif
+}
+/* DOS paths spell the separator '\' */
+static const char *tb_dospath(const char *path) {
+    static char buf[512];
+    size_t n = strlen(tb_s(path));
+    if (n >= sizeof buf) n = sizeof buf - 1;
+    for (size_t i = 0; i < n; i++) {
+        char c = tb_s(path)[i];
+        buf[i] = c == '\\' ? '/' : c;
+    }
+    buf[n] = 0;
+    return buf;
+}
+/* CHDIR to a missing path is TB error 76, Path not found (t1_chdir dosout) */
+void tb_chdir(const char *path) {
+#ifdef _WIN32
+    if (_chdir(tb_dospath(path))) tb_error(76);
+#else
+    if (chdir(tb_dospath(path))) tb_error(76);
+#endif
+}
+/* RMDIR of a missing (or non-empty) directory is TB error 75, Path/File
+   access error (t1_rmdir dosout) */
+void tb_rmdir(const char *path) {
+#ifdef _WIN32
+    if (_rmdir(tb_dospath(path))) tb_error(75);
+#else
+    if (rmdir(tb_dospath(path))) tb_error(75);
+#endif
+}
+/* SEEK on a random-mode channel is TB error 54, Bad file mode (t1_seek
+   dosout); on a sequential channel it moves the byte position (1-based) */
+void tb_seek(int n, double pos) {
+    FILE *f = tb_file(n);
+    if (tb_recbuf[n]) tb_error(54);
+    fseek(f, (long)tb_i(pos) - 1, SEEK_SET);
 }

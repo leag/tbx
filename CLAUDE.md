@@ -26,6 +26,15 @@ python tbx/tools/dump_user_code.py                    # tests/fixtures/usercode/
 uv run python tests/tbx/test_ir_snapshot.py --write   # tests/fixtures/ir_snapshot.txt
 ```
 
+With the external toolchain oracle available (`TBX_ORACLE`, see
+`tbx/tools/oracle.py` — a headless real-TB-compiler automation from a sister
+project; needs node + mtools):
+
+```sh
+uv run python -m tbx.tools.verify_fixture STEM        # byte-exact round trip
+uv run python -m tbx.tools.dump_dos_output --missing  # tests/fixtures/dosout/
+```
+
 Requires Python 3.11+. CI (`.github/workflows/ci.yml`) runs ruff, ty, and pytest on Python 3.11–3.13 for pushes to main and pull requests; all three must pass.
 
 The core package (`tbx.decode0`, `tbx.ir`, `tbx.emit0`, `tbx.cli`) has **zero runtime dependencies**; keep it that way. Only `tbx/tools/` may use iced-x86 (the `debug` extra), and `tests/tbx/test_cfg.py` guards it with `pytest.importorskip`.
@@ -47,7 +56,7 @@ An alternative back end, `c0.py` (`tbx --emit-c`), lowers the same IR to a self-
 
 ## The calibration rule (most important convention)
 
-The decoder is **fail-loud**: any byte pattern outside the calibrated vocabulary raises `ValueError` (with offending byte and file offset) rather than guessing. A byte pattern joins the vocabulary only after a fixture program in `tests/fixtures/corpus/` witnesses it and its decompile-recompile round trip was verified byte-exact against the real Turbo Basic compilers. Do not add speculative decodings. Verifying *new* fixtures end-to-end requires the original DOS toolchain (under an emulator), which this repo does not include or automate — existing goldens encode past verifications.
+The decoder is **fail-loud**: any byte pattern outside the calibrated vocabulary raises `ValueError` (with offending byte and file offset) rather than guessing. A byte pattern joins the vocabulary only after a fixture program in `tests/fixtures/corpus/` witnesses it and its decompile-recompile round trip was verified byte-exact against the real Turbo Basic compilers. Do not add speculative decodings. Verifying *new* fixtures end-to-end requires the original DOS toolchain (under an emulator), which this repo does not include — on machines with the external oracle (`TBX_ORACLE`), `python -m tbx.tools.verify_fixture STEM` automates the check; existing goldens encode past verifications.
 
 Where the compiler is genuinely lossy, aliases are normalized to one canonical form that recompiles byte-identically (STOP/SYSTEM ≡ END, INCR x ≡ x = x + 1, DATA regrouped as one statement, pre-test WHILE ≡ DO WHILE…LOOP) — normalization is fine, guessing is not.
 
@@ -60,6 +69,7 @@ Regression layers, all swept on every pytest run:
 - `tests/fixtures/ops/*.txt` — canonical op-stream dump per corpus EXE, gated by `test_goldens.py` (which reuses `dump_ops.canon`, so tool and test can't drift apart). Scan-level drift fails here.
 - `tests/fixtures/ir_snapshot.txt` — one `repr()` per IR statement for every corpus EXE that has a usercode golden; decoder drift fails with the exact program and statement line (`test_ir_snapshot.py`).
 - `tests/fixtures/usercode/*.bas` — golden emitted source, swept by `test_goldens.py`. Emit-level drift fails here.
+- `tests/fixtures/dosout/*.txt` (+ `<stem>.file.<NAME>` for files the program wrote) — what the ORIGINAL corpus EXE visibly did running on the real (emulated) machine, captured once by `dump_dos_output.py`. `test_c0.py::test_dos_golden` holds the recompiled native binaries to them — the c0 analog of the byte-exact rule. Waivers in `test_c0.py` name the surrogate that justifies each divergence.
 - Hand-written per-feature tests in `tests/tbx/` that pin exact IR for specific fixtures — the strongest guard, since goldens can be regenerated but pinned IR must be edited deliberately.
 
 Golden regeneration is only for **intended** changes; review the git diff it produces as carefully as code. `dump_user_code.py` deliberately skips flag fixtures (non-empty `Program.toggles`) — they carry no `.bas` golden because their source is identical to the unflagged program's, and `test_goldens.py` enforces that absence.
