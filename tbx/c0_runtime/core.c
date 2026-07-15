@@ -116,8 +116,16 @@ int tb_lchk(double v) {
     return (int)r;
 }
 double tb_div(double a, double b) { if (b == 0) tb_error(11); return a / b; }
-double tb_idiv(double a, double b) { if (tb_i(b) == 0) tb_error(11); return (double)(tb_i(a) / tb_i(b)); }
-double tb_mod(double a, double b) { if (tb_i(b) == 0) tb_error(11); return (double)(tb_i(a) % tb_i(b)); }
+/* \ and MOD convert operands to 16-bit by x87 FIST-store semantics: an
+   out-of-range value becomes the "integer indefinite" 0x8000 = -32768
+   (witnessed: zz_x_ldiv/zz_x_lmod dosout -- 100000 \ 7 = -4681 and
+   100000 MOD 7 = -1, exactly -32768 \ 7) */
+static long tb_fist16(double v) {
+    double r = tb_cint(v);
+    return (r < -32768.0 || r > 32767.0) ? -32768 : (long)r;
+}
+double tb_idiv(double a, double b) { long d = tb_fist16(b); if (d == 0) tb_error(11); return (double)(tb_fist16(a) / d); }
+double tb_mod(double a, double b) { long d = tb_fist16(b); if (d == 0) tb_error(11); return (double)(tb_fist16(a) % d); }
 double tb_and(double a, double b) { return (double)(short)(tb_i(a) & tb_i(b)); }
 double tb_or(double a, double b) { return (double)(short)(tb_i(a) | tb_i(b)); }
 double tb_xor(double a, double b) { return (double)(short)(tb_i(a) ^ tb_i(b)); }

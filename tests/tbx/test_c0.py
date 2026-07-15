@@ -272,6 +272,12 @@ _DOS_WAIVED: dict[str, str] = {
     "t1_shellvar": "SHELL with an empty command starts the resident shell "
     "(the FreeCom banner in the golden); natively system('') is a no-op -- "
     "the child shell is environmental",
+    "zz_sc3": "TB 1.1's CASE IS codegen is broken (see the zz_sc3 ops): the "
+    "bound is fcomp'd against DS:0120 -- a hidden never-written slot, not "
+    "the selector -- and the arm matches iff the SELECTOR equals that "
+    "materialized boolean, so A=20 falls to CASE ELSE. c0 keeps the "
+    "handbook semantics (20 > 10 -> BIG); reproducing the bug needs phase-2 "
+    "probes to pin the hidden slot",
     # the known binary-strings divergence, resolved by the string-descriptor
     # refactor (graduation plan phase 3): MK*$ images embed NUL bytes that
     # the runtime's NUL-terminated strings truncate
