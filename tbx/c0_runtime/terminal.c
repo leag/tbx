@@ -2,6 +2,8 @@
 
 double tb_rnd(void) { return rand() / ((double)RAND_MAX + 1); }
 double tb_instat(void) {
+    int k = tb_sdl_instat();          /* -1: no SDL window, use the terminal */
+    if (k >= 0) return k ? -1 : 0;
 #ifdef _WIN32
     if (!_isatty(0)) {
         int c = getchar();
@@ -46,6 +48,11 @@ void tb_color(int has_fg, double fg, int has_bg, double bg) {
     if (has_bg) { sprintf(b, "\033[4%dm", tb_cga[(int)bg & 7]); tb_esc(b); }
 }
 char *tb_inkey(void) {
+    int k = tb_sdl_inkey();           /* -1: no SDL window, use the terminal */
+    if (k >= 0) {
+        char b[2] = {(char)k, 0};
+        return tb_dup(k ? b : "");
+    }
 #ifdef _WIN32
     int ch;
     if (!_isatty(0)) {

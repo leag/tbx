@@ -10,6 +10,9 @@ Two layers:
   the program is inside the implemented vocabulary.
 
 The end-to-end layer needs a C compiler; it is skipped when `cc` is absent.
+Two more build shapes are pinned when the tools exist: the runtime compiled
+as a standalone library linked by a --no-runtime program, and the SDL2
+video backend run under SDL's dummy driver.
 """
 
 import glob
@@ -25,6 +28,8 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _CORPUS = os.path.join(_ROOT, "fixtures", "corpus")
 
 _CC = shutil.which("cc")
+_AR = shutil.which("ar")
+_SDL2_CONFIG = shutil.which("sdl2-config")
 
 
 def _decode(stem):
@@ -74,6 +79,12 @@ _PINNED = {
     "zz_mdeffn2": " 42 \n",  # ... with an EXIT DEF branch not taken
     "zz_cv_cvi": " 16961 \n",  # CVI("AB") = 0x4241 little-endian
     "t1_point": " 0 \n",  # POINT on a fresh framebuffer reads attribute 0
+    "t1_peek": " 0 \n",  # emulated memory is zero-filled
+    "t1_inpf": " 0 \n",  # a port never OUT-latched reads 0
+    "t1_poke2": "",  # POKE into the emulated memory: silent success
+    "t1_defseg": "",  # DEF SEG rebases POKE, bare form restores DGROUP
+    "t1_wait3": "",  # WAIT returns at once: the absent device is "ready"
+    "t1_calli": "",  # REG + CALL INTERRUPT: register store, no-op INT
 }
 
 
@@ -111,6 +122,126 @@ def test_untrapped_error_exit(tmp_path):
     assert "Error 5 in line 10" in r.stderr
 
 
+@pytest.mark.skipif(_CC is None, reason="no host C compiler")
+def test_machine_memory_roundtrip(tmp_path):
+    # POKE/PEEK and OUT/INP and REG hit real storage in the emulated machine
+    from tbx import ir
+
+    assert _CC is not None
+
+    prog = [
+        ir.Poke(addr=ir.Lit(100), value=ir.Lit(7)),
+        ir.Out(port=ir.Lit(888), value=ir.Lit(5)),
+        ir.RegSet(n=ir.Lit(1), value=ir.Lit(512)),
+        ir.Print(
+            items=(
+                ir.Call("PEEK", (ir.Lit(100),)),
+                ir.Call("INP", (ir.Lit(888),)),
+                ir.Call("REG", (ir.Lit(1),)),
+            ),
+            newline=True,
+            file=None,
+        ),
+        ir.End(),
+    ]
+    src = tmp_path / "mach.c"
+    src.write_text(c0.emit_c(prog))
+    exe = tmp_path / "mach"
+    subprocess.run([_CC, str(src), "-lm", "-o", str(exe)], check=True)
+    r = subprocess.run([str(exe)], capture_output=True, text=True, timeout=10)
+    assert r.stdout == " 7  5  512 \n"
+
+
+@pytest.mark.skipif(_CC is None, reason="no host C compiler")
+def test_bsave_bload_roundtrip(tmp_path):
+    # t1_bsave writes X.IMG (header + 100 zeroed bytes); t1_bload reads it back
+    assert _run("t1_bsave", tmp_path) == ""
+    img = (tmp_path / "X.IMG").read_bytes()
+    assert img[0] == 0xFD and len(img) == 7 + 100
+    assert _run("t1_bload", tmp_path) == ""
+
+
+@pytest.mark.skipif(_CC is None, reason="no host C compiler")
+def test_call_absolute_aborts(tmp_path):
+    # transpiles, then aborts if reached: no machine code on this host
+    exe = _build("t1_calla", tmp_path)
+    r = subprocess.run(
+        [str(exe)], capture_output=True, text=True, timeout=10, cwd=str(tmp_path)
+    )
+    assert r.returncode == 255
+    assert "CALL ABSOLUTE in line 20" in r.stderr
+
+
+@pytest.mark.skipif(_CC is None, reason="no host C compiler")
+def test_chain(tmp_path):
+    # CHAIN "PROG" execs ./prog (lowercase retry); absent -> TB error 53
+    exe = _build("t1_chain", tmp_path)
+    r = subprocess.run(
+        [str(exe)], capture_output=True, text=True, timeout=10, cwd=str(tmp_path)
+    )
+    assert r.returncode == 53
+    if os.name == "posix":
+        tgt = tmp_path / "prog"
+        tgt.write_text("#!/bin/sh\necho CHAINED\n")
+        tgt.chmod(0o755)
+        r = subprocess.run(
+            [str(exe)], capture_output=True, text=True, timeout=10, cwd=str(tmp_path)
+        )
+        assert r.returncode == 0 and r.stdout == "CHAINED\n"
+
+
+@pytest.mark.skipif(_CC is None or _AR is None, reason="no host C toolchain")
+def test_runtime_builds_as_library(tmp_path):
+    # every fragment compiles standalone; the archive links a --no-runtime
+    # program (which only #includes tb_runtime.h)
+    assert _CC is not None and _AR is not None
+    rt = os.path.join(os.path.dirname(c0.__file__), "c0_runtime")
+    objs = []
+    for name in sorted(f for f in os.listdir(rt) if f.endswith(".c")):
+        o = tmp_path / (name[:-2] + ".o")
+        subprocess.run(
+            [_CC, "-c", os.path.join(rt, name), "-o", str(o)], check=True
+        )
+        objs.append(str(o))
+    lib = tmp_path / "libtbrt.a"
+    subprocess.run([_AR, "rcs", str(lib), *objs], check=True)
+    src = tmp_path / "p.c"
+    src.write_text(c0.emit_c(_decode("t1_print"), standalone=False))
+    exe = tmp_path / "p"
+    subprocess.run(
+        [_CC, str(src), "-I", rt, "-L", str(tmp_path), "-ltbrt", "-lm",
+         "-o", str(exe)],
+        check=True,
+    )
+    r = subprocess.run([str(exe)], capture_output=True, text=True, timeout=10)
+    assert r.stdout == _PINNED["t1_print"]
+
+
+@pytest.mark.skipif(
+    _CC is None or _SDL2_CONFIG is None, reason="no host C compiler or SDL2"
+)
+def test_sdl_backend_runs_headless(tmp_path):
+    # the SDL2 video backend, exercised under SDL's dummy driver: window,
+    # texture upload, event pump, and the POINT read all still line up
+    assert _CC is not None and _SDL2_CONFIG is not None
+    flags = subprocess.run(
+        [_SDL2_CONFIG, "--cflags", "--libs"],
+        capture_output=True, text=True, check=True,
+    ).stdout.split()
+    for stem, expect in [("t1_point", " 0 \n"), ("t1_circle", "")]:
+        src = tmp_path / f"{stem}.c"
+        src.write_text(c0.emit_c(_decode(stem), sdl=True))
+        exe = tmp_path / stem
+        subprocess.run([_CC, str(src), "-lm", *flags, "-o", str(exe)], check=True)
+        env = dict(os.environ, SDL_VIDEODRIVER="dummy", TB_SDL_HOLD="0")
+        r = subprocess.run(
+            [str(exe)], capture_output=True, text=True, timeout=15,
+            env=env, cwd=str(tmp_path),
+        )
+        assert r.returncode == 0, r.stderr
+        assert r.stdout == expect
+
+
 def test_transpile_coverage_floor():
     ok = 0
     total = 0
@@ -121,15 +252,22 @@ def test_transpile_coverage_floor():
             ok += 1
         except ValueError:
             pass
-    # 534/564 as of the graphics/traps/random-access batch (the remaining 30
-    # are machine access: PEEK/POKE/OUT/WAIT/INP/REG/CALL ABSOLUTE/BLOAD/
-    # BSAVE/CHAIN/DEF SEG, deliberately fail-loud). Slack allows intended
-    # decoder changes; a real regression in c0 shows up as a big drop.
-    assert ok >= 510, f"c0 transpile coverage regressed: {ok}/{total}"
+    # 564/564 as of the machine-access batch (the emulated real-mode machine
+    # in machine.c absorbed PEEK/POKE/OUT/WAIT/INP/REG/BLOAD/BSAVE/CHAIN/
+    # DEF SEG/CALL ABSOLUTE). Slack allows intended decoder changes; a real
+    # regression in c0 shows up as a big drop.
+    assert ok >= 555, f"c0 transpile coverage regressed: {ok}/{total}"
 
 
 def test_unsupported_raises():
     # fail-loud: a program using an unimplemented construct must raise,
-    # never mistranslate (t1_poke touches machine memory via POKE).
+    # never mistranslate. No corpus fixture is outside the vocabulary
+    # anymore, so pin the behavior with a synthetic unknown intrinsic.
+    from tbx import ir
+
+    prog = [
+        ir.Assign(target=ir.Var("A"), value=ir.Call("NOSUCH", (ir.Lit(1),))),
+        ir.End(),
+    ]
     with pytest.raises(ValueError):
-        c0.emit_c(_decode("t1_poke"))
+        c0.emit_c(prog)

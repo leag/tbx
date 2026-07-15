@@ -9,6 +9,12 @@ carries #ifdef _WIN32 paths for its terminal/keyboard/timing bits).
 GOSUB/RETURN use the labels-as-values extension, so gcc/clang specifically,
 not MSVC.
 
+Two variants of the output shape (see emit_c): `standalone=False` emits an
+#include of tb_runtime.h instead of embedding the runtime, for linking many
+programs against one libtbrt.a (`make` in c0_runtime/); `sdl=True` selects
+the SDL2 video backend, presenting the graphics framebuffer in a real
+window with the window's keyboard feeding INKEY$/INSTAT.
+
 Fidelity is behavioral, not byte-exact, and deliberately fail-loud in the
 repo's style: an IR node, intrinsic, or type combination outside the
 implemented vocabulary raises ValueError rather than mistranslating. The
@@ -26,9 +32,15 @@ implemented semantics follow the Turbo Basic handbook:
 - FOR/WHILE/DO compile to explicit test/jump label pairs so EXIT FOR /
   EXIT LOOP and cross-statement GOTO keep working exactly as in the flat IR.
 
-Unsupported (raises): machine access (PEEK/POKE/OUT/INP/WAIT/DEF SEG/
-BLOAD/BSAVE/CALL ABSOLUTE/REG), CHAIN, string DEF FN, DIM rank > 2, and
-any intrinsic not listed in _NUM_FUNCS/_STR_FUNCS.
+Machine access runs against the emulated real-mode machine in
+machine.c: PEEK/POKE/DEF SEG/BLOAD/BSAVE address a private zeroed 1 MiB
+array, OUT/INP are 64 K port latches, WAIT returns at once, REG is real
+storage with a no-op CALL INTERRUPT, CHAIN execs the named file, and
+CALL ABSOLUTE transpiles but aborts if reached (there is no machine code
+to run).
+
+Unsupported (raises): string DEF FN, DIM rank > 2, and any intrinsic not
+listed in _NUM_FUNCS/_STR_FUNCS.
 """
 
 from __future__ import annotations
@@ -50,6 +62,8 @@ _RUNTIME_FRAGMENTS = (
     "graphics.c",  # framebuffer graphics: SCREEN, PSET, LINE, CIRCLE, PAINT, DRAW...
     "play.c",      # PLAY: MML decoding to the WAV-file surrogate
     "events.c",    # ON TIMER polling, MTIMER, the GOSUB label stack
+    "machine.c",   # emulated real-mode memory, ports, REG buffer, CHAIN
+    "sdl.c",       # optional SDL2 window (-DTB_SDL=1); empty otherwise
 )
 
 
@@ -113,6 +127,11 @@ _NUM_FUNCS = {
     # free memory: meaningless on a modern host; a fixed roomy answer keeps
     # low-memory guard code on its happy path
     ("FRE", 1): "65536.0",
+    # machine access reads the emulated machine in machine.c: POKEd memory
+    # and OUT-latched ports read back, everything else reads 0
+    ("PEEK", 1): "tb_peek({0})",
+    ("INP", 1): "tb_inp({0})",
+    ("REG", 1): "tb_regget({0})",
 }
 _STR_FUNCS = {
     ("CHR$", 1): "tb_chr({0})",
@@ -217,8 +236,9 @@ class _Unsupported(ValueError):
 class _Gen:
     """One translation: collects declarations while rendering the body."""
 
-    def __init__(self, stmts):
+    def __init__(self, stmts, standalone: bool = True):
         self.stmts = list(stmts)
+        self.standalone = standalone
         self.orig_lines = getattr(stmts, "lines", None)
         self.vars: dict[str, str] = {}  # mangled -> C declaration
         # name -> (ty, dims, rank); dims is a tuple of (lo, hi) int pairs for a
@@ -713,7 +733,7 @@ class _Gen:
         if isinstance(s, ir.Cls):
             return [
                 'tb_esc("\\033[2J\\033[H"); tb_cols[0] = 0; tb_row = 0;',
-                "if (tb_fb) memset(tb_fb, 0, (size_t)tb_gw * tb_gh);",
+                "if (tb_fb) { memset(tb_fb, 0, (size_t)tb_gw * tb_gh); tb_present(); }",
             ]
         if isinstance(s, ir.Delay):
             return [f"tb_delay({self.num(s.secs)});"]
@@ -914,7 +934,10 @@ class _Gen:
             out.append("goto L0;")
             return out
         if isinstance(s, ir.Palette):
-            return [f"tb_pal[tb_i({self.num(s.attr)}) & 15] = (int)tb_i({self.num(s.color)}) & 15;"]
+            return [
+                f"tb_pal[tb_i({self.num(s.attr)}) & 15] = "
+                f"(int)tb_i({self.num(s.color)}) & 15; tb_present();"
+            ]
         if isinstance(s, ir.Mtimer):
             return ["tb_mt0 = tb_mono();"]
         if isinstance(s, ir.Lprint):
@@ -941,6 +964,33 @@ class _Gen:
         if isinstance(s, (ir.KeyList, ir.Sound, ir.Width)):
             # no soft-key display, audio device, or fixed-width console here
             return [f"/* {type(s).__name__}: no device counterpart on this host */"]
+        if isinstance(s, ir.Poke):
+            return [f"tb_poke({self.num(s.addr)}, {self.num(s.value)});"]
+        if isinstance(s, ir.Out):
+            return [f"tb_outp({self.num(s.port)}, {self.num(s.value)});"]
+        if isinstance(s, ir.Wait):
+            xr = self.num(s.xor) if s.xor is not None else "0"
+            return [f"tb_wait({self.num(s.port)}, {self.num(s.mask)}, {xr});"]
+        if isinstance(s, ir.DefSeg):
+            has, seg = self.opt(s.seg)
+            return [f"tb_defseg({has}, {seg});"]
+        if isinstance(s, ir.RegSet):
+            return [f"tb_regset({self.num(s.n)}, {self.num(s.value)});"]
+        if isinstance(s, ir.CallInterrupt):
+            return [f"tb_callint({self.num(s.n)});"]
+        if isinstance(s, ir.CallAbsolute):
+            # transpiles, then aborts if reached: the emulated memory never
+            # holds runnable machine code
+            return [f"tb_callabs({self.num(s.addr)});"]
+        if isinstance(s, ir.Bload):
+            return [f"tb_bload({self.s(s.file)}, {self.num(s.offset)});"]
+        if isinstance(s, ir.Bsave):
+            return [
+                f"tb_bsave({self.s(s.file)}, {self.num(s.offset)}, "
+                f"{self.num(s.length)});"
+            ]
+        if isinstance(s, ir.Chain):
+            return [f"tb_chain({self.s(s.file)});"]
         raise _Unsupported(f"statement {type(s).__name__}")
 
     def gen_deffn(self, s) -> None:
@@ -1084,7 +1134,12 @@ class _Gen:
         if loops:
             raise _Unsupported(f"unclosed loop(s): {[k for k, *_ in loops]}")
 
-        parts = [_PRELUDE]
+        parts = [
+            _PRELUDE
+            if self.standalone
+            else "/* generated by tbx --emit-c --no-runtime : link against"
+            ' libtbrt.a (make in c0_runtime/) */\n#include "tb_runtime.h"\n'
+        ]
         if self.data:
             items = ", ".join(_cstr(t) for t, _ in self.data)
             parts.append(f"static const char *tb_data[] = {{ {items} }};")
@@ -1131,9 +1186,20 @@ class _Gen:
         return "\n".join(parts) + "\n"
 
 
-def emit_c(stmts) -> str:
-    """Typed IR statements -> a self-contained C translation unit (gcc/clang).
+def emit_c(stmts, standalone: bool = True, sdl: bool = False) -> str:
+    """Typed IR statements -> a C translation unit (gcc/clang).
+
+    `standalone=True` (the default) embeds the runtime fragments so the
+    output compiles alone with `cc out.c -lm`. `standalone=False` emits
+    `#include "tb_runtime.h"` instead, for linking against the runtime
+    built as a library (`make` in c0_runtime/ produces libtbrt.a).
+
+    `sdl=True` turns on the SDL2 video backend (#define TB_SDL 1): graphics
+    render into a real window instead of the PPM-at-exit surrogate. Build
+    with `cc out.c -lm $(sdl2-config --cflags --libs)` (or, non-standalone,
+    a `make SDL=1` runtime library).
 
     Raises ValueError for programs using constructs outside the implemented
     vocabulary -- fail-loud, like the decoder."""
-    return _Gen(stmts).build()
+    text = _Gen(stmts, standalone).build()
+    return "#define TB_SDL 1\n" + text if sdl else text

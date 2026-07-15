@@ -18,6 +18,7 @@
 #include <windows.h>
 #include <conio.h>
 #include <io.h>
+#include <process.h>
 #include <dirent.h>
 #else
 #include <unistd.h>
@@ -40,6 +41,14 @@
    (silent PLAY, no screen file), the way real hardware-less execution behaves. */
 #ifndef TB_FILE_DEVICES
 #define TB_FILE_DEVICES 1
+#endif
+
+/* Build with -DTB_SDL=1 (and SDL2) to present the graphics framebuffer in a
+   real window instead: sdl.c then provides tb_present/tb_sdl_inkey/
+   tb_sdl_instat and graphics.c's no-op stubs compile out. The flag must be
+   consistent across all fragments of one build. */
+#ifndef TB_SDL
+#define TB_SDL 0
 #endif
 
 /* --- core.c: error trapping, console PRINT, clock, numbers, strings --- */
@@ -159,9 +168,31 @@ void tb_window(int has_rect, double x1, double y1, double x2, double y2,
                int absolute);
 void tb_draw(const char *cmd);
 double tb_pmap(double v, double n);
+/* presentation hook: every drawing op ends with tb_present(). sdl.c
+   implements the TB_SDL side; graphics.c holds the no-op stubs. The
+   tb_sdl_* pair returns -1 while no window is open, letting the terminal
+   keyboard keep INKEY$/INSTAT. */
+void tb_present(void);
+int tb_sdl_inkey(void);
+int tb_sdl_instat(void);
 
 /* --- play.c: MML decoding to the WAV-file surrogate --- */
 void tb_play(const char *mml);
+
+/* --- machine.c: emulated real-mode memory, ports, REG buffer, CHAIN --- */
+double tb_peek(double off);
+void tb_poke(double off, double v);
+void tb_defseg(int has, double seg);
+double tb_inp(double port);
+void tb_outp(double port, double v);
+void tb_wait(double port, double mask, double xr);
+void tb_regset(double n, double v);
+double tb_regget(double n);
+void tb_callint(double n);
+void tb_callabs(double off);
+void tb_bsave(const char *f, double off, double len);
+void tb_bload(const char *f, double off);
+void tb_chain(const char *f);
 
 /* --- events.c: ON TIMER polling, MTIMER, the GOSUB label stack --- */
 double tb_mono(void);

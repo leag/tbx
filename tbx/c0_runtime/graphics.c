@@ -46,6 +46,7 @@ void tb_screen(double mode) {
             static int reg = 0;
             if (!reg) { reg = 1; atexit(tb_ppm_dump); }
 #endif
+            tb_present();
             return;
         }
     tb_error(5);                                         /* illegal function call */
@@ -79,6 +80,7 @@ void tb_pset(double x, double y, int step, int has_c, double c, int preset) {
     tb_map(x, y, &px, &py);
     tb_px(px, py, has_c ? (int)c : preset ? 0 : tb_fg);
     tb_lastx = x; tb_lasty = y;
+    tb_present();
 }
 static void tb_line_px(long x1, long y1, long x2, long y2, int c, unsigned style) {
     long dx = labs(x2 - x1), sx = x1 < x2 ? 1 : -1;
@@ -114,6 +116,7 @@ void tb_linestmt(double x1, double y1, int s1, double x2, double y2, int s2,
         tb_line_px(px1, py1, px2, py2, col, style);
     }
     tb_lastx = x2; tb_lasty = y2;
+    tb_present();
 }
 void tb_circle(double x, double y, double r, int step, int has_c, double c,
                       double sa, double ea, double aspect) {
@@ -135,6 +138,7 @@ void tb_circle(double x, double y, double r, int step, int has_c, double c,
     if (line_s) tb_line_px(cx, cy, lround(cx + rx * cos(sa)), lround(cy - ry * sin(sa)), col, 0xFFFF);
     if (line_e) tb_line_px(cx, cy, lround(cx + rx * cos(ea)), lround(cy - ry * sin(ea)), col, 0xFFFF);
     tb_lastx = x; tb_lasty = y;
+    tb_present();
 }
 void tb_paint(double x, double y, int has_p, double p, int has_b, double b) {
     long sx, sy;
@@ -157,6 +161,7 @@ void tb_paint(double x, double y, int has_p, double p, int has_b, double b) {
         }
     }
     free(stack);
+    tb_present();
 }
 /* GET/PUT blit: internal layout [long w][long h][one byte per pixel] laid
    into the array's storage, clipped to its capacity in bytes */
@@ -199,6 +204,7 @@ void tb_putgfx(void *buf, long cap, double x, double y, int pset_action) {
                  : pset_action == 4 ? (unsigned char)(*dst | v)
                  : (unsigned char)((*dst ^ v) & 15);
         }
+    tb_present();
 }
 void tb_view(int has_rect, double x1, double y1, double x2, double y2,
                     int absolute, int has_c, double c, int has_b, double b) {
@@ -224,6 +230,7 @@ void tb_view(int has_rect, double x1, double y1, double x2, double y2,
         tb_line_px(ox1 - 1, oy2 + 1, ox1 - 1, oy1 - 1, (int)b, 0xFFFF);
         tb_vx1 = ox1; tb_vy1 = oy1; tb_vx2 = ox2; tb_vy2 = oy2;
     }
+    if (has_c || has_b) tb_present();
 }
 void tb_window(int has_rect, double x1, double y1, double x2, double y2, int absolute) {
     tb_gfx();
@@ -285,6 +292,7 @@ void tb_draw(const char *cmd) {
         }
         if (!back) { tb_lastx = nx; tb_lasty = ny; }
     }
+    tb_present();
 }
 double tb_pmap(double v, double n) {
     long px, py;
@@ -304,3 +312,11 @@ double tb_pmap(double v, double n) {
     tb_error(5);
     return 0;
 }
+
+#if !TB_SDL
+/* no SDL backend in this build: drawing stays in the in-memory framebuffer
+   (PPM-at-exit surrogate above) and the terminal keeps the keyboard */
+void tb_present(void) {}
+int tb_sdl_inkey(void) { return -1; }
+int tb_sdl_instat(void) { return -1; }
+#endif
