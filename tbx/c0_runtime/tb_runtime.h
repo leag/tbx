@@ -6,6 +6,12 @@
 #ifndef TB_RUNTIME_H
 #define TB_RUNTIME_H
 
+/* The runtime interface version. Bump on ANY change to a declaration in
+   this header or to a documented surrogate behavior (see README.md in this
+   directory): a generated --no-runtime program only links against a
+   libtbrt.a built from the same version. */
+#define TB_RT_VERSION 1
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

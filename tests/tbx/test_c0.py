@@ -28,7 +28,7 @@ from tbx import c0, decode0
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _CORPUS = os.path.join(_ROOT, "fixtures", "corpus")
 
-_CC = shutil.which("cc")
+_CC = shutil.which(os.environ.get("CC", "cc"))  # CI matrix sets CC=gcc/clang
 _AR = shutil.which("ar")
 _SDL2_CONFIG = shutil.which("sdl2-config")
 

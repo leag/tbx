@@ -35,7 +35,7 @@ uv run python -m tbx.tools.verify_fixture STEM        # byte-exact round trip
 uv run python -m tbx.tools.dump_dos_output --missing  # tests/fixtures/dosout/
 ```
 
-Requires Python 3.11+. CI (`.github/workflows/ci.yml`) runs ruff, ty, and pytest on Python 3.11–3.13 for pushes to main and pull requests; all three must pass.
+Requires Python 3.11+. CI (`.github/workflows/ci.yml`) runs ruff, ty, and pytest on Python 3.11–3.13 for pushes to main and pull requests, plus a `c0` platform matrix (Linux gcc/clang with SDL2, macOS clang, experimental Windows MinGW) running `test_c0.py`; all must pass.
 
 The core package (`tbx.decode0`, `tbx.ir`, `tbx.emit0`, `tbx.cli`) has **zero runtime dependencies**; keep it that way. Only `tbx/tools/` may use iced-x86 (the `debug` extra), and `tests/tbx/test_cfg.py` guards it with `pytest.importorskip`.
 

@@ -20,3 +20,37 @@ jobs:
       - run: uv run ruff check
       - run: uv run ty check
       - run: uv run pytest
+
+  # the c0 native-recompile back end across platforms and compilers
+  # (graduation plan phase 4); the decoder suite is platform-independent
+  # and already covered by `test` above
+  c0:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            cc: gcc
+          - os: ubuntu-latest
+            cc: clang
+          - os: macos-latest
+            cc: clang
+          - os: windows-latest
+            cc: gcc
+    runs-on: ${{ matrix.os }}
+    # the Windows lane (MinGW-w64 gcc) is experimental until proven green
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
+    env:
+      CC: ${{ matrix.cc }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - if: runner.os == 'Linux'
+        # SDL2 so the headless SDL backend test runs instead of skipping
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev
+      - if: runner.os == 'macOS'
+        run: brew install sdl2
+      - run: uv sync
+      - run: uv run pytest tests/tbx/test_c0.py -q
