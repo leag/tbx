@@ -118,7 +118,7 @@ cc program.c -lm -o program        # gcc or clang (labels-as-values is used)
 
 The output compiles unchanged on Windows with MinGW-w64 gcc or clang (not
 MSVC) — the runtime carries `#ifdef _WIN32` paths for its keyboard, console,
-directory, and timing pieces.
+directory, and timing pieces (exercised under Wine).
 
 The generated file embeds a runtime that follows Turbo Basic semantics:
 GW-BASIC-style PRINT and PRINT USING layout with per-channel TAB/SPC columns,
@@ -136,12 +136,54 @@ at exit. These file surrogates are gated at compile time — build with
 `-DTB_FILE_DEVICES=0` to omit them and leave the devices absent (silent PLAY,
 no screen dump). Terminal statements map to ANSI escapes; the remaining
 device statements (KEY LIST, SOUND, WIDTH) are no-ops, and device functions
-read as absent (STICK/STRIG/PEN = 0). Fidelity is behavioral, not byte-exact,
-and the back end stays fail-loud where a faithful translation is impossible:
-machine access
-(PEEK/POKE/OUT/WAIT/INP/REG/CALL ABSOLUTE/BLOAD/BSAVE/DEF SEG) and CHAIN are
-rejected rather than mistranslated. 534 of the 564 fixture-corpus programs
-(95%) recompile and run natively today; the other 30 all use machine access.
+read as absent (STICK/STRIG/PEN = 0).
+
+Machine access runs against an emulated real-mode machine rather than being
+rejected: PEEK/POKE/DEF SEG/BLOAD/BSAVE address a private zero-filled 1 MiB
+memory image (POKEd values PEEK back; BSAVE/BLOAD round-trip through files
+with the real 7-byte header), OUT/INP are 64 K one-byte port latches, WAIT
+returns at once (the absent device is treated as ready), REG is real storage
+behind a no-op CALL INTERRUPT, CHAIN execs the named file from the working
+directory (so a chained program recompiled alongside works, TB error 53 if
+absent), and CALL ABSOLUTE compiles but aborts if reached — there is no
+machine code to run. These are documented surrogates, not DOS: a program
+that PEEKs a BIOS structure at a magic address reads 0.
+
+Fidelity is behavioral, not byte-exact, and the back end stays fail-loud:
+a construct outside the implemented vocabulary raises instead of
+mistranslating. All 564 fixture-corpus programs recompile and run natively
+today.
+
+### Reusing the runtime
+
+The C runtime lives in `tbx/c0_runtime/` as standalone units — each `.c`
+compiles on its own against `tb_runtime.h`, so it also builds as an ordinary
+static library. `--no-runtime` then emits programs that `#include` the
+header instead of embedding the runtime, letting many recompiled programs
+share one build of it:
+
+```
+make -C tbx/c0_runtime                              # libtbrt.a
+tbx PROGRAM.EXE --emit-c --no-runtime -o program.c
+cc program.c -Itbx/c0_runtime -Ltbx/c0_runtime -ltbrt -lm -o program
+```
+
+### SDL2 graphics
+
+With SDL2 installed, `--sdl` presents graphics in a real window instead of
+the in-memory framebuffer's PPM-at-exit surrogate:
+
+```
+tbx PROGRAM.EXE --emit-c --sdl -o program.c
+cc program.c -lm $(sdl2-config --cflags --libs) -o program
+```
+
+The window is 4:3, like the CRTs these modes were designed for, so 640×200
+keeps its authentic non-square pixels. Keys typed into the window feed
+INKEY$/INSTAT, making interactive graphics programs playable; when the
+program ends, the final image stays up until a key or the close button
+(set `TB_SDL_HOLD=0` to skip). For the library build, use
+`make -C tbx/c0_runtime SDL=1` and compile programs with `-DTB_SDL=1`.
 
 ## Debugging tools
 
