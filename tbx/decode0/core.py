@@ -1048,6 +1048,8 @@ def decode_user_code(exe: bytes) -> list[Any]:
             a["name"] += "&"  # long-integer arrays render with `&`
         if a.get("int") and not a["name"].endswith("%"):
             a["name"] += "%"  # integer arrays (type 00, esz 2) render with `%`
+        if a.get("dbl") and not a["name"].endswith("#"):
+            a["name"] += "#"  # double arrays (type 06, esz 8) render with `#`
     state.stack = []  # the emulated FP stack, as ir Expr nodes
     state.stmts = []
     state.addrs = []  # addrs[k] = first-op address of stmts[k]

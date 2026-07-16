@@ -1,7 +1,7 @@
-10 DIM V0(3)
+10 DIM V0#(3)
 20 A# = 0#
 30 FOR B% = 0 TO 3
-40 A# = A# + V0(B%)
+40 A# = A# + V0#(B%)
 50 NEXT B%
 60 PRINT A#
 70 END

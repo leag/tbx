@@ -158,6 +158,26 @@ End()
 DateTimeSet(name='DATE$', value=StrLit(value='07-02-2026'))
 End()
 
+## t1_dblar2
+Dim(name='V0#', bounds=(5,), also=())
+Assign(target=Var(name='A'), value=Lit(value=2))
+Assign(target=ArrayRef(name='V0#', indices=(Var(name='A'),)), value=Lit(value=7))
+Assign(target=Var(name='B#'), value=Lit(value=9))
+IfGoto(cond=RelOp(op='<=', lhs=ArrayRef(name='V0#', indices=(Var(name='A'),)), rhs=Var(name='B#')), target=6)
+Print(items=(StrLit(value='G'),), newline=True, file=None, commas=None)
+Print(items=(ArrayRef(name='V0#', indices=(Lit(value=2),)),), newline=True, file=None, commas=None)
+End()
+
+## t1_dblarr
+Dim(name='V0#', bounds=(5,), also=())
+Assign(target=Var(name='A'), value=Lit(value=2))
+Assign(target=ArrayRef(name='V0#', indices=(Var(name='A'),)), value=Lit(value=7))
+Assign(target=Var(name='B#'), value=Lit(value=9))
+IfGoto(cond=RelOp(op='<=', lhs=Var(name='B#'), rhs=ArrayRef(name='V0#', indices=(Var(name='A'),))), target=6)
+Print(items=(StrLit(value='G'),), newline=True, file=None, commas=None)
+Print(items=(ArrayRef(name='V0#', indices=(Lit(value=2),)),), newline=True, file=None, commas=None)
+End()
+
 ## t1_defseg
 DefSeg(seg=Lit(value=0))
 Poke(addr=Lit(value=1040), value=Lit(value=1))
@@ -3326,24 +3346,24 @@ Print(items=(Var(name='C#'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_vm_darr
-Dim(name='V0', bounds=(3,), also=())
-Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=DblLit(value=2.5))
-Print(items=(ArrayRef(name='V0', indices=(Lit(value=1),)),), newline=True, file=None, commas=None)
+Dim(name='V0#', bounds=(3,), also=())
+Assign(target=ArrayRef(name='V0#', indices=(Lit(value=1),)), value=DblLit(value=2.5))
+Print(items=(ArrayRef(name='V0#', indices=(Lit(value=1),)),), newline=True, file=None, commas=None)
 End()
 
 ## zz_vm_darr_loop
-Dim(name='V0', bounds=(3,), also=())
+Dim(name='V0#', bounds=(3,), also=())
 For(var=Var(name='A%'), init=Lit(value=0), limit=Lit(value=3), step=Lit(value=1))
-Assign(target=ArrayRef(name='V0', indices=(Var(name='A%'),)), value=DblLit(value=2.5))
+Assign(target=ArrayRef(name='V0#', indices=(Var(name='A%'),)), value=DblLit(value=2.5))
 NextStmt(var=Var(name='A%'))
-Print(items=(ArrayRef(name='V0', indices=(Lit(value=0),)),), newline=True, file=None, commas=None)
+Print(items=(ArrayRef(name='V0#', indices=(Lit(value=0),)),), newline=True, file=None, commas=None)
 End()
 
 ## zz_vm_darr_rdloop
-Dim(name='V0', bounds=(3,), also=())
+Dim(name='V0#', bounds=(3,), also=())
 Assign(target=Var(name='A#'), value=DblLit(value=0.0))
 For(var=Var(name='B%'), init=Lit(value=0), limit=Lit(value=3), step=Lit(value=1))
-Assign(target=Var(name='A#'), value=BinOp(op='+', lhs=Var(name='A#'), rhs=ArrayRef(name='V0', indices=(Var(name='B%'),))))
+Assign(target=Var(name='A#'), value=BinOp(op='+', lhs=Var(name='A#'), rhs=ArrayRef(name='V0#', indices=(Var(name='B%'),))))
 NextStmt(var=Var(name='B%'))
 Print(items=(Var(name='A#'),), newline=True, file=None, commas=None)
 End()

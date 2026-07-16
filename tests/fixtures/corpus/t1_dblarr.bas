@@ -1,0 +1,7 @@
+10 DIM A#(5)
+20 I = 2
+30 A#(I) = 7
+40 X# = 9
+50 IF X# > A#(I) THEN PRINT "G"
+60 PRINT A#(2)
+70 END

@@ -108,10 +108,12 @@ def test_decode_t1_dblarr():
 
 def test_decode_t1_dblar2():
     # DC /3 FCOMP m64 [si]: double ARRAY ELEMENT as the mem side of an FP IF
+    # (source `IF A#(I) > X# THEN`; renders negated as a skip-goto, same
+    # convention as test_decode_t1_dblarr)
     from tbx import decode0, emit0
 
     src = emit0.emit(decode0.decode_user_code(_exe("t1_dblar2.exe")))
-    assert "IF V0#(A) > B# THEN" in src
+    assert "IF V0#(A) <= B# THEN" in src
 
 
 def test_decode_t1_cmpfar():

@@ -134,6 +134,7 @@ def _parse_static_slot(exe: bytes, pos: int) -> dict[str, Any] | None:
         "esz": esz,
         "long": rt & 0xFF == 0x02,  # pre-seed; confirmed in _layout finish
         "int": rt & 0xFF == 0x00,
+        "dbl": rt & 0xFF == 0x06,
     }
 
 
