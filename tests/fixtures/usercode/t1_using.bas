@@ -1,0 +1,6 @@
+10 A = 3.14
+20 PRINT USING "##.##"; A
+30 PRINT USING "TOTAL: #### UNITS"; 42
+40 B$ = "HI"
+50 PRINT USING "\ \ !"; B$; B$
+60 END

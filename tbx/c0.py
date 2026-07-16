@@ -563,13 +563,15 @@ class _Gen:
         out = []
         if s.file is not None:
             out.append(f"tb_out = tb_file({s.file}); tb_ch = {s.file};")
-        for item in s.items:
+        for i, item in enumerate(s.items):
             if isinstance(item, ir.Call) and item.name in ("TAB", "SPC"):
                 out.append(f"tb_{item.name.lower()}({self.num(item.args[0])});")
             elif _is_str(item):
                 out.append(f"tb_pss({self.s(item)});")
             else:
                 out.append(f"tb_pn({self.num(item)});")
+            if s.commas and s.commas[i]:
+                out.append("tb_zone();")
         if s.newline:
             out.append("tb_nl();")
         if s.file is not None:
@@ -896,6 +898,8 @@ class _Gen:
             # SEEK on a random-mode channel is TB error 54 (t1_seek dosout)
             return [f"tb_seek({s.num}, {self.num(s.pos)});"]
         if isinstance(s, ir.Close):
+            if s.num is None:  # bare CLOSE: all channels, like RESET
+                return ["tb_reset();"]
             return [f"tb_close({s.num});"]
         if isinstance(s, ir.Reset):
             return ["tb_reset();"]
@@ -927,6 +931,10 @@ class _Gen:
             return [f"free({m}); {m} = 0;"]
         if isinstance(s, ir.Key):
             return []  # soft-key display line: no modern-terminal counterpart
+        if isinstance(s, ir.KeyDef):
+            # F-key macro definitions feed the BIOS keyboard buffer; there is
+            # no modern-terminal counterpart (same surrogate as KEY ON/OFF)
+            return []
         if isinstance(s, ir.Locate):
             out = [f"tb_locate({self.num(s.row)}, {self.num(s.col)});"]
             if s.cursor is not None:
@@ -1078,7 +1086,11 @@ class _Gen:
             if s.file is not None:
                 out.append(f"tb_out = tb_file({s.file}); tb_ch = {s.file};")
             out.append(f"tb_pu_begin({self.s(s.fmt)});")
-            out.extend(f"tb_pu_val({self.num(v)});" for v in s.values)
+            out.extend(
+                f"tb_pu_sval({self.s(v)});" if _is_str(v) else f"tb_pu_val({self.num(v)});"
+                for v in s.values
+            )
+            out.append("tb_pu_flush();")
             if s.newline:
                 out.append("tb_nl();")
             if s.file is not None:

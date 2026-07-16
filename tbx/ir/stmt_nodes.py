@@ -195,6 +195,10 @@ class Print:
     items: Any  # tuple[StrLit | numeric Expr, ...]; a single item is normalized below
     newline: bool = True
     file: object = None  # int | None
+    # zone-advance separators (INT C1, witnessed t1_pcomma): None = all ';',
+    # else an items-aligned tuple[bool] -- True = a ',' follows item i (the
+    # last flag is the trailing separator when newline=False)
+    commas: Any = None
 
     def __post_init__(self):
         if not isinstance(self.items, tuple):
@@ -605,6 +609,15 @@ class Key:
 
 
 @dataclass(frozen=True)
+class KeyDef:
+    """KEY n, s$ (INT ECh sub 58h) -- define function-key macro n: n in ax,
+    the macro string pushed (witnessed t1_key)."""
+
+    num: object  # Lit
+    text: object  # string Expr
+
+
+@dataclass(frozen=True)
 class Screen:
     """SCREEN mode[,burst][,apage][,vpage] (INT ECh sub C6h): the trailing tag
     byte is a presence mask (08 mode / 04 burst / 02 apage / 01 vpage) and the
@@ -700,9 +713,10 @@ class InputFile:
 
 @dataclass(frozen=True)
 class Close:
-    """CLOSE #n -- ax=n, sub 18."""
+    """CLOSE #n -- ax=n, sub 18; bare CLOSE (all channels) is its own sub 16
+    and lifts to num=None (witnessed t1_close)."""
 
-    num: int  # file number
+    num: object = None  # int file number | None (= close all)
 
 
 @dataclass(frozen=True)

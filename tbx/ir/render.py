@@ -73,6 +73,7 @@ from tbx.ir.stmt_nodes import (
     Input,
     InputFile,
     Key,
+    KeyDef,
     KeyList,
     Kill,
     LineInput,
@@ -265,9 +266,17 @@ def _us_output(s) -> str | None:
     """Render PRINT family, sound and misc actions; None if `s` is not one of them."""
     if isinstance(s, Print):
         txt = "PRINT" + (f" #{s.file}," if s.file is not None else "")
+        cs = s.commas or (False,) * len(s.items)
         if s.items:
-            txt += " " + "; ".join(unparse(i) for i in s.items)
-        return txt + ("" if s.newline else ";")
+            parts = []
+            for i, item in enumerate(s.items):
+                parts.append(unparse(item))
+                if i < len(s.items) - 1:
+                    parts.append(", " if cs[i] else "; ")
+            txt += " " + "".join(parts)
+        if s.newline:
+            return txt
+        return txt + ("," if s.items and cs[-1] else ";")
     if isinstance(s, PrintUsing):
         pre = f"#{s.file}, " if s.file is not None else ""
         vals = "; ".join(unparse(v) for v in s.values)
@@ -373,6 +382,8 @@ def _us_graphics(s) -> str | None:
         return f"WIDTH {unparse(s.cols)}"
     if isinstance(s, Key):
         return "KEY ON" if s.on else "KEY OFF"
+    if isinstance(s, KeyDef):
+        return f"KEY {unparse(s.num)},{unparse(s.text)}"
     if isinstance(s, Screen):
         args = [s.mode, s.burst, s.apage, s.vpage]
         while args and args[-1] is None:
@@ -420,7 +431,7 @@ def _us_fileio(s) -> str | None:
     if isinstance(s, InputFile):
         return f"INPUT #{s.num}, {', '.join(unparse(v) for v in s.vars)}"
     if isinstance(s, Close):
-        return f"CLOSE #{s.num}"
+        return "CLOSE" if s.num is None else f"CLOSE #{s.num}"
     if isinstance(s, Reset):
         return "RESET"
     if isinstance(s, Files):

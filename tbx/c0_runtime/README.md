@@ -46,7 +46,8 @@ from argv, uppercased — original quoting and spacing are not recoverable.
 null device, never the console (t1_lprint), with its own column state.
 SOUND/BEEP and PLAY decode to PCM (`TB_PLAY_WAV` dumps at exit); joystick,
 light pen (PEN errors while PEN OFF, t1_penf), and COM are absent — their
-functions read 0 and their event sources never fire. ON TIMER is polled at
+functions read 0 and their event sources never fire. KEY n,s$ macro
+definitions are no-ops like KEY ON/OFF (they fed the BIOS keyboard buffer). ON TIMER is polled at
 statement boundaries, like TB.
 
 **Graphics** (`graphics.c`, `sdl.c`) — SCREEN n allocates a byte-per-pixel

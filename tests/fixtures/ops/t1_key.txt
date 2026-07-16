@@ -1,0 +1,19 @@
+# t1_key dialect=1.1 start=08870
+08873:movax:1
+08876:movsi:296
+08879:rt:156
+0887B:movbxax
+0887D:movax:13
+08880:strfn:CHR$
+08882:movrr:ax:bx
+08884:strconcat
+08886:key_macro
+08889:key_on
+0888C:movax:2
+0888F:movsi:292
+08892:rt:156
+08894:key_macro
+08897:key_off
+0889A:end
+0889D:epilogue
+# commits

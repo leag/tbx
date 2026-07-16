@@ -402,6 +402,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "cmpax_m", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4
         return p
+    if b == 0x3B and exe[p + 1] == 0xC3:  # cmp ax, bx: integer relational where
+        ops.append((p, "cmpax_bx"))  # both sides are ax-computed -- source RHS
+        p += 2  # evaluates first and shuttles to bx (witnessed t1_cmpax)
+        return p
     return None
 
 
@@ -468,6 +472,8 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
         0xC0,
         0xCA,
         0xCB,  # file/USING legs
+        0xCC,  # USING string item (witnessed t1_using)
+        0xC1,  # PRINT comma zone advance (witnessed t1_pcomma)
         0xBC,
         0xB9,
     ):  # LPRINT item / newline
@@ -808,6 +814,10 @@ def _scan(
                 ops.append((p, "close"))
                 p += 3
                 continue
+            if sub == 0x16:  # bare CLOSE: close all channels (witnessed t1_close)
+                ops.append((p, "close_all"))
+                p += 3
+                continue
             if sub == 0x2C:  # runtime DIM: begin bracket
                 ops.append((p, "dim_begin"))
                 p += 3
@@ -900,6 +910,10 @@ def _scan(
                 continue
             if sub == 0x54:  # KEY ON
                 ops.append((p, "key_on"))
+                p += 3
+                continue
+            if sub == 0x58:  # KEY n, s$: n in ax, macro on sstack (t1_key)
+                ops.append((p, "key_macro"))
                 p += 3
                 continue
             if sub == 0x52:  # KEY OFF

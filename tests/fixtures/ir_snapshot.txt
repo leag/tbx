@@ -2,9 +2,9 @@
 Input(prompt=None, var=Var(name='A'), comma=False)
 Input(prompt=None, var=Var(name='B'), comma=False)
 IfGoto(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), target=5)
-Print(items=(Lit(value=0),), newline=True, file=None)
+Print(items=(Lit(value=0),), newline=True, file=None, commas=None)
 Goto(target=6)
-Print(items=(Lit(value=1),), newline=True, file=None)
+Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
 End()
 
 ## t1_arr1
@@ -103,9 +103,24 @@ End()
 Clear()
 End()
 
+## t1_close
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='A.TXT'), reclen=None)
+Print(items=(StrLit(value='X'),), newline=True, file=1, commas=None)
+Close(num=None)
+End()
+
 ## t1_cmd
 Assign(target=Var(name='A$'), value=Nullary(name='COMMAND$'))
-Print(items=(Var(name='A$'),), newline=True, file=None)
+Print(items=(Var(name='A$'),), newline=True, file=None, commas=None)
+End()
+
+## t1_cmpax
+Assign(target=Var(name='A$'), value=StrLit(value='AB'))
+Assign(target=Var(name='B$'), value=StrLit(value='CD'))
+IfGoto(cond=RelOp(op='<>', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Call(name='LEN', args=(Var(name='B$'),))), target=4)
+Print(items=(StrLit(value='EQ'),), newline=True, file=None, commas=None)
+IfGoto(cond=RelOp(op='<=', lhs=Call(name='INSTR', args=(Var(name='A$'), StrLit(value='B'))), rhs=Call(name='LEN', args=(Var(name='B$'),))), target=6)
+Print(items=(StrLit(value='GT'),), newline=True, file=None, commas=None)
 End()
 
 ## t1_convf
@@ -151,7 +166,7 @@ End()
 Dim(name='V0', bounds=(2, 3, 4), also=())
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=2), Lit(value=3))), value=Lit(value=7))
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=2), Lit(value=3), Lit(value=4))), value=Lit(value=9))
-Print(items=(ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=2), Lit(value=3))), ArrayRef(name='V0', indices=(Lit(value=2), Lit(value=3), Lit(value=4))), ArrayRef(name='V0', indices=(Lit(value=0), Lit(value=0), Lit(value=0)))), newline=True, file=None)
+Print(items=(ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=2), Lit(value=3))), ArrayRef(name='V0', indices=(Lit(value=2), Lit(value=3), Lit(value=4))), ArrayRef(name='V0', indices=(Lit(value=0), Lit(value=0), Lit(value=0)))), newline=True, file=None, commas=None)
 End()
 
 ## t1_dim3v
@@ -164,7 +179,7 @@ Assign(target=ArrayRef(name='V0', indices=(Var(name='B'), Var(name='C'), Var(nam
 NextStmt(var=Var(name='D'))
 NextStmt(var=Var(name='C'))
 NextStmt(var=Var(name='B'))
-Print(items=(ArrayRef(name='V0', indices=(Lit(value=2), Lit(value=4), Lit(value=3))), ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=2), Lit(value=1))), ArrayRef(name='V0', indices=(Lit(value=0), Lit(value=0), Lit(value=0)))), newline=True, file=None)
+Print(items=(ArrayRef(name='V0', indices=(Lit(value=2), Lit(value=4), Lit(value=3))), ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=2), Lit(value=1))), ArrayRef(name='V0', indices=(Lit(value=0), Lit(value=0), Lit(value=0)))), newline=True, file=None, commas=None)
 End()
 
 ## t1_dimm
@@ -176,14 +191,14 @@ Assign(target=Var(name='B'), value=Lit(value=2))
 Assign(target=ArrayRef(name='V2', indices=(Var(name='B'),)), value=Lit(value=4))
 Assign(target=ArrayRef(name='V0', indices=(Var(name='B'),)), value=ArrayRef(name='V2', indices=(Var(name='B'),)))
 Assign(target=ArrayRef(name='V3', indices=(Var(name='B'), Lit(value=1))), value=BinOp(op='+', lhs=ArrayRef(name='V2', indices=(Var(name='B'),)), rhs=ArrayRef(name='V1', indices=(Var(name='B'),))))
-Print(items=(ArrayRef(name='V3', indices=(Var(name='B'), Lit(value=1))), ArrayRef(name='V0', indices=(Var(name='A'),))), newline=True, file=None)
+Print(items=(ArrayRef(name='V3', indices=(Var(name='B'), Lit(value=1))), ArrayRef(name='V0', indices=(Var(name='A'),))), newline=True, file=None, commas=None)
 End()
 
 ## t1_dimv
 Input(prompt=None, var=Var(name='A'), comma=False)
 Dim(name='V0', bounds=(Var(name='A'),), also=())
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=2))
-Print(items=(ArrayRef(name='V0', indices=(Lit(value=1),)),), newline=True, file=None)
+Print(items=(ArrayRef(name='V0', indices=(Lit(value=1),)),), newline=True, file=None, commas=None)
 End()
 
 ## t1_dimv2
@@ -322,89 +337,89 @@ Assign(target=Var(name='B'), value=Call(name='ABS', args=(Var(name='A'),)))
 Assign(target=Var(name='C'), value=Call(name='SQR', args=(Var(name='A'),)))
 Assign(target=Var(name='D'), value=Call(name='INT', args=(Var(name='A'),)))
 Assign(target=Var(name='E'), value=Call(name='SGN', args=(Var(name='A'),)))
-Print(items=(BinOp(op='+', lhs=BinOp(op='+', lhs=BinOp(op='+', lhs=Var(name='B'), rhs=Var(name='C')), rhs=Var(name='D')), rhs=Var(name='E')),), newline=True, file=None)
+Print(items=(BinOp(op='+', lhs=BinOp(op='+', lhs=BinOp(op='+', lhs=Var(name='B'), rhs=Var(name='C')), rhs=Var(name='D')), rhs=Var(name='E')),), newline=True, file=None, commas=None)
 End()
 
 ## t1_fn_asc
 Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
-Print(items=(Call(name='ASC', args=(Var(name='A$'),)),), newline=True, file=None)
+Print(items=(Call(name='ASC', args=(Var(name='A$'),)),), newline=True, file=None, commas=None)
 End()
 
 ## t1_fn_bin
-Print(items=(Call(name='BIN$', args=(Lit(value=5),)),), newline=True, file=None)
+Print(items=(Call(name='BIN$', args=(Lit(value=5),)),), newline=True, file=None, commas=None)
 End()
 
 ## t1_fn_chr
-Print(items=(Call(name='CHR$', args=(Lit(value=65),)),), newline=True, file=None)
+Print(items=(Call(name='CHR$', args=(Lit(value=65),)),), newline=True, file=None, commas=None)
 End()
 
 ## t1_fn_hex
-Print(items=(Call(name='HEX$', args=(Lit(value=255),)),), newline=True, file=None)
+Print(items=(Call(name='HEX$', args=(Lit(value=255),)),), newline=True, file=None, commas=None)
 End()
 
 ## t1_fn_instr
 Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
-Print(items=(Call(name='INSTR', args=(Var(name='A$'), StrLit(value='l'))),), newline=True, file=None)
+Print(items=(Call(name='INSTR', args=(Var(name='A$'), StrLit(value='l'))),), newline=True, file=None, commas=None)
 End()
 
 ## t1_fn_lcase
 Assign(target=Var(name='A$'), value=StrLit(value='Hi'))
-Print(items=(Call(name='LCASE$', args=(Var(name='A$'),)),), newline=True, file=None)
+Print(items=(Call(name='LCASE$', args=(Var(name='A$'),)),), newline=True, file=None, commas=None)
 End()
 
 ## t1_fn_left
 Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
-Print(items=(Call(name='LEFT$', args=(Var(name='A$'), Lit(value=2))),), newline=True, file=None)
+Print(items=(Call(name='LEFT$', args=(Var(name='A$'), Lit(value=2))),), newline=True, file=None, commas=None)
 End()
 
 ## t1_fn_len
 Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
-Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None)
+Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None, commas=None)
 End()
 
 ## t1_fn_mid
 Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
-Print(items=(Call(name='MID$', args=(Var(name='A$'), Lit(value=2), Lit(value=3))),), newline=True, file=None)
+Print(items=(Call(name='MID$', args=(Var(name='A$'), Lit(value=2), Lit(value=3))),), newline=True, file=None, commas=None)
 End()
 
 ## t1_fn_oct
-Print(items=(Call(name='OCT$', args=(Lit(value=8),)),), newline=True, file=None)
+Print(items=(Call(name='OCT$', args=(Lit(value=8),)),), newline=True, file=None, commas=None)
 End()
 
 ## t1_fn_right
 Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
-Print(items=(Call(name='RIGHT$', args=(Var(name='A$'), Lit(value=2))),), newline=True, file=None)
+Print(items=(Call(name='RIGHT$', args=(Var(name='A$'), Lit(value=2))),), newline=True, file=None, commas=None)
 End()
 
 ## t1_fn_space
-Print(items=(Call(name='SPACE$', args=(Lit(value=3),)),), newline=True, file=None)
+Print(items=(Call(name='SPACE$', args=(Lit(value=3),)),), newline=True, file=None, commas=None)
 End()
 
 ## t1_fn_str
-Print(items=(Call(name='STR$', args=(Lit(value=42),)),), newline=True, file=None)
+Print(items=(Call(name='STR$', args=(Lit(value=42),)),), newline=True, file=None, commas=None)
 End()
 
 ## t1_fn_string
-Print(items=(Call(name='STRING$', args=(Lit(value=3), Lit(value=42))),), newline=True, file=None)
+Print(items=(Call(name='STRING$', args=(Lit(value=3), Lit(value=42))),), newline=True, file=None, commas=None)
 End()
 
 ## t1_fn_ucase
 Assign(target=Var(name='A$'), value=StrLit(value='Hi'))
-Print(items=(Call(name='UCASE$', args=(Var(name='A$'),)),), newline=True, file=None)
+Print(items=(Call(name='UCASE$', args=(Var(name='A$'),)),), newline=True, file=None, commas=None)
 End()
 
 ## t1_fn_val
-Print(items=(Call(name='VAL', args=(StrLit(value='42'),)),), newline=True, file=None)
+Print(items=(Call(name='VAL', args=(StrLit(value='42'),)),), newline=True, file=None, commas=None)
 End()
 
 ## t1_fnstr
 DefFn(name='FNFN1$', params=('A$', 'B'), body=BinOp(op='+', lhs=Var(name='A$'), rhs=Call(name='STR$', args=(Var(name='B'),))), is_block=False)
-Print(items=(FnCall(name='FNFN1$', args=(StrLit(value='X'), Lit(value=3))),), newline=True, file=None)
+Print(items=(FnCall(name='FNFN1$', args=(StrLit(value='X'), Lit(value=3))),), newline=True, file=None, commas=None)
 End()
 
 ## t1_fnstrb
 DefFn(name='FNFN1$', params=('A$',), body=(FnResult(value=BinOp(op='+', lhs=Var(name='A$'), rhs=StrLit(value='!'))),), is_block=True)
-Print(items=(FnCall(name='FNFN1$', args=(StrLit(value='HI'),)),), newline=True, file=None)
+Print(items=(FnCall(name='FNFN1$', args=(StrLit(value='HI'),)),), newline=True, file=None, commas=None)
 End()
 
 ## t1_for
@@ -427,21 +442,21 @@ Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(valu
 Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=9)))
 Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=10)))
 NextStmt(var=Var(name='A'))
-Print(items=(Var(name='B'),), newline=True, file=None)
+Print(items=(Var(name='B'),), newline=True, file=None, commas=None)
 End()
 
 ## t1_fp
 Assign(target=Var(name='A'), value=Lit(value=0.5))
 Assign(target=Var(name='B'), value=Lit(value=1.3552527156068805e-20))
 Assign(target=Var(name='C'), value=Lit(value=24999999488.0))
-Print(items=(Var(name='A'), Var(name='B'), Var(name='C')), newline=True, file=None)
+Print(items=(Var(name='A'), Var(name='B'), Var(name='C')), newline=True, file=None, commas=None)
 End()
 
 ## t1_fp2
 Assign(target=Var(name='A'), value=Lit(value=0.0))
 Assign(target=Var(name='B'), value=Lit(value=1.0))
 Assign(target=Var(name='C'), value=Lit(value=5.0))
-Print(items=(Var(name='A'), Var(name='B'), Var(name='C')), newline=True, file=None)
+Print(items=(Var(name='A'), Var(name='B'), Var(name='C')), newline=True, file=None, commas=None)
 End()
 
 ## t1_fre
@@ -505,7 +520,7 @@ End()
 Input(prompt=None, var=Var(name='A'), comma=False)
 Input(prompt=None, var=Var(name='B'), comma=False)
 IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), body=(Assign(target=Var(name='C'), value=Lit(value=1)), Assign(target=Var(name='D'), value=Lit(value=2))))
-Print(items=(Var(name='C'), Var(name='D')), newline=True, file=None)
+Print(items=(Var(name='C'), Var(name='D')), newline=True, file=None, commas=None)
 End()
 
 ## t1_inkey
@@ -515,7 +530,7 @@ End()
 ## t1_inp
 Input(prompt=None, var=Var(name='A'), comma=False)
 Input(prompt=None, var=Var(name='B$'), comma=False)
-Print(items=(Var(name='B$'),), newline=True, file=None)
+Print(items=(Var(name='B$'),), newline=True, file=None, commas=None)
 End()
 
 ## t1_inp2
@@ -533,18 +548,18 @@ End()
 
 ## t1_inp5
 Open(mode=StrLit(value='O'), num=1, file=StrLit(value='A.TXT'), reclen=None)
-Print(items=(StrLit(value='HELLO'),), newline=True, file=1)
+Print(items=(StrLit(value='HELLO'),), newline=True, file=1, commas=None)
 Close(num=1)
 Open(mode=StrLit(value='I'), num=2, file=StrLit(value='A.TXT'), reclen=None)
 Assign(target=Var(name='A$'), value=Call(name='INPUT$', args=(Lit(value=3), Lit(value=2))))
 Close(num=2)
 Assign(target=Var(name='B$'), value=Call(name='INPUT$', args=(Lit(value=1),)))
-Print(items=(Var(name='B$'), Var(name='A$')), newline=True, file=None)
+Print(items=(Var(name='B$'), Var(name='A$')), newline=True, file=None, commas=None)
 End()
 
 ## t1_inpf
 Assign(target=Var(name='A'), value=Call(name='INP', args=(Lit(value=888),)))
-Print(items=(Var(name='A'),), newline=True, file=None)
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 End()
 
 ## t1_instat
@@ -566,6 +581,13 @@ Assign(target=Var(name='E%'), value=BinOp(op='*', lhs=Var(name='A%'), rhs=Var(na
 Assign(target=Var(name='F%'), value=BinOp(op='+', lhs=Var(name='A%'), rhs=Lit(value=3)))
 Assign(target=Var(name='G'), value=BinOp(op='+', lhs=Var(name='A%'), rhs=Var(name='B%')))
 Assign(target=Var(name='H%'), value=Var(name='G'))
+End()
+
+## t1_key
+KeyDef(num=Lit(value=1), text=BinOp(op='+', lhs=StrLit(value='DIR'), rhs=Call(name='CHR$', args=(Lit(value=13),))))
+Key(on=True)
+KeyDef(num=Lit(value=2), text=StrLit(value='X'))
+Key(on=False)
 End()
 
 ## t1_keylist
@@ -662,7 +684,7 @@ Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=BinOp(op='+',
 Assign(target=ArrayRef(name='V1', indices=(Lit(value=1), Lit(value=2))), value=ArrayRef(name='V0', indices=(Var(name='A'),)))
 Assign(target=ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=1))), value=Lit(value=4))
 Assign(target=ArrayRef(name='V2', indices=(Lit(value=1),)), value=ArrayRef(name='V1', indices=(Lit(value=1), Lit(value=1))))
-Print(items=(ArrayRef(name='V0', indices=(Var(name='A'),)), ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=2))), ArrayRef(name='V2', indices=(Var(name='A'),))), newline=True, file=None)
+Print(items=(ArrayRef(name='V0', indices=(Var(name='A'),)), ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=2))), ArrayRef(name='V2', indices=(Var(name='A'),))), newline=True, file=None, commas=None)
 End()
 
 ## t1_mix2
@@ -676,7 +698,7 @@ Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=BinOp(op='+',
 Assign(target=ArrayRef(name='V1', indices=(Lit(value=1), Lit(value=2))), value=ArrayRef(name='V0', indices=(Var(name='A'),)))
 Assign(target=ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=1))), value=Lit(value=4))
 Assign(target=ArrayRef(name='V2', indices=(Lit(value=1),)), value=ArrayRef(name='V1', indices=(Lit(value=1), Lit(value=1))))
-Print(items=(ArrayRef(name='V0', indices=(Var(name='A'),)), ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=2))), ArrayRef(name='V2', indices=(Var(name='A'),))), newline=True, file=None)
+Print(items=(ArrayRef(name='V0', indices=(Var(name='A'),)), ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=2))), ArrayRef(name='V2', indices=(Var(name='A'),))), newline=True, file=None, commas=None)
 End()
 
 ## t1_mix3
@@ -690,7 +712,7 @@ Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=BinOp(op='+',
 Assign(target=ArrayRef(name='V1', indices=(Lit(value=2), Lit(value=0))), value=ArrayRef(name='V0', indices=(Var(name='A'),)))
 Assign(target=ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=2))), value=Lit(value=4))
 Assign(target=ArrayRef(name='V2', indices=(Lit(value=1),)), value=ArrayRef(name='V1', indices=(Lit(value=3), Lit(value=1))))
-Print(items=(ArrayRef(name='V0', indices=(Var(name='A'),)), ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=2))), ArrayRef(name='V2', indices=(Var(name='A'),))), newline=True, file=None)
+Print(items=(ArrayRef(name='V0', indices=(Var(name='A'),)), ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=2))), ArrayRef(name='V2', indices=(Var(name='A'),))), newline=True, file=None, commas=None)
 End()
 
 ## t1_mkdir
@@ -723,7 +745,7 @@ Assign(target=Var(name='B'), value=Lit(value=3))
 Assign(target=ArrayRef(name='V0', indices=(Var(name='A'), Var(name='B'))), value=Lit(value=5))
 Assign(target=ArrayRef(name='V1', indices=(Var(name='A'), Var(name='B'))), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Var(name='A'), Var(name='B'))), rhs=ArrayRef(name='V0', indices=(Var(name='B'), Var(name='A')))))
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=2))), value=ArrayRef(name='V1', indices=(Var(name='A'), Var(name='B'))))
-Print(items=(ArrayRef(name='V0', indices=(Var(name='A'), Var(name='B'))), ArrayRef(name='V1', indices=(Var(name='A'), Var(name='B')))), newline=True, file=None)
+Print(items=(ArrayRef(name='V0', indices=(Var(name='A'), Var(name='B'))), ArrayRef(name='V1', indices=(Var(name='A'), Var(name='B')))), newline=True, file=None, commas=None)
 End()
 
 ## t1_ob3
@@ -733,7 +755,7 @@ Dim(name='V2', bounds=((1, 4),), also=())
 Assign(target=Var(name='A'), value=Lit(value=2))
 Assign(target=Var(name='B'), value=Lit(value=3))
 Assign(target=ArrayRef(name='V1', indices=(Var(name='A'), Var(name='B'))), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Var(name='A'), Var(name='B'))), rhs=ArrayRef(name='V2', indices=(Var(name='A'),))))
-Print(items=(ArrayRef(name='V1', indices=(Var(name='A'), Var(name='B'))),), newline=True, file=None)
+Print(items=(ArrayRef(name='V1', indices=(Var(name='A'), Var(name='B'))),), newline=True, file=None, commas=None)
 End()
 
 ## t1_oncom
@@ -751,7 +773,7 @@ End()
 
 ## t1_onerr
 OnError(target=3)
-Print(items=(Lit(value=1),), newline=True, file=None)
+Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
 End()
 Resume(next_=False, target=None)
 
@@ -803,7 +825,7 @@ Return()
 
 ## t1_open2
 Open(mode=StrLit(value='O'), num=1, file=StrLit(value='A.TXT'), reclen=None)
-Print(items=(StrLit(value='HI'),), newline=True, file=1)
+Print(items=(StrLit(value='HI'),), newline=True, file=1, commas=None)
 Close(num=1)
 Open(mode=StrLit(value='I'), num=2, file=StrLit(value='A.TXT'), reclen=None)
 InputFile(num=2, vars=(Var(name='A$'),))
@@ -817,9 +839,9 @@ End()
 ## t1_or
 Input(prompt=None, var=Var(name='A'), comma=False)
 IfGoto(cond=LogOp(op='OR', lhs=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=0)), rhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=9))), target=4)
-Print(items=(Lit(value=0),), newline=True, file=None)
+Print(items=(Lit(value=0),), newline=True, file=None, commas=None)
 Goto(target=5)
-Print(items=(Lit(value=1),), newline=True, file=None)
+Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
 End()
 
 ## t1_out
@@ -847,9 +869,16 @@ End()
 Palette(attr=Lit(value=1), color=Lit(value=2))
 End()
 
+## t1_pcomma
+Assign(target=Var(name='A$'), value=StrLit(value='AB'))
+Print(items=(StrLit(value='X'), StrLit(value='Y'), Var(name='A$')), newline=True, file=None, commas=(True, True, False))
+Print(items=(Lit(value=1), Lit(value=2)), newline=True, file=None, commas=(True, False))
+Print(items=(StrLit(value='Z'), StrLit(value='W')), newline=True, file=None, commas=(True, False))
+End()
+
 ## t1_peek
 Assign(target=Var(name='A'), value=Call(name='PEEK', args=(Lit(value=100),)))
-Print(items=(Var(name='A'),), newline=True, file=None)
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 End()
 
 ## t1_penf
@@ -870,7 +899,7 @@ End()
 
 ## t1_point
 Assign(target=Var(name='A'), value=Call(name='POINT', args=(Lit(value=10), Lit(value=20))))
-Print(items=(Var(name='A'),), newline=True, file=None)
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 End()
 
 ## t1_poke
@@ -888,12 +917,12 @@ End()
 
 ## t1_pr2
 Input(prompt=None, var=Var(name='A'), comma=False)
-Print(items=(StrLit(value='A'), Var(name='A'), StrLit(value='B')), newline=True, file=None)
-Print(items=(StrLit(value='X'),), newline=False, file=None)
+Print(items=(StrLit(value='A'), Var(name='A'), StrLit(value='B')), newline=True, file=None, commas=None)
+Print(items=(StrLit(value='X'),), newline=False, file=None, commas=None)
 PrintUsing(fmt=StrLit(value='##.##'), values=(Var(name='A'),), file=None, newline=True)
 PrintUsing(fmt=StrLit(value='#.# #.#'), values=(Var(name='A'), Var(name='A')), file=None, newline=True)
 Open(mode=StrLit(value='O'), num=1, file=StrLit(value='R.TXT'), reclen=None)
-Print(items=(Var(name='A'),), newline=True, file=1)
+Print(items=(Var(name='A'),), newline=True, file=1, commas=None)
 PrintUsing(fmt=StrLit(value='##.##'), values=(Var(name='A'), Var(name='A')), file=1, newline=True)
 Close(num=1)
 End()
@@ -916,16 +945,16 @@ End()
 
 ## t1_print
 Assign(target=Var(name='A'), value=Lit(value=5))
-Print(items=(StrLit(value='HELLO'),), newline=True, file=None)
-Print(items=(Var(name='A'),), newline=True, file=None)
-Print(items=(BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)),), newline=True, file=None)
+Print(items=(StrLit(value='HELLO'),), newline=True, file=None, commas=None)
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
+Print(items=(BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)),), newline=True, file=None, commas=None)
 End()
 
 ## t1_print2
 Assign(target=Var(name='A'), value=Lit(value=5))
-Print(items=(StrLit(value='HELLO'),), newline=True, file=None)
-Print(items=(StrLit(value='WORLD!'),), newline=True, file=None)
-Print(items=(Var(name='A'),), newline=True, file=None)
+Print(items=(StrLit(value='HELLO'),), newline=True, file=None, commas=None)
+Print(items=(StrLit(value='WORLD!'),), newline=True, file=None, commas=None)
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 End()
 
 ## t1_pset
@@ -1035,13 +1064,13 @@ End()
 
 ## t1_resumel
 OnError(target=3)
-Print(items=(Lit(value=1),), newline=True, file=None)
+Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
 End()
 Resume(next_=False, target=1)
 
 ## t1_resumen
 OnError(target=3)
-Print(items=(Lit(value=1),), newline=True, file=None)
+Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
 End()
 Resume(next_=True, target=None)
 
@@ -1056,42 +1085,42 @@ End()
 
 ## t1_rndfn
 Assign(target=Var(name='A#'), value=Nullary(name='RND'))
-Print(items=(BinOp(op='*', lhs=Var(name='A#'), rhs=DblLit(value=16777216.0)),), newline=True, file=None)
+Print(items=(BinOp(op='*', lhs=Var(name='A#'), rhs=DblLit(value=16777216.0)),), newline=True, file=None, commas=None)
 Assign(target=Var(name='A#'), value=Call(name='RND', args=(Lit(value=0),)))
-Print(items=(BinOp(op='*', lhs=Var(name='A#'), rhs=DblLit(value=16777216.0)),), newline=True, file=None)
+Print(items=(BinOp(op='*', lhs=Var(name='A#'), rhs=DblLit(value=16777216.0)),), newline=True, file=None, commas=None)
 Assign(target=Var(name='A#'), value=Call(name='RND', args=(Lit(value=0),)))
-Print(items=(BinOp(op='*', lhs=Var(name='A#'), rhs=DblLit(value=16777216.0)),), newline=True, file=None)
+Print(items=(BinOp(op='*', lhs=Var(name='A#'), rhs=DblLit(value=16777216.0)),), newline=True, file=None, commas=None)
 Assign(target=Var(name='A#'), value=Call(name='RND', args=(Neg(operand=Lit(value=3)),)))
-Print(items=(BinOp(op='*', lhs=Var(name='A#'), rhs=DblLit(value=16777216.0)),), newline=True, file=None)
+Print(items=(BinOp(op='*', lhs=Var(name='A#'), rhs=DblLit(value=16777216.0)),), newline=True, file=None, commas=None)
 Assign(target=Var(name='A#'), value=Nullary(name='RND'))
-Print(items=(BinOp(op='*', lhs=Var(name='A#'), rhs=DblLit(value=16777216.0)),), newline=True, file=None)
+Print(items=(BinOp(op='*', lhs=Var(name='A#'), rhs=DblLit(value=16777216.0)),), newline=True, file=None, commas=None)
 Assign(target=Var(name='A#'), value=Call(name='RND', args=(Lit(value=5),)))
-Print(items=(BinOp(op='*', lhs=Var(name='A#'), rhs=DblLit(value=16777216.0)),), newline=True, file=None)
+Print(items=(BinOp(op='*', lhs=Var(name='A#'), rhs=DblLit(value=16777216.0)),), newline=True, file=None, commas=None)
 End()
 
 ## t1_rndseq
 Assign(target=Var(name='A#'), value=Nullary(name='RND'))
-Print(items=(BinOp(op='*', lhs=Var(name='A#'), rhs=DblLit(value=16777216.0)),), newline=True, file=None)
+Print(items=(BinOp(op='*', lhs=Var(name='A#'), rhs=DblLit(value=16777216.0)),), newline=True, file=None, commas=None)
 Assign(target=Var(name='A#'), value=Nullary(name='RND'))
-Print(items=(BinOp(op='*', lhs=Var(name='A#'), rhs=DblLit(value=16777216.0)),), newline=True, file=None)
+Print(items=(BinOp(op='*', lhs=Var(name='A#'), rhs=DblLit(value=16777216.0)),), newline=True, file=None, commas=None)
 Randomize(seed=Lit(value=1))
 For(var=Var(name='B'), init=Lit(value=1), limit=Lit(value=4), step=Lit(value=1))
 Assign(target=Var(name='A#'), value=Nullary(name='RND'))
-Print(items=(BinOp(op='*', lhs=Var(name='A#'), rhs=DblLit(value=16777216.0)),), newline=True, file=None)
+Print(items=(BinOp(op='*', lhs=Var(name='A#'), rhs=DblLit(value=16777216.0)),), newline=True, file=None, commas=None)
 NextStmt(var=Var(name='B'))
 Randomize(seed=Lit(value=2))
 For(var=Var(name='B'), init=Lit(value=1), limit=Lit(value=4), step=Lit(value=1))
 Assign(target=Var(name='A#'), value=Nullary(name='RND'))
-Print(items=(BinOp(op='*', lhs=Var(name='A#'), rhs=DblLit(value=16777216.0)),), newline=True, file=None)
+Print(items=(BinOp(op='*', lhs=Var(name='A#'), rhs=DblLit(value=16777216.0)),), newline=True, file=None, commas=None)
 NextStmt(var=Var(name='B'))
 Randomize(seed=Lit(value=12345))
 For(var=Var(name='B'), init=Lit(value=1), limit=Lit(value=4), step=Lit(value=1))
 Assign(target=Var(name='A#'), value=Nullary(name='RND'))
-Print(items=(BinOp(op='*', lhs=Var(name='A#'), rhs=DblLit(value=16777216.0)),), newline=True, file=None)
+Print(items=(BinOp(op='*', lhs=Var(name='A#'), rhs=DblLit(value=16777216.0)),), newline=True, file=None, commas=None)
 NextStmt(var=Var(name='B'))
 Randomize(seed=Neg(operand=Lit(value=7)))
 Assign(target=Var(name='A#'), value=Nullary(name='RND'))
-Print(items=(BinOp(op='*', lhs=Var(name='A#'), rhs=DblLit(value=16777216.0)),), newline=True, file=None)
+Print(items=(BinOp(op='*', lhs=Var(name='A#'), rhs=DblLit(value=16777216.0)),), newline=True, file=None, commas=None)
 End()
 
 ## t1_rset
@@ -1109,7 +1138,7 @@ Dim(name='V0$', bounds=(Var(name='A'),), also=())
 Assign(target=ArrayRef(name='V0$', indices=(Lit(value=1),)), value=StrLit(value='AB'))
 Assign(target=ArrayRef(name='V0$', indices=(Var(name='A'),)), value=StrLit(value='CD'))
 Assign(target=Var(name='B$'), value=ArrayRef(name='V0$', indices=(Var(name='A'),)))
-Print(items=(ArrayRef(name='V0$', indices=(Lit(value=1),)),), newline=True, file=None)
+Print(items=(ArrayRef(name='V0$', indices=(Lit(value=1),)),), newline=True, file=None, commas=None)
 End()
 
 ## t1_sarr2
@@ -1119,7 +1148,7 @@ Dim(name='V0', bounds=(Var(name='A'), Lit(value=5)), also=())
 Open(mode=StrLit(value='I'), num=1, file=StrLit(value='X.DAT'), reclen=None)
 InputFile(num=1, vars=(ArrayRef(name='V0', indices=(Var(name='A'), Lit(value=5))), ArrayRef(name='V1$', indices=(Var(name='A'),))))
 Close(num=1)
-Print(items=(ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=1))), ArrayRef(name='V1$', indices=(Var(name='A'),))), newline=True, file=None)
+Print(items=(ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=1))), ArrayRef(name='V1$', indices=(Var(name='A'),))), newline=True, file=None, commas=None)
 End()
 
 ## t1_scr
@@ -1128,7 +1157,7 @@ Locate(row=Lit(value=3), col=Lit(value=5), cursor=None)
 Color(fg=Lit(value=1), bg=None)
 Locate(row=Lit(value=10), col=Lit(value=20), cursor=None)
 Color(fg=Lit(value=7), bg=Lit(value=0))
-Print(items=(StrLit(value='HI'),), newline=True, file=None)
+Print(items=(StrLit(value='HI'),), newline=True, file=None, commas=None)
 End()
 
 ## t1_scr2
@@ -1194,7 +1223,7 @@ End()
 ## t1_str
 Assign(target=Var(name='A$'), value=StrLit(value='HI'))
 Assign(target=Var(name='B$'), value=Var(name='A$'))
-Print(items=(Var(name='A$'),), newline=True, file=None)
+Print(items=(Var(name='A$'),), newline=True, file=None, commas=None)
 End()
 
 ## t1_strigf
@@ -1213,79 +1242,79 @@ End()
 Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
 Assign(target=Var(name='B$'), value=Call(name='UCASE$', args=(Var(name='A$'),)))
 Assign(target=Var(name='C$'), value=Call(name='LEFT$', args=(Var(name='B$'), Lit(value=3))))
-Print(items=(Var(name='C$'),), newline=True, file=None)
-Print(items=(Call(name='MID$', args=(Var(name='A$'), Lit(value=2), Lit(value=3))),), newline=True, file=None)
-Print(items=(Call(name='INSTR', args=(Var(name='A$'), StrLit(value='l'))),), newline=True, file=None)
-Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None)
-Print(items=(Call(name='STR$', args=(Lit(value=42),)),), newline=True, file=None)
+Print(items=(Var(name='C$'),), newline=True, file=None, commas=None)
+Print(items=(Call(name='MID$', args=(Var(name='A$'), Lit(value=2), Lit(value=3))),), newline=True, file=None, commas=None)
+Print(items=(Call(name='INSTR', args=(Var(name='A$'), StrLit(value='l'))),), newline=True, file=None, commas=None)
+Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None, commas=None)
+Print(items=(Call(name='STR$', args=(Lit(value=42),)),), newline=True, file=None, commas=None)
 End()
 
 ## t1_strnul
 Assign(target=Var(name='A$'), value=Call(name='MKI$', args=(Lit(value=256),)))
-Print(items=(Call(name='LEN', args=(Var(name='A$'),)), Call(name='CVI', args=(Var(name='A$'),))), newline=True, file=None)
+Print(items=(Call(name='LEN', args=(Var(name='A$'),)), Call(name='CVI', args=(Var(name='A$'),))), newline=True, file=None, commas=None)
 Assign(target=Var(name='B$'), value=BinOp(op='+', lhs=Call(name='CHR$', args=(Lit(value=0),)), rhs=StrLit(value='X')))
-Print(items=(Call(name='LEN', args=(Var(name='B$'),)), Call(name='ASC', args=(Call(name='RIGHT$', args=(Var(name='B$'), Lit(value=1))),))), newline=True, file=None)
+Print(items=(Call(name='LEN', args=(Var(name='B$'),)), Call(name='ASC', args=(Call(name='RIGHT$', args=(Var(name='B$'), Lit(value=1))),))), newline=True, file=None, commas=None)
 Assign(target=Var(name='C$'), value=StrLit(value=''))
 For(var=Var(name='D'), init=Lit(value=1), limit=Lit(value=100), step=Lit(value=1))
 Assign(target=Var(name='C$'), value=BinOp(op='+', lhs=Var(name='C$'), rhs=StrLit(value='AB')))
 NextStmt(var=Var(name='D'))
-Print(items=(Call(name='LEN', args=(Var(name='C$'),)), Call(name='INSTR', args=(Var(name='B$'), Call(name='CHR$', args=(Lit(value=0),))))), newline=True, file=None)
+Print(items=(Call(name='LEN', args=(Var(name='C$'),)), Call(name='INSTR', args=(Var(name='B$'), Call(name='CHR$', args=(Lit(value=0),))))), newline=True, file=None, commas=None)
 End()
 
 ## t1_strs2
 Assign(target=Var(name='A$'), value=Call(name='STRING$', args=(Lit(value=5), StrLit(value='-'))))
 Assign(target=Var(name='B$'), value=Call(name='STRING$', args=(Lit(value=6), Lit(value=42))))
 Assign(target=Var(name='C$'), value=Call(name='STRING$', args=(Lit(value=4), Var(name='A$'))))
-Print(items=(Var(name='A$'), Var(name='B$'), Var(name='C$')), newline=True, file=None)
+Print(items=(Var(name='A$'), Var(name='B$'), Var(name='C$')), newline=True, file=None, commas=None)
 End()
 
 ## t1_subad
-SubDef(name='SUB1', params=(), body=(Dim(name='V0', bounds=(10,), also=()), Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=42)), Print(items=(StrLit(value='S'), ArrayRef(name='V0', indices=(Lit(value=1),))), newline=True, file=None)))
+SubDef(name='SUB1', params=(), body=(Dim(name='V0', bounds=(10,), also=()), Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=42)), Print(items=(StrLit(value='S'), ArrayRef(name='V0', indices=(Lit(value=1),))), newline=True, file=None, commas=None)))
 Dim(name='V1', bounds=(10,), also=())
 Assign(target=ArrayRef(name='V1', indices=(Lit(value=1),)), value=Lit(value=7))
 CallStmt(name='SUB1', args=())
-Print(items=(StrLit(value='M'), ArrayRef(name='V1', indices=(Lit(value=1),))), newline=True, file=None)
+Print(items=(StrLit(value='M'), ArrayRef(name='V1', indices=(Lit(value=1),))), newline=True, file=None, commas=None)
 
 ## t1_subarr
 SubDef(name='SUB1', params=(), body=(Shared(names=('V0()',)), Assign(target=ArrayRef(name='V0', indices=(Lit(value=2),)), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=1),)), rhs=Lit(value=10)))))
 Dim(name='V0', bounds=(5,), also=())
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=7))
 CallStmt(name='SUB1', args=())
-Print(items=(ArrayRef(name='V0', indices=(Lit(value=2),)),), newline=True, file=None)
+Print(items=(ArrayRef(name='V0', indices=(Lit(value=2),)),), newline=True, file=None, commas=None)
 
 ## t1_subdef
-SubDef(name='SUB1', params=(), body=(Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1))), Print(items=(StrLit(value='S'), Var(name='A')), newline=True, file=None)))
+SubDef(name='SUB1', params=(), body=(Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1))), Print(items=(StrLit(value='S'), Var(name='A')), newline=True, file=None, commas=None)))
 Assign(target=Var(name='B'), value=Lit(value=5))
 CallStmt(name='SUB1', args=())
 CallStmt(name='SUB1', args=())
-Print(items=(StrLit(value='M'), Var(name='B')), newline=True, file=None)
+Print(items=(StrLit(value='M'), Var(name='B')), newline=True, file=None, commas=None)
 
 ## t1_suberr
 SubDef(name='SUB1', params=(), body=(OnError(target=3), ErrorStmt(code=Lit(value=5))))
 CallStmt(name='SUB1', args=())
 End()
-Print(items=(StrLit(value='TRAP'), Err()), newline=True, file=None)
+Print(items=(StrLit(value='TRAP'), Err()), newline=True, file=None, commas=None)
 End()
 
 ## t1_subgoto
 SubDef(name='SUB1', params=(), body=(Goto(target=2),))
 CallStmt(name='SUB1', args=())
-Print(items=(StrLit(value='AT100'),), newline=True, file=None)
+Print(items=(StrLit(value='AT100'),), newline=True, file=None, commas=None)
 End()
 
 ## t1_subgsb
-SubDef(name='SUB1', params=(), body=(Gosub(target=BodyLine(stmt=0, phys=3)), ExitSub(), Print(items=(StrLit(value='IN'),), newline=True, file=None), Return()))
+SubDef(name='SUB1', params=(), body=(Gosub(target=BodyLine(stmt=0, phys=3)), ExitSub(), Print(items=(StrLit(value='IN'),), newline=True, file=None, commas=None), Return()))
 CallStmt(name='SUB1', args=())
 End()
 
 ## t1_subsh
-SubDef(name='SUB1', params=(), body=(Shared(names=('A',)), Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1))), Print(items=(StrLit(value='S'), Var(name='A')), newline=True, file=None)))
+SubDef(name='SUB1', params=(), body=(Shared(names=('A',)), Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1))), Print(items=(StrLit(value='S'), Var(name='A')), newline=True, file=None, commas=None)))
 Assign(target=Var(name='A'), value=Lit(value=5))
 CallStmt(name='SUB1', args=())
-Print(items=(StrLit(value='M'), Var(name='A')), newline=True, file=None)
+Print(items=(StrLit(value='M'), Var(name='A')), newline=True, file=None, commas=None)
 
 ## t1_subst
-SubDef(name='SUB1', params=(), body=(Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1))), Print(items=(StrLit(value='S'), Var(name='A')), newline=True, file=None)))
+SubDef(name='SUB1', params=(), body=(Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1))), Print(items=(StrLit(value='S'), Var(name='A')), newline=True, file=None, commas=None)))
 CallStmt(name='SUB1', args=())
 CallStmt(name='SUB1', args=())
 
@@ -1297,11 +1326,11 @@ End()
 
 ## t1_tab
 Input(prompt=None, var=Var(name='A'), comma=False)
-Print(items=(StrLit(value='A'), Call(name='TAB', args=(Lit(value=7),)), Var(name='A')), newline=True, file=None)
-Print(items=(Call(name='SPC', args=(Lit(value=3),)), StrLit(value='B')), newline=True, file=None)
-Print(items=(Call(name='TAB', args=(Var(name='A'),)), StrLit(value='C')), newline=True, file=None)
+Print(items=(StrLit(value='A'), Call(name='TAB', args=(Lit(value=7),)), Var(name='A')), newline=True, file=None, commas=None)
+Print(items=(Call(name='SPC', args=(Lit(value=3),)), StrLit(value='B')), newline=True, file=None, commas=None)
+Print(items=(Call(name='TAB', args=(Var(name='A'),)), StrLit(value='C')), newline=True, file=None, commas=None)
 Open(mode=StrLit(value='O'), num=1, file=StrLit(value='R.TXT'), reclen=None)
-Print(items=(StrLit(value='X'), Call(name='TAB', args=(Lit(value=7),)), StrLit(value='Y'), Call(name='SPC', args=(Lit(value=8),)), Var(name='A')), newline=True, file=1)
+Print(items=(StrLit(value='X'), Call(name='TAB', args=(Lit(value=7),)), StrLit(value='Y'), Call(name='SPC', args=(Lit(value=8),)), Var(name='A')), newline=True, file=1, commas=None)
 Close(num=1)
 End()
 
@@ -1442,6 +1471,14 @@ Data(items=(DataItem(text='12', is_str=False), DataItem(text='3', is_str=False))
 Read(targets=(Var(name='A'), Var(name='B')))
 End()
 
+## t1_using
+Assign(target=Var(name='A'), value=SingleLit(value=3.14))
+PrintUsing(fmt=StrLit(value='##.##'), values=(Var(name='A'),), file=None, newline=True)
+PrintUsing(fmt=StrLit(value='TOTAL: #### UNITS'), values=(Lit(value=42),), file=None, newline=True)
+Assign(target=Var(name='B$'), value=StrLit(value='HI'))
+PrintUsing(fmt=StrLit(value='\\ \\ !'), values=(Var(name='B$'), Var(name='B$')), file=None, newline=True)
+End()
+
 ## t1_varptr
 Assign(target=Var(name='A'), value=Lit(value=1))
 Assign(target=Var(name='B%'), value=Call(name='VARPTR', args=(Var(name='A'),)))
@@ -1541,19 +1578,19 @@ Assign(target=Var(name='H'), value=BinOp(op='*', lhs=Var(name='A'), rhs=Lit(valu
 End()
 
 ## v10_subdef
-SubDef(name='SUB1', params=(), body=(Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1))), Print(items=(StrLit(value='S'), Var(name='A')), newline=True, file=None)))
+SubDef(name='SUB1', params=(), body=(Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1))), Print(items=(StrLit(value='S'), Var(name='A')), newline=True, file=None, commas=None)))
 Assign(target=Var(name='B'), value=Lit(value=5))
 CallStmt(name='SUB1', args=())
 CallStmt(name='SUB1', args=())
-Print(items=(StrLit(value='M'), Var(name='B')), newline=True, file=None)
+Print(items=(StrLit(value='M'), Var(name='B')), newline=True, file=None, commas=None)
 
 ## v10_t1_and
 Input(prompt=None, var=Var(name='A'), comma=False)
 Input(prompt=None, var=Var(name='B'), comma=False)
 IfGoto(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), target=5)
-Print(items=(Lit(value=0),), newline=True, file=None)
+Print(items=(Lit(value=0),), newline=True, file=None, commas=None)
 Goto(target=6)
-Print(items=(Lit(value=1),), newline=True, file=None)
+Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_arr1
@@ -1700,14 +1737,14 @@ Assign(target=Var(name='B'), value=Lit(value=2))
 Assign(target=ArrayRef(name='V2', indices=(Var(name='B'),)), value=Lit(value=4))
 Assign(target=ArrayRef(name='V0', indices=(Var(name='B'),)), value=ArrayRef(name='V2', indices=(Var(name='B'),)))
 Assign(target=ArrayRef(name='V3', indices=(Var(name='B'), Lit(value=1))), value=BinOp(op='+', lhs=ArrayRef(name='V2', indices=(Var(name='B'),)), rhs=ArrayRef(name='V1', indices=(Var(name='B'),))))
-Print(items=(ArrayRef(name='V3', indices=(Var(name='B'), Lit(value=1))), ArrayRef(name='V0', indices=(Var(name='A'),))), newline=True, file=None)
+Print(items=(ArrayRef(name='V3', indices=(Var(name='B'), Lit(value=1))), ArrayRef(name='V0', indices=(Var(name='A'),))), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_dimv
 Input(prompt=None, var=Var(name='A'), comma=False)
 Dim(name='V0', bounds=(Var(name='A'),), also=())
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=2))
-Print(items=(ArrayRef(name='V0', indices=(Lit(value=1),)),), newline=True, file=None)
+Print(items=(ArrayRef(name='V0', indices=(Lit(value=1),)),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_dimv2
@@ -1846,79 +1883,79 @@ Assign(target=Var(name='B'), value=Call(name='ABS', args=(Var(name='A'),)))
 Assign(target=Var(name='C'), value=Call(name='SQR', args=(Var(name='A'),)))
 Assign(target=Var(name='D'), value=Call(name='INT', args=(Var(name='A'),)))
 Assign(target=Var(name='E'), value=Call(name='SGN', args=(Var(name='A'),)))
-Print(items=(BinOp(op='+', lhs=BinOp(op='+', lhs=BinOp(op='+', lhs=Var(name='B'), rhs=Var(name='C')), rhs=Var(name='D')), rhs=Var(name='E')),), newline=True, file=None)
+Print(items=(BinOp(op='+', lhs=BinOp(op='+', lhs=BinOp(op='+', lhs=Var(name='B'), rhs=Var(name='C')), rhs=Var(name='D')), rhs=Var(name='E')),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_fn_asc
 Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
-Print(items=(Call(name='ASC', args=(Var(name='A$'),)),), newline=True, file=None)
+Print(items=(Call(name='ASC', args=(Var(name='A$'),)),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_fn_bin
-Print(items=(Call(name='BIN$', args=(Lit(value=5),)),), newline=True, file=None)
+Print(items=(Call(name='BIN$', args=(Lit(value=5),)),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_fn_chr
-Print(items=(Call(name='CHR$', args=(Lit(value=65),)),), newline=True, file=None)
+Print(items=(Call(name='CHR$', args=(Lit(value=65),)),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_fn_hex
-Print(items=(Call(name='HEX$', args=(Lit(value=255),)),), newline=True, file=None)
+Print(items=(Call(name='HEX$', args=(Lit(value=255),)),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_fn_instr
 Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
-Print(items=(Call(name='INSTR', args=(Var(name='A$'), StrLit(value='l'))),), newline=True, file=None)
+Print(items=(Call(name='INSTR', args=(Var(name='A$'), StrLit(value='l'))),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_fn_lcase
 Assign(target=Var(name='A$'), value=StrLit(value='Hi'))
-Print(items=(Call(name='LCASE$', args=(Var(name='A$'),)),), newline=True, file=None)
+Print(items=(Call(name='LCASE$', args=(Var(name='A$'),)),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_fn_left
 Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
-Print(items=(Call(name='LEFT$', args=(Var(name='A$'), Lit(value=2))),), newline=True, file=None)
+Print(items=(Call(name='LEFT$', args=(Var(name='A$'), Lit(value=2))),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_fn_len
 Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
-Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None)
+Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_fn_mid
 Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
-Print(items=(Call(name='MID$', args=(Var(name='A$'), Lit(value=2), Lit(value=3))),), newline=True, file=None)
+Print(items=(Call(name='MID$', args=(Var(name='A$'), Lit(value=2), Lit(value=3))),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_fn_oct
-Print(items=(Call(name='OCT$', args=(Lit(value=8),)),), newline=True, file=None)
+Print(items=(Call(name='OCT$', args=(Lit(value=8),)),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_fn_right
 Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
-Print(items=(Call(name='RIGHT$', args=(Var(name='A$'), Lit(value=2))),), newline=True, file=None)
+Print(items=(Call(name='RIGHT$', args=(Var(name='A$'), Lit(value=2))),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_fn_space
-Print(items=(Call(name='SPACE$', args=(Lit(value=3),)),), newline=True, file=None)
+Print(items=(Call(name='SPACE$', args=(Lit(value=3),)),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_fn_str
-Print(items=(Call(name='STR$', args=(Lit(value=42),)),), newline=True, file=None)
+Print(items=(Call(name='STR$', args=(Lit(value=42),)),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_fn_string
-Print(items=(Call(name='STRING$', args=(Lit(value=3), Lit(value=42))),), newline=True, file=None)
+Print(items=(Call(name='STRING$', args=(Lit(value=3), Lit(value=42))),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_fn_ucase
 Assign(target=Var(name='A$'), value=StrLit(value='Hi'))
-Print(items=(Call(name='UCASE$', args=(Var(name='A$'),)),), newline=True, file=None)
+Print(items=(Call(name='UCASE$', args=(Var(name='A$'),)),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_fn_val
-Print(items=(Call(name='VAL', args=(StrLit(value='42'),)),), newline=True, file=None)
+Print(items=(Call(name='VAL', args=(StrLit(value='42'),)),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_for
@@ -1941,21 +1978,21 @@ Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(valu
 Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=9)))
 Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=10)))
 NextStmt(var=Var(name='A'))
-Print(items=(Var(name='B'),), newline=True, file=None)
+Print(items=(Var(name='B'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_fp
 Assign(target=Var(name='A'), value=Lit(value=0.5))
 Assign(target=Var(name='B'), value=Lit(value=1.3552527156068805e-20))
 Assign(target=Var(name='C'), value=Lit(value=24999999488.0))
-Print(items=(Var(name='A'), Var(name='B'), Var(name='C')), newline=True, file=None)
+Print(items=(Var(name='A'), Var(name='B'), Var(name='C')), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_fp2
 Assign(target=Var(name='A'), value=Lit(value=0.0))
 Assign(target=Var(name='B'), value=Lit(value=1.0))
 Assign(target=Var(name='C'), value=Lit(value=5.0))
-Print(items=(Var(name='A'), Var(name='B'), Var(name='C')), newline=True, file=None)
+Print(items=(Var(name='A'), Var(name='B'), Var(name='C')), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_fre
@@ -2019,7 +2056,7 @@ End()
 Input(prompt=None, var=Var(name='A'), comma=False)
 Input(prompt=None, var=Var(name='B'), comma=False)
 IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), body=(Assign(target=Var(name='C'), value=Lit(value=1)), Assign(target=Var(name='D'), value=Lit(value=2))))
-Print(items=(Var(name='C'), Var(name='D')), newline=True, file=None)
+Print(items=(Var(name='C'), Var(name='D')), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_inkey
@@ -2029,7 +2066,7 @@ End()
 ## v10_t1_inp
 Input(prompt=None, var=Var(name='A'), comma=False)
 Input(prompt=None, var=Var(name='B$'), comma=False)
-Print(items=(Var(name='B$'),), newline=True, file=None)
+Print(items=(Var(name='B$'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_inp2
@@ -2047,7 +2084,7 @@ End()
 
 ## v10_t1_inpf
 Assign(target=Var(name='A'), value=Call(name='INP', args=(Lit(value=888),)))
-Print(items=(Var(name='A'),), newline=True, file=None)
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_instat
@@ -2165,7 +2202,7 @@ Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=BinOp(op='+',
 Assign(target=ArrayRef(name='V1', indices=(Lit(value=1), Lit(value=2))), value=ArrayRef(name='V0', indices=(Var(name='A'),)))
 Assign(target=ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=1))), value=Lit(value=4))
 Assign(target=ArrayRef(name='V2', indices=(Lit(value=1),)), value=ArrayRef(name='V1', indices=(Lit(value=1), Lit(value=1))))
-Print(items=(ArrayRef(name='V0', indices=(Var(name='A'),)), ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=2))), ArrayRef(name='V2', indices=(Var(name='A'),))), newline=True, file=None)
+Print(items=(ArrayRef(name='V0', indices=(Var(name='A'),)), ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=2))), ArrayRef(name='V2', indices=(Var(name='A'),))), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_mix2
@@ -2179,7 +2216,7 @@ Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=BinOp(op='+',
 Assign(target=ArrayRef(name='V1', indices=(Lit(value=1), Lit(value=2))), value=ArrayRef(name='V0', indices=(Var(name='A'),)))
 Assign(target=ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=1))), value=Lit(value=4))
 Assign(target=ArrayRef(name='V2', indices=(Lit(value=1),)), value=ArrayRef(name='V1', indices=(Lit(value=1), Lit(value=1))))
-Print(items=(ArrayRef(name='V0', indices=(Var(name='A'),)), ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=2))), ArrayRef(name='V2', indices=(Var(name='A'),))), newline=True, file=None)
+Print(items=(ArrayRef(name='V0', indices=(Var(name='A'),)), ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=2))), ArrayRef(name='V2', indices=(Var(name='A'),))), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_mix3
@@ -2193,7 +2230,7 @@ Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=BinOp(op='+',
 Assign(target=ArrayRef(name='V1', indices=(Lit(value=2), Lit(value=0))), value=ArrayRef(name='V0', indices=(Var(name='A'),)))
 Assign(target=ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=2))), value=Lit(value=4))
 Assign(target=ArrayRef(name='V2', indices=(Lit(value=1),)), value=ArrayRef(name='V1', indices=(Lit(value=3), Lit(value=1))))
-Print(items=(ArrayRef(name='V0', indices=(Var(name='A'),)), ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=2))), ArrayRef(name='V2', indices=(Var(name='A'),))), newline=True, file=None)
+Print(items=(ArrayRef(name='V0', indices=(Var(name='A'),)), ArrayRef(name='V1', indices=(Var(name='A'), Lit(value=2))), ArrayRef(name='V2', indices=(Var(name='A'),))), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_mkdir
@@ -2226,7 +2263,7 @@ Assign(target=Var(name='B'), value=Lit(value=3))
 Assign(target=ArrayRef(name='V0', indices=(Var(name='A'), Var(name='B'))), value=Lit(value=5))
 Assign(target=ArrayRef(name='V1', indices=(Var(name='A'), Var(name='B'))), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Var(name='A'), Var(name='B'))), rhs=ArrayRef(name='V0', indices=(Var(name='B'), Var(name='A')))))
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=2))), value=ArrayRef(name='V1', indices=(Var(name='A'), Var(name='B'))))
-Print(items=(ArrayRef(name='V0', indices=(Var(name='A'), Var(name='B'))), ArrayRef(name='V1', indices=(Var(name='A'), Var(name='B')))), newline=True, file=None)
+Print(items=(ArrayRef(name='V0', indices=(Var(name='A'), Var(name='B'))), ArrayRef(name='V1', indices=(Var(name='A'), Var(name='B')))), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_ob3
@@ -2236,7 +2273,7 @@ Dim(name='V2', bounds=((1, 4),), also=())
 Assign(target=Var(name='A'), value=Lit(value=2))
 Assign(target=Var(name='B'), value=Lit(value=3))
 Assign(target=ArrayRef(name='V1', indices=(Var(name='A'), Var(name='B'))), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Var(name='A'), Var(name='B'))), rhs=ArrayRef(name='V2', indices=(Var(name='A'),))))
-Print(items=(ArrayRef(name='V1', indices=(Var(name='A'), Var(name='B'))),), newline=True, file=None)
+Print(items=(ArrayRef(name='V1', indices=(Var(name='A'), Var(name='B'))),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_oncom
@@ -2254,7 +2291,7 @@ End()
 
 ## v10_t1_onerr
 OnError(target=3)
-Print(items=(Lit(value=1),), newline=True, file=None)
+Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
 End()
 Resume(next_=False, target=None)
 
@@ -2307,9 +2344,9 @@ Return()
 ## v10_t1_or
 Input(prompt=None, var=Var(name='A'), comma=False)
 IfGoto(cond=LogOp(op='OR', lhs=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=0)), rhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=9))), target=4)
-Print(items=(Lit(value=0),), newline=True, file=None)
+Print(items=(Lit(value=0),), newline=True, file=None, commas=None)
 Goto(target=5)
-Print(items=(Lit(value=1),), newline=True, file=None)
+Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_out
@@ -2339,7 +2376,7 @@ End()
 
 ## v10_t1_peek
 Assign(target=Var(name='A'), value=Call(name='PEEK', args=(Lit(value=100),)))
-Print(items=(Var(name='A'),), newline=True, file=None)
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_penf
@@ -2360,7 +2397,7 @@ End()
 
 ## v10_t1_point
 Assign(target=Var(name='A'), value=Call(name='POINT', args=(Lit(value=10), Lit(value=20))))
-Print(items=(Var(name='A'),), newline=True, file=None)
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_poke
@@ -2378,12 +2415,12 @@ End()
 
 ## v10_t1_pr2
 Input(prompt=None, var=Var(name='A'), comma=False)
-Print(items=(StrLit(value='A'), Var(name='A'), StrLit(value='B')), newline=True, file=None)
-Print(items=(StrLit(value='X'),), newline=False, file=None)
+Print(items=(StrLit(value='A'), Var(name='A'), StrLit(value='B')), newline=True, file=None, commas=None)
+Print(items=(StrLit(value='X'),), newline=False, file=None, commas=None)
 PrintUsing(fmt=StrLit(value='##.##'), values=(Var(name='A'),), file=None, newline=True)
 PrintUsing(fmt=StrLit(value='#.# #.#'), values=(Var(name='A'), Var(name='A')), file=None, newline=True)
 Open(mode=StrLit(value='O'), num=1, file=StrLit(value='R.TXT'), reclen=None)
-Print(items=(Var(name='A'),), newline=True, file=1)
+Print(items=(Var(name='A'),), newline=True, file=1, commas=None)
 PrintUsing(fmt=StrLit(value='##.##'), values=(Var(name='A'), Var(name='A')), file=1, newline=True)
 Close(num=1)
 End()
@@ -2398,16 +2435,16 @@ End()
 
 ## v10_t1_print
 Assign(target=Var(name='A'), value=Lit(value=5))
-Print(items=(StrLit(value='HELLO'),), newline=True, file=None)
-Print(items=(Var(name='A'),), newline=True, file=None)
-Print(items=(BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)),), newline=True, file=None)
+Print(items=(StrLit(value='HELLO'),), newline=True, file=None, commas=None)
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
+Print(items=(BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_print2
 Assign(target=Var(name='A'), value=Lit(value=5))
-Print(items=(StrLit(value='HELLO'),), newline=True, file=None)
-Print(items=(StrLit(value='WORLD!'),), newline=True, file=None)
-Print(items=(Var(name='A'),), newline=True, file=None)
+Print(items=(StrLit(value='HELLO'),), newline=True, file=None, commas=None)
+Print(items=(StrLit(value='WORLD!'),), newline=True, file=None, commas=None)
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_pset
@@ -2509,13 +2546,13 @@ End()
 
 ## v10_t1_resumel
 OnError(target=3)
-Print(items=(Lit(value=1),), newline=True, file=None)
+Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
 End()
 Resume(next_=False, target=1)
 
 ## v10_t1_resumen
 OnError(target=3)
-Print(items=(Lit(value=1),), newline=True, file=None)
+Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
 End()
 Resume(next_=True, target=None)
 
@@ -2543,7 +2580,7 @@ Dim(name='V0$', bounds=(Var(name='A'),), also=())
 Assign(target=ArrayRef(name='V0$', indices=(Lit(value=1),)), value=StrLit(value='AB'))
 Assign(target=ArrayRef(name='V0$', indices=(Var(name='A'),)), value=StrLit(value='CD'))
 Assign(target=Var(name='B$'), value=ArrayRef(name='V0$', indices=(Var(name='A'),)))
-Print(items=(ArrayRef(name='V0$', indices=(Lit(value=1),)),), newline=True, file=None)
+Print(items=(ArrayRef(name='V0$', indices=(Lit(value=1),)),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_sarr2
@@ -2553,7 +2590,7 @@ Dim(name='V0', bounds=(Var(name='A'), Lit(value=5)), also=())
 Open(mode=StrLit(value='I'), num=1, file=StrLit(value='X.DAT'), reclen=None)
 InputFile(num=1, vars=(ArrayRef(name='V0', indices=(Var(name='A'), Lit(value=5))), ArrayRef(name='V1$', indices=(Var(name='A'),))))
 Close(num=1)
-Print(items=(ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=1))), ArrayRef(name='V1$', indices=(Var(name='A'),))), newline=True, file=None)
+Print(items=(ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=1))), ArrayRef(name='V1$', indices=(Var(name='A'),))), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_scr
@@ -2562,7 +2599,7 @@ Locate(row=Lit(value=3), col=Lit(value=5), cursor=None)
 Color(fg=Lit(value=1), bg=None)
 Locate(row=Lit(value=10), col=Lit(value=20), cursor=None)
 Color(fg=Lit(value=7), bg=Lit(value=0))
-Print(items=(StrLit(value='HI'),), newline=True, file=None)
+Print(items=(StrLit(value='HI'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_scr2
@@ -2616,7 +2653,7 @@ End()
 ## v10_t1_str
 Assign(target=Var(name='A$'), value=StrLit(value='HI'))
 Assign(target=Var(name='B$'), value=Var(name='A$'))
-Print(items=(Var(name='A$'),), newline=True, file=None)
+Print(items=(Var(name='A$'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_strigf
@@ -2635,11 +2672,11 @@ End()
 Assign(target=Var(name='A$'), value=StrLit(value='Hello'))
 Assign(target=Var(name='B$'), value=Call(name='UCASE$', args=(Var(name='A$'),)))
 Assign(target=Var(name='C$'), value=Call(name='LEFT$', args=(Var(name='B$'), Lit(value=3))))
-Print(items=(Var(name='C$'),), newline=True, file=None)
-Print(items=(Call(name='MID$', args=(Var(name='A$'), Lit(value=2), Lit(value=3))),), newline=True, file=None)
-Print(items=(Call(name='INSTR', args=(Var(name='A$'), StrLit(value='l'))),), newline=True, file=None)
-Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None)
-Print(items=(Call(name='STR$', args=(Lit(value=42),)),), newline=True, file=None)
+Print(items=(Var(name='C$'),), newline=True, file=None, commas=None)
+Print(items=(Call(name='MID$', args=(Var(name='A$'), Lit(value=2), Lit(value=3))),), newline=True, file=None, commas=None)
+Print(items=(Call(name='INSTR', args=(Var(name='A$'), StrLit(value='l'))),), newline=True, file=None, commas=None)
+Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None, commas=None)
+Print(items=(Call(name='STR$', args=(Lit(value=42),)),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_swap
@@ -2650,11 +2687,11 @@ End()
 
 ## v10_t1_tab
 Input(prompt=None, var=Var(name='A'), comma=False)
-Print(items=(StrLit(value='A'), Call(name='TAB', args=(Lit(value=7),)), Var(name='A')), newline=True, file=None)
-Print(items=(Call(name='SPC', args=(Lit(value=3),)), StrLit(value='B')), newline=True, file=None)
-Print(items=(Call(name='TAB', args=(Var(name='A'),)), StrLit(value='C')), newline=True, file=None)
+Print(items=(StrLit(value='A'), Call(name='TAB', args=(Lit(value=7),)), Var(name='A')), newline=True, file=None, commas=None)
+Print(items=(Call(name='SPC', args=(Lit(value=3),)), StrLit(value='B')), newline=True, file=None, commas=None)
+Print(items=(Call(name='TAB', args=(Var(name='A'),)), StrLit(value='C')), newline=True, file=None, commas=None)
 Open(mode=StrLit(value='O'), num=1, file=StrLit(value='R.TXT'), reclen=None)
-Print(items=(StrLit(value='X'), Call(name='TAB', args=(Lit(value=7),)), StrLit(value='Y'), Call(name='SPC', args=(Lit(value=8),)), Var(name='A')), newline=True, file=1)
+Print(items=(StrLit(value='X'), Call(name='TAB', args=(Lit(value=7),)), StrLit(value='Y'), Call(name='SPC', args=(Lit(value=8),)), Var(name='A')), newline=True, file=1, commas=None)
 Close(num=1)
 End()
 
@@ -2902,79 +2939,79 @@ Assign(target=Var(name='B'), value=Lit(value=3))
 End()
 
 ## zz_cv_ceil
-Print(items=(Call(name='CEIL', args=(DblLit(value=1.2),)),), newline=True, file=None)
+Print(items=(Call(name='CEIL', args=(DblLit(value=1.2),)),), newline=True, file=None, commas=None)
 End()
 
 ## zz_cv_cint
-Print(items=(Call(name='CINT', args=(DblLit(value=1.7),)),), newline=True, file=None)
+Print(items=(Call(name='CINT', args=(DblLit(value=1.7),)),), newline=True, file=None, commas=None)
 End()
 
 ## zz_cv_clng
 Assign(target=Var(name='A&'), value=Call(name='CLNG', args=(DblLit(value=70000.4),)))
-Print(items=(Var(name='A&'),), newline=True, file=None)
+Print(items=(Var(name='A&'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_cv_cvd
-Print(items=(Call(name='CVD', args=(StrLit(value='ABCDEFGH'),)),), newline=True, file=None)
+Print(items=(Call(name='CVD', args=(StrLit(value='ABCDEFGH'),)),), newline=True, file=None, commas=None)
 End()
 
 ## zz_cv_cvi
-Print(items=(Call(name='CVI', args=(StrLit(value='AB'),)),), newline=True, file=None)
+Print(items=(Call(name='CVI', args=(StrLit(value='AB'),)),), newline=True, file=None, commas=None)
 End()
 
 ## zz_cv_cvl
-Print(items=(Call(name='CVL', args=(StrLit(value='ABCD'),)),), newline=True, file=None)
+Print(items=(Call(name='CVL', args=(StrLit(value='ABCD'),)),), newline=True, file=None, commas=None)
 End()
 
 ## zz_cv_cvs
-Print(items=(Call(name='CVS', args=(StrLit(value='ABCD'),)),), newline=True, file=None)
+Print(items=(Call(name='CVS', args=(StrLit(value='ABCD'),)),), newline=True, file=None, commas=None)
 End()
 
 ## zz_cv_mix
 Assign(target=Var(name='A$'), value=Call(name='MKL$', args=(Lit(value=70000),)))
 Assign(target=Var(name='B&'), value=Call(name='CVL', args=(Var(name='A$'),)))
-Print(items=(Call(name='CEIL', args=(DblLit(value=1.2),)), Call(name='CINT', args=(DblLit(value=2.7),)), Var(name='B&')), newline=True, file=None)
+Print(items=(Call(name='CEIL', args=(DblLit(value=1.2),)), Call(name='CINT', args=(DblLit(value=2.7),)), Var(name='B&')), newline=True, file=None, commas=None)
 End()
 
 ## zz_cv_mkd
 Assign(target=Var(name='A$'), value=Call(name='MKD$', args=(DblLit(value=2.5),)))
-Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None)
+Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None, commas=None)
 End()
 
 ## zz_cv_mki
 Assign(target=Var(name='A$'), value=Call(name='MKI$', args=(Lit(value=258),)))
-Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None)
+Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None, commas=None)
 End()
 
 ## zz_cv_mkl
 Assign(target=Var(name='A$'), value=Call(name='MKL$', args=(Lit(value=70000),)))
-Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None)
+Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None, commas=None)
 End()
 
 ## zz_cv_mks
 Assign(target=Var(name='A$'), value=Call(name='MKS$', args=(DblLit(value=1.5),)))
-Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None)
+Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None, commas=None)
 End()
 
 ## zz_cv_single
 Assign(target=Var(name='A'), value=SingleLit(value=1.5))
-Print(items=(Var(name='A'),), newline=True, file=None)
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_deffn1
 DefFn(name='FNFN1', params=('A',), body=BinOp(op='*', lhs=Var(name='A'), rhs=Lit(value=2)), is_block=False)
-Print(items=(FnCall(name='FNFN1', args=(Lit(value=21),)),), newline=True, file=None)
+Print(items=(FnCall(name='FNFN1', args=(Lit(value=21),)),), newline=True, file=None, commas=None)
 
 ## zz_deffn2
 DefFn(name='FNFN1', params=('A', 'B'), body=BinOp(op='+', lhs=Var(name='A'), rhs=Var(name='B')), is_block=False)
-Print(items=(FnCall(name='FNFN1', args=(Lit(value=3), Lit(value=4))),), newline=True, file=None)
+Print(items=(FnCall(name='FNFN1', args=(Lit(value=3), Lit(value=4))),), newline=True, file=None, commas=None)
 
 ## zz_do2
 Assign(target=Var(name='A'), value=Lit(value=0))
 Do(kind='UNTIL', cond=RelOp(op='>=', lhs=Var(name='A'), rhs=Lit(value=5)))
 Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
 Loop(kind=None, cond=None)
-Print(items=(Var(name='A'),), newline=True, file=None)
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_do3
@@ -2982,7 +3019,7 @@ Assign(target=Var(name='A'), value=Lit(value=0))
 Do(kind=None, cond=None)
 Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
 Loop(kind='WHILE', cond=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=5)))
-Print(items=(Var(name='A'),), newline=True, file=None)
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_do4
@@ -2990,7 +3027,7 @@ Assign(target=Var(name='A'), value=Lit(value=0))
 Do(kind=None, cond=None)
 Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
 Loop(kind='UNTIL', cond=RelOp(op='>=', lhs=Var(name='A'), rhs=Lit(value=5)))
-Print(items=(Var(name='A'),), newline=True, file=None)
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_do5
@@ -2999,7 +3036,7 @@ Do(kind=None, cond=None)
 Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
 IfInline(cond=RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=3)), body=(ExitLoop(),))
 Loop(kind=None, cond=None)
-Print(items=(Var(name='A'),), newline=True, file=None)
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_do7
@@ -3007,15 +3044,15 @@ Assign(target=Var(name='A'), value=Lit(value=10))
 Do(kind=None, cond=None)
 Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
 Loop(kind='WHILE', cond=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=5)))
-Print(items=(Var(name='A'),), newline=True, file=None)
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_efor
 For(var=Var(name='A'), init=Lit(value=1), limit=Lit(value=10), step=Lit(value=1))
-Print(items=(Var(name='A'),), newline=True, file=None)
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 IfInline(cond=RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=5)), body=(ExitFor(),))
 NextStmt(var=Var(name='A'))
-Print(items=(StrLit(value='DONE'),), newline=True, file=None)
+Print(items=(StrLit(value='DONE'),), newline=True, file=None, commas=None)
 
 ## zz_ginf
 Assign(target=Var(name='A'), value=Lit(value=0))
@@ -3028,50 +3065,50 @@ End()
 Assign(target=Var(name='A'), value=Lit(value=0))
 Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
 IfGoto(cond=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=5)), target=1)
-Print(items=(Var(name='A'),), newline=True, file=None)
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_mdeffn1
 DefFn(name='FNFN1', params=('A',), body=(FnResult(value=BinOp(op='*', lhs=Var(name='A'), rhs=Lit(value=2))),), is_block=True)
-Print(items=(FnCall(name='FNFN1', args=(Lit(value=21),)),), newline=True, file=None)
+Print(items=(FnCall(name='FNFN1', args=(Lit(value=21),)),), newline=True, file=None, commas=None)
 
 ## zz_mdeffn2
 DefFn(name='FNFN1', params=('A',), body=(IfInline(cond=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=0)), body=(ExitDef(),)), FnResult(value=BinOp(op='*', lhs=Var(name='A'), rhs=Lit(value=2)))), is_block=True)
-Print(items=(FnCall(name='FNFN1', args=(Lit(value=21),)),), newline=True, file=None)
+Print(items=(FnCall(name='FNFN1', args=(Lit(value=21),)),), newline=True, file=None, commas=None)
 
 ## zz_op_and
 Assign(target=Var(name='A%'), value=Lit(value=12))
 Assign(target=Var(name='B%'), value=Lit(value=10))
 Assign(target=Var(name='C%'), value=BinOp(op='AND', lhs=Var(name='A%'), rhs=Var(name='B%')))
-Print(items=(Var(name='C%'),), newline=True, file=None)
+Print(items=(Var(name='C%'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_op_concat
 Assign(target=Var(name='A$'), value=StrLit(value='foo'))
 Assign(target=Var(name='B$'), value=StrLit(value='bar'))
 Assign(target=Var(name='C$'), value=BinOp(op='+', lhs=Var(name='A$'), rhs=Var(name='B$')))
-Print(items=(Var(name='C$'),), newline=True, file=None)
+Print(items=(Var(name='C$'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_op_eqv
 Assign(target=Var(name='A%'), value=Lit(value=12))
 Assign(target=Var(name='B%'), value=Lit(value=10))
 Assign(target=Var(name='C%'), value=Not(operand=BinOp(op='XOR', lhs=Var(name='A%'), rhs=Var(name='B%'))))
-Print(items=(Var(name='C%'),), newline=True, file=None)
+Print(items=(Var(name='C%'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_op_idiv
 Assign(target=Var(name='A%'), value=Lit(value=7))
 Assign(target=Var(name='B%'), value=Lit(value=3))
 Assign(target=Var(name='C%'), value=BinOp(op='\\', lhs=Var(name='A%'), rhs=Var(name='B%')))
-Print(items=(Var(name='C%'),), newline=True, file=None)
+Print(items=(Var(name='C%'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_op_imp
 Assign(target=Var(name='A%'), value=Lit(value=12))
 Assign(target=Var(name='B%'), value=Lit(value=10))
 Assign(target=Var(name='C%'), value=BinOp(op='OR', lhs=Not(operand=Var(name='A%')), rhs=Var(name='B%')))
-Print(items=(Var(name='C%'),), newline=True, file=None)
+Print(items=(Var(name='C%'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_op_mix
@@ -3082,159 +3119,159 @@ Assign(target=Var(name='D%'), value=BinOp(op='MOD', lhs=Var(name='A%'), rhs=Lit(
 Assign(target=Var(name='E%'), value=BinOp(op='>', lhs=Var(name='A%'), rhs=Var(name='B%')))
 Assign(target=Var(name='F%'), value=BinOp(op='=', lhs=Var(name='A%'), rhs=Var(name='B%')))
 Assign(target=Var(name='G$'), value=BinOp(op='+', lhs=StrLit(value='x'), rhs=StrLit(value='y')))
-Print(items=(Var(name='C%'), Var(name='D%'), Var(name='E%'), Var(name='F%'), Var(name='G$')), newline=True, file=None)
+Print(items=(Var(name='C%'), Var(name='D%'), Var(name='E%'), Var(name='F%'), Var(name='G$')), newline=True, file=None, commas=None)
 End()
 
 ## zz_op_mod
 Assign(target=Var(name='A%'), value=Lit(value=7))
 Assign(target=Var(name='B%'), value=Lit(value=3))
 Assign(target=Var(name='C%'), value=BinOp(op='MOD', lhs=Var(name='A%'), rhs=Var(name='B%')))
-Print(items=(Var(name='C%'),), newline=True, file=None)
+Print(items=(Var(name='C%'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_op_not
 Assign(target=Var(name='A%'), value=Lit(value=12))
 Assign(target=Var(name='B%'), value=Not(operand=Var(name='A%')))
-Print(items=(Var(name='B%'),), newline=True, file=None)
+Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_op_or
 Assign(target=Var(name='A%'), value=Lit(value=12))
 Assign(target=Var(name='B%'), value=Lit(value=10))
 Assign(target=Var(name='C%'), value=BinOp(op='OR', lhs=Var(name='A%'), rhs=Var(name='B%')))
-Print(items=(Var(name='C%'),), newline=True, file=None)
+Print(items=(Var(name='C%'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_op_pow
 Assign(target=Var(name='A'), value=Lit(value=2))
 Assign(target=Var(name='B'), value=Lit(value=10))
 Assign(target=Var(name='C'), value=BinOp(op='^', lhs=Var(name='A'), rhs=Var(name='B')))
-Print(items=(Var(name='C'),), newline=True, file=None)
+Print(items=(Var(name='C'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_op_rel_eq
 Assign(target=Var(name='A%'), value=Lit(value=5))
 Assign(target=Var(name='B%'), value=Lit(value=3))
 Assign(target=Var(name='C%'), value=BinOp(op='=', lhs=Var(name='A%'), rhs=Var(name='B%')))
-Print(items=(Var(name='C%'),), newline=True, file=None)
+Print(items=(Var(name='C%'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_op_rel_ge
 Assign(target=Var(name='A%'), value=Lit(value=5))
 Assign(target=Var(name='B%'), value=Lit(value=3))
 Assign(target=Var(name='C%'), value=BinOp(op='>=', lhs=Var(name='A%'), rhs=Var(name='B%')))
-Print(items=(Var(name='C%'),), newline=True, file=None)
+Print(items=(Var(name='C%'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_op_rel_gt
 Assign(target=Var(name='A%'), value=Lit(value=5))
 Assign(target=Var(name='B%'), value=Lit(value=3))
 Assign(target=Var(name='C%'), value=BinOp(op='>', lhs=Var(name='A%'), rhs=Var(name='B%')))
-Print(items=(Var(name='C%'),), newline=True, file=None)
+Print(items=(Var(name='C%'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_op_rel_le
 Assign(target=Var(name='A%'), value=Lit(value=5))
 Assign(target=Var(name='B%'), value=Lit(value=3))
 Assign(target=Var(name='C%'), value=BinOp(op='<=', lhs=Var(name='A%'), rhs=Var(name='B%')))
-Print(items=(Var(name='C%'),), newline=True, file=None)
+Print(items=(Var(name='C%'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_op_rel_lt
 Assign(target=Var(name='A%'), value=Lit(value=5))
 Assign(target=Var(name='B%'), value=Lit(value=3))
 Assign(target=Var(name='C%'), value=BinOp(op='<', lhs=Var(name='A%'), rhs=Var(name='B%')))
-Print(items=(Var(name='C%'),), newline=True, file=None)
+Print(items=(Var(name='C%'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_op_rel_ne
 Assign(target=Var(name='A%'), value=Lit(value=5))
 Assign(target=Var(name='B%'), value=Lit(value=3))
 Assign(target=Var(name='C%'), value=BinOp(op='<>', lhs=Var(name='A%'), rhs=Var(name='B%')))
-Print(items=(Var(name='C%'),), newline=True, file=None)
+Print(items=(Var(name='C%'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_op_xor
 Assign(target=Var(name='A%'), value=Lit(value=12))
 Assign(target=Var(name='B%'), value=Lit(value=10))
 Assign(target=Var(name='C%'), value=BinOp(op='XOR', lhs=Var(name='A%'), rhs=Var(name='B%')))
-Print(items=(Var(name='C%'),), newline=True, file=None)
+Print(items=(Var(name='C%'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_sc1
 Assign(target=Var(name='A'), value=Lit(value=2))
-SelectCase(selector=Var(name='A'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=1)),), body=(Print(items=(StrLit(value='ONE'),), newline=True, file=None),)), CaseArm(guards=(CaseValue(value=Lit(value=2)),), body=(Print(items=(StrLit(value='TWO'),), newline=True, file=None),))), case_else=(Print(items=(StrLit(value='OTHER'),), newline=True, file=None),))
+SelectCase(selector=Var(name='A'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=1)),), body=(Print(items=(StrLit(value='ONE'),), newline=True, file=None, commas=None),)), CaseArm(guards=(CaseValue(value=Lit(value=2)),), body=(Print(items=(StrLit(value='TWO'),), newline=True, file=None, commas=None),))), case_else=(Print(items=(StrLit(value='OTHER'),), newline=True, file=None, commas=None),))
 
 ## zz_sc2
 Assign(target=Var(name='A'), value=Lit(value=3))
-SelectCase(selector=Var(name='A'), arms=(CaseArm(guards=(CaseRange(lo=Lit(value=1), hi=Lit(value=5)),), body=(Print(items=(StrLit(value='LOW'),), newline=True, file=None),)),), case_else=(Print(items=(StrLit(value='HIGH'),), newline=True, file=None),))
+SelectCase(selector=Var(name='A'), arms=(CaseArm(guards=(CaseRange(lo=Lit(value=1), hi=Lit(value=5)),), body=(Print(items=(StrLit(value='LOW'),), newline=True, file=None, commas=None),)),), case_else=(Print(items=(StrLit(value='HIGH'),), newline=True, file=None, commas=None),))
 
 ## zz_sc3
 Assign(target=Var(name='A'), value=Lit(value=20))
-SelectCase(selector=Var(name='A'), arms=(CaseArm(guards=(CaseIs(op='>', value=Lit(value=10)),), body=(Print(items=(StrLit(value='BIG'),), newline=True, file=None),)),), case_else=(Print(items=(StrLit(value='SMALL'),), newline=True, file=None),))
+SelectCase(selector=Var(name='A'), arms=(CaseArm(guards=(CaseIs(op='>', value=Lit(value=10)),), body=(Print(items=(StrLit(value='BIG'),), newline=True, file=None, commas=None),)),), case_else=(Print(items=(StrLit(value='SMALL'),), newline=True, file=None, commas=None),))
 
 ## zz_sc4
 Assign(target=Var(name='A'), value=Lit(value=3))
-SelectCase(selector=Var(name='A'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=1)), CaseValue(value=Lit(value=3)), CaseValue(value=Lit(value=5))), body=(Print(items=(StrLit(value='ODD'),), newline=True, file=None),)),), case_else=(Print(items=(StrLit(value='EVEN'),), newline=True, file=None),))
+SelectCase(selector=Var(name='A'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=1)), CaseValue(value=Lit(value=3)), CaseValue(value=Lit(value=5))), body=(Print(items=(StrLit(value='ODD'),), newline=True, file=None, commas=None),)),), case_else=(Print(items=(StrLit(value='EVEN'),), newline=True, file=None, commas=None),))
 
 ## zz_sc5
 Assign(target=Var(name='A$'), value=StrLit(value='Y'))
-SelectCase(selector=Var(name='A$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='Y')),), body=(Print(items=(StrLit(value='YES'),), newline=True, file=None),)), CaseArm(guards=(CaseValue(value=StrLit(value='N')),), body=(Print(items=(StrLit(value='NO'),), newline=True, file=None),))), case_else=(Print(items=(StrLit(value='MAYBE'),), newline=True, file=None),))
+SelectCase(selector=Var(name='A$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='Y')),), body=(Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None),)), CaseArm(guards=(CaseValue(value=StrLit(value='N')),), body=(Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None),))), case_else=(Print(items=(StrLit(value='MAYBE'),), newline=True, file=None, commas=None),))
 
 ## zz_sc6
 Assign(target=Var(name='A'), value=Lit(value=1))
-SelectCase(selector=Var(name='A'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=1)),), body=(Print(items=(StrLit(value='ONE'),), newline=True, file=None),)), CaseArm(guards=(CaseValue(value=Lit(value=2)),), body=(Print(items=(StrLit(value='TWO'),), newline=True, file=None),))), case_else=None)
+SelectCase(selector=Var(name='A'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=1)),), body=(Print(items=(StrLit(value='ONE'),), newline=True, file=None, commas=None),)), CaseArm(guards=(CaseValue(value=Lit(value=2)),), body=(Print(items=(StrLit(value='TWO'),), newline=True, file=None, commas=None),))), case_else=None)
 
 ## zz_sub0
-SubDef(name='SUB1', params=(), body=(Print(items=(StrLit(value='HI'),), newline=True, file=None),))
+SubDef(name='SUB1', params=(), body=(Print(items=(StrLit(value='HI'),), newline=True, file=None, commas=None),))
 CallStmt(name='SUB1', args=())
 
 ## zz_sub1
 SubDef(name='SUB1', params=('A',), body=(Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1))),))
 Assign(target=Var(name='B'), value=Lit(value=5))
 CallStmt(name='SUB1', args=(Var(name='B'),))
-Print(items=(Var(name='B'),), newline=True, file=None)
+Print(items=(Var(name='B'),), newline=True, file=None, commas=None)
 
 ## zz_sub2
-SubDef(name='SUB1', params=('A', 'B'), body=(Print(items=(Var(name='A'), Var(name='B')), newline=True, file=None),))
+SubDef(name='SUB1', params=('A', 'B'), body=(Print(items=(Var(name='A'), Var(name='B')), newline=True, file=None, commas=None),))
 CallStmt(name='SUB1', args=(Lit(value=7), Lit(value=9)))
 
 ## zz_sub3
-SubDef(name='SUB1', params=('A', 'B'), body=(Print(items=(Var(name='A'), Var(name='B')), newline=True, file=None),))
+SubDef(name='SUB1', params=('A', 'B'), body=(Print(items=(Var(name='A'), Var(name='B')), newline=True, file=None, commas=None),))
 Assign(target=Var(name='C'), value=Lit(value=3))
 Assign(target=Var(name='D'), value=Lit(value=4))
 CallStmt(name='SUB1', args=(BinOp(op='+', lhs=Var(name='C'), rhs=Lit(value=1)), BinOp(op='*', lhs=Var(name='D'), rhs=Lit(value=2))))
 
 ## zz_sub4
-SubDef(name='SUB1', params=('A$',), body=(Print(items=(Var(name='A$'),), newline=True, file=None),))
+SubDef(name='SUB1', params=('A$',), body=(Print(items=(Var(name='A$'),), newline=True, file=None, commas=None),))
 Assign(target=Var(name='B$'), value=StrLit(value='HI'))
 CallStmt(name='SUB1', args=(Var(name='B$'),))
 
 ## zz_sub5
-SubDef(name='SUB1', params=('A$',), body=(Print(items=(Var(name='A$'),), newline=True, file=None),))
+SubDef(name='SUB1', params=('A$',), body=(Print(items=(Var(name='A$'),), newline=True, file=None, commas=None),))
 CallStmt(name='SUB1', args=(StrLit(value='HI'),))
 
 ## zz_sub6
-SubDef(name='SUB1', params=('A',), body=(Print(items=(Var(name='A'),), newline=True, file=None),))
+SubDef(name='SUB1', params=('A',), body=(Print(items=(Var(name='A'),), newline=True, file=None, commas=None),))
 Dim(name='V0', bounds=(3,), also=())
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=5))
 CallStmt(name='SUB1', args=(ArrayRef(name='V0', indices=(Lit(value=1),)),))
 
 ## zz_sub7
-SubDef(name='SUB1', params=('A',), body=(IfInline(cond=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=0)), body=(ExitSub(),)), Print(items=(Var(name='A'),), newline=True, file=None)))
+SubDef(name='SUB1', params=('A',), body=(IfInline(cond=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=0)), body=(ExitSub(),)), Print(items=(Var(name='A'),), newline=True, file=None, commas=None)))
 CallStmt(name='SUB1', args=(Lit(value=5),))
 
 ## zz_vm_darith
 Assign(target=Var(name='A#'), value=DblLit(value=1.0))
 Assign(target=Var(name='B#'), value=DblLit(value=3.0))
 Assign(target=Var(name='C#'), value=BinOp(op='/', lhs=Var(name='A#'), rhs=Var(name='B#')))
-Print(items=(Var(name='C#'),), newline=True, file=None)
+Print(items=(Var(name='C#'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_vm_darr
 Dim(name='V0', bounds=(3,), also=())
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=DblLit(value=2.5))
-Print(items=(ArrayRef(name='V0', indices=(Lit(value=1),)),), newline=True, file=None)
+Print(items=(ArrayRef(name='V0', indices=(Lit(value=1),)),), newline=True, file=None, commas=None)
 End()
 
 ## zz_vm_darr_loop
@@ -3242,7 +3279,7 @@ Dim(name='V0', bounds=(3,), also=())
 For(var=Var(name='A%'), init=Lit(value=0), limit=Lit(value=3), step=Lit(value=1))
 Assign(target=ArrayRef(name='V0', indices=(Var(name='A%'),)), value=DblLit(value=2.5))
 NextStmt(var=Var(name='A%'))
-Print(items=(ArrayRef(name='V0', indices=(Lit(value=0),)),), newline=True, file=None)
+Print(items=(ArrayRef(name='V0', indices=(Lit(value=0),)),), newline=True, file=None, commas=None)
 End()
 
 ## zz_vm_darr_rdloop
@@ -3251,31 +3288,31 @@ Assign(target=Var(name='A#'), value=DblLit(value=0.0))
 For(var=Var(name='B%'), init=Lit(value=0), limit=Lit(value=3), step=Lit(value=1))
 Assign(target=Var(name='A#'), value=BinOp(op='+', lhs=Var(name='A#'), rhs=ArrayRef(name='V0', indices=(Var(name='B%'),))))
 NextStmt(var=Var(name='B%'))
-Print(items=(Var(name='A#'),), newline=True, file=None)
+Print(items=(Var(name='A#'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_vm_dlit
 Assign(target=Var(name='A#'), value=DblLit(value=1.5))
-Print(items=(Var(name='A#'),), newline=True, file=None)
+Print(items=(Var(name='A#'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_vm_dvar
 Assign(target=Var(name='A#'), value=DblLit(value=2.5))
 Assign(target=Var(name='B#'), value=Var(name='A#'))
-Print(items=(Var(name='B#'),), newline=True, file=None)
+Print(items=(Var(name='B#'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_vm_ladd
 Assign(target=Var(name='A&'), value=Lit(value=100000))
 Assign(target=Var(name='B&'), value=Lit(value=200000))
 Assign(target=Var(name='C&'), value=BinOp(op='+', lhs=Var(name='A&'), rhs=Var(name='B&')))
-Print(items=(Var(name='C&'),), newline=True, file=None)
+Print(items=(Var(name='C&'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_vm_larr
 Dim(name='V0&', bounds=(3,), also=())
 Assign(target=ArrayRef(name='V0&', indices=(Lit(value=1),)), value=Lit(value=100000))
-Print(items=(ArrayRef(name='V0&', indices=(Lit(value=1),)),), newline=True, file=None)
+Print(items=(ArrayRef(name='V0&', indices=(Lit(value=1),)),), newline=True, file=None, commas=None)
 End()
 
 ## zz_vm_larr_loop
@@ -3283,7 +3320,7 @@ Dim(name='V0&', bounds=(3,), also=())
 For(var=Var(name='A%'), init=Lit(value=0), limit=Lit(value=3), step=Lit(value=1))
 Assign(target=ArrayRef(name='V0&', indices=(Var(name='A%'),)), value=Lit(value=100000))
 NextStmt(var=Var(name='A%'))
-Print(items=(ArrayRef(name='V0&', indices=(Lit(value=0),)),), newline=True, file=None)
+Print(items=(ArrayRef(name='V0&', indices=(Lit(value=0),)),), newline=True, file=None, commas=None)
 End()
 
 ## zz_vm_lmix
@@ -3292,52 +3329,52 @@ Assign(target=Var(name='A&'), value=Lit(value=100000))
 Assign(target=Var(name='B&'), value=Lit(value=5))
 Assign(target=Var(name='C&'), value=BinOp(op='+', lhs=BinOp(op='*', lhs=Var(name='B&'), rhs=Lit(value=2)), rhs=Var(name='A&')))
 Assign(target=ArrayRef(name='V0&', indices=(Lit(value=1),)), value=Var(name='C&'))
-Print(items=(Var(name='A&'), Var(name='C&'), ArrayRef(name='V0&', indices=(Lit(value=1),))), newline=True, file=None)
+Print(items=(Var(name='A&'), Var(name='C&'), ArrayRef(name='V0&', indices=(Lit(value=1),))), newline=True, file=None, commas=None)
 End()
 
 ## zz_vm_lmul
 Assign(target=Var(name='A&'), value=Lit(value=100000))
 Assign(target=Var(name='B&'), value=Lit(value=3))
 Assign(target=Var(name='C&'), value=BinOp(op='*', lhs=Var(name='A&'), rhs=Var(name='B&')))
-Print(items=(Var(name='C&'),), newline=True, file=None)
+Print(items=(Var(name='C&'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_vm_lneg
 Assign(target=Var(name='A&'), value=Neg(operand=Lit(value=100000)))
-Print(items=(Var(name='A&'),), newline=True, file=None)
+Print(items=(Var(name='A&'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_vm_long
 Assign(target=Var(name='A&'), value=Lit(value=100000))
-Print(items=(Var(name='A&'),), newline=True, file=None)
+Print(items=(Var(name='A&'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_vm_lsub
 Assign(target=Var(name='A&'), value=Lit(value=200000))
 Assign(target=Var(name='B&'), value=Lit(value=100000))
 Assign(target=Var(name='C&'), value=BinOp(op='-', lhs=Var(name='A&'), rhs=Var(name='B&')))
-Print(items=(Var(name='C&'),), newline=True, file=None)
+Print(items=(Var(name='C&'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_vm_mixed
 Assign(target=Var(name='A'), value=SingleLit(value=1.5))
 Assign(target=Var(name='B&'), value=Lit(value=100000))
-Print(items=(Var(name='A'),), newline=True, file=None)
-Print(items=(Var(name='B&'),), newline=True, file=None)
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
+Print(items=(Var(name='B&'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_x_ldiv
 Assign(target=Var(name='A&'), value=Lit(value=100000))
 Assign(target=Var(name='B&'), value=Lit(value=7))
 Assign(target=Var(name='C&'), value=BinOp(op='\\', lhs=Var(name='A&'), rhs=Var(name='B&')))
-Print(items=(Var(name='C&'),), newline=True, file=None)
+Print(items=(Var(name='C&'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_x_lmod
 Assign(target=Var(name='A&'), value=Lit(value=100000))
 Assign(target=Var(name='B&'), value=Lit(value=7))
 Assign(target=Var(name='C&'), value=BinOp(op='MOD', lhs=Var(name='A&'), rhs=Var(name='B&')))
-Print(items=(Var(name='C&'),), newline=True, file=None)
+Print(items=(Var(name='C&'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_x_mix
@@ -3347,7 +3384,7 @@ Assign(target=Var(name='C%'), value=Lit(value=9))
 Assign(target=Var(name='D%'), value=Lit(value=12))
 Assign(target=Var(name='E%'), value=BinOp(op='-', lhs=BinOp(op='AND', lhs=Var(name='A%'), rhs=Var(name='B%')), rhs=Group(inner=BinOp(op='AND', lhs=Var(name='C%'), rhs=Var(name='D%')))))
 Assign(target=Var(name='F%'), value=BinOp(op='*', lhs=BinOp(op='AND', lhs=Var(name='A%'), rhs=Var(name='B%')), rhs=Group(inner=BinOp(op='AND', lhs=Var(name='C%'), rhs=Var(name='D%')))))
-Print(items=(Var(name='E%'), Var(name='F%')), newline=True, file=None)
+Print(items=(Var(name='E%'), Var(name='F%')), newline=True, file=None, commas=None)
 End()
 
 ## zz_x_rradd
@@ -3356,7 +3393,7 @@ Assign(target=Var(name='B%'), value=Lit(value=6))
 Assign(target=Var(name='C%'), value=Lit(value=9))
 Assign(target=Var(name='D%'), value=Lit(value=12))
 Assign(target=Var(name='E%'), value=BinOp(op='+', lhs=BinOp(op='AND', lhs=Var(name='A%'), rhs=Var(name='B%')), rhs=Group(inner=BinOp(op='AND', lhs=Var(name='C%'), rhs=Var(name='D%')))))
-Print(items=(Var(name='E%'),), newline=True, file=None)
+Print(items=(Var(name='E%'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_x_rrand
@@ -3365,7 +3402,7 @@ Assign(target=Var(name='B%'), value=Lit(value=7))
 Assign(target=Var(name='C%'), value=Lit(value=13))
 Assign(target=Var(name='D%'), value=Lit(value=6))
 Assign(target=Var(name='E%'), value=BinOp(op='AND', lhs=BinOp(op='AND', lhs=Var(name='A%'), rhs=Var(name='B%')), rhs=Group(inner=BinOp(op='AND', lhs=Var(name='C%'), rhs=Var(name='D%')))))
-Print(items=(Var(name='E%'),), newline=True, file=None)
+Print(items=(Var(name='E%'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_x_rrmul
@@ -3374,7 +3411,7 @@ Assign(target=Var(name='B%'), value=Lit(value=6))
 Assign(target=Var(name='C%'), value=Lit(value=9))
 Assign(target=Var(name='D%'), value=Lit(value=12))
 Assign(target=Var(name='E%'), value=BinOp(op='*', lhs=BinOp(op='AND', lhs=Var(name='A%'), rhs=Var(name='B%')), rhs=Group(inner=BinOp(op='AND', lhs=Var(name='C%'), rhs=Var(name='D%')))))
-Print(items=(Var(name='E%'),), newline=True, file=None)
+Print(items=(Var(name='E%'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_x_rror
@@ -3383,7 +3420,7 @@ Assign(target=Var(name='B%'), value=Lit(value=3))
 Assign(target=Var(name='C%'), value=Lit(value=5))
 Assign(target=Var(name='D%'), value=Lit(value=2))
 Assign(target=Var(name='E%'), value=BinOp(op='OR', lhs=BinOp(op='AND', lhs=Var(name='A%'), rhs=Var(name='B%')), rhs=BinOp(op='AND', lhs=Var(name='C%'), rhs=Var(name='D%'))))
-Print(items=(Var(name='E%'),), newline=True, file=None)
+Print(items=(Var(name='E%'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_x_rrsub
@@ -3392,7 +3429,7 @@ Assign(target=Var(name='B%'), value=Lit(value=6))
 Assign(target=Var(name='C%'), value=Lit(value=9))
 Assign(target=Var(name='D%'), value=Lit(value=12))
 Assign(target=Var(name='E%'), value=BinOp(op='-', lhs=BinOp(op='AND', lhs=Var(name='A%'), rhs=Var(name='B%')), rhs=Group(inner=BinOp(op='AND', lhs=Var(name='C%'), rhs=Var(name='D%')))))
-Print(items=(Var(name='E%'),), newline=True, file=None)
+Print(items=(Var(name='E%'),), newline=True, file=None, commas=None)
 End()
 
 ## zz_x_rrxor
@@ -3401,5 +3438,5 @@ Assign(target=Var(name='B%'), value=Lit(value=6))
 Assign(target=Var(name='C%'), value=Lit(value=9))
 Assign(target=Var(name='D%'), value=Lit(value=12))
 Assign(target=Var(name='E%'), value=BinOp(op='XOR', lhs=BinOp(op='AND', lhs=Var(name='A%'), rhs=Var(name='B%')), rhs=BinOp(op='AND', lhs=Var(name='C%'), rhs=Var(name='D%'))))
-Print(items=(Var(name='E%'),), newline=True, file=None)
+Print(items=(Var(name='E%'),), newline=True, file=None, commas=None)
 End()

@@ -23,8 +23,12 @@ _POP_OPS = {
 _POP_OPS_N = {0xE9: "-", 0xF9: "/"}  # DE reg: non-R FSUBP/FDIVP -- first-pushed is LEFT
 
 # Jcc byte -> the SOURCE relop R when the pair `Jcc +3; e9 T` encodes `IF R THEN line(T)`
-# (the Jcc tests NOT R). Operands from FLD y; FCOMP [x]: x R y.
-_JCC_RELOP = {0x75: "=", 0x74: "<>", 0x76: "<", 0x72: "<=", 0x73: ">", 0x77: ">="}
+# (the Jcc tests NOT R). Operands from FLD y; FCOMP [x]: x R y. The signed codes
+# (7C-7F) are the integer `cmp ax,bx` form, flags = lhs - rhs (witnessed t1_cmpax).
+_JCC_RELOP = {
+    0x75: "=", 0x74: "<>", 0x76: "<", 0x72: "<=", 0x73: ">", 0x77: ">=",
+    0x7D: "<", 0x7F: "<=", 0x7C: ">=", 0x7E: ">",
+}
 _NEGATE_REL = {"=": "<>", "<>": "=", "<": ">=", ">=": "<", ">": "<=", "<=": ">"}
 
 # Materialization form (WHILE / boolean values): the Jcc tests the relop TRUE --
@@ -161,6 +165,15 @@ _TABSPC_VECS = {
 
 MARKER = b"\x00\x80\x16\x00"  # always immediately precedes the const pool
 ARR_BLOCK = 0x36  # per-array DGROUP bookkeeping block size
+
+
+def _pp_commas(pp) -> tuple[bool, ...] | None:
+    """items-aligned comma-separator flags for a pend_print dict, or None
+    when every separator is the default ';' (see ir.Print.commas)."""
+    cs = pp.get("commas")
+    if not cs:
+        return None
+    return tuple(i in cs for i in range(len(pp["items"])))
 
 
 _FREAD = ("fread",)  # sentinel: an INPUT#-parsed value awaiting its

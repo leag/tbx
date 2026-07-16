@@ -189,6 +189,46 @@ void tb_pu_val(double v) {
     for (; pad > 0; pad--) tb_ps(" ");
     tb_ps(num);
 }
+void tb_pu_flush(void) {
+    /* statement end: TB prints the mask's literal tail after the last value,
+       stopping at the next field ("TOTAL: #### UNITS", t1_using dosout) */
+    const char *f = tb_cs(tb_puf);
+    size_t L = (size_t)tb_puf.n;
+    for (; tb_pup < L; tb_pup++) {
+        char c = f[tb_pup];
+        if (strchr("#+!\\&$*^", c)) break;
+        char b[2] = {c, 0}; tb_ps(b);
+    }
+}
+void tb_pu_sval(tb_str s) {
+    /* string USING fields (t1_using dosout): `!` first char, `\ \` a field
+       2 + between-chars wide, `&` the whole string; left-justified,
+       space-padded */
+    const char *f = tb_cs(tb_puf);
+    size_t L = (size_t)tb_puf.n;
+    int guard = 0;
+    if (!L) tb_error(5);
+    for (;; tb_pup++) {                                  /* literals up to the field */
+        if (tb_pup >= L) { tb_pup = 0; if (guard++) tb_error(5); }
+        char c = f[tb_pup];
+        if (c == '!' || c == '\\' || c == '&') break;
+        if (strchr("^_$*#+", c)) tb_error(5);
+        char b[2] = {c, 0}; tb_ps(b);
+    }
+    long w;
+    if (f[tb_pup] == '!') { w = 1; tb_pup++; }
+    else if (f[tb_pup] == '&') { w = s.n; tb_pup++; }
+    else {
+        size_t j = tb_pup + 1;
+        while (j < L && f[j] != '\\') j++;
+        if (j >= L) tb_error(5);
+        w = (long)(j - tb_pup) + 1;
+        tb_pup = j + 1;
+    }
+    tb_str o = tb_new((size_t)w);
+    for (long i = 0; i < w; i++) o.p[i] = i < s.n ? s.p[i] : ' ';
+    tb_pss(o);
+}
 /* MKx$/CVx: raw little-endian bytes in a string -- binary-safe now that
    descriptors carry their length (MKI$(256) holds its embedded NUL). */
 static tb_str tb_mkbytes(const void *p, size_t n) {

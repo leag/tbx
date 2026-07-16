@@ -15,6 +15,7 @@ from tbx.decode0.const import (
     _PREC,
     _PUT_ACTIONS,
     _READDATA,
+    _pp_commas,
 )
 from tbx.decode0.dialect import find_prologue
 from tbx.decode0.scan import _grp, _orient, _scan
@@ -203,7 +204,12 @@ class DecodeState:
                 raise ValueError("LPRINT chain not flushed on b9")
             else:
                 self.stmts.append(
-                    ir.Print(tuple(pp["items"]), newline=False, file=pp["file"])
+                    ir.Print(
+                        tuple(pp["items"]),
+                        newline=False,
+                        file=pp["file"],
+                        commas=_pp_commas(pp),
+                    )
                 )
             self.addrs.append(pp["start"])
         if self.pend_using is not None:
@@ -1637,6 +1643,12 @@ def decode_user_code(exe: bytes) -> list[Any]:
             continue
         if kind == "key_on" or kind == "key_off":  # KEY ON / KEY OFF
             state.put(ir.Key(kind == "key_on"), state.cur)
+            state.cur = None
+            state.k += 1
+            continue
+        if kind == "key_macro":  # KEY n, s$: n in ax, macro on sstack
+            state.put(ir.KeyDef(state.ax, state.sstack.pop()), state.cur)
+            state.ax = None
             state.cur = None
             state.k += 1
             continue

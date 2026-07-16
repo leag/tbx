@@ -10,7 +10,7 @@
    this header or to a documented surrogate behavior (see README.md in this
    directory): a generated --no-runtime program only links against a
    libtbrt.a built from the same version. */
-#define TB_RT_VERSION 5
+#define TB_RT_VERSION 6
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -162,6 +162,9 @@ void tb_wnum(double v);
 void tb_wstr(tb_str s);
 void tb_pu_begin(tb_str f);
 void tb_pu_val(double v);
+void tb_pu_sval(tb_str s);
+void tb_pu_flush(void);
+void tb_zone(void);
 tb_str tb_mki(double v);
 tb_str tb_mkl(double v);
 tb_str tb_mks(double v);

@@ -15,6 +15,7 @@ from tbx.decode0.const import (
     _JCC_RELOP_VALUE,
     _TRAP_CTL,
     _TRAP_GOSUB,
+    _pp_commas,
 )
 from tbx.decode0.lift import (
     _lift_bool_tail,
@@ -91,7 +92,8 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             state.cur = None
             state.k += 1
             return True
-        if vec == 0xCB:  # USING emit + its string item vec
+        if vec in (0xCB, 0xCC):  # USING emit + its string item vec: CB formats a
+            # numeric off the FP stack, CC a string off the sstack (t1_using)
             nxt = state.ops[state.k + 1][1:] if state.k + 1 < len(state.ops) else None
             if state.pend_using is None or nxt not in (("rt", 0xBE), ("rt", 0xC0)):
                 raise ValueError(f"stray USING emit at {addr:#x}")
@@ -101,9 +103,24 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             if state.pend_using["values"] and state.pend_using["file"] != f:
                 raise ValueError(f"USING console/file leg flip at {addr:#x}")
             state.pend_using["file"] = f
-            state.pend_using["values"].append(state.stack.pop())
+            state.pend_using["values"].append(
+                state.sstack.pop() if vec == 0xCC else state.stack.pop()
+            )
             state.cur = None
             state.k += 2
+            return True
+        if vec == 0xC1:  # PRINT comma: zone-advance separator after an item
+            if (
+                state.pend_print is None
+                or state.pend_print.get("mode")
+                or not state.pend_print["items"]
+            ):
+                raise ValueError(f"comma separator without print item at {addr:#x}")
+            state.pend_print.setdefault("commas", set()).add(
+                len(state.pend_print["items"]) - 1
+            )
+            state.cur = None
+            state.k += 1
             return True
         if vec in (0xBB, 0xBE, 0xBD, 0xC0):  # item-eval vectors
             if state.pend_using is not None:  # plain item closes a USING chain
@@ -172,7 +189,12 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
                     )
                 else:
                     state.put(
-                        ir.Print(tuple(pp["items"]), file=pp["file"]), pp["start"]
+                        ir.Print(
+                            tuple(pp["items"]),
+                            file=pp["file"],
+                            commas=_pp_commas(pp),
+                        ),
+                        pp["start"],
                     )
             elif not want_file:
                 state.put(ir.Print(()), state.cur)  # bare PRINT (blank line)

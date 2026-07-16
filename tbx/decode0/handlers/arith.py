@@ -155,6 +155,13 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         state.ax = None
         state.k += 1
         return True
+    if kind == "cmpax_bx":  # integer IF compare, both sides ax-computed: the
+        # source RHS evaluates first and shuttles to bx, LHS lands in ax, and
+        # the signed Jcc rides _JCC_RELOP's 7C-7F rows (witnessed t1_cmpax)
+        state.pend_cmp = (state.ax, state.bx)
+        state.ax = state.bx = None
+        state.k += 1
+        return True
     if kind == "inc_m":
         # Integer FOR-NEXT increment -- implicit in BASIC; consume silently
         # (the NEXT stmt is emitted on the cmp_mi8 guard above).

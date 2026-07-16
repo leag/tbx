@@ -44,6 +44,11 @@ def fileio(state: DecodeState, op, addr, kind) -> bool:
         state.cur = None
         state.k += 1
         return True
+    if kind == "close_all":  # bare CLOSE: all channels, no operands
+        state.put(ir.Close(None), state.cur)
+        state.cur = None
+        state.k += 1
+        return True
     if kind == "field":  # FIELD #n, w AS v$[, ...]
         if state.pend_fnum is None:
             raise ValueError(f"FIELD without file number at {addr:#x}")

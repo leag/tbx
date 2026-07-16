@@ -1,0 +1,17 @@
+# t1_close dialect=1.1 start=08D50
+08D53:movm_imm:96:1
+08D59:movsi:296
+08D5C:rt:156
+08D5E:movsi:300
+08D61:rt:156
+08D63:movax:128
+08D66:open
+08D69:movm_imm:96:1
+08D6F:movsi:292
+08D72:rt:156
+08D74:rt:192
+08D76:rt:186
+08D78:close_all
+08D7B:end
+08D7E:epilogue
+# commits

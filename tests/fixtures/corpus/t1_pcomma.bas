@@ -1,0 +1,6 @@
+10 A$ = "AB"
+20 PRINT "X", "Y", A$
+30 PRINT 1, 2
+40 PRINT "Z",
+50 PRINT "W"
+60 END

@@ -104,6 +104,8 @@ void tb_pn(double v) {
 }
 void tb_tab(double n) { while (tb_col < (int)n - 1) tb_ps(" "); }
 void tb_spc(double n) { for (int i = 0; i < (int)n; i++) tb_ps(" "); }
+/* PRINT comma: advance to the next 14-column print zone (t1_pcomma dosout) */
+void tb_zone(void) { int t = tb_col - tb_col % 14 + 14; while (tb_col < t) tb_ps(" "); }
 /* CINT: round half to even (the x87/IEEE default nearbyint mode). */
 double tb_cint(double v) { return nearbyint(v); }
 long tb_i(double v) { return (long)tb_cint(v); }

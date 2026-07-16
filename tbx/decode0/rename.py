@@ -122,7 +122,10 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.Loop(s.kind, walk_cond(s.cond) if s.cond is not None else None)
         if isinstance(s, ir.Print):
             return ir.Print(
-                tuple(walk(i) for i in s.items), newline=s.newline, file=s.file
+                tuple(walk(i) for i in s.items),
+                newline=s.newline,
+                file=s.file,
+                commas=s.commas,
             )
         if isinstance(s, ir.PrintUsing):
             return ir.PrintUsing(
@@ -252,6 +255,8 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
         if isinstance(s, ir.Screen):
             wn = lambda e: None if e is None else walk(e)  # noqa: E731
             return ir.Screen(walk(s.mode), wn(s.burst), wn(s.apage), wn(s.vpage))
+        if isinstance(s, ir.KeyDef):
+            return ir.KeyDef(walk(s.num), walk(s.text))
         if isinstance(s, ir.Files):
             return ir.Files(walk(s.spec))
         if isinstance(s, ir.Name):
