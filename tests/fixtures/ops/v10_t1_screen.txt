@@ -1,6 +1,6 @@
 # v10_t1_screen dialect=1.0 start=071E0
 071E3:movm_imm:136:1
-071E9:screen
+071E9:screen:8
 071ED:end
 071F0:epilogue
 # commits

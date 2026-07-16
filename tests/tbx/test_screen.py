@@ -39,6 +39,22 @@ def test_decode_t1_scr2():
     assert decode0.decode_user_code(_exe("t1_scr2.exe")) == want
 
 
+def test_screen_optional_args():
+    # SCREEN's trailing tag byte is a presence mask (08 mode / 04 burst /
+    # 02 apage / 01 vpage) with args in cells [88]/[94]/[A0]/[AC] --
+    # witnessed t1_screenb (2-arg) and t1_screenp (3- and 4-arg), the
+    # top gap in the PC-SIG wild scan (8 programs)
+    from tbx import decode0
+
+    L = ir.Lit
+    prog = decode0.decode_user_code(_exe("t1_screenb.exe"))
+    assert prog[0] == ir.Screen(L(1), L(0))
+    assert prog[2] == ir.Screen(L(2), L(1))
+    prog = decode0.decode_user_code(_exe("t1_screenp.exe"))
+    assert prog[0] == ir.Screen(L(1), L(0), L(0))
+    assert prog[2] == ir.Screen(L(2), L(1), L(0), L(0))
+
+
 def test_dialect_invariant():
     from tbx import decode0
 

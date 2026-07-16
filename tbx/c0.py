@@ -859,7 +859,11 @@ class _Gen:
             return ["return;"]
         if isinstance(s, ir.Open):
             if s.mode.value.upper() == "R":
-                return [f"tb_open_r({s.num}, {self.s(s.file)});"]
+                rl = "128" if s.reclen is None else f"tb_i({self.num(s.reclen)})"
+                return [f"tb_open_r({s.num}, {self.s(s.file)}, {rl});"]
+            if s.reclen is not None:
+                # sequential-mode reclen is only a DOS buffer-size hint
+                raise _Unsupported(f"OPEN {s.mode.value!r} with reclen")
             mode = {"I": '"r"', "O": '"w"', "A": '"a"'}.get(s.mode.value.upper())
             if mode is None:
                 raise _Unsupported(f"OPEN mode {s.mode.value!r}")
@@ -946,6 +950,11 @@ class _Gen:
             fn = "tb_set_date" if s.name == "DATE$" else "tb_set_time"
             return [f"{fn}({self.s(s.value)});"]
         if isinstance(s, ir.Screen):
+            # burst (composite-monitor color) has no meaning on the
+            # framebuffer surrogate; page args only as the single page 0
+            for pg in (s.apage, s.vpage):
+                if pg is not None and pg != ir.Lit(0):
+                    raise _Unsupported("SCREEN page argument (single-page surrogate)")
             return [f"tb_screen({self.num(s.mode)});"]
         if isinstance(s, ir.Pset):
             hc, c = self.opt(s.color)

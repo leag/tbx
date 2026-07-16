@@ -906,10 +906,11 @@ def _scan(
                 ops.append((p, "key_off"))
                 p += 3
                 continue
-            if sub == 0xC6:  # SCREEN n (fixed tag 0x08; mode from [0x88])
-                if p + 3 >= len(exe) or exe[p + 3] != 0x08:
+            if sub == 0xC6:  # SCREEN m[,b][,a][,v]: trailing presence mask
+                # 08 mode / 04 burst / 02 apage / 01 vpage (t1_screenb/p)
+                if p + 3 >= len(exe) or exe[p + 3] not in (0x08, 0x0C, 0x0E, 0x0F):
                     raise ValueError(f"SCREEN bad tag at {p:#x}")
-                ops.append((p, "screen"))
+                ops.append((p, "screen", exe[p + 3]))
                 p += 4
                 continue
             if sub == 0xF4:  # WRITE numeric item

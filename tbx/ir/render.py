@@ -374,7 +374,12 @@ def _us_graphics(s) -> str | None:
     if isinstance(s, Key):
         return "KEY ON" if s.on else "KEY OFF"
     if isinstance(s, Screen):
-        return f"SCREEN {unparse(s.mode)}"
+        args = [s.mode, s.burst, s.apage, s.vpage]
+        while args and args[-1] is None:
+            args.pop()
+        if any(a is None for a in args):
+            raise ValueError("SCREEN argument gap (no witnessed spelling)")
+        return "SCREEN " + ",".join(unparse(a) for a in args)
 
 
 def _us_console(s) -> str | None:
@@ -410,7 +415,8 @@ def _us_console(s) -> str | None:
 def _us_fileio(s) -> str | None:
     """Render file I/O statements; None if `s` is not one of them."""
     if isinstance(s, Open):
-        return f"OPEN {unparse(s.mode)},#{s.num},{unparse(s.file)}"
+        rl = "" if s.reclen is None else f",{unparse(s.reclen)}"
+        return f"OPEN {unparse(s.mode)},#{s.num},{unparse(s.file)}{rl}"
     if isinstance(s, InputFile):
         return f"INPUT #{s.num}, {', '.join(unparse(v) for v in s.vars)}"
     if isinstance(s, Close):

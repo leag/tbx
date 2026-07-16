@@ -21,14 +21,17 @@ if TYPE_CHECKING:
 
 def fileio(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: open, close, field."""
-    if kind == "open":  # OPEN "m",#n,file
-        if state.pend_fnum is None or len(state.sstack) < 2 or state.ax != ir.Lit(0x80):
+    if kind == "open":  # OPEN "m",#n,file[,reclen] -- ax = reclen, 0x80 default
+        if state.pend_fnum is None or len(state.sstack) < 2 or not isinstance(
+            state.ax, ir.Lit
+        ):
             raise ValueError(
                 f"OPEN state mismatch at {addr:#x} "
                 f"(fnum={state.pend_fnum}, sstack={len(state.sstack)}, ax={state.ax})"
             )
+        reclen = None if state.ax == ir.Lit(0x80) else state.ax
         mode, file = state.sstack.pop(), state.sstack.pop()
-        state.put(ir.Open(mode, state.pend_fnum, file), state.cur)
+        state.put(ir.Open(mode, state.pend_fnum, file, reclen), state.cur)
         state.pend_fnum = state.ax = None
         state.cur = None
         state.k += 1

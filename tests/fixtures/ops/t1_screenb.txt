@@ -1,0 +1,14 @@
+# t1_screenb dialect=1.1 start=088E0
+088E3:movm_imm:136:1
+088E9:movm_imm:148:0
+088EF:screen:12
+088F3:fild:294
+088F8:fild:294
+088FD:pset:2
+08903:movm_imm:136:2
+08909:movm_imm:148:1
+0890F:screen:12
+08913:end
+08916:epilogue
+# commits
+08901

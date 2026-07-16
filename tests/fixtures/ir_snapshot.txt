@@ -283,13 +283,13 @@ Assign(target=Var(name='C'), value=Call(name='LOG10', args=(DblLit(value=2.5),))
 End()
 
 ## t1_field
-Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'))
+Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'), reclen=None)
 Field(num=1, fields=((Lit(value=10), Var(name='A$')), (Lit(value=20), Var(name='B$'))))
 Close(num=1)
 End()
 
 ## t1_file
-Open(mode=StrLit(value='I'), num=1, file=StrLit(value='X.DAT'))
+Open(mode=StrLit(value='I'), num=1, file=StrLit(value='X.DAT'), reclen=None)
 InputFile(num=1, vars=(Var(name='A'),))
 InputFile(num=1, vars=(Var(name='B$'),))
 Close(num=1)
@@ -297,7 +297,7 @@ End()
 
 ## t1_file2
 LineInput(prompt=None, var=Var(name='A$'))
-Open(mode=StrLit(value='I'), num=2, file=Var(name='A$'))
+Open(mode=StrLit(value='I'), num=2, file=Var(name='A$'), reclen=None)
 InputFile(num=2, vars=(Var(name='B'), Var(name='C')))
 Close(num=2)
 End()
@@ -461,7 +461,7 @@ Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Call(name='FRE', args=(StrL
 End()
 
 ## t1_getfile
-Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'))
+Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'), reclen=None)
 Get(num=1, pos=Lit(value=1))
 Close(num=1)
 End()
@@ -785,6 +785,19 @@ TrapCtl(event='TIMER', n=None, mode='ON')
 End()
 Return()
 
+## t1_open2
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='A.TXT'), reclen=None)
+Print(items=(StrLit(value='HI'),), newline=True, file=1)
+Close(num=1)
+Open(mode=StrLit(value='I'), num=2, file=StrLit(value='A.TXT'), reclen=None)
+InputFile(num=2, vars=(Var(name='A$'),))
+Close(num=2)
+Open(mode=StrLit(value='A'), num=3, file=StrLit(value='A.TXT'), reclen=None)
+Close(num=3)
+Open(mode=StrLit(value='R'), num=4, file=StrLit(value='B.DAT'), reclen=Lit(value=64))
+Close(num=4)
+End()
+
 ## t1_or
 Input(prompt=None, var=Var(name='A'), comma=False)
 IfGoto(cond=LogOp(op='OR', lhs=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=0)), rhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=9))), target=4)
@@ -863,7 +876,7 @@ Print(items=(StrLit(value='A'), Var(name='A'), StrLit(value='B')), newline=True,
 Print(items=(StrLit(value='X'),), newline=False, file=None)
 PrintUsing(fmt=StrLit(value='##.##'), values=(Var(name='A'),), file=None, newline=True)
 PrintUsing(fmt=StrLit(value='#.# #.#'), values=(Var(name='A'), Var(name='A')), file=None, newline=True)
-Open(mode=StrLit(value='O'), num=1, file=StrLit(value='R.TXT'))
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='R.TXT'), reclen=None)
 Print(items=(Var(name='A'),), newline=True, file=1)
 PrintUsing(fmt=StrLit(value='##.##'), values=(Var(name='A'), Var(name='A')), file=1, newline=True)
 Close(num=1)
@@ -931,7 +944,7 @@ PutGfx(x=Lit(value=3), y=Lit(value=3), array='V0%', action='OR')
 End()
 
 ## t1_putfile
-Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'))
+Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'), reclen=None)
 Put(num=1, pos=Lit(value=1))
 Close(num=1)
 End()
@@ -1087,7 +1100,7 @@ End()
 Input(prompt=None, var=Var(name='A'), comma=False)
 Dim(name='V1$', bounds=(Var(name='A'),), also=())
 Dim(name='V0', bounds=(Var(name='A'), Lit(value=5)), also=())
-Open(mode=StrLit(value='I'), num=1, file=StrLit(value='X.DAT'))
+Open(mode=StrLit(value='I'), num=1, file=StrLit(value='X.DAT'), reclen=None)
 InputFile(num=1, vars=(ArrayRef(name='V0', indices=(Var(name='A'), Lit(value=5))), ArrayRef(name='V1$', indices=(Var(name='A'),))))
 Close(num=1)
 Print(items=(ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=1))), ArrayRef(name='V1$', indices=(Var(name='A'),))), newline=True, file=None)
@@ -1109,15 +1122,27 @@ Color(fg=None, bg=Lit(value=2))
 End()
 
 ## t1_screen
-Screen(mode=Lit(value=1))
+Screen(mode=Lit(value=1), burst=None, apage=None, vpage=None)
+End()
+
+## t1_screenb
+Screen(mode=Lit(value=1), burst=Lit(value=0), apage=None, vpage=None)
+Pset(x=Lit(value=10), y=Lit(value=10), color=None, preset=False, step=False)
+Screen(mode=Lit(value=2), burst=Lit(value=1), apage=None, vpage=None)
 End()
 
 ## t1_screenf
 Assign(target=Var(name='A%'), value=Call(name='SCREEN', args=(Lit(value=1), Lit(value=2))))
 End()
 
+## t1_screenp
+Screen(mode=Lit(value=1), burst=Lit(value=0), apage=Lit(value=0), vpage=None)
+Pset(x=Lit(value=10), y=Lit(value=10), color=None, preset=False, step=False)
+Screen(mode=Lit(value=2), burst=Lit(value=1), apage=Lit(value=0), vpage=Lit(value=0))
+End()
+
 ## t1_seek
-Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'))
+Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'), reclen=None)
 Seek(num=1, pos=Lit(value=1))
 Close(num=1)
 End()
@@ -1252,7 +1277,7 @@ Input(prompt=None, var=Var(name='A'), comma=False)
 Print(items=(StrLit(value='A'), Call(name='TAB', args=(Lit(value=7),)), Var(name='A')), newline=True, file=None)
 Print(items=(Call(name='SPC', args=(Lit(value=3),)), StrLit(value='B')), newline=True, file=None)
 Print(items=(Call(name='TAB', args=(Var(name='A'),)), StrLit(value='C')), newline=True, file=None)
-Open(mode=StrLit(value='O'), num=1, file=StrLit(value='R.TXT'))
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='R.TXT'), reclen=None)
 Print(items=(StrLit(value='X'), Call(name='TAB', args=(Lit(value=7),)), StrLit(value='Y'), Call(name='SPC', args=(Lit(value=8),)), Var(name='A')), newline=True, file=1)
 Close(num=1)
 End()
@@ -1452,7 +1477,7 @@ Write(items=(Lit(value=1), Lit(value=2)), file=None)
 End()
 
 ## t1_writefile
-Open(mode=StrLit(value='O'), num=1, file=StrLit(value='X.DAT'))
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='X.DAT'), reclen=None)
 Write(items=(Lit(value=1), StrLit(value='A')), file=1)
 Close(num=1)
 End()
@@ -1764,13 +1789,13 @@ Assign(target=Var(name='C'), value=Call(name='LOG10', args=(DblLit(value=2.5),))
 End()
 
 ## v10_t1_field
-Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'))
+Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'), reclen=None)
 Field(num=1, fields=((Lit(value=10), Var(name='A$')), (Lit(value=20), Var(name='B$'))))
 Close(num=1)
 End()
 
 ## v10_t1_file
-Open(mode=StrLit(value='I'), num=1, file=StrLit(value='X.DAT'))
+Open(mode=StrLit(value='I'), num=1, file=StrLit(value='X.DAT'), reclen=None)
 InputFile(num=1, vars=(Var(name='A'),))
 InputFile(num=1, vars=(Var(name='B$'),))
 Close(num=1)
@@ -1778,7 +1803,7 @@ End()
 
 ## v10_t1_file2
 LineInput(prompt=None, var=Var(name='A$'))
-Open(mode=StrLit(value='I'), num=2, file=Var(name='A$'))
+Open(mode=StrLit(value='I'), num=2, file=Var(name='A$'), reclen=None)
 InputFile(num=2, vars=(Var(name='B'), Var(name='C')))
 Close(num=2)
 End()
@@ -1932,7 +1957,7 @@ Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Call(name='FRE', args=(StrL
 End()
 
 ## v10_t1_getfile
-Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'))
+Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'), reclen=None)
 Get(num=1, pos=Lit(value=1))
 Close(num=1)
 End()
@@ -2334,7 +2359,7 @@ Print(items=(StrLit(value='A'), Var(name='A'), StrLit(value='B')), newline=True,
 Print(items=(StrLit(value='X'),), newline=False, file=None)
 PrintUsing(fmt=StrLit(value='##.##'), values=(Var(name='A'),), file=None, newline=True)
 PrintUsing(fmt=StrLit(value='#.# #.#'), values=(Var(name='A'), Var(name='A')), file=None, newline=True)
-Open(mode=StrLit(value='O'), num=1, file=StrLit(value='R.TXT'))
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='R.TXT'), reclen=None)
 Print(items=(Var(name='A'),), newline=True, file=1)
 PrintUsing(fmt=StrLit(value='##.##'), values=(Var(name='A'), Var(name='A')), file=1, newline=True)
 Close(num=1)
@@ -2386,7 +2411,7 @@ PutGfx(x=Lit(value=3), y=Lit(value=3), array='V0%', action='OR')
 End()
 
 ## v10_t1_putfile
-Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'))
+Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'), reclen=None)
 Put(num=1, pos=Lit(value=1))
 Close(num=1)
 End()
@@ -2502,7 +2527,7 @@ End()
 Input(prompt=None, var=Var(name='A'), comma=False)
 Dim(name='V1$', bounds=(Var(name='A'),), also=())
 Dim(name='V0', bounds=(Var(name='A'), Lit(value=5)), also=())
-Open(mode=StrLit(value='I'), num=1, file=StrLit(value='X.DAT'))
+Open(mode=StrLit(value='I'), num=1, file=StrLit(value='X.DAT'), reclen=None)
 InputFile(num=1, vars=(ArrayRef(name='V0', indices=(Var(name='A'), Lit(value=5))), ArrayRef(name='V1$', indices=(Var(name='A'),))))
 Close(num=1)
 Print(items=(ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=1))), ArrayRef(name='V1$', indices=(Var(name='A'),))), newline=True, file=None)
@@ -2524,7 +2549,7 @@ Color(fg=None, bg=Lit(value=2))
 End()
 
 ## v10_t1_screen
-Screen(mode=Lit(value=1))
+Screen(mode=Lit(value=1), burst=None, apage=None, vpage=None)
 End()
 
 ## v10_t1_screenf
@@ -2532,7 +2557,7 @@ Assign(target=Var(name='A%'), value=Call(name='SCREEN', args=(Lit(value=1), Lit(
 End()
 
 ## v10_t1_seek
-Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'))
+Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'), reclen=None)
 Seek(num=1, pos=Lit(value=1))
 Close(num=1)
 End()
@@ -2605,7 +2630,7 @@ Input(prompt=None, var=Var(name='A'), comma=False)
 Print(items=(StrLit(value='A'), Call(name='TAB', args=(Lit(value=7),)), Var(name='A')), newline=True, file=None)
 Print(items=(Call(name='SPC', args=(Lit(value=3),)), StrLit(value='B')), newline=True, file=None)
 Print(items=(Call(name='TAB', args=(Var(name='A'),)), StrLit(value='C')), newline=True, file=None)
-Open(mode=StrLit(value='O'), num=1, file=StrLit(value='R.TXT'))
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='R.TXT'), reclen=None)
 Print(items=(StrLit(value='X'), Call(name='TAB', args=(Lit(value=7),)), StrLit(value='Y'), Call(name='SPC', args=(Lit(value=8),)), Var(name='A')), newline=True, file=1)
 Close(num=1)
 End()
@@ -2805,7 +2830,7 @@ Write(items=(Lit(value=1), Lit(value=2)), file=None)
 End()
 
 ## v10_t1_writefile
-Open(mode=StrLit(value='O'), num=1, file=StrLit(value='X.DAT'))
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='X.DAT'), reclen=None)
 Write(items=(Lit(value=1), StrLit(value='A')), file=1)
 Close(num=1)
 End()

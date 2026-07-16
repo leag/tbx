@@ -20,11 +20,19 @@ if TYPE_CHECKING:
 
 def graphics(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: screen, cls, line, pset, circle, paint, draw, palette, color_commit, locate, cursor, width."""
-    if kind == "screen":  # SCREEN mode (cell [0x88])
+    if kind == "screen":  # SCREEN m[,b][,a][,v]: cells by presence mask
+        tag = op[2]
         mode = state.color_cells.pop(0x88, None)
         if mode is None:
             raise ValueError(f"SCREEN without [0x88] mode store at {addr:#x}")
-        state.put(ir.Screen(mode), state.cur)
+        burst = state.color_cells.pop(0x94, None) if tag & 0x04 else None
+        apage = state.color_cells.pop(0xA0, None) if tag & 0x02 else None
+        vpage = state.color_cells.pop(0xAC, None) if tag & 0x01 else None
+        if (tag & 0x04 and burst is None) or (tag & 0x02 and apage is None) or (
+            tag & 0x01 and vpage is None
+        ):
+            raise ValueError(f"SCREEN arg cell missing for tag {tag:#x} at {addr:#x}")
+        state.put(ir.Screen(mode, burst, apage, vpage), state.cur)
         state.cur = None
         state.k += 1
         return True

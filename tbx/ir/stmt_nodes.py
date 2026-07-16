@@ -606,9 +606,15 @@ class Key:
 
 @dataclass(frozen=True)
 class Screen:
-    """SCREEN mode (INT ECh sub C6h) -- mode stored to cell [0x88] (shared with COLOR fg)."""
+    """SCREEN mode[,burst][,apage][,vpage] (INT ECh sub C6h): the trailing tag
+    byte is a presence mask (08 mode / 04 burst / 02 apage / 01 vpage) and the
+    arguments ride in cells [88]/[94]/[A0]/[AC] (witnessed t1_screenb,
+    t1_screenp; [88] is shared with COLOR fg)."""
 
     mode: object  # Expr
+    burst: object = None  # Expr | None
+    apage: object = None  # Expr | None
+    vpage: object = None  # Expr | None
 
 
 @dataclass(frozen=True)
@@ -672,11 +678,16 @@ class LineInput:
 
 @dataclass(frozen=True)
 class Open:
-    """OPEN "m",#n,file$ -- [0060]=n, push file + mode, ax=reclen 0x80, sub 82."""
+    """OPEN "m",#n,file$[,reclen] -- [0060]=n, push file + mode, ax=reclen, sub 82.
+
+    ax carries the record length; 0x80 is the compiler default and lifts to
+    reclen=None (an explicit ",128" is byte-identical, so it normalizes away;
+    witnessed q_open2 -> t1_open2 with reclen 64)."""
 
     mode: object  # StrLit
     num: int  # file number
     file: object  # StrLit | Var ($)
+    reclen: object = None  # Lit | None (None = default 128)
 
 
 @dataclass(frozen=True)

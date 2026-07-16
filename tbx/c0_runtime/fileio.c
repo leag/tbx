@@ -34,16 +34,16 @@ void tb_close(int n) {
     }
 }
 void tb_reset(void) { for (int i = 1; i < 16; i++) tb_close(i); }
-void tb_open_r(int n, tb_str name) {
+void tb_open_r(int n, tb_str name, int reclen) {
     if (n < 1 || n > 15) tb_error(52);
     if (tb_files[n]) tb_error(55);
     FILE *f = fopen(tb_cs(name), "r+b");
     if (!f) f = fopen(tb_cs(name), "w+b");
     if (!f) tb_error(53);
     tb_files[n] = f;
-    tb_reclen[n] = 128;
-    tb_recbuf[n] = tb_halloc(128);                       /* persists across statements */
-    memset(tb_recbuf[n], ' ', 128);
+    tb_reclen[n] = reclen;
+    tb_recbuf[n] = tb_halloc(reclen);                    /* persists across statements */
+    memset(tb_recbuf[n], ' ', reclen);
 }
 double tb_eof(double n) {
     FILE *f = ((int)n >= 1 && (int)n <= 15) ? tb_files[(int)n] : 0;

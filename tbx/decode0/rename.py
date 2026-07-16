@@ -225,8 +225,6 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.Window(walk(s.x1), walk(s.y1), walk(s.x2), walk(s.y2), s.screen)
         if isinstance(s, ir.Width):
             return ir.Width(walk(s.cols))
-        if isinstance(s, ir.Screen):
-            return ir.Screen(walk(s.mode))
         if isinstance(s, ir.Write):
             return ir.Write(tuple(walk(i) for i in s.items), file=s.file)
         if isinstance(s, ir.Lprint):
@@ -236,7 +234,7 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
         if isinstance(s, ir.LineInput):
             return ir.LineInput(s.prompt, walk(s.var))
         if isinstance(s, ir.Open):
-            return ir.Open(s.mode, s.num, walk(s.file))
+            return ir.Open(s.mode, s.num, walk(s.file), s.reclen)
         if isinstance(s, ir.InputFile):
             return ir.InputFile(s.num, tuple(walk(v) for v in s.vars))
         if isinstance(s, ir.Dim):
@@ -251,6 +249,9 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
                 tuple(wb(b) for b in s.bounds),
                 tuple((n, tuple(wb(b) for b in bs)) for n, bs in s.also),
             )
+        if isinstance(s, ir.Screen):
+            wn = lambda e: None if e is None else walk(e)  # noqa: E731
+            return ir.Screen(walk(s.mode), wn(s.burst), wn(s.apage), wn(s.vpage))
         if isinstance(s, ir.Files):
             return ir.Files(walk(s.spec))
         if isinstance(s, ir.Name):

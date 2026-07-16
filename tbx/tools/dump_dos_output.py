@@ -80,6 +80,8 @@ SKIP = {
     "zz_ginf": "infinite DO loop by design",
     "t1_calla": "CALL ABSOLUTE at a bare address: no machine code there",
     "t1_screen": "SCREEN 1 enters a graphics mode; the text screen is lost",
+    "t1_screenb": "SCREEN 1 enters a graphics mode; the text screen is lost",
+    "t1_screenp": "SCREEN 1 enters a graphics mode; the text screen is lost",
     "t1_scr": "runs to completion on screen (HI at 10,20) but the harness "
     "never sees the DOS prompt return after CLS/LOCATE -- no confirmed-"
     "complete capture",

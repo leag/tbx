@@ -10,7 +10,7 @@
    this header or to a documented surrogate behavior (see README.md in this
    directory): a generated --no-runtime program only links against a
    libtbrt.a built from the same version. */
-#define TB_RT_VERSION 3
+#define TB_RT_VERSION 4
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -144,7 +144,7 @@ FILE *tb_file(int n);
 void tb_open(const char *mode, int n, tb_str name);
 void tb_close(int n);
 void tb_reset(void);
-void tb_open_r(int n, tb_str name);
+void tb_open_r(int n, tb_str name, int reclen);
 double tb_eof(double n);
 double tb_finput_num(int n);
 tb_str tb_finput_str(int n);
