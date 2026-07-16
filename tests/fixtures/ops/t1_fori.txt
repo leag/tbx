@@ -1,0 +1,17 @@
+# t1_fori dialect=1.1 start=08700
+08703:movm_imm:294:3
+08709:movax_m:294
+0870D:movm_ax:290
+08711:movm_imm:292:1
+08717:jmp:34597
+0871A:movsi:308
+0871D:rt:156
+0871F:rt:190
+08721:inc_m:292
+08725:movax_m:290
+08729:cmpm_ax:292
+0872D:jcc:126:34586
+0872F:rt:184
+08731:end
+08734:epilogue
+# commits

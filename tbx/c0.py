@@ -1000,6 +1000,8 @@ class _Gen:
                 f"{int(s.step)}, {hc}, {c}, {sa}, {ea}, {asp});"
             ]
         if isinstance(s, ir.Paint):
+            if s.paint is not None and _is_str(s.paint):
+                raise _Unsupported("PAINT tile pattern")
             hp, p = self.opt(s.paint)
             hb, b = self.opt(s.border)
             return [f"tb_paint({self.num(s.x)}, {self.num(s.y)}, {hp}, {p}, {hb}, {b});"]

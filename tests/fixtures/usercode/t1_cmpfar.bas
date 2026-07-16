@@ -1,0 +1,7 @@
+10 SUB SUB1(A%)
+  B% = A% = 1
+  PRINT B%
+END SUB
+20 C% = 1
+30 CALL SUB1(C%)
+40 END

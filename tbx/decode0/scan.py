@@ -406,6 +406,14 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "cmpax_bx"))  # both sides are ax-computed -- source RHS
         p += 2  # evaluates first and shuttles to bx (witnessed t1_cmpax)
         return p
+    if b == 0x39 and exe[p + 1] == 0x06:  # cmp [disp16], ax: the integer FOR
+        ops.append((p, "cmpm_ax", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # test with a VARIABLE limit (witnessed t1_fori)
+        return p
+    if b == 0x26 and exe[p + 1] == 0x3B and exe[p + 2] == 0x04:  # cmp ax, es:[si]:
+        ops.append((p, "far_cmpax_si"))  # relational against a by-ref param
+        p += 3  # (witnessed t1_cmpfar)
+        return p
     return None
 
 
@@ -476,6 +484,7 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
         0xC1,  # PRINT comma zone advance (witnessed t1_pcomma)
         0xBC,
         0xB9,
+        0xBF,  # LPRINT string item (witnessed t1_lpstr)
     ):  # LPRINT item / newline
         ops.append((p, "rt", vec))
         p += 2
@@ -955,6 +964,10 @@ def _scan(
                 ops.append((p, "put"))
                 p += 3
                 continue
+            if sub == 0xDC:  # PAINT tile variant: tile$ on sstack + flag byte
+                ops.append((p, "paint_tile", exe[p + 3]))  # (witnessed t1_paintt)
+                p += 4
+                continue
             if sub == 0xCA:  # SEEK #n, pos
                 ops.append((p, "seek"))
                 p += 3
@@ -1085,6 +1098,10 @@ def _scan(
                 ops.append((p, "frndint"))
                 p = mo + 1
                 continue
+            if esc == 0xDE and modrm == 0xD9:  # FCOMPP: both sides FP-computed
+                ops.append((p, "fcompp"))  # (witnessed t1_fcmp)
+                p = mo + 1
+                continue
             if esc == 0xDE and modrm in _POP_OPS_N:  # non-R FSUBP/FDIVP
                 ops.append((p, "popop_n", _POP_OPS_N[modrm]))
                 p = mo + 1
@@ -1098,6 +1115,7 @@ def _scan(
                     (0xD9, 0): "fld_si",
                     (0xD9, 3): "fstp_si",
                     (0xD8, 3): "fcomp_si",
+                    (0xDC, 3): "fcomp_si64",  # m64 compare (double array elem)
                     (0xDD, 0): "fld_si64",
                     (0xDD, 3): "fstp_si64",
                     (0xDB, 0): "fild_si32",

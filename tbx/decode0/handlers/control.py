@@ -138,8 +138,9 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             state.cur = None
             state.k += 1
             return True
-        if vec == 0xBC:  # LPRINT item-eval (printer)
-            item = state.stack.pop()
+        if vec in (0xBC, 0xBF):  # LPRINT item-eval (printer): BC numeric off the
+            # FP stack, BF string off the sstack (witnessed t1_lpstr)
+            item = state.sstack.pop() if vec == 0xBF else state.stack.pop()
             if (
                 state.pend_print is not None
                 and state.pend_print.get("mode") != "lprint"
@@ -157,7 +158,12 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             state.k += 1
             return True
         if vec == 0xB9:  # LPRINT flush-newline
-            if state.pend_print is None or state.pend_print.get("mode") != "lprint":
+            if state.pend_print is None:  # bare LPRINT: blank line (t1_lpstr)
+                state.put(ir.Lprint(()), state.cur)
+                state.cur = None
+                state.k += 1
+                return True
+            if state.pend_print.get("mode") != "lprint":
                 raise ValueError(f"b9 flush without open LPRINT chain at {addr:#x}")
             pp, state.pend_print = state.pend_print, None
             state.put(ir.Lprint(tuple(pp["items"])), pp["start"])

@@ -31,6 +31,10 @@ _JCC_RELOP = {
 }
 _NEGATE_REL = {"=": "<>", "<>": "=", "<": ">=", ">=": "<", ">": "<=", "<=": ">"}
 
+# String compares (INT 9A outside SELECT CASE, witnessed t1_strif): flags are
+# FORWARD (lhs cmp rhs), unlike the FP shape's reversed orientation, so the
+# unsigned Jcc codes need their own skip-relop rows.
+_JCC_RELOP_STR = {0x75: "=", 0x74: "<>", 0x72: ">=", 0x73: "<", 0x76: ">", 0x77: "<="}
 # Materialization form (WHILE / boolean values): the Jcc tests the relop TRUE --
 # the inverse mapping of _JCC_RELOP.
 _JCC_RELOP_TRUE = {0x77: "<", 0x73: "<=", 0x72: ">", 0x76: ">=", 0x74: "=", 0x75: "<>"}
@@ -130,6 +134,7 @@ _STRFN_VECS = {
     0xAD: "LEFT$",
     0xB2: "RIGHT$",
     0xB1: "MID$",
+    0xB0: "MID$2",  # 2-arg MID$(s$, start): start in ax (witnessed t1_mid2)
     0xB4: "MKD$",
     0xB5: "MKI$",
     0xB6: "MKL$",
@@ -153,13 +158,16 @@ _EE_STRFN_SUBS = {
     0x26: "TIME$",
 }
 
-# TAB(n)/SPC(n) print item vectors (canonical): name + file leg. The arg
-# rides in ax (literal b8 or the FISTP-[2C] bridge).
+# TAB(n)/SPC(n) print item vectors (canonical): name + leg (None = console,
+# True = file, "lprint" = printer). The arg rides in ax (literal b8 or the
+# FISTP-[2C] bridge). Printer TAB witnessed t1_ltab.
 _TABSPC_VECS = {
     0xC7: ("TAB", False),
     0xC9: ("TAB", True),
+    0xC8: ("TAB", "lprint"),
     0xC4: ("SPC", False),
     0xC6: ("SPC", True),
+    0xC5: ("SPC", "lprint"),
 }
 
 

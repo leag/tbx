@@ -1,0 +1,6 @@
+10 A% = 3
+20 FOR B% = 1 TO A%
+30 PRINT "A";
+40 NEXT B%
+50 PRINT
+60 END

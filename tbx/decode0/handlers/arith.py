@@ -285,7 +285,8 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             state.stack.append(_orient(sik[2], ref, state.stack.pop()))
         elif sik[1] == pre + "fold_n_si":  # mem = RIGHT operand
             state.stack.append(ir.BinOp(sik[2], state.stack.pop(), ref))
-        elif sik[1] == pre + "fcomp_si":  # IF on an array element
+        elif sik[1] in (pre + "fcomp_si", pre + "fcomp_si64"):
+            # IF on an array element (m64 witnessed t1_dblar2)
             state.pend_cmp = (ref, state.stack.pop())
         else:
             raise ValueError(f"element access: unexpected op {sik[1]} at {sik[0]:#x}")

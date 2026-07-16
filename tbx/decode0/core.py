@@ -11,6 +11,7 @@ from tbx.decode0.const import (
     VAR_BASE,
     _FREAD,
     _JCC_RELOP,
+    _JCC_RELOP_STR,
     _JCC_RELOP_TRUE,
     _PREC,
     _PUT_ACTIONS,
@@ -87,6 +88,7 @@ class DecodeState:
     pend_args: Any = None
     pend_bool: Any = None
     pend_cmp: Any = None
+    pend_cmp_str: bool = False  # pend_cmp came from strcmp: forward flags
     pend_dataread: Any = None
     pend_es: Any = None
     pend_filein: Any = None
@@ -98,6 +100,7 @@ class DecodeState:
     prev_dim_end: Any = None
     proc_frame: Any = None
     proc_names: Any = None
+    proc_int_offs: Any = None
     proc_str_offs: Any = None
     r_arrs: Any = None
     si: Any = None
@@ -637,6 +640,11 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             n = state.ax
             state.ax = None
             args = (n, state.sstack.pop())
+        elif name == "MID$2":  # MID$(s$, start): s$ on sstack, start in ax
+            name = "MID$"
+            n = state.ax
+            state.ax = None
+            args = (state.sstack.pop(), n)
         elif name in ("LEFT$", "RIGHT$"):  # string on sstack, count in ax
             n = state.ax
             state.ax = None
@@ -786,23 +794,37 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         state.cur = None
     elif kind == "fcomp":
         state.pend_cmp = (state.fpval(op[2]), state.stack.pop())
+    elif kind == "fcomp64":  # m64 direct compare outside SELECT CASE (which
+        # consumes its own): double var or pooled f64 (witnessed t1_dblarr)
+        state.pend_cmp = (state.fpval64(op[2]), state.stack.pop())
+    elif kind == "fcompp":  # both sides FP-computed: LHS pushed first, so
+        rhs = state.stack.pop()  # flags (ST0 cmp ST1 = rhs cmp lhs) keep the
+        state.pend_cmp = (state.stack.pop(), rhs)  # reversed FP orientation
+    elif kind == "strcmp":  # string relational IF (outside SELECT CASE, which
+        rhs = state.sstack.pop()  # consumes its own strcmp ops): forward flags
+        state.pend_cmp = (state.sstack.pop(), rhs)
+        state.pend_cmp_str = True
     elif kind == "fstsw":
         pass
     elif kind == "jcc":
         cc, t = op[2], op[3]
         nxt = state.ops[state.k + 1] if state.k + 1 < len(state.ops) else None
+        relop_map = _JCC_RELOP_STR if state.pend_cmp_str else _JCC_RELOP
         if state.pend_cmp and nxt and nxt[1] == "jmp" and t == nxt[0] + 3:
-            if cc not in _JCC_RELOP:
+            if cc not in relop_map:
                 raise ValueError(f"unhandled IF jcc {cc:02x} at {addr:#x}")
             lhs, rhs = state.pend_cmp
             state.pend_cmp = None
+            state.pend_cmp_str = False
             state.put(
-                ir.IfGoto(ir.RelOp(_JCC_RELOP[cc], lhs, rhs), ("addr", nxt[2])),
+                ir.IfGoto(ir.RelOp(relop_map[cc], lhs, rhs), ("addr", nxt[2])),
                 state.cur,
             )
             state.cur = None
             state.k += 2
             return
+        if state.pend_cmp_str:  # string direct-goto form: no witnessed spelling
+            raise ValueError(f"string compare jcc {cc:02x} without skip-jmp at {addr:#x}")
         if state.pend_cmp and cc in _JCC_RELOP_TRUE:  # direct conditional GOTO (taken =
             lhs, rhs = state.pend_cmp  # THEN): IF cond THEN <line>, short
             state.pend_cmp = None  # jcc with no skip-jmp (witnessed zz_godo)
@@ -854,6 +876,47 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             state.fors.append(
                 {
                     "v": cmp_at_t[2],
+                    "test": t,
+                    "body": state.ops[state.k + 1][0]
+                    if state.k + 1 < len(state.ops)
+                    else None,
+                }
+            )
+        elif (
+            cmp_at_t is not None
+            and cmp_at_t[1] == "movax_m"
+            and state.stmts
+            and isinstance(state.stmts[-1], ir.Assign)
+            and isinstance(state.stmts[-1].target, ir.Var)
+            and isinstance(state.stmts[-1].value, ir.Lit)
+            and (nxt_t := next((o for o in state.ops if o[0] > t), None)) is not None
+            and nxt_t[1] == "cmpm_ax"
+            and nxt_t[2] == state.vdisp(state.stmts[-1].target)
+        ):
+            # Integer FOR header, VARIABLE limit: the ops at the test are
+            # `mov ax,[limit-temp]; cmp [I%],ax; jle body`, and the header
+            # copies the TO expression into the temp just before the init
+            # (`mov ax,[N%]; mov [temp],ax; mov [I%],1; jmp test`) -- fold
+            # that copy back into the FOR so the temp slot never surfaces
+            # as a variable (witnessed t1_fori)
+            init_s = state.stmts.pop()
+            a = state.addrs.pop()
+            limit = state.loc(cmp_at_t[2])
+            if (
+                state.stmts
+                and isinstance(state.stmts[-1], ir.Assign)
+                and isinstance(state.stmts[-1].target, ir.Var)
+                and state.vdisp(state.stmts[-1].target) == cmp_at_t[2]
+            ):
+                limit = state.stmts.pop().value
+                a = state.addrs.pop()
+            state.put(
+                ir.For(init_s.target, init_s.value, limit, ir.Lit(1)),
+                a,
+            )
+            state.fors.append(
+                {
+                    "v": nxt_t[2],
                     "test": t,
                     "body": state.ops[state.k + 1][0]
                     if state.k + 1 < len(state.ops)
@@ -1039,6 +1102,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
     state.proc_str_offs = (
         set()
     )  # bp_offs the open proc reads as strings (arg_ref;far_spush)
+    state.proc_int_offs = set()  # bp_offs read as integers (far_cmpax_si)
 
     # String-space base: ss_base = align16(pool end), but the pool can
     # hold words the code never references (LOCATE/COLOR arg literals compile to
@@ -1190,6 +1254,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 "exit": next(o[0] for o in state.ops[state.k :] if o[1] == "proc_ret"),
             }
             state.proc_str_offs = set()
+            state.proc_int_offs = set()
             state.cur = None
             state.k += 1
             continue
@@ -1213,7 +1278,9 @@ def decode_user_code(exe: bytes) -> list[Any]:
             state.proc_names[state.proc_frame["entry"]] = name
             nparams = op[2] // 4  # retf pop bytes = 4 x nargs
             params = tuple(
-                f"P{off:02X}$" if off in state.proc_str_offs else f"P{off:02X}"
+                f"P{off:02X}$"
+                if off in state.proc_str_offs
+                else (f"P{off:02X}%" if off in state.proc_int_offs else f"P{off:02X}")
                 for off in (6 + 4 * (nparams - 1 - i) for i in range(nparams))
             )
             state.stmts.append(ir.SubDef(name, params, body))
@@ -1338,6 +1405,11 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 state.stack.append(ir.BinOp(op[2], top, argvar))
             elif base == "fcomp_si":
                 state.pend_cmp = (argvar, state.stack.pop())
+            elif base == "cmpax_si":  # cmp ax, es:[si]: relational value vs a
+                argvar = ir.Var(f"P{state.pend_arg:02X}%")  # by-ref INT param
+                state.proc_int_offs.add(state.pend_arg)  # (t1_cmpfar)
+                state.pend_icmp = (argvar, state.ax)
+                state.ax = None
             else:
                 raise ValueError(f"unhandled by-ref param op {kind} at {addr:#x}")
             state.pend_arg = None
@@ -1353,6 +1425,25 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 state.exit_folds,
             )
             state.cur = None
+            continue
+        if (
+            kind == "movax_m"
+            and state.fors
+            and addr == state.fors[-1]["test"]
+            and state.k + 2 < len(state.ops)
+            and state.ops[state.k + 1][1] == "cmpm_ax"
+            and state.ops[state.k + 1][2] == state.fors[-1]["v"]
+        ):
+            # Variable-limit integer NEXT: `mov ax,[limit]; cmp [I%],ax; jle body`
+            # (t1_fori; inc_m was consumed, step is always 1)
+            f = state.fors[-1]
+            jcc = state.ops[state.k + 2]
+            if jcc[1] != "jcc" or jcc[2] not in (0x7E, 0x76) or jcc[3] != f["body"]:
+                raise ValueError(f"int NEXT (var limit): expected JLE to body at {addr:#x}")
+            state.put(ir.NextStmt(state.loc(f["v"])), state.cur)
+            state.fors.pop()
+            state.cur = None
+            state.k += 3
             continue
         if kind == "cmp_mi8" and state.fors and addr == state.fors[-1]["test"]:
             # Integer FOR-test guard: the cmp at the open FOR's test address is the
@@ -1501,11 +1592,13 @@ def decode_user_code(exe: bytes) -> list[Any]:
                         raise ValueError("inconsistent OPTION BASE across DIMs")
                     state.option_base = base_vals.pop()
                 # Runtime slots carry their element type at file time:
-                # 0A = string-descriptor elements, so the name is typed from birth.
-                is_str = exe[state.ds + block + 2] == 0x0A
+                # 0A = string-descriptor elements, 06 = double (witnessed
+                # t1_dblarr), so the name is typed from birth.
+                tb = exe[state.ds + block + 2]
+                is_str = tb == 0x0A
                 name = (
                     f"V{state.lay['n_static'] + state.lay['rt_blocks'].index(block)}"
-                    + ("$" if is_str else "")
+                    + ("$" if is_str else "#" if tb == 0x06 else "")
                 )
                 if not all(isinstance(v, ir.Lit) for v in lows):
                     raise ValueError(

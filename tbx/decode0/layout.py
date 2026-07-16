@@ -66,6 +66,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
             "movm_ax",
             "inc_m",
             "cmp_mi8",
+            "cmpm_ax",
             "movsim",
         )
         and o[2] >= VAR_BASE
@@ -142,6 +143,13 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
                 run[d] = 4
                 strs.add(d)
                 d += 4
+            elif d + 2 in ints:
+                # Phantom FOR step slot: an integer FOR with a variable limit
+                # allocates step+limit temp slots before I%, and the step slot
+                # is never referenced when STEP is the literal-1 INC fast path
+                # (witnessed t1_fori: 0x120 phantom, 0x122 limit, 0x124 I%).
+                run[d] = 2
+                d += 2
             else:
                 return run, strs, d
 

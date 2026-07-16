@@ -123,6 +123,12 @@ IfGoto(cond=RelOp(op='<=', lhs=Call(name='INSTR', args=(Var(name='A$'), StrLit(v
 Print(items=(StrLit(value='GT'),), newline=True, file=None, commas=None)
 End()
 
+## t1_cmpfar
+SubDef(name='SUB1', params=('A%',), body=(Assign(target=Var(name='B%'), value=BinOp(op='=', lhs=Var(name='A%'), rhs=Lit(value=1))), Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)))
+Assign(target=Var(name='C%'), value=Lit(value=1))
+CallStmt(name='SUB1', args=(Var(name='C%'),))
+End()
+
 ## t1_convf
 Assign(target=Var(name='A#'), value=DblLit(value=1.5))
 Assign(target=Var(name='B'), value=SingleLit(value=2.5))
@@ -302,6 +308,15 @@ Assign(target=Var(name='B'), value=Call(name='LOG', args=(DblLit(value=2.5),)))
 Assign(target=Var(name='C'), value=Call(name='LOG10', args=(DblLit(value=2.5),)))
 End()
 
+## t1_fcmp
+Assign(target=Var(name='A'), value=Lit(value=2))
+Assign(target=Var(name='B'), value=Lit(value=3))
+IfGoto(cond=RelOp(op='<=', lhs=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=BinOp(op='*', lhs=Var(name='B'), rhs=Lit(value=2))), target=4)
+Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None)
+IfGoto(cond=RelOp(op='<>', lhs=BinOp(op='*', lhs=Var(name='A'), rhs=Var(name='A')), rhs=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=1))), target=6)
+Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_field
 Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'), reclen=None)
 Field(num=1, fields=((Lit(value=10), Var(name='A$')), (Lit(value=20), Var(name='B$'))))
@@ -443,6 +458,14 @@ Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(valu
 Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=10)))
 NextStmt(var=Var(name='A'))
 Print(items=(Var(name='B'),), newline=True, file=None, commas=None)
+End()
+
+## t1_fori
+Assign(target=Var(name='A%'), value=Lit(value=3))
+For(var=Var(name='B%'), init=Lit(value=1), limit=Var(name='A%'), step=Lit(value=1))
+Print(items=(StrLit(value='A'),), newline=False, file=None, commas=None)
+NextStmt(var=Var(name='B%'))
+Print(items=(), newline=True, file=None, commas=None)
 End()
 
 ## t1_fp
@@ -659,13 +682,33 @@ End()
 Lprint(items=(Lit(value=5),), newline=True)
 End()
 
+## t1_lpstr
+Lprint(items=(StrLit(value='HELLO'),), newline=True)
+Assign(target=Var(name='A$'), value=StrLit(value='X'))
+Lprint(items=(Var(name='A$'), StrLit(value='Y')), newline=True)
+Lprint(items=(), newline=True)
+End()
+
 ## t1_lset
 Assign(target=Var(name='A$'), value=StrLit(value='HELLO'))
 Lset(target=Var(name='A$'), source=StrLit(value='HI'))
 End()
 
+## t1_ltab
+Lprint(items=(Call(name='TAB', args=(Lit(value=5),)), StrLit(value='X')), newline=True)
+Lprint(items=(Call(name='SPC', args=(Lit(value=3),)), StrLit(value='Y')), newline=True)
+End()
+
 ## t1_meta0
 Assign(target=Var(name='A%'), value=Lit(value=1))
+End()
+
+## t1_mid2
+Assign(target=Var(name='A$'), value=StrLit(value='ABCDE'))
+Assign(target=Var(name='B%'), value=Lit(value=2))
+Assign(target=Var(name='C$'), value=Call(name='MID$', args=(Var(name='A$'), Var(name='B%'))))
+Assign(target=Var(name='D$'), value=Call(name='MID$', args=(Var(name='A$'), Lit(value=4))))
+Print(items=(Var(name='C$'), Var(name='D$')), newline=True, file=None, commas=None)
 End()
 
 ## t1_midas
@@ -863,6 +906,11 @@ End()
 
 ## t1_paintp
 Paint(x=Lit(value=50), y=Lit(value=50), paint=Lit(value=1), border=None)
+End()
+
+## t1_paintt
+Screen(mode=Lit(value=1), burst=None, apage=None, vpage=None)
+Paint(x=Lit(value=10), y=Lit(value=10), paint=Call(name='CHR$', args=(Lit(value=85),)), border=Lit(value=1))
 End()
 
 ## t1_palette
@@ -1224,6 +1272,15 @@ End()
 Assign(target=Var(name='A$'), value=StrLit(value='HI'))
 Assign(target=Var(name='B$'), value=Var(name='A$'))
 Print(items=(Var(name='A$'),), newline=True, file=None, commas=None)
+End()
+
+## t1_strif
+Assign(target=Var(name='A$'), value=StrLit(value='AB'))
+Assign(target=Var(name='B$'), value=StrLit(value='AB'))
+IfGoto(cond=RelOp(op='<>', lhs=Var(name='A$'), rhs=Var(name='B$')), target=4)
+Print(items=(StrLit(value='EQ'),), newline=True, file=None, commas=None)
+IfGoto(cond=RelOp(op='>=', lhs=Var(name='A$'), rhs=StrLit(value='M')), target=6)
+Print(items=(StrLit(value='LT'),), newline=True, file=None, commas=None)
 End()
 
 ## t1_strigf

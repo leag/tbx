@@ -119,6 +119,17 @@ def graphics(state: DecodeState, op, addr, kind) -> bool:
         state.cur = None
         state.k += 1
         return True
+    if kind == "paint_tile":  # PAINT (x,y), tile$[, border] (witnessed t1_paintt)
+        if op[2] & ~0x01:
+            raise ValueError(f"PAINT tile flag {op[2]:02x} at {addr:#x} (unsupported)")
+        border = state.color_cells.pop(0x94) if op[2] & 0x01 else None
+        tile = state.sstack.pop()
+        y = state.stack.pop()
+        x = state.stack.pop()
+        state.put(ir.Paint(x, y, tile, border), state.cur)
+        state.cur = None
+        state.k += 1
+        return True
     if kind == "draw":  # DRAW cmd$
         state.put(ir.Draw(state.sstack.pop()), state.cur)
         state.cur = None
@@ -236,18 +247,32 @@ def console(state: DecodeState, op, addr, kind) -> bool:
         state.k += 1
         return True
     if kind == "tabspc":  # TAB(n)/SPC(n) item
-        name, isfile = _TABSPC_VECS[op[2]]
+        name, leg = _TABSPC_VECS[op[2]]
         if state.ax is None or isinstance(state.ax, tuple):
             raise ValueError(f"{name} without an ax argument at {addr:#x}")
         if state.pend_using is not None:  # unwitnessed inside USING chains
             state.flush_pending()
-        f = state.pend_fnum if isfile else None
-        if isfile and f is None:
-            raise ValueError(f"file {name} without [0060] at {addr:#x}")
-        if state.pend_print is not None and state.pend_print["file"] != f:
-            state.flush_pending()  # console/file leg change = new stmt
-        if state.pend_print is None:
-            state.pend_print = {"items": [], "file": f, "start": state.cur}
+        if leg == "lprint":  # printer leg joins/opens an LPRINT chain (t1_ltab)
+            if (
+                state.pend_print is not None
+                and state.pend_print.get("mode") != "lprint"
+            ):
+                state.flush_pending()
+            if state.pend_print is None:
+                state.pend_print = {
+                    "items": [],
+                    "file": None,
+                    "start": state.cur,
+                    "mode": "lprint",
+                }
+        else:
+            f = state.pend_fnum if leg else None
+            if leg and f is None:
+                raise ValueError(f"file {name} without [0060] at {addr:#x}")
+            if state.pend_print is not None and state.pend_print["file"] != f:
+                state.flush_pending()  # console/file leg change = new stmt
+            if state.pend_print is None:
+                state.pend_print = {"items": [], "file": f, "start": state.cur}
         assert state.pend_print is not None  # just established above
         state.pend_print["items"].append(ir.Call(name, (state.ax,)))
         state.ax = None

@@ -1,0 +1,7 @@
+10 A = 2
+20 B = 3
+30 IF A + 1 <= B * 2 THEN 50
+40 PRINT "X"
+50 IF A * A <> B + 1 THEN 70
+60 PRINT "Y"
+70 END
