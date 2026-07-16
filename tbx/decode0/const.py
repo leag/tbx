@@ -133,12 +133,16 @@ _STRFN_VECS = {
 }
 _EE_STRFN_SUBS = {
     0x00: "BIN$",
+    0x02: "COMMAND$",  # zero-arg (witnessed t1_cmd)
     0x0C: "HEX$",
+    0x10: "INPUT$",  # keyboard form: n in ax (witnessed t1_inp5)
+    0x12: "INPUT$F",  # file form INPUT$(n,f): n in bx, f in ax (t1_inp5)
     0x16: "LCASE$",
     0x1C: "OCT$",
     0x1E: "SPACE$",
     0x20: "STR$",
     0x22: "STRING$",
+    0x24: "STRING$S",  # STRING$(n, s$): n in ax, s$ on sstack (t1_strs2)
     0x28: "UCASE$",
     0x0E: "INKEY$",
     0x04: "DATE$",

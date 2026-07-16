@@ -75,6 +75,7 @@ SKIP = {
     # by the statement's startup. No golden until the harness sees the cursor.
     "t1_inp3": "bare LINE INPUT: no screen marker to synchronize keys on",
     "t1_file2": "bare LINE INPUT: no screen marker to synchronize keys on",
+    "t1_inp5": "bare INPUT$(1): no screen marker to synchronize keys on",
     # programs that never return to the DOS prompt
     "t1_run": "RUN restarts the program forever",
     "zz_ginf": "infinite DO loop by design",

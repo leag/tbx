@@ -45,6 +45,16 @@ void tb_open_r(int n, tb_str name, int reclen) {
     tb_recbuf[n] = tb_halloc(reclen);                    /* persists across statements */
     memset(tb_recbuf[n], ' ', reclen);
 }
+tb_str tb_inputSF(double n, double fnum) {
+    /* INPUT$(n, f): exactly n bytes from the channel, no delimiter parsing */
+    int fn = (int)fnum;
+    FILE *f = (fn >= 1 && fn <= 15) ? tb_files[fn] : 0;
+    if (!f) tb_error(52);
+    long want = tb_i(n) < 0 ? 0 : tb_i(n);
+    tb_str r = tb_new((size_t)want);
+    if ((long)fread(r.p, 1, (size_t)want, f) < want) tb_error(62); /* input past end */
+    return r;
+}
 double tb_eof(double n) {
     FILE *f = ((int)n >= 1 && (int)n <= 15) ? tb_files[(int)n] : 0;
     if (!f) tb_error(52);       /* EOF on a closed channel: Bad file number

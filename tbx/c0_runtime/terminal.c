@@ -102,6 +102,46 @@ tb_str tb_inkey(void) {
 #endif
     return tb_key1((unsigned char)ch);
 }
+tb_str tb_inputS(double n) {
+    /* INPUT$(n): n keystrokes, blocking, no echo. Polls tb_inkey so the SDL
+       window path feeds it too; a non-tty stdin that runs dry is EOF, not a
+       keyboard that will eventually deliver, so it stops short rather than
+       spin (extended two-byte keys may also end the fill one byte short). */
+    long want = tb_i(n) < 0 ? 0 : tb_i(n);
+    tb_str r = tb_new((size_t)want);
+    long got = 0;
+    while (got < want) {
+        tb_str k = tb_inkey();
+        if (!k.n) {
+#ifdef _WIN32
+            if (!_isatty(0)) break;
+#else
+            if (!isatty(0)) break;
+#endif
+            tb_delay(0.005);
+            continue;
+        }
+        for (long i = 0; i < k.n && got < want; i++) r.p[got++] = k.p[i];
+    }
+    r.n = got;
+    return r;
+}
+int tb_argc; char **tb_argv;                       /* set by the generated main */
+tb_str tb_commandS(void) {
+    /* COMMAND$: the DOS command tail, uppercased with leading blanks stripped
+       (handbook). Rebuilt from argv words -- original quoting and spacing are
+       not recoverable on a modern host. */
+    long len = 0;
+    for (int i = 1; i < tb_argc; i++) len += (long)strlen(tb_argv[i]) + (i > 1);
+    tb_str r = tb_new((size_t)len);
+    long o = 0;
+    for (int i = 1; i < tb_argc; i++) {
+        if (i > 1) r.p[o++] = ' ';
+        for (const char *s = tb_argv[i]; *s; s++)
+            r.p[o++] = (char)((*s >= 'a' && *s <= 'z') ? *s - 32 : *s);
+    }
+    return r;
+}
 #ifdef _WIN32
 /* DOS wildcard match (* and ?), case-insensitive: the fnmatch surrogate */
 static int tb_match(const char *pat, const char *s) {

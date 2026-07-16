@@ -10,7 +10,7 @@
    this header or to a documented surrogate behavior (see README.md in this
    directory): a generated --no-runtime program only links against a
    libtbrt.a built from the same version. */
-#define TB_RT_VERSION 4
+#define TB_RT_VERSION 5
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -123,6 +123,11 @@ tb_str tb_chr(double c);
 tb_str tb_strS(double v);
 tb_str tb_space(double n);
 tb_str tb_stringS(double n, double c);
+tb_str tb_stringSS(double n, tb_str s);
+tb_str tb_inputS(double n);
+tb_str tb_inputSF(double n, double fnum);
+tb_str tb_commandS(void);
+extern int tb_argc; extern char **tb_argv;  /* set by the generated main */
 tb_str tb_left(tb_str s, double n);
 tb_str tb_right(tb_str s, double n);
 tb_str tb_mid(tb_str s, double start, double len);

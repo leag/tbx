@@ -239,6 +239,11 @@ tb_str tb_stringS(double n, double c) {
     long k = tb_i(n) < 0 ? 0 : tb_i(n);
     tb_str r = tb_new((size_t)k); memset(r.p, (char)tb_i(c), (size_t)k); return r;
 }
+tb_str tb_stringSS(double n, tb_str s) {
+    /* STRING$(n, s$): n copies of s$'s first character */
+    if (!s.n) tb_error(5);                               /* illegal function call */
+    return tb_stringS(n, (double)(unsigned char)s.p[0]);
+}
 tb_str tb_left(tb_str s, double n) {
     long k = tb_i(n) < 0 ? 0 : tb_i(n);
     if (k > s.n) k = s.n;

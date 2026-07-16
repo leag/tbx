@@ -616,9 +616,21 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         state.stack.append(ir.Call("CLNG", (state.stack.pop(),)))
     elif kind == "strfn":  # string-result intrinsic
         name = op[2]
-        if name in ("CHR$", "SPACE$", "MKI$"):  # integer arg in ax
+        if name in ("CHR$", "SPACE$", "MKI$", "INPUT$"):  # integer arg in ax
             args = (state.ax,)
             state.ax = None
+        elif name == "INPUT$F":  # INPUT$(n, f): n in bx (shuttled), f in ax
+            name = "INPUT$"
+            f = state.ax
+            state.ax = None
+            n = state.bx
+            state.bx = None
+            args = (n, f)
+        elif name == "STRING$S":  # STRING$(n, s$): n in ax, s$ on sstack
+            name = "STRING$"
+            n = state.ax
+            state.ax = None
+            args = (n, state.sstack.pop())
         elif name in ("LEFT$", "RIGHT$"):  # string on sstack, count in ax
             n = state.ax
             state.ax = None
@@ -635,7 +647,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             n = state.bx
             state.bx = None
             args = (n, ch)
-        elif name in ("INKEY$", "DATE$", "TIME$"):  # zero-arg: bare keyword
+        elif name in ("INKEY$", "DATE$", "TIME$", "COMMAND$"):  # zero-arg: bare keyword
             state.sstack.append(ir.Nullary(name))
             state.k += 1
             return

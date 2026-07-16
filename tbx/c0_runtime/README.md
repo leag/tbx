@@ -38,6 +38,9 @@ significant digits. Screen control (CLS/LOCATE/COLOR) is ANSI escapes;
 INKEY$/INSTAT read the terminal (or the SDL window under `-DTB_SDL`).
 Untrapped errors print `Error N in line L` to stderr and exit(N) — the DOS
 screen said `Error N  at pgm-ctr: X`; both normalize to `Error N`.
+INPUT$(n) polls INKEY$ (blocking, no echo); a non-tty stdin that runs dry
+returns short instead of spinning. COMMAND$ rebuilds the DOS command tail
+from argv, uppercased — original quoting and spacing are not recoverable.
 
 **Devices that do not exist here** — LPRINT goes to `TB_LPRINT_TXT` or the
 null device, never the console (t1_lprint), with its own column state.
@@ -54,9 +57,10 @@ skips the exit-wait; SDL's dummy driver runs headless).
 
 **Files** (`fileio.c`) — DOS `\` separators translate to the host's; error
 codes are witnessed (53 missing file, 52 bad channel, 54 SEEK on random
-mode, 75/76 path errors). Random-access records are the calibrated 128
-bytes; a never-FIELDed PUT writes a space-filled buffer where real DOS
-exposed live DGROUP memory (t1_putfile waiver).
+mode, 75/76 path errors). Random-access records honor OPEN's record
+length (default 128, t1_open2); a never-FIELDed PUT writes a space-filled
+buffer where real DOS exposed live DGROUP memory (t1_putfile waiver).
+INPUT$(n, f) reads exactly n bytes, error 62 past end.
 
 ## Strings
 

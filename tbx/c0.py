@@ -138,7 +138,9 @@ _STR_FUNCS = {
     ("CHR$", 1): "tb_chr({0})",
     ("STR$", 1): "tb_strS({0})",
     ("SPACE$", 1): "tb_space({0})",
-    ("STRING$", 2): "tb_stringS({0}, {1})",
+    ("STRING$", 2): "tb_stringS({0}, {1})",  # string-2nd-arg form special-cased in call()
+    ("INPUT$", 1): "tb_inputS({0})",
+    ("INPUT$", 2): "tb_inputSF({0}, {1})",
     ("LEFT$", 2): "tb_left({0}, {1})",
     ("RIGHT$", 2): "tb_right({0}, {1})",
     ("MID$", 2): "tb_mid({0}, {1}, -1)",
@@ -164,7 +166,12 @@ _NULLARY = {
     # error address: a DOS code offset with no modern counterpart
     "ERADR": "0.0",
 }
-_NULLARY_STR = {"DATE$": "tb_dateS()", "TIME$": "tb_timeS()", "INKEY$": "tb_inkey()"}
+_NULLARY_STR = {
+    "DATE$": "tb_dateS()",
+    "TIME$": "tb_timeS()",
+    "INKEY$": "tb_inkey()",
+    "COMMAND$": "tb_commandS()",
+}
 
 # variable C types by TB suffix: (c type, mangle prefix, zero)
 _VTYPES = {
@@ -426,6 +433,9 @@ class _Gen:
         raise _Unsupported(f"string expression {type(e).__name__}")
 
     def call(self, e, table) -> str:
+        if e.name == "STRING$" and len(e.args) == 2 and _is_str(e.args[1]):
+            # STRING$(n, s$) overload: repeat s$'s first character
+            return f"tb_stringSS({self.num(e.args[0])}, {self.s(e.args[1])})"
         # arity-keyed template; each arg renders by its own inferred type
         key = (e.name, len(e.args))
         if key not in table:
@@ -1364,7 +1374,8 @@ class _Gen:
         if self.uses_clear:
             parts.append("static void tb_clear_all(void);")
         parts.extend(self.fns)
-        parts.append("int main(void) {")
+        parts.append("int main(int argc, char **argv) {")
+        parts.append("    tb_argc = argc; tb_argv = argv;")
         for t in sorted(self.xlabels):
             # main-label addresses for GOTO/ON ERROR inside SUB bodies
             parts.append(f"    tb_xl{t} = &&L{t};")

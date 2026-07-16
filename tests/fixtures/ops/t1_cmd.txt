@@ -1,0 +1,11 @@
+# t1_cmd dialect=1.1 start=08700
+08703:strfn:COMMAND$
+08706:movsi:288
+08709:strassign
+0870B:movsi:288
+0870E:rt:156
+08710:rt:190
+08712:rt:184
+08714:end
+08717:epilogue
+# commits

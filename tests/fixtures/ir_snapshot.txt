@@ -103,6 +103,11 @@ End()
 Clear()
 End()
 
+## t1_cmd
+Assign(target=Var(name='A$'), value=Nullary(name='COMMAND$'))
+Print(items=(Var(name='A$'),), newline=True, file=None)
+End()
+
 ## t1_convf
 Assign(target=Var(name='A#'), value=DblLit(value=1.5))
 Assign(target=Var(name='B'), value=SingleLit(value=2.5))
@@ -524,6 +529,17 @@ End()
 
 ## t1_inp4
 Input(prompt=StrLit(value='X'), var=Var(name='A$'), comma=True)
+End()
+
+## t1_inp5
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='A.TXT'), reclen=None)
+Print(items=(StrLit(value='HELLO'),), newline=True, file=1)
+Close(num=1)
+Open(mode=StrLit(value='I'), num=2, file=StrLit(value='A.TXT'), reclen=None)
+Assign(target=Var(name='A$'), value=Call(name='INPUT$', args=(Lit(value=3), Lit(value=2))))
+Close(num=2)
+Assign(target=Var(name='B$'), value=Call(name='INPUT$', args=(Lit(value=1),)))
+Print(items=(Var(name='B$'), Var(name='A$')), newline=True, file=None)
 End()
 
 ## t1_inpf
@@ -1214,6 +1230,13 @@ For(var=Var(name='D'), init=Lit(value=1), limit=Lit(value=100), step=Lit(value=1
 Assign(target=Var(name='C$'), value=BinOp(op='+', lhs=Var(name='C$'), rhs=StrLit(value='AB')))
 NextStmt(var=Var(name='D'))
 Print(items=(Call(name='LEN', args=(Var(name='C$'),)), Call(name='INSTR', args=(Var(name='B$'), Call(name='CHR$', args=(Lit(value=0),))))), newline=True, file=None)
+End()
+
+## t1_strs2
+Assign(target=Var(name='A$'), value=Call(name='STRING$', args=(Lit(value=5), StrLit(value='-'))))
+Assign(target=Var(name='B$'), value=Call(name='STRING$', args=(Lit(value=6), Lit(value=42))))
+Assign(target=Var(name='C$'), value=Call(name='STRING$', args=(Lit(value=4), Var(name='A$'))))
+Print(items=(Var(name='A$'), Var(name='B$'), Var(name='C$')), newline=True, file=None)
 End()
 
 ## t1_subad
