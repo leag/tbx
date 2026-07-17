@@ -162,84 +162,167 @@ Current tally (post gap 26):
 - Gap 12 INCR/DECR (`0e4f0f7`), gap 11 by-ref int param family (`3f1e23d`),
   gap 10 LOCAL (`2ef2b6d`), gap 9 double arrays — see git log.
 
-## Gap 16 — schart/hfprop/vhfprop/inv87/invoice, UNDIAGNOSED (re-traced 2026-07-17)
+## Gap 16 — schart/hfprop/vhfprop/inv87/invoice, UNDIAGNOSED (re-traced 2026-07-17, twice)
 
 The 5 wild "DGROUP layout not solvable" files did NOT advance after gap
-15's fix landed. This session did a full fresh re-trace of schart.exe and
-**overturned the previous session's working theory** (the "leading 368-byte
-mystery blob before the real static records" write-up that used to live in
-this section, and the near-identical text that had been misfiled under the
-gap-19 byte-06 section below — both described the same schart.exe
-analysis under a since-corrected wrong assumption). Recorded here so the
-next session doesn't re-derive it:
+15's fix landed. **This section has been through two full re-traces this
+session; the second overturns the first's "prompt disps collide with the
+scalar band" theory below it.** Both are kept because the corpus-array
+brute-force technique (first sub-section) is still the right way to pin
+`ds` for a wild file, and because the schart-specific "prompt disps"
+observation may still be this SAME newly-discovered mechanism wearing a
+different mask (schart has INPUT statements; the reproducer below doesn't
+need them at all) — not yet re-tested against schart itself.
 
-**The old theory was an artifact of a wrong `ds`.** Previous session
-guessed `ds=0xf900` from a `pool_base=0x4b4` assumption, which put the
-*real* static-array records (found independently below) 0x170 bytes into
-what it thought was the grid, and misidentified that leading 368-byte span
-as unexplained. **That leading span is the ordinary error-trap line table**
-(`layout._line_table`'s `(code_offset, line_number)` format — confirmed
-directly: `exe[0xfa20:0xfa30]` decodes as strictly-increasing code offsets
-that resolve to real op addresses in schart.exe's own op stream, paired
-with line numbers repeating for same-line statements and stepping by 10).
-It sits at file offset 0xfa20-0xfb90, i.e. entirely *before* the correct
-`ds` (below), which is normal/expected — it's a tail structure unrelated to
-DGROUP addressing, not something living inside the scalar/array grid.
+### Trace 1 (superseded theory, kept for the `ds`-pinning technique)
 
-**The correct `ds` is `0xfa70`, confirmed by brute force**: scanning the
-whole file for a run of `_parse_static_slot`-valid records whose `base`
-fields match the known `addsi` evidence bases (`0x7e0, 0x810, 0xc8a0,
-0xc8d0, 0xc900, 0xc930, 0xc960`) lands exactly 10 records starting at file
-offset `0xfb90 = 0xfa70 + VAR_BASE`, each separated by the *full* `0x36`
-`ARR_BLOCK` stride (a short populated header — 12/18/24 bytes per
-`_parse_static_slot` — then zero padding out to the full slot), ending
-cleanly right at the one-and-only marker occurrence (`P = 0xfdb0`, `exe.rfind`
-found no other candidate in the whole file). Also recovers the 3
-addsi-silent arrays (`0x840`/`0x1fc0`/`0x7430`, constant-index-only, large
-counts 751/2701/2701) in their correct declared-order slots between the
-addsi-evidenced ones — this matches the previous session's own note about
-"3 unwitnessed records" almost exactly, just at the *right* file position
-this time (their find_statics call never reached record 3 before, because
-the window was anchored 0x170 bytes too early).
+The old theory (from an *even earlier* session) was an artifact of a wrong
+`ds` (guessed `0xf900` from a `pool_base=0x4b4` assumption, which
+misidentified the ordinary error-trap line table as an unexplained blob).
+**The correct `ds` is `0xfa70`, confirmed by brute force**: scan the whole
+file for a run of `_parse_static_slot`-valid records whose `base` fields
+match the known `addsi` evidence bases; they land exactly 10 records
+starting at file offset `0xfb90 = 0xfa70 + VAR_BASE`, each separated by
+the full `0x36` `ARR_BLOCK` stride, ending cleanly at the one-and-only
+marker occurrence (`P = 0xfdb0`). **This brute-force "find every valid
+static-slot record in the whole file, check they're `ARR_BLOCK`-spaced,
+derive `ds` from the first one's position minus `VAR_BASE`" technique is
+reusable and correct — reuse it directly, don't re-derive.**
 
-**Where it's currently stuck**: with `ds=0xfa70` nailed down, the
-scalar-band walk (`walk_run(sb)`, `sb = VAR_BASE + ARR_BLOCK*10 = 0x33c`)
-finds real evidence (fld/fstp/fcomp *and* movsi) all the way out past
-0x4b0 — confirmed several of these are genuine read+write scalar slots,
-not pooled literal descriptors (fstp writes at e.g. 0x33c/0x340/0x344 rule
-out "pool descriptor", since those are immutable). But **every dc/pool_base
-candidate the existing loop tries fails `finish()`'s descriptor
-validation** (`off = P+4+d-pool_base` must read a `len|0x8000` word), and
-the failure is specifically driven by `prompt_disps` (INPUT/LINE INPUT
-prompt-string disps): the code only exempts *one* prompt disp from
-descriptor validation (`prompt_disps - {pool_base - 4}`, the "bare-prompt
-sentinel" special case from the INT-19 investigation), but schart.exe has
-several prompt disps (0x440, 0x4b0, 0x548, ...) that coincide with real
-scalar-band slots, not just one — so whichever single disp gets exempted
-per candidate, the others still fail the pool-descriptor tag check. This
-looks like a second, more general "promptless INPUT reuses some other
-scalar's storage as its prompt pointer" convention that isn't understood
-yet, layered on top of a genuine architecture gap: the `no rt_blocks`
-branch's `dc` candidate list (`[dend] + 16-aligned points within strs`)
-doesn't explore the full space of the real answer either — a working
-`(ds, pool_base)` pair for this file was NOT found even after decoupling
-`ds` from the `ds = P+4-pool_base` (delta==0) assumption and searching
-`pool_base` independently.
+Trace 1 concluded (WRONG, see trace 2): "every dc/pool_base candidate
+fails finish()'s descriptor validation, driven by prompt_disps landing on
+real scalar-band slots" and recommended building a probe with several
+static arrays plus mixed prompted/bare INPUT statements. That probe was
+built this session (trace 2) — **the INPUT angle was a red herring**: the
+real reproducer below has zero INPUT statements.
 
-**Do not patch further from schart.exe alone** (unverifiable against the
-oracle anyway per the wild-corpus caveat). Next step: author a probe with
-a similar shape — several static arrays (including large addsi-silent
-ones) *plus* multiple INPUT statements, some with explicit prompts and
-some without, sharing DGROUP space with a sizeable scalar band — compile
-via the oracle, and work out the real prompt-disp/sentinel rule from a
-verifiable fixture before generalizing `finish()`'s exemption or the `dc`
-search. A debug script reproducing all of the above (evidence-set dumps,
-brute-force record-chain finder, `finish()` reimplementation with tracing)
-was used ad hoc this session and not preserved; rebuild similarly rather
-than re-deriving `ds`/the line-table identification from scratch.
+### Trace 2 (2026-07-17, this session, later) — real reproducer found, root cause narrowed but NOT fixed
 
-hfprop/vhfprop/inv87/invoice are untested against this session's finding;
-they may or may not share schart's exact shape.
+**Minimal oracle-verified reproducer** (`wild/probes_gap16/q_gap16q.bas`,
+compiles clean via `oracle.compile_bas`, TB 1.1):
+
+```basic
+10 DIM P1(20)
+20 DIM P2(20)
+30 DIM P3(20)
+40 DIM P4(20)
+50 DIM P5(20)
+60 DIM P6(20)
+70 DIM P7(20)
+80 DIM S1(20)
+90 DIM S2(20)
+100 DIM S3(20)
+110 A% = 1
+120 B% = 2
+130 C = 1.5
+140 D = 2.5
+150 E# = 3.5#
+160 F# = 4.5#
+170 G% = 3
+180 FOR I% = 1 TO 6
+190 P1(I%) = I%
+260 NEXT I%
+270 H% = P2(1) + P3(1) + P4(1) + P5(1) + P6(1) + P7(1) + S1(1) + S2(1) + S3(1)
+340 PRINT A%, B%, C, D, E#, F#, G%, H%
+350 END
+```
+
+tbx currently mis-decodes this as a WRONG-but-passing layout (`n_static=9`
+instead of 10, `scalars={}` — see below), which then blows up downstream
+with `displacement 0x360 is neither scalar nor array element` instead of
+failing loud at the layout stage. **This is worse than "not solvable": a
+silently-wrong layout, only caught by luck when decode later touches a
+disp `finish()` should have rejected.** `q_gap16c.bas` (the original,
+larger 3-large-array probe from earlier this session) hits the exact same
+root cause and DOES fail loud as "DGROUP layout not solvable" — both are
+saved in `wild/probes_gap16/` along with `q_gap16o/p/r.bas`, the bisection
+probes that pinned the trigger condition (see below).
+
+**Trigger condition, empirically bisected** (all combinations compiled +
+decoded, see the `wild/probes_gap16/` files and this session's transcript
+for the full matrix): the bug needs **exactly 10 total static arrays**
+*and* **a FOR loop with a literal limit** (step defaults to 1) in the same
+program. Neither alone triggers it:
+- 10 static arrays, no FOR loop → decodes fine (any size mix, large or
+  small — tested up to 3 arrays of 2701+ elements).
+- A FOR loop (literal limit/step) with static arrays present, `n_static`
+  anywhere from 0 (no arrays, the existing `t1_forstep` fixture) through
+  9 → decodes fine, REGARDLESS of whether the loop body indexes an array.
+- 3 large arrays alone (no small ones, no FOR) → fine.
+- 10 arrays + FOR loop → **always breaks**, independent of array sizes,
+  independent of whether the loop body touches an array, independent of
+  loop-body statement count (controlled for a separate, unrelated
+  pre-existing gap below).
+
+**A genuine new 48-byte DGROUP structure exists, confirmed byte-for-byte
+identical (up to its two variable words) across three independently
+compiled files** (`q_gap16c`, `q_gap16o`/`q`, and even the *already-passing*
+`t1_forstep.exe` in a collapsed 4-byte form since it has zero arrays):
+16 zero bytes, then `00 00 10 01` repeated 4× (16 bytes), then a
+structured 16-byte tail that decodes as 8 LE words
+`[scalar_band_width, sb, 0, sb+scalar_band_width, n_static, VAR_BASE, 0, sb]`
+— i.e. it is *self-describing*: its own words equal independently-derived
+quantities (`sb = VAR_BASE + ARR_BLOCK*n_static`, the scalar band's total
+byte width, and `n_static` itself), not junk. Where this block sits
+relative to `VAR_BASE` and the array grid, and how the *individual*
+scalars (I%, G%, ...) end up addressed relative to it, is **not yet
+resolved** — three internally-consistent-looking hypotheses were tried
+this session and each contradicted real op evidence when checked further
+(see below); do not trust any of them without re-verifying against fresh
+byte dumps first.
+
+**What's ruled out**:
+- It is NOT the existing "disps below VAR_BASE are runtime system cells"
+  case extended — the block's *content* references `VAR_BASE` and `sb`
+  as literal words, which only makes sense if the compiler computed those
+  values for *this specific program*, i.e. it's DGROUP-layout-aware
+  compiler output, not a generic fixed runtime cell.
+- It is NOT specific to array size (large vs. small) or to the loop body
+  indexing an array — confirmed via the bisection matrix above.
+- The three hypotheses tried and contradicted:
+  1. "Array grid starts exactly at `ds+VAR_BASE` as always; ignore the
+     block, it's below `VAR_BASE`" — contradicted because the real
+     `pool_base` this implies (836) is too small to hold the independently
+     scan-confirmed scalar evidence (G%, F#, E#, D, C, B%, A% all land at
+     or above it, yet are clearly mutable scalars via `movm_imm`/`fstp`,
+     not pool literals).
+  2. "`vb` (var_base) shifts by +48, like the existing LINE box-fill
+     `+4` case" — `find_statics` still finds all 10 records fine under
+     this shift (it's tolerant of leading slop either way, so this is
+     not a discriminating test), but it puts I%'s and G%'s real disps
+     (834, 836) *inside* the shifted grid+block span, which cannot be
+     right since they're independent live scalars.
+  3. "The marker's own 4 bytes double as I%'s storage (extending the
+     already-established 'marker cell doubles as an INPUT empty-string
+     sentinel' precedent)" — self-consistent for `ds=0x8730`/`pool_base=
+     836`/I% alone, but leaves G%/F#/E#/D/C/B%/A% unexplained (all land
+     above `pool_base` under this `ds`, same contradiction as (1)).
+
+**Do not guess further from hypothesis-fitting alone** — the fix needs
+either (a) a byte-level disassembly of the actual FOR-loop prologue/NEXT
+code (not just the op-stream disps already extracted) to see what
+instruction, if any, references the 48-byte block directly (none of the
+scanned ops in `q_gap16q`'s dump reference disps in the `[VAR_BASE-48,
+VAR_BASE)` range at all — worth double-checking with `cfgview`/raw
+disassembly whether the FOR-loop's *codegen* touches those addresses, or
+whether the block is purely a linker/loader artifact nothing ever reads),
+or (b) a systematic sweep varying ONE thing at a time from the
+`q_gap16r.bas` (works, 3 arrays) baseline — add arrays one at a time up to
+10 while re-checking the block's presence/size and the scalar disps' exact
+addresses at each step, to find where exactly `n_static` crosses whatever
+threshold matters (the working `q_gap16p.bas` has `n_static=9`; the
+bisection never tried `n_static=10` with a MUCH smaller/simpler scalar set
+(just `A%` and `I%`, dropping B%/C/D/E#/F#/G%) to isolate whether the
+*number* of ordinary scalars, not just their presence, participates.
+
+**Also still true from trace 1**: hfprop/vhfprop/inv87/invoice/schart are
+untested against this session's finding (none re-compiled/re-diagnosed
+this session; schart specifically should be re-examined for whether its
+INPUT statements are a coincidence or whether `INPUT`/`LINE INPUT` codegen
+is what plants a FOR-loop-shaped 48-byte block even without a literal
+FOR — unconfirmed, worth checking first since schart has no FOR loop in
+evidence but might use `FOR`-adjacent internal codegen for something else,
+e.g. a hidden loop in string handling).
 
 ## Gap INT-8c — likely ON KEY GOSUB related, UNDIAGNOSED
 
