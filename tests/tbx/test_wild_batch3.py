@@ -302,6 +302,18 @@ def test_decode_t1_forbig():
     )
 
 
+def test_decode_t1_addimm():
+    # 01 06 = add [disp16], ax: the disp16 sibling of addm_ax_bp (t1_local1's
+    # LOCAL combine-store) -- `X% = X% + <expr>` when the RHS isn't a bare
+    # literal 1 (no INCR fast path applies), materializing the RHS into ax
+    # first and folding the store back with ADD instead of a separate
+    # load/add/MOV
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_addimm.exe")))
+    assert src == "10 A% = 5\n20 A% = A% + 3\n30 PRINT A%\n40 END\n"
+
+
 if __name__ == "__main__":
     test_decode_t1_fcmp()
     test_decode_t1_fori()
@@ -325,4 +337,5 @@ if __name__ == "__main__":
     test_decode_t1_forstep()
     test_decode_t1_forstepn()
     test_decode_t1_forbig()
+    test_decode_t1_addimm()
     print("ALL PASS")

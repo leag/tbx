@@ -20,6 +20,7 @@ PAIRS = [
     "t1_forstep",
     "t1_forstepn",
     "t1_forbig",
+    "t1_addimm",
 ]
 
 

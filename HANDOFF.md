@@ -8,7 +8,7 @@ gitignored, copyrighted shareware — **never commit them**).
 ## Where things stand
 
 `python -m tbx.tools.scan_wild wild/hits` — 84 EXEs: 3 decode OK, 81 fail.
-Current tally (post gap 21):
+Current tally (post gap 22):
 
 | count | error | status |
 |---|---|---|
@@ -16,12 +16,32 @@ Current tally (post gap 21):
 | 7 | DGROUP layout not solvable | **gap 16, needs fresh diagnosis — see below** |
 | 5 | byte 90 | set aside (4) + rstprint.exe advanced in from gap 21 (1, undiagnosed whether it's the same unwitnessable shape — check before assuming) |
 | 4 | byte ea | mcmurphy.exe advanced in from gap 21; likely the multi-segment-code JMP FAR shape diagnosed under gap-ea below — probably a big lift, not a small gap |
-| 3 each | byte 81, 06, 01 | next tier, undiagnosed (byte ce is fully gone) |
-| 2 each | EC sub 66, EC sub 38, INT 8c, FP de/1e, FP dc/04, byte ff, 8c, 3b, 29 | then singles |
+| 3 each | INT 8c, byte 81, 06 | next tier, undiagnosed (byte 01 is fully gone; byte 83/ce also gone from earlier gaps this session) |
+| 2 each | EC sub 66, EC sub 38, FP de/1e, FP dc/04, byte ff, 8c, 3b, 29 | then singles |
 
 ## Recently closed (this campaign, newest first)
 
-- **Gap 21, Overflow-toggle INTO after arithmetic** (this session): byte
+- **Gap 22, compound-store integer ADD (disp16)** (this session): `01 06
+  [disp16]` = `add word [disp16], ax` — the DGROUP-scalar sibling of the
+  already-implemented `addm_ax_bp` (LOCAL variant, `01 46 [bp+disp8]`,
+  from the `t1_local1` era). Covers `X% = X% + <expr>` whenever the RHS
+  isn't a bare literal 1 (no INCR fast path applies) and the compiler
+  folds the store back with ADD instead of a separate load/add/MOV —
+  works uniformly whether the materialized RHS in `ax` came from a
+  literal or a different variable read (menu.exe's wild occurrence reads
+  a DIFFERENT scalar into `ax` before the ADD, `A% = A% + B%` shape).
+  New op `addm_ax`, handled identically to `addm_ax_bp` but through
+  `state.loc()` instead of `state.loc_local()`. Also caught and fixed a
+  drift bug while implementing this: the COMMON-bands layout path
+  (`layout.py`'s `_bands_layout`-feeding evidence list, ~line 365) has
+  its OWN separate copy of the int-evidence tuple that fell out of sync
+  during gap 20 (`addm_i8`/`cmp_mi16` were never added there) — fixed
+  alongside `addm_ax`. Byte-exact verified both dialects, both a
+  literal-RHS and variable-RHS probe. Fixture `t1_addimm`/`v10_t1_addimm`,
+  pinned in `test_wild_batch3.py` + `test_tb10_dialect.py`. Closed wild
+  baby.exe/menu.exe/number.exe's byte-01 failures; each advanced into a
+  distinct next gap (INT 8c, byte 0b, byte 89).
+- **Gap 21, Overflow-toggle INTO after arithmetic** (2026-07-17): byte
   `0xCE` = the raw x86 `INTO` instruction (call INT 4 if the Overflow flag
   is set), which the compiler inserts after integer arithmetic whenever
   the **Overflow** IDE Options toggle is ON. Confirmed by checking

@@ -1828,6 +1828,16 @@ def decode_user_code(exe: bytes) -> list[Any]:
             state.cur = None
             state.k += 1
             continue
+        if kind == "addm_ax":  # int var = var + ax expression, e.g.
+            var = state.loc(op[2])  # `X% = X% + 3` (no INCR fast path since the
+            state.put(  # RHS isn't a bare literal-1; disp16 sibling of
+                ir.Assign(var, ir.BinOp("+", var, _rgrp("+", state.ax))),
+                state.cur,  # addm_ax_bp, witnessed q_addimm)
+            )
+            state.ax = None
+            state.cur = None
+            state.k += 1
+            continue
         if kind == "movm_ax_bp":  # LOCAL int var = ax expression
             state.put(ir.Assign(state.loc_local(op[2]), state.ax), state.cur)
             state.ax = None

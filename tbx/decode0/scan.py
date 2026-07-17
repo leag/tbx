@@ -311,6 +311,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "movm_ax", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4
         return p
+    if b == 0x01 and exe[p + 1] == 0x06:  # add [disp16], ax: int combine-store,
+        ops.append((p, "addm_ax", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # e.g. `X% = X% + <expr>` (disp16 sibling of addm_ax_bp,
+        return p  # witnessed q_addimm)
     if b == 0x89 and exe[p + 1] == 0x46:  # mov [bp+disp8], ax: LOCAL int store
         ops.append((p, "movm_ax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
         p += 3  # (witnessed t1_local2)

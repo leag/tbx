@@ -64,6 +64,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
             "imul_m",
             "movm_imm",
             "movm_ax",
+            "addm_ax",
             "inc_m",
             "dec_m",
             "addm_i8",
@@ -366,8 +367,9 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
             for o in ops
             if o[1]
             in (
-                "movax_m", "addax_m", "imul_m", "movm_imm", "movm_ax",
-                "inc_m", "dec_m", "cmp_mi8", "cmpm_ax", "movsim",
+                "movax_m", "addax_m", "imul_m", "movm_imm", "movm_ax", "addm_ax",
+                "inc_m", "dec_m", "addm_i8", "cmp_mi8", "cmp_mi16", "cmpm_ax",
+                "movsim",
             )
         }
         fild_c = {o[2] for o in ops if o[1] == "fild"}
