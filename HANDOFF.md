@@ -25,28 +25,37 @@ Frequency order per the standing instruction; INT cd (16) stays skipped as
 unwitnessable. Each gap runs through the 7-step workflow at the bottom of
 this file once diagnosed.
 
-1. **Gap 16 (7 files, DGROUP layout) — in progress, reproducer in hand.**
-   Root cause narrowed to a 48-byte self-describing DGROUP block appearing
-   with 10 static arrays + a literal-limit FOR loop (full trace in the gap-16
-   section below). Remaining steps, in order:
-   - a. Disassemble `q_gap16q.exe`'s FOR prologue/NEXT as raw x86 (`cfgview`
-     or iced directly) — determine whether any instruction references the
-     48-byte block's addresses (`[VAR_BASE-48, VAR_BASE)` relative to the
-     candidate `ds`), or whether it's pure loader data no code reads.
-   - b. Single-variable sweep: start from `q_gap16r.bas` (n=3, decodes fine)
-     and add arrays one at a time to n=10 with a MINIMAL scalar set (just
-     `A%` + loop var), dumping the grid bytes + real scalar disps at each n
-     to catch exactly where and how the block appears and what shifts.
-   - c. Implement the rule in `layout.py`; make the wrong-n_static silent
-     acceptance impossible (the current failure mode is a wrong layout that
-     passes `finish()` — the fix must both solve the new shape AND reject
-     the bogus n=9 solution).
-   - d. Byte-exact verify both dialects; promote probe(s) as `t1_*`/`v10_*`
+1. **Gap 16 (7 files, DGROUP layout) — in progress, mechanism narrowed to
+   a formula-shaped gap, general rule still NOT pinned.** Root cause (see
+   "Trace 3" in the gap-16 section below, now with a 3-for-3-confirmed
+   scaling relationship): whenever a literal-limit FOR loop coincides with
+   enough static arrays (10, in every probe so far — the exact threshold
+   is still unknown), the array grid's real start shifts to `VAR_BASE +
+   align16(total_scalar_band_width)`, and the scalar band's own disps can
+   fall inside — and span more than one of — the array grid's 54-byte
+   slots. Confirmed position-independent (doesn't matter which array the
+   loop touches) and confirmed to spill across 2 slots when wide enough.
+   Remaining steps, in order (do not skip to implementation — the
+   calibration rule needs a general fixture-verified rule, not 3 data
+   points all sharing `n_static=10`):
+   - a. Get data points at OTHER `n_static` values (know `n=9` never
+     triggers this at all; find the real threshold, then vary `n` above
+     it) crossed with a couple of different scalar-band widths, to fit
+     `grid_start`/`pool_base` as a function of `(VAR_BASE, n, width)`
+     instead of eyeballing `align16(width)` from 3 points.
+   - b. Implement as an additional `dc` candidate in the "no runtime
+     arrays" loop (`layout.py` ~line 309), derived from
+     `align16(dend-sb)` — NOT a change to `walk_run` (verified correct
+     every time it was actually run rather than hand-simulated) or to
+     `find_statics`'s per-record advance (also already correct).
+   - c. Byte-exact verify both dialects; promote probe(s) as `t1_*`/`v10_*`
      fixtures with pin tests; regenerate goldens; capture dosout.
-   - e. Re-scan wild; confirm schart/hfprop/vhfprop/inv87/invoice/onelab87/
+   - d. Re-scan wild; confirm schart/hfprop/vhfprop/inv87/invoice/onelab87/
      onelabel actually advance (per the gap-15 lesson: verify, don't assume).
-     For schart specifically, first check whether its shape really is this
-     block (it has INPUT statements and no obvious FOR — see trace 2 notes).
+     schart has INPUT statements and no obvious FOR loop in evidence — check
+     first whether its shape is really this same mechanism triggered by
+     something other than a literal FOR (e.g. internal string handling)
+     before assuming it matches.
 2. **Byte 90 (5 files)** — 4 are set-aside unwitnessable NOP pairs;
    diagnose rstprint.exe's occurrence before assuming it matches (one
    hexdump at the failing offset settles it). If it matches, the bucket is
@@ -247,7 +256,149 @@ static arrays plus mixed prompted/bare INPUT statements. That probe was
 built this session (trace 2) — **the INPUT angle was a red herring**: the
 real reproducer below has zero INPUT statements.
 
-### Trace 2 (2026-07-17, this session, later) — real reproducer found, root cause narrowed but NOT fixed
+### Trace 3 (2026-07-17, same session, continued) — root cause mechanism identified precisely; NOT yet fixed
+
+Continuing trace 2 below: trace 2's "three contradicting hypotheses" were
+all artifacts of **one arithmetic slip** (manually re-deriving `walk_run`
+by hand instead of running it — it does NOT fail on `q_gap16q`; re-running
+it in Python gives a clean `dend=0x362` covering every real scalar). With
+`walk_run` trusted, the correct chain is: `dend=0x362(866)` → `pool_base=
+align16(866)+4=884` → `ds=P+4-884=0x8700` (**not** `0x8730` — trace 2's
+"verified" `ds` was wrong; it was only self-consistent for the array grid
+in isolation, via `find_statics`'s tolerant `pos+=2` fallback scan finding
+a coincidentally-valid 10-record run at the wrong base). Under the
+*correct* `ds=0x8700`:
+
+- The marker sits at disp `0x880` from `ds`... no — sits at file `P=
+  0x8a70`, disp `832` from `ds=0x8700`, i.e. `pool_base-4=832`,
+  `pool_base=836`... **this is still the trace-2 contradiction** if taken
+  at face value (real scalar evidence needs `pool_base>=884`). The
+  resolution: **`pool_base` is genuinely `884`, and `ds` is genuinely
+  `0x8700` — the marker's file position `P` and `pool_base-4` do NOT have
+  to differ by `ds` alone once a scalar/array overlap (below) is in play.**
+  Don't re-derive `ds` from the marker for this shape; derive it from
+  `dend` as the "no runtime arrays" loop already does — that part of the
+  algorithm was never wrong.
+- `find_statics(ds=0x8700, vb=VAR_BASE, n=10)` **fails** (returns `None`):
+  the real records start 48 bytes into the window
+  (`ds+VAR_BASE=0x8820`, but the first record is at `0x8850`), and the
+  window `end=ds+sb=0x8a3c` cuts off 6 bytes before the 10th record's
+  populated bytes finish (same proximate symptom as trace 1's schart
+  window-cutoff, now with a root cause).
+- **The 48-byte block genuinely occupies `[ds+VAR_BASE, ds+VAR_BASE+48)`
+  — i.e. it comes *before* the array grid, exactly as first suspected.**
+  It is the same self-describing 48-byte structure documented below
+  (`00 00 10 01`×4 then 8 LE words `[scalar_band_width, sb, 0,
+  sb+scalar_band_width, n_static, VAR_BASE, 0, sb]`).
+- **And separately, the scalar band (`[sb, dend) = [828, 866)`) overlaps
+  the grid's OWN span.** Grid total footprint under this model is
+  `48 + ARR_BLOCK*10 = 588` bytes, `[VAR_BASE, VAR_BASE+588) = [288,
+  876)`. The scalar band `[828, 866)` sits entirely inside that range —
+  specifically inside the **last array slot's own 54-byte reservation**
+  (slot 9, 0-indexed, `[822, 876)` relative to `VAR_BASE`, which is `P1`
+  in reverse-DIM order — confirmed via its `addsi:1792` match). Byte-exact:
+  `H%`'s disp (828) lands 6 bytes *inside* `P1`'s own populated 12-byte
+  record header (`[822, 834)`, specifically the `esz` field at `disp+6`);
+  the two FOR-phantom words and `I%` (834) land in what would be `P1`'s
+  `lo`/`hi` bounds fields and its trailing pad; `G%`/`F#`/`E#`/`D`/`C`/
+  `B%`/`A%` (836…864) fill the rest of that slot's normal padding.
+
+**Working theory (untested further): TB's compiler frees a static array's
+54-byte bookkeeping slot for scalar reuse once nothing at runtime needs to
+read that record again** — plausible because a static array with a
+compile-time-constant base needs its record only for *codegen* (computing
+`addsi` immediates) and for services this probe never uses (Bounds
+checking, ERASE, array SUB-params); `P1`'s own last runtime use (the FOR
+loop) happens *before* `H%`'s statement reuses its slot. **This was tested
+and is not simply "reuse happens whenever Bounds-check is off"**: compiling
+`q_gap16q.bas` with `--toggles B` (Bounds ON, via `tb_v86_compile.js
+--toggles B --tb tb_floppy.img`) produces the **exact same** 48-byte
+block and the same record positions/overlap — so Bounds-checking is not
+the gate. What the actual gate is remains open.
+
+**Follow-up probes this session (after trace 3's initial writeup) — items
+1 and 2 above answered, both confirmed via fresh oracle-compiled probes**
+(`wild/probes_gap16/q_gap16s.bas`, `q_gap16t.bas`, not yet promoted —
+save alongside the others before the next session):
+
+1. **Answered: reuse targets a position-fixed slot, NOT whichever array's
+   last use finishes first.** `q_gap16s.bas` is `q_gap16q.bas` with the FOR
+   loop retargeted to index `S3` (last-declared → reverse-DIM slot 0)
+   instead of `P1` (first-declared → slot 9). The scalar evidence disps
+   (`0x33c/0x342/0x344/0x35e/0x360`) are byte-for-byte IDENTICAL to the
+   `P1` version — the overlap always lands in the grid's *last* slot
+   position regardless of which array the loop actually touches. Fails the
+   same way (`DGROUP layout not solvable`).
+
+2. **Answered: the scalar band DOES spill across multiple array slots when
+   wide enough — it is not capped at one 54-byte slot.** `q_gap16t.bas`
+   widens the scalar band from 38 bytes (7 scalars + FOR overhead) to 62
+   bytes (20 scalars + FOR overhead). Recomputing `walk_run`/`dend`
+   directly (not by hand — see the process note below) confirms: the real
+   array-grid start (found via the `ds`-independent brute-force record
+   scan) sits at DS-relative disp `VAR_BASE + 64` this time, not `VAR_BASE
+   + 48`. **`64 = align16(62)` and `48 = align16(38)` and `48 = align16(48)`
+   (the middle 48-byte-scalar-band probe) — three-for-three, the leading
+   gap before the array grid equals `align16(total_scalar_band_width)`
+   exactly.** And the scalar band's start (disp 828) now falls inside
+   *slot 8* (grid-relative `[784, 838)`), one slot earlier than before —
+   confirmed spillover into a second array slot.
+
+**Emerging general picture (still not a fully closed-form rule — do not
+implement from this alone, see below)**: the array grid's real start,
+relative to `VAR_BASE`, is `align16(total_scalar_band_width)`, and the
+grid's real end sits close to (empirically, exactly `+8` from)
+`pool_base`. The scalar band's own disps (`sb..dend`, computed by
+`walk_run` exactly as today, unchanged) numerically fall *inside* the
+array-grid's disp range and can span more than one 54-byte slot. This
+looks less like "array slot memory gets reused" and more like: **the
+`align16`-rounded scalar-band width is being treated as a *fixed offset
+prepended to the whole DGROUP layout* whenever this FOR-loop shape is
+present** — i.e. a missing `vb`/`sb` adjustment term, not literal memory
+reuse. This reframing is more promising for a clean fix (one added term
+in the `sb`/`vb` formulas, no need to special-case which grid bytes are
+"free") but is NOT yet verified algebraically against more than 3 data
+points (all with `n_static=10`; nothing yet varies `n`).
+
+**Process note, worth repeating for whoever continues this**: earlier in
+this same trace, three "contradicting hypotheses" wasted significant time
+before being traced back to hand-simulating `walk_run` incorrectly instead
+of just running the function. When re-deriving any of layout.py's
+evidence sets or walks by hand to reason about a hypothesis, **run the
+actual function against the actual op stream first** — every dead end in
+this investigation so far was a manual-arithmetic slip, not a wrong idea.
+
+**Concrete next steps, in priority order**:
+1. Get a 4th (and 5th) data point with a *different* `n_static` (not 10)
+   to test whether `grid_start - VAR_BASE = align16(scalar_band_width)`
+   holds in general, or was a coincidence tied to `n=10` specifically
+   (recall `n=9` already decodes fine *without* triggering this at all —
+   find the actual `n` threshold, and re-check the `align16` relationship
+   at e.g. `n=11`, `n=15`, with a couple of different scalar-band widths
+   each, to fit the general formula for `grid_start` and `pool_base` as
+   functions of `(VAR_BASE, n, width)`.
+2. Once the formula is pinned across several `(n, width)` pairs, implement
+   it in `layout.py` — likely as an additional candidate `dc`/`grid-offset`
+   term derived from `align16(dend - sb)`, tried alongside the existing
+   `dc=dend` candidate in the "no runtime arrays" loop (around line 309),
+   *not* as a change to `walk_run` itself (which has been correct this
+   whole time) or to `find_statics`'s per-record advance logic (also
+   correct — it already tolerates irregular spacing via its `pos+=2`
+   fallback; only the *window bound* and the *grid base* need to move).
+3. Byte-exact verify both dialects; promote probe(s) as `t1_*`/`v10_*`
+   fixtures with pin tests; regenerate goldens; capture dosout.
+4. Re-scan wild; confirm each of schart/hfprop/vhfprop/inv87/invoice/
+   onelab87/onelabel actually advances (gap-15 lesson: verify, don't
+   assume). schart has INPUT statements and no obvious FOR loop in
+   evidence — check first whether its shape is really this same mechanism
+   triggered by something other than a literal FOR before assuming it
+   matches.
+
+**Superseded material from trace 2 below, kept only for the "what was
+ruled out and why the reasoning was wrong" record — do not re-derive
+`ds=0x8730` for this shape, it's confirmed incorrect (see above).**
+
+### Trace 2 (2026-07-17, this session, earlier) — real reproducer found, root cause narrowed but NOT fixed
 
 **Minimal oracle-verified reproducer** (`wild/probes_gap16/q_gap16q.bas`,
 compiles clean via `oracle.compile_bas`, TB 1.1):
