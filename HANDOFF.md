@@ -7,20 +7,37 @@ gitignored, copyrighted shareware — **never commit them**).
 
 ## Where things stand
 
-`python -m tbx.tools.scan_wild wild/hits` — 84 EXEs: 2 decode OK, 82 fail.
-Current tally (post gap 15):
+`python -m tbx.tools.scan_wild wild/hits` — 84 EXEs: 3 decode OK, 81 fail.
+Current tally (post gap 17):
 
 | count | error | status |
 |---|---|---|
 | 15 | INT cd | unwitnessable runtime-revision artifact — not actionable (see `scan_wild.py` docstring) |
-| 5 | DGROUP layout not solvable | **gap 16, needs fresh diagnosis — see below** (gap 15's shape closed, but none of the 5 wild files actually had it) |
+| 7 | DGROUP layout not solvable | **gap 16, needs fresh diagnosis — see below** (grew from 5 to 7: onelab87/onelabel advanced into it after gap 17 closed) |
 | 4 | byte 90 | set aside: unwitnessable FWAIT-revision skew (3 probe variants all compile INT 3Dh) |
-| 3 each | INT EC sub c4, byte ea, ce, 83, 81, 26 | next tier, undiagnosed |
+| 3 each | byte ea, ce, 83, 81, 26 | next tier, undiagnosed |
 | 2 each | EC sub 66, INT 8c, FP dc/04, byte ff, 8c, 3b, 29, 03, 01 | then singles |
 
 ## Recently closed (this campaign, newest first)
 
-- **Gap 15, static string array at constant index** (this session): static
+- **Gap 17, RUN file$** (this session): `RUN "file$"` (loads and runs a
+  DIFFERENT program) compiles to `movsi <string desc>; rt 0x9C (push); INT
+  EC sub C4` — a distinct statement dispatch from bare `RUN`'s raw
+  jmp-to-start (already handled). Sub 0xC4 sits alphabetically between
+  RMDIR (0xC2) and SHELL/SCREEN in the EC sub-op table, exactly where a
+  gap existed. `ir.Run` gained an optional `file` field (`None` = bare
+  RUN); `core.py`'s `os_system` handler pops the pushed string and builds
+  `ir.Run(file)`, mirroring `ir.Chain`. c0 doesn't support it (no
+  host-process-replace surrogate for loading a different program) and now
+  raises `_Unsupported` explicitly instead of silently mistranslating it
+  as a restart — waived in `test_c0.py`. Byte-exact verified both dialects
+  and both a literal (`RUN "X.BAS"`) and variable (`RUN A$`) filename
+  form; fixtures t1_run2/v10_t1_run2 (literal form; variable form shares
+  the same decode path so wasn't promoted separately), pinned in
+  `test_wild_batch3.py::test_decode_t1_run2` + `test_tb10_dialect.py`'s
+  `PAIRS`. Closes wild ck.exe fully; onelab87.exe/onelabel.exe advanced
+  into the DGROUP-layout gap (gap 16) instead.
+- **Gap 15, static string array at constant index** (2026-07-17): static
   string array element access (`DIM A$(5)` / `A$(2) = ...`) compiles
   `movsi <array_base + 4*index>`; that disp is neither a scalar slot nor a
   pool descriptor. Two fixes in `layout.py`'s `finish`: (1) the descriptor
@@ -80,6 +97,47 @@ another fix — do not assume it's a small tweak.
 
 hfprop/vhfprop/inv87/invoice are untested against this specific finding;
 they may or may not share schart's exact shape.
+
+**Further traced (2026-07-17, same session)**: found the right `ds`
+(`0xf900`, from `pool_base=0x4b4` — confirmed correct because `INPUT`'s
+bare-prompt sentinel disp `0x4b0` == `pool_base-4` exactly, and because
+extending `find_statics`'s scan window at this `ds` well past `sb` turns
+up EXACTLY 10 valid, contiguously-packed (each `+0x36` apart) static slot
+records with bases `0x7e0, 0x810, 0x840, 0x1fc0, 0x7430, 0xc8a0, 0xc8d0,
+0xc900, 0xc930, 0xc960` — the first two and last five exactly match the 7
+`addsi` bases seen in the ops (the other 3 are presumably `[si]`-only or
+constant-index arrays with no `addsi` evidence). So `ds` and the true
+static count (`n=10`) are BOTH right.
+
+The bug: `find_statics(ds, sb, n)` bounds its scan window at
+`ds+sb` (`sb = VAR_BASE + ARR_BLOCK*n`), i.e. it assumes all `n` records
+are packed within exactly `n * 0x36` bytes from the grid start
+(`ds+VAR_BASE`). For schart.exe they are NOT: the 10 real records sit
+contiguously (correctly `0x36` apart from each other) but only starting
+368 bytes (`0x170`) into the grid, well past where a tight `n*0x36`
+window would look for record 1 — so the window cuts off after only 3
+records instead of reaching all 10. Hex-dumped that leading 368-byte
+span: it is NOT zero padding (ruled out the "zero-init table [that
+floats before static-only records]" explanation from `find_statics`'s
+own docstring) — it's dense structured binary data, unclear origin
+(possibly another data structure entirely occupying that space, or slot
+records in a format `_parse_static_slot` doesn't recognize). Did not
+identify what it actually is.
+
+**Why not fixed this session**: this is exactly the situation the
+calibration rule warns against — patching `find_statics`'s window
+math without understanding what that leading 368 bytes actually IS
+would be guessing, and schart.exe (a wild EXE, not an authored fixture)
+can't be byte-exact verified against the oracle even if a fix is found
+(see the wild-corpus runtime-revision-skew caveat). Next step for
+whoever picks this up: identify what occupies file offset `ds+VAR_BASE`
+through `ds+VAR_BASE+0x170` (`0xfa20`-`0xfb90` for this specific `ds`) —
+compare against a corpus fixture with a similarly large static-array
+count to see if there's a known structure (DATA pool? another array
+type not yet in `_parse_static_slot`?) that explains it, THEN author a
+minimal authored probe reproducing that exact shape for oracle
+verification, per the usual workflow — don't patch based on schart.exe
+alone.
 
 ## The workflow (each gap, see gap 9–14 commits for examples)
 

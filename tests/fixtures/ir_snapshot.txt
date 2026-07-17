@@ -1256,8 +1256,11 @@ Rset(target=Var(name='A$'), source=StrLit(value='HI'))
 End()
 
 ## t1_run
-Run()
+Run(file=None)
 End()
+
+## t1_run2
+Run(file=StrLit(value='X.BAS'))
 
 ## t1_sarr
 Input(prompt=None, var=Var(name='A'), comma=False)
@@ -2721,8 +2724,11 @@ Rset(target=Var(name='A$'), source=StrLit(value='HI'))
 End()
 
 ## v10_t1_run
-Run()
+Run(file=None)
 End()
+
+## v10_t1_run2
+Run(file=StrLit(value='X.BAS'))
 
 ## v10_t1_sarr
 Input(prompt=None, var=Var(name='A'), comma=False)

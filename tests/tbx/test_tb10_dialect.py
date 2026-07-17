@@ -15,6 +15,7 @@ PAIRS = [
     "t1_int",
     "t1_arr1",
     "t1_sstat",
+    "t1_run2",
 ]
 
 

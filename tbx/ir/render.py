@@ -243,7 +243,7 @@ def _us_decl(s) -> str | None:
     if isinstance(s, ExitDef):
         return "EXIT DEF"
     if isinstance(s, Run):
-        return "RUN"
+        return "RUN" if s.file is None else f"RUN {unparse(s.file)}"
     if isinstance(s, Dim):
 
         def bound(b):

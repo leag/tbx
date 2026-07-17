@@ -150,6 +150,8 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.Shell(walk(s.cmd))
         if isinstance(s, ir.Chain):
             return ir.Chain(walk(s.file))
+        if isinstance(s, ir.Run):
+            return ir.Run(None if s.file is None else walk(s.file))
         if isinstance(s, ir.OnGoto):
             return ir.OnGoto(walk(s.selector), s.targets)
         if isinstance(s, ir.OnGosub):

@@ -1071,6 +1071,8 @@ class _Gen:
             self.uses_clear = True
             return ["tb_clear_all();"]
         if isinstance(s, ir.Run):
+            if s.file is not None:
+                raise _Unsupported("RUN file$ (loads a different program)")
             self.uses_clear = True
             out = ["tb_clear_all();"]
             if self.data:
@@ -1327,7 +1329,7 @@ class _Gen:
                     self.labels.add(node.target)
                 if node.event == "TIMER":
                     self.uses_timer = True
-            if isinstance(node, ir.Run):
+            if isinstance(node, ir.Run) and node.file is None:
                 self.labels.add(0)
             for f in getattr(node, "__dataclass_fields__", ()):
                 v = getattr(node, f)

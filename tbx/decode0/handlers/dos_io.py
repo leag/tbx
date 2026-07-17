@@ -53,6 +53,11 @@ def os_system(state: DecodeState, op, addr, kind) -> bool:
         state.cur = None
         state.k += 1
         return True
+    if kind == "run_file":  # RUN file$ (EC sub C4)
+        state.put(ir.Run(state.sstack.pop()), state.cur)
+        state.cur = None
+        state.k += 1
+        return True
     if kind == "environ":  # ENVIRON s$ (EC sub 34)
         state.put(ir.Environ(state.sstack.pop()), state.cur)
         state.cur = None

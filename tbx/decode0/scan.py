@@ -931,6 +931,11 @@ def _scan(
                 ops.append((p, "rmdir"))
                 p += 3
                 continue
+            if sub == 0xC4:  # RUN file$ (pops pushed name; distinct from bare
+                # RUN's raw jmp -- loads and runs a different program)
+                ops.append((p, "run_file"))
+                p += 3
+                continue
             if sub == 0xCE:  # SHELL cmd$ (pops pushed cmd; empty = bare)
                 ops.append((p, "shell"))
                 p += 3

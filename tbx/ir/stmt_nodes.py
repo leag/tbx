@@ -155,7 +155,11 @@ class SelectCase:
 
 @dataclass(frozen=True)
 class Run:
-    """RUN — restart the program from the beginning (`eb` short jump to `start`)."""
+    """RUN — bare form restarts the program from the beginning (`eb`/`e9` jump
+    to `start`); RUN file$ loads and runs a different program (push + EC sub
+    C4), `file` is None for the bare form."""
+
+    file: object = None  # StrLit | Var ($) | None
 
 
 @dataclass(frozen=True)

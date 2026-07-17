@@ -233,6 +233,17 @@ def test_decode_t1_sstat():
     )
 
 
+def test_decode_t1_run2():
+    # RUN file$ (EC sub C4): loads and runs a different program -- distinct
+    # from bare RUN's raw jmp-to-start (byte ff family closed it, this is a
+    # separate INT EC statement dispatch, push + pop off sstack like CHAIN)
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_run2.exe"))
+    assert prog[0] == ir.Run(ir.StrLit("X.BAS"))
+    assert emit0.emit(prog) == '10 RUN "X.BAS"\n'
+
+
 if __name__ == "__main__":
     test_decode_t1_fcmp()
     test_decode_t1_fori()
@@ -251,4 +262,5 @@ if __name__ == "__main__":
     test_decode_t1_poolrun()
     test_decode_t1_decr1()
     test_decode_t1_sstat()
+    test_decode_t1_run2()
     print("ALL PASS")
