@@ -291,6 +291,10 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             # first body statement (Local's placeholder names are never seen
             # before this point), so declaration order == first-store order
             return ir.Local(tuple(name(n) for n in s.names))
+        if isinstance(s, ir.Common):
+            # always the program's first statement, so the COMMON band's
+            # slots letter first, in band order
+            return ir.Common(tuple(name(n) for n in s.names))
         if isinstance(s, ir.SubDef):
             params = tuple(
                 name(p) for p in s.params

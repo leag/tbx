@@ -48,6 +48,7 @@ from tbx.ir.stmt_nodes import (
     Close,
     Cls,
     Color,
+    Common,
     Data,
     DateTimeSet,
     DefFn,
@@ -263,6 +264,8 @@ def _us_decl(s) -> str | None:
         return "SHARED " + ", ".join(s.names)
     if isinstance(s, Local):
         return "LOCAL " + ", ".join(s.names)
+    if isinstance(s, Common):
+        return "COMMON " + ", ".join(s.names)
 
 
 def _us_output(s) -> str | None:

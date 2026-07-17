@@ -488,6 +488,17 @@ def _finalize(state: DecodeState, addr) -> Program:
                 fixed_lines[len(new_s) - 1] = hookline[i]
         state.stmts[:], state.addrs[:] = new_s, new_a
         traced_idx = set(fixed_lines)
+    # COMMON compiles to no ops -- only the DGROUP band stamps the layout
+    # solver recovered (see layout._bands_layout). Synthesize the canonical
+    # declaration as the first statement, named/typed via loc() like any
+    # other slot (witnessed t1_common1).
+    if state.lay.get("common_slots"):
+        if fixed_lines is not None:
+            raise ValueError("COMMON alongside TRON trace hooks is unsupported")
+        state.stmts.insert(
+            0, ir.Common(tuple(state.loc(d).name for d in state.lay["common_slots"]))
+        )
+        state.addrs.insert(0, None)
     # $EVENT regions: when trapping is in play the compiler emits a CC
     # poll hook before EVERY statement; $EVENT OFF..ON suppresses them
     # for a run of statements (witnessed t1_evreg), or everywhere when OFF

@@ -136,6 +136,26 @@ Assign(target=Var(name='C%'), value=Lit(value=1))
 CallStmt(name='SUB1', args=(Var(name='C%'),))
 End()
 
+## t1_common1
+Common(names=('A%', 'B%', 'C%', 'D%', 'E%', 'F$'))
+Assign(target=Var(name='G$'), value=StrLit(value='HI'))
+Assign(target=Var(name='H%'), value=Lit(value=7))
+Print(items=(Var(name='G$'), Var(name='H%')), newline=True, file=None, commas=None)
+End()
+
+## t1_common2
+Common(names=('A$', 'B$', 'C$'))
+Assign(target=Var(name='D$'), value=StrLit(value='HI'))
+Assign(target=Var(name='E$'), value=StrLit(value='YO'))
+Print(items=(Var(name='D$'), Var(name='E$')), newline=True, file=None, commas=None)
+End()
+
+## t1_common3
+Common(names=('A$', 'B$', 'C$', 'D$', 'E$', 'F$', 'G$', 'H$', 'I$', 'J$'))
+Assign(target=Var(name='J$'), value=StrLit(value='HI'))
+Print(items=(Var(name='J$'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_convf
 Assign(target=Var(name='A#'), value=DblLit(value=1.5))
 Assign(target=Var(name='B'), value=SingleLit(value=2.5))
@@ -1803,6 +1823,13 @@ End()
 
 ## v10_t1_clear
 Clear()
+End()
+
+## v10_t1_common2
+Common(names=('A$', 'B$', 'C$'))
+Assign(target=Var(name='D$'), value=StrLit(value='HI'))
+Assign(target=Var(name='E$'), value=StrLit(value='YO'))
+Print(items=(Var(name='D$'), Var(name='E$')), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_convf

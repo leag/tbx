@@ -849,6 +849,19 @@ class Local:
 
 
 @dataclass(frozen=True)
+class Common:
+    """COMMON v[, v...] -- declares variables passed across CHAIN in a
+    DGROUP band of their own at DS:0110, below the ordinary scalars. The
+    compiler is lossy about the declaration's shape: interleaving of numeric
+    and string names, numeric width mixes of equal total size, and splitting
+    across several COMMON statements all compile identically (witnessed
+    t1_common1), so the decoder emits one canonical statement: numeric
+    slots first, then strings, in band order."""
+
+    names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class BodyLine:
     """A jump target INSIDE a SUB/DEF FN body: physical line `phys` (1-based,
     counting the header as 0) of the block at top-level statement index `stmt`.

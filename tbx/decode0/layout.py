@@ -300,7 +300,161 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
             lay = finish(ds, n, statics, sb, run_c, strs_c, pool_base, 0)
             if lay is not None:
                 return lay
+
+    # COMMON: the compiler stamps two 16-byte band descriptors into the init
+    # image, (num_size, num_base)(str_size, num_base+num_size)(0, num_base)
+    # (0, num_base) -- one for the CHAIN-persistent COMMON band at DS:0110 and
+    # one for the ordinary scalars, which are then SEGREGATED numerics-first
+    # (witnessed t1_common1; positions vary and may overlay band cells, so the
+    # stamps are found by shape, never position). pool = align16(ord_end) + 4
+    # closes the loop on ds. Only engaged for a non-empty COMMON band: plain
+    # programs carry degenerate stamps but solve on the walk paths above.
+    def read_stamp(pos):
+        if pos < 0 or pos + 16 > len(exe):
+            return None
+        w = struct.unpack_from("<8H", exe, pos)
+        s1, b1, s2, b2, w3, b3, w4, b4 = w
+        if w3 or w4 or b3 != b1 or b4 != b1 or b2 != b1 + s1:
+            return None
+        if b1 < 0x110 or s1 >= 0x1000 or s2 >= 0x1000 or s1 % 2 or s2 % 4:
+            return None
+        return s1, s2, b1
+    if not (addsi_bases or argarr_disps or blit_disps):
+        # The walk paths' evidence sets are VAR_BASE-filtered, but the COMMON
+        # band starts at 0x110: rebuild them 0x110-filtered so a reference
+        # into the band's first paragraph types its slot (or fails loud)
+        # instead of being silently dropped.
+        fp64_c = {o[2] for o in ops if o[1] in ("fld64", "fstp64")} | {
+            o[3] for o in ops if o[1] in ("fold64", "fold_n64")
+        }
+        long_c = {o[2] for o in ops if o[1] in ("fild32", "fistp32")} | {
+            o[3] for o in ops if o[1] == "ifold32"
+        }
+        int_c = {
+            o[2]
+            for o in ops
+            if o[1]
+            in (
+                "movax_m", "addax_m", "imul_m", "movm_imm", "movm_ax",
+                "inc_m", "dec_m", "cmp_mi8", "cmpm_ax", "movsim",
+            )
+        }
+        fild_c = {o[2] for o in ops if o[1] == "fild"}
+        movsi_c = {
+            ops[i][2]
+            for i in range(len(ops))
+            if ops[i][1] == "movsi"
+            and ops[i][2] >= 0x110
+            and not (
+                i + 1 < len(ops)
+                and ops[i + 1][1] in ("far_spush", "far_strassign", "add_si_sp")
+            )
+        }
+        fp64_c = {d for d in fp64_c if d >= 0x110}
+        long_c = {d for d in long_c if d >= 0x110}
+        int_c = {d for d in int_c if d >= 0x110}
+        fild_c = {d for d in fild_c if d >= 0x110}
+        for pool_base in range(0x124, 0x1124, 16):
+            ds = P + 4 - pool_base
+            if ds % 16 or ds <= 0:
+                continue
+            stamps = []
+            for r in range(0x110, pool_base - 4, 16):
+                st = read_stamp(ds + r)
+                if st is not None:
+                    stamps.append(st)
+            com = [s for s in stamps if s[2] == 0x110 and s[0] + s[1] > 0]
+            ord_ = [
+                s
+                for s in stamps
+                if ((s[2] + s[0] + s[1] + 15) & ~15) + 4 == pool_base
+                and s[2] >= 0x110 + sum(com[0][:2] if com else (0,))
+            ]
+            if len(com) != 1 or len(ord_) != 1:
+                continue
+            lay = _bands_layout(
+                exe, com[0], ord_[0], pool_base, ds, P,
+                fp_disps, fp64_c, long_c, int_c, fild_c,
+                movsi_c, prompt_disps,
+            )
+            if lay is not None:
+                return lay
     raise ValueError("DGROUP layout not solvable from the calibrated rules")
+
+
+def _bands_layout(
+    exe, com, ord_, pool_base, ds, P,
+    fp_disps, fp64_disps, long_disps0, int_disps0, fild_disps0,
+    movsi_disps, prompt_disps,
+):
+    """Validate a COMMON stamp pair against the op-stream evidence and build the
+    layout: slots typed by evidence inside each sub-band, 2-byte '%' fillers in
+    unreferenced numeric space (width mixes of equal size compile identically,
+    so the filler choice is byte-safe -- witnessed t1_common1), '$' every 4
+    bytes of string space. Returns None if any evidence contradicts the bands."""
+    run: dict[int, int] = {}
+    strs: set[int] = set()
+    long_slots: set[int] = set()
+    spans = []
+    for s_num, s_str, base in (com, ord_):
+        spans.append((base, base + s_num, base + s_num + s_str))
+    # numeric sub-bands: place evidenced widths, fill gaps with 2-byte ints
+    for lo, mid, _hi in spans:
+        d = lo
+        while d < mid:
+            if d in fp64_disps:
+                run[d] = 8
+                d += 8
+            elif d in long_disps0:
+                run[d] = 4
+                long_slots.add(d)
+                d += 4
+            elif d in fp_disps:
+                run[d] = 4
+                d += 4
+            else:  # int evidence or unreferenced filler
+                run[d] = 2
+                d += 2
+        if d != mid:
+            return None  # an evidenced width straddles the band edge
+    for _lo, mid, hi in spans:
+        for d in range(mid, hi, 4):
+            run[d] = 4
+            strs.add(d)
+    # every piece of evidence must land on a slot of the matching kind, or in
+    # the pool window past the marker
+    for d in int_disps0 | fild_disps0:
+        if d >= 0x110 and not (run.get(d) == 2 or d >= pool_base - 4):
+            return None
+    for d in fp_disps:
+        if d >= 0x110 and not (run.get(d) == 4 and d not in strs) and d < pool_base - 4:
+            return None
+    for d in fp64_disps:
+        if run.get(d) != 8 and d < pool_base - 4:
+            return None
+    for d in movsi_disps | prompt_disps:
+        if d in strs or d == pool_base - 4:
+            continue
+        off = P + 4 + d - pool_base
+        if d < pool_base - 4 or off + 2 > len(exe):
+            return None
+        if not struct.unpack_from("<H", exe, off)[0] & 0x8000:
+            return None
+    com_slots = sorted(d for d in run if d < com[2] + com[0] + com[1])
+    return {
+        "ds": ds,
+        "delta": 0,
+        "var_base": ord_[2],
+        "scalar_base": 0x110,
+        "scalars": run,
+        "strs": strs,
+        "long_slots": long_slots,
+        "pool_base": pool_base,
+        "arrs": [],
+        "rt_blocks": [],
+        "n_static": 0,
+        "common_slots": com_slots,
+    }
 
 
 def _line_table(

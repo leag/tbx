@@ -863,6 +863,11 @@ class _Gen:
             # scope declaration only: the decoder already resolved every name
             # to its program-unique slot, so there is nothing to generate
             return []
+        if isinstance(s, ir.Common):
+            # declaration only under c0: variables are file-scope globals
+            # anyway, and tb_chain (a documented surrogate) does not carry
+            # COMMON values into the chained program
+            return []
         if isinstance(s, ir.Local):
             # true per-call locals need real (non-static) C storage, re-zeroed
             # every call -- the SUB-local declaration pass below doesn't
