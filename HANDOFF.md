@@ -190,6 +190,52 @@ another fix — do not assume it's a small tweak.
 hfprop/vhfprop/inv87/invoice are untested against this specific finding;
 they may or may not share schart's exact shape.
 
+## Gap INT-8c — likely ON KEY GOSUB related, UNDIAGNOSED
+
+3 wild files (baby.exe, help.exe, prtguide.exe, all TB 1.0): raw byte
+`CD 86` (canonicalizes to vector 0x8C via TB 1.0's +6 vec_shift — see
+`dialect.py`'s `canon_vec`) is unmapped in `_scan_int`'s vector table
+(neighbors: 0x8A stack-test GOSUB, 0x8B stack-test RETURN, 0x8F DEF FN
+terminator — 0x8C/0x8D sit in the gap between them).
+
+**Strong lead, not yet confirmed**: all three files' ONLY event-trap
+declarations are `ON KEY(n) GOSUB` (`on_trap` sub `0x78`="KEY") —
+baby.exe alone has EIGHT of them (F1–F8 menu pattern) plus many
+`trap_ctl 0x5A/0x5E` (KEY OFF/ON) toggles. This is the only common
+thread found across the three files' surrounding context (which is
+otherwise unrelated: CLS+assignment, COMMAND$/UCASE$+strassign, a
+plain retf).
+
+**Ruled out** (compiled via oracle, decoded clean, no `CD 86` anywhere
+in the output):
+- A single `ON KEY(1) GOSUB` + `KEY(1) ON` + assignment + PRINT (probe
+  `q_onkey.bas`) — full ops dump has zero `cd 86` occurrences.
+- `ON TIMER(1) GOSUB` + `TIMER ON` (probe `q_ontimer.bas`) — same event-
+  trap mechanism, ruled out as a possible confusion with "sub 120".
+- `A$ = UCASE$(COMMAND$)` alone (probe `q_cmdstr.bas`), matching
+  help.exe's immediate preceding ops — no correlation.
+- A plain FOR loop under the Keyboard-break ('K') toggle (probe
+  `q_kbloop.bas`) — all three wild files carry 'K' too, tested as an
+  alternate hypothesis, ruled out.
+
+Also ruled out: two simultaneous `ON KEY` traps (`q_onkey2.bas`, 2
+GOSUB targets + 2 `KEY(n) ON`) — still zero `cd 86` in the output.
+
+**Not yet tried**: a statement INSIDE the GOSUB handler itself, since
+the poll/check (if that's what this is) might only appear there and
+none of my probes have exercised the actual handler bodies during
+compilation (the handlers just PRINT+RETURN, same as the wild files'
+likely shape, but maybe the trigger needs the trap to interact with
+something specific inside the handler); baby.exe's EIGHT traps might
+need a genuine threshold (more than 2) to manifest, which would be an
+expensive/unusual thing for TB to gate on but not impossible; the
+`trap_ctl` (KEY ON/OFF) SEQUENCE pattern in baby.exe is unusually
+dense (interleaved on/off toggles across many lines) and might matter
+more than trap COUNT. This gap has consumed several probe iterations
+without success — worth checking whether help.exe's or prtguide.exe's
+actual `.bas` source (if ever recoverable, e.g. via a shareware-archive
+source listing) would shortcut the guessing.
+
 ## Gap 19 — byte 06 (filepatc/morcalc/pw, all TB 1.0), UNDIAGNOSED
 
 Surfaced by gap 18's closure (these 3 files previously failed on byte 26).
