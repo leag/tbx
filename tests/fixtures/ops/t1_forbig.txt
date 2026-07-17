@@ -1,0 +1,13 @@
+# t1_forbig dialect=1.1 start=08700
+08703:movm_imm:292:1
+08709:jmp:34588
+0870C:fild:292
+08711:rt:187
+08713:rt:184
+08717:addm_i8:292:18
+0871C:cmp_mi16:292:200
+08722:jcc:126:34572
+08724:end
+08727:epilogue
+# commits
+08715

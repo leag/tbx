@@ -194,6 +194,21 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         state.cur = None
         state.k += 1
         return True
+    if kind == "addm_i8":
+        # Integer FOR-NEXT increment for a literal STEP other than +-1 (those
+        # use inc_m/dec_m instead): `add word [I%], step` at the open FOR's
+        # test address. Rewrite the already-emitted ir.For statement's step
+        # in place -- it was provisionally Lit(1) when the header was folded,
+        # before this NEXT-side evidence was available (q_forstep/
+        # q_forstepneg). No bare (non-FOR) form is witnessed; fail loud.
+        if not (state.fors and state.fors[-1]["v"] == op[2]):
+            raise ValueError(f"unhandled addm_i8 (not an open FOR's var) at {addr:#x}")
+        f = state.fors[-1]
+        old = state.stmts[f["idx"]]
+        state.stmts[f["idx"]] = ir.For(old.var, old.init, old.limit, ir.Lit(op[3]))
+        f["step"] = op[3]
+        state.k += 1
+        return True
     if kind == "negax":  # subtraction setup
         state.ax = ir.Neg(state.ax)
         state.k += 1

@@ -880,7 +880,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             )
         elif (
             cmp_at_t is not None
-            and cmp_at_t[1] == "cmp_mi8"
+            and cmp_at_t[1] in ("cmp_mi8", "cmp_mi16")
             and state.stmts
             and isinstance(state.stmts[-1], ir.Assign)
             and isinstance(state.stmts[-1].target, ir.Var)
@@ -888,7 +888,11 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             and cmp_at_t[2] == state.vdisp(state.stmts[-1].target)
         ):
             # Integer FOR header: `I% = init; jmp cmp_addr` where the op at the
-            # target is `cmp word [I%], limit`. The step is always 1 (inc_m).
+            # target is `cmp word [I%], limit` (imm8 or, when the limit doesn't
+            # fit a signed byte, imm16 -- q_forbig). Step defaults to 1 (inc_m);
+            # a literal step other than +-1 rewrites this statement in place
+            # once the matching addm_i8 is seen at the NEXT (q_forstep/
+            # q_forstepneg).
             init_s = state.stmts.pop()
             a = state.addrs.pop()
             state.put(
@@ -899,6 +903,8 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 {
                     "v": cmp_at_t[2],
                     "test": t,
+                    "idx": len(state.stmts) - 1,
+                    "step": 1,
                     "body": state.ops[state.k + 1][0]
                     if state.k + 1 < len(state.ops)
                     else None,
@@ -1519,19 +1525,28 @@ def decode_user_code(exe: bytes) -> list[Any]:
             state.cur = None
             state.k += 3
             continue
-        if kind == "cmp_mi8" and state.fors and addr == state.fors[-1]["test"]:
+        if (
+            kind in ("cmp_mi8", "cmp_mi16")
+            and state.fors
+            and addr == state.fors[-1]["test"]
+        ):
             # Integer FOR-test guard: the cmp at the open FOR's test address is the
-            # integer NEXT template (`inc_m` was consumed; step is always 1).
+            # integer NEXT template (`inc_m`/`addm_i8` was consumed; cmp_mi16 when
+            # the limit doesn't fit a signed imm8, q_forbig). Ascending steps (the
+            # default, and any literal step >= 0) test JLE/JBE; descending literal
+            # steps (addm_i8 with a negative imm8) test JGE, its signed mirror
+            # (q_forstepneg).
             f = state.fors[-1]
             if op[2] != f["v"]:
                 raise ValueError(f"int NEXT: cmp disp mismatch at {addr:#x}")
+            wantcc = (0x7D,) if f.get("step", 1) < 0 else (0x7E, 0x76)
             if (
                 state.k + 1 >= len(state.ops)
                 or state.ops[state.k + 1][1] != "jcc"
-                or state.ops[state.k + 1][2] not in (0x7E, 0x76)
+                or state.ops[state.k + 1][2] not in wantcc
                 or state.ops[state.k + 1][3] != f["body"]
             ):
-                raise ValueError(f"int NEXT: expected JLE/JBE to body at {addr:#x}")
+                raise ValueError(f"int NEXT: expected JLE/JBE/JGE to body at {addr:#x}")
             state.put(ir.NextStmt(state.loc(f["v"])), state.cur)
             state.fors.pop()
             state.cur = None

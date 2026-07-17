@@ -259,6 +259,49 @@ def test_decode_t1_byref2():
     )
 
 
+def test_decode_t1_forstep():
+    # 83 06 = add word [disp16], imm8: the integer FOR-NEXT increment for a
+    # literal STEP other than +-1 (those use inc_m/dec_m instead). A literal
+    # limit AND a literal non-+-1 step both fold directly into their
+    # instructions (cmp_mi8 / addm_i8), so NEITHER temp word gets evidence --
+    # both reserved words before I% are phantom (walk_run's existing single-
+    # phantom bridge only covered one; this needed a second)
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_forstep.exe"))
+    assert prog[0] == ir.For(ir.Var("A%"), ir.Lit(1), ir.Lit(100), ir.Lit(10))
+    assert emit0.emit(prog) == (
+        "10 FOR A% = 1 TO 100 STEP 10\n20 PRINT A%\n30 NEXT A%\n40 END\n"
+    )
+
+
+def test_decode_t1_forstepn():
+    # Same addm_i8 fast path with a NEGATIVE literal step (imm8 sign-
+    # extended): the loop-continuation test flips to JGE (0x7D) instead of
+    # JLE/JBE, the signed-comparison mirror of the ascending case
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_forstepn.exe"))
+    assert prog[0] == ir.For(ir.Var("A%"), ir.Lit(100), ir.Lit(1), ir.Lit(-10))
+    assert emit0.emit(prog) == (
+        "10 FOR A% = 100 TO 1 STEP -10\n20 PRINT A%\n30 NEXT A%\n40 END\n"
+    )
+
+
+def test_decode_t1_forbig():
+    # 81 3E = cmp word [disp16], imm16: the int FOR-NEXT limit test when the
+    # limit doesn't fit a signed imm8 (cmp_mi8's range), needed on both the
+    # FOR-header recognition side and the NEXT-side test/jcc guard; paired
+    # here with a literal STEP (addm_i8) to cover both fixes together
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_forbig.exe"))
+    assert prog[0] == ir.For(ir.Var("A%"), ir.Lit(1), ir.Lit(200), ir.Lit(18))
+    assert emit0.emit(prog) == (
+        "10 FOR A% = 1 TO 200 STEP 18\n20 PRINT A%\n30 NEXT A%\n40 END\n"
+    )
+
+
 if __name__ == "__main__":
     test_decode_t1_fcmp()
     test_decode_t1_fori()
@@ -279,4 +322,7 @@ if __name__ == "__main__":
     test_decode_t1_sstat()
     test_decode_t1_run2()
     test_decode_t1_byref2()
+    test_decode_t1_forstep()
+    test_decode_t1_forstepn()
+    test_decode_t1_forbig()
     print("ALL PASS")

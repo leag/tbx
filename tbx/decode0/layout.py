@@ -66,7 +66,9 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
             "movm_ax",
             "inc_m",
             "dec_m",
+            "addm_i8",
             "cmp_mi8",
+            "cmp_mi16",
             "cmpm_ax",
             "movsim",
         )
@@ -149,6 +151,14 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
                 # allocates step+limit temp slots before I%, and the step slot
                 # is never referenced when STEP is the literal-1 INC fast path
                 # (witnessed t1_fori: 0x120 phantom, 0x122 limit, 0x124 I%).
+                run[d] = 2
+                d += 2
+            elif d + 4 in ints:
+                # Both temp slots phantom: a literal limit AND a literal step
+                # other than 1 need neither temp (the limit folds into cmp_mi8,
+                # the step into addm_i8), so both reserved words before I% go
+                # unreferenced (witnessed q_forstep: 0x120/0x122 phantom, 0x124
+                # I%).
                 run[d] = 2
                 d += 2
             else:

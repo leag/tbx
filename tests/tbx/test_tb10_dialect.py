@@ -17,6 +17,9 @@ PAIRS = [
     "t1_sstat",
     "t1_run2",
     "t1_byref2",
+    "t1_forstep",
+    "t1_forstepn",
+    "t1_forbig",
 ]
 
 

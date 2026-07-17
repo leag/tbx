@@ -8,19 +8,52 @@ gitignored, copyrighted shareware — **never commit them**).
 ## Where things stand
 
 `python -m tbx.tools.scan_wild wild/hits` — 84 EXEs: 3 decode OK, 81 fail.
-Current tally (post gap 18):
+Current tally (post gap 20):
 
 | count | error | status |
 |---|---|---|
 | 15 | INT cd | unwitnessable runtime-revision artifact — not actionable (see `scan_wild.py` docstring) |
-| 7 | DGROUP layout not solvable | **gap 16, needs fresh diagnosis — see below** (grew from 5 to 7: onelab87/onelabel advanced into it after gap 17 closed) |
+| 7 | DGROUP layout not solvable | **gap 16, needs fresh diagnosis — see below** |
 | 4 | byte 90 | set aside: unwitnessable FWAIT-revision skew (3 probe variants all compile INT 3Dh) |
-| 3 each | byte ea, ce, 83, 81, 06 | next tier, undiagnosed (byte 06 is new: filepatc/morcalc/pw advanced into it from gap 18) |
-| 2 each | EC sub 66, INT 8c, FP dc/04, byte ff, 8c, 3b, 29, 03, 01 | then singles |
+| 3 each | byte ea, ce, 81, 06, 01 | next tier, undiagnosed (byte 01 is new: menu.exe advanced into it from gap 20; byte 83 is fully gone) |
+| 2 each | EC sub 66, EC sub 38, INT 8c, FP de/1e, FP dc/04, byte ff, 8c, 3b, 29 | then singles |
 
 ## Recently closed (this campaign, newest first)
 
-- **Gap 18, by-ref int param IMUL fold** (this session): `26 F7 2C` = `imul
+- **Gap 20, integer FOR-NEXT with a literal STEP other than +-1, and/or a
+  limit too large for a signed imm8** (this session): `83 06 [disp16]
+  imm8` = `add word [disp16], imm8` is the FOR-NEXT increment fast path
+  for a literal STEP the compiler folds directly into the instruction
+  (`inc_m`/`dec_m` only cover +-1). New op `addm_i8`; on match against the
+  open FOR's loop var it rewrites the already-`put` `ir.For` statement's
+  step field IN PLACE (tracked via a new `"idx"` key in the FOR frame,
+  set when the statement is first emitted with a provisional `Lit(1)`)
+  rather than trying to know the step up front, since the ADD only
+  appears at the NEXT, after the body's already been scanned. A negative
+  literal step (sign-extended imm8) flips the loop-continuation jcc from
+  JLE/JBE to JGE (0x7D) at the paired `cmp_mi8` consumer. Discovering this
+  also surfaced a **second phantom scalar slot**: with both limit and
+  step literal, NEITHER of the FOR's two reserved temp words gets any
+  evidence (the existing single-phantom bridge in `walk_run` only
+  covered one), so `layout.py` gained a second `elif d + 4 in ints`
+  bridge. Testing surfaced one more sub-gap: `81 3E [disp16] imm16` =
+  `cmp word [disp16], imm16`, needed whenever the limit doesn't fit a
+  signed imm8 (`cmp_mi16`, wired into both the FOR-header recognition and
+  the NEXT-side test) — this turned out to affect even a plain step-1
+  FOR with a large limit, a latent gap independent of the STEP work.
+  Byte-exact verified both dialects across three fixtures (positive step,
+  negative step, large limit + step), t1_forstep/t1_forstepn/t1_forbig +
+  v10 variants, pinned in `test_wild_batch3.py` + `test_tb10_dialect.py`.
+  Closed wild football.exe/menu.exe/stat.exe's byte-83 failures; each
+  advanced into a distinct next gap (EC sub 38, byte 01, FP de/1e resp.) —
+  none share a common next blocker.
+  **Note**: while diagnosing, found a separate PRE-EXISTING bug (STEP -1
+  inside an integer FOR raises "displacement 0x124 is neither scalar nor
+  array element" — the phantom-slot walk apparently mishandles the
+  dec_m+FOR combination too) that no CURRENT wild file happens to trip;
+  left unfixed as out of this gap's scope, but worth a look if a future
+  wild file surfaces it.
+- **Gap 18, by-ref int param IMUL fold** (2026-07-17): `26 F7 2C` = `imul
   word es:[si]` — the multiplicative counterpart to the existing
   `far_addax_si`/`far_andax_si`/`far_cmpax_si` folds in the `les
   si,[bp+N]; 26 <op> es:[si]` by-ref-SUB-param family (gap 11). Fills a

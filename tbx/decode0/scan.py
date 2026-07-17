@@ -336,6 +336,16 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "cmp_mi8", d16, i8))
         p += 5
         return p
+    if b == 0x81 and exe[p + 1] == 0x3E:  # cmp word [disp16], imm16: the int FOR
+        d16, i16 = struct.unpack_from("<Hh", exe, p + 2)  # test when the limit
+        ops.append((p, "cmp_mi16", d16, i16))  # doesn't fit a signed imm8
+        p += 6  # (witnessed q_forbig)
+        return p
+    if b == 0x83 and exe[p + 1] == 0x06:  # add word [disp16], imm8: the integer
+        d16, i8 = struct.unpack_from("<Hb", exe, p + 2)  # FOR-NEXT increment for
+        ops.append((p, "addm_i8", d16, i8))  # a literal STEP other than +-1
+        p += 5  # (+-1 use inc_m/dec_m instead; witnessed q_forstep)
+        return p
     if b == 0x8B and exe[p + 1] == 0xD3:  # mov dx,bx (OUT port setup)
         ops.append((p, "movdxbx"))
         p += 2
