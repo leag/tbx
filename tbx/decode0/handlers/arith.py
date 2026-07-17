@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 
 def int_alu(state: DecodeState, op, addr, kind) -> bool:
-    """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addsiax, subax_m, imul_m, imul_bp, idivbx, cmpax_m, inc_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
+    """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addsiax, subax_m, imul_m, imul_bp, movax_bp, idivbx, cmpax_m, inc_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
     if kind == "movdx_m":  # IMP left operand -> dx
         state.dx = state.loc(op[2])
         state.k += 1
@@ -145,6 +145,10 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         return True
     if kind == "imul_bp":  # imul word [bp+d8]: LOCAL int as the right operand
         state.ax = ir.BinOp("*", state.loc_local(op[2]), _rgrp("*", state.ax))
+        state.k += 1
+        return True
+    if kind == "movax_bp":  # mov ax, [bp+d8]: LOCAL int read, e.g. as an
+        state.ax = state.loc_local(op[2])  # expression's first term (t1_byref1)
         state.k += 1
         return True
     if kind == "idivbx":  # ax (dividend) \ bx (divisor) -> ax

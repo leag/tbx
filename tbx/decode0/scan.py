@@ -444,6 +444,28 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "far_addax_si"))  # arithmetic fold of a by-ref int
         p += 3  # param, e.g. `N% + 1` (witnessed t1_local2)
         return p
+    if b == 0x26 and exe[p + 1] == 0x8B and exe[p + 2] == 0x04:  # mov ax, es:[si]:
+        ops.append((p, "far_movax_si"))  # plain read of a by-ref int param
+        p += 3  # into ax, e.g. as an expression's first term (t1_byref1)
+        return p
+    if b == 0x26 and exe[p + 1] == 0x23 and exe[p + 2] == 0x04:  # and ax, es:[si]
+        ops.append((p, "far_andax_si"))  # bitwise fold of a by-ref int param
+        p += 3  # (t1_byref1)
+        return p
+    if b == 0x26 and exe[p + 1] == 0x89 and exe[p + 2] == 0x04:  # mov es:[si], ax:
+        ops.append((p, "far_movm_ax_si"))  # write ax into a by-ref int param
+        p += 3  # (t1_byref1)
+        return p
+    if (
+        b == 0x26 and exe[p + 1] == 0xC7 and exe[p + 2] == 0x04
+    ):  # mov word es:[si], imm16: write a constant into a by-ref int param
+        ops.append((p, "far_movm_imm_si", struct.unpack_from("<h", exe, p + 3)[0]))
+        p += 5  # (t1_byref1)
+        return p
+    if b == 0x8B and exe[p + 1] == 0x46:  # mov ax, [bp+disp8]: LOCAL int read
+        ops.append((p, "movax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # (t1_byref1)
+        return p
     return None
 
 
@@ -1150,7 +1172,8 @@ def _scan(
                     (0xDD, 3): "fstp_si64",
                     (0xDB, 0): "fild_si32",
                     (0xDB, 3): "fstp_si32",
-                }.get((esc, reg))
+                    (0xDF, 0): "fild_si",  # m16 int onto the FP stack, e.g. a
+                }.get((esc, reg))  # by-ref int param for PRINT (t1_byref1)
                 if kind:
                     ops.append((p, pre + kind))
                     p = mo + 1

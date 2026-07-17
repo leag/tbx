@@ -61,6 +61,13 @@ End()
 Bsave(file=StrLit(value='X.IMG'), offset=Lit(value=0), length=Lit(value=100))
 End()
 
+## t1_byref1
+SubDef(name='SUB1', params=('A%',), body=(Local(names=('B%', 'C%', 'D%')), Assign(target=Var(name='B%'), value=Var(name='A%')), Assign(target=Var(name='C%'), value=BinOp(op='AND', lhs=Var(name='A%'), rhs=Lit(value=5))), Assign(target=Var(name='D%'), value=BinOp(op='+', lhs=Var(name='A%'), rhs=Lit(value=1))), Assign(target=Var(name='A%'), value=Lit(value=9)), Assign(target=Var(name='A%'), value=Var(name='B%')), Print(items=(Var(name='B%'), Var(name='C%'), Var(name='D%'), Var(name='A%')), newline=True, file=None, commas=(True, True, True, False))))
+Assign(target=Var(name='E%'), value=Lit(value=7))
+CallStmt(name='SUB1', args=(Var(name='E%'),))
+Print(items=(Var(name='E%'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_calla
 Assign(target=Var(name='A%'), value=Lit(value=16384))
 CallAbsolute(addr=Var(name='A%'))

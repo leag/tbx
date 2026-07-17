@@ -164,6 +164,26 @@ def test_decode_t1_local2():
     )
 
 
+def test_decode_t1_byref1():
+    # By-ref int SUB param fast-path family, all via `les si,[bp+N]; 26 <op>
+    # es:[si]`: plain read into ax (26 8b 04), bitwise AND fold (26 23 04),
+    # write ax back into the param (26 89 04), write a constant into the
+    # param (26 c7 04 <imm16>), and FILD onto the FP stack for PRINT
+    # (INT 3C; ESC DF /0 [si]) -- plus the plain bp-relative LOCAL int read
+    # (8b 46 <d8>) needed to copy one LOCAL into the param
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_byref1.exe")))
+    assert src == (
+        "10 SUB SUB1(A%)\n"
+        "  LOCAL B%, C%, D%\n"
+        "  B% = A%\n  C% = A% AND 5\n  D% = A% + 1\n"
+        "  A% = 9\n  A% = B%\n"
+        "  PRINT B%, C%, D%, A%\nEND SUB\n"
+        "20 E% = 7\n30 CALL SUB1(E%)\n40 PRINT E%\n50 END\n"
+    )
+
+
 if __name__ == "__main__":
     test_decode_t1_fcmp()
     test_decode_t1_fori()
@@ -177,4 +197,5 @@ if __name__ == "__main__":
     test_decode_t1_cmpfar()
     test_decode_t1_local1()
     test_decode_t1_local2()
+    test_decode_t1_byref1()
     print("ALL PASS")

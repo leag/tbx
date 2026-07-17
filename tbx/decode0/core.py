@@ -1437,6 +1437,10 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 state.stack.append(ir.BinOp(op[2], top, argvar))
             elif base == "fcomp_si":
                 state.pend_cmp = (argvar, state.stack.pop())
+            elif base == "fild_si":  # by-ref int param onto the FP stack,
+                argvar = ir.Var(f"P{state.pend_arg:02X}%")  # e.g. for PRINT
+                state.proc_int_offs.add(state.pend_arg)  # (t1_byref1)
+                state.stack.append(argvar)
             elif base == "cmpax_si":  # cmp ax, es:[si]: relational value vs a
                 argvar = ir.Var(f"P{state.pend_arg:02X}%")  # by-ref INT param
                 state.proc_int_offs.add(state.pend_arg)  # (t1_cmpfar)
@@ -1446,6 +1450,25 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 argvar = ir.Var(f"P{state.pend_arg:02X}%")  # by-ref INT param
                 state.proc_int_offs.add(state.pend_arg)  # (t1_local2)
                 state.ax = ir.BinOp("+", argvar, _rgrp("+", state.ax))
+            elif base == "andax_si":  # and ax, es:[si]: bitwise fold of a
+                argvar = ir.Var(f"P{state.pend_arg:02X}%")  # by-ref INT param
+                state.proc_int_offs.add(state.pend_arg)  # (t1_byref1)
+                state.ax = ir.BinOp("AND", argvar, _rgrp("AND", state.ax))
+            elif base == "movax_si":  # mov ax, es:[si]: plain read of a
+                argvar = ir.Var(f"P{state.pend_arg:02X}%")  # by-ref INT param,
+                state.proc_int_offs.add(state.pend_arg)  # e.g. an expression's
+                state.ax = argvar  # first term (t1_byref1)
+            elif base == "movm_ax_si":  # mov es:[si], ax: write ax into a
+                argvar = ir.Var(f"P{state.pend_arg:02X}%")  # by-ref INT param
+                state.proc_int_offs.add(state.pend_arg)  # (t1_byref1)
+                state.put(ir.Assign(argvar, state.ax), state.cur)
+                state.ax = None
+                state.cur = None
+            elif base == "movm_imm_si":  # mov word es:[si], imm16: write a
+                argvar = ir.Var(f"P{state.pend_arg:02X}%")  # constant into a
+                state.proc_int_offs.add(state.pend_arg)  # by-ref INT param
+                state.put(ir.Assign(argvar, ir.Lit(op[2])), state.cur)  # (t1_byref1)
+                state.cur = None
             else:
                 raise ValueError(f"unhandled by-ref param op {kind} at {addr:#x}")
             state.pend_arg = None
