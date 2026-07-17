@@ -112,6 +112,68 @@ another fix — do not assume it's a small tweak.
 hfprop/vhfprop/inv87/invoice are untested against this specific finding;
 they may or may not share schart's exact shape.
 
+## Gap 19 — byte 06 (filepatc/morcalc/pw, all TB 1.0), UNDIAGNOSED
+
+Surfaced by gap 18's closure (these 3 files previously failed on byte 26).
+Failure: `unhandled byte 06` right after a fresh `proc_enter` (SUB/DEF FN
+prologue `55 8b ec` = push bp; mov bp,sp), i.e. `06` = bare `push es` at
+the very top of a new procedure body, which the decoder doesn't
+recognize in that position. Full byte sequence at filepatc.exe 0x8870:
+
+```
+55 8b ec                push bp; mov bp,sp        (proc_enter)
+06                       push es
+1e                       push ds
+8b 16 00 00              mov dx,[0000h]
+c5 76 0a                 lds si,[bp+0Ah]
+8e 04                    mov es,[si]
+c5 76 06                 lds si,[bp+06h]
+8b 3c                    mov di,[si]
+c5 76 1a                 lds si,[bp+1Ah]
+8b 04                    mov ax,[si]
+50                       push ax
+c5 76 0e                 lds si,[bp+0Eh]
+8b 04                    mov ax,[si]
+c5 76 12                 lds si,[bp+12h]
+8b 5c 02                 mov bx,[si+2]
+03 d8                    add bx,ax
+c5 76 1e                 lds si,[bp+1Eh]
+8b 0c                    mov cx,[si]
+c5 76 16                 lds si,[bp+16h]
+8b 74 ..                 mov si,[si+..]  (truncated where the dump ends)
+```
+
+**Read so far**: `bp+6, +0xA, +0xE, +0x12, +0x16, +0x1A, +0x1E` — seven
+slots exactly 4 bytes apart, starting right after what would be a far
+call's return address (`bp+2`=old bp, `bp+4`/`+6`... — i.e. a SUB/FUNCTION
+with (at least) 7 parameters, each passed as a 4-byte far pointer, and
+EACH accessed via a fresh `lds si,[bp+N]; mov <reg>,[si]` rather than the
+already-implemented ES-shortcut family (`les si,[bp+N]; 26 <op>
+es:[si]`, gaps 11/18). Working theory: the ES-shortcut only fires when a
+SUB reuses the same by-ref param's ES:SI setup for a second op within
+one statement; a single-use read of a DIFFERENT param each time falls
+back to this general LDS-based form instead — if true, this is a
+genuinely new, more general "plain by-ref param read" mechanism (target
+register varies: ES, DI, AX, BX, CX, SI seen so far, not just AX), NOT a
+small addition to the existing 26-prefixed dispatch table.
+
+**Why not fixed this session**: 7 parameters with values loaded into ES/
+DI/BX/CX/SI (not just AX) is unusual for ordinary arithmetic — ES
+loaded from a by-ref param strongly suggests it's being used AS A
+SEGMENT for a subsequent far access, and the `[si+2]` field-style access
+suggests either pointer/structure arithmetic or something like FIELD-
+based random file I/O combining buffer segments/offsets. Tried one
+probe hypothesis (a SUB with an array parameter, `SUB SUB1(B())`) — TB
+rejected the syntax outright (`Error 425: Integer constant expected`),
+so that guess was wrong and ruled out. Did not attempt further guesses
+without stronger evidence; picking this up needs either: (a) more
+candidate probes (7-int-by-ref-param SUB doing varied arithmetic; GET/
+PUT with FIELD-allocated buffers; CALL INTERRUPT with register-struct
+args) compiled and diffed against this exact byte shape, or (b) reading
+further into what `mov dx,[0000h]` reads (disp 0 is below `VAR_BASE`,
+so it's a fixed runtime/system cell, not a user scalar — identifying
+what lives at DS:0000 would narrow this down fast).
+
 **Further traced (2026-07-17, same session)**: found the right `ds`
 (`0xf900`, from `pool_base=0x4b4` — confirmed correct because `INPUT`'s
 bare-prompt sentinel disp `0x4b0` == `pool_base-4` exactly, and because
