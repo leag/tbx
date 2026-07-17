@@ -1,6 +1,6 @@
 # Wild-corpus gap campaign — handoff
 
-Status as of 2026-07-16, branch `claude/claude-md-docs-mr8ssz` (clean, pushed).
+Status as of 2026-07-17, branch `claude/claude-md-docs-mr8ssz`.
 Standing instruction: close the most common decoder gap first, in frequency
 order, over the 84 wild PC-SIG Turbo Basic EXEs in `wild/hits/` (untracked,
 gitignored, copyrighted shareware — **never commit them**).
@@ -8,18 +8,37 @@ gitignored, copyrighted shareware — **never commit them**).
 ## Where things stand
 
 `python -m tbx.tools.scan_wild wild/hits` — 84 EXEs: 2 decode OK, 82 fail.
-Current tally (post gap 14):
+Current tally (post gap 15):
 
 | count | error | status |
 |---|---|---|
 | 15 | INT cd | unwitnessable runtime-revision artifact — not actionable (see `scan_wild.py` docstring) |
-| 5 | DGROUP layout not solvable | **gap 15, diagnosed — see below** |
+| 5 | DGROUP layout not solvable | **gap 16, needs fresh diagnosis — see below** (gap 15's shape closed, but none of the 5 wild files actually had it) |
 | 4 | byte 90 | set aside: unwitnessable FWAIT-revision skew (3 probe variants all compile INT 3Dh) |
 | 3 each | INT EC sub c4, byte ea, ce, 83, 81, 26 | next tier, undiagnosed |
 | 2 each | EC sub 66, INT 8c, FP dc/04, byte ff, 8c, 3b, 29, 03, 01 | then singles |
 
 ## Recently closed (this campaign, newest first)
 
+- **Gap 15, static string array at constant index** (this session): static
+  string array element access (`DIM A$(5)` / `A$(2) = ...`) compiles
+  `movsi <array_base + 4*index>`; that disp is neither a scalar slot nor a
+  pool descriptor. Two fixes in `layout.py`'s `finish`: (1) the descriptor
+  validation loop now exempts movsi disps landing inside a static STRING
+  array's element span (`rec["str"]`, type byte 0x0A); (2) the walk-path's
+  pre-`find_statics` movsi gate was reordered to run *after* `find_statics`
+  so it can apply the same string-array-span exemption instead of blindly
+  rejecting any candidate with an unaccounted movsi disp below the pool
+  (that gate previously had no way to know about arrays yet). `core.py`'s
+  `rt 0x9C` push leg (~line 1839) now also checks static string-array
+  membership, not just scalar `strs`, before falling back to
+  `_pool_str`. Byte-exact verified both dialects, fixtures t1_sstat +
+  v10_t1_sstat, pinned in `test_wild_batch3.py::test_decode_t1_sstat` and
+  `test_tb10_dialect.py`'s `PAIRS`.
+  **Important**: diagnosing this shape came from a wild-file lead
+  (schart.exe, movsi disp 0x600) but implementing it did NOT make any wild
+  file advance — see gap 16 below, the wild DGROUP-5 files have a different
+  or additional problem.
 - **Gap 14, COMMON** (`b75086d`): compiles to zero ops — two 16-byte band
   stamps `(num_size, num_base)(str_size, num_base+num_size)(0, num_base)
   (0, num_base)` in the DGROUP init image: COMMON band at DS:0110, ordinary
@@ -34,38 +53,33 @@ Current tally (post gap 14):
 - Gap 12 INCR/DECR (`0e4f0f7`), gap 11 by-ref int param family (`3f1e23d`),
   gap 10 LOCAL (`2ef2b6d`), gap 9 double arrays — see git log.
 
-## Gap 15 — diagnosed, NOT yet implemented
+## Gap 16 — schart/hfprop/vhfprop/inv87/invoice, UNDIAGNOSED
 
-**Shape**: static string array accessed at a constant index. Reproducer
-(oracle-compiled it fails with "DGROUP layout not solvable"):
+The 5 wild "DGROUP layout not solvable" files did NOT advance after gap
+15's fix landed. Traced schart.exe in detail (instrumented `layout._layout`
+with temporary debug prints, since removed): the "no runtime arrays"
+walk-based solver (`_layout`'s `for n in range(31, -1, -1)` loop) never
+finds a consistent `(ds, n, statics)` triple for ANY `n` from 0 to 31 —
+`find_statics` returns `None` for most `n`, and the handful of `n` where it
+does return statics (9, 7, 6, 4, 3, 2, 1, 0) all produce bogus/spurious
+array records (huge implausible bases like `0xc8a0`-`0xc960`, none of them
+`str`-typed) that don't include a string array whose span covers the
+movsi disp `0x600` referenced in the ops. That disp is never explained as
+either a scalar, a pool descriptor, or (in any candidate reached) a string
+array element.
 
-```basic
-10 DIM A$(5)
-20 A$(2) = "HI"
-30 B$ = A$(2)
-40 PRINT B$
-50 END
-```
+This means schart.exe's real DGROUP shape doesn't fit the existing
+walk-anchored solve strategy at all — likely something structurally
+different (not just "add one more exemption"), e.g.: array element storage
+interleaved with or ahead of the scalar walk in a way the `dc`-driven
+`pool_base` formula doesn't model, a second/nested array region, or this
+file actually needs the `rt_blocks` (runtime-DIM) anchor path but isn't
+tripping it. Needs fresh evidence-set analysis (`tbx FILE --ops`,
+`cfgview`, hexdump around disp 0x600 and its file offset) before attempting
+another fix — do not assume it's a small tweak.
 
-**Cause**: the element access compiles `movsi <array_base + 4*index>`; that
-disp is neither a scalar slot nor a pool descriptor, and `layout.py`'s
-`finish` descriptor check exempts static-array spans only for fp/int
-evidence, never movsi.
-
-**Fix plan**:
-1. In `finish`, exempt movsi disps landing inside a **string** static
-   array's span (`rec["str"]`, type byte 0x0A in
-   `datapool._parse_static_slot`).
-2. In `core.py`'s movsi handler (~line 1836) route span-hitting disps
-   through `state.loc(d)` — `loc` already returns `ArrayRef` for span
-   disps — on both the read (`rt 0x9C` push) and write (`strassign`) legs;
-   also the `state.loc(d) if d in strs else _pool_str(d)` dispatch nearby.
-3. Oracle byte-exact verify the probe, promote as `t1_sstat`, regenerate
-   goldens (diffs must be additive-only), capture dosout, pin test, full
-   suite + ruff + ty, commit, re-scan.
-
-Wild schart.exe (movsi 0x600 inside a string static's span) should advance;
-hfprop/vhfprop/inv87/invoice likely share the shape.
+hfprop/vhfprop/inv87/invoice are untested against this specific finding;
+they may or may not share schart's exact shape.
 
 ## The workflow (each gap, see gap 9–14 commits for examples)
 

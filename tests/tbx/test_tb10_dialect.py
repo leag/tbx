@@ -7,7 +7,15 @@ from tbx import ir
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-PAIRS = ["tier0_trivial", "tier1_expr", "t1_for", "t1_print", "t1_int", "t1_arr1"]
+PAIRS = [
+    "tier0_trivial",
+    "tier1_expr",
+    "t1_for",
+    "t1_print",
+    "t1_int",
+    "t1_arr1",
+    "t1_sstat",
+]
 
 
 def _exe(name):

@@ -1836,9 +1836,14 @@ def decode_user_code(exe: bytes) -> list[Any]:
         if kind == "movsi":  # string operand by descriptor
             nxt = state.ops[state.k + 1][1:] if state.k + 1 < len(state.ops) else None
             d = cast(int, op[2])
-            if nxt == ("rt", 0x9C):  # push (var desc or pooled literal)
+            if nxt == ("rt", 0x9C):  # push (var desc, static string-array
+                # element at a constant index, or pooled literal)
+                is_local = d in state.lay["strs"] or any(
+                    a["str"] and a["base"] <= d < a["base"] + a["esz"] * a["count"]
+                    for a in state.arrs
+                )
                 state.sstack.append(
-                    state.loc(d) if d in state.lay["strs"] else state._pool_str(d)
+                    state.loc(d) if is_local else state._pool_str(d)
                 )
                 state.k += 2
                 continue

@@ -182,9 +182,19 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
                 run[d] = 8
         # Validate every code-referenced descriptor under (pool_base, delta): pooled
         # literal descs (movsi targets that aren't slots) and prompt words map to
-        # file P + 4 + (d - pool_base) and must read as <len|8000><ptr> records.
+        # file P + 4 + (d - pool_base) and must read as <len|8000><ptr> records --
+        # except movsi disps landing inside a static STRING array's element span
+        # (constant-index element access, e.g. `A$(2) = ...`): those are array
+        # elements, not descriptors (witnessed q_sstat).
+        str_spans = [
+            (a["base"], a["base"] + a["esz"] * a["count"])
+            for a in statics
+            if a["str"]
+        ]
         descs = (movsi_disps - set(run)) | (prompt_disps - {pool_base - 4})
         for d in descs:
+            if any(lo <= d < hi for lo, hi in str_spans):
+                continue
             off = P + 4 + d - pool_base
             if d < pool_base - 4 or off < 0 or off + 2 > len(exe):
                 return None
@@ -292,10 +302,21 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
             ds = P + 4 - pool_base
             if ds % 16 or ds <= 0:
                 continue
-            if any(m < pool_base - 4 for m in movsi_disps - set(run_c)):
-                continue  # a movsi target is neither a slot nor pooled
             statics = find_statics(ds, sb, n)
             if statics is None:
+                continue
+            # A movsi target unaccounted by the scalar walk and below the pool
+            # is only explicable as a static STRING array element (constant
+            # index); anything else there is neither a slot nor pooled.
+            str_spans_c = [
+                (a["base"], a["base"] + a["esz"] * a["count"])
+                for a in statics
+                if a["str"]
+            ]
+            if any(
+                m < pool_base - 4 and not any(lo <= m < hi for lo, hi in str_spans_c)
+                for m in movsi_disps - set(run_c)
+            ):
                 continue
             lay = finish(ds, n, statics, sb, run_c, strs_c, pool_base, 0)
             if lay is not None:

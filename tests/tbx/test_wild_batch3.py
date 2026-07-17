@@ -217,6 +217,22 @@ def test_decode_t1_decr1():
     assert src == "10 A% = 5\n20 A% = A% - 1\n30 PRINT A%\n40 END\n"
 
 
+def test_decode_t1_sstat():
+    # Static STRING array element at a constant index (`A$(2) = ...`): the
+    # element movsi disp falls inside the array's span, not a scalar slot
+    # or a pooled-literal descriptor -- layout.finish's descriptor check now
+    # exempts movsi disps landing in a static string array's span, and the
+    # rt-0x9C push leg now routes such disps through state.loc() (which
+    # already resolved array spans generally) instead of treating them as
+    # pooled literals
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_sstat.exe")))
+    assert src == (
+        '10 DIM V0$(5)\n20 V0$(2) = "HI"\n30 A$ = V0$(2)\n40 PRINT A$\n50 END\n'
+    )
+
+
 if __name__ == "__main__":
     test_decode_t1_fcmp()
     test_decode_t1_fori()
@@ -234,4 +250,5 @@ if __name__ == "__main__":
     test_decode_t1_incr1()
     test_decode_t1_poolrun()
     test_decode_t1_decr1()
+    test_decode_t1_sstat()
     print("ALL PASS")
