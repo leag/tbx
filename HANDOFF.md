@@ -419,6 +419,60 @@ evidence sets or walks by hand to reason about a hypothesis, **run the
 actual function against the actual op stream first** — every dead end in
 this investigation so far was a manual-arithmetic slip, not a wrong idea.
 
+### Static-analysis pass (2026-07-17, follow-up session, no oracle/wild corpus available)
+
+This session's environment had neither `wild/hits/` nor `../frame/oracle`
+mounted (both are external to the repo — the shareware corpus is
+gitignored/untracked, the oracle is outside the repo entirely), so no new
+probes could be compiled or byte-exact verified. Per the calibration rule
+nothing was changed in `layout.py`; this is pure arithmetic over the three
+`(n, width) -> offset` data points already recorded above, offered as a
+**candidate, unverified** lead rather than a fix.
+
+Restating the three points (`offset` = real grid start's DS-relative disp
+minus `VAR_BASE`, i.e. what trace 3 calls `grid_start - VAR_BASE`):
+
+| n_static | width | offset |
+|---|---|---|
+| 10 | 38 | 48 |
+| 10 | 62 | 64 |
+| 11 | 38 | 32 |
+
+`offset = align16(width) - 16*(n - 10)` fits all three exactly. **Flagging
+immediately why this is weak evidence, not a finding**: two free
+coefficients (a width term, an n term) fit against three points where two
+points share `n` and two share `width` is only one real constraint away
+from being guaranteed to fit — it is the same shape of premature
+conclusion the `align16(width)`-only hypothesis was before the `n=11`
+point refuted it. The `-10` reference and the `-16` per-`n` step are not
+derived from anything structural (`VAR_BASE=0x120=288`, `ARR_BLOCK=0x36=54`
+— neither divides evenly into 16 or 10 in a way that explains a `-16` per
+`n` step), which is a yellow flag that it's curve-fitting, not mechanism.
+
+This is exactly the experiment HANDOFF's own "Revised next step" above
+already prescribes — holding width fixed and sweeping `n` — so this pass
+doesn't change the priority order, it just makes the next probe batch
+concrete. **If oracle access is available next, the cheapest
+falsification test** is two more probes at `width=38` (reuse
+`q_gap16q.bas`'s scalar set, just add/remove `DIM` lines to hit exact
+`n_static` values):
+
+- `n_static=9`: formula predicts `offset = 48 - 16*(-1) = 64`. (Also worth
+  double-checking whether `n=9` even exhibits the overlap at all per the
+  open question in the paragraph above — the formula's own author-in-me
+  suspects it will, since gap 27's window slack already covers small
+  overlaps silently.)
+- `n_static=12`: formula predicts `offset = 48 - 16*2 = 16`.
+
+Either result outside those exact values falsifies the linear-in-`n`
+guess immediately (which is likely, given how it was derived) and the
+mod-16-residue-of-`sb` alternative HANDOFF already suggests should be
+tried instead — for what it's worth, `sb mod 16` (`sb = VAR_BASE +
+ARR_BLOCK*n`) is 12 at `n=10` and 2 at `n=11` (a residue *decrease* of 10,
+not the offset's decrease of 16), so that specific residue framing doesn't
+obviously match either on the two points already in hand; a real sweep is
+still the only way forward, per the existing "Concrete next steps" below.
+
 **Concrete next steps, in priority order**:
 1. Get a 4th (and 5th) data point with a *different* `n_static` (not 10)
    to test whether `grid_start - VAR_BASE = align16(scalar_band_width)`
