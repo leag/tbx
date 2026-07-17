@@ -279,18 +279,27 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
     for n in range(31, -1, -1):
         sb = vb + ARR_BLOCK * n
         run, strs, dend = walk_run(sb)
-        pool_base = ((dend + 15) & ~15) + 4
-        ds = P + 4 - pool_base
-        if ds % 16 or ds <= 0:
-            continue
-        if any(m < pool_base - 4 for m in movsi_disps - set(run)):
-            continue  # a movsi target is neither a slot nor pooled
-        statics = find_statics(ds, sb, n)
-        if statics is None:
-            continue
-        lay = finish(ds, n, statics, sb, run, strs, pool_base, 0)
-        if lay is not None:
-            return lay
+        # Candidate walk ends: greedy first (the normal case), then each
+        # 16-aligned string position, longest first. A scalar band ending
+        # exactly on a paragraph boundary puts the marker at a movsi-referenced
+        # cell (the pooled "" literal doubles as the marker record), and the
+        # greedy walk runs away through the pool's descriptors as phantom
+        # string scalars (witnessed t1_poolrun).
+        for dc in [dend] + sorted((d for d in strs if d % 16 == 0), reverse=True):
+            run_c = {k: w for k, w in run.items() if k < dc}
+            strs_c = {k for k in strs if k < dc}
+            pool_base = ((dc + 15) & ~15) + 4
+            ds = P + 4 - pool_base
+            if ds % 16 or ds <= 0:
+                continue
+            if any(m < pool_base - 4 for m in movsi_disps - set(run_c)):
+                continue  # a movsi target is neither a slot nor pooled
+            statics = find_statics(ds, sb, n)
+            if statics is None:
+                continue
+            lay = finish(ds, n, statics, sb, run_c, strs_c, pool_base, 0)
+            if lay is not None:
+                return lay
     raise ValueError("DGROUP layout not solvable from the calibrated rules")
 
 

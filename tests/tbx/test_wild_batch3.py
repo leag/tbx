@@ -194,6 +194,21 @@ def test_decode_t1_incr1():
     assert src == "10 A% = 5\n20 A% = A% + 1\n30 PRINT A%\n40 END\n"
 
 
+def test_decode_t1_poolrun():
+    # Scalar band ending exactly on a paragraph boundary: the pool marker sits
+    # at a movsi-referenced cell (the pooled "" literal doubles as the marker
+    # record), so the greedy scalar walk runs away through the pool descriptors
+    # and the no-prompt INPUT's marker-cell prompt rejects the layout; the
+    # solver retries with the walk cut at 16-aligned string positions
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_poolrun.exe")))
+    assert src == (
+        '10 A$ = ""\n20 B$ = "HELLO"\n30 C$ = A$ + B$\n'
+        "40 INPUT D$\n50 PRINT C$; D$\n60 END\n"
+    )
+
+
 def test_decode_t1_decr1():
     # Bare DEC [disp16] (FF /1): the DECR normalization, `X% = X% - 1`
     from tbx import decode0, emit0
@@ -217,5 +232,6 @@ if __name__ == "__main__":
     test_decode_t1_local2()
     test_decode_t1_byref1()
     test_decode_t1_incr1()
+    test_decode_t1_poolrun()
     test_decode_t1_decr1()
     print("ALL PASS")

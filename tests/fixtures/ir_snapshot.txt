@@ -1010,6 +1010,14 @@ Assign(target=Var(name='A%'), value=Lit(value=7))
 Poke(addr=Lit(value=100), value=Var(name='A%'))
 End()
 
+## t1_poolrun
+Assign(target=Var(name='A$'), value=StrLit(value=''))
+Assign(target=Var(name='B$'), value=StrLit(value='HELLO'))
+Assign(target=Var(name='C$'), value=BinOp(op='+', lhs=Var(name='A$'), rhs=Var(name='B$')))
+Input(prompt=None, var=Var(name='D$'), comma=False)
+Print(items=(Var(name='C$'), Var(name='D$')), newline=True, file=None, commas=None)
+End()
+
 ## t1_pos
 Assign(target=Var(name='A%'), value=Call(name='POS', args=(Lit(value=0),)))
 End()

@@ -59,6 +59,7 @@ KEYS = {
     "t1_sarr": '[{"wait":"?","send":"3\\r"}]',
     "t1_tab": '[{"wait":"?","send":"3\\r"}]',
     "t1_pr2": '[{"wait":"?","send":"3\\r"}]',
+    "t1_poolrun": '[{"wait":"?","send":"x\\r"}]',
 }
 
 
