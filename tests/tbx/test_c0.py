@@ -287,6 +287,9 @@ _DOS_WAIVED: dict[str, str] = {
     "t1_byref1": "LOCAL declares true per-call stack locals, re-zeroed every "
     "call; c0's SUB-local declaration pass doesn't yet distinguish that from "
     "the default local-and-static scoping (ir.Local raises _Unsupported)",
+    "t1_locidx": "LOCAL declares true per-call stack locals, re-zeroed every "
+    "call; c0's SUB-local declaration pass doesn't yet distinguish that from "
+    "the default local-and-static scoping (ir.Local raises _Unsupported)",
     "t1_run2": "RUN file$ loads and runs a DIFFERENT program; c0 targets "
     "one self-contained translation unit and has no host-process-replace "
     "surrogate for it (ir.Run(file=...) raises _Unsupported)",

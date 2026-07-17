@@ -22,6 +22,7 @@ PAIRS = [
     "t1_forbig",
     "t1_addimm",
     "t1_fwd",
+    "t1_locidx",
 ]
 
 

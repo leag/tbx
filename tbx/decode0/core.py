@@ -885,7 +885,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             )
         elif (
             cmp_at_t is not None
-            and cmp_at_t[1] in ("cmp_mi8", "cmp_mi16")
+            and cmp_at_t[1] in ("cmp_mi8", "cmp_mi16", "cmp_bpi8")
             and state.stmts
             and isinstance(state.stmts[-1], ir.Assign)
             and isinstance(state.stmts[-1].target, ir.Var)
@@ -897,13 +897,24 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             # fit a signed byte, imm16 -- q_forbig). Step defaults to 1 (inc_m);
             # a literal step other than +-1 rewrites this statement in place
             # once the matching addm_i8 is seen at the NEXT (q_forstep/
-            # q_forstepneg).
+            # q_forstepneg). A LOCAL loop var uses the bp-relative forms
+            # (mov_bp_imm init / cmp_bpi8 test / inc_bp step -- q_locidx);
+            # vdisp on its L-name yields the bp offset, disjoint from static
+            # disps (>= VAR_BASE).
             init_s = state.stmts.pop()
             a = state.addrs.pop()
             state.put(
                 ir.For(init_s.target, init_s.value, ir.Lit(cmp_at_t[3]), ir.Lit(1)),
                 a,
             )
+            if cmp_at_t[1] == "cmp_bpi8" and state.proc_frame is not None:
+                # A literal-bound FOR over a LOCAL reserves its two unused
+                # limit/step temp words in the LOCAL frame right after the
+                # loop var (the frame analog of the static band's phantom
+                # slots, q_forstep) -- they are not declared LOCALs (q_locidx)
+                locs = state.proc_frame["locals"] or {}
+                locs.pop(cmp_at_t[2] + 2, None)
+                locs.pop(cmp_at_t[2] + 4, None)
             state.fors.append(
                 {
                     "v": cmp_at_t[2],
@@ -1330,6 +1341,9 @@ def decode_user_code(exe: bytes) -> list[Any]:
             state.proc_frame["locals"] = {
                 disp + 2 * i: f"L{disp + 2 * i:02X}%" for i in range(cnt)
             }
+            state.proc_frame["frame_words"] = cnt  # retf pop math needs the
+            # full zero-filled span even after FOR temp words are dropped
+            # from the dict (q_locidx)
             state.cur = None
             state.k += 1
             continue
@@ -1359,7 +1373,9 @@ def decode_user_code(exe: bytes) -> list[Any]:
             # retf pop bytes = 4 x nargs, PLUS the LOCAL frame's own span: the
             # locals' stack space is caller-allocated too, so retf pops it
             # right along with the params (witnessed t1_local2)
-            nparams = (op[2] - 2 * len(locs or ())) // 4
+            nparams = (
+                op[2] - 2 * state.proc_frame.get("frame_words", len(locs or ()))
+            ) // 4
             params = tuple(
                 f"P{off:02X}$"
                 if off in state.proc_str_offs
@@ -1385,6 +1401,18 @@ def decode_user_code(exe: bytes) -> list[Any]:
                     state.fn_frame["block"] = True
                 elif op[2] != 2:
                     raise ValueError(f"[bp+{op[2]}] init in DEF FN body at {addr:#x}")
+            elif (
+                state.proc_frame is not None
+                and (state.proc_frame["locals"] or {}).get(op[2]) is not None
+            ):  # LOCAL int var = constant, e.g. a FOR init (q_locidx)
+                if state.cur is None:
+                    state.cur = addr
+                state.put(
+                    ir.Assign(state.loc_local(op[2]), ir.Lit(op[3])), state.cur
+                )
+                state.cur = None
+                state.k += 1
+                continue
             elif op[3] != 0:  # caller: zero-init of a staged string-arg
                 raise ValueError(  # descriptor slot (t1_fnstr)
                     f"mov [bp+{op[2]}],{op[3]} outside a DEF FN body at {addr:#x}"
@@ -1570,7 +1598,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
             state.k += 3
             continue
         if (
-            kind in ("cmp_mi8", "cmp_mi16")
+            kind in ("cmp_mi8", "cmp_mi16", "cmp_bpi8")
             and state.fors
             and addr == state.fors[-1]["test"]
         ):
@@ -1591,7 +1619,12 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 or state.ops[state.k + 1][3] != f["body"]
             ):
                 raise ValueError(f"int NEXT: expected JLE/JBE/JGE to body at {addr:#x}")
-            state.put(ir.NextStmt(state.loc(f["v"])), state.cur)
+            state.put(
+                ir.NextStmt(
+                    state.loc_local(f["v"]) if kind == "cmp_bpi8" else state.loc(f["v"])
+                ),
+                state.cur,
+            )
             state.fors.pop()
             state.cur = None
             state.k += 2

@@ -62,6 +62,11 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         state.si = state.loc(op[2])
         state.k += 1
         return True
+    if kind == "movsi_bp":
+        # mov si,[bp+d8]: LOCAL int as a raw element index (q_locidx)
+        state.si = state.loc_local(op[2])
+        state.k += 1
+        return True
     if kind == "addax_m":  # fold LEFT; neg-aware = subtraction
         if isinstance(state.ax, ir.Neg):
             state.ax = ir.BinOp("-", state.loc(op[2]), _rgrp("-", state.ax.operand))
@@ -183,6 +188,14 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         state.cur = None
         state.k += 1
         return True
+    if kind == "inc_bp":
+        # LOCAL-var FOR-NEXT increment (q_locidx). A bare inc [bp+d8] outside
+        # a FOR is unwitnessed (LOCAL `X% = X% + 1` compiles to addm_ax_bp,
+        # t1_local1) -- fail loud.
+        if state.fors and state.fors[-1]["v"] == op[2]:
+            state.k += 1
+            return True
+        raise ValueError(f"inc [bp+{op[2]}] outside a FOR at {addr:#x}")
     if kind == "dec_m":
         # DECR normalization: bare DEC [disp16] compiles `X = X - 1`; never
         # witnessed inside a FOR (negative-step FOR-NEXT is a separate,
@@ -298,7 +311,10 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         state.si = None
         sik = state.ops[state.k + ao + 1]
         pre = "far_" if far else ""
-        if sik[1] in ("far_spush", "far_strassign"):
+        if sik[1] in ("far_spush", "far_strassign") or (
+            not far and sik[1] == "strassign"
+        ):  # near strassign: SI already points at the element descriptor
+            # (SUB-local static string array, witnessed q_locidx)
             if not a.get("str"):
                 raise ValueError(f"string op on numeric array at {addr:#x}")
             if sik[1] == "far_spush":

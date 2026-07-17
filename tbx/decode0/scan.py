@@ -352,9 +352,22 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "movsim", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4
         return p
+    if b == 0x8B and exe[p + 1] == 0x76:  # mov si, [bp+d8]: LOCAL int -> array
+        ops.append((p, "movsi_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # index (witnessed q_locidx)
+        return p
     if b == 0xFF and exe[p + 1] == 0x06:  # inc word [disp16]: the integer FOR
         ops.append((p, "inc_m", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4  # step, OR a bare `X = X + 1` (INCR) outside a loop (t1_incr1)
+        return p
+    if b == 0xFF and exe[p + 1] == 0x46:  # inc word [bp+d8]: the LOCAL int
+        ops.append((p, "inc_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # FOR step (witnessed q_locidx)
+        return p
+    if b == 0x83 and exe[p + 1] == 0x7E:  # cmp word [bp+d8], imm8: the LOCAL
+        bp_off, i8 = struct.unpack_from("<bb", exe, p + 2)  # int FOR-NEXT
+        ops.append((p, "cmp_bpi8", bp_off, i8))  # limit test (q_locidx)
+        p += 4
         return p
     if b == 0xFF and exe[p + 1] == 0x0E:  # dec word [disp16]: bare `X = X - 1`
         ops.append((p, "dec_m", struct.unpack_from("<H", exe, p + 2)[0]))

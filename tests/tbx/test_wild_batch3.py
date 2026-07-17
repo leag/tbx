@@ -339,6 +339,26 @@ def test_decode_t1_fwd():
     )
 
 
+def test_decode_t1_locidx():
+    # FOR over a LOCAL int inside a SUB, whole bp-relative family: mov_bp_imm
+    # init / cmp_bpi8 test / inc_bp step, plus movsi_bp (8b 76: LOCAL as array
+    # index) and the NEAR string-element strassign terminal after addsi.
+    # The literal-bound LOCAL FOR reserves two temp words in the frame right
+    # after the loop var -- dropped from LOCAL, but the retf pop math keeps
+    # the full zero-filled span (no phantom SUB param).
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_locidx.exe"))
+    sub = prog[0]
+    assert isinstance(sub, ir.SubDef) and sub.params == ()
+    assert emit0.emit(prog) == (
+        "10 SUB SUB1\n"
+        "  DIM V0$(10)\n  LOCAL A%\n  FOR A% = 1 TO 5\n"
+        '  V0$(A%) = "X"\n  NEXT A%\n  PRINT V0$(3)\nEND SUB\n'
+        "20 CALL SUB1\n30 END\n"
+    )
+
+
 if __name__ == "__main__":
     test_decode_t1_fcmp()
     test_decode_t1_fori()
@@ -364,4 +384,5 @@ if __name__ == "__main__":
     test_decode_t1_forbig()
     test_decode_t1_addimm()
     test_decode_t1_fwd()
+    test_decode_t1_locidx()
     print("ALL PASS")
