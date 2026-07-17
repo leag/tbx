@@ -21,6 +21,7 @@ PAIRS = [
     "t1_forstepn",
     "t1_forbig",
     "t1_addimm",
+    "t1_for10arr",
     "t1_fwd",
     "t1_locidx",
     "t1_loccmp",

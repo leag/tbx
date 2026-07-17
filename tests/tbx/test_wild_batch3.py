@@ -302,6 +302,36 @@ def test_decode_t1_forbig():
     )
 
 
+def test_decode_t1_for10arr():
+    # Gap 16: a literal-limit FOR loop's variable + the ordinary scalars
+    # allocated after it can land inside the LAST static array's own 0x36
+    # ARR_BLOCK slot (that array's bookkeeping record is dead at runtime
+    # once its constant-base addsi is compiled, so the compiler appears to
+    # reuse the tail of its slot) -- find_statics's window, bounded at
+    # `ds + sb`, cut off a few bytes short of the last record's populated
+    # bytes whenever this reuse pushed the record run past that boundary;
+    # widened by one ARR_BLOCK of slack (always < the largest reuse offset
+    # witnessed, wild/probes_gap16/q_gap16{p,q,u}.bas: 32/48/32 bytes).
+    # 10 static arrays is the smallest count this was witnessed to trigger
+    # at (9 decodes clean; the reuse offset doesn't depend on array count
+    # or on which array the loop happens to index, only on how much the
+    # scalar band needs).
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_for10arr.exe"))
+    assert prog[17] == ir.For(ir.Var("H%"), ir.Lit(1), ir.Lit(6), ir.Lit(1))
+    assert emit0.emit(prog) == (
+        "10 DIM V0(20)\n20 DIM V1(20)\n30 DIM V2(20)\n40 DIM V3(20)\n"
+        "50 DIM V4(20)\n60 DIM V5(20)\n70 DIM V6(20)\n80 DIM V7(20)\n"
+        "90 DIM V8(20)\n100 DIM V9(20)\n110 A% = 1\n120 B% = 2\n"
+        "130 C = 1.5\n140 D = 2.5\n150 E# = 3.5#\n160 F# = 4.5#\n"
+        "170 G% = 3\n180 FOR H% = 1 TO 6\n190 V0(H%) = H%\n200 NEXT H%\n"
+        "210 I% = V1(1) + V2(1) + V3(1) + V4(1) + V5(1) + V6(1) + V7(1) "
+        "+ V8(1) + V9(1)\n"
+        "220 PRINT A%, B%, C, G%, I%\n230 END\n"
+    )
+
+
 def test_decode_t1_addimm():
     # 01 06 = add [disp16], ax: the disp16 sibling of addm_ax_bp (t1_local1's
     # LOCAL combine-store) -- `X% = X% + <expr>` when the RHS isn't a bare
@@ -402,6 +432,7 @@ if __name__ == "__main__":
     test_decode_t1_forstep()
     test_decode_t1_forstepn()
     test_decode_t1_forbig()
+    test_decode_t1_for10arr()
     test_decode_t1_addimm()
     test_decode_t1_fwd()
     test_decode_t1_locidx()

@@ -168,8 +168,16 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
     def find_statics(ds, sb, n_want):
         """Static records sit at exact slot positions in mixed programs but float
         after a variable-length zero-init table in static-only ones;
-        a window-bounded floating scan covers both. Window order == slot order."""
-        out, pos, end = [], ds + vb, ds + sb
+        a window-bounded floating scan covers both. Window order == slot order.
+        The window extends one extra ARR_BLOCK past `sb`: a literal-limit FOR
+        loop can plant its temp/loop-var words inside the tail of the LAST
+        array's own 0x36 slot (its bookkeeping record is dead at runtime once
+        the loop's constant-base addsi is compiled, so the compiler appears to
+        reuse the space) -- when that happens the static-record run legitimately
+        starts a bit past `ds + vb` and the last record's populated bytes can
+        extend a few bytes past the un-widened `ds + sb` boundary (witnessed
+        wild/probes_gap16/q_gap16{q,u}.bas, offsets 48/32 bytes, both < 0x36)."""
+        out, pos, end = [], ds + vb, ds + sb + ARR_BLOCK
         while pos < end - 11 and len(out) < n_want:
             rec = _parse_static_slot(exe, pos) if pos + 24 <= len(exe) else None
             if rec is not None:

@@ -8,16 +8,16 @@ gitignored, copyrighted shareware — **never commit them**).
 ## Where things stand
 
 `python -m tbx.tools.scan_wild wild/hits` — 84 EXEs: 3 decode OK, 81 fail.
-Current tally (post gap 26):
+Current tally (post gap 27, `find_statics` window widening):
 
 | count | error | status |
 |---|---|---|
 | 16 | INT cd | unwitnessable runtime-revision artifact — not actionable (see `scan_wild.py` docstring); crossref.exe advanced in from gap 23 |
-| 7 | DGROUP layout not solvable | **gap 16, needs fresh diagnosis — see below** |
+| 5 | DGROUP layout not solvable | **gap 27 CLOSED one root cause (window-cutoff), 2 of 7 files advanced** (onelab87.exe/onelabel.exe → new gap, "compound-IF tail mismatch"); **schart/hfprop/vhfprop/inv87/invoice remain — see gap-16 section, likely a DIFFERENT or additional root cause (they have INPUT statements, not a literal FOR loop in evidence)** |
 | 5 | byte 90 | set aside (4) + rstprint.exe advanced in from gap 21 (1, undiagnosed whether it's the same unwitnessable shape — check before assuming) |
 | 4 | byte ea | mcmurphy.exe advanced in from gap 21; likely the multi-segment-code JMP FAR shape diagnosed under gap-ea below — probably a big lift, not a small gap |
 | 3 each | INT 8c, byte 06 | INT 8c documented below; byte 06 = **gap 19**, partially diagnosed below (byte 81/8b/3b tiers cleared by gaps 23–26) |
-| 2 each | EC sub 66, EC sub 38, FP de/1e, FP dc/04, byte 8c, 29, 03, ff, 3b, system cell 0x8a, COLOR mask | then singles; the ff/3b/8b entries keep reshuffling as cleanup/reformat/horses/phone/CVT2TB chain through their next blockers |
+| 2 each | string compare jcc, EC sub 66, EC sub 38, FP de/1e, FP dc/04, FP da/1c, COLOR mask, byte 8c, 8b, 89, 29, 1e | then singles |
 
 ## Ongoing plan (priority order — pick up at the first incomplete step)
 
@@ -25,37 +25,41 @@ Frequency order per the standing instruction; INT cd (16) stays skipped as
 unwitnessable. Each gap runs through the 7-step workflow at the bottom of
 this file once diagnosed.
 
-1. **Gap 16 (7 files, DGROUP layout) — in progress, mechanism narrowed to
-   a formula-shaped gap, general rule still NOT pinned.** Root cause (see
-   "Trace 3" in the gap-16 section below, now with a 3-for-3-confirmed
-   scaling relationship): whenever a literal-limit FOR loop coincides with
-   enough static arrays (10, in every probe so far — the exact threshold
-   is still unknown), the array grid's real start shifts to `VAR_BASE +
-   align16(total_scalar_band_width)`, and the scalar band's own disps can
-   fall inside — and span more than one of — the array grid's 54-byte
-   slots. Confirmed position-independent (doesn't matter which array the
-   loop touches) and confirmed to spill across 2 slots when wide enough.
-   Remaining steps, in order (do not skip to implementation — the
-   calibration rule needs a general fixture-verified rule, not 3 data
-   points all sharing `n_static=10`):
-   - a. Get data points at OTHER `n_static` values (know `n=9` never
-     triggers this at all; find the real threshold, then vary `n` above
-     it) crossed with a couple of different scalar-band widths, to fit
-     `grid_start`/`pool_base` as a function of `(VAR_BASE, n, width)`
-     instead of eyeballing `align16(width)` from 3 points.
-   - b. Implement as an additional `dc` candidate in the "no runtime
-     arrays" loop (`layout.py` ~line 309), derived from
-     `align16(dend-sb)` — NOT a change to `walk_run` (verified correct
-     every time it was actually run rather than hand-simulated) or to
-     `find_statics`'s per-record advance (also already correct).
-   - c. Byte-exact verify both dialects; promote probe(s) as `t1_*`/`v10_*`
-     fixtures with pin tests; regenerate goldens; capture dosout.
-   - d. Re-scan wild; confirm schart/hfprop/vhfprop/inv87/invoice/onelab87/
-     onelabel actually advance (per the gap-15 lesson: verify, don't assume).
-     schart has INPUT statements and no obvious FOR loop in evidence — check
-     first whether its shape is really this same mechanism triggered by
-     something other than a literal FOR (e.g. internal string handling)
-     before assuming it matches.
+1. **Gap 16 (was 7 files, DGROUP layout) — gap 27 CLOSED the window-cutoff
+   root cause, 2/7 files advanced; 5 remain, likely a different or
+   additional root cause.** Landed (commit — see git log — "Wild gap 27:
+   widen find_statics's window for FOR-loop/array-grid overlap"):
+   `find_statics`'s window (`pos < end - 11`, `end = ds + sb`) was cut off
+   a few bytes too early whenever a literal-limit FOR loop's scalar band
+   overlapped the tail of the array grid's own slots (see "Trace 3" in the
+   gap-16 section below for the full mechanism trace) — widened by one
+   `ARR_BLOCK` (54 bytes) of slack, which comfortably covers every overlap
+   witnessed so far (32/48/32 bytes across 3 probes at `n_static=9/10/11`).
+   Byte-exact verified both dialects (`t1_for10arr`/`v10_t1_for10arr`,
+   pinned in `test_wild_batch3.py` + `test_tb10_dialect.py`), full suite +
+   ruff + ty clean. Wild re-scan: DGROUP-layout tally 7→5 — onelab87.exe
+   and onelabel.exe advanced into a NEW gap ("compound-IF tail mismatch at
+   0xe792", not investigated yet). **schart/hfprop/vhfprop/inv87/invoice
+   still fail "DGROUP layout not solvable"** — none has an obvious literal
+   FOR loop (schart has INPUT statements instead, the original trace-1
+   lead that trace 2 called a red herring — worth re-examining now that a
+   real, different but related mechanism is understood: INPUT's own
+   codegen may plant a similar scalar/array-grid overlap through a
+   different trigger). Next steps for the remainder:
+   - a. Re-trace schart.exe with the NOW-correct technique (brute-force
+     record scan for `ds`, `dend`-derived `pool_base`, check for the same
+     kind of overlap) rather than re-deriving from scratch — the gap-16
+     section's trace-1 sub-section already has schart's brute-force `ds`
+     confirmed once; redo the `pool_base`/overlap check with fresh eyes.
+   - b. If schart's shape matches (scalar band wider than one `ARR_BLOCK`
+     of slack, or overlapping more than one slot), widen `find_statics`'s
+     window further or make it unbounded (relying on `n_want`-count +
+     `finish()` validation for safety) instead of a fixed one-`ARR_BLOCK`
+     slack constant — the current fix is deliberately conservative and may
+     not be the general form.
+   - c. compound-IF tail mismatch (onelab87.exe/onelabel.exe's new gap):
+     undiagnosed, pick up per the standing frequency-order instruction once
+     its bucket size is known from a fresh scan.
 2. **Byte 90 (5 files)** — 4 are set-aside unwitnessable NOP pairs;
    diagnose rstprint.exe's occurrence before assuming it matches (one
    hexdump at the failing offset settles it). If it matches, the bucket is
@@ -81,6 +85,33 @@ this file once diagnosed.
 
 ## Recently closed (this campaign, newest first)
 
+- **Gap 27, `find_statics` window too tight for FOR-loop/array-grid
+  overlap** (2026-07-17, this session): a literal-limit FOR loop's control
+  variable and the scalar band allocated with/after it can land inside the
+  DGROUP array grid's own trailing bytes — specifically the LAST static
+  array's `ARR_BLOCK` (0x36) slot, whose bookkeeping record is otherwise
+  dead at runtime once its constant-base `addsi` is compiled. Confirmed via
+  5 oracle-compiled probes (`wild/probes_gap16/q_gap16{p,q,s,t,u}.bas`):
+  the overlap is position-fixed (always the grid's last slot, regardless
+  of which array the loop actually indexes — retargeting the loop to a
+  different array produces byte-identical scalar evidence) and can span
+  more than one slot when the scalar band is wide (confirmed 2-slot
+  spillover at a 62-byte band). `find_statics`'s window (`pos < end - 11`,
+  `end = ds + sb`) assumed the static-record run always finishes within
+  `[ds+VAR_BASE, ds+sb)`; widened by one `ARR_BLOCK` of slack, comfortably
+  covering every overlap witnessed (32/48/32 bytes at `n_static=9/10/11`
+  respectively — NOT simply `align16(scalar_band_width)`, an earlier
+  3-data-point hypothesis that a 4th point at a different `n` refuted;
+  see the gap-16 section's "Trace 3" for the full, occasionally
+  self-correcting investigation). `walk_run` and `find_statics`'s
+  per-record advance logic were never wrong — only the window bound.
+  Byte-exact verified both dialects, fixture `t1_for10arr`/
+  `v10_t1_for10arr`, pinned in `test_wild_batch3.py` +
+  `test_tb10_dialect.py`. Closed 2 of 7 wild "DGROUP layout not solvable"
+  files (onelab87.exe/onelabel.exe, advancing into a new "compound-IF tail
+  mismatch" gap); schart/hfprop/vhfprop/inv87/invoice remain — see the
+  gap-16 section for why they're likely a different/additional mechanism
+  (no literal FOR loop in evidence; schart has INPUT statements instead).
 - **Gap 22, compound-store integer ADD (disp16)** (this session): `01 06
   [disp16]` = `add word [disp16], ax` — the DGROUP-scalar sibling of the
   already-implemented `addm_ax_bp` (LOCAL variant, `01 46 [bp+disp8]`,
@@ -344,21 +375,41 @@ save alongside the others before the next session):
    *slot 8* (grid-relative `[784, 838)`), one slot earlier than before —
    confirmed spillover into a second array slot.
 
-**Emerging general picture (still not a fully closed-form rule — do not
-implement from this alone, see below)**: the array grid's real start,
-relative to `VAR_BASE`, is `align16(total_scalar_band_width)`, and the
-grid's real end sits close to (empirically, exactly `+8` from)
-`pool_base`. The scalar band's own disps (`sb..dend`, computed by
-`walk_run` exactly as today, unchanged) numerically fall *inside* the
-array-grid's disp range and can span more than one 54-byte slot. This
-looks less like "array slot memory gets reused" and more like: **the
-`align16`-rounded scalar-band width is being treated as a *fixed offset
-prepended to the whole DGROUP layout* whenever this FOR-loop shape is
-present** — i.e. a missing `vb`/`sb` adjustment term, not literal memory
-reuse. This reframing is more promising for a clean fix (one added term
-in the `sb`/`vb` formulas, no need to special-case which grid bytes are
-"free") but is NOT yet verified algebraically against more than 3 data
-points (all with `n_static=10`; nothing yet varies `n`).
+**`align16(width)` hypothesis: REFUTED by a 4th data point at a different
+`n_static` — do not re-propose it without new evidence.** All 3 confirming
+points above shared `n_static=10`. A 4th probe (`q_gap16u.bas`, saved in
+`wild/probes_gap16/`, `n_static=11`, same 38-byte scalar-band width as the
+first `n=10` probe) **decodes successfully** — but tracing it the same way
+(brute-force record scan + `dend`-derived `ds`) shows the SAME kind of
+overlap is still present: real record0 sits at DS-relative disp `320 =
+VAR_BASE + 32`, not `+48` as `align16(38)` would predict, and not `+0`
+either. It only *looks* fine because `find_statics`'s window (`pos < end -
+11`, checked against each record's *start*, not its populated-byte *end*)
+happens to have enough slack at `n=11` to still reach record 11's start
+before the cutoff — `n=10` was the unlucky case where it didn't, by a
+margin of a few bytes, not a qualitatively different trigger. **This
+reframes gap 16 entirely: it is very likely NOT "exactly `n_static=10`
+triggers a new mechanism" — it's that the SAME leading-offset phenomenon
+exists at `n_static` values well below and above 10 too (probably at every
+`n` once a FOR loop's phantom slots create *any* gap in `walk_run`'s
+otherwise-contiguous evidence, or perhaps at every `n` unconditionally),
+and it only fails loud (or fails silently-wrong) when the offset happens
+to be large enough, or land awkwardly enough, relative to that specific
+program's `n`/pool_base/window math.** This means the wild file counts in
+the tally (7 for "DGROUP not solvable") may be a significant undercount of
+how many files are AFFECTED by this offset — some may already be
+decoding with silently-wrong scalar disps that just haven't crashed yet,
+same as the `n=9` false-positive found earlier in this same trace.
+
+**Revised next step**: stop trying to fit `grid_start - VAR_BASE` as a
+function of `(n, width)` from scattered probes — instead get the offset
+value at `n=9` too (does it also have a small nonzero offset that
+`find_statics` simply always tolerates, or is `n=9` genuinely offset=0?)
+and at 2–3 more `n` values with the SAME width, holding width constant
+this time, to see if the offset is periodic in `n` (a strong hint it's
+really about `(VAR_BASE + n*ARR_BLOCK) mod 16` or similar alignment
+residue, not about the scalar band at all) — this is a cleaner, smaller
+experiment than the width sweep already done and should be tried first.
 
 **Process note, worth repeating for whoever continues this**: earlier in
 this same trace, three "contradicting hypotheses" wasted significant time
