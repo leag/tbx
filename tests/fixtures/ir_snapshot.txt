@@ -68,6 +68,13 @@ CallStmt(name='SUB1', args=(Var(name='E%'),))
 Print(items=(Var(name='E%'),), newline=True, file=None, commas=None)
 End()
 
+## t1_byref2
+SubDef(name='SUB1', params=('A%', 'B%'), body=(Assign(target=Var(name='C%'), value=BinOp(op='*', lhs=Var(name='A%'), rhs=Var(name='B%'))), Print(items=(Var(name='C%'),), newline=True, file=None, commas=None)))
+Assign(target=Var(name='D%'), value=Lit(value=3))
+Assign(target=Var(name='E%'), value=Lit(value=4))
+CallStmt(name='SUB1', args=(Var(name='D%'), Var(name='E%')))
+End()
+
 ## t1_calla
 Assign(target=Var(name='A%'), value=Lit(value=16384))
 CallAbsolute(addr=Var(name='A%'))
@@ -1791,6 +1798,13 @@ End()
 
 ## v10_t1_bsave
 Bsave(file=StrLit(value='X.IMG'), offset=Lit(value=0), length=Lit(value=100))
+End()
+
+## v10_t1_byref2
+SubDef(name='SUB1', params=('A%', 'B%'), body=(Assign(target=Var(name='C%'), value=BinOp(op='*', lhs=Var(name='A%'), rhs=Var(name='B%'))), Print(items=(Var(name='C%'),), newline=True, file=None, commas=None)))
+Assign(target=Var(name='D%'), value=Lit(value=3))
+Assign(target=Var(name='E%'), value=Lit(value=4))
+CallStmt(name='SUB1', args=(Var(name='D%'), Var(name='E%')))
 End()
 
 ## v10_t1_calla

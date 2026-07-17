@@ -8,19 +8,33 @@ gitignored, copyrighted shareware — **never commit them**).
 ## Where things stand
 
 `python -m tbx.tools.scan_wild wild/hits` — 84 EXEs: 3 decode OK, 81 fail.
-Current tally (post gap 17):
+Current tally (post gap 18):
 
 | count | error | status |
 |---|---|---|
 | 15 | INT cd | unwitnessable runtime-revision artifact — not actionable (see `scan_wild.py` docstring) |
 | 7 | DGROUP layout not solvable | **gap 16, needs fresh diagnosis — see below** (grew from 5 to 7: onelab87/onelabel advanced into it after gap 17 closed) |
 | 4 | byte 90 | set aside: unwitnessable FWAIT-revision skew (3 probe variants all compile INT 3Dh) |
-| 3 each | byte ea, ce, 83, 81, 26 | next tier, undiagnosed |
+| 3 each | byte ea, ce, 83, 81, 06 | next tier, undiagnosed (byte 06 is new: filepatc/morcalc/pw advanced into it from gap 18) |
 | 2 each | EC sub 66, INT 8c, FP dc/04, byte ff, 8c, 3b, 29, 03, 01 | then singles |
 
 ## Recently closed (this campaign, newest first)
 
-- **Gap 17, RUN file$** (this session): `RUN "file$"` (loads and runs a
+- **Gap 18, by-ref int param IMUL fold** (this session): `26 F7 2C` = `imul
+  word es:[si]` — the multiplicative counterpart to the existing
+  `far_addax_si`/`far_andax_si`/`far_cmpax_si` folds in the `les
+  si,[bp+N]; 26 <op> es:[si]` by-ref-SUB-param family (gap 11). Fills a
+  gap: `A% * B%` where both operands are by-ref int params. New scan.py
+  case emits `"far_imulax_si"`; consumed in `core.py`'s generic
+  `kind.endswith("_si")` by-ref-param dispatch (~line 1460) alongside the
+  sibling folds, using `"*"` through the same `_rgrp` orientation helper.
+  Byte-exact verified both dialects, fixtures t1_byref2/v10_t1_byref2,
+  pinned in `test_wild_batch3.py::test_decode_t1_byref2` +
+  `test_tb10_dialect.py`'s `PAIRS`. Closes wild filepatc.exe/morcalc.exe/
+  pw.exe's byte-26 failures fully — all three advanced into a NEW `byte
+  06` gap (undiagnosed, now tied at 3 with ea/ce/83/81), not yet
+  investigated this session.
+- **Gap 17, RUN file$** (2026-07-17): `RUN "file$"` (loads and runs a
   DIFFERENT program) compiles to `movsi <string desc>; rt 0x9C (push); INT
   EC sub C4` — a distinct statement dispatch from bare `RUN`'s raw
   jmp-to-start (already handled). Sub 0xC4 sits alphabetically between

@@ -244,6 +244,21 @@ def test_decode_t1_run2():
     assert emit0.emit(prog) == '10 RUN "X.BAS"\n'
 
 
+def test_decode_t1_byref2():
+    # 26 F7 2C = imul word es:[si]: multiplicative fold of a by-ref int SUB
+    # param (`A% * B%` with both params by-ref), alongside the pre-existing
+    # far_addax_si/far_andax_si/far_cmpax_si folds for the same `les
+    # si,[bp+N]; 26 <op> es:[si]` family
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_byref2.exe")))
+    assert src == (
+        "10 SUB SUB1(A%, B%)\n"
+        "  C% = A% * B%\n  PRINT C%\nEND SUB\n"
+        "20 D% = 3\n30 E% = 4\n40 CALL SUB1(D%,E%)\n50 END\n"
+    )
+
+
 if __name__ == "__main__":
     test_decode_t1_fcmp()
     test_decode_t1_fori()
@@ -263,4 +278,5 @@ if __name__ == "__main__":
     test_decode_t1_decr1()
     test_decode_t1_sstat()
     test_decode_t1_run2()
+    test_decode_t1_byref2()
     print("ALL PASS")

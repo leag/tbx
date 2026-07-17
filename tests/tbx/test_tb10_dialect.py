@@ -16,6 +16,7 @@ PAIRS = [
     "t1_arr1",
     "t1_sstat",
     "t1_run2",
+    "t1_byref2",
 ]
 
 

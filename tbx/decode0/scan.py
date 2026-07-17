@@ -448,6 +448,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "far_addax_si"))  # arithmetic fold of a by-ref int
         p += 3  # param, e.g. `N% + 1` (witnessed t1_local2)
         return p
+    if b == 0x26 and exe[p + 1] == 0xF7 and exe[p + 2] == 0x2C:  # imul word es:[si]:
+        ops.append((p, "far_imulax_si"))  # multiplicative fold of a by-ref
+        p += 3  # int param, e.g. `A% * B%` (witnessed q_byref_imul)
+        return p
     if b == 0x26 and exe[p + 1] == 0x8B and exe[p + 2] == 0x04:  # mov ax, es:[si]:
         ops.append((p, "far_movax_si"))  # plain read of a by-ref int param
         p += 3  # into ax, e.g. as an expression's first term (t1_byref1)
