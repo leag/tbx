@@ -168,6 +168,51 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         state.ax = None
         state.k += 1
         return True
+    if kind == "cmpax_bp":  # cmp ax,[bp+d8]: relational against a LOCAL int
+        # (q_loccmp). The compiler evaluates the SOURCE RHS into ax and
+        # compares the LOCAL as memory, so flags are rhs-vs-lhs; the emitted
+        # skip-goto must keep the LOCAL on the LEFT (byte-identical respell),
+        # which needs a mirrored negation map -- the shared _JCC_RELOP signed
+        # rows assume cmpax_bx's forward flag order, so the IF form consumes
+        # its own jcc+jmp here. Value form (movax FFFF follows) keeps
+        # cmpax_m's (mem, ax) source order.
+        nxt = state.ops[state.k + 1] if state.k + 1 < len(state.ops) else None
+        local = state.loc_local(op[2])
+        if nxt is not None and nxt[1] == "movax" and nxt[2] == 0xFFFF:
+            state.pend_icmp = (local, state.ax)
+            state.ax = None
+            state.k += 1
+            return True
+        skiprel = {0x74: "<>", 0x75: "=", 0x7F: ">=", 0x7D: ">", 0x7C: "<=", 0x7E: "<"}
+        if (
+            nxt is None
+            or nxt[1] != "jcc"
+            or nxt[2] not in skiprel
+            or state.k + 2 >= len(state.ops)
+            or state.ops[state.k + 2][1] != "jmp"
+            or nxt[3] != state.ops[state.k + 2][0] + 3
+        ):
+            raise ValueError(f"cmpax_bp without an IF jcc+skip-jmp at {addr:#x}")
+        state.put(
+            ir.IfGoto(
+                ir.RelOp(skiprel[nxt[2]], local, state.ax),
+                ("addr", state.ops[state.k + 2][2]),
+            ),
+            state.cur,
+        )
+        state.ax = None
+        state.cur = None
+        state.k += 3
+        return True
+    if kind == "addax_bp":  # add ax,[bp+d8]: fold a LOCAL int LEFT (q_loccmp)
+        if isinstance(state.ax, ir.Neg):
+            state.ax = ir.BinOp(
+                "-", state.loc_local(op[2]), _rgrp("-", state.ax.operand)
+            )
+        else:
+            state.ax = ir.BinOp("+", state.loc_local(op[2]), _rgrp("+", state.ax))
+        state.k += 1
+        return True
     if kind == "cmpax_bx":  # integer IF compare, both sides ax-computed: the
         # source RHS evaluates first and shuttles to bx, LHS lands in ax, and
         # the signed Jcc rides _JCC_RELOP's 7C-7F rows (witnessed t1_cmpax)
@@ -493,6 +538,8 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
     if kind == "fild_bp":  # LOCAL int onto the FP stack, e.g. for PRINT
         if state.proc_frame is None:
             raise ValueError(f"fild_bp outside a SUB body at {addr:#x}")
+        if state.cur is None:  # may open a statement (e.g. PRINT A% as an
+            state.cur = addr  # IF's skip-goto target, q_loccmp)
         state.stack.append(state.loc_local(op[2]))
         state.k += 1
         return True

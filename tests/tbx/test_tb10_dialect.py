@@ -23,6 +23,7 @@ PAIRS = [
     "t1_addimm",
     "t1_fwd",
     "t1_locidx",
+    "t1_loccmp",
 ]
 
 

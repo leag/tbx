@@ -484,6 +484,14 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "cmpax_m", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4
         return p
+    if b == 0x03 and exe[p + 1] == 0x46:  # add ax, [bp+d8]: fold a LOCAL int
+        ops.append((p, "addax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # into ax (witnessed q_loccmp)
+        return p
+    if b == 0x3B and exe[p + 1] == 0x46:  # cmp ax, [bp+d8]: relational value
+        ops.append((p, "cmpax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # against a LOCAL int (witnessed q_loccmp)
+        return p
     if b == 0x3B and exe[p + 1] == 0xC3:  # cmp ax, bx: integer relational where
         ops.append((p, "cmpax_bx"))  # both sides are ax-computed -- source RHS
         p += 2  # evaluates first and shuttles to bx (witnessed t1_cmpax)

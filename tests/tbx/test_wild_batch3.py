@@ -359,6 +359,26 @@ def test_decode_t1_locidx():
     )
 
 
+def test_decode_t1_loccmp():
+    # 3b 46 = cmp ax,[bp+d8]: integer relational against a LOCAL int, plus
+    # 03 46 = add ax,[bp+d8] (LOCAL folded LEFT into ax). The compiler
+    # evaluates the source RHS into ax and compares the LOCAL as memory
+    # (flags reversed vs cmpax_bx), so the IF form consumes its own jcc+jmp
+    # with a mirrored negation map to keep the LOCAL spelled on the left --
+    # the emitted skip-goto respell is byte-identical on recompile.
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_loccmp.exe")))
+    assert src == (
+        "10 SUB SUB1\n"
+        "  LOCAL A%, B%\n  A% = 3\n  B% = 9\n"
+        '  IF A% <> 0 THEN 16\n  PRINT "Z"\n'
+        '16 IF A% >= B% + 1 THEN 18\n  PRINT "W"\n'
+        "18 PRINT A%\nEND SUB\n"
+        "20 CALL SUB1\n30 END\n"
+    )
+
+
 if __name__ == "__main__":
     test_decode_t1_fcmp()
     test_decode_t1_fori()
@@ -385,4 +405,5 @@ if __name__ == "__main__":
     test_decode_t1_addimm()
     test_decode_t1_fwd()
     test_decode_t1_locidx()
+    test_decode_t1_loccmp()
     print("ALL PASS")

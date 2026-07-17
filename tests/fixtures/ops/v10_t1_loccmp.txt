@@ -1,0 +1,33 @@
+# v10_t1_loccmp dialect=1.0 start=070B0
+070B3:jmp:28943
+070B6:proc_enter
+070B9:local_init:2:6
+070CD:mov_bp_imm:6:3
+070D2:mov_bp_imm:8:9
+070D7:xorax
+070D9:cmpax_bp:6
+070DC:jcc:116:28897
+070DE:jmp:28906
+070E1:movsi:296
+070E4:rt:156
+070E6:rt:190
+070E8:rt:184
+070EA:movax:1
+070ED:addax_bp:8
+070F0:cmpax_bp:6
+070F3:jcc:127:28920
+070F5:jmp:28929
+070F8:movsi:292
+070FB:rt:156
+070FD:rt:190
+070FF:rt:184
+07101:fild_bp:6
+07105:rt:187
+07107:rt:184
+0710B:proc_ret:4
+0710F:sub_sp:4
+07112:far_call:28854
+07117:end
+0711A:epilogue
+# commits
+07109

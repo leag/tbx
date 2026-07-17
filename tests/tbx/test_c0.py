@@ -287,6 +287,9 @@ _DOS_WAIVED: dict[str, str] = {
     "t1_byref1": "LOCAL declares true per-call stack locals, re-zeroed every "
     "call; c0's SUB-local declaration pass doesn't yet distinguish that from "
     "the default local-and-static scoping (ir.Local raises _Unsupported)",
+    "t1_loccmp": "LOCAL declares true per-call stack locals, re-zeroed every "
+    "call; c0's SUB-local declaration pass doesn't yet distinguish that from "
+    "the default local-and-static scoping (ir.Local raises _Unsupported)",
     "t1_locidx": "LOCAL declares true per-call stack locals, re-zeroed every "
     "call; c0's SUB-local declaration pass doesn't yet distinguish that from "
     "the default local-and-static scoping (ir.Local raises _Unsupported)",
