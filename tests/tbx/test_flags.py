@@ -51,6 +51,19 @@ CASES = [
         "O",
         "10 A% = 30000\n20 B% = 30000\n30 C% = A% + B%\n40 PRINT C%\n50 END\n",
     ),
+    (  # cmp sp/jae/mov ax,7/int EC 3C stack-room check at the CALL site under
+        # Stack test: no source spelling, skipped like INTO
+        "fst_t1_stsub.exe",
+        "S",
+        "10 SUB SUB1(A%, B%)\n  C% = A% * B%\n  PRINT C%\nEND SUB\n"
+        "20 D% = 3\n30 E% = 4\n40 CALL SUB1(D%,E%)\n50 END\n",
+    ),
+    (
+        "v10_fst_t1_stsub.exe",
+        "S",
+        "10 SUB SUB1(A%, B%)\n  C% = A% * B%\n  PRINT C%\nEND SUB\n"
+        "20 D% = 3\n30 E% = 4\n40 CALL SUB1(D%,E%)\n50 END\n",
+    ),
     (
         "fbd_t1_arr1.exe",
         "B",

@@ -1,0 +1,22 @@
+# v10_fst_t1_stsub dialect=1.0 start=070B0
+070B3:jmp:28888
+070B6:proc_enter
+070B9:arg_ref:6
+070BC:far_movax_si
+070BF:arg_ref:10
+070C2:far_imulax_si
+070C5:movm_ax:292
+070C9:fild:292
+070CE:rt:187
+070D0:rt:184
+070D4:proc_ret:8
+070D8:movm_imm:290:3
+070DE:movm_imm:288:4
+070E4:stack_chk:526
+070F0:arg_push_ref:290
+070F5:arg_push_ref:288
+070FA:far_call:28854
+070FF:end
+07102:epilogue
+# commits
+070D2

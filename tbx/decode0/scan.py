@@ -164,6 +164,17 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         ops.append((p, "add_sp", exe[p + 2]))
         p += 3
         return p
+    if (
+        b == 0xFF
+        and exe[p + 1] == 0x76
+        and exe[p + 3] == 0xFF
+        and exe[p + 4] == 0x76
+        and exe[p + 2] == exe[p + 5] + 2
+    ):  # push word [bp+d+2]; push word [bp+d]: forward the enclosing SUB's
+        # by-ref param (a far seg:off pair in its frame) as a CALL argument
+        ops.append((p, "arg_push_fwd", struct.unpack_from("<b", exe, p + 5)[0]))
+        p += 6  # (witnessed q_fwd)
+        return p
     if b == 0x16 and exe[p + 1] == 0x56:  # push ss; push si (push far temp ptr arg)
         ops.append((p, "arg_push_temp"))
         p += 2
@@ -193,6 +204,16 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
     if b == 0xCE:  # into: Overflow-toggle check after arithmetic ('O' IDE
         ops.append((p, "into"))  # Options toggle; no operand, no source
         p += 1  # spelling (witnessed q_ovf)
+        return p
+    if (
+        b == 0x81
+        and exe[p + 1] == 0xFC  # cmp sp, imm16: Stack-test ('S') room check at
+        and exe[p + 4 : p + 11] == b"\x73\x06\xb8\x07\x00\xcd\xec"  # CALL site:
+        and dia.canon_sub(exe[p + 11], 0x28) == 0x3C  # jae skip / mov ax,7 /
+    ):  # int EC 3C (raise error 7). Threshold varies with the callee frame;
+        # semantic-free, recompiling with S regenerates it (witnessed q_stsub).
+        ops.append((p, "stack_chk", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 12
         return p
     if b == 0x09 and exe[p + 1] == 0xC0:  # or ax, ax (materialization)
         ops.append((p, "orax"))
@@ -477,6 +498,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
     if b == 0x26 and exe[p + 1] == 0x23 and exe[p + 2] == 0x04:  # and ax, es:[si]
         ops.append((p, "far_andax_si"))  # bitwise fold of a by-ref int param
         p += 3  # (t1_byref1)
+        return p
+    if b == 0x26 and exe[p + 1] == 0x01 and exe[p + 2] == 0x04:  # add es:[si], ax:
+        ops.append((p, "far_addm_ax_si"))  # compound-store add into a by-ref
+        p += 3  # int param, e.g. `A% = A% + 1` in the callee (witnessed q_fwd)
         return p
     if b == 0x26 and exe[p + 1] == 0x89 and exe[p + 2] == 0x04:  # mov es:[si], ax:
         ops.append((p, "far_movm_ax_si"))  # write ax into a by-ref int param

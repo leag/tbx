@@ -587,6 +587,14 @@ End()
 Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Call(name='FRE', args=(StrLit(value='AB'),)), rhs=Lit(value=1)))
 End()
 
+## t1_fwd
+SubDef(name='SUB1', params=('A%',), body=(Assign(target=Var(name='A%'), value=BinOp(op='+', lhs=Var(name='A%'), rhs=Lit(value=1))),))
+SubDef(name='SUB2', params=('A%',), body=(CallStmt(name='SUB1', args=(Var(name='A%'),)),))
+Assign(target=Var(name='B%'), value=Lit(value=5))
+CallStmt(name='SUB2', args=(Var(name='B%'),))
+Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_getfile
 Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'), reclen=None)
 Get(num=1, pos=Lit(value=1))
@@ -2229,6 +2237,14 @@ End()
 
 ## v10_t1_fresx
 Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Call(name='FRE', args=(StrLit(value='AB'),)), rhs=Lit(value=1)))
+End()
+
+## v10_t1_fwd
+SubDef(name='SUB1', params=('A%',), body=(Assign(target=Var(name='A%'), value=BinOp(op='+', lhs=Var(name='A%'), rhs=Lit(value=1))),))
+SubDef(name='SUB2', params=('A%',), body=(CallStmt(name='SUB1', args=(Var(name='A%'),)),))
+Assign(target=Var(name='B%'), value=Lit(value=5))
+CallStmt(name='SUB2', args=(Var(name='B%'),))
+Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_getfile

@@ -100,6 +100,7 @@ class DecodeState:
     prev_dim_end: Any = None
     proc_frame: Any = None
     proc_names: Any = None
+    proc_params: Any = None
     proc_int_offs: Any = None
     proc_str_offs: Any = None
     r_arrs: Any = None
@@ -308,6 +309,10 @@ def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, in
     for i, s in enumerate(state.stmts):
         if isinstance(s, ir.SubDef):
             vs, ars = _region_refs(s.body)
+            # A SUB's formals are its own scope: two SUBs whose params share a
+            # bp offset get the same P-name, which must not read as a cross-
+            # region (SHARED) reference (q_fwd).
+            vs = [v for v in vs if v not in s.params]
             regions.append((i, vs, ars))
     main_stmts = [s for s in state.stmts if not isinstance(s, ir.SubDef)]
     mvs, mars = _region_refs(tuple(main_stmts))
@@ -1119,6 +1124,8 @@ def decode_user_code(exe: bytes) -> list[Any]:
         o[1] in ("proc_enter", "fn_ret") for o in state.ops
     )  # def region present
     state.proc_names = {}  # proc entry addr -> synthesized name (SUB1.., FNFN1..)
+    state.proc_params = {}  # SUB entry addr -> params tuple (declaration order),
+    # for typing forwarded by-ref args at nested CALL sites (q_fwd)
     # open SUB body {entry, idx} (idx into stmts) / open DEF FN body {.., result, max_off}
     state.proc_frame = None
     state.fn_frame = None
@@ -1243,6 +1250,12 @@ def decode_user_code(exe: bytes) -> list[Any]:
             # (witnessed q_ovf).
             state.k += 1
             continue
+        if kind == "stack_chk":
+            # Stack-test toggle ('S') room check before a CALL: cmp sp against
+            # a callee-dependent threshold, raise error 7 if short. No source
+            # spelling and no IR effect -- skip like "into" (witnessed q_stsub).
+            state.k += 1
+            continue
         if select_case.step(state):
             continue
         while state.ifs and addr == state.ifs[-1]["target"]:  # inline-IF body ends here
@@ -1262,6 +1275,18 @@ def decode_user_code(exe: bytes) -> list[Any]:
             state.main_start = op[
                 2
             ]  # entry jmp over the def region: target = main start
+            state.k += 1  # glue, not a GOTO
+            continue
+        if (
+            state.has_procs
+            and kind == "jmp"
+            and addr == state.main_start
+            and state.k + 1 < len(state.ops)
+            and state.ops[state.k + 1][1] == "proc_enter"
+        ):  # chained skip-jmp: consecutive SUB defs are each bracketed by
+            # their own jmp, so the entry jmp lands on the next def's jmp;
+            # extend the def region to its target (witnessed q_fwd)
+            state.main_start = op[2]
             state.k += 1  # glue, not a GOTO
             continue
         # A DEF FN body has no proc_enter prologue (terminated by fn_ret): the first
@@ -1341,6 +1366,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 else (f"P{off:02X}%" if off in state.proc_int_offs else f"P{off:02X}")
                 for off in (6 + 4 * (nparams - 1 - i) for i in range(nparams))
             )
+            state.proc_params[state.proc_frame["entry"]] = params
             state.stmts.append(ir.SubDef(name, params, body))
             state.addrs.append(None)  # a SUB definition is never a jump target
             state.proc_frame = None
@@ -1492,6 +1518,15 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 argvar = ir.Var(f"P{state.pend_arg:02X}%")  # by-ref INT param
                 state.proc_int_offs.add(state.pend_arg)  # (t1_byref1)
                 state.put(ir.Assign(argvar, state.ax), state.cur)
+                state.ax = None
+                state.cur = None
+            elif base == "addm_ax_si":  # add es:[si], ax: compound-store add
+                argvar = ir.Var(f"P{state.pend_arg:02X}%")  # into a by-ref INT
+                state.proc_int_offs.add(state.pend_arg)  # param (q_fwd)
+                state.put(
+                    ir.Assign(argvar, ir.BinOp("+", argvar, _rgrp("+", state.ax))),
+                    state.cur,
+                )
                 state.ax = None
                 state.cur = None
             elif base == "movm_imm_si":  # mov word es:[si], imm16: write a

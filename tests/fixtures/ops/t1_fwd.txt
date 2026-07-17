@@ -1,0 +1,22 @@
+# t1_fwd dialect=1.1 start=08700
+08703:jmp:34582
+08706:proc_enter
+08709:movax:1
+0870C:arg_ref:6
+0870F:far_addm_ax_si
+08712:proc_ret:4
+08716:jmp:34603
+08719:proc_enter
+0871C:arg_push_fwd:6
+08722:far_call:34566
+08727:proc_ret:4
+0872B:movm_imm:288:5
+08731:arg_push_ref:288
+08736:far_call:34585
+0873B:fild:288
+08740:rt:187
+08742:rt:184
+08746:end
+08749:epilogue
+# commits
+08744

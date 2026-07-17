@@ -314,6 +314,31 @@ def test_decode_t1_addimm():
     assert src == "10 A% = 5\n20 A% = A% + 3\n30 PRINT A%\n40 END\n"
 
 
+def test_decode_t1_fwd():
+    # Nested SUBs, three shapes in one fixture: ff 76 d+2 / ff 76 d
+    # (arg_push_fwd -- forwarding the enclosing SUB's by-ref far-pointer param
+    # to a nested CALL, typed from the callee's signature), 26 01 04
+    # (far_addm_ax_si -- compound-store add into a by-ref int param), and the
+    # chained skip-jmp def-region layout for two consecutive SUB definitions.
+    # Formal params sharing a bp offset across SUBs must not synthesize SHARED.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_fwd.exe"))
+    assert prog[0] == ir.SubDef(
+        "SUB1",
+        ("A%",),
+        (ir.Assign(ir.Var("A%"), ir.BinOp("+", ir.Var("A%"), ir.Lit(1))),),
+    )
+    assert prog[1] == ir.SubDef(
+        "SUB2", ("A%",), (ir.CallStmt("SUB1", (ir.Var("A%"),)),)
+    )
+    assert emit0.emit(prog) == (
+        "10 SUB SUB1(A%)\n  A% = A% + 1\nEND SUB\n"
+        "20 SUB SUB2(A%)\n  CALL SUB1(A%)\nEND SUB\n"
+        "30 B% = 5\n40 CALL SUB2(B%)\n50 PRINT B%\n60 END\n"
+    )
+
+
 if __name__ == "__main__":
     test_decode_t1_fcmp()
     test_decode_t1_fori()
@@ -338,4 +363,5 @@ if __name__ == "__main__":
     test_decode_t1_forstepn()
     test_decode_t1_forbig()
     test_decode_t1_addimm()
+    test_decode_t1_fwd()
     print("ALL PASS")

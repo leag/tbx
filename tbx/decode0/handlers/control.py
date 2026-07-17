@@ -42,9 +42,29 @@ def calls(state: DecodeState, op, addr, kind) -> bool:
         state.k += 1
         return True
     if kind == "far_call":
-        args = tuple(state.pend_args)
+        args = []
+        for i, a in enumerate(state.pend_args):
+            if isinstance(a, tuple) and a[0] == "fwd":
+                # Forwarded by-ref param (arg_push_fwd): the far pointer pair
+                # carries no type, so take it from the callee's param in the
+                # same position -- and mark the enclosing SUB's param with the
+                # same type so both headers agree (q_fwd).
+                params = state.proc_params.get(op[2])
+                if params is None or i >= len(params):
+                    raise ValueError(
+                        f"forwarded arg to unknown callee params at {addr:#x}"
+                    )
+                sfx = params[i][-1] if params[i][-1] in "%$" else ""
+                off = a[1]
+                if sfx == "%":
+                    state.proc_int_offs.add(off)
+                elif sfx == "$":
+                    state.proc_str_offs.add(off)
+                args.append(ir.Var(f"P{off:02X}{sfx}"))
+            else:
+                args.append(a)
         state.pend_args.clear()
-        state.put(ir.CallStmt(state.proc_names[op[2]], args), addr)
+        state.put(ir.CallStmt(state.proc_names[op[2]], tuple(args)), addr)
         state.cur = None
         state.k += 1
         return True
@@ -72,6 +92,11 @@ def cargs(state: DecodeState, op, addr, kind) -> bool:
         return True
     if kind == "arg_push_ref":  # push a by-ref CALL arg (caller's var)
         state.pend_args.append(state.loc(op[2]))
+        state.k += 1
+        return True
+    if kind == "arg_push_fwd":  # forward the enclosing SUB's by-ref param as a
+        # CALL arg; typed at far_call from the callee's signature (q_fwd)
+        state.pend_args.append(("fwd", op[2]))
         state.k += 1
         return True
     return False
