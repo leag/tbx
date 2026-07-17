@@ -19,7 +19,7 @@ from tbx.decode0.const import (
     _pp_commas,
 )
 from tbx.decode0.dialect import find_prologue
-from tbx.decode0.scan import _grp, _orient, _scan
+from tbx.decode0.scan import _grp, _orient, _rgrp, _scan
 from tbx.decode0 import handlers, select_case
 from tbx.decode0.datapool import _read_data_pool
 from tbx.decode0.layout import (
@@ -178,6 +178,17 @@ class DecodeState:
                     subs.append(ir.Lit(a["lo"][d] + (r // spans[d]) % ext))
                 return ir.ArrayRef(a["name"], tuple(subs))
         raise ValueError(f"displacement {disp:#x} is neither scalar nor array element")
+
+    def loc_local(self, bp_off):
+        """A [bp+off] operand inside an open SUB body: a LOCAL statement's
+        per-call stack slot (never a by-ref param, which is only ever reached
+        indirectly through `les si,[bp+off]` -- witnessed t1_local1). Every
+        slot in the zero-filled range is a 2-byte int for now (no fixture has
+        witnessed a mixed-type LOCAL declaration yet)."""
+        locs = self.proc_frame["locals"] if self.proc_frame else None
+        if locs is None or bp_off not in locs:
+            raise ValueError(f"[bp+{bp_off}] outside the open LOCAL frame")
+        return ir.Var(locs[bp_off])
 
     def flush_pending(self):
         """A trailing-';' print has no flush vector: the chain is proven
@@ -1254,9 +1265,20 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 "entry": addr,
                 "idx": len(state.stmts),
                 "exit": next(o[0] for o in state.ops[state.k :] if o[1] == "proc_ret"),
+                "locals": None,
             }
             state.proc_str_offs = set()
             state.proc_int_offs = set()
+            state.cur = None
+            state.k += 1
+            continue
+        if kind == "local_init":  # LOCAL statement's zero-fill prologue
+            if state.proc_frame is None or len(state.stmts) != state.proc_frame["idx"]:
+                raise ValueError(f"LOCAL zero-fill outside a fresh SUB body at {addr:#x}")
+            cnt, disp = op[2], op[3]
+            state.proc_frame["locals"] = {
+                disp + 2 * i: f"L{disp + 2 * i:02X}%" for i in range(cnt)
+            }
             state.cur = None
             state.k += 1
             continue
@@ -1275,10 +1297,18 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 state.stmts[state.proc_frame["idx"] :],
                 state.addrs[state.proc_frame["idx"] :],
             )
+            locs = state.proc_frame["locals"]
+            if locs:  # the zero-fill always runs right after proc_enter,
+                # regardless of where LOCAL appears in source, so it's
+                # always the body's first physical line (t1_local1)
+                body = (ir.Local(tuple(locs.values())),) + body
             state.nsub += 1
             name = f"SUB{state.nsub}"
             state.proc_names[state.proc_frame["entry"]] = name
-            nparams = op[2] // 4  # retf pop bytes = 4 x nargs
+            # retf pop bytes = 4 x nargs, PLUS the LOCAL frame's own span: the
+            # locals' stack space is caller-allocated too, so retf pops it
+            # right along with the params (witnessed t1_local2)
+            nparams = (op[2] - 2 * len(locs or ())) // 4
             params = tuple(
                 f"P{off:02X}$"
                 if off in state.proc_str_offs
@@ -1412,6 +1442,10 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 state.proc_int_offs.add(state.pend_arg)  # (t1_cmpfar)
                 state.pend_icmp = (argvar, state.ax)
                 state.ax = None
+            elif base == "addax_si":  # add ax, es:[si]: arithmetic fold of a
+                argvar = ir.Var(f"P{state.pend_arg:02X}%")  # by-ref INT param
+                state.proc_int_offs.add(state.pend_arg)  # (t1_local2)
+                state.ax = ir.BinOp("+", argvar, _rgrp("+", state.ax))
             else:
                 raise ValueError(f"unhandled by-ref param op {kind} at {addr:#x}")
             state.pend_arg = None
@@ -1728,6 +1762,22 @@ def decode_user_code(exe: bytes) -> list[Any]:
             continue
         if kind == "movm_ax":  # int var = ax expression
             state.put(ir.Assign(state.loc(op[2]), state.ax), state.cur)
+            state.ax = None
+            state.cur = None
+            state.k += 1
+            continue
+        if kind == "movm_ax_bp":  # LOCAL int var = ax expression
+            state.put(ir.Assign(state.loc_local(op[2]), state.ax), state.cur)
+            state.ax = None
+            state.cur = None
+            state.k += 1
+            continue
+        if kind == "addm_ax_bp":  # LOCAL int var = var + ax expression, e.g.
+            local = state.loc_local(op[2])  # `X% = X% + 1` (no INCR fast path
+            state.put(  # for bp-relative locals -- witnessed t1_local1)
+                ir.Assign(local, ir.BinOp("+", local, _rgrp("+", state.ax))),
+                state.cur,
+            )
             state.ax = None
             state.cur = None
             state.k += 1

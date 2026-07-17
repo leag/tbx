@@ -78,6 +78,7 @@ from tbx.ir.stmt_nodes import (
     Kill,
     LineInput,
     LineStmt,
+    Local,
     Locate,
     Loop,
     Lprint,
@@ -260,6 +261,8 @@ def _us_decl(s) -> str | None:
         return f"ERASE {s.name}"
     if isinstance(s, Shared):
         return "SHARED " + ", ".join(s.names)
+    if isinstance(s, Local):
+        return "LOCAL " + ", ".join(s.names)
 
 
 def _us_output(s) -> str | None:

@@ -839,6 +839,16 @@ class Shared:
 
 
 @dataclass(frozen=True)
+class Local:
+    """LOCAL v[, v...] -- inside a SUB body, declares true per-call stack
+    variables (unlike the SUB's own default scoping, which is local AND
+    static: see Shared). The compiler zero-fills them in the prologue right
+    after the frame is opened, every call (witnessed t1_local1)."""
+
+    names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class BodyLine:
     """A jump target INSIDE a SUB/DEF FN body: physical line `phys` (1-based,
     counting the header as 0) of the block at top-level statement index `stmt`.

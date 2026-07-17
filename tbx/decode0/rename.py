@@ -287,6 +287,10 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.Shared(
                 tuple(n if n.endswith("()") else name(n) for n in s.names)
             )
+        if isinstance(s, ir.Local):
+            # first body statement (Local's placeholder names are never seen
+            # before this point), so declaration order == first-store order
+            return ir.Local(tuple(name(n) for n in s.names))
         if isinstance(s, ir.SubDef):
             params = tuple(
                 name(p) for p in s.params

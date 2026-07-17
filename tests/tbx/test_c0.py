@@ -278,6 +278,12 @@ _DOS_WAIVED: dict[str, str] = {
     "materialized boolean, so A=20 falls to CASE ELSE. c0 keeps the "
     "handbook semantics (20 > 10 -> BIG); reproducing the bug needs phase-2 "
     "probes to pin the hidden slot",
+    "t1_local1": "LOCAL declares true per-call stack locals, re-zeroed every "
+    "call; c0's SUB-local declaration pass doesn't yet distinguish that from "
+    "the default local-and-static scoping (ir.Local raises _Unsupported)",
+    "t1_local2": "LOCAL declares true per-call stack locals, re-zeroed every "
+    "call; c0's SUB-local declaration pass doesn't yet distinguish that from "
+    "the default local-and-static scoping (ir.Local raises _Unsupported)",
 }
 # file-comparison waivers: the screen still must match
 _DOS_FILE_WAIVED = {

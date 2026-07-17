@@ -863,6 +863,11 @@ class _Gen:
             # scope declaration only: the decoder already resolved every name
             # to its program-unique slot, so there is nothing to generate
             return []
+        if isinstance(s, ir.Local):
+            # true per-call locals need real (non-static) C storage, re-zeroed
+            # every call -- the SUB-local declaration pass below doesn't
+            # distinguish that from the default local-and-static scoping yet
+            raise _Unsupported("LOCAL statement (per-call SUB locals)")
         if isinstance(s, ir.CallStmt):
             return self.gen_call(s)
         if isinstance(s, ir.ExitSub):

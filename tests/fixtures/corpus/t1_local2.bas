@@ -1,0 +1,9 @@
+10 SUB SUB1(N%)
+20 LOCAL X%, Y%
+30 X% = N% + 1
+40 Y% = X% * 2
+50 PRINT X%, Y%
+60 END SUB
+70 M% = 5
+80 CALL SUB1(M%)
+90 END

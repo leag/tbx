@@ -93,6 +93,20 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         ops.append((p, "proc_ret", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4
         return p
+    if (
+        b == 0x51  # push cx; push di; mov ax,ss; mov es,ax; mov cx,<n>;
+        and exe[p + 1] == 0x57  # lea di,[bp+<disp16>]; xor ax,ax; cld; rep
+        and exe[p + 2 : p + 6] == b"\x8c\xd0\x8e\xc0"  # stosw; pop di; pop cx --
+        and exe[p + 6] == 0xB9  # LOCAL statement's zero-fill prologue, right
+        and exe[p + 9 : p + 11] == b"\x8d\xbe"  # after proc_enter (witnessed
+        and exe[p + 13 : p + 18] == b"\x31\xc0\xfc\xf3\xab"  # t1_local1)
+        and exe[p + 18 : p + 20] == b"\x5f\x59"
+    ):
+        cnt = struct.unpack_from("<H", exe, p + 7)[0]
+        disp = struct.unpack_from("<H", exe, p + 11)[0]
+        ops.append((p, "local_init", cnt, disp))
+        p += 20
+        return p
     # Function/temp-frame glue: semantic-free SP/BP frame setup &
     # teardown around DEF FN call sites; matched AFTER the proc_enter/proc_ret
     # combined forms above. The lifter skips these.
@@ -273,6 +287,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "imul_m", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4
         return p
+    if b == 0xF7 and exe[p + 1] == 0x6E:  # imul word [bp+disp8]: LOCAL int
+        ops.append((p, "imul_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # read as the right operand (witnessed t1_local2)
+        return p
     if b == 0xC7 and exe[p + 1] == 0x06:  # mov word [disp16], imm16
         d16, v16 = struct.unpack_from("<Hh", exe, p + 2)
         ops.append((p, "movm_imm", d16, v16))
@@ -288,6 +306,14 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
     if b == 0x89 and exe[p + 1] == 0x06:  # mov [disp16], ax (int store)
         ops.append((p, "movm_ax", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4
+        return p
+    if b == 0x89 and exe[p + 1] == 0x46:  # mov [bp+disp8], ax: LOCAL int store
+        ops.append((p, "movm_ax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # (witnessed t1_local2)
+        return p
+    if b == 0x01 and exe[p + 1] == 0x46:  # add [bp+disp8], ax: LOCAL int
+        ops.append((p, "addm_ax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # combine-store, e.g. `X% = X% + 1` (witnessed t1_local1)
         return p
     if b == 0xA3:  # mov [imm16], ax (scratch bridge)
         ops.append((p, "movmem_ax", struct.unpack_from("<H", exe, p + 1)[0]))
@@ -413,6 +439,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
     if b == 0x26 and exe[p + 1] == 0x3B and exe[p + 2] == 0x04:  # cmp ax, es:[si]:
         ops.append((p, "far_cmpax_si"))  # relational against a by-ref param
         p += 3  # (witnessed t1_cmpfar)
+        return p
+    if b == 0x26 and exe[p + 1] == 0x03 and exe[p + 2] == 0x04:  # add ax, es:[si]:
+        ops.append((p, "far_addax_si"))  # arithmetic fold of a by-ref int
+        p += 3  # param, e.g. `N% + 1` (witnessed t1_local2)
         return p
     return None
 
@@ -1191,7 +1221,8 @@ def _scan(
                     (0xD9, 0): "fld_bp",
                     (0xD9, 3): "fstp_bp",
                     (0xD8, 3): "fcomp_bp",
-                }.get((esc, reg))
+                    (0xDF, 0): "fild_bp",  # LOCAL int read onto the FP stack
+                }.get((esc, reg))  # (PRINT of a local int, witnessed t1_local1)
                 if kind:
                     ops.append((p, pre + kind, bp_off))
                     p = mo + 2

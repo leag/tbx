@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 
 def int_alu(state: DecodeState, op, addr, kind) -> bool:
-    """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addsiax, subax_m, imul_m, idivbx, cmpax_m, inc_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
+    """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addsiax, subax_m, imul_m, imul_bp, idivbx, cmpax_m, inc_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
     if kind == "movdx_m":  # IMP left operand -> dx
         state.dx = state.loc(op[2])
         state.k += 1
@@ -141,6 +141,10 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             )
         else:
             state.ax = ir.BinOp("*", state.loc(op[2]), _rgrp("*", state.ax))
+        state.k += 1
+        return True
+    if kind == "imul_bp":  # imul word [bp+d8]: LOCAL int as the right operand
+        state.ax = ir.BinOp("*", state.loc_local(op[2]), _rgrp("*", state.ax))
         state.k += 1
         return True
     if kind == "idivbx":  # ax (dividend) \ bx (divisor) -> ax
@@ -433,7 +437,13 @@ def fp_math(state: DecodeState, op, addr, kind) -> bool:
 
 
 def fp_bp(state: DecodeState, op, addr, kind) -> bool:
-    """Dispatch family: fld_bp, fstp_bp, fold_bp, fold_n_bp, fcomp_bp."""
+    """Dispatch family: fld_bp, fstp_bp, fold_bp, fold_n_bp, fcomp_bp, fild_bp."""
+    if kind == "fild_bp":  # LOCAL int onto the FP stack, e.g. for PRINT
+        if state.proc_frame is None:
+            raise ValueError(f"fild_bp outside a SUB body at {addr:#x}")
+        state.stack.append(state.loc_local(op[2]))
+        state.k += 1
+        return True
     if kind in ("fld_bp", "fstp_bp", "fold_bp", "fold_n_bp", "fcomp_bp"):
         bp_off = op[2] if kind in ("fld_bp", "fstp_bp", "fcomp_bp") else op[3]
         if state.fn_frame is not None:  # DEF FN body: param read / result / fold

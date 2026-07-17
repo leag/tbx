@@ -1,5 +1,6 @@
 """FCOMPP / variable-limit int FOR / string IF / LPRINT string+TAB / 2-arg
-MID$ / PAINT tile / far by-ref compare -- PC-SIG wild-scan batch 3."""
+MID$ / PAINT tile / far by-ref compare -- PC-SIG wild-scan batch 3.
+Also carries later single-gap closures (double arrays, LOCAL statement)."""
 
 import os
 from tbx import ir
@@ -126,6 +127,43 @@ def test_decode_t1_cmpfar():
     assert "B% = A% = 1" in src
 
 
+def test_decode_t1_local1():
+    # LOCAL's zero-fill prologue (push cx/di; ...; rep stosw; pop di/cx, right
+    # after proc_enter) declares a true per-call stack int, read/written via
+    # plain [bp+d8] ModRM (not the by-ref `les si,[bp+N]` params use)
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_local1.exe"))
+    sub = prog[0]
+    assert isinstance(sub, ir.SubDef) and sub.params == ()
+    assert sub.body[0] == ir.Local(("A%",))
+    assert sub.body[1] == ir.Assign(
+        ir.Var("A%"), ir.BinOp("+", ir.Var("A%"), ir.Lit(1))
+    )
+    assert emit0.emit(prog) == (
+        "10 SUB SUB1\n"
+        "  LOCAL A%\n  A% = A% + 1\n  PRINT A%\nEND SUB\n"
+        "20 CALL SUB1\n30 CALL SUB1\n40 END\n"
+    )
+
+
+def test_decode_t1_local2():
+    # Multiple LOCAL ints (frame base = 6 + 4*nparams, right after the
+    # by-ref param slots) + `26 03 04` = add ax,es:[si]: arithmetic fold of
+    # a by-ref int param (distinct from the existing far_cmpax_si compare);
+    # the LOCAL frame's own span also rides the retf pop-count alongside
+    # the params, so nparams must subtract it back out
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_local2.exe")))
+    assert src == (
+        "10 SUB SUB1(A%)\n"
+        "  LOCAL B%, C%\n  B% = A% + 1\n  C% = B% * 2\n"
+        "  PRINT B%, C%\nEND SUB\n"
+        "20 D% = 5\n30 CALL SUB1(D%)\n40 END\n"
+    )
+
+
 if __name__ == "__main__":
     test_decode_t1_fcmp()
     test_decode_t1_fori()
@@ -137,4 +175,6 @@ if __name__ == "__main__":
     test_decode_t1_dblarr()
     test_decode_t1_dblar2()
     test_decode_t1_cmpfar()
+    test_decode_t1_local1()
+    test_decode_t1_local2()
     print("ALL PASS")
