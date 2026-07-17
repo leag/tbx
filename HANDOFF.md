@@ -8,16 +8,16 @@ gitignored, copyrighted shareware — **never commit them**).
 ## Where things stand
 
 `python -m tbx.tools.scan_wild wild/hits` — 84 EXEs: 3 decode OK, 81 fail.
-Current tally (post gap 22):
+Current tally (post gap 26):
 
 | count | error | status |
 |---|---|---|
-| 15 | INT cd | unwitnessable runtime-revision artifact — not actionable (see `scan_wild.py` docstring) |
+| 16 | INT cd | unwitnessable runtime-revision artifact — not actionable (see `scan_wild.py` docstring); crossref.exe advanced in from gap 23 |
 | 7 | DGROUP layout not solvable | **gap 16, needs fresh diagnosis — see below** |
 | 5 | byte 90 | set aside (4) + rstprint.exe advanced in from gap 21 (1, undiagnosed whether it's the same unwitnessable shape — check before assuming) |
 | 4 | byte ea | mcmurphy.exe advanced in from gap 21; likely the multi-segment-code JMP FAR shape diagnosed under gap-ea below — probably a big lift, not a small gap |
-| 3 each | INT 8c, byte 81, 06 | next tier, undiagnosed (byte 01 is fully gone; byte 83/ce also gone from earlier gaps this session) |
-| 2 each | EC sub 66, EC sub 38, FP de/1e, FP dc/04, byte ff, 8c, 3b, 29 | then singles |
+| 3 each | INT 8c, byte 06 | INT 8c documented below; byte 06 = **gap 19**, partially diagnosed below (byte 81/8b/3b tiers cleared by gaps 23–26) |
+| 2 each | EC sub 66, EC sub 38, FP de/1e, FP dc/04, byte 8c, 29, 03, ff, 3b, system cell 0x8a, COLOR mask | then singles; the ff/3b/8b entries keep reshuffling as cleanup/reformat/horses/phone/CVT2TB chain through their next blockers |
 
 ## Recently closed (this campaign, newest first)
 
@@ -162,32 +162,83 @@ Current tally (post gap 22):
 - Gap 12 INCR/DECR (`0e4f0f7`), gap 11 by-ref int param family (`3f1e23d`),
   gap 10 LOCAL (`2ef2b6d`), gap 9 double arrays — see git log.
 
-## Gap 16 — schart/hfprop/vhfprop/inv87/invoice, UNDIAGNOSED
+## Gap 16 — schart/hfprop/vhfprop/inv87/invoice, UNDIAGNOSED (re-traced 2026-07-17)
 
 The 5 wild "DGROUP layout not solvable" files did NOT advance after gap
-15's fix landed. Traced schart.exe in detail (instrumented `layout._layout`
-with temporary debug prints, since removed): the "no runtime arrays"
-walk-based solver (`_layout`'s `for n in range(31, -1, -1)` loop) never
-finds a consistent `(ds, n, statics)` triple for ANY `n` from 0 to 31 —
-`find_statics` returns `None` for most `n`, and the handful of `n` where it
-does return statics (9, 7, 6, 4, 3, 2, 1, 0) all produce bogus/spurious
-array records (huge implausible bases like `0xc8a0`-`0xc960`, none of them
-`str`-typed) that don't include a string array whose span covers the
-movsi disp `0x600` referenced in the ops. That disp is never explained as
-either a scalar, a pool descriptor, or (in any candidate reached) a string
-array element.
+15's fix landed. This session did a full fresh re-trace of schart.exe and
+**overturned the previous session's working theory** (the "leading 368-byte
+mystery blob before the real static records" write-up that used to live in
+this section, and the near-identical text that had been misfiled under the
+gap-19 byte-06 section below — both described the same schart.exe
+analysis under a since-corrected wrong assumption). Recorded here so the
+next session doesn't re-derive it:
 
-This means schart.exe's real DGROUP shape doesn't fit the existing
-walk-anchored solve strategy at all — likely something structurally
-different (not just "add one more exemption"), e.g.: array element storage
-interleaved with or ahead of the scalar walk in a way the `dc`-driven
-`pool_base` formula doesn't model, a second/nested array region, or this
-file actually needs the `rt_blocks` (runtime-DIM) anchor path but isn't
-tripping it. Needs fresh evidence-set analysis (`tbx FILE --ops`,
-`cfgview`, hexdump around disp 0x600 and its file offset) before attempting
-another fix — do not assume it's a small tweak.
+**The old theory was an artifact of a wrong `ds`.** Previous session
+guessed `ds=0xf900` from a `pool_base=0x4b4` assumption, which put the
+*real* static-array records (found independently below) 0x170 bytes into
+what it thought was the grid, and misidentified that leading 368-byte span
+as unexplained. **That leading span is the ordinary error-trap line table**
+(`layout._line_table`'s `(code_offset, line_number)` format — confirmed
+directly: `exe[0xfa20:0xfa30]` decodes as strictly-increasing code offsets
+that resolve to real op addresses in schart.exe's own op stream, paired
+with line numbers repeating for same-line statements and stepping by 10).
+It sits at file offset 0xfa20-0xfb90, i.e. entirely *before* the correct
+`ds` (below), which is normal/expected — it's a tail structure unrelated to
+DGROUP addressing, not something living inside the scalar/array grid.
 
-hfprop/vhfprop/inv87/invoice are untested against this specific finding;
+**The correct `ds` is `0xfa70`, confirmed by brute force**: scanning the
+whole file for a run of `_parse_static_slot`-valid records whose `base`
+fields match the known `addsi` evidence bases (`0x7e0, 0x810, 0xc8a0,
+0xc8d0, 0xc900, 0xc930, 0xc960`) lands exactly 10 records starting at file
+offset `0xfb90 = 0xfa70 + VAR_BASE`, each separated by the *full* `0x36`
+`ARR_BLOCK` stride (a short populated header — 12/18/24 bytes per
+`_parse_static_slot` — then zero padding out to the full slot), ending
+cleanly right at the one-and-only marker occurrence (`P = 0xfdb0`, `exe.rfind`
+found no other candidate in the whole file). Also recovers the 3
+addsi-silent arrays (`0x840`/`0x1fc0`/`0x7430`, constant-index-only, large
+counts 751/2701/2701) in their correct declared-order slots between the
+addsi-evidenced ones — this matches the previous session's own note about
+"3 unwitnessed records" almost exactly, just at the *right* file position
+this time (their find_statics call never reached record 3 before, because
+the window was anchored 0x170 bytes too early).
+
+**Where it's currently stuck**: with `ds=0xfa70` nailed down, the
+scalar-band walk (`walk_run(sb)`, `sb = VAR_BASE + ARR_BLOCK*10 = 0x33c`)
+finds real evidence (fld/fstp/fcomp *and* movsi) all the way out past
+0x4b0 — confirmed several of these are genuine read+write scalar slots,
+not pooled literal descriptors (fstp writes at e.g. 0x33c/0x340/0x344 rule
+out "pool descriptor", since those are immutable). But **every dc/pool_base
+candidate the existing loop tries fails `finish()`'s descriptor
+validation** (`off = P+4+d-pool_base` must read a `len|0x8000` word), and
+the failure is specifically driven by `prompt_disps` (INPUT/LINE INPUT
+prompt-string disps): the code only exempts *one* prompt disp from
+descriptor validation (`prompt_disps - {pool_base - 4}`, the "bare-prompt
+sentinel" special case from the INT-19 investigation), but schart.exe has
+several prompt disps (0x440, 0x4b0, 0x548, ...) that coincide with real
+scalar-band slots, not just one — so whichever single disp gets exempted
+per candidate, the others still fail the pool-descriptor tag check. This
+looks like a second, more general "promptless INPUT reuses some other
+scalar's storage as its prompt pointer" convention that isn't understood
+yet, layered on top of a genuine architecture gap: the `no rt_blocks`
+branch's `dc` candidate list (`[dend] + 16-aligned points within strs`)
+doesn't explore the full space of the real answer either — a working
+`(ds, pool_base)` pair for this file was NOT found even after decoupling
+`ds` from the `ds = P+4-pool_base` (delta==0) assumption and searching
+`pool_base` independently.
+
+**Do not patch further from schart.exe alone** (unverifiable against the
+oracle anyway per the wild-corpus caveat). Next step: author a probe with
+a similar shape — several static arrays (including large addsi-silent
+ones) *plus* multiple INPUT statements, some with explicit prompts and
+some without, sharing DGROUP space with a sizeable scalar band — compile
+via the oracle, and work out the real prompt-disp/sentinel rule from a
+verifiable fixture before generalizing `finish()`'s exemption or the `dc`
+search. A debug script reproducing all of the above (evidence-set dumps,
+brute-force record-chain finder, `finish()` reimplementation with tracing)
+was used ad hoc this session and not preserved; rebuild similarly rather
+than re-deriving `ds`/the line-table identification from scratch.
+
+hfprop/vhfprop/inv87/invoice are untested against this session's finding;
 they may or may not share schart's exact shape.
 
 ## Gap INT-8c — likely ON KEY GOSUB related, UNDIAGNOSED
@@ -298,46 +349,55 @@ further into what `mov dx,[0000h]` reads (disp 0 is below `VAR_BASE`,
 so it's a fixed runtime/system cell, not a user scalar — identifying
 what lives at DS:0000 would narrow this down fast).
 
-**Further traced (2026-07-17, same session)**: found the right `ds`
-(`0xf900`, from `pool_base=0x4b4` — confirmed correct because `INPUT`'s
-bare-prompt sentinel disp `0x4b0` == `pool_base-4` exactly, and because
-extending `find_statics`'s scan window at this `ds` well past `sb` turns
-up EXACTLY 10 valid, contiguously-packed (each `+0x36` apart) static slot
-records with bases `0x7e0, 0x810, 0x840, 0x1fc0, 0x7430, 0xc8a0, 0xc8d0,
-0xc900, 0xc930, 0xc960` — the first two and last five exactly match the 7
-`addsi` bases seen in the ops (the other 3 are presumably `[si]`-only or
-constant-index arrays with no `addsi` evidence). So `ds` and the true
-static count (`n=10`) are BOTH right.
+**Full-routine trace (2026-07-17, this session)**: disassembled filepatc.exe
+0x8870 through the `retf` with iced-x86 (raw instructions, not just the
+leading bytes HANDOFF previously quoted). The full body, after the 7
+`lds si,[bp+N]; mov <reg>,[si]` reads, is a textbook **CGA snow-avoidance
+direct video-memory writer**: `mov dx,3DAh` (CGA status port) /
+`in al,dx` / `rcr al,1` / `jb` spin-waits for the safe write window, then
+`cli` / `in al,dx` / `and al,ah` / `je` re-checks display-enable, writes a
+char+attribute word via `stosw` to `es:di` (the far pointer from
+`bp+0Ah`/`bp+6`, i.e. the video segment:offset), `sti`, and loops
+(`loop`) over the string read via `lodsb` from the buffer at `bp+1Eh`/
+`bp+16h`. Two code paths (one with the snow-check loop, one — reached via
+`je short 88D3h` when `ax==0`, presumably "not CGA" or "safe mode
+detected" — a plain `lodsb`/`stosw` loop with no port polling). This
+resolves the earlier "what does this SUB do" question definitively: it
+is not ordinary arithmetic, it's an anti-snow text-mode blitter.
 
-The bug: `find_statics(ds, sb, n)` bounds its scan window at
-`ds+sb` (`sb = VAR_BASE + ARR_BLOCK*n`), i.e. it assumes all `n` records
-are packed within exactly `n * 0x36` bytes from the grid start
-(`ds+VAR_BASE`). For schart.exe they are NOT: the 10 real records sit
-contiguously (correctly `0x36` apart from each other) but only starting
-368 bytes (`0x170`) into the grid, well past where a tight `n*0x36`
-window would look for record 1 — so the window cuts off after only 3
-records instead of reaching all 10. Hex-dumped that leading 368-byte
-span: it is NOT zero padding (ruled out the "zero-init table [that
-floats before static-only records]" explanation from `find_statics`'s
-own docstring) — it's dense structured binary data, unclear origin
-(possibly another data structure entirely occupying that space, or slot
-records in a format `_parse_static_slot` doesn't recognize). Did not
-identify what it actually is.
+This also resolves **why `mov dx,[0]` matters**: `[0]` (DS:0000, disp 0,
+below `VAR_BASE`) is read at entry and restored via `mov ds,dx` right
+before the final `pop ds; pop es; pop bp; retf` — i.e. it's simply *this
+program's own DGROUP segment value*, stashed by the runtime startup so
+routines that clobber DS as scratch (every `lds` here reloads DS from
+whatever far pointer it's dereferencing) can restore it before returning.
+Generic runtime bookkeeping cell, not specific to this feature — no
+longer worth chasing as a lead.
 
-**Why not fixed this session**: this is exactly the situation the
-calibration rule warns against — patching `find_statics`'s window
-math without understanding what that leading 368 bytes actually IS
-would be guessing, and schart.exe (a wild EXE, not an authored fixture)
-can't be byte-exact verified against the oracle even if a fix is found
-(see the wild-corpus runtime-revision-skew caveat). Next step for
-whoever picks this up: identify what occupies file offset `ds+VAR_BASE`
-through `ds+VAR_BASE+0x170` (`0xfa20`-`0xfb90` for this specific `ds`) —
-compare against a corpus fixture with a similarly large static-array
-count to see if there's a known structure (DATA pool? another array
-type not yet in `_parse_static_slot`?) that explains it, THEN author a
-minimal authored probe reproducing that exact shape for oracle
-verification, per the usual workflow — don't patch based on schart.exe
-alone.
+**Ruled out this session**: this routine is NOT part of any *always-linked*
+runtime path — grepped the compiled byte signature (`55 8b ec 06 1e 8b 16
+00 00`, proc_enter + push es + push ds + the DS:0000 read) against every
+`.exe` in `tests/fixtures/corpus/`, including several `v10_*` (TB 1.0)
+fixtures that do plain `PRINT`: zero matches. So it isn't emitted for
+ordinary console PRINT under TB 1.0 — something more specific in
+filepatc.exe's/morcalc.exe's/pw.exe's actual source triggers linking this
+routine in, still unidentified. `cli`/`sti` rule out this being literal
+user BASIC statements (TB exposes no CLI/STI-emitting construct) so it's
+compiler/runtime-generated, likely the internal implementation of some
+specific TB statement that blits multiple characters to text-mode video
+memory directly (candidates not yet tried as probes: `VIEW PRINT` region
+scrolling, `WIDTH`-mode-dependent fast PRINT, `PCOPY`, or a PUT/GET
+variant operating on a text-mode "screen" rather than a graphics array).
+Next step is still probe-driven: try each of those statements individually
+compiled under both dialects and diff the output against this exact byte
+shape, since guessing the decoder-side fix (generic LDS-based by-ref-param
+read + DS-restore epilogue) without knowing the real trigger risks solving
+the wrong shape.
+
+(A previous version of this section carried a schart.exe DGROUP-layout
+trace — that was a mis-filed duplicate of the gap-16 investigation, since
+corrected and moved to the gap-16 section above; schart.exe is unrelated
+to this byte-06/by-ref-param gap.)
 
 ## The workflow (each gap, see gap 9–14 commits for examples)
 
