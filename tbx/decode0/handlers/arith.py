@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 
 def int_alu(state: DecodeState, op, addr, kind) -> bool:
-    """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addsiax, subax_m, imul_m, imul_bp, movax_bp, idivbx, cmpax_m, inc_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
+    """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addsiax, subax_m, imul_m, imul_bp, movax_bp, idivbx, cmpax_m, inc_m, dec_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
     if kind == "movdx_m":  # IMP left operand -> dx
         state.dx = state.loc(op[2])
         state.k += 1
@@ -171,10 +171,27 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         state.k += 1
         return True
     if kind == "inc_m":
-        # Integer FOR-NEXT increment -- implicit in BASIC; consume silently
-        # (the NEXT stmt is emitted on the cmp_mi8 guard above).
-        if not state.fors or state.fors[-1]["v"] != op[2]:
-            raise ValueError(f"inc_m outside integer FOR loop at {addr:#x}")
+        if state.fors and state.fors[-1]["v"] == op[2]:
+            # Integer FOR-NEXT increment -- implicit in BASIC; consume
+            # silently (the NEXT stmt is emitted on the cmp_mi8 guard above).
+            state.k += 1
+            return True
+        # INCR normalization: bare INC [disp16] outside a FOR context
+        # compiles `X = X + 1` (witnessed t1_incr1)
+        var = state.loc(op[2])
+        state.put(ir.Assign(var, ir.BinOp("+", var, ir.Lit(1))), state.cur)
+        state.cur = None
+        state.k += 1
+        return True
+    if kind == "dec_m":
+        # DECR normalization: bare DEC [disp16] compiles `X = X - 1`; never
+        # witnessed inside a FOR (negative-step FOR-NEXT is a separate,
+        # unwitnessed shape) so any FOR-frame match is fail-loud
+        if state.fors and state.fors[-1]["v"] == op[2]:
+            raise ValueError(f"dec_m matches the open FOR's loop var at {addr:#x}")
+        var = state.loc(op[2])
+        state.put(ir.Assign(var, ir.BinOp("-", var, ir.Lit(1))), state.cur)
+        state.cur = None
         state.k += 1
         return True
     if kind == "negax":  # subtraction setup

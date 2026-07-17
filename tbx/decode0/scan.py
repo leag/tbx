@@ -323,9 +323,13 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "movsim", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4
         return p
-    if b == 0xFF and exe[p + 1] == 0x06:  # inc word [disp16] (integer FOR)
+    if b == 0xFF and exe[p + 1] == 0x06:  # inc word [disp16]: the integer FOR
         ops.append((p, "inc_m", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 4
+        p += 4  # step, OR a bare `X = X + 1` (INCR) outside a loop (t1_incr1)
+        return p
+    if b == 0xFF and exe[p + 1] == 0x0E:  # dec word [disp16]: bare `X = X - 1`
+        ops.append((p, "dec_m", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # (DECR, witnessed t1_decr1)
         return p
     if b == 0x83 and exe[p + 1] == 0x3E:  # cmp word [disp16], imm8 (int FOR test)
         d16, i8 = struct.unpack_from("<Hb", exe, p + 2)

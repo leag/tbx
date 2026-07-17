@@ -185,6 +185,12 @@ Print(items=(StrLit(value='G'),), newline=True, file=None, commas=None)
 Print(items=(ArrayRef(name='V0#', indices=(Lit(value=2),)),), newline=True, file=None, commas=None)
 End()
 
+## t1_decr1
+Assign(target=Var(name='A%'), value=Lit(value=5))
+Assign(target=Var(name='A%'), value=BinOp(op='-', lhs=Var(name='A%'), rhs=Lit(value=1)))
+Print(items=(Var(name='A%'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_defseg
 DefSeg(seg=Lit(value=0))
 Poke(addr=Lit(value=1040), value=Lit(value=1))
@@ -571,6 +577,12 @@ Input(prompt=None, var=Var(name='A'), comma=False)
 Input(prompt=None, var=Var(name='B'), comma=False)
 IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), body=(Assign(target=Var(name='C'), value=Lit(value=1)), Assign(target=Var(name='D'), value=Lit(value=2))))
 Print(items=(Var(name='C'), Var(name='D')), newline=True, file=None, commas=None)
+End()
+
+## t1_incr1
+Assign(target=Var(name='A%'), value=Lit(value=5))
+Assign(target=Var(name='A%'), value=BinOp(op='+', lhs=Var(name='A%'), rhs=Lit(value=1)))
+Print(items=(Var(name='A%'),), newline=True, file=None, commas=None)
 End()
 
 ## t1_inkey

@@ -65,6 +65,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
             "movm_imm",
             "movm_ax",
             "inc_m",
+            "dec_m",
             "cmp_mi8",
             "cmpm_ax",
             "movsim",

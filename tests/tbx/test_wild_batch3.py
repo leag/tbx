@@ -184,6 +184,24 @@ def test_decode_t1_byref1():
     )
 
 
+def test_decode_t1_incr1():
+    # Bare INC [disp16] (FF /0) outside a FOR context is the INCR
+    # normalization: `X% = X% + 1`, distinct from the FOR-NEXT step use of
+    # the exact same opcode
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_incr1.exe")))
+    assert src == "10 A% = 5\n20 A% = A% + 1\n30 PRINT A%\n40 END\n"
+
+
+def test_decode_t1_decr1():
+    # Bare DEC [disp16] (FF /1): the DECR normalization, `X% = X% - 1`
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_decr1.exe")))
+    assert src == "10 A% = 5\n20 A% = A% - 1\n30 PRINT A%\n40 END\n"
+
+
 if __name__ == "__main__":
     test_decode_t1_fcmp()
     test_decode_t1_fori()
@@ -198,4 +216,6 @@ if __name__ == "__main__":
     test_decode_t1_local1()
     test_decode_t1_local2()
     test_decode_t1_byref1()
+    test_decode_t1_incr1()
+    test_decode_t1_decr1()
     print("ALL PASS")
