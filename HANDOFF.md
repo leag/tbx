@@ -19,6 +19,57 @@ Current tally (post gap 26):
 | 3 each | INT 8c, byte 06 | INT 8c documented below; byte 06 = **gap 19**, partially diagnosed below (byte 81/8b/3b tiers cleared by gaps 23–26) |
 | 2 each | EC sub 66, EC sub 38, FP de/1e, FP dc/04, byte 8c, 29, 03, ff, 3b, system cell 0x8a, COLOR mask | then singles; the ff/3b/8b entries keep reshuffling as cleanup/reformat/horses/phone/CVT2TB chain through their next blockers |
 
+## Ongoing plan (priority order — pick up at the first incomplete step)
+
+Frequency order per the standing instruction; INT cd (16) stays skipped as
+unwitnessable. Each gap runs through the 7-step workflow at the bottom of
+this file once diagnosed.
+
+1. **Gap 16 (7 files, DGROUP layout) — in progress, reproducer in hand.**
+   Root cause narrowed to a 48-byte self-describing DGROUP block appearing
+   with 10 static arrays + a literal-limit FOR loop (full trace in the gap-16
+   section below). Remaining steps, in order:
+   - a. Disassemble `q_gap16q.exe`'s FOR prologue/NEXT as raw x86 (`cfgview`
+     or iced directly) — determine whether any instruction references the
+     48-byte block's addresses (`[VAR_BASE-48, VAR_BASE)` relative to the
+     candidate `ds`), or whether it's pure loader data no code reads.
+   - b. Single-variable sweep: start from `q_gap16r.bas` (n=3, decodes fine)
+     and add arrays one at a time to n=10 with a MINIMAL scalar set (just
+     `A%` + loop var), dumping the grid bytes + real scalar disps at each n
+     to catch exactly where and how the block appears and what shifts.
+   - c. Implement the rule in `layout.py`; make the wrong-n_static silent
+     acceptance impossible (the current failure mode is a wrong layout that
+     passes `finish()` — the fix must both solve the new shape AND reject
+     the bogus n=9 solution).
+   - d. Byte-exact verify both dialects; promote probe(s) as `t1_*`/`v10_*`
+     fixtures with pin tests; regenerate goldens; capture dosout.
+   - e. Re-scan wild; confirm schart/hfprop/vhfprop/inv87/invoice/onelab87/
+     onelabel actually advance (per the gap-15 lesson: verify, don't assume).
+     For schart specifically, first check whether its shape really is this
+     block (it has INPUT statements and no obvious FOR — see trace 2 notes).
+2. **Byte 90 (5 files)** — 4 are set-aside unwitnessable NOP pairs;
+   diagnose rstprint.exe's occurrence before assuming it matches (one
+   hexdump at the failing offset settles it). If it matches, the bucket is
+   done and drops out of the actionable tally.
+3. **Byte ea (4 files)** — suspected multi-segment-code JMP FAR (programs
+   >64K code). Scope it first: confirm the shape on mcmurphy/mf/swbb, then
+   decide whether to attempt (likely a scan-architecture lift: segmented
+   op addresses) or document as set-aside with the evidence.
+4. **INT 8c (3 files)** — ON KEY GOSUB lead; untried probes from the gap
+   section below: a statement variety inside the GOSUB handler body, >2
+   simultaneous traps (baby.exe has 8), dense interleaved KEY(n) ON/OFF
+   toggles between statements.
+5. **Byte 06 / gap 19 (3 files)** — CGA snow-avoidance blitter routine;
+   probe candidate triggers one at a time under both dialects: VIEW PRINT,
+   WIDTH-dependent PRINT, PCOPY, text-mode GET/PUT. Match against the byte
+   signature `55 8b ec 06 1e 8b 16 00 00`.
+6. **The 2-tier** (EC sub 66, EC sub 38, FP de/1e, FP dc/04, byte 8c, 29,
+   03, ff, 3b, system cell 0x8a, COLOR mask) — re-tally after each closure
+   above first; these buckets reshuffle as files advance. For FP gaps check
+   the `[si]` FP table for missing rows first; for EC/ED subs check the
+   alphabetical sub-op gap trick (gap-17 lesson).
+7. Singles last, same workflow.
+
 ## Recently closed (this campaign, newest first)
 
 - **Gap 22, compound-store integer ADD (disp16)** (this session): `01 06
