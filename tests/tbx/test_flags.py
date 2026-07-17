@@ -39,6 +39,18 @@ CASES = [
     ("fkb_t1_beep.exe", "K", "10 BEEP\n20 END\n"),
     ("fkb_t1_and.exe", "K", None),
     ("fov_t1_and.exe", "O", None),
+    (  # 0xCE (INTO) after an integer ADD fold under Overflow: no source
+        # spelling, skipped mid-expression without disturbing statement
+        # grouping
+        "fov_t1_ovfadd.exe",
+        "O",
+        "10 A% = 30000\n20 B% = 30000\n30 C% = A% + B%\n40 PRINT C%\n50 END\n",
+    ),
+    (
+        "v10_fov_t1_ovfadd.exe",
+        "O",
+        "10 A% = 30000\n20 B% = 30000\n30 C% = A% + B%\n40 PRINT C%\n50 END\n",
+    ),
     (
         "fbd_t1_arr1.exe",
         "B",

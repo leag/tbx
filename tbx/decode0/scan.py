@@ -190,6 +190,10 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         ops.append((p, "incax"))
         p += 1
         return p
+    if b == 0xCE:  # into: Overflow-toggle check after arithmetic ('O' IDE
+        ops.append((p, "into"))  # Options toggle; no operand, no source
+        p += 1  # spelling (witnessed q_ovf)
+        return p
     if b == 0x09 and exe[p + 1] == 0xC0:  # or ax, ax (materialization)
         ops.append((p, "orax"))
         p += 2

@@ -8,18 +8,43 @@ gitignored, copyrighted shareware — **never commit them**).
 ## Where things stand
 
 `python -m tbx.tools.scan_wild wild/hits` — 84 EXEs: 3 decode OK, 81 fail.
-Current tally (post gap 20):
+Current tally (post gap 21):
 
 | count | error | status |
 |---|---|---|
 | 15 | INT cd | unwitnessable runtime-revision artifact — not actionable (see `scan_wild.py` docstring) |
 | 7 | DGROUP layout not solvable | **gap 16, needs fresh diagnosis — see below** |
-| 4 | byte 90 | set aside: unwitnessable FWAIT-revision skew (3 probe variants all compile INT 3Dh) |
-| 3 each | byte ea, ce, 81, 06, 01 | next tier, undiagnosed (byte 01 is new: menu.exe advanced into it from gap 20; byte 83 is fully gone) |
+| 5 | byte 90 | set aside (4) + rstprint.exe advanced in from gap 21 (1, undiagnosed whether it's the same unwitnessable shape — check before assuming) |
+| 4 | byte ea | mcmurphy.exe advanced in from gap 21; likely the multi-segment-code JMP FAR shape diagnosed under gap-ea below — probably a big lift, not a small gap |
+| 3 each | byte 81, 06, 01 | next tier, undiagnosed (byte ce is fully gone) |
 | 2 each | EC sub 66, EC sub 38, INT 8c, FP de/1e, FP dc/04, byte ff, 8c, 3b, 29 | then singles |
 
 ## Recently closed (this campaign, newest first)
 
+- **Gap 21, Overflow-toggle INTO after arithmetic** (this session): byte
+  `0xCE` = the raw x86 `INTO` instruction (call INT 4 if the Overflow flag
+  is set), which the compiler inserts after integer arithmetic whenever
+  the **Overflow** IDE Options toggle is ON. Confirmed by checking
+  `_toggles()` on all three wild hits (bill.exe/mcmurphy.exe/rstprint.exe
+  all carry `O`). The existing `fov_t1_and.exe` flagged fixture never
+  actually exercised this byte (it's all FP comparisons, no integer
+  arithmetic) — toggle *detection* was calibrated, but the runtime
+  check's own byte pattern never was, so this sat as a gap despite
+  looking "already supported." Like Bounds/Stack test, INTO has no
+  source spelling; unlike those, it carries no operand and no state, so
+  the fix is a pure skip — a new `"into"` op consumed at the very top of
+  the main dispatch loop, before any statement-boundary logic touches
+  `state.cur`, since it appears mid-expression. Compiled via
+  `oracle`'s lower-level `tb_v86_compile.js --toggles O` (the
+  Python `compile_bas` wrapper has no toggle parameter; needed `--tb
+  <floppy>` too, not `--floppy`, for the TB 1.0 variant — a wrapper gap,
+  not a compiler one). Byte-exact verified both dialects (recompiled with
+  the same `--toggles O` flag). Fixtures `fov_t1_ovfadd.exe` +
+  `v10_fov_t1_ovfadd.exe` (flagged fixtures: `.exe` only, no `.bas`, no
+  dosout — pinned directly in `test_flags.py`, matching the existing
+  `fov_t1_and`/`fbd_*`/`fst_*` convention). Closed all three wild
+  byte-ce failures; each advanced into a distinct next gap (0x8a system
+  cell, byte ea, byte 90) — no shared follow-on blocker.
 - **Gap 20, integer FOR-NEXT with a literal STEP other than +-1, and/or a
   limit too large for a signed imm8** (this session): `83 06 [disp16]
   imm8` = `add word [disp16], imm8` is the FOR-NEXT increment fast path

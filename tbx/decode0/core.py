@@ -1234,6 +1234,15 @@ def decode_user_code(exe: bytes) -> list[Any]:
     while state.k < len(state.ops):
         op = state.ops[state.k]
         addr, kind = op[0], op[1]
+        if kind == "into":
+            # Overflow-toggle check (0xCE, no operand): the compiler inserts
+            # this after arithmetic that could overflow when the 'O' IDE
+            # Options toggle is on. No source spelling (rides on
+            # Program.toggles like Bounds/Stack test) and no IR effect --
+            # skip in place, mid-expression, without disturbing state.cur
+            # (witnessed q_ovf).
+            state.k += 1
+            continue
         if select_case.step(state):
             continue
         while state.ifs and addr == state.ifs[-1]["target"]:  # inline-IF body ends here
