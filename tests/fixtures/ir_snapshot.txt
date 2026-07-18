@@ -781,6 +781,14 @@ IfGoto(cond=RelOp(op='=', lhs=Var(name='A'), rhs=Var(name='B')), target=6)
 Assign(target=Var(name='C'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
 End()
 
+## t1_ifgoto
+Input(prompt=None, var=Var(name='A$'), comma=False)
+IfInline(cond=LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='T')), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='t'))), body=(Cls(), Goto(target=5)))
+IfGoto(cond=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='X')), target=4)
+Print(items=(StrLit(value='A'),), newline=True, file=None, commas=None)
+Print(items=(StrLit(value='B'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_ifin
 Input(prompt=None, var=Var(name='A'), comma=False)
 Input(prompt=None, var=Var(name='B'), comma=False)
@@ -2861,6 +2869,14 @@ IfGoto(cond=RelOp(op='>=', lhs=Var(name='A'), rhs=Var(name='B')), target=4)
 Assign(target=Var(name='C'), value=Lit(value=5))
 IfGoto(cond=RelOp(op='=', lhs=Var(name='A'), rhs=Var(name='B')), target=6)
 Assign(target=Var(name='C'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
+End()
+
+## v10_t1_ifgoto
+Input(prompt=None, var=Var(name='A$'), comma=False)
+IfInline(cond=LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='T')), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='t'))), body=(Cls(), Goto(target=5)))
+IfGoto(cond=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='X')), target=4)
+Print(items=(StrLit(value='A'),), newline=True, file=None, commas=None)
+Print(items=(StrLit(value='B'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_ifin

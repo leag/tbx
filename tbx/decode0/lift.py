@@ -301,7 +301,36 @@ def _apply_exit_folds(stmts, addrs, exit_folds):
             i += 1
 
 
-def _fold_if(stmts, addrs, bound=None):
+def _jump_targets(stmts) -> frozenset[int]:
+    """Every address referenced as a jump target anywhere in the statement
+    tree (Goto/IfGoto/Gosub, ON GOTO/GOSUB lists, ON ERROR/RESUME/ON-trap),
+    including inside already-lifted IfInline bodies."""
+    out = set()
+
+    def walk(s):
+        if isinstance(s, (ir.Goto, ir.IfGoto, ir.Gosub)):
+            if isinstance(s.target, tuple) and s.target[0] == "addr":
+                out.add(s.target[1])
+        elif isinstance(s, (ir.OnGoto, ir.OnGosub)):
+            for tag, a in s.targets:
+                if tag == "addr":
+                    out.add(a)
+        elif isinstance(s, (ir.OnError, ir.Resume)) and s.target is not None:
+            if isinstance(s.target, tuple) and s.target[0] == "addr":
+                out.add(s.target[1])
+        elif isinstance(s, ir.OnTrap):
+            if isinstance(s.target, tuple) and s.target[0] == "addr":
+                out.add(s.target[1])
+        elif isinstance(s, ir.IfInline):
+            for b in s.body:
+                walk(b)
+
+    for s in stmts:
+        walk(s)
+    return frozenset(out)
+
+
+def _fold_if(stmts, addrs, bound=None, targets=frozenset()):
     """Fold multi-line IF blocks, address-level (before target resolution).
     A block IF/ELSE is an IfInline whose body ends in a forward Goto past its own start
     (the else-skip): strip it, take the statements up to the Goto target as the ELSE
@@ -309,7 +338,11 @@ def _fold_if(stmts, addrs, bound=None):
     non-inline-safe IfInline with no else becomes a single-arm block. `bound` is the
     merge address that terminates the region: an else-skip Goto to it lands at the
     region end (used when recursing into an ELSE region that excludes the merge stmt).
-    Returns new (stmts, addrs) lists."""
+    `targets` is the program-wide jump-target address set: a region containing a
+    targeted address cannot be an ELSE body (block interiors aren't addressable, so
+    the source can only have spelled it as `IF c THEN ...: GOTO n` over separate
+    lines -- witnessed q_ifgoto2/wild onelab87.exe); the fold is skipped and the
+    trailing Goto stays in the inline body. Returns new (stmts, addrs) lists."""
     out_s, out_a = [], []
     i = 0
     while i < len(stmts):
@@ -329,10 +362,17 @@ def _fold_if(stmts, addrs, bound=None):
             )
             if end_idx is None and end == bound:  # else-skip to the region's merge
                 end_idx = len(stmts)
+            if end_idx is not None and any(
+                t in targets for t in addrs[i + 1 : end_idx] if t is not None
+            ):
+                end_idx = None  # targeted interior: not an ELSE region
             if end_idx is not None:
                 arms = [(s.cond, _fold_body(s.body[:-1]))]
                 else_s, _ = _fold_if(
-                    stmts[i + 1 : end_idx], addrs[i + 1 : end_idx], bound=end
+                    stmts[i + 1 : end_idx],
+                    addrs[i + 1 : end_idx],
+                    bound=end,
+                    targets=targets,
                 )
                 if len(else_s) == 1 and isinstance(else_s[0], ir.IfBlock):
                     arms.extend(else_s[0].arms)  # ELSEIF flatten

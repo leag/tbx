@@ -34,6 +34,7 @@ from tbx.decode0.lift import (
     _apply_exit_folds,
     _fold_if,
     _is_for_header,
+    _jump_targets,
     _lift_midblock_troff,
     _lift_next,
     _resolve_targets,
@@ -430,7 +431,7 @@ def _finalize(state: DecodeState, addr) -> Program:
     # exit, then fold `IF c THEN <skip>` + EXIT into `IF negate(c) THEN EXIT`.
     _apply_exit_folds(state.stmts, state.addrs, state.exit_folds)
     state.stmts[:], state.addrs[:] = _fold_if(
-        state.stmts, state.addrs
+        state.stmts, state.addrs, targets=_jump_targets(state.stmts)
     )  # multi-line IF blocks (Task 3.3)
     fixed_lines = None
     trace_partial: dict[int, int] = {}

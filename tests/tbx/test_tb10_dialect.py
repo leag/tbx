@@ -31,6 +31,7 @@ PAIRS = [
     "t1_strch",
     "t1_svaridx",
     "t1_addpool",
+    "t1_ifgoto",
 ]
 
 

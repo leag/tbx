@@ -369,6 +369,28 @@ def test_decode_t1_strch():
     assert lines[260] == "2610 END"
 
 
+def test_decode_t1_ifgoto():
+    # An IfInline whose body ends in a forward Goto normally block-folds into
+    # IF/ELSE -- but when the would-be ELSE region contains a line that is a
+    # jump target from anywhere (line 50 here, targeted by line 30's IF),
+    # that reading is impossible in source (block-IF interiors aren't
+    # addressable), so _fold_if now skips the fold and the statement emits as
+    # `IF c THEN ...: GOTO n` with the region kept as separate lines.
+    # The compound OR condition is what routes the outer IF through the
+    # IfInline machinery (a simple string IF uses the direct-goto form and
+    # never folds -- q_ifgoto1 witnessed that path decodes fine either way).
+    from tbx import decode0, emit0
+
+    assert emit0.emit(decode0.decode_user_code(_exe("t1_ifgoto.exe"))) == (
+        "10 INPUT A$\n"
+        '20 IF A$ = "T" OR A$ = "t" THEN CLS: GOTO 60\n'
+        '30 IF A$ = "X" THEN 50\n'
+        '40 PRINT "A"\n'
+        '50 PRINT "B"\n'
+        "60 END\n"
+    )
+
+
 def test_decode_t1_addpool():
     # addax_m folding a POOLED int literal as its LEFT operand: `15 - LEN(A$)`
     # evaluates the computed right first, negates, then `add ax,[disp16]`
@@ -581,6 +603,7 @@ if __name__ == "__main__":
     test_decode_t1_forbig()
     test_decode_t1_for10arr()
     test_decode_t1_strch()
+    test_decode_t1_ifgoto()
     test_decode_t1_addpool()
     test_decode_t1_addimm()
     test_decode_t1_fwd()

@@ -62,6 +62,9 @@ KEYS = {
     "t1_poolrun": '[{"wait":"?","send":"x\\r"}]',
     "t1_boolwh": '[{"wait":"?","send":"1\\r"}]',
     "t1_booluntil": '[{"wait":"?","send":"1\\r"}]',
+    # 't' would take the CLS path, whose screen-clear defeats the harness's
+    # prompt-return detection (t1_scr); 'x' exercises the fall-through lines
+    "t1_ifgoto": '[{"wait":"?","send":"x\\r"}]',
 }
 
 
