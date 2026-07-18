@@ -369,6 +369,28 @@ def test_decode_t1_strch():
     assert lines[260] == "2610 END"
 
 
+def test_decode_t1_addpool():
+    # addax_m folding a POOLED int literal as its LEFT operand: `15 - LEN(A$)`
+    # evaluates the computed right first, negates, then `add ax,[disp16]`
+    # where disp16 is a const-pool word, not a scalar slot -- addax_m
+    # previously had no pool fallback (fpval/ifold already did). Also
+    # surfaced the SECOND canonical_rename statement miss in a row (after
+    # gap 31's ir.Color): ir.Locate's row/col/cursor were never walked, so
+    # a V####$ placeholder leaked into LOCATE's col expression; an audit of
+    # every stmt class against rn()'s isinstance checks confirms Locate and
+    # Color were the only walkable-Expr statements missing.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_addpool.exe"))
+    assert prog[1] == ir.Locate(
+        ir.Lit(1),
+        ir.BinOp("-", ir.Lit(15), ir.Call("LEN", (ir.Var("A$"),))),
+    )
+    assert emit0.emit(prog) == (
+        '10 A$ = "AB"\n20 LOCATE 1,15 - LEN(A$)\n30 PRINT "X"\n40 END\n'
+    )
+
+
 def test_decode_t1_addimm():
     # 01 06 = add [disp16], ax: the disp16 sibling of addm_ax_bp (t1_local1's
     # LOCAL combine-store) -- `X% = X% + <expr>` when the RHS isn't a bare
@@ -559,6 +581,7 @@ if __name__ == "__main__":
     test_decode_t1_forbig()
     test_decode_t1_for10arr()
     test_decode_t1_strch()
+    test_decode_t1_addpool()
     test_decode_t1_addimm()
     test_decode_t1_fwd()
     test_decode_t1_locidx()

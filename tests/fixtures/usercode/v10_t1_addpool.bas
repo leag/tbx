@@ -1,0 +1,4 @@
+10 A$ = "AB"
+20 LOCATE 1,15 - LEN(A$)
+30 PRINT "X"
+40 END

@@ -296,6 +296,10 @@ _DOS_WAIVED: dict[str, str] = {
     "t1_run2": "RUN file$ loads and runs a DIFFERENT program; c0 targets "
     "one self-contained translation unit and has no host-process-replace "
     "surrogate for it (ir.Run(file=...) raises _Unsupported)",
+    "t1_addpool": "LOCATE positions via the ANSI-escape surrogate "
+    "(terminal.c tb_locate); in the harness's captured pipe the escapes "
+    "don't reposition, so the DOS golden's column-13 X has no native "
+    "equivalent -- same surrogate that keeps t1_scr out of the dosout set",
 }
 # file-comparison waivers: the screen still must match
 _DOS_FILE_WAIVED = {

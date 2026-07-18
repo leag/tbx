@@ -68,10 +68,20 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         state.k += 1
         return True
     if kind == "addax_m":  # fold LEFT; neg-aware = subtraction
+        try:
+            mem = state.loc(op[2])
+        except ValueError:
+            if op[2] < state.lay["pool_base"] - 4:
+                raise
+            # pooled int-literal LEFT operand: `15 - LEN(A$)` evaluates the
+            # computed RIGHT first, negates, then adds the literal from the
+            # const pool (witnessed t1_addpool) -- same fallback fpval/ifold
+            # already have.
+            mem = state.pool_lit(op[2])
         if isinstance(state.ax, ir.Neg):
-            state.ax = ir.BinOp("-", state.loc(op[2]), _rgrp("-", state.ax.operand))
+            state.ax = ir.BinOp("-", mem, _rgrp("-", state.ax.operand))
         else:
-            state.ax = ir.BinOp("+", state.loc(op[2]), _rgrp("+", state.ax))
+            state.ax = ir.BinOp("+", mem, _rgrp("+", state.ax))
         state.k += 1
         return True
     if kind == "addsiax":

@@ -214,6 +214,12 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.Poke(walk(s.addr), walk(s.value))
         if isinstance(s, ir.DefSeg):
             return ir.DefSeg(None if s.seg is None else walk(s.seg))
+        if isinstance(s, ir.Locate):
+            return ir.Locate(
+                walk(s.row),
+                walk(s.col),
+                None if s.cursor is None else walk(s.cursor),
+            )
         if isinstance(s, ir.Color):
             return ir.Color(
                 None if s.fg is None else walk(s.fg), None if s.bg is None else walk(s.bg)
