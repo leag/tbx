@@ -35,6 +35,7 @@ PAIRS = [
     "t1_errcmp",
     "t1_fileint",
     "t1_imulpool",
+    "t1_miderr",
     "t1_orchain",
     "t1_strgodo",
     "t1_strgoto",

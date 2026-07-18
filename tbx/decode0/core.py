@@ -712,9 +712,9 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         elif name == "MID$":  # s$ on sstack, start in bx, len in ax
             ln = state.ax
             state.ax = None
-            state.start = state.bx
+            st = state.bx
             state.bx = None
-            args = (state.sstack.pop(), state.start, ln)
+            args = (state.sstack.pop(), st, ln)
         elif name == "STRING$":  # n in bx (shuttled), ch in ax
             ch = state.ax
             state.ax = None

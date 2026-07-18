@@ -1077,6 +1077,16 @@ Assign(target=Var(name='A$'), value=StrLit(value='HELLO'))
 MidAssign(target=Var(name='A$'), start=Lit(value=2), source=StrLit(value='X'))
 End()
 
+## t1_miderr
+OnError(target=6)
+Assign(target=Var(name='A$'), value=Call(name='MID$', args=(StrLit(value='ABCDE'), Lit(value=2), Lit(value=3))))
+Print(items=(Var(name='A$'),), newline=True, file=None, commas=None)
+ErrorStmt(code=Lit(value=5))
+Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None)
+End()
+Print(items=(Err(),), newline=True, file=None, commas=None)
+Resume(next_=False, target=5)
+
 ## t1_mix
 OptionBase(n=1)
 Dim(name='V0', bounds=(4,), also=())
@@ -3221,6 +3231,16 @@ End()
 Assign(target=Var(name='A$'), value=StrLit(value='HELLO'))
 MidAssign(target=Var(name='A$'), start=Lit(value=2), source=StrLit(value='X'))
 End()
+
+## v10_t1_miderr
+OnError(target=6)
+Assign(target=Var(name='A$'), value=Call(name='MID$', args=(StrLit(value='ABCDE'), Lit(value=2), Lit(value=3))))
+Print(items=(Var(name='A$'),), newline=True, file=None, commas=None)
+ErrorStmt(code=Lit(value=5))
+Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None)
+End()
+Print(items=(Err(),), newline=True, file=None, commas=None)
+Resume(next_=False, target=5)
 
 ## v10_t1_mix
 OptionBase(n=1)

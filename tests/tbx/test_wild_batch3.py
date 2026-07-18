@@ -469,6 +469,26 @@ def test_decode_t1_addpool():
     )
 
 
+def test_decode_t1_miderr():
+    # 3-arg MID$ decode clobbered DecodeState.start (`state.start = state.bx`
+    # instead of a local), so any program that later needs the error-trap
+    # line table crashed in _finalize with a Lit where the user-code start
+    # address belongs (wild vhfprop.exe; it decodes fully after the fix).
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_miderr.exe")))
+    assert src == (
+        "10 ON ERROR GOTO 70\n"
+        '20 A$ = MID$("ABCDE",2,3)\n'
+        "30 PRINT A$\n"
+        "40 ERROR 5\n"
+        '50 PRINT "NO"\n'
+        "60 END\n"
+        "70 PRINT ERR\n"
+        "80 RESUME 60\n"
+    )
+
+
 def test_decode_t1_strgoto():
     # _is_for_header crashed on three trailing STRING assigns before a GOTO
     # (wild inv87/invoice): vdisp can't parse the "$" placeholder suffix --
@@ -747,6 +767,7 @@ if __name__ == "__main__":
     test_decode_t1_strgodo()
     test_decode_t1_ifgoto()
     test_decode_t1_addpool()
+    test_decode_t1_miderr()
     test_decode_t1_strgoto()
     test_decode_t1_orchain()
     test_decode_t1_fileint()
