@@ -1945,6 +1945,15 @@ Print(items=(StrLit(value='L'),), newline=True, file=None, commas=None)
 IfGoto(cond=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='X')), target=0)
 End()
 
+## t1_strgoto
+Assign(target=Var(name='A$'), value=StrLit(value='A'))
+Assign(target=Var(name='B$'), value=StrLit(value='B'))
+Assign(target=Var(name='C$'), value=StrLit(value='C'))
+Goto(target=5)
+Print(items=(StrLit(value='N'),), newline=True, file=None, commas=None)
+Print(items=(Var(name='A$'), Var(name='B$'), Var(name='C$')), newline=True, file=None, commas=None)
+End()
+
 ## t1_strif
 Assign(target=Var(name='A$'), value=StrLit(value='AB'))
 Assign(target=Var(name='B$'), value=StrLit(value='AB'))
@@ -3971,6 +3980,15 @@ End()
 Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
 Print(items=(StrLit(value='L'),), newline=True, file=None, commas=None)
 IfGoto(cond=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='X')), target=0)
+End()
+
+## v10_t1_strgoto
+Assign(target=Var(name='A$'), value=StrLit(value='A'))
+Assign(target=Var(name='B$'), value=StrLit(value='B'))
+Assign(target=Var(name='C$'), value=StrLit(value='C'))
+Goto(target=5)
+Print(items=(StrLit(value='N'),), newline=True, file=None, commas=None)
+Print(items=(Var(name='A$'), Var(name='B$'), Var(name='C$')), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_strigf

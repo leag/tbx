@@ -15,6 +15,12 @@ def _is_for_header(stmts, vdisp) -> bool:
     lim_s, stp_s, init_s = stmts[-3:]
     if not all(isinstance(s.target, ir.Var) for s in (lim_s, stp_s, init_s)):
         return False
+    if any(s.target.name.endswith("$") for s in (lim_s, stp_s, init_s)):
+        # A FOR variable is never a string, and consecutive string slots are
+        # ALSO 4 bytes apart, so the v-4/v-8 probe below could false-positive
+        # on three trailing string assigns before a GOTO (witnessed t1_strgoto
+        # / wild inv87.exe -- vdisp can't even parse the "$" placeholder).
+        return False
     v = vdisp(init_s.target)
     return vdisp(lim_s.target) == v - 4 and vdisp(stp_s.target) == v - 8
 

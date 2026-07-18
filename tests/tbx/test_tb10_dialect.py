@@ -37,6 +37,7 @@ PAIRS = [
     "t1_imulpool",
     "t1_orchain",
     "t1_strgodo",
+    "t1_strgoto",
     "t1_lpusing",
 ]
 

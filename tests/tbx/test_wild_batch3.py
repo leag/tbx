@@ -469,6 +469,21 @@ def test_decode_t1_addpool():
     )
 
 
+def test_decode_t1_strgoto():
+    # _is_for_header crashed on three trailing STRING assigns before a GOTO
+    # (wild inv87/invoice): vdisp can't parse the "$" placeholder suffix --
+    # and consecutive string slots are ALSO 4 bytes apart, so merely teaching
+    # vdisp "$" would risk false-positive FOR detection; string targets now
+    # reject the header probe outright.
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_strgoto.exe")))
+    assert src == (
+        '10 A$ = "A"\n20 B$ = "B"\n30 C$ = "C"\n40 GOTO 60\n'
+        '50 PRINT "N"\n60 PRINT A$; B$; C$\n70 END\n'
+    )
+
+
 def test_decode_t1_orchain():
     # Integer relationals in a compound bool chain (vhfprop/inv87/invoice at
     # the "unhandled op orax" stop): `IF ERR = 25 OR ERR = 27 OR ERR = 57`
@@ -732,6 +747,7 @@ if __name__ == "__main__":
     test_decode_t1_strgodo()
     test_decode_t1_ifgoto()
     test_decode_t1_addpool()
+    test_decode_t1_strgoto()
     test_decode_t1_orchain()
     test_decode_t1_fileint()
     test_decode_t1_addimm()
