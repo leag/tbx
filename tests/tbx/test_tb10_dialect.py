@@ -32,6 +32,9 @@ PAIRS = [
     "t1_svaridx",
     "t1_addpool",
     "t1_ifgoto",
+    "t1_errcmp",
+    "t1_imulpool",
+    "t1_strgodo",
 ]
 
 

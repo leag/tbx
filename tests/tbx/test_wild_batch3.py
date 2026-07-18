@@ -369,6 +369,43 @@ def test_decode_t1_strch():
     assert lines[260] == "2610 END"
 
 
+def test_decode_t1_errcmp():
+    # IF ERR = n THEN <line>: cmpax_m against runtime cell [0074] (ERR;
+    # [0072] = ERL, both already known to movax_m) in the direct-jcc IF
+    # form -- cmpax_m previously ONLY had the relational-value form (movax
+    # FFFF following); the IF forms consume their own jcc (+skip-jmp for
+    # the forward spelling, wild inv87.exe), flags rhs-lhs REVERSED like
+    # the FP rows and unlike cmpax_bx
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_errcmp.exe")))
+    assert "60 IF ERR = 24 THEN 50" in src
+
+
+def test_decode_t1_imulpool():
+    # imul_m with a POOLED int-literal operand: `180 * (A > 0)` evaluates
+    # the materialized right first, then multiplies the literal LEFT from
+    # the const pool -- the same loc->pool_lit fallback addax_m got in gap
+    # 34. ALSO pins popop's bare-emission rule for a first-pushed chain at
+    # EQUAL precedence: `B * 2 - 1 + 180 * (A > 0)` must NOT respell
+    # R-form, because the flipped textual order flips int-pool allocation
+    # order (a 5-byte diff caught by oracle round-trip)
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_imulpool.exe")))
+    assert "30 C = B * 2 - 1 + 180 * (A > 0)" in src
+
+
+def test_decode_t1_strgodo():
+    # String direct conditional GOTO (`IF A$ = "X" THEN <line>`, backward
+    # target): strcmp + bare jcc with no skip-jmp -- forward strcmp flags,
+    # so the TRUE map is _JCC_RELOP_STR's inverse (wild schart.exe)
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_strgodo.exe")))
+    assert '30 IF A$ = "X" THEN 10' in src
+
+
 def test_decode_t1_ifgoto():
     # An IfInline whose body ends in a forward Goto normally block-folds into
     # IF/ELSE -- but when the would-be ELSE region contains a line that is a
@@ -603,6 +640,9 @@ if __name__ == "__main__":
     test_decode_t1_forbig()
     test_decode_t1_for10arr()
     test_decode_t1_strch()
+    test_decode_t1_errcmp()
+    test_decode_t1_imulpool()
+    test_decode_t1_strgodo()
     test_decode_t1_ifgoto()
     test_decode_t1_addpool()
     test_decode_t1_addimm()

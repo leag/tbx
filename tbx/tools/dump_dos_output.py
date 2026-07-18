@@ -76,6 +76,8 @@ KEYS = {
     "t1_inpmulti3": '[{"wait":"?","send":"1,2,3\\r"}]',
     "t1_inpmixed": '[{"wait":"?","send":"ab,7\\r"}]',
     "t1_relval": '[{"wait":"?","send":"2\\r"}]',
+    "t1_imulpool": '[{"wait":"?","send":"2\\r"}]',
+    "t1_strgodo": '[{"wait":"?","send":"z\\r"}]',
 }
 
 
@@ -96,6 +98,9 @@ SKIP = {
     # programs that never return to the DOS prompt
     "t1_run": "RUN restarts the program forever",
     "zz_ginf": "infinite DO loop by design",
+    "t1_errcmp": "the handler's IF ERR = 24 THEN 50 / 50 PRINT loop is "
+    "infinite by design (the fixture pins the cmpax_m-vs-ERR decode shape, "
+    "not behavior)",
     "t1_calla": "CALL ABSOLUTE at a bare address: no machine code there",
     "t1_screen": "SCREEN 1 enters a graphics mode; the text screen is lost",
     "t1_screenb": "SCREEN 1 enters a graphics mode; the text screen is lost",

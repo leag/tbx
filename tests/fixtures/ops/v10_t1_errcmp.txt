@@ -1,0 +1,20 @@
+# v10_t1_errcmp dialect=1.0 start=070B0
+070B3:on_error:28885
+070BA:movax:24
+070BD:error_stmt
+070C0:movsi:296
+070C3:rt:156
+070C5:rt:190
+070C7:rt:184
+070C9:end
+070CC:movsi:292
+070CF:rt:156
+070D1:rt:190
+070D3:rt:184
+070D5:movax:24
+070D8:cmpax_m:116
+070DC:jcc:116:28876
+070DE:resume_pre
+070E1:jmps:28873
+070E3:epilogue
+# commits

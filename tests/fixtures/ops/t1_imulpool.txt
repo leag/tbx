@@ -1,0 +1,30 @@
+# t1_imulpool dialect=1.1 start=08830
+08833:input:304:16384
+0883A:read_num
+0883D:fstp:296
+08844:fild:314
+08849:fstp:292
+08850:fild:314
+08855:fold:*:292
+0885A:ifold_n:-:312
+0885F:fldz
+08862:fcomp:296
+08867:fstsw
+08869:movax:65535
+0886C:jcc:114:34927
+0886E:incax
+0886F:imul_m:310
+08873:movmem_ax:44
+08876:fild:44
+0887B:popop:+
+0887E:fstp:288
+08885:fld:288
+0888A:rt:187
+0888C:rt:184
+08890:end
+08893:epilogue
+# commits
+08842
+0884E
+08883
+0888E

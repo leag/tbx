@@ -1,0 +1,18 @@
+# t1_strgodo dialect=1.1 start=08830
+08833:input:304:0
+0883A:read_str
+0883D:movsi:288
+08840:strassign
+08842:movsi:312
+08845:rt:156
+08847:rt:190
+08849:rt:184
+0884B:movsi:288
+0884E:rt:156
+08850:movsi:308
+08853:rt:156
+08855:strcmp
+08857:jcc:116:34867
+08859:end
+0885C:epilogue
+# commits

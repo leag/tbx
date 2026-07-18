@@ -786,15 +786,22 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     elif kind == "popop":
         last = state.stack.pop()  # last-pushed is the textual LEFT
         first = state.stack.pop()  # (R-form FSUBRP: st1=st0-st1, and
-        if op[2] in "+*" and all(
-            isinstance(e, ir.BinOp) and _PREC[e.op] > _PREC[op[2]]
-            for e in (last, first)
+        if (
+            op[2] in "+*"
+            and isinstance(last, ir.BinOp)
+            and _PREC[last.op] > _PREC[op[2]]
+            and isinstance(first, ir.BinOp)
+            and _PREC[first.op] >= _PREC[op[2]]
         ):
-            # Two BARE higher-precedence fold chains (I*100 + J*10): TB
-            # evaluates these left-to-right, and they must re-emit without
-            # parens -- a grouped operand compiles right-first, so adding
-            # them would flip the push order (witnessed t1_dim3v; the
-            # grouped/call shapes below are tier1_expr/expr2, t1_fresx).
+            # Two BARE fold chains (I*100 + J*10): TB evaluates these
+            # left-to-right, and they must re-emit without parens -- a
+            # grouped operand compiles right-first, so adding them would
+            # flip the push order (witnessed t1_dim3v; the grouped/call
+            # shapes below are tier1_expr/expr2, t1_fresx). The first-pushed
+            # chain may sit at EQUAL precedence (left-associativity keeps
+            # the parse): `B * 2 - 1 + 180 * (A > 0)` must not respell
+            # R-form, since the flipped textual order also flips int-pool
+            # allocation order (witnessed t1_imulpool, 5-byte diff).
             state.stack.append(ir.BinOp(op[2], first, last))
         else:
             state.stack.append(ir.BinOp(op[2], _grp(last), _grp(first)))  # R-first
@@ -877,8 +884,26 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             state.cur = None
             state.k += 2
             return
-        if state.pend_cmp_str:  # string direct-goto form: no witnessed spelling
-            raise ValueError(f"string compare jcc {cc:02x} without skip-jmp at {addr:#x}")
+        if state.pend_cmp_str:  # string direct conditional GOTO (taken = THEN):
+            # forward strcmp flags, so the TRUE map is _JCC_RELOP_STR's inverse
+            # (witnessed t1_strgodo `IF A$ = "X" THEN <line>` / wild schart.exe;
+            # only "="/"<>" seen, remaining rows by the same forward derivation)
+            true_str = {0x74: "=", 0x75: "<>", 0x73: ">=", 0x72: "<",
+                        0x77: ">", 0x76: "<="}
+            if cc not in true_str:
+                raise ValueError(
+                    f"string compare jcc {cc:02x} without skip-jmp at {addr:#x}"
+                )
+            lhs, rhs = state.pend_cmp
+            state.pend_cmp = None
+            state.pend_cmp_str = False
+            state.put(
+                ir.IfGoto(ir.RelOp(true_str[cc], lhs, rhs), ("addr", t)),
+                state.cur,
+            )
+            state.cur = None
+            state.k += 1
+            return
         if state.pend_cmp and cc in _JCC_RELOP_TRUE:  # direct conditional GOTO (taken =
             lhs, rhs = state.pend_cmp  # THEN): IF cond THEN <line>, short
             state.pend_cmp = None  # jcc with no skip-jmp (witnessed zz_godo)

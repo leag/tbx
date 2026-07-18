@@ -1,0 +1,4 @@
+10 INPUT A$
+20 PRINT "L"
+30 IF A$ = "X" THEN 10
+40 END

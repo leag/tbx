@@ -7,13 +7,14 @@ the shared :class:`~tbx.decode0.core.DecodeState` plus the current
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from tbx import ir
 from tbx.decode0.const import (
     ARR_BLOCK,
     _FREAD,
     _INPUTREAD,
+    _JCC_RELOP_VALUE,
     _PREC,
     _READDATA,
 )
@@ -156,7 +157,16 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                 state.ax,
             )
         else:
-            state.ax = ir.BinOp("*", state.loc(op[2]), _rgrp("*", state.ax))
+            try:
+                mem = state.loc(op[2])
+            except ValueError:
+                if op[2] < state.lay["pool_base"] - 4:
+                    raise
+                # pooled int-literal LEFT operand: `180 * (A > 0)` evaluates
+                # the materialized right first, then multiplies the literal
+                # from the const pool (witnessed t1_imulpool, wild schart.exe)
+                mem = state.pool_lit(op[2])
+            state.ax = ir.BinOp("*", mem, _rgrp("*", state.ax))
         state.k += 1
         return True
     if kind == "imul_bp":  # imul word [bp+d8]: LOCAL int as the right operand
@@ -174,11 +184,57 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         state.bx = None
         state.k += 1
         return True
-    if kind == "cmpax_m":  # record compare: relational value
-        state.pend_icmp = (state.loc(op[2]), state.ax)  # source LHS = mem, RHS = ax
-        state.ax = None
-        state.k += 1
-        return True
+    if kind == "cmpax_m":  # integer relational, mem side = source LHS
+        if op[2] == 0x74:  # runtime cells, not user slots: ERR = [0074],
+            mem: Any = ir.Err()  # ERL = [0072] (IF ERR = n, witnessed
+        elif op[2] == 0x72:  # t1_errcmp / wild inv87.exe)
+            mem = ir.Erl()
+        else:
+            mem = state.loc(op[2])
+        nxt = state.ops[state.k + 1] if state.k + 1 < len(state.ops) else None
+        if nxt is not None and nxt[1] == "movax" and nxt[2] == 0xFFFF:
+            state.pend_icmp = (mem, state.ax)  # relational-value form
+            state.ax = None
+            state.k += 1
+            return True
+        # IF forms: cmp ax,[mem] flags are rhs-lhs (REVERSED, like the FP
+        # rows and unlike cmpax_bx's forward order) -- the skip map mirrors
+        # cmpax_bp's and the direct map coincides with _JCC_RELOP_VALUE;
+        # only "=" is witnessed (t1_errcmp direct, inv87 skip), the other
+        # rows follow the same orientation derivation
+        if nxt is not None and nxt[1] == "jcc":
+            cc = nxt[2]
+            j2 = state.ops[state.k + 2] if state.k + 2 < len(state.ops) else None
+            if j2 is not None and j2[1] == "jmp" and nxt[3] == j2[0] + 3:
+                skiprel = {
+                    0x74: "<>", 0x75: "=", 0x7F: ">=",
+                    0x7D: ">", 0x7C: "<=", 0x7E: "<",
+                }
+                if cc not in skiprel:
+                    raise ValueError(f"cmpax_m IF jcc {cc:02x} at {addr:#x}")
+                state.put(
+                    ir.IfGoto(
+                        ir.RelOp(skiprel[cc], mem, state.ax), ("addr", j2[2])
+                    ),
+                    state.cur,
+                )
+                state.ax = None
+                state.cur = None
+                state.k += 3
+                return True
+            if cc in _JCC_RELOP_VALUE:  # direct: taken = THEN <line>
+                state.put(
+                    ir.IfGoto(
+                        ir.RelOp(_JCC_RELOP_VALUE[cc], mem, state.ax),
+                        ("addr", nxt[3]),
+                    ),
+                    state.cur,
+                )
+                state.ax = None
+                state.cur = None
+                state.k += 2
+                return True
+        raise ValueError(f"cmpax_m without a value/IF consumer at {addr:#x}")
     if kind == "cmpax_bp":  # cmp ax,[bp+d8]: relational against a LOCAL int
         # (q_loccmp). The compiler evaluates the SOURCE RHS into ax and
         # compares the LOCAL as memory, so flags are rhs-vs-lhs; the emitted

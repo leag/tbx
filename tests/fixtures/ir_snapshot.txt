@@ -465,6 +465,15 @@ Erase(name='V0')
 Dim(name='V0', bounds=(Var(name='A'),), also=())
 End()
 
+## t1_errcmp
+OnError(target=5)
+ErrorStmt(code=Lit(value=24))
+Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None)
+End()
+Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None)
+IfGoto(cond=RelOp(op='=', lhs=Err(), rhs=Lit(value=24)), target=4)
+Resume(next_=False, target=3)
+
 ## t1_errf
 Assign(target=Var(name='A%'), value=Err())
 Assign(target=Var(name='B%'), value=Erl())
@@ -811,6 +820,13 @@ Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Input(prompt=None, var=Var(name='B'), comma=False, semi=False)
 IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), body=(Assign(target=Var(name='C'), value=Lit(value=1)), Assign(target=Var(name='D'), value=Lit(value=2))))
 Print(items=(Var(name='C'), Var(name='D')), newline=True, file=None, commas=None)
+End()
+
+## t1_imulpool
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
+Assign(target=Var(name='B'), value=Lit(value=2))
+Assign(target=Var(name='C'), value=BinOp(op='+', lhs=BinOp(op='-', lhs=BinOp(op='*', lhs=Var(name='B'), rhs=Lit(value=2)), rhs=Lit(value=1)), rhs=BinOp(op='*', lhs=Lit(value=180), rhs=Group(inner=BinOp(op='>', lhs=Var(name='A'), rhs=Lit(value=0))))))
+Print(items=(Var(name='C'),), newline=True, file=None, commas=None)
 End()
 
 ## t1_incr1
@@ -1896,6 +1912,12 @@ Print(items=(StrLit(value='S258'),), newline=True, file=None, commas=None)
 Print(items=(StrLit(value='S259'),), newline=True, file=None, commas=None)
 End()
 
+## t1_strgodo
+Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
+Print(items=(StrLit(value='L'),), newline=True, file=None, commas=None)
+IfGoto(cond=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='X')), target=0)
+End()
+
 ## t1_strif
 Assign(target=Var(name='A$'), value=StrLit(value='AB'))
 Assign(target=Var(name='B$'), value=StrLit(value='AB'))
@@ -2645,6 +2667,15 @@ Erase(name='V0')
 Dim(name='V0', bounds=(Var(name='A'),), also=())
 End()
 
+## v10_t1_errcmp
+OnError(target=5)
+ErrorStmt(code=Lit(value=24))
+Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None)
+End()
+Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None)
+IfGoto(cond=RelOp(op='=', lhs=Err(), rhs=Lit(value=24)), target=4)
+Resume(next_=False, target=3)
+
 ## v10_t1_errf
 Assign(target=Var(name='A%'), value=Err())
 Assign(target=Var(name='B%'), value=Erl())
@@ -2964,6 +2995,13 @@ Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Input(prompt=None, var=Var(name='B'), comma=False, semi=False)
 IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), body=(Assign(target=Var(name='C'), value=Lit(value=1)), Assign(target=Var(name='D'), value=Lit(value=2))))
 Print(items=(Var(name='C'), Var(name='D')), newline=True, file=None, commas=None)
+End()
+
+## v10_t1_imulpool
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
+Assign(target=Var(name='B'), value=Lit(value=2))
+Assign(target=Var(name='C'), value=BinOp(op='+', lhs=BinOp(op='-', lhs=BinOp(op='*', lhs=Var(name='B'), rhs=Lit(value=2)), rhs=Lit(value=1)), rhs=BinOp(op='*', lhs=Lit(value=180), rhs=Group(inner=BinOp(op='>', lhs=Var(name='A'), rhs=Lit(value=0))))))
+Print(items=(Var(name='C'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_inkey
@@ -3873,6 +3911,12 @@ Print(items=(StrLit(value='S256'),), newline=True, file=None, commas=None)
 Print(items=(StrLit(value='S257'),), newline=True, file=None, commas=None)
 Print(items=(StrLit(value='S258'),), newline=True, file=None, commas=None)
 Print(items=(StrLit(value='S259'),), newline=True, file=None, commas=None)
+End()
+
+## v10_t1_strgodo
+Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
+Print(items=(StrLit(value='L'),), newline=True, file=None, commas=None)
+IfGoto(cond=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='X')), target=0)
 End()
 
 ## v10_t1_strigf
