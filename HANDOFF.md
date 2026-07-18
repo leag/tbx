@@ -1,6 +1,6 @@
 # Wild-corpus gap campaign — handoff
 
-Status as of 2026-07-17 (follow-up session, gaps 29-32), branch
+Status as of 2026-07-18 (session gaps 46-52), branch
 `claude/claude-md-docs-mr8ssz`.
 Standing instruction: close the most common decoder gap first, in frequency
 order, over the 84 wild PC-SIG Turbo Basic EXEs in `wild/hits/` (untracked,
@@ -8,62 +8,121 @@ gitignored, copyrighted shareware — **never commit them**).
 
 ## Where things stand
 
-`python -m tbx.tools.scan_wild wild/hits` — 84 EXEs: 3 decode OK, 81 fail.
-Current tally (post gaps 29-32: compound-IF tail-test DO..LOOP, string
-char-record window re-anchor, COLOR/VIEW FP-arg cell, variable-indexed
-static string array element — **both the "compound-IF tail mismatch" and
-"string char record not found" buckets from the previous handoff are now
-EMPTY**, all files advanced):
+84 wild EXEs: **8 decode OK** (ck, onelab87, onelabel, mm, autonum, rev,
+startup, vhfprop — the last four report IDE toggles on stderr and are
+otherwise clean), 76 fail. Fresh tally (2026-07-18, after gaps 46-52):
 
 | count | error | status |
 |---|---|---|
 | 16 | INT cd | unwitnessable runtime-revision artifact — not actionable (see `scan_wild.py` docstring) |
-| 5 | byte 90 | set aside (4, unwitnessable) + rstprint.exe (1, undiagnosed whether it's the same shape — check before assuming) |
-| 4 | byte ea | likely the multi-segment-code JMP FAR shape (programs >64K code) — probably a big lift, not a small gap |
-| 3 each | INT 8c; byte 06; then NEW this session: "displacement 0xeaa is neither scalar nor array element" (inv87/invoice), "jump target 0xe74c is not a statement start" (onelab87/onelabel) | INT 8c and byte 06 documented below (both extensively probed, still undiagnosed); the two new 2-file pairs are FRESH, one hexdump/trace each away from a lead |
-| 2 each | INT EC sub 66/38, FP de/1e, FP dc/04, FP da/1c, byte 8c/8b/89/29/1e, system cell 0x8a | INT EC sub 38 investigated this session (see Gap 33 below, undiagnosed); the rest untouched |
+| 5 | byte 90 | set aside (4, unwitnessable) + rstprint.exe (1, undiagnosed whether it's the same shape) |
+| 4 | byte ea | likely multi-segment-code JMP FAR (>64K code) — big lift, not a small gap |
+| 3 each | INT 8c; byte 06 | both extensively probed earlier, still undiagnosed (sections below) |
+| 2 each | EC sub 66, EC sub 38 (gap 33, stuck), FP de/1e, FP dc/04, FP da/1c, byte 8c/8b/89/29/1e, system cell 0x8a | mostly untouched |
+| 2 | "jump target 0x15740 is not a statement start" (inv87/invoice) | the LINE-TABLE EPIC below — a GOTO target nested TWO block-IF levels deep; single-level interior targets were closed as gap 51 |
+| 2 | COLOR mask 07 != cells 06 (r.exe + one more) | untouched |
+| 1 | "cmpax_m without a value/IF consumer" (schart) | schart advanced through gap 52; next stop is an integer-compare consumer shape at 0xf15f — likely small, diagnose next |
+| singles | see scan output | untouched |
+
+## THE LINE-TABLE EPIC (the current big blocker — read this first)
+
+vhfprop.exe now decodes COMPLETELY but does NOT round-trip byte-exact, and
+inv87/invoice's remaining stop is the same root cause. Real wild programs
+have **multi-statement lines** (`1 DIM A$(15,15): DIM B(15): ON ERROR ...`),
+original line numbers that are BYTE-SIGNIFICANT (error-trap line table
+present: ON ERROR/RESUME/ERR), zero-length statements (REM/DATA produce a
+line-table entry but no code), and **numbered block-IF interior lines**
+jumped into from anywhere (gap 51 closed the single-level case).
+
+Findings so far (all verified against vhfprop/inv87 this session):
+
+- vhfprop's table at file 0xbec4: entries (u16 off, u16 line) per STATEMENT,
+  original lines 1,2,10,12,... with up to 5 statements per line. Two entries
+  at the SAME offset (0xe99, lines 500,500,502) = zero-length statements —
+  `_line_table`'s strictly-increasing check rejects the whole table, so
+  prog.lines stays None and we renumber freely → recompiled table differs
+  (~2.4KB of the diff). Runtime-region diffs (0xc0 header area, 0x18a,
+  0x7305) may also derive from line structure and/or the Keyboard-break
+  toggle (vhfprop was compiled with K ON — recompile via
+  `node tb_v86_compile.js <bas> --compile-exe --toggles K --tb <floppy>`,
+  see memory tb-oracle-location).
+- The table-offset set must include statements folded into block bodies:
+  `_finalize` now passes `stmt_addr.values()` as extra_offs (done, gap-51
+  commit). What remains: tolerate equal offsets (zero-length statements),
+  figure out WHAT to emit to regenerate those entries (probe: does `REM`
+  after a colon produce a table entry? does DATA? an empty `::` statement?
+  — compile probes with ON ERROR + REM/DATA variants and diff tables),
+  then build prog.lines for MULTI-statement lines (emit0 already regroups
+  equal consecutive lines via `:` — witnessed t1_errml/t1_tronml) and
+  number block-IF interiors from the table (emit0's traced-block rendering
+  already numbers every physical line of a block; reuse that shape).
+- inv87's "jump target 0x15740": a Goto nested inside an IfInline inside
+  another IfInline (nested numbered block-IFs). The single-level BodyLine
+  mechanism (gap 51) doesn't reach it; with the line table, interior
+  targets resolve naturally to original line numbers instead of phys
+  arithmetic. Recommendation: don't extend phys-counting to nested blocks —
+  build the line-table path instead, it subsumes this.
 
 ## Ongoing plan (priority order — pick up at the first incomplete step)
 
-Frequency order per the standing instruction; INT cd (16) stays skipped as
-unwitnessable. Each gap runs through the 7-step workflow at the bottom of
-this file once diagnosed.
-
-1. **Byte 90 (5 files)** — 4 are set-aside unwitnessable NOP pairs;
-   diagnose rstprint.exe's occurrence before assuming it matches (one
-   hexdump at the failing offset settles it). If it matches, the bucket is
-   done and drops out of the actionable tally.
-2. **Byte ea (4 files)** — suspected multi-segment-code JMP FAR (programs
-   >64K code). Scope it first: confirm the shape on mcmurphy/mf/swbb, then
-   decide whether to attempt (likely a scan-architecture lift: segmented
-   op addresses) or document as set-aside with the evidence.
-3. **INT 8c (3 files)** — ON KEY GOSUB lead; untried probes from the gap
-   section below: a statement variety inside the GOSUB handler body, >2
-   simultaneous traps (baby.exe has 8), dense interleaved KEY(n) ON/OFF
-   toggles between statements.
-4. **Byte 06 / gap 19 (3 files)** — CGA snow-avoidance blitter routine;
-   probe candidate triggers one at a time under both dialects: VIEW PRINT,
-   WIDTH-dependent PRINT, PCOPY, text-mode GET/PUT. Match against the byte
-   signature `55 8b ec 06 1e 8b 16 00 00`.
-5. **"displacement 0xeaa ..." (inv87/invoice, 2 files)** — brand new this
-   session, surfaced by gap 31 closing; not yet traced at all. Same
-   `state.loc()` failure family as gap 31 (COLOR/VIEW cells) and gap 16
-   (array layout) — check whether 0xeaa is another fixed system cell first
-   (grep the movm_imm/movm_ax system-cell dispatch for anything nearby),
-   then whether it's a DGROUP layout miss.
-6. **"jump target 0xe74c is not a statement start" (onelab87/onelabel,
-   2 files)** — brand new this session, surfaced by gap 29 closing. A
-   target-resolution issue at `_finalize`/epilogue time, not a scan-level
-   byte gap — look at what control-flow fold produced a target address
-   that isn't in `addrs`.
-7. **The 2-tier** (EC sub 66, EC sub 38, FP de/1e, FP dc/04, byte 8c/8b/
-   89/29/1e, system cell 0x8a) — re-tally after each closure above first;
-   these buckets reshuffle as files advance. EC sub 38 was investigated
-   this session without a confirmed hypothesis (see Gap 33 below); for FP
-   gaps check the `[si]` FP table for missing rows first.
+1. **schart's cmpax_m consumer at 0xf15f** — fresh small gap, diagnose
+   with --ops context (the file advanced through gaps 46/52 this session;
+   likely another integer-compare shape variant).
+2. **The line-table epic** (above) — unblocks vhfprop byte-exactness AND
+   inv87/invoice (2 files). Start with the zero-length-statement probes.
+3. **Byte 90 (5 files)** — diagnose rstprint.exe's occurrence (one hexdump
+   settles whether it matches the set-aside NOP-pair shape).
+4. **Byte ea (4 files)** — scope the JMP FAR multi-segment theory on
+   mcmurphy/mf/swbb before deciding attempt vs set-aside.
+5. **INT 8c (3 files)** — ON KEY GOSUB lead; untried probes listed in the
+   gap section below.
+6. **Byte 06 / gap 19 (3 files)** — CGA snow-avoidance blitter; probe
+   VIEW PRINT / WIDTH PRINT / PCOPY / text GET/PUT one at a time.
+7. **The 2-tier** — re-tally after each closure; for FP gaps check the
+   `[si]` FP table for missing rows first.
 8. Singles last, same workflow.
 
 ## Recently closed (this campaign, newest first)
+
+- **Gap 52: leading/doubled PRINT commas** (2026-07-18): schart.exe opens
+  PRINTs with bare zone-advances (`PRINT ,,X`) and doubles commas between
+  items. `ir.Print.commas` migrated from items-aligned bools to GAP-aligned
+  comma counts (len(items)+1 slots); C1 handler opens a pend_print on a
+  leading console comma. `PRINT A$,,` (trailing) merges with the next
+  statement's items byte-identically — canonicalized to the merged form.
+  Fixture t1_pcomma2.
+- **Gaps 50-51: 64KB segment wrap; GOTO into block-IF interior**
+  (2026-07-18): (50) GOTO/GOSUB spanning >32KB encode wrapped signed rel16;
+  scan now normalizes e9/e8 targets into [start, start+64K) — fixture
+  t1_bigjmp, a 2800-statement program. (51) TB accepts a NUMBERED line
+  inside IF..END IF as a jump target; inline-IF regions force block form
+  when a body statement's addr is jump-targeted (_fold_if grew a stmt_addr
+  param), short backward jmps into folded bodies lift as Goto("addr"),
+  _resolve_targets extends ir.BodyLine to single-arm IfBlock interiors,
+  emit0's existing body-line numbering renders it; c0 uses a function-
+  scoped C label. Fixture t1_blkgoto. Both from inv87.
+- **Gap 49: 3-arg MID$ clobbered DecodeState.start** (2026-07-18): the
+  MID$(s$,start,len) branch wrote the start ARG into state.start (the
+  user-code start address); any later error-trap line-table use crashed.
+  One-line fix; vhfprop.exe then decoded COMPLETELY (8th wild decode-ok).
+  Fixture t1_miderr.
+- **Gap 48: _is_for_header crash on trailing string assigns** (2026-07-18):
+  GOTO after three consecutive string assigns probes the FOR-header shape;
+  vdisp can't parse "$" placeholders — and string slots are also 4 bytes
+  apart, so string targets now reject the probe outright (teaching vdisp
+  "$" would risk false-positive FOR detection). Fixture t1_strgoto.
+- **Gap 47: integer relationals in compound bool chains** (2026-07-18):
+  `IF ERR = 25 OR ERR = 27 OR ...` materializes cmpax_m through the same
+  6-op template the FP compound machinery lifts; pend_icmp now hands the
+  compare to pend_cmp when orax/andaxbx follows the incax. RESTRICTED to
+  jcc 74/75 (equality): _JCC_RELOP_TRUE's signed rows are cmpax_bx-forward
+  and would silently flip cmpax_m's reversed (mem, ax) order — other codes
+  stay fail-loud until witnessed. Fixture t1_orchain.
+- **Gap 46: INPUT# integer targets via the fistp bridge; PRINT# comma**
+  (2026-07-18): the fistp FP->int bridge fed the _FREAD/_READDATA sentinels
+  straight to ir.Assign instead of _fread_target/_readdata_target. Also
+  witnessed INT C3 = PRINT#'s comma separator (console is C1). Fixture
+  t1_fileint (writes a T.DAT file golden).
 
 - **Gap 32: variable-indexed static string array element as a string
   value** (2026-07-17, follow-up session): the shl-si/addsi computed-
