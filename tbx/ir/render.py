@@ -284,9 +284,10 @@ def _us_output(s) -> str | None:
             return txt
         return txt + ("," if s.items and cs[-1] else ";")
     if isinstance(s, PrintUsing):
+        kw = "LPRINT" if s.lprint else "PRINT"
         pre = f"#{s.file}, " if s.file is not None else ""
         vals = "; ".join(unparse(v) for v in s.values)
-        return f"PRINT {pre}USING {unparse(s.fmt)}; {vals}" + ("" if s.newline else ";")
+        return f"{kw} {pre}USING {unparse(s.fmt)}; {vals}" + ("" if s.newline else ";")
     if isinstance(s, Kill):
         return f"KILL {unparse(s.file)}"
     if isinstance(s, Play):

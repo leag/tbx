@@ -133,6 +133,7 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
                 tuple(walk(v) for v in s.values),
                 file=s.file,
                 newline=s.newline,
+                lprint=s.lprint,
             )
         if isinstance(s, ir.Kill):
             return ir.Kill(walk(s.file))

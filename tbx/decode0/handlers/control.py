@@ -119,16 +119,27 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             state.k += 1
             return True
         if vec in (0xCB, 0xCC):  # USING emit + its string item vec: CB formats a
-            # numeric off the FP stack, CC a string off the sstack (t1_using)
+            # numeric off the FP stack, CC a string off the sstack (t1_using);
+            # item vec BE = console, C0 = file, BF = printer (LPRINT USING,
+            # witnessed t1_lpusing / wild vhfprop.exe)
             nxt = state.ops[state.k + 1][1:] if state.k + 1 < len(state.ops) else None
-            if state.pend_using is None or nxt not in (("rt", 0xBE), ("rt", 0xC0)):
+            if state.pend_using is None or nxt not in (
+                ("rt", 0xBE),
+                ("rt", 0xC0),
+                ("rt", 0xBF),
+            ):
                 raise ValueError(f"stray USING emit at {addr:#x}")
-            f = None if nxt[1] == 0xBE else state.pend_fnum
+            lp = nxt[1] == 0xBF
+            f = state.pend_fnum if nxt[1] == 0xC0 else None
             if nxt[1] == 0xC0 and f is None:
                 raise ValueError(f"file USING item without [0060] at {addr:#x}")
-            if state.pend_using["values"] and state.pend_using["file"] != f:
+            if state.pend_using["values"] and (
+                state.pend_using["file"] != f
+                or state.pend_using.get("lprint", False) != lp
+            ):
                 raise ValueError(f"USING console/file leg flip at {addr:#x}")
             state.pend_using["file"] = f
+            state.pend_using["lprint"] = lp
             state.pend_using["values"].append(
                 state.sstack.pop() if vec == 0xCC else state.stack.pop()
             )
@@ -167,6 +178,8 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
         if vec in (0xBC, 0xBF):  # LPRINT item-eval (printer): BC numeric off the
             # FP stack, BF string off the sstack (witnessed t1_lpstr)
             item = state.sstack.pop() if vec == 0xBF else state.stack.pop()
+            if state.pend_using is not None:  # plain item closes a USING chain
+                state.flush_pending()
             if (
                 state.pend_print is not None
                 and state.pend_print.get("mode") != "lprint"
@@ -184,6 +197,22 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             state.k += 1
             return True
         if vec == 0xB9:  # LPRINT flush-newline
+            if state.pend_using is not None:  # LPRINT USING closes on B9 too
+                pu, state.pend_using = state.pend_using, None
+                if not pu.get("lprint"):
+                    raise ValueError(f"b9 flush of a non-printer USING at {addr:#x}")
+                state.put(
+                    ir.PrintUsing(
+                        pu["fmt"],
+                        tuple(pu["values"]),
+                        newline=True,
+                        lprint=True,
+                    ),
+                    pu["start"],
+                )
+                state.cur = None
+                state.k += 1
+                return True
             if state.pend_print is None:  # bare LPRINT: blank line (t1_lpstr)
                 state.put(ir.Lprint(()), state.cur)
                 state.cur = None

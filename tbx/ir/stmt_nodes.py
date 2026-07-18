@@ -212,12 +212,14 @@ class Print:
 @dataclass(frozen=True)
 class PrintUsing:
     """PRINT [#n,] USING fmt; v[; v...] -- push fmt desc + CA begin, then per value
-    FLD + CB emit + the string item vector (BE console / C0 file)."""
+    FLD + CB emit + the string item vector (BE console / C0 file / BF printer,
+    the last spelling LPRINT USING, witnessed t1_lpusing)."""
 
     fmt: object  # StrLit | Var ($)
     values: tuple[Expr, ...]
     file: object = None  # int | None
     newline: bool = True
+    lprint: bool = False  # LPRINT USING (printer item vector BF)
 
 
 @dataclass(frozen=True)

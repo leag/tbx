@@ -216,8 +216,10 @@ class DecodeState:
             pp, self.pend_print = self.pend_print, None
             if pp.get("mode") == "write":  # WRITE / WRITE# has no trailing-';' form:
                 self.stmts.append(ir.Write(tuple(pp["items"]), file=pp["file"]))
-            elif pp.get("mode") == "lprint":  # LPRINT closes only on its own B9
-                raise ValueError("LPRINT chain not flushed on b9")
+            elif pp.get("mode") == "lprint":  # trailing-';' LPRINT: closed by
+                # the next completed statement, like console PRINT (witnessed
+                # t1_lpusing -- an LPRINT USING follows with no B9 between)
+                self.stmts.append(ir.Lprint(tuple(pp["items"]), newline=False))
             else:
                 self.stmts.append(
                     ir.Print(
@@ -232,7 +234,11 @@ class DecodeState:
             pu, self.pend_using = self.pend_using, None
             self.stmts.append(
                 ir.PrintUsing(
-                    pu["fmt"], tuple(pu["values"]), file=pu["file"], newline=False
+                    pu["fmt"],
+                    tuple(pu["values"]),
+                    file=pu["file"],
+                    newline=False,
+                    lprint=pu.get("lprint", False),
                 )
             )
             self.addrs.append(pu["start"])

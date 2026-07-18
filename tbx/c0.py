@@ -1106,7 +1106,9 @@ class _Gen:
             ]
         if isinstance(s, ir.PrintUsing):
             out = []
-            if s.file is not None:
+            if s.lprint:  # LPRINT USING: printer sink, same as ir.Lprint
+                out.append("tb_out = tb_lpt(); tb_ch = 15;")
+            elif s.file is not None:
                 out.append(f"tb_out = tb_file({s.file}); tb_ch = {s.file};")
             out.append(f"tb_pu_begin({self.s(s.fmt)});")
             out.extend(
@@ -1116,7 +1118,7 @@ class _Gen:
             out.append("tb_pu_flush();")
             if s.newline:
                 out.append("tb_nl();")
-            if s.file is not None:
+            if s.lprint or s.file is not None:
                 out.append("tb_out = stdout; tb_ch = 0;")
             return out
         if isinstance(s, ir.Mkdir):

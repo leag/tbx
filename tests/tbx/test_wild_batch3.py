@@ -369,6 +369,25 @@ def test_decode_t1_strch():
     assert lines[260] == "2610 END"
 
 
+def test_decode_t1_lpusing():
+    # LPRINT USING (wild vhfprop.exe/inv87.exe/invoice.exe): the USING
+    # emit's item vector is BF (printer) alongside the known BE console /
+    # C0 file legs; a trailing-';' LPRINT chain also finalizes lazily like
+    # console PRINT (the old code raised "LPRINT chain not flushed on b9"),
+    # and B9 closes an open printer USING chain
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_lpusing.exe"))
+    assert prog[2] == ir.Lprint((ir.Var("A$"),), newline=False)
+    assert prog[3] == ir.PrintUsing(
+        ir.StrLit("##.##"), (ir.Var("B"),), newline=False, lprint=True
+    )
+    assert emit0.emit(prog) == (
+        '10 A$ = "AB"\n20 B = 1.5\n30 LPRINT A$;\n'
+        '40 LPRINT USING "##.##"; B;\n50 LPRINT A$\n60 END\n'
+    )
+
+
 def test_decode_t1_errcmp():
     # IF ERR = n THEN <line>: cmpax_m against runtime cell [0074] (ERR;
     # [0072] = ERL, both already known to movax_m) in the direct-jcc IF
@@ -640,6 +659,7 @@ if __name__ == "__main__":
     test_decode_t1_forbig()
     test_decode_t1_for10arr()
     test_decode_t1_strch()
+    test_decode_t1_lpusing()
     test_decode_t1_errcmp()
     test_decode_t1_imulpool()
     test_decode_t1_strgodo()
