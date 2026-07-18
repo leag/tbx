@@ -640,6 +640,32 @@ without success — worth checking whether help.exe's or prtguide.exe's
 actual `.bas` source (if ever recoverable, e.g. via a shareware-archive
 source listing) would shortcut the guessing.
 
+**More ruled out this session (2026-07-18)**, using a traceback-frame
+technique to extract the partial `ops` list `_scan()` had built before
+raising (frame walk to the deepest traceback frame, `frame.f_locals
+["ops"]` — faster than the earlier temporary-source-edit approach,
+worth reusing): baby.exe's own immediate context before the fail point
+is `... CLS; mov word[0078h],0; [trap_hook]; <FAIL>` — cell 0x78 first
+looked like it might be a special system cell (it's WELL below the
+usual VAR_BASE≈0x120), but since `movm_imm` decoded it successfully as
+an ordinary scalar store with no special-casing anywhere in its
+handler, it's almost certainly just a plain user scalar in THIS
+program's particular layout, not a system cell — not a lead after all.
+Tried, still zero `cd 86` in any output: **8 simultaneous `ON KEY(n)
+GOSUB` declarations** (matching baby.exe's actual F1-F8 count, `q_
+onkey8.bas` — previous sessions only tried 1-2), the SAME 8-trap probe
+recompiled **with the Keyboard-break ('K') toggle** via the oracle's
+`--toggles K --tb tb10_floppy.img` lower-level path (all three wild
+files carry 'K'), and a **`CLS` + plain assignment before `RETURN`
+inside two ON-KEY handler bodies** (mimicking the exact local shape
+found above). The local-context finding (CLS then an assignment
+directly preceding the fail point) suggests the trigger is something
+inside a HANDLER BODY reacting to a SPECIFIC STATEMENT SHAPE that
+follows CLS+assignment, not to trap count/toggles/K — still
+undiagnosed; a genuinely different follow-on statement inside the
+handler (e.g. an INKEY$ read, a LOCATE, a nested IF) is the next
+category worth trying, not more ON KEY variations.
+
 ## Gap 19 — byte 06 (filepatc/morcalc/pw, all TB 1.0), UNDIAGNOSED
 
 Surfaced by gap 18's closure (these 3 files previously failed on byte 26).
@@ -746,6 +772,23 @@ compiled under both dialects and diff the output against this exact byte
 shape, since guessing the decoder-side fix (generic LDS-based by-ref-param
 read + DS-restore epilogue) without knowing the real trigger risks solving
 the wrong shape.
+
+**Two of those four candidates ELIMINATED this session (2026-07-18)**:
+`VIEW PRINT` and `PCOPY` are not TB keywords at all — the oracle rejects
+both (`Error 412: "(" expected` for `VIEW PRINT...` — the parser reads
+`VIEW` as the graphics-viewport statement wanting `(x1,y1)-(x2,y2)`, with
+no PRINT-region variant; `Error 414: "=" expected` for `PCOPY 0,1` — the
+parser reads `PCOPY` as an undeclared variable name wanting an
+assignment). Neither exists in this dialect at all, so neither can be
+the trigger. Remaining untried: `WIDTH`-mode-dependent fast PRINT (tried
+a bare `WIDTH 40` + `PRINT` combo this session, and separately a plain
+`SCREEN 0` + `PRINT` combo — NEITHER produced the signature bytes
+`55 8b ec 06 1e 8b 16 00 00`, so those specific minimal forms are ALSO
+ruled out now, though a WIDTH-40-plus-something-else combination isn't
+exhausted) and text-mode GET/PUT (not yet tried — TB's GET/PUT may only
+exist for graphics arrays/file records, worth confirming it's even valid
+syntax on a plain text "screen" before spending a probe on it, the way
+VIEW PRINT/PCOPY just turned out not to exist).
 
 (A previous version of this section carried a schart.exe DGROUP-layout
 trace — that was a mis-filed duplicate of the gap-16 investigation, since
