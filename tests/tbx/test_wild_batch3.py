@@ -469,6 +469,45 @@ def test_decode_t1_addpool():
     )
 
 
+def test_decode_t1_orchain():
+    # Integer relationals in a compound bool chain (vhfprop/inv87/invoice at
+    # the "unhandled op orax" stop): `IF ERR = 25 OR ERR = 27 OR ERR = 57`
+    # materializes each cmpax_m through the same 6-op template the FP
+    # compound machinery lifts (movax FFFF; jcc; incax; orax; jcc; jmp) --
+    # pend_icmp only knew the bare value form and left the orax unconsumed.
+    # The fix hands the compare to pend_cmp when the comb op follows,
+    # restricted to the orientation-neutral 74/75 codes (the signed
+    # _JCC_RELOP_TRUE rows assume cmpax_bx's forward flag order).
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_orchain.exe"))
+    cond = ir.LogOp(
+        "OR",
+        ir.LogOp(
+            "OR",
+            ir.RelOp("=", ir.Err(), ir.Lit(25)),
+            ir.RelOp("=", ir.Err(), ir.Lit(27)),
+        ),
+        ir.RelOp("=", ir.Err(), ir.Lit(57)),
+    )
+    assert prog[5] == ir.IfInline(
+        cond,
+        (
+            ir.Print((ir.StrLit("Y"),), newline=True, file=None, commas=None),
+            ir.Print((ir.StrLit("Z"),), newline=True, file=None, commas=None),
+        ),
+    )
+    assert emit0.emit(prog) == (
+        "10 ON ERROR GOTO 60\n"
+        "20 ERROR 25\n"
+        '30 PRINT "NO"\n'
+        "40 END\n"
+        '50 PRINT "X"\n'
+        '60 IF ERR = 25 OR ERR = 27 OR ERR = 57 THEN PRINT "Y": PRINT "Z"\n'
+        "70 RESUME 40\n"
+    )
+
+
 def test_decode_t1_fileint():
     # INPUT# with INTEGER targets (inv87/invoice at 0x1389c): the numeric
     # read leaves the value on the x87 stack as usual, but an int slot is
@@ -693,6 +732,7 @@ if __name__ == "__main__":
     test_decode_t1_strgodo()
     test_decode_t1_ifgoto()
     test_decode_t1_addpool()
+    test_decode_t1_orchain()
     test_decode_t1_fileint()
     test_decode_t1_addimm()
     test_decode_t1_fwd()

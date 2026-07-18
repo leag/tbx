@@ -1255,6 +1255,15 @@ Print(items=(Lit(value=0),), newline=True, file=None, commas=None)
 Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
 End()
 
+## t1_orchain
+OnError(target=5)
+ErrorStmt(code=Lit(value=25))
+Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None)
+End()
+Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None)
+IfInline(cond=LogOp(op='OR', lhs=LogOp(op='OR', lhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=25)), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=27))), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=57))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='Z'),), newline=True, file=None, commas=None)))
+Resume(next_=False, target=3)
+
 ## t1_out
 Out(port=Lit(value=888), value=Lit(value=1))
 End()
@@ -3361,6 +3370,15 @@ Print(items=(Lit(value=0),), newline=True, file=None, commas=None)
 Goto(target=5)
 Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
 End()
+
+## v10_t1_orchain
+OnError(target=5)
+ErrorStmt(code=Lit(value=25))
+Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None)
+End()
+Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None)
+IfInline(cond=LogOp(op='OR', lhs=LogOp(op='OR', lhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=25)), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=27))), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=57))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='Z'),), newline=True, file=None, commas=None)))
+Resume(next_=False, target=3)
 
 ## v10_t1_out
 Out(port=Lit(value=888), value=Lit(value=1))

@@ -369,14 +369,31 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             or state.ops[state.k + 2][1] != "incax"
         ):
             raise ValueError(f"relational-value: expected jcc+incax at {addr:#x}")
-        relop = _JCC_RELOP_VALUE.get(state.ops[state.k + 1][2])
-        if relop is None:
-            raise ValueError(f"relational-value: unmapped jcc at {addr:#x}")
-        lhs, rhs = state.pend_icmp
-        state.pend_icmp = None
-        state.ax = ir.BinOp(relop, lhs, rhs)
-        state.k += 3  # consume movax FFFF, jcc, incax
-        return True
+        if (
+            state.k + 3 < len(state.ops)
+            and state.ops[state.k + 3][1] in ("orax", "andaxbx")
+        ):
+            # Integer compare feeding the compound-IF/WHILE materialization
+            # template (`IF ERR = 25 OR ERR = 27 ...`, witnessed t1_orchain /
+            # wild vhfprop.exe): hand the compare to the pend_cmp machinery
+            # below. Only the orientation-neutral equality codes may pass --
+            # _JCC_RELOP_TRUE's signed rows are written for cmpax_bx's FORWARD
+            # flag order and would silently flip cmpax_m's REVERSED (mem, ax)
+            # operand order.
+            cc = state.ops[state.k + 1][2]
+            if cc not in (0x74, 0x75):
+                raise ValueError(f"int compound relational jcc {cc:02x} at {addr:#x}")
+            state.pend_cmp = state.pend_icmp
+            state.pend_icmp = None
+        else:
+            relop = _JCC_RELOP_VALUE.get(state.ops[state.k + 1][2])
+            if relop is None:
+                raise ValueError(f"relational-value: unmapped jcc at {addr:#x}")
+            lhs, rhs = state.pend_icmp
+            state.pend_icmp = None
+            state.ax = ir.BinOp(relop, lhs, rhs)
+            state.k += 3  # consume movax FFFF, jcc, incax
+            return True
     if kind == "movax" and state.pend_cmp and op[2] == 0xFFFF:
         if state.pend_bool is not None:  # compound-IF tail
             nk = _lift_bool_do_tail(
