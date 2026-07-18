@@ -14,6 +14,9 @@ PAIRS = [
     "t1_inpsemi",
     "t1_inparr",
     "t1_icmpmat",
+    "t1_inpmulti",
+    "t1_inpmixed",
+    "t1_relval",
 ]
 
 
@@ -96,6 +99,33 @@ def test_decode_t1_inparr():
     )
 
 
+def test_decode_t1_inpmulti():
+    # Multi-target INPUT (wild schart.exe): the flag word's low bits carry
+    # the EXTRA-target count and `0x4000 >> k` set = target k numeric --
+    # `INPUT A, B` = 0x6001, `INPUT "VALS"; A, B, C` = 0x7002 (all numeric),
+    # `INPUT A$, B` = 0x2001 (string first). One read op per target; the
+    # statement emits when the last target lands, var = tuple.
+    from tbx import decode0, emit0
+
+    prog = decode0.decode_user_code(_exe("t1_inpmulti.exe"))
+    assert prog[0] == ir.Input(None, (ir.Var("A"), ir.Var("B")))
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_inpmulti3.exe")))
+    assert '10 INPUT "VALS"; A, B, C' in src
+    prog = decode0.decode_user_code(_exe("t1_inpmixed.exe"))
+    assert prog[0] == ir.Input(None, (ir.Var("A$"), ir.Var("B")))
+
+
+def test_decode_t1_relval():
+    # FP relational-as-VALUE inside arithmetic (wild schart.exe): `(A > 0)`
+    # materializes -1/0 with no dispatch pair after the inc ax -- the next
+    # op consumes ax directly (imulbx here, imul_m in the wild). The Group
+    # is explicit: the source requires the parens for this parse.
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_relval.exe")))
+    assert "30 C = (A > 0) * 3 + B" in src
+
+
 def test_decode_t1_icmpmat():
     # Signed materialization jccs (7F/7C/7D/7E) in _JCC_RELOP_TRUE: an
     # integer cmpax_bx compare feeding a compound-IF term materializes with
@@ -142,6 +172,8 @@ if __name__ == "__main__":
     test_decode_t1_inp4()
     test_decode_t1_inpsemi()
     test_decode_t1_inparr()
+    test_decode_t1_inpmulti()
+    test_decode_t1_relval()
     test_decode_t1_icmpmat()
     test_dialect_invariant()
     test_emit_strings_input()

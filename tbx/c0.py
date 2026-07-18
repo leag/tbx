@@ -809,7 +809,6 @@ class _Gen:
                 raise _Unsupported("RESTORE to a non-DATA statement")
             return [f"tb_data_p = {off};"]
         if isinstance(s, ir.Input):
-            fn = "tb_input_str" if _suffix_ty(s.var.name) == "STR" else "tb_input_num"
             prompt = (
                 f"TB_S({_cstr(s.prompt.value)})"
                 if s.prompt is not None
@@ -818,6 +817,14 @@ class _Gen:
             mark = 0 if (s.prompt is not None and s.comma) else 1
             if s.semi:  # `INPUT;` keeps the cursor on the line (bit 1)
                 mark |= 2
+            if isinstance(s.var, tuple):  # multi-target: one line, CSV fields
+                out = [f"tb_input_begin({prompt}, {mark});"]
+                for v in s.var:
+                    is_str = _suffix_ty(v.name) == "STR"
+                    nfn = "tb_input_next_str" if is_str else "tb_input_next_num"
+                    out.append(self.assign(v, _Raw(f"{nfn}()", is_str)))
+                return out
+            fn = "tb_input_str" if _suffix_ty(s.var.name) == "STR" else "tb_input_num"
             return [self.assign(s.var, _Raw(f"{fn}({prompt}, {mark})", fn.endswith("str")))]
         if isinstance(s, ir.LineInput):
             prompt = (

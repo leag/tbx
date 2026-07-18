@@ -420,10 +420,15 @@ def _us_console(s) -> str | None:
         return f"COLOR {fg}{bg}"
     if isinstance(s, Input):
         kw = "INPUT;" if s.semi else "INPUT"
+        vs = (
+            ", ".join(unparse(v) for v in s.var)
+            if isinstance(s.var, tuple)
+            else unparse(s.var)
+        )
         if s.prompt is None:
-            return f"{kw} {unparse(s.var)}"
+            return f"{kw} {vs}"
         sep = "," if s.comma else ";"
-        return f"{kw} {unparse(s.prompt)}{sep} {unparse(s.var)}"
+        return f"{kw} {unparse(s.prompt)}{sep} {vs}"
     if isinstance(s, LineInput):
         if s.prompt is None:
             return f"LINE INPUT {unparse(s.var)}"

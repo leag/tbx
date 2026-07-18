@@ -339,6 +339,32 @@ tb_str tb_input_str(tb_str prompt, int mark) {
     tb_input_line(line, sizeof line, mark & 2);
     return tb_from_c(line);
 }
+/* Multi-target INPUT (`INPUT A, B`): one typed line, comma-split fields.
+   Too few fields yield "" / 0 for the leftovers (TB would re-prompt "??";
+   the harness always supplies a complete line). */
+static char tb_input_buf[256];
+static char *tb_input_p;
+void tb_input_begin(tb_str prompt, int mark) {
+    if (prompt.p) tb_pss(prompt);
+    if (mark & 1) tb_ps("? ");
+    tb_input_line(tb_input_buf, sizeof tb_input_buf, mark & 2);
+    tb_input_p = tb_input_buf;
+}
+static char *tb_input_field(void) {
+    static char f[256];
+    char *p = tb_input_p;
+    while (*p == ' ') p++;
+    size_t n = strcspn(p, ",");
+    while (n && p[n - 1] == ' ') n--;
+    if (n >= sizeof f) n = sizeof f - 1;
+    memcpy(f, p, n); f[n] = 0;
+    p += strcspn(p, ",");
+    if (*p == ',') p++;
+    tb_input_p = p;
+    return f;
+}
+double tb_input_next_num(void) { return strtod(tb_input_field(), NULL); }
+tb_str tb_input_next_str(void) { return tb_from_c(tb_input_field()); }
 tb_str tb_dateS(void) {
     struct tm *lt = tb_now_tm(); char b[40];
     sprintf(b, "%02d-%02d-%04d", lt->tm_mon + 1, lt->tm_mday, lt->tm_year + 1900);

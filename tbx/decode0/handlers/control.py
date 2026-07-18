@@ -401,6 +401,27 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             state.pend_cmp = None
             state.cur = None
             return True
+        if (
+            not state.pend_cmp_str
+            and state.k + 3 < len(state.ops)
+            and state.ops[state.k + 1][1] == "jcc"
+            and state.ops[state.k + 2][1] == "incax"
+            and state.ops[state.k + 1][3] == state.ops[state.k + 3][0]
+            and state.ops[state.k + 1][2] in _JCC_RELOP_TRUE
+            and state.ops[state.k + 3][1] not in ("orax", "andaxbx")
+        ):
+            # FP relational-as-VALUE inside arithmetic (t1_relval, wild
+            # schart.exe): `(A > 0) * 3` materializes -1/0 into ax with no
+            # dispatch pair after the inc -- the next op consumes ax directly
+            # (imulbx/imul_m). The source REQUIRES the parens for this parse,
+            # so the value carries an explicit Group. Strings stay fail-loud.
+            lhs, rhs = state.pend_cmp
+            state.ax = ir.Group(
+                ir.BinOp(_JCC_RELOP_TRUE[state.ops[state.k + 1][2]], lhs, rhs)
+            )
+            state.pend_cmp = None
+            state.k += 3
+            return True
         state.k = _lift_while(
             state.ops,
             state.k,

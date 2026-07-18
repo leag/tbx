@@ -245,7 +245,12 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
         if isinstance(s, ir.Lprint):
             return ir.Lprint(tuple(walk(i) for i in s.items), newline=s.newline)
         if isinstance(s, ir.Input):
-            return ir.Input(s.prompt, walk(s.var), s.comma, s.semi)
+            var = (
+                tuple(walk(v) for v in s.var)
+                if isinstance(s.var, tuple)
+                else walk(s.var)
+            )
+            return ir.Input(s.prompt, var, s.comma, s.semi)
         if isinstance(s, ir.LineInput):
             return ir.LineInput(s.prompt, walk(s.var))
         if isinstance(s, ir.Open):

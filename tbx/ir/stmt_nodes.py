@@ -677,12 +677,13 @@ class Color:
 
 @dataclass(frozen=True)
 class Input:
-    """INPUT [;] ["prompt"{;|,}] var -- `cd ec 4e <prompt_desc> <flags>` + one read
-    call; flags: 0x4000 numeric target, 0x0040 comma separator (no "? "), 0x0080
-    leading `INPUT;` (stay on the line after entry, witnessed t1_inpsemi)."""
+    """INPUT [;] ["prompt"{;|,}] var[, var...] -- `cd ec 4e <prompt_desc> <flags>` +
+    one read call per target; flags: 0x0040 comma separator (no "? "), 0x0080
+    leading `INPUT;` (t1_inpsemi), low bits = extra-target count and
+    `0x4000 >> k` set = target k numeric (t1_inpmulti/t1_inpmixed)."""
 
     prompt: object  # StrLit | None
-    var: object  # Var | ArrayRef
+    var: object  # Var | ArrayRef, or a tuple of them (multi-target)
     comma: bool = False  # prompt separator: True = ',' (suppresses "? ")
     semi: bool = False  # leading `INPUT;`
 

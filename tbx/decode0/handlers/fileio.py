@@ -137,9 +137,6 @@ def data_read(state: DecodeState, op, addr, kind) -> bool:
         nxt = state.ops[state.k + 1] if state.k + 1 < len(state.ops) else None
         if state.pend_input is None or nxt is None:
             raise ValueError(f"numeric INPUT read without target at {addr:#x}")
-        prompt, flags = state.pend_input
-        if flags & ~0x40C0 or not flags & 0x4000:
-            raise ValueError(f"INPUT flags {flags:#06x} for numeric target")
         if nxt[1] == "fstp":  # FP variable target
             var, used = state.loc(nxt[2]), 2
         elif (
@@ -163,13 +160,7 @@ def data_read(state: DecodeState, op, addr, kind) -> bool:
             return True
         else:
             raise ValueError(f"numeric INPUT read without FSTP at {addr:#x}")
-        state.put(
-            ir.Input(
-                prompt, var, comma=bool(flags & 0x0040), semi=bool(flags & 0x0080)
-            ),
-            state.cur,
-        )
-        state.pend_input = None
+        state._input_target(var, is_str=False)
         state.cur = None
         state.k += used
         return True

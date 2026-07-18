@@ -72,6 +72,10 @@ KEYS = {
     "t1_inpsemis": '[{"wait":"?","send":"ab\\r"}]',
     "t1_inparr": '[{"wait":"?","send":"4\\r"}]',
     "t1_icmpmat": '[{"wait":"?","send":"abc\\r"}]',
+    "t1_inpmulti": '[{"wait":"?","send":"3,4\\r"}]',
+    "t1_inpmulti3": '[{"wait":"?","send":"1,2,3\\r"}]',
+    "t1_inpmixed": '[{"wait":"?","send":"ab,7\\r"}]',
+    "t1_relval": '[{"wait":"?","send":"2\\r"}]',
 }
 
 

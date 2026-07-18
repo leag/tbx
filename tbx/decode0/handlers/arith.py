@@ -391,17 +391,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             elif v is _READDATA:  # READ far numeric target
                 state._readdata_target(ref)
             elif v is _INPUTREAD:  # console INPUT element target (t1_inparr)
-                prompt, flags = state.pend_input
-                state.put(
-                    ir.Input(
-                        prompt,
-                        ref,
-                        comma=bool(flags & 0x0040),
-                        semi=bool(flags & 0x0080),
-                    ),
-                    state.cur,
-                )
-                state.pend_input = None
+                state._input_target(ref, is_str=False)
             else:
                 state.put(ir.Assign(ref, v), state.cur)
             state.cur = None

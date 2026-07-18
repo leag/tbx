@@ -250,6 +250,32 @@ class DecodeState:
         assert self.pend_dataread is not None
         self.pend_dataread["targets"].append(ref)
 
+    def _input_target(self, ref: object, is_str: bool) -> None:
+        """Append a console-INPUT target; validate its per-position type bit
+        (0x4000 >> k set = numeric, witnessed t1_inpmulti/t1_inpmixed) and
+        emit the Input statement once every target has arrived."""
+        pi = self.pend_input
+        assert pi is not None
+        k = len(pi["targets"])
+        bit = 0x4000 >> k
+        if bool(pi["flags"] & bit) == is_str:
+            raise ValueError(
+                f"INPUT target {k} type bit mismatch (flags {pi['flags']:#06x})"
+            )
+        pi["targets"].append(ref)
+        if len(pi["targets"]) == pi["want"]:
+            var = pi["targets"][0] if pi["want"] == 1 else tuple(pi["targets"])
+            self.put(
+                ir.Input(
+                    pi["prompt"],
+                    var,
+                    comma=bool(pi["flags"] & 0x0040),
+                    semi=bool(pi["flags"] & 0x0080),
+                ),
+                pi["start"],
+            )
+            self.pend_input = None
+
     # decode a pooled string literal at descriptor `desc`; desc and ss_base are ints
     # wherever a string literal is present (else this is unreached)
     def _pool_str(self, desc: object) -> ir.StrLit:
@@ -1986,19 +2012,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 continue
             if nxt == ("strassign",):  # pop-assign into a string var
                 if state.pend_input is not None:  # ... as an INPUT's string read
-                    prompt, flags = state.pend_input
-                    if flags & ~0x40C0 or flags & 0x4000:
-                        raise ValueError(f"INPUT flags {flags:#06x} for string target")
-                    state.put(
-                        ir.Input(
-                            prompt,
-                            state.loc(d),
-                            comma=bool(flags & 0x0040),
-                            semi=bool(flags & 0x0080),
-                        ),
-                        state.cur,
-                    )
-                    state.pend_input = None
+                    state._input_target(state.loc(d), is_str=True)
                 elif (
                     state.sstack and state.sstack[-1] is _FREAD
                 ):  # INPUT# string target

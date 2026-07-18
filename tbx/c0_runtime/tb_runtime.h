@@ -140,6 +140,9 @@ tb_str tb_hex(double v);
 tb_str tb_oct(double v);
 double tb_input_num(tb_str prompt, int mark);  /* prompt.p NULL = none; mark */
 tb_str tb_input_str(tb_str prompt, int mark);  /* bit0 "? ", bit1 INPUT; */
+void tb_input_begin(tb_str prompt, int mark);  /* multi-target INPUT: read the */
+double tb_input_next_num(void);                /* line, then pull CSV fields */
+tb_str tb_input_next_str(void);
 tb_str tb_dateS(void);
 tb_str tb_timeS(void);
 void *tb_calloc(long n, size_t w);

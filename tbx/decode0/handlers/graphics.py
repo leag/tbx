@@ -229,7 +229,22 @@ def console(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: input, line_input, key_list, tabspc, swap."""
     if kind == "input":  # INPUT prologue
         prompt = None if op[2] == state.lay["pool_base"] - 4 else state._pool_str(op[2])
-        state.pend_input = (prompt, op[3])
+        flags = op[3]
+        count = flags & 0x3F  # extra targets beyond the first
+        tmask = 0  # per-position numeric-type bits, 0x4000 >> k
+        for i in range(count + 1):
+            tmask |= 0x4000 >> i
+        if flags & ~(0x00C0 | 0x3F | tmask):
+            raise ValueError(
+                f"INPUT flags {flags:#06x} with {count + 1} targets at {addr:#x}"
+            )
+        state.pend_input = {
+            "prompt": prompt,
+            "flags": flags,
+            "targets": [],
+            "want": count + 1,
+            "start": state.cur,
+        }
         state.k += 1
         return True
     if kind == "line_input":  # LINE INPUT
