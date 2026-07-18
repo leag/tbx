@@ -815,7 +815,9 @@ class _Gen:
                 if s.prompt is not None
                 else "((tb_str){0, 0})"
             )
-            mark = "0" if (s.prompt is not None and s.comma) else "1"
+            mark = 0 if (s.prompt is not None and s.comma) else 1
+            if s.semi:  # `INPUT;` keeps the cursor on the line (bit 1)
+                mark |= 2
             return [self.assign(s.var, _Raw(f"{fn}({prompt}, {mark})", fn.endswith("str")))]
         if isinstance(s, ir.LineInput):
             prompt = (

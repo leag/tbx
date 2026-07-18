@@ -13,6 +13,7 @@ from tbx import ir
 from tbx.decode0.const import (
     ARR_BLOCK,
     _FREAD,
+    _INPUTREAD,
     _PREC,
     _READDATA,
 )
@@ -389,6 +390,18 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                 state._fread_target(ref)
             elif v is _READDATA:  # READ far numeric target
                 state._readdata_target(ref)
+            elif v is _INPUTREAD:  # console INPUT element target (t1_inparr)
+                prompt, flags = state.pend_input
+                state.put(
+                    ir.Input(
+                        prompt,
+                        ref,
+                        comma=bool(flags & 0x0040),
+                        semi=bool(flags & 0x0080),
+                    ),
+                    state.cur,
+                )
+                state.pend_input = None
             else:
                 state.put(ir.Assign(ref, v), state.cur)
             state.cur = None

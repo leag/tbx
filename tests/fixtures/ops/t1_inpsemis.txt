@@ -1,0 +1,12 @@
+# t1_inpsemis dialect=1.1 start=08830
+08833:input:308:128
+0883A:read_str
+0883D:movsi:288
+08840:strassign
+08842:movsi:288
+08845:rt:156
+08847:rt:190
+08849:rt:184
+0884B:end
+0884E:epilogue
+# commits

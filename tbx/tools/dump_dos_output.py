@@ -68,6 +68,10 @@ KEYS = {
     "t1_and3": '[{"wait":"?","send":"2\\r"},{"wait":"?","count":2,"send":"3\\r"},'
     '{"wait":"?","count":3,"send":"2\\r"}]',
     "t1_or3": '[{"wait":"?","send":"5\\r"}]',
+    "t1_inpsemi": '[{"wait":"?","send":"3\\r"}]',
+    "t1_inpsemis": '[{"wait":"?","send":"ab\\r"}]',
+    "t1_inparr": '[{"wait":"?","send":"4\\r"}]',
+    "t1_icmpmat": '[{"wait":"?","send":"abc\\r"}]',
 }
 
 

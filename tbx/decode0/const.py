@@ -37,7 +37,13 @@ _NEGATE_REL = {"=": "<>", "<>": "=", "<": ">=", ">=": "<", ">": "<=", "<=": ">"}
 _JCC_RELOP_STR = {0x75: "=", 0x74: "<>", 0x72: ">=", 0x73: "<", 0x76: ">", 0x77: "<="}
 # Materialization form (WHILE / boolean values): the Jcc tests the relop TRUE --
 # the inverse mapping of _JCC_RELOP.
-_JCC_RELOP_TRUE = {0x77: "<", 0x73: "<=", 0x72: ">", 0x76: ">=", 0x74: "=", 0x75: "<>"}
+_JCC_RELOP_TRUE = {
+    # unsigned rows: FP/string compares, whose pend_cmp is REVERSED (mem, top)
+    0x77: "<", 0x73: "<=", 0x72: ">", 0x76: ">=", 0x74: "=", 0x75: "<>",
+    # signed rows: integer cmpax_bx compares, whose pend_cmp is FORWARD
+    # (lhs, rhs) -- jg taken iff lhs > rhs (witnessed t1_icmpmat, all four)
+    0x7F: ">", 0x7C: "<", 0x7D: ">=", 0x7E: "<=",
+}
 # Relational-as-value (`C% = A% < B%`): signed jcc over `inc ax` -> source relop.
 _JCC_RELOP_VALUE = {0x74: "=", 0x75: "<>", 0x7F: "<", 0x7D: "<=", 0x7C: ">", 0x7E: ">="}
 # SELECT CASE IS-arm: materialized-boolean jcc cc -> source relop (selector IS <op> bound).
@@ -189,6 +195,9 @@ _FREAD = ("fread",)  # sentinel: an INPUT#-parsed value awaiting its
 # Identity-compared, never an Expr.
 _READDATA = ("readdata",)  # sentinel: a DATA item awaiting its READ store;
 # the consuming store names the target.
+_INPUTREAD = ("inputread",)  # sentinel: a console-INPUT-parsed value whose
+# target is an array element -- the index computation runs between the
+# read and the element store, so the store names the target (t1_inparr).
 
 
 _PREC = ir._PREC

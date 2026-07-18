@@ -1987,10 +1987,15 @@ def decode_user_code(exe: bytes) -> list[Any]:
             if nxt == ("strassign",):  # pop-assign into a string var
                 if state.pend_input is not None:  # ... as an INPUT's string read
                     prompt, flags = state.pend_input
-                    if flags & ~0x4040 or flags & 0x4000:
+                    if flags & ~0x40C0 or flags & 0x4000:
                         raise ValueError(f"INPUT flags {flags:#06x} for string target")
                     state.put(
-                        ir.Input(prompt, state.loc(d), comma=bool(flags & 0x0040)),
+                        ir.Input(
+                            prompt,
+                            state.loc(d),
+                            comma=bool(flags & 0x0040),
+                            semi=bool(flags & 0x0080),
+                        ),
                         state.cur,
                     )
                     state.pend_input = None

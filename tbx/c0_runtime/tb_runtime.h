@@ -138,8 +138,8 @@ tb_str tb_ltrim(tb_str s);
 tb_str tb_rtrim(tb_str s);
 tb_str tb_hex(double v);
 tb_str tb_oct(double v);
-double tb_input_num(tb_str prompt, int mark);  /* prompt.p NULL = none */
-tb_str tb_input_str(tb_str prompt, int mark);
+double tb_input_num(tb_str prompt, int mark);  /* prompt.p NULL = none; mark */
+tb_str tb_input_str(tb_str prompt, int mark);  /* bit0 "? ", bit1 INPUT; */
 tb_str tb_dateS(void);
 tb_str tb_timeS(void);
 void *tb_calloc(long n, size_t w);

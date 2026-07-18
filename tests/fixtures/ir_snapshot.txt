@@ -11,8 +11,8 @@ Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None)
 End()
 
 ## t1_and
-Input(prompt=None, var=Var(name='A'), comma=False)
-Input(prompt=None, var=Var(name='B'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
+Input(prompt=None, var=Var(name='B'), comma=False, semi=False)
 IfGoto(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), target=5)
 Print(items=(Lit(value=0),), newline=True, file=None, commas=None)
 Goto(target=6)
@@ -20,9 +20,9 @@ Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
 End()
 
 ## t1_and3
-Input(prompt=None, var=Var(name='A'), comma=False)
-Input(prompt=None, var=Var(name='B'), comma=False)
-Input(prompt=None, var=Var(name='C'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
+Input(prompt=None, var=Var(name='B'), comma=False, semi=False)
+Input(prompt=None, var=Var(name='C'), comma=False, semi=False)
 IfGoto(cond=LogOp(op='AND', lhs=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), rhs=RelOp(op='=', lhs=Var(name='C'), rhs=Lit(value=2))), target=5)
 Print(items=(Lit(value=0),), newline=True, file=None, commas=None)
 Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
@@ -169,13 +169,13 @@ End()
 
 ## t1_booluntil
 Do(kind=None, cond=None)
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Loop(kind='UNTIL', cond=LogOp(op='AND', lhs=RelOp(op='>=', lhs=Var(name='A'), rhs=Lit(value=0)), rhs=RelOp(op='<=', lhs=Var(name='A'), rhs=Lit(value=1))))
 Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 
 ## t1_boolwh
 Do(kind=None, cond=None)
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Loop(kind='WHILE', cond=LogOp(op='OR', lhs=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=0)), rhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1))))
 Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 
@@ -390,7 +390,7 @@ End()
 
 ## t1_dimm
 OptionBase(n=1)
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Dim(name='V3', bounds=(Var(name='A'), Lit(value=3)), also=(('V2', (Var(name='A'),)), ('V1', (BinOp(op='*', lhs=Lit(value=2), rhs=Var(name='A')),))))
 Dim(name='V0', bounds=(Var(name='A'),), also=())
 Assign(target=Var(name='B'), value=Lit(value=2))
@@ -401,7 +401,7 @@ Print(items=(ArrayRef(name='V3', indices=(Var(name='B'), Lit(value=1))), ArrayRe
 End()
 
 ## t1_dimv
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Dim(name='V0', bounds=(Var(name='A'),), also=())
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=2))
 Print(items=(ArrayRef(name='V0', indices=(Lit(value=1),)),), newline=True, file=None, commas=None)
@@ -409,7 +409,7 @@ End()
 
 ## t1_dimv2
 OptionBase(n=1)
-Input(prompt=None, var=Var(name='A%'), comma=False)
+Input(prompt=None, var=Var(name='A%'), comma=False, semi=False)
 Dim(name='V0', bounds=(Var(name='A%'), Lit(value=3)), also=())
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=1))), value=BinOp(op='+', lhs=Var(name='A%'), rhs=Lit(value=2)))
 Assign(target=Var(name='B'), value=BinOp(op='*', lhs=ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=1))), rhs=Var(name='A%')))
@@ -417,7 +417,7 @@ End()
 
 ## t1_dimw
 OptionBase(n=1)
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Dim(name='V1', bounds=(Var(name='A'), Lit(value=3)), also=())
 Dim(name='V0', bounds=(Var(name='A'),), also=())
 Assign(target=Var(name='B'), value=Lit(value=2))
@@ -428,7 +428,7 @@ End()
 
 ## t1_dimw2
 OptionBase(n=1)
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Dim(name='V0', bounds=(Var(name='A'), Lit(value=3)), also=())
 Assign(target=Var(name='B'), value=Lit(value=2))
 Assign(target=Var(name='C'), value=Lit(value=1))
@@ -437,7 +437,7 @@ End()
 
 ## t1_dimw3
 OptionBase(n=1)
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Dim(name='V1', bounds=(Var(name='A'), Lit(value=3)), also=())
 Dim(name='V0', bounds=(Var(name='A'), Lit(value=2)), also=())
 Assign(target=Var(name='B'), value=Lit(value=2))
@@ -458,7 +458,7 @@ Assign(target=Var(name='A%'), value=Nullary(name='ERADR'))
 End()
 
 ## t1_erase
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Dim(name='V0', bounds=(Var(name='A'),), also=())
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=2))
 Erase(name='V0')
@@ -547,7 +547,7 @@ Files(spec=StrLit(value='*.*'))
 End()
 
 ## t1_fn
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Assign(target=Var(name='B'), value=Call(name='ABS', args=(Var(name='A'),)))
 Assign(target=Var(name='C'), value=Call(name='SQR', args=(Var(name='A'),)))
 Assign(target=Var(name='D'), value=Call(name='INT', args=(Var(name='A'),)))
@@ -781,6 +781,14 @@ Assign(target=Var(name='A'), value=Lit(value=2))
 Assign(target=Var(name='B'), value=Lit(value=3))
 End()
 
+## t1_icmpmat
+Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
+Assign(target=Var(name='B'), value=Lit(value=0))
+IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=2)), rhs=RelOp(op='<', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=9))), body=(Assign(target=Var(name='B'), value=Lit(value=1)),))
+IfInline(cond=LogOp(op='OR', lhs=RelOp(op='>=', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=3)), rhs=RelOp(op='<=', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=1))), body=(Assign(target=Var(name='B'), value=Lit(value=2)),))
+Print(items=(Var(name='B'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_if
 Assign(target=Var(name='A'), value=Lit(value=1))
 Assign(target=Var(name='B'), value=Lit(value=2))
@@ -791,7 +799,7 @@ Assign(target=Var(name='C'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(valu
 End()
 
 ## t1_ifgoto
-Input(prompt=None, var=Var(name='A$'), comma=False)
+Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
 IfInline(cond=LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='T')), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='t'))), body=(Cls(), Goto(target=5)))
 IfGoto(cond=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='X')), target=4)
 Print(items=(StrLit(value='A'),), newline=True, file=None, commas=None)
@@ -799,8 +807,8 @@ Print(items=(StrLit(value='B'),), newline=True, file=None, commas=None)
 End()
 
 ## t1_ifin
-Input(prompt=None, var=Var(name='A'), comma=False)
-Input(prompt=None, var=Var(name='B'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
+Input(prompt=None, var=Var(name='B'), comma=False, semi=False)
 IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), body=(Assign(target=Var(name='C'), value=Lit(value=1)), Assign(target=Var(name='D'), value=Lit(value=2))))
 Print(items=(Var(name='C'), Var(name='D')), newline=True, file=None, commas=None)
 End()
@@ -816,13 +824,13 @@ Assign(target=Var(name='A$'), value=Nullary(name='INKEY$'))
 End()
 
 ## t1_inp
-Input(prompt=None, var=Var(name='A'), comma=False)
-Input(prompt=None, var=Var(name='B$'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
+Input(prompt=None, var=Var(name='B$'), comma=False, semi=False)
 Print(items=(Var(name='B$'),), newline=True, file=None, commas=None)
 End()
 
 ## t1_inp2
-Input(prompt=StrLit(value='X'), var=Var(name='A'), comma=False)
+Input(prompt=StrLit(value='X'), var=Var(name='A'), comma=False, semi=False)
 End()
 
 ## t1_inp3
@@ -831,7 +839,7 @@ LineInput(prompt=StrLit(value='X'), var=Var(name='B$'))
 End()
 
 ## t1_inp4
-Input(prompt=StrLit(value='X'), var=Var(name='A$'), comma=True)
+Input(prompt=StrLit(value='X'), var=Var(name='A$'), comma=True, semi=False)
 End()
 
 ## t1_inp5
@@ -845,9 +853,26 @@ Assign(target=Var(name='B$'), value=Call(name='INPUT$', args=(Lit(value=1),)))
 Print(items=(Var(name='B$'), Var(name='A$')), newline=True, file=None, commas=None)
 End()
 
+## t1_inparr
+Dim(name='V0', bounds=(10,), also=())
+Assign(target=Var(name='A'), value=Lit(value=3))
+Input(prompt=None, var=ArrayRef(name='V0', indices=(Var(name='A'),)), comma=False, semi=False)
+Print(items=(ArrayRef(name='V0', indices=(Lit(value=3),)),), newline=True, file=None, commas=None)
+End()
+
 ## t1_inpf
 Assign(target=Var(name='A'), value=Call(name='INP', args=(Lit(value=888),)))
 Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
+End()
+
+## t1_inpsemi
+Input(prompt=StrLit(value='GIVE'), var=Var(name='A'), comma=False, semi=True)
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
+End()
+
+## t1_inpsemis
+Input(prompt=StrLit(value='NAME'), var=Var(name='A$'), comma=False, semi=True)
+Print(items=(Var(name='A$'),), newline=True, file=None, commas=None)
 End()
 
 ## t1_instat
@@ -1007,7 +1032,7 @@ End()
 OptionBase(n=1)
 Dim(name='V0', bounds=(4,), also=())
 Dim(name='V1', bounds=(3, 2), also=())
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Dim(name='V2', bounds=(Var(name='A'),), also=())
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=2))
 Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=2),)), rhs=Lit(value=1)))
@@ -1021,7 +1046,7 @@ End()
 OptionBase(n=1)
 Dim(name='V0', bounds=(5,), also=())
 Dim(name='V1', bounds=(3, 2), also=())
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Dim(name='V2', bounds=(Var(name='A'),), also=())
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=2))
 Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=2),)), rhs=Lit(value=1)))
@@ -1035,7 +1060,7 @@ End()
 OptionBase(n=1)
 Dim(name='V0', bounds=((0, 4),), also=())
 Dim(name='V1', bounds=((2, 3), (0, 2)), also=())
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Dim(name='V2', bounds=(Var(name='A'),), also=())
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=0),)), value=Lit(value=2))
 Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=2),)), rhs=Lit(value=1)))
@@ -1167,7 +1192,7 @@ Close(num=4)
 End()
 
 ## t1_or
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 IfGoto(cond=LogOp(op='OR', lhs=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=0)), rhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=9))), target=4)
 Print(items=(Lit(value=0),), newline=True, file=None, commas=None)
 Goto(target=5)
@@ -1175,7 +1200,7 @@ Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
 End()
 
 ## t1_or3
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 IfGoto(cond=LogOp(op='OR', lhs=LogOp(op='OR', lhs=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=0)), rhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=9))), rhs=RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=5))), target=3)
 Print(items=(Lit(value=0),), newline=True, file=None, commas=None)
 Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
@@ -1257,7 +1282,7 @@ End()
 Assign(target=Var(name='A$'), value=StrLit(value=''))
 Assign(target=Var(name='B$'), value=StrLit(value='HELLO'))
 Assign(target=Var(name='C$'), value=BinOp(op='+', lhs=Var(name='A$'), rhs=Var(name='B$')))
-Input(prompt=None, var=Var(name='D$'), comma=False)
+Input(prompt=None, var=Var(name='D$'), comma=False, semi=False)
 Print(items=(Var(name='C$'), Var(name='D$')), newline=True, file=None, commas=None)
 End()
 
@@ -1266,7 +1291,7 @@ Assign(target=Var(name='A%'), value=Call(name='POS', args=(Lit(value=0),)))
 End()
 
 ## t1_pr2
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Print(items=(StrLit(value='A'), Var(name='A'), StrLit(value='B')), newline=True, file=None, commas=None)
 Print(items=(StrLit(value='X'),), newline=False, file=None, commas=None)
 PrintUsing(fmt=StrLit(value='##.##'), values=(Var(name='A'),), file=None, newline=True)
@@ -1486,7 +1511,7 @@ End()
 Run(file=StrLit(value='X.BAS'))
 
 ## t1_sarr
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Dim(name='V0$', bounds=(Var(name='A'),), also=())
 Assign(target=ArrayRef(name='V0$', indices=(Lit(value=1),)), value=StrLit(value='AB'))
 Assign(target=ArrayRef(name='V0$', indices=(Var(name='A'),)), value=StrLit(value='CD'))
@@ -1495,7 +1520,7 @@ Print(items=(ArrayRef(name='V0$', indices=(Lit(value=1),)),), newline=True, file
 End()
 
 ## t1_sarr2
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Dim(name='V1$', bounds=(Var(name='A'),), also=())
 Dim(name='V0', bounds=(Var(name='A'), Lit(value=5)), also=())
 Open(mode=StrLit(value='I'), num=1, file=StrLit(value='X.DAT'), reclen=None)
@@ -1964,7 +1989,7 @@ Swap(a=Var(name='A'), b=Var(name='B'))
 End()
 
 ## t1_tab
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Print(items=(StrLit(value='A'), Call(name='TAB', args=(Lit(value=7),)), Var(name='A')), newline=True, file=None, commas=None)
 Print(items=(Call(name='SPC', args=(Lit(value=3),)), StrLit(value='B')), newline=True, file=None, commas=None)
 Print(items=(Call(name='TAB', args=(Var(name='A'),)), StrLit(value='C')), newline=True, file=None, commas=None)
@@ -2236,8 +2261,8 @@ Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_and
-Input(prompt=None, var=Var(name='A'), comma=False)
-Input(prompt=None, var=Var(name='B'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
+Input(prompt=None, var=Var(name='B'), comma=False, semi=False)
 IfGoto(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), target=5)
 Print(items=(Lit(value=0),), newline=True, file=None, commas=None)
 Goto(target=6)
@@ -2245,9 +2270,9 @@ Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_and3
-Input(prompt=None, var=Var(name='A'), comma=False)
-Input(prompt=None, var=Var(name='B'), comma=False)
-Input(prompt=None, var=Var(name='C'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
+Input(prompt=None, var=Var(name='B'), comma=False, semi=False)
+Input(prompt=None, var=Var(name='C'), comma=False, semi=False)
 IfGoto(cond=LogOp(op='AND', lhs=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), rhs=RelOp(op='=', lhs=Var(name='C'), rhs=Lit(value=2))), target=5)
 Print(items=(Lit(value=0),), newline=True, file=None, commas=None)
 Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
@@ -2394,13 +2419,13 @@ End()
 
 ## v10_t1_booluntil
 Do(kind=None, cond=None)
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Loop(kind='UNTIL', cond=LogOp(op='AND', lhs=RelOp(op='>=', lhs=Var(name='A'), rhs=Lit(value=0)), rhs=RelOp(op='<=', lhs=Var(name='A'), rhs=Lit(value=1))))
 Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 
 ## v10_t1_boolwh
 Do(kind=None, cond=None)
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Loop(kind='WHILE', cond=LogOp(op='OR', lhs=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=0)), rhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1))))
 Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 
@@ -2523,7 +2548,7 @@ End()
 
 ## v10_t1_dimm
 OptionBase(n=1)
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Dim(name='V3', bounds=(Var(name='A'), Lit(value=3)), also=(('V2', (Var(name='A'),)), ('V1', (BinOp(op='*', lhs=Lit(value=2), rhs=Var(name='A')),))))
 Dim(name='V0', bounds=(Var(name='A'),), also=())
 Assign(target=Var(name='B'), value=Lit(value=2))
@@ -2534,7 +2559,7 @@ Print(items=(ArrayRef(name='V3', indices=(Var(name='B'), Lit(value=1))), ArrayRe
 End()
 
 ## v10_t1_dimv
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Dim(name='V0', bounds=(Var(name='A'),), also=())
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=2))
 Print(items=(ArrayRef(name='V0', indices=(Lit(value=1),)),), newline=True, file=None, commas=None)
@@ -2542,7 +2567,7 @@ End()
 
 ## v10_t1_dimv2
 OptionBase(n=1)
-Input(prompt=None, var=Var(name='A%'), comma=False)
+Input(prompt=None, var=Var(name='A%'), comma=False, semi=False)
 Dim(name='V0', bounds=(Var(name='A%'), Lit(value=3)), also=())
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=1))), value=BinOp(op='+', lhs=Var(name='A%'), rhs=Lit(value=2)))
 Assign(target=Var(name='B'), value=BinOp(op='*', lhs=ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=1))), rhs=Var(name='A%')))
@@ -2550,7 +2575,7 @@ End()
 
 ## v10_t1_dimw
 OptionBase(n=1)
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Dim(name='V1', bounds=(Var(name='A'), Lit(value=3)), also=())
 Dim(name='V0', bounds=(Var(name='A'),), also=())
 Assign(target=Var(name='B'), value=Lit(value=2))
@@ -2561,7 +2586,7 @@ End()
 
 ## v10_t1_dimw2
 OptionBase(n=1)
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Dim(name='V0', bounds=(Var(name='A'), Lit(value=3)), also=())
 Assign(target=Var(name='B'), value=Lit(value=2))
 Assign(target=Var(name='C'), value=Lit(value=1))
@@ -2570,7 +2595,7 @@ End()
 
 ## v10_t1_dimw3
 OptionBase(n=1)
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Dim(name='V1', bounds=(Var(name='A'), Lit(value=3)), also=())
 Dim(name='V0', bounds=(Var(name='A'), Lit(value=2)), also=())
 Assign(target=Var(name='B'), value=Lit(value=2))
@@ -2591,7 +2616,7 @@ Assign(target=Var(name='A%'), value=Nullary(name='ERADR'))
 End()
 
 ## v10_t1_erase
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Dim(name='V0', bounds=(Var(name='A'),), also=())
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=2))
 Erase(name='V0')
@@ -2671,7 +2696,7 @@ Files(spec=StrLit(value='*.*'))
 End()
 
 ## v10_t1_fn
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Assign(target=Var(name='B'), value=Call(name='ABS', args=(Var(name='A'),)))
 Assign(target=Var(name='C'), value=Call(name='SQR', args=(Var(name='A'),)))
 Assign(target=Var(name='D'), value=Call(name='INT', args=(Var(name='A'),)))
@@ -2887,6 +2912,14 @@ Assign(target=Var(name='A'), value=Lit(value=2))
 Assign(target=Var(name='B'), value=Lit(value=3))
 End()
 
+## v10_t1_icmpmat
+Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
+Assign(target=Var(name='B'), value=Lit(value=0))
+IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=2)), rhs=RelOp(op='<', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=9))), body=(Assign(target=Var(name='B'), value=Lit(value=1)),))
+IfInline(cond=LogOp(op='OR', lhs=RelOp(op='>=', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=3)), rhs=RelOp(op='<=', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=1))), body=(Assign(target=Var(name='B'), value=Lit(value=2)),))
+Print(items=(Var(name='B'),), newline=True, file=None, commas=None)
+End()
+
 ## v10_t1_if
 Assign(target=Var(name='A'), value=Lit(value=1))
 Assign(target=Var(name='B'), value=Lit(value=2))
@@ -2897,7 +2930,7 @@ Assign(target=Var(name='C'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(valu
 End()
 
 ## v10_t1_ifgoto
-Input(prompt=None, var=Var(name='A$'), comma=False)
+Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
 IfInline(cond=LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='T')), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='t'))), body=(Cls(), Goto(target=5)))
 IfGoto(cond=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='X')), target=4)
 Print(items=(StrLit(value='A'),), newline=True, file=None, commas=None)
@@ -2905,8 +2938,8 @@ Print(items=(StrLit(value='B'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_ifin
-Input(prompt=None, var=Var(name='A'), comma=False)
-Input(prompt=None, var=Var(name='B'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
+Input(prompt=None, var=Var(name='B'), comma=False, semi=False)
 IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), body=(Assign(target=Var(name='C'), value=Lit(value=1)), Assign(target=Var(name='D'), value=Lit(value=2))))
 Print(items=(Var(name='C'), Var(name='D')), newline=True, file=None, commas=None)
 End()
@@ -2916,13 +2949,13 @@ Assign(target=Var(name='A$'), value=Nullary(name='INKEY$'))
 End()
 
 ## v10_t1_inp
-Input(prompt=None, var=Var(name='A'), comma=False)
-Input(prompt=None, var=Var(name='B$'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
+Input(prompt=None, var=Var(name='B$'), comma=False, semi=False)
 Print(items=(Var(name='B$'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_inp2
-Input(prompt=StrLit(value='X'), var=Var(name='A'), comma=False)
+Input(prompt=StrLit(value='X'), var=Var(name='A'), comma=False, semi=False)
 End()
 
 ## v10_t1_inp3
@@ -2931,11 +2964,23 @@ LineInput(prompt=StrLit(value='X'), var=Var(name='B$'))
 End()
 
 ## v10_t1_inp4
-Input(prompt=StrLit(value='X'), var=Var(name='A$'), comma=True)
+Input(prompt=StrLit(value='X'), var=Var(name='A$'), comma=True, semi=False)
+End()
+
+## v10_t1_inparr
+Dim(name='V0', bounds=(10,), also=())
+Assign(target=Var(name='A'), value=Lit(value=3))
+Input(prompt=None, var=ArrayRef(name='V0', indices=(Var(name='A'),)), comma=False, semi=False)
+Print(items=(ArrayRef(name='V0', indices=(Lit(value=3),)),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_inpf
 Assign(target=Var(name='A'), value=Call(name='INP', args=(Lit(value=888),)))
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
+End()
+
+## v10_t1_inpsemi
+Input(prompt=StrLit(value='GIVE'), var=Var(name='A'), comma=False, semi=True)
 Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 End()
 
@@ -3057,7 +3102,7 @@ End()
 OptionBase(n=1)
 Dim(name='V0', bounds=(4,), also=())
 Dim(name='V1', bounds=(3, 2), also=())
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Dim(name='V2', bounds=(Var(name='A'),), also=())
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=2))
 Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=2),)), rhs=Lit(value=1)))
@@ -3071,7 +3116,7 @@ End()
 OptionBase(n=1)
 Dim(name='V0', bounds=(5,), also=())
 Dim(name='V1', bounds=(3, 2), also=())
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Dim(name='V2', bounds=(Var(name='A'),), also=())
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=2))
 Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=2),)), rhs=Lit(value=1)))
@@ -3085,7 +3130,7 @@ End()
 OptionBase(n=1)
 Dim(name='V0', bounds=((0, 4),), also=())
 Dim(name='V1', bounds=((2, 3), (0, 2)), also=())
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Dim(name='V2', bounds=(Var(name='A'),), also=())
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=0),)), value=Lit(value=2))
 Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=2),)), rhs=Lit(value=1)))
@@ -3204,7 +3249,7 @@ End()
 Return()
 
 ## v10_t1_or
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 IfGoto(cond=LogOp(op='OR', lhs=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=0)), rhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=9))), target=4)
 Print(items=(Lit(value=0),), newline=True, file=None, commas=None)
 Goto(target=5)
@@ -3276,7 +3321,7 @@ Assign(target=Var(name='A%'), value=Call(name='POS', args=(Lit(value=0),)))
 End()
 
 ## v10_t1_pr2
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Print(items=(StrLit(value='A'), Var(name='A'), StrLit(value='B')), newline=True, file=None, commas=None)
 Print(items=(StrLit(value='X'),), newline=False, file=None, commas=None)
 PrintUsing(fmt=StrLit(value='##.##'), values=(Var(name='A'),), file=None, newline=True)
@@ -3440,7 +3485,7 @@ End()
 Run(file=StrLit(value='X.BAS'))
 
 ## v10_t1_sarr
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Dim(name='V0$', bounds=(Var(name='A'),), also=())
 Assign(target=ArrayRef(name='V0$', indices=(Lit(value=1),)), value=StrLit(value='AB'))
 Assign(target=ArrayRef(name='V0$', indices=(Var(name='A'),)), value=StrLit(value='CD'))
@@ -3449,7 +3494,7 @@ Print(items=(ArrayRef(name='V0$', indices=(Lit(value=1),)),), newline=True, file
 End()
 
 ## v10_t1_sarr2
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Dim(name='V1$', bounds=(Var(name='A'),), also=())
 Dim(name='V0', bounds=(Var(name='A'), Lit(value=5)), also=())
 Open(mode=StrLit(value='I'), num=1, file=StrLit(value='X.DAT'), reclen=None)
@@ -3828,7 +3873,7 @@ Swap(a=Var(name='A'), b=Var(name='B'))
 End()
 
 ## v10_t1_tab
-Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Print(items=(StrLit(value='A'), Call(name='TAB', args=(Lit(value=7),)), Var(name='A')), newline=True, file=None, commas=None)
 Print(items=(Call(name='SPC', args=(Lit(value=3),)), StrLit(value='B')), newline=True, file=None, commas=None)
 Print(items=(Call(name='TAB', args=(Var(name='A'),)), StrLit(value='C')), newline=True, file=None, commas=None)

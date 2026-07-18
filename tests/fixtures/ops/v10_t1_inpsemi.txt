@@ -1,0 +1,12 @@
+# v10_t1_inpsemi dialect=1.0 start=071E0
+071E3:input:308:16512
+071EA:read_num
+071ED:fstp:288
+071F4:fld:288
+071F9:rt:187
+071FB:rt:184
+071FF:end
+07202:epilogue
+# commits
+071F2
+071FD

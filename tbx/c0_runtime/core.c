@@ -313,29 +313,30 @@ tb_str tb_oct(double v) { char b[24]; sprintf(b, "%lo", tb_i(v) & 0xFFFF); retur
 /* TB's INPUT echoes the typed characters and the Enter newline to the
    screen itself. Under a terminal the tty layer already does that; with
    redirected stdin nothing would, so echo the read line then -- keeping
-   the visible output identical to a real DOS run (the dosout goldens). */
-static void tb_input_line(char *line, size_t n) {
+   the visible output identical to a real DOS run (the dosout goldens).
+   `INPUT;` (mark bit 1) keeps the cursor on the line: no newline echo. */
+static void tb_input_line(char *line, size_t n, int semi) {
     if (!fgets(line, n, stdin)) { line[0] = 0; }
     line[strcspn(line, "\r\n")] = 0;
 #ifdef _WIN32
-    if (!_isatty(0)) { tb_ps(line); tb_ps("\n"); return; }
+    if (!_isatty(0)) { tb_ps(line); if (!semi) tb_ps("\n"); return; }
 #else
-    if (!isatty(0)) { tb_ps(line); tb_ps("\n"); return; }
+    if (!isatty(0)) { tb_ps(line); if (!semi) tb_ps("\n"); return; }
 #endif
     tb_col = 0;
 }
 double tb_input_num(tb_str prompt, int mark) {
     if (prompt.p) tb_pss(prompt);
-    if (mark) tb_ps("? ");
+    if (mark & 1) tb_ps("? ");
     char line[256];
-    tb_input_line(line, sizeof line);
+    tb_input_line(line, sizeof line, mark & 2);
     return strtod(line, NULL);
 }
 tb_str tb_input_str(tb_str prompt, int mark) {
     if (prompt.p) tb_pss(prompt);
-    if (mark) tb_ps("? ");
+    if (mark & 1) tb_ps("? ");
     char line[256];
-    tb_input_line(line, sizeof line);
+    tb_input_line(line, sizeof line, mark & 2);
     return tb_from_c(line);
 }
 tb_str tb_dateS(void) {

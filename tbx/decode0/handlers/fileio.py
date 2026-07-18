@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 from tbx import ir
 from tbx.decode0.const import (
     _FREAD,
+    _INPUTREAD,
     _READDATA,
 )
 
@@ -137,7 +138,7 @@ def data_read(state: DecodeState, op, addr, kind) -> bool:
         if state.pend_input is None or nxt is None:
             raise ValueError(f"numeric INPUT read without target at {addr:#x}")
         prompt, flags = state.pend_input
-        if flags & ~0x4040 or not flags & 0x4000:
+        if flags & ~0x40C0 or not flags & 0x4000:
             raise ValueError(f"INPUT flags {flags:#06x} for numeric target")
         if nxt[1] == "fstp":  # FP variable target
             var, used = state.loc(nxt[2]), 2
@@ -151,9 +152,23 @@ def data_read(state: DecodeState, op, addr, kind) -> bool:
                 state.loc(state.ops[state.k + 4][2]),
                 5,
             )  # int target via bridge
+        elif nxt[1] in ("fld", "fild"):
+            # Array-element target (t1_inparr, wild schart.exe): the index
+            # computation runs between the read and the element store, so the
+            # parsed value waits on the FP stack as a sentinel and the store
+            # terminal (fstp_si) names the target; pend_input stays open for
+            # it. Any other continuation still fails loudly below.
+            state.stack.append(_INPUTREAD)
+            state.k += 1
+            return True
         else:
             raise ValueError(f"numeric INPUT read without FSTP at {addr:#x}")
-        state.put(ir.Input(prompt, var, comma=bool(flags & 0x0040)), state.cur)
+        state.put(
+            ir.Input(
+                prompt, var, comma=bool(flags & 0x0040), semi=bool(flags & 0x0080)
+            ),
+            state.cur,
+        )
         state.pend_input = None
         state.cur = None
         state.k += used
