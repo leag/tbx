@@ -3098,10 +3098,14 @@ Assign(target=Var(name='C%'), value=Lit(value=1))
 CallStmt(name='SUB1', args=(Var(name='C%'),))
 End()
 
+## t1_color3
+Color(fg=Lit(value=1), bg=Lit(value=2), border=Lit(value=3))
+End()
+
 ## t1_colorfp
 Assign(target=Var(name='A'), value=SingleLit(value=3.7))
 Assign(target=Var(name='B'), value=SingleLit(value=1.2))
-Color(fg=Var(name='A'), bg=Var(name='B'))
+Color(fg=Var(name='A'), bg=Var(name='B'), border=None)
 End()
 
 ## t1_common1
@@ -4459,16 +4463,16 @@ End()
 ## t1_scr
 Cls()
 Locate(row=Lit(value=3), col=Lit(value=5), cursor=None)
-Color(fg=Lit(value=1), bg=None)
+Color(fg=Lit(value=1), bg=None, border=None)
 Locate(row=Lit(value=10), col=Lit(value=20), cursor=None)
-Color(fg=Lit(value=7), bg=Lit(value=0))
+Color(fg=Lit(value=7), bg=Lit(value=0), border=None)
 Print(items=(StrLit(value='HI'),), newline=True, file=None, commas=None)
 End()
 
 ## t1_scr2
 Locate(row=Lit(value=3), col=Lit(value=5), cursor=Lit(value=1))
 Locate(row=Lit(value=4), col=Lit(value=6), cursor=Lit(value=0))
-Color(fg=None, bg=Lit(value=2))
+Color(fg=None, bg=Lit(value=2), border=None)
 End()
 
 ## t1_screen
@@ -8257,10 +8261,14 @@ End()
 Clear()
 End()
 
+## v10_t1_color3
+Color(fg=Lit(value=1), bg=Lit(value=2), border=Lit(value=3))
+End()
+
 ## v10_t1_colorfp
 Assign(target=Var(name='A'), value=SingleLit(value=3.7))
 Assign(target=Var(name='B'), value=SingleLit(value=1.2))
-Color(fg=Var(name='A'), bg=Var(name='B'))
+Color(fg=Var(name='A'), bg=Var(name='B'), border=None)
 End()
 
 ## v10_t1_common2
@@ -9370,16 +9378,16 @@ End()
 ## v10_t1_scr
 Cls()
 Locate(row=Lit(value=3), col=Lit(value=5), cursor=None)
-Color(fg=Lit(value=1), bg=None)
+Color(fg=Lit(value=1), bg=None, border=None)
 Locate(row=Lit(value=10), col=Lit(value=20), cursor=None)
-Color(fg=Lit(value=7), bg=Lit(value=0))
+Color(fg=Lit(value=7), bg=Lit(value=0), border=None)
 Print(items=(StrLit(value='HI'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_scr2
 Locate(row=Lit(value=3), col=Lit(value=5), cursor=Lit(value=1))
 Locate(row=Lit(value=4), col=Lit(value=6), cursor=Lit(value=0))
-Color(fg=None, bg=Lit(value=2))
+Color(fg=None, bg=Lit(value=2), border=None)
 End()
 
 ## v10_t1_screen

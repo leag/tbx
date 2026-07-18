@@ -695,6 +695,22 @@ def test_decode_t1_dimorph():
     )
 
 
+def test_decode_t1_color3():
+    # COLOR's third argument (border) -- wild r.exe/book.exe at "COLOR mask
+    # 07 != cells 06 (+{160: ...})": color_commit's mask bit 0x01 (border)
+    # was unhandled, only fg(0x04)/bg(0x02) were ever popped from
+    # state.color_cells, leaving cell 0xA0 unaccounted whenever a program
+    # used the 3-argument form (`COLOR fg,bg,border`, GW-BASIC-style CGA
+    # border color). ir.Color gained a `border` field; render.py builds the
+    # comma list up to the highest set argument, matching how it already
+    # skips a bare fg-only or fg,bg form.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_color3.exe"))
+    assert prog[0] == ir.Color(ir.Lit(1), ir.Lit(2), ir.Lit(3))
+    assert emit0.emit(prog) == "10 COLOR 1,2,3\n20 END\n"
+
+
 def test_decode_t1_fileint():
     # INPUT# with INTEGER targets (inv87/invoice at 0x1389c): the numeric
     # read leaves the value on the x87 stack as usual, but an int slot is

@@ -418,9 +418,10 @@ def _us_console(s) -> str | None:
         cur = "" if s.cursor is None else f",{unparse(s.cursor)}"
         return f"LOCATE {unparse(s.row)},{unparse(s.col)}{cur}"
     if isinstance(s, Color):
-        fg = "" if s.fg is None else unparse(s.fg)
-        bg = "" if s.bg is None else f",{unparse(s.bg)}"
-        return f"COLOR {fg}{bg}"
+        args = (s.fg, s.bg, s.border)
+        last = max((i for i, a in enumerate(args) if a is not None), default=-1)
+        parts = [unparse(a) if a is not None else "" for a in args[: last + 1]]
+        return f"COLOR {','.join(parts)}"
     if isinstance(s, Input):
         kw = "INPUT;" if s.semi else "INPUT"
         vs = (

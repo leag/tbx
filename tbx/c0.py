@@ -986,6 +986,12 @@ class _Gen:
                 )
             return out
         if isinstance(s, ir.Color):
+            if s.border is not None:
+                # CGA/EGA text-mode border color: no visible effect in the
+                # PPM/SDL framebuffer surrogate (the border strip is outside
+                # the captured display), but silently dropping a value the
+                # source explicitly set would mistranslate -- fail loud.
+                raise _Unsupported("COLOR border argument")
             fg = self.num(s.fg) if s.fg is not None else "0"
             bg = self.num(s.bg) if s.bg is not None else "0"
             has_fg = "1" if s.fg is not None else "0"

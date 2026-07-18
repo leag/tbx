@@ -141,18 +141,23 @@ def graphics(state: DecodeState, op, addr, kind) -> bool:
         state.cur = None
         state.k += 1
         return True
-    if kind == "color_commit":  # COLOR fg(04)/bg(02) mask
-        fg, bg = (
+    if kind == "color_commit":  # COLOR fg(04)/bg(02)/border(01) mask
+        fg, bg, border = (
             state.color_cells.pop(0x88, None),
             state.color_cells.pop(0x94, None),
+            state.color_cells.pop(0xA0, None),
         )
-        want_mask = (4 if fg is not None else 0) | (2 if bg is not None else 0)
+        want_mask = (
+            (4 if fg is not None else 0)
+            | (2 if bg is not None else 0)
+            | (1 if border is not None else 0)
+        )
         if op[2] != want_mask or state.color_cells:
             raise ValueError(
                 f"COLOR mask {op[2]:02x} != cells {want_mask:02x} "
                 f"(+{state.color_cells}) at {addr:#x}"
             )
-        state.put(ir.Color(fg, bg), state.cur)
+        state.put(ir.Color(fg, bg, border), state.cur)
         state.cur = None
         state.k += 1
         return True

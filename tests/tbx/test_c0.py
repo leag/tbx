@@ -300,6 +300,10 @@ _DOS_WAIVED: dict[str, str] = {
     "(terminal.c tb_locate); in the harness's captured pipe the escapes "
     "don't reposition, so the DOS golden's column-13 X has no native "
     "equivalent -- same surrogate that keeps t1_scr out of the dosout set",
+    "t1_color3": "COLOR's border argument (CGA/EGA text-mode border color) "
+    "has no visible effect in the PPM/SDL framebuffer surrogate -- the "
+    "border strip is outside the captured display -- so c0 raises "
+    "_Unsupported rather than silently dropping a value the source set",
 }
 # file-comparison waivers: the screen still must match
 _DOS_FILE_WAIVED = {

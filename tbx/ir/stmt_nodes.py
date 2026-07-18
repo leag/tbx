@@ -673,10 +673,11 @@ class Locate:
 
 @dataclass(frozen=True)
 class Color:
-    """COLOR [fg][,bg] -- stores to fixed DGROUP cells + `cd ec 22 <mask>`."""
+    """COLOR [fg][,bg][,border] -- stores to fixed DGROUP cells + `cd ec 22 <mask>`."""
 
     fg: object = None  # Expr (Lit) | None
     bg: object = None  # Expr (Lit) | None
+    border: object = None  # Expr (Lit) | None
 
 
 @dataclass(frozen=True)
