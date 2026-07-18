@@ -29,6 +29,7 @@ PAIRS = [
     "t1_bandstr",
     "t1_dim4",
     "t1_strch",
+    "t1_svaridx",
 ]
 
 

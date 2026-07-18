@@ -1,0 +1,23 @@
+# v10_t1_svaridx dialect=1.0 start=070B0
+070B3:movsi:356
+070B6:rt:156
+070B8:movsi:380
+070BB:strassign
+070BD:fild:360
+070C2:fstp:342
+070C9:fld:342
+070CE:fistp:44
+070D3:fwait
+070D5:movaxmem:44
+070D8:movsiax
+070DA:shlsi
+070DC:shlsi
+070DE:addsi:368
+070E2:rt:156
+070E4:rt:190
+070E6:rt:184
+070EA:end
+070ED:epilogue
+# commits
+070C7
+070E8

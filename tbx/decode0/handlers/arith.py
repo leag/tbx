@@ -389,6 +389,16 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         elif sik[1] in (pre + "fcomp_si", pre + "fcomp_si64"):
             # IF on an array element (m64 witnessed t1_dblar2)
             state.pend_cmp = (ref, state.stack.pop())
+        elif sik[1] == "rt" and sik[2] == 0x9C:
+            # push (var desc): a VARIABLE-indexed static string array element
+            # used as a string value (PRINT item, string arg, ...) -- same
+            # push-then-consume shape as the constant-index case (core.py's
+            # movsi + rt-0x9C), just via a computed si instead of a fixed
+            # disp16. The following op (the actual consumer) runs through the
+            # ordinary dispatch loop, same as any other sstack push.
+            if not a.get("str"):
+                raise ValueError(f"string op on numeric array at {addr:#x}")
+            state.sstack.append(ref)
         else:
             raise ValueError(f"element access: unexpected op {sik[1]} at {sik[0]:#x}")
         state.k += ao + 2

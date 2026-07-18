@@ -1,0 +1,5 @@
+10 DIM V0$(20)
+20 V0$(3) = "HELLO"
+30 A = 3
+40 PRINT V0$(A)
+50 END

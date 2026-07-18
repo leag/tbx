@@ -1,0 +1,23 @@
+# t1_svaridx dialect=1.1 start=08700
+08703:movsi:356
+08706:rt:156
+08708:movsi:380
+0870B:strassign
+0870D:fild:360
+08712:fstp:342
+08719:fld:342
+0871E:fistp:44
+08723:fwait
+08725:movaxmem:44
+08728:movsiax
+0872A:shlsi
+0872C:shlsi
+0872E:addsi:368
+08732:rt:156
+08734:rt:190
+08736:rt:184
+0873A:end
+0873D:epilogue
+# commits
+08717
+08738

@@ -233,6 +233,23 @@ def test_decode_t1_sstat():
     )
 
 
+def test_decode_t1_svaridx():
+    # Static STRING array element at a VARIABLE (computed) index used as a
+    # string value (PRINT item here): the shl-si/addsi element-access chain
+    # ends in `rt 0x9C` (push var desc) rather than one of the fld_si/
+    # fstp_si/strassign/far_spush terminals int_alu already recognized --
+    # same push-then-consume shape as the constant-index case (core.py's
+    # movsi + rt-0x9C), just reached via a computed si. Only the push is
+    # consumed; the following op (PRINT's own rt-0xBE item-eval here) runs
+    # through the ordinary dispatch loop off the sstack push, unchanged.
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_svaridx.exe")))
+    assert src == (
+        '10 DIM V0$(20)\n20 V0$(3) = "HELLO"\n30 A = 3\n40 PRINT V0$(A)\n50 END\n'
+    )
+
+
 def test_decode_t1_run2():
     # RUN file$ (EC sub C4): loads and runs a different program -- distinct
     # from bare RUN's raw jmp-to-start (byte ff family closed it, this is a
@@ -534,6 +551,7 @@ if __name__ == "__main__":
     test_decode_t1_poolrun()
     test_decode_t1_decr1()
     test_decode_t1_sstat()
+    test_decode_t1_svaridx()
     test_decode_t1_run2()
     test_decode_t1_byref2()
     test_decode_t1_forstep()
