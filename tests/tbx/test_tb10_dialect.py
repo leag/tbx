@@ -33,6 +33,7 @@ PAIRS = [
     "t1_addpool",
     "t1_ifgoto",
     "t1_errcmp",
+    "t1_fileint",
     "t1_imulpool",
     "t1_strgodo",
     "t1_lpusing",

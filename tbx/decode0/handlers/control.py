@@ -146,11 +146,14 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             state.cur = None
             state.k += 2
             return True
-        if vec == 0xC1:  # PRINT comma: zone-advance separator after an item
+        if vec in (0xC1, 0xC3):  # PRINT comma: zone-advance separator after an
+            # item (C1 console / C3 file, witnessed t1_pcomma / t1_fileint)
+            want_file = vec == 0xC3
             if (
                 state.pend_print is None
                 or state.pend_print.get("mode")
                 or not state.pend_print["items"]
+                or (state.pend_print["file"] is not None) != want_file
             ):
                 raise ValueError(f"comma separator without print item at {addr:#x}")
             state.pend_print.setdefault("commas", set()).add(

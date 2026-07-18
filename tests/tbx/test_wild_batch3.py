@@ -469,6 +469,34 @@ def test_decode_t1_addpool():
     )
 
 
+def test_decode_t1_fileint():
+    # INPUT# with INTEGER targets (inv87/invoice at 0x1389c): the numeric
+    # read leaves the value on the x87 stack as usual, but an int slot is
+    # stored through the fistp bridge (fistp 2C; fwait; movaxmem 2C;
+    # movm_ax <slot>) -- fp_math's fistp assign branch popped the _FREAD
+    # sentinel and fed it straight to ir.Assign instead of routing it to
+    # _fread_target (the _READDATA analog got the same fix). The probe also
+    # witnessed INT C3, PRINT#'s comma separator (console comma is C1):
+    # `PRINT #1, 5, 7` compiles item;C3;item, previously unscanned.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_fileint.exe"))
+    assert prog[4] == ir.InputFile(1, (ir.Var("A%"), ir.Var("B%")))
+    assert prog[1] == ir.Print(
+        (ir.Lit(5), ir.Lit(7)), newline=True, file=1, commas=(True, False)
+    )
+    assert emit0.emit(prog) == (
+        '10 OPEN "O",#1,"T.DAT"\n'
+        "20 PRINT #1, 5, 7\n"
+        "30 CLOSE\n"
+        '40 OPEN "I",#1,"T.DAT"\n'
+        "50 INPUT #1, A%, B%\n"
+        "60 CLOSE\n"
+        "70 PRINT A% + B%\n"
+        "80 END\n"
+    )
+
+
 def test_decode_t1_addimm():
     # 01 06 = add [disp16], ax: the disp16 sibling of addm_ax_bp (t1_local1's
     # LOCAL combine-store) -- `X% = X% + <expr>` when the RHS isn't a bare
@@ -665,6 +693,7 @@ if __name__ == "__main__":
     test_decode_t1_strgodo()
     test_decode_t1_ifgoto()
     test_decode_t1_addpool()
+    test_decode_t1_fileint()
     test_decode_t1_addimm()
     test_decode_t1_fwd()
     test_decode_t1_locidx()

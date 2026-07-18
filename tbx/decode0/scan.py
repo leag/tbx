@@ -606,6 +606,7 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
         0xCB,  # file/USING legs
         0xCC,  # USING string item (witnessed t1_using)
         0xC1,  # PRINT comma zone advance (witnessed t1_pcomma)
+        0xC3,  # PRINT# comma zone advance (witnessed t1_fileint)
         0xBC,
         0xB9,
         0xBF,  # LPRINT string item (witnessed t1_lpstr)

@@ -551,6 +551,16 @@ Assign(target=Var(name='A%'), value=Call(name='EOF', args=(Lit(value=1),)))
 Assign(target=Var(name='B%'), value=Call(name='LPOS', args=(Lit(value=0),)))
 End()
 
+## t1_fileint
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='T.DAT'), reclen=None)
+Print(items=(Lit(value=5), Lit(value=7)), newline=True, file=1, commas=(True, False))
+Close(num=None)
+Open(mode=StrLit(value='I'), num=1, file=StrLit(value='T.DAT'), reclen=None)
+InputFile(num=1, vars=(Var(name='A%'), Var(name='B%')))
+Close(num=None)
+Print(items=(BinOp(op='+', lhs=Var(name='A%'), rhs=Var(name='B%')),), newline=True, file=None, commas=None)
+End()
+
 ## t1_files
 Files(spec=StrLit(value='*.*'))
 End()
@@ -2750,6 +2760,16 @@ End()
 ## v10_t1_filef
 Assign(target=Var(name='A%'), value=Call(name='EOF', args=(Lit(value=1),)))
 Assign(target=Var(name='B%'), value=Call(name='LPOS', args=(Lit(value=0),)))
+End()
+
+## v10_t1_fileint
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='T.DAT'), reclen=None)
+Print(items=(Lit(value=5), Lit(value=7)), newline=True, file=1, commas=(True, False))
+Close(num=None)
+Open(mode=StrLit(value='I'), num=1, file=StrLit(value='T.DAT'), reclen=None)
+InputFile(num=1, vars=(Var(name='A%'), Var(name='B%')))
+Close(num=None)
+Print(items=(BinOp(op='+', lhs=Var(name='A%'), rhs=Var(name='B%')),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_files
