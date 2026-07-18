@@ -1217,7 +1217,13 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 for d in state.desc_disps
             )
         hdr = struct.pack("<H", 0x8000 | total)
-        lo = (state.lay["pool_base"] + 15) & ~15
+        # `d` already sits just past the last matched descriptor (or at pool_base
+        # if none chained) -- anchor there rather than at pool_base itself, since
+        # a large descriptor table (e.g. a static string array's per-element
+        # descriptors chained into the same table, witnessed vhfprop.exe: 469
+        # descriptors) can run for well over 0x400 bytes past pool_base, pushing
+        # the char record's actual position outside the old fixed window.
+        lo = (d + 15) & ~15
         for cand in range(lo, lo + 0x400, 16):
             pos = state.dsd + cand + 0x10
             if (

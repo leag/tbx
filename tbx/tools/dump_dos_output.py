@@ -92,6 +92,8 @@ SKIP = {
     "complete capture",
     "t1_shell": "SHELL DIR completes on screen but the sub-shell confuses "
     "the harness's prompt-return detection -- no confirmed-complete capture",
+    "t1_strch": "260 PRINT lines scroll the 25-line screen many times over; "
+    "the harness's DOS-prompt-return detection never confirms completion",
     **{
         s: _TRON_HANG
         for s in (

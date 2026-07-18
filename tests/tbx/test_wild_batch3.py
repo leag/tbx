@@ -332,6 +332,26 @@ def test_decode_t1_for10arr():
     )
 
 
+def test_decode_t1_strch():
+    # A large-enough run of pooled string literals (260 here) chains the
+    # per-literal descriptor table for well over 0x400 bytes past pool_base,
+    # pushing the char-record's `(len|0x8000) 00 00 00 00 <chars> (len|0x8000)`
+    # bracket outside the old fixed search window anchored at pool_base --
+    # wild vhfprop.exe/inv87.exe/invoice.exe hit the same shape via a big
+    # static string array's per-element descriptors chained into the same
+    # table (469/513 entries). The search now anchors on `d`, which the
+    # descriptor walk already leaves sitting just past the last matched
+    # entry, rather than recomputing from pool_base.
+    from tbx import decode0, emit0
+
+    prog = decode0.decode_user_code(_exe("t1_strch.exe"))
+    assert len(prog) == 261  # 260 PRINT + END
+    lines = emit0.emit(prog).splitlines()
+    assert lines[0] == '10 PRINT "S000"'
+    assert lines[259] == '2600 PRINT "S259"'
+    assert lines[260] == "2610 END"
+
+
 def test_decode_t1_addimm():
     # 01 06 = add [disp16], ax: the disp16 sibling of addm_ax_bp (t1_local1's
     # LOCAL combine-store) -- `X% = X% + <expr>` when the RHS isn't a bare
@@ -520,6 +540,7 @@ if __name__ == "__main__":
     test_decode_t1_forstepn()
     test_decode_t1_forbig()
     test_decode_t1_for10arr()
+    test_decode_t1_strch()
     test_decode_t1_addimm()
     test_decode_t1_fwd()
     test_decode_t1_locidx()
