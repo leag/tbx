@@ -1,6 +1,7 @@
 # Wild-corpus gap campaign — handoff
 
-Status as of 2026-07-17, branch `claude/claude-md-docs-mr8ssz`.
+Status as of 2026-07-17 (follow-up session, gaps 29-32), branch
+`claude/claude-md-docs-mr8ssz`.
 Standing instruction: close the most common decoder gap first, in frequency
 order, over the 84 wild PC-SIG Turbo Basic EXEs in `wild/hits/` (untracked,
 gitignored, copyrighted shareware — **never commit them**).
@@ -8,16 +9,19 @@ gitignored, copyrighted shareware — **never commit them**).
 ## Where things stand
 
 `python -m tbx.tools.scan_wild wild/hits` — 84 EXEs: 3 decode OK, 81 fail.
-Current tally (post gap 28, stamp-anchored DGROUP layout — **the
-"DGROUP layout not solvable" bucket is now EMPTY**, all 5 files advanced):
+Current tally (post gaps 29-32: compound-IF tail-test DO..LOOP, string
+char-record window re-anchor, COLOR/VIEW FP-arg cell, variable-indexed
+static string array element — **both the "compound-IF tail mismatch" and
+"string char record not found" buckets from the previous handoff are now
+EMPTY**, all files advanced):
 
 | count | error | status |
 |---|---|---|
-| 16 | INT cd | unwitnessable runtime-revision artifact — not actionable (see `scan_wild.py` docstring); crossref.exe advanced in from gap 23 |
-| 5 | byte 90 | set aside (4) + rstprint.exe advanced in from gap 21 (1, undiagnosed whether it's the same unwitnessable shape — check before assuming) |
-| 4 | byte ea | mcmurphy.exe advanced in from gap 21; likely the multi-segment-code JMP FAR shape diagnosed under gap-ea below — probably a big lift, not a small gap |
-| 3 each | INT 8c; byte 06; compound-IF tail mismatch; string char record not found | INT 8c and byte 06 documented below; compound-IF tail mismatch at 0xe792/0xb43e (onelab87/onelabel/schart — schart advanced in from gap 28) and "string char record not found" (vhfprop/inv87/invoice, advanced in from gap 28) are both undiagnosed |
-| 2 each | string compare jcc, EC sub 66, EC sub 38, FP de/1e, FP dc/04, FP da/1c, COLOR mask, byte 8c, 8b, 29, 1e, system cell 0x8a | then singles (hfprop advanced from gap 28 into the known FRE(s$) unreferenced-pooled-strings unsupported case) |
+| 16 | INT cd | unwitnessable runtime-revision artifact — not actionable (see `scan_wild.py` docstring) |
+| 5 | byte 90 | set aside (4, unwitnessable) + rstprint.exe (1, undiagnosed whether it's the same shape — check before assuming) |
+| 4 | byte ea | likely the multi-segment-code JMP FAR shape (programs >64K code) — probably a big lift, not a small gap |
+| 3 each | INT 8c; byte 06; then NEW this session: "displacement 0xeaa is neither scalar nor array element" (inv87/invoice), "jump target 0xe74c is not a statement start" (onelab87/onelabel) | INT 8c and byte 06 documented below (both extensively probed, still undiagnosed); the two new 2-file pairs are FRESH, one hexdump/trace each away from a lead |
+| 2 each | INT EC sub 66/38, FP de/1e, FP dc/04, FP da/1c, byte 8c/8b/89/29/1e, system cell 0x8a | INT EC sub 38 investigated this session (see Gap 33 below, undiagnosed); the rest untouched |
 
 ## Ongoing plan (priority order — pick up at the first incomplete step)
 
@@ -41,22 +45,75 @@ this file once diagnosed.
    probe candidate triggers one at a time under both dialects: VIEW PRINT,
    WIDTH-dependent PRINT, PCOPY, text-mode GET/PUT. Match against the byte
    signature `55 8b ec 06 1e 8b 16 00 00`.
-5. **Compound-IF tail mismatch (3 files: onelab87/onelabel @0xe792,
-   schart @0xb43e)** — undiagnosed; surfaced when gaps 17/28 pushed these
-   files past their earlier blockers.
-6. **String char record not found (3 files: vhfprop/inv87/invoice)** —
-   undiagnosed; surfaced when gap 28 solved their DGROUP layouts. All
-   three now get past layout, so this is a datapool/string-space issue —
-   start from where the "string char record" error is raised.
-7. **The 2-tier** (EC sub 66, EC sub 38, FP de/1e, FP dc/04, byte 8c, 29,
-   03, ff, 3b, system cell 0x8a, COLOR mask) — re-tally after each closure
-   above first; these buckets reshuffle as files advance. For FP gaps check
-   the `[si]` FP table for missing rows first; for EC/ED subs check the
-   alphabetical sub-op gap trick (gap-17 lesson).
+5. **"displacement 0xeaa ..." (inv87/invoice, 2 files)** — brand new this
+   session, surfaced by gap 31 closing; not yet traced at all. Same
+   `state.loc()` failure family as gap 31 (COLOR/VIEW cells) and gap 16
+   (array layout) — check whether 0xeaa is another fixed system cell first
+   (grep the movm_imm/movm_ax system-cell dispatch for anything nearby),
+   then whether it's a DGROUP layout miss.
+6. **"jump target 0xe74c is not a statement start" (onelab87/onelabel,
+   2 files)** — brand new this session, surfaced by gap 29 closing. A
+   target-resolution issue at `_finalize`/epilogue time, not a scan-level
+   byte gap — look at what control-flow fold produced a target address
+   that isn't in `addrs`.
+7. **The 2-tier** (EC sub 66, EC sub 38, FP de/1e, FP dc/04, byte 8c/8b/
+   89/29/1e, system cell 0x8a) — re-tally after each closure above first;
+   these buckets reshuffle as files advance. EC sub 38 was investigated
+   this session without a confirmed hypothesis (see Gap 33 below); for FP
+   gaps check the `[si]` FP table for missing rows first.
 8. Singles last, same workflow.
 
 ## Recently closed (this campaign, newest first)
 
+- **Gap 32: variable-indexed static string array element as a string
+  value** (2026-07-17, follow-up session): the shl-si/addsi computed-
+  element-access chain (`int_alu`, arith.py) only recognized a fixed set
+  of terminal ops right after the index resolves (fld_si/fstp_si/fold_si/
+  fcomp_si/strassign/far_spush/...) — a static STRING array element read
+  at a VARIABLE index and used as a string value (a PRINT item) instead
+  ends in `rt 0x9C` ("push var desc"), the same push op the constant-index
+  case already goes through via `movsi` (core.py), just reached via a
+  computed si. Added an `rt`/0x9C branch: push the resolved `ArrayRef`
+  onto the sstack and let the ordinary dispatch loop handle whatever
+  consumes it next, mirroring the movsi+0x9C push-then-consume shape.
+  Fixture t1_svaridx (`PRINT A$(I)`). Closed inv87.exe/invoice.exe/
+  onelab87.exe/onelabel.exe's "unexpected op rt" failures.
+- **Gap 31: COLOR/VIEW cell target for the FP->int assign bridge**
+  (2026-07-17, same session): COLOR fg,bg (and the VIEW/WINDOW coordinate
+  cells) had only ever been witnessed with a plain immediate or an
+  ax-computed value; a non-integer argument compiles through the generic
+  FP->int assign bridge (FISTP [2C]; FWAIT; MOV AX,[2C]; MOV [tgt],AX),
+  whose fallback unconditionally routed the target through `state.loc()`
+  — these cells aren't in the scalar/array layout, so it raised
+  "displacement ... is neither scalar nor array element". Also fixed a
+  SEPARATE, previously-unreachable bug this surfaced: canonical_rename's
+  per-statement walk never had an `ir.Color` case at all (every other
+  graphics statement is walked), invisible before because COLOR's args
+  were always Lit/None, never a Var needing re-lettering. Fixture
+  t1_colorfp (`COLOR A,B` both single). Closed vhfprop.exe/inv87.exe/
+  invoice.exe's "displacement 0x88 ..." failures.
+- **Gap 30: re-anchor the string char-record search past the descriptor
+  table** (2026-07-17, same session): the char-record search bracket
+  (`(len|0x8000) 00 00 00 00 <chars> (len|0x8000)`) anchored its 0x400-
+  byte window at align16(pool_base) — fine for a short pooled-literal
+  descriptor chain, wrong once the chain runs long (many literals, or a
+  static string array whose per-element descriptors chain into the SAME
+  table — witnessed 469/513-entry chains). The chain-walk loop's own `d`
+  variable already sits exactly past the last matched descriptor when the
+  loop breaks — anchor the search there instead of re-deriving from
+  pool_base. Fixture t1_strch (260 pooled PRINT literals; bisected
+  minimum). Closed vhfprop.exe/inv87.exe/invoice.exe's "string char
+  record not found" failures.
+- **Gap 29: compound-IF second term ending in a tail-test DO..LOOP**
+  (2026-07-17, same session): `LOOP WHILE/UNTIL A relop B AND/OR C relop
+  D` materializes its second term with a BACKWARD Jcc (the loop's own
+  back-edge) instead of the dispatch jcc+jmp pair every other compound-IF
+  tail uses — same 5-op shape `_lift_do_tail` already handled for a bare
+  single condition, just with the AND/OR combining op where a bare
+  tail-test always has a plain self-test `or ax,ax`. New
+  `_lift_bool_do_tail` in lift.py, tried before the existing dispatch-pair
+  `_lift_bool_tail`. Fixtures t1_boolwh/t1_booluntil. Closed onelab87.exe/
+  onelabel.exe/schart.exe's "compound-IF tail mismatch" failures.
 - **Gap 28 follow-up: stamp path generalized to ALL no-runtime-array
   programs** (2026-07-17, same session): corpus-wide survey showed every
   one of the 615 no-rt fixtures carries the ordinary-scalars stamp and it
@@ -281,6 +338,70 @@ this file once diagnosed.
   the walk cut at 16-aligned string positions. Fixture t1_poolrun.
 - Gap 12 INCR/DECR (`0e4f0f7`), gap 11 by-ref int param family (`3f1e23d`),
   gap 10 LOCAL (`2ef2b6d`), gap 9 double arrays — see git log.
+
+## Gap 33 — INT EC sub 38 (football.exe/refund.exe), UNDIAGNOSED
+
+Both wild hits are TB 1.1/1.0 respectively (`canon_sub` already normalizes
+the dialect difference, so it's genuinely the same feature). Byte shape at
+football.exe 0x9e64:
+
+```
+be 8c 01     mov si, 018Ch        -- block disp (a runtime-DIM'd array)
+ba 1a 0a     mov dx, 0A1Ah        -- relocated segment (exe reloc entry)
+8e c2        mov es, dx
+cd ec 38     int ECh, sub 38      -- FAILS HERE, no operand byte follows
+be f0 06     mov si, 06F0h        -- next statement starts cleanly after
+cd 9c        int 9Ch (rt push)
+```
+
+The `movsi <block>; movdx <reloc-seg>; movesdx` prefix is the SAME runtime-
+array-block-reference convention used by `dim_begin`(0x2C)/`dim_end`(0x2E)/
+`erase`(0x36) (core.py ~line 1716) and by GET/PUT graphics blit on a
+runtime array (confirmed via probe `q_dynget.bas`: `DIM A(N)` then
+`GET/PUT ..., A` emits this exact prefix before `get_gfx`/`put_gfx`). So
+sub 0x38 is a FOURTH runtime-array-block operation, block-only (no operand
+byte after the sub, no stack push before or after it in the 15-op window
+captured) — same argument-shape as `erase`.
+
+**Ruled out this session** (all compiled clean through the oracle with
+ZERO occurrences of `cd ec 38`, so none of these are it):
+- `ERASE A$` on a runtime-DIM'd STRING array (both 1-D and 2-D) — decodes
+  fine via the EXISTING `erase` (0x36), no separate string variant exists.
+- `ERASE A, B` (multiple arrays in one statement) — just repeats `erase`
+  once per array.
+- A runtime array declared/erased inside a SUB body (local scope) — same
+  `dim_begin`/`erase` ops, no scope-exit auto-cleanup op emitted.
+- `SWAP A, B` on two runtime arrays (array-level swap, not element-level)
+  — compiles to the generic inline register-swap template (`swap:400:396`
+  in the ops dump) using the arrays' own descriptor-pointer cells
+  directly, not this ES:SI convention at all.
+- `SUB SUB1(B())` (array by-ref SUB parameter) — TB rejects the syntax
+  outright (`Error 425`), confirmed unsupported (same finding as gap 19).
+- `REDIM A(N)` — TB doesn't have this keyword (`Error 414: "=" expected`
+  parsing `REDIM` as a bare variable assignment target).
+
+**Context captured but not yet exploited**: the statement immediately
+before the mystery op is a COMPLETE, separate statement — `fild:3706;
+movsi:1728; rt:156 (push string); str2num:LEN; movmem_ax:44; fild:44;
+popop:/; fistp:44; fwait; movaxmem:44; movm_ax:1512` — i.e. `X% = <FP
+expr> / LEN(S$)`, committing to scalar disp 1512, BEFORE the block-396
+statement starts fresh. This confirms sub 0x38 takes no stack-pushed
+argument at all (unlike a hoped-for "resize array to this new size"
+operation, which would need to consume something at disp 1512) — whatever
+0x38 does, it acts on the array block alone. Worth re-examining: get much
+more context AFTER the failure point (patch scan.py's `raise` line to a
+temporary `continue`+print, as this session did, then revert — do NOT
+commit a "handled" stub without an oracle-verified probe) to see what
+STATEMENT-LEVEL pattern (not just the immediately-preceding one) precedes
+this block reference in the actual source, since neither file's `.bas` is
+recoverable. Untried candidate statements: `CLEAR` variants that also
+touch a specific array, `COMMON`-shared dynamic array cleanup, an
+ON-ERROR-triggered implicit ERASE, or a GET/PUT FILE (not graphics)
+`#n, rec` where `rec` is itself a runtime-DIM'd array element buffer
+(distinct from the already-working FIELD-based GET/PUT). Do not guess the
+decoder-side fix without an oracle-confirmed probe reproducing `cd ec 38`
+exactly — per the calibration rule, a byte pattern only joins the
+vocabulary once witnessed.
 
 ## Gap INT-8c — likely ON KEY GOSUB related, UNDIAGNOSED
 
