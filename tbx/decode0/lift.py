@@ -134,10 +134,14 @@ def _has_jmps_back(ops, exit_addr, test_addr) -> bool:
     return False
 
 
-def _lift_bool_tail(ops, k, pend_cmp, pb, put, whiles, ifs, stmts, flush) -> int:
+def _lift_bool_tail(ops, k, pend_cmp, pb, put, whiles, ifs, stmts, flush):
     """Consume the compound-IF second term at ops[k] (movax FFFF): dispatch 74 =
     THEN-line IfGoto; dispatch 75 = compound WHILE (jmps-back present)
-    or inline-IF body."""
+    or inline-IF body. A 3+-term chain (witnessed t1_and3) cascades: each MID
+    segment's dispatch jmp short-circuits into the NEXT segment's fold template
+    (comb addr + the same +2/+0 AND/OR delta the first-term match uses) instead
+    of exiting -- fold the condition and keep the compound open. Returns
+    (next op index, still-open pend_bool or None)."""
     comb = "andaxbx" if pb["op"] == "AND" else "orax"
     if [o[1] for o in ops[k : k + 6]] != [
         "movax",
@@ -153,12 +157,26 @@ def _lift_bool_tail(ops, k, pend_cmp, pb, put, whiles, ifs, stmts, flush) -> int
         raise ValueError(f"compound-IF tail: bad Jcc skip at {m_jcc[0]:#x}")
     if f_jcc[2] not in (0x74, 0x75) or f_jcc[3] != f_jmp[0] + 3:
         raise ValueError(f"compound-IF tail: bad dispatch pair at {f_jcc[0]:#x}")
-    if pb["sc"] != ops[k + 3][0] + (2 if pb["op"] == "AND" else 0):
+    delta = 2 if pb["op"] == "AND" else 0
+    if pb["sc"] != ops[k + 3][0] + delta:
         raise ValueError(
             f"compound-IF: short-circuit target mismatch at {ops[k][0]:#x}"
         )
     r2 = ir.RelOp(_JCC_RELOP_TRUE[m_jcc[2]], *pend_cmp)
     cond = ir.LogOp(pb["op"], pb["r1"], r2)
+    for j in range(k + 6, min(k + 36, len(ops) - 3)):
+        if (
+            ops[j][1] == "movax"
+            and ops[j][2] == 0xFFFF
+            and [o[1] for o in ops[j + 1 : j + 4]] == ["jcc", "incax", comb]
+            and f_jmp[2] == ops[j + 3][0] + delta
+        ):  # mid segment: chain continues at ops[j]'s fold
+            return k + 6, {
+                "r1": cond,
+                "op": pb["op"],
+                "sc": f_jmp[2],
+                "start": pb["start"],
+            }
     if f_jcc[2] == 0x74:
         put(ir.IfGoto(cond, ("addr", f_jmp[2])), pb["start"])
     elif _has_jmps_back(ops, f_jmp[2], pb["start"]):
@@ -169,7 +187,7 @@ def _lift_bool_tail(ops, k, pend_cmp, pb, put, whiles, ifs, stmts, flush) -> int
         ifs.append(
             {"target": f_jmp[2], "cond": cond, "start": pb["start"], "idx": len(stmts)}
         )
-    return k + 6
+    return k + 6, None
 
 
 def _lift_do_tail(ops, k, pend_cmp, stmts, addrs, put, cur):

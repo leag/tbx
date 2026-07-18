@@ -19,6 +19,15 @@ Goto(target=6)
 Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
 End()
 
+## t1_and3
+Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='B'), comma=False)
+Input(prompt=None, var=Var(name='C'), comma=False)
+IfGoto(cond=LogOp(op='AND', lhs=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), rhs=RelOp(op='=', lhs=Var(name='C'), rhs=Lit(value=2))), target=5)
+Print(items=(Lit(value=0),), newline=True, file=None, commas=None)
+Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
+End()
+
 ## t1_arr1
 Dim(name='V0', bounds=(10,), also=())
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=5))
@@ -1165,6 +1174,13 @@ Goto(target=5)
 Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
 End()
 
+## t1_or3
+Input(prompt=None, var=Var(name='A'), comma=False)
+IfGoto(cond=LogOp(op='OR', lhs=LogOp(op='OR', lhs=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=0)), rhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=9))), rhs=RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=5))), target=3)
+Print(items=(Lit(value=0),), newline=True, file=None, commas=None)
+Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
+End()
+
 ## t1_out
 Out(port=Lit(value=888), value=Lit(value=1))
 End()
@@ -2225,6 +2241,15 @@ Input(prompt=None, var=Var(name='B'), comma=False)
 IfGoto(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), target=5)
 Print(items=(Lit(value=0),), newline=True, file=None, commas=None)
 Goto(target=6)
+Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
+End()
+
+## v10_t1_and3
+Input(prompt=None, var=Var(name='A'), comma=False)
+Input(prompt=None, var=Var(name='B'), comma=False)
+Input(prompt=None, var=Var(name='C'), comma=False)
+IfGoto(cond=LogOp(op='AND', lhs=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), rhs=RelOp(op='=', lhs=Var(name='C'), rhs=Lit(value=2))), target=5)
+Print(items=(Lit(value=0),), newline=True, file=None, commas=None)
 Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
 End()
 

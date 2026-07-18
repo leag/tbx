@@ -5,7 +5,15 @@ from tbx import ir
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-PAIRS = ["t1_and", "t1_or", "t1_fn", "t1_erase", "t1_boolwh", "t1_booluntil"]
+PAIRS = [
+    "t1_and",
+    "t1_or",
+    "t1_fn",
+    "t1_erase",
+    "t1_boolwh",
+    "t1_booluntil",
+    "t1_and3",
+]
 
 
 def _exe(name):
@@ -80,6 +88,46 @@ def test_decode_t1_erase():
         ir.End(),
     ]
     assert decode0.decode_user_code(_exe("t1_erase.exe")) == want
+
+
+def test_decode_t1_and3():
+    # 3+-term compound chain: each MID segment materializes its term, folds
+    # with `and ax,bx` (`or ax,bx`), and its dispatch jmp short-circuits into
+    # the NEXT segment's fold template (comb addr +2 AND / +0 OR) instead of
+    # exiting -- _lift_bool_tail folds the condition and keeps the compound
+    # open until the final segment's jmp exits the chain. Left-associative:
+    # LogOp(AND, LogOp(AND, t1, t2), t3).
+    from tbx import decode0
+
+    L, V = ir.Lit, ir.Var
+    prog = decode0.decode_user_code(_exe("t1_and3.exe"))
+    assert prog[3] == ir.IfGoto(
+        ir.LogOp(
+            "AND",
+            ir.LogOp(
+                "AND", ir.RelOp(">", V("A"), L(1)), ir.RelOp("<", V("B"), L(5))
+            ),
+            ir.RelOp("=", V("C"), L(2)),
+        ),
+        5,
+    )
+
+
+def test_decode_t1_or3():
+    from tbx import decode0
+
+    L, V = ir.Lit, ir.Var
+    prog = decode0.decode_user_code(_exe("t1_or3.exe"))
+    assert prog[1] == ir.IfGoto(
+        ir.LogOp(
+            "OR",
+            ir.LogOp(
+                "OR", ir.RelOp("<", V("A"), L(0)), ir.RelOp(">", V("A"), L(9))
+            ),
+            ir.RelOp("=", V("A"), L(5)),
+        ),
+        3,
+    )
 
 
 def test_decode_t1_boolwh():

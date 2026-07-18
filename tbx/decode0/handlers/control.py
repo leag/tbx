@@ -358,8 +358,9 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             )  # compound DO..LOOP WHILE/UNTIL?
             if nk is not None:
                 state.k = nk
+                state.pend_bool = None
             else:
-                state.k = _lift_bool_tail(
+                state.k, state.pend_bool = _lift_bool_tail(
                     state.ops,
                     state.k,
                     state.pend_cmp,
@@ -369,8 +370,7 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
                     state.ifs,
                     state.stmts,
                     state.flush_pending,
-                )
-            state.pend_bool = None
+                )  # a mid-chain segment keeps pend_bool open (t1_and3)
             state.pend_cmp = None
             state.cur = None
             return True

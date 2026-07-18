@@ -65,6 +65,9 @@ KEYS = {
     # 't' would take the CLS path, whose screen-clear defeats the harness's
     # prompt-return detection (t1_scr); 'x' exercises the fall-through lines
     "t1_ifgoto": '[{"wait":"?","send":"x\\r"}]',
+    "t1_and3": '[{"wait":"?","send":"2\\r"},{"wait":"?","count":2,"send":"3\\r"},'
+    '{"wait":"?","count":3,"send":"2\\r"}]',
+    "t1_or3": '[{"wait":"?","send":"5\\r"}]',
 }
 
 
