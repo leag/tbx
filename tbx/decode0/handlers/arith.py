@@ -192,7 +192,24 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         else:
             mem = state.loc(op[2])
         nxt = state.ops[state.k + 1] if state.k + 1 < len(state.ops) else None
-        if nxt is not None and nxt[1] == "movax" and nxt[2] == 0xFFFF:
+        # AND-chain 2nd+ term (wild schart.exe): the running accumulator sits
+        # in bx (OR-chains need no accumulator, they resolve by pure
+        # short-circuit jumps -- t1_orchain). The compare's own flags survive
+        # a plain register shuttle, so the compiler round-trips ax<->bx
+        # (mov ax,bx; mov bx,ax -- a no-op restoring bx's value, byte-exact
+        # boilerplate) between the compare and the value materialization;
+        # skip over it and let the generic movrr/movbxax handlers process it.
+        shuffled = (
+            nxt is not None
+            and nxt[1] == "movrr"
+            and nxt[2] == "ax"
+            and nxt[3] == "bx"
+            and state.k + 3 < len(state.ops)
+            and state.ops[state.k + 2][1] == "movbxax"
+            and state.ops[state.k + 3][1] == "movax"
+            and state.ops[state.k + 3][2] == 0xFFFF
+        )
+        if (nxt is not None and nxt[1] == "movax" and nxt[2] == 0xFFFF) or shuffled:
             state.pend_icmp = (mem, state.ax)  # relational-value form
             state.ax = None
             state.k += 1

@@ -28,6 +28,15 @@ Print(items=(Lit(value=0),), newline=True, file=None, commas=None)
 Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
 End()
 
+## t1_andchain
+OnError(target=5)
+ErrorStmt(code=Lit(value=25))
+Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None)
+End()
+Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None)
+IfInline(cond=LogOp(op='AND', lhs=LogOp(op='AND', lhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=25)), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=27))), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=57))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='Z'),), newline=True, file=None, commas=None)))
+Resume(next_=False, target=3)
+
 ## t1_arr1
 Dim(name='V0', bounds=(10,), also=())
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=5))
@@ -5193,6 +5202,15 @@ IfGoto(cond=LogOp(op='AND', lhs=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='
 Print(items=(Lit(value=0),), newline=True, file=None, commas=None)
 Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
 End()
+
+## v10_t1_andchain
+OnError(target=5)
+ErrorStmt(code=Lit(value=25))
+Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None)
+End()
+Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None)
+IfInline(cond=LogOp(op='AND', lhs=LogOp(op='AND', lhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=25)), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=27))), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=57))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='Z'),), newline=True, file=None, commas=None)))
+Resume(next_=False, target=3)
 
 ## v10_t1_arr1
 Dim(name='V0', bounds=(10,), also=())

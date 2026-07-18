@@ -603,6 +603,45 @@ def test_decode_t1_orchain():
     )
 
 
+def test_decode_t1_andchain():
+    # Integer relationals in a compound AND chain (wild schart.exe at the
+    # "cmpax_m without a value/IF consumer" stop): unlike an OR chain
+    # (t1_orchain), which resolves by pure short-circuit jumps, an AND
+    # chain's 2nd+ term genuinely combines via `and ax,bx` -- the running
+    # accumulator lives in bx, and the compiler round-trips ax<->bx (mov
+    # ax,bx; mov bx,ax, a byte-exact no-op restoring bx) between the
+    # compare and the value materialization. cmpax_m's value-form guard now
+    # also recognizes that shuffled lookahead, not just a bare movax FFFF.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_andchain.exe"))
+    cond = ir.LogOp(
+        "AND",
+        ir.LogOp(
+            "AND",
+            ir.RelOp("=", ir.Err(), ir.Lit(25)),
+            ir.RelOp("=", ir.Err(), ir.Lit(27)),
+        ),
+        ir.RelOp("=", ir.Err(), ir.Lit(57)),
+    )
+    assert prog[5] == ir.IfInline(
+        cond,
+        (
+            ir.Print((ir.StrLit("Y"),), newline=True, file=None, commas=None),
+            ir.Print((ir.StrLit("Z"),), newline=True, file=None, commas=None),
+        ),
+    )
+    assert emit0.emit(prog) == (
+        "10 ON ERROR GOTO 60\n"
+        "20 ERROR 25\n"
+        '30 PRINT "NO"\n'
+        "40 END\n"
+        '50 PRINT "X"\n'
+        '60 IF ERR = 25 AND ERR = 27 AND ERR = 57 THEN PRINT "Y": PRINT "Z"\n'
+        "70 RESUME 40\n"
+    )
+
+
 def test_decode_t1_fileint():
     # INPUT# with INTEGER targets (inv87/invoice at 0x1389c): the numeric
     # read leaves the value on the x87 stack as usual, but an int slot is
