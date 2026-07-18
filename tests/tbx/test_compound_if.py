@@ -5,7 +5,7 @@ from tbx import ir
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-PAIRS = ["t1_and", "t1_or", "t1_fn", "t1_erase"]
+PAIRS = ["t1_and", "t1_or", "t1_fn", "t1_erase", "t1_boolwh", "t1_booluntil"]
 
 
 def _exe(name):
@@ -80,6 +80,38 @@ def test_decode_t1_erase():
         ir.End(),
     ]
     assert decode0.decode_user_code(_exe("t1_erase.exe")) == want
+
+
+def test_decode_t1_boolwh():
+    from tbx import decode0
+
+    L, V = ir.Lit, ir.Var
+    want = [
+        ir.Do(None, None),
+        ir.Input(None, V("A")),
+        ir.Loop(
+            "WHILE",
+            ir.LogOp("OR", ir.RelOp("<", V("A"), L(0)), ir.RelOp(">", V("A"), L(1))),
+        ),
+        ir.Print((V("A"),)),
+    ]
+    assert decode0.decode_user_code(_exe("t1_boolwh.exe")) == want
+
+
+def test_decode_t1_booluntil():
+    from tbx import decode0
+
+    L, V = ir.Lit, ir.Var
+    want = [
+        ir.Do(None, None),
+        ir.Input(None, V("A")),
+        ir.Loop(
+            "UNTIL",
+            ir.LogOp("AND", ir.RelOp(">=", V("A"), L(0)), ir.RelOp("<=", V("A"), L(1))),
+        ),
+        ir.Print((V("A"),)),
+    ]
+    assert decode0.decode_user_code(_exe("t1_booluntil.exe")) == want
 
 
 def test_dialect_invariant():

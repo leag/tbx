@@ -197,6 +197,35 @@ def _lift_do_tail(ops, k, pend_cmp, stmts, addrs, put, cur):
     return k + len(want)
 
 
+def _lift_bool_do_tail(ops, k, pend_cmp, pb, stmts, addrs, put):
+    """Compound-IF second term ending in a tail-test DO ... LOOP WHILE/UNTIL:
+    same shape as `_lift_do_tail` (materialization's Jcc IS the backward
+    loop edge, no trailing jmp), except the combining op at index 3 is the
+    compound's AND/OR fold (from `pb`) rather than a bare self-test `or ax,ax`.
+    Returns the next op index, or None if no match (caller falls back to
+    `_lift_bool_tail`'s dispatch-jcc+jmp shape)."""
+    comb = "andaxbx" if pb["op"] == "AND" else "orax"
+    want = ["movax", "jcc", "incax", comb, "jcc"]
+    if k + len(want) > len(ops) or [o[1] for o in ops[k : k + len(want)]] != want:
+        return None
+    m_jcc, back_jcc = ops[k + 1], ops[k + 4]
+    if m_jcc[3] != ops[k + 3][0] or m_jcc[2] not in _JCC_RELOP_TRUE:
+        return None
+    if pb["sc"] != ops[k + 3][0] + (2 if pb["op"] == "AND" else 0):
+        return None
+    back = back_jcc[3]
+    if back_jcc[2] not in (0x74, 0x75) or back >= ops[k][0] or back not in addrs:
+        return None
+    r2 = ir.RelOp(_JCC_RELOP_TRUE[m_jcc[2]], *pend_cmp)
+    cond = ir.LogOp(pb["op"], pb["r1"], r2)
+    kind = "WHILE" if back_jcc[2] == 0x75 else "UNTIL"
+    idx = addrs.index(back)  # splice `DO` before the body start
+    stmts.insert(idx, ir.Do(None))
+    addrs.insert(idx, None)
+    put(ir.Loop(kind, cond), pb["start"])
+    return k + len(want)
+
+
 def _lift_while(ops, k, pend_cmp, whiles, dos, ifs, stmts, put, flush, cur) -> int:
     """Consume the materialized loop test at ops[k] (mov ax,0FFFF):
     Jcc(R) +1; inc ax; or ax,ax; <cc> +3; e9 EXIT. With a loop-back before

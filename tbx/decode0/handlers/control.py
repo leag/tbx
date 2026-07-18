@@ -18,6 +18,7 @@ from tbx.decode0.const import (
     _pp_commas,
 )
 from tbx.decode0.lift import (
+    _lift_bool_do_tail,
     _lift_bool_tail,
     _lift_do_tail,
     _lift_while,
@@ -346,17 +347,29 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
         return True
     if kind == "movax" and state.pend_cmp and op[2] == 0xFFFF:
         if state.pend_bool is not None:  # compound-IF tail
-            state.k = _lift_bool_tail(
+            nk = _lift_bool_do_tail(
                 state.ops,
                 state.k,
                 state.pend_cmp,
                 state.pend_bool,
-                state.put,
-                state.whiles,
-                state.ifs,
                 state.stmts,
-                state.flush_pending,
-            )
+                state.addrs,
+                state.put,
+            )  # compound DO..LOOP WHILE/UNTIL?
+            if nk is not None:
+                state.k = nk
+            else:
+                state.k = _lift_bool_tail(
+                    state.ops,
+                    state.k,
+                    state.pend_cmp,
+                    state.pend_bool,
+                    state.put,
+                    state.whiles,
+                    state.ifs,
+                    state.stmts,
+                    state.flush_pending,
+                )
             state.pend_bool = None
             state.pend_cmp = None
             state.cur = None

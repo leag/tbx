@@ -60,6 +60,8 @@ KEYS = {
     "t1_tab": '[{"wait":"?","send":"3\\r"}]',
     "t1_pr2": '[{"wait":"?","send":"3\\r"}]',
     "t1_poolrun": '[{"wait":"?","send":"x\\r"}]',
+    "t1_boolwh": '[{"wait":"?","send":"1\\r"}]',
+    "t1_booluntil": '[{"wait":"?","send":"1\\r"}]',
 }
 
 

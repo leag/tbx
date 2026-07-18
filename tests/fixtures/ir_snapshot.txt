@@ -152,6 +152,18 @@ End()
 Bload(file=StrLit(value='X.IMG'), offset=Lit(value=0))
 End()
 
+## t1_booluntil
+Do(kind=None, cond=None)
+Input(prompt=None, var=Var(name='A'), comma=False)
+Loop(kind='UNTIL', cond=LogOp(op='AND', lhs=RelOp(op='>=', lhs=Var(name='A'), rhs=Lit(value=0)), rhs=RelOp(op='<=', lhs=Var(name='A'), rhs=Lit(value=1))))
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
+
+## t1_boolwh
+Do(kind=None, cond=None)
+Input(prompt=None, var=Var(name='A'), comma=False)
+Loop(kind='WHILE', cond=LogOp(op='OR', lhs=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=0)), rhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1))))
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
+
 ## t1_bound
 Dim(name='V0', bounds=(10,), also=())
 Assign(target=Var(name='A%'), value=Call(name='UBOUND', args=(ArrayRef(name='V0', indices=(Lit(value=1),)),)))
@@ -2058,6 +2070,18 @@ End()
 ## v10_t1_bload
 Bload(file=StrLit(value='X.IMG'), offset=Lit(value=0))
 End()
+
+## v10_t1_booluntil
+Do(kind=None, cond=None)
+Input(prompt=None, var=Var(name='A'), comma=False)
+Loop(kind='UNTIL', cond=LogOp(op='AND', lhs=RelOp(op='>=', lhs=Var(name='A'), rhs=Lit(value=0)), rhs=RelOp(op='<=', lhs=Var(name='A'), rhs=Lit(value=1))))
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
+
+## v10_t1_boolwh
+Do(kind=None, cond=None)
+Input(prompt=None, var=Var(name='A'), comma=False)
+Loop(kind='WHILE', cond=LogOp(op='OR', lhs=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=0)), rhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1))))
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 
 ## v10_t1_bound
 Dim(name='V0', bounds=(10,), also=())

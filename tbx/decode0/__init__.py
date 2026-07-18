@@ -81,6 +81,7 @@ from tbx.decode0.lift import (
     _has_jmps_back,
     _inline_safe,
     _is_for_header,
+    _lift_bool_do_tail,
     _lift_bool_tail,
     _lift_do_tail,
     _lift_midblock_troff,
