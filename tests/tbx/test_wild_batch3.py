@@ -642,6 +642,59 @@ def test_decode_t1_andchain():
     )
 
 
+def test_decode_t1_dataorph():
+    # A codeless DATA statement with no READ/RESTORE anywhere in the program
+    # (wild vhfprop.exe: the error-trap line table shows an "orphan" entry
+    # -- a code offset shared by TWO OR MORE table rows, since a codeless
+    # statement borrows whatever real code follows it -- but READ/RESTORE
+    # was the ONLY trigger _read_data_pool had, so vhfprop's DATA silently
+    # vanished from the IR entirely). Two same-line DATA statements now
+    # trigger recovery from that orphan evidence alone; the item/statement
+    # split point is unrecoverable from the pool (probe q_lt4 confirmed
+    # `DATA 1: DATA 2,3,4` byte-for-byte equals `DATA 1,2: DATA 3,4`) so
+    # every statement but the last gets exactly one item. DATA also
+    # compiles in TEXTUAL order, not pool order (probe q_lt3): it's
+    # repositioned to sit immediately before the statement whose offset it
+    # borrowed, not unconditionally prepended.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_dataorph.exe"))
+    assert getattr(prog, "lines", None) == [10, 10, 20, 20, 30, 40]
+    assert prog[2] == ir.Data((ir.DataItem("1", False),))
+    assert prog[3] == ir.Data(
+        (ir.DataItem("2", False), ir.DataItem("3", False), ir.DataItem("4", False))
+    )
+    assert emit0.emit(prog) == (
+        "10 A% = ERR: B% = ERL\n"
+        "20 DATA 1: DATA 2,3,4\n"
+        "30 A% = 2\n"
+        "40 END\n"
+    )
+
+
+def test_decode_t1_dimorph():
+    # A static array's DIM is codeless too (recovered from array bookkeeping
+    # records, not a scanned op) and is normally repositioned to a canonical
+    # spot right after any SUB/DEF FN bodies -- fine under free renumbering,
+    # but wrong once the error-trap line table makes DIM's own line
+    # byte-significant (wild vhfprop.exe: two static arrays, both showing
+    # up as a matching pair of orphan table entries, both on line 500).
+    # `len(dims) == len(data_orphan_lines)` in a single cluster repositions
+    # + relines them at the table's evidence instead.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_dimorph.exe"))
+    assert getattr(prog, "lines", None) == [10, 10, 20, 20, 20, 30, 40]
+    assert prog[3] == ir.Dim("V0", (30,))
+    assert prog[4] == ir.Dim("V1$", (5,))
+    assert emit0.emit(prog) == (
+        "10 A% = ERR: B% = ERL\n"
+        '20 C$ = "N": DIM V0(30): DIM V1$(5)\n'
+        "30 V0(1) = 25\n"
+        "40 END\n"
+    )
+
+
 def test_decode_t1_fileint():
     # INPUT# with INTEGER targets (inv87/invoice at 0x1389c): the numeric
     # read leaves the value on the x87 stack as usual, but an int slot is

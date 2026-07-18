@@ -38,6 +38,8 @@ PAIRS = [
     "t1_miderr",
     "t1_orchain",
     "t1_andchain",
+    "t1_dataorph",
+    "t1_dimorph",
     "t1_pcomma2",
     "t1_strgodo",
     "t1_strgoto",

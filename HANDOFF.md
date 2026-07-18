@@ -1,7 +1,7 @@
 # Wild-corpus gap campaign — handoff
 
-Status as of 2026-07-18 (session gaps 46-52), branch
-`claude/claude-md-docs-mr8ssz`.
+Status as of 2026-07-18 (session gaps 46-53 + line-table epic progress),
+branch `claude/claude-md-docs-mr8ssz`.
 Standing instruction: close the most common decoder gap first, in frequency
 order, over the 84 wild PC-SIG Turbo Basic EXEs in `wild/hits/` (untracked,
 gitignored, copyrighted shareware — **never commit them**).
@@ -9,81 +9,177 @@ gitignored, copyrighted shareware — **never commit them**).
 ## Where things stand
 
 84 wild EXEs: **8 decode OK** (ck, onelab87, onelabel, mm, autonum, rev,
-startup, vhfprop — the last four report IDE toggles on stderr and are
-otherwise clean), 76 fail. Fresh tally (2026-07-18, after gaps 46-52):
+startup, schart), 76 fail. vhfprop.exe DROPPED OUT of decode-ok this
+session (was 9) — not a regression, see "vhfprop status" below: it now
+fails LOUD on a real, previously-silent bug instead of silently emitting
+wrong line numbers. Fresh tally (2026-07-18):
 
 | count | error | status |
 |---|---|---|
 | 16 | INT cd | unwitnessable runtime-revision artifact — not actionable (see `scan_wild.py` docstring) |
-| 5 | byte 90 | set aside (4, unwitnessable) + rstprint.exe (1, undiagnosed whether it's the same shape) |
+| 5 | byte 90 | set aside (4, unwitnessable) + rstprint.exe (1, undiagnosed whether it's the same shape) — **next stop** |
 | 4 | byte ea | likely multi-segment-code JMP FAR (>64K code) — big lift, not a small gap |
 | 3 each | INT 8c; byte 06 | both extensively probed earlier, still undiagnosed (sections below) |
 | 2 each | EC sub 66, EC sub 38 (gap 33, stuck), FP de/1e, FP dc/04, FP da/1c, byte 8c/8b/89/29/1e, system cell 0x8a | mostly untouched |
 | 2 | "jump target 0x15740 is not a statement start" (inv87/invoice) | the LINE-TABLE EPIC below — a GOTO target nested TWO block-IF levels deep; single-level interior targets were closed as gap 51 |
 | 2 | COLOR mask 07 != cells 06 (r.exe + one more) | untouched |
-| 1 | "cmpax_m without a value/IF consumer" (schart) | schart advanced through gap 52; next stop is an integer-compare consumer shape at 0xf15f — likely small, diagnose next |
+| 1 | "statements don't map 1:1" (vhfprop) | the LINE-TABLE EPIC below — DATA/DIM sub-problems now CLOSED; the bare-DO-normalization sub-problem is what's left |
 | singles | see scan output | untouched |
 
-## THE LINE-TABLE EPIC (the current big blocker — read this first)
+## THE LINE-TABLE EPIC (read this first)
 
-vhfprop.exe now decodes COMPLETELY but does NOT round-trip byte-exact, and
-inv87/invoice's remaining stop is the same root cause. Real wild programs
-have **multi-statement lines** (`1 DIM A$(15,15): DIM B(15): ON ERROR ...`),
-original line numbers that are BYTE-SIGNIFICANT (error-trap line table
-present: ON ERROR/RESUME/ERR), zero-length statements (REM/DATA produce a
-line-table entry but no code), and **numbered block-IF interior lines**
-jumped into from anywhere (gap 51 closed the single-level case).
+Real wild programs have **multi-statement lines**, original line numbers
+that are BYTE-SIGNIFICANT (error-trap line table present: ON ERROR/
+RESUME/ERR), **codeless statements** (DATA, static-array DIM — REM and a
+bare `::` are NOT codeless, confirmed NOT to produce a table entry), and
+**numbered block-IF interior lines** jumped into from anywhere (gap 51
+closed the single-level case; inv87's remaining stop needs the nested
+case, still open).
 
-Findings so far (all verified against vhfprop/inv87 this session):
+### CLOSED this session: DATA and static-DIM orphan recovery
 
-- vhfprop's table at file 0xbec4: entries (u16 off, u16 line) per STATEMENT,
-  original lines 1,2,10,12,... with up to 5 statements per line. Two entries
-  at the SAME offset (0xe99, lines 500,500,502) = zero-length statements —
-  `_line_table`'s strictly-increasing check rejects the whole table, so
-  prog.lines stays None and we renumber freely → recompiled table differs
-  (~2.4KB of the diff). Runtime-region diffs (0xc0 header area, 0x18a,
-  0x7305) may also derive from line structure and/or the Keyboard-break
-  toggle (vhfprop was compiled with K ON — recompile via
-  `node tb_v86_compile.js <bas> --compile-exe --toggles K --tb <floppy>`,
-  see memory tb-oracle-location).
-- The table-offset set must include statements folded into block bodies:
-  `_finalize` now passes `stmt_addr.values()` as extra_offs (done, gap-51
-  commit). What remains: tolerate equal offsets (zero-length statements),
-  figure out WHAT to emit to regenerate those entries (probe: does `REM`
-  after a colon produce a table entry? does DATA? an empty `::` statement?
-  — compile probes with ON ERROR + REM/DATA variants and diff tables),
-  then build prog.lines for MULTI-statement lines (emit0 already regroups
-  equal consecutive lines via `:` — witnessed t1_errml/t1_tronml) and
-  number block-IF interiors from the table (emit0's traced-block rendering
-  already numbers every physical line of a block; reuse that shape).
-- inv87's "jump target 0x15740": a Goto nested inside an IfInline inside
-  another IfInline (nested numbered block-IFs). The single-level BodyLine
-  mechanism (gap 51) doesn't reach it; with the line table, interior
-  targets resolve naturally to original line numbers instead of phys
-  arithmetic. Recommendation: don't extend phys-counting to nested blocks —
-  build the line-table path instead, it subsumes this.
+`_line_table` (layout.py) now returns `(ent, orphans)` instead of a bare
+dict: a codeless statement borrows the code offset of whatever REAL
+statement follows it, so two-or-more table entries can share ONE offset
+(`_line_table`'s old strictly-increasing check rejected the whole table
+outright over this — now tolerates equal offsets, last-entry-per-offset
+wins for `ent`, the superseded ones collect in `orphans` in table order).
+
+Two DIFFERENT statement kinds turned out to be codeless-with-a-table-entry
+(both witnessed against vhfprop.exe's actual "500,500,502" triplet at file
+offset 0xc2c8, decoded via a temporary debug patch to `_finalize` — see
+git history of this commit for the probe/patch technique if needed again):
+
+- **DATA with no READ/RESTORE anywhere in the program** (`core.py`
+  `_finalize`): previously `_read_data_pool` only fired when Read/Restore
+  IR existed, so such DATA silently vanished from the IR. Now an early
+  `_line_table` probe (computed BEFORE dims/DATA/COMMON/TRON synthesis
+  touches `state.addrs`, since `state.stmt_addr` is already fully
+  populated by then) also triggers recovery from orphan evidence alone.
+  The item/statement split point among recovered items is UNRECOVERABLE
+  from the pool itself (probe q_lt4, saved as fixture material: `DATA 1:
+  DATA 2,3,4` compiles BYTE-FOR-BYTE identical to `DATA 1,2: DATA 3,4` —
+  only the STATEMENT COUNT and each one's LINE are byte-significant), so
+  every recovered statement but the last gets exactly one item. DATA also
+  compiles in TEXTUAL/compile order, not pool order (probe q_lt3: naively
+  prepending it at the top, the pre-existing convention for the READ-
+  triggered path, byte-diffs the table once DATA's own line matters) — it
+  now gets spliced immediately before whichever statement shares its
+  borrowed offset. Fixture `t1_dataorph`/`v10_t1_dataorph`.
+- **Static array DIM declarations** (`core.py` `_finalize`, the `dims`
+  list): these are recovered from array bookkeeping records, not a
+  scanned op at all, and were ALWAYS repositioned to a canonical spot
+  ("static DIMs follow any proc definitions") — fine under free
+  renumbering, wrong once DIM's own line is byte-significant. When
+  `len(dims) == len(data_orphan_lines)` in a single offset cluster, dims
+  are now repositioned + relined from that evidence instead (vhfprop:
+  two static arrays, exactly two orphan "500" entries). Fixture
+  `t1_dimorph`/`v10_t1_dimorph`.
+
+Both fixtures byte-exact verified both dialects via the oracle. Multiple
+SEPARATE codeless-statement clusters in one table, or a RESTORE split
+colliding with orphan evidence, are explicitly rejected (fail loud, no
+witness) rather than guessed — narrow the check if a future wild file
+needs it.
+
+### vhfprop status: NEW, narrower blocker found (bare-DO vs line tables)
+
+After the DATA/DIM fixes, vhfprop.exe advances to a NEW error:
+`"error-trap line table present but statements don't map 1:1 to its
+entries"` — a REAL bug, not a regression. Root cause (confirmed via a
+temporary debug patch, then a matching probe q_lt8): `core.py`'s "bare
+backward jmps = infinite DO" path (~line 1217-1221, comment: `elif op[2]
+< addr and op[2] in state.addrs`) ALWAYS canonicalizes a backward jump
+loop into synthesized `ir.Do(None)` + `ir.Loop(None)`, regardless of
+whether the ORIGINAL source spelled it `DO...LOOP` or was a plain
+`GOTO`-based loop — both compile to IDENTICAL bytes, so the decoder can't
+tell which from the op stream alone. Probe q_lt8 proved an EXPLICIT
+`DO...LOOP` (no WHILE/UNTIL) DOES get its own codeless orphan entry in
+the table (same borrowing convention as DATA/DIM) — but vhfprop's TWO
+`Do` statements (prog indices 259, 281; body starts at file offsets
+0xf62/0x1100) have NO matching orphan anywhere in vhfprop's validated
+734-real-entry table (confirmed: `ent[0xf62]=600`, `ent[0x1100]=722`,
+single entries, no duplicates). So vhfprop's loops were almost certainly
+plain `GOTO`-based in the original source, not `DO...LOOP` — meaning the
+EXISTING bare-DO canonicalization is ALREADY lossy in a way that's
+invisible under free renumbering but genuinely non-byte-exact once a line
+table is active: emitting our canonicalized "DO" would introduce an EXTRA
+table entry the original never had.
+**Not fixed this session** — this needs either (a) reproducing literal
+`GOTO`-loop syntax instead of canonicalizing to DO when the table shows no
+orphan there (invasive: touches the existing, previously-untested-against-
+line-tables DO-canonicalization convention), or (b) accepting the
+combination as unsupported for now. Diagnose fresh with `_line_table`
+before guessing.
+
+### Still open: inv87's nested block-IF GOTO target
+
+inv87's "jump target 0x15740": a Goto nested inside an IfInline inside
+another IfInline (nested numbered block-IFs). The single-level BodyLine
+mechanism (gap 51) doesn't reach it; with the line table now closer to
+usable, interior targets should resolve naturally to original line
+numbers instead of phys arithmetic once inv87 itself is retried (it
+wasn't this session — pick up here next: does inv87 even reach this stop
+now, or does it hit a NEW DATA/DIM/bare-DO-shaped stop first?).
+
+### Reproducing the investigation
+
+The probe technique that worked all session: monkeypatch
+`tbx.decode0.core._finalize` (or just temporarily edit the `except
+(KeyError, TypeError): raise ValueError(...)` block near the end of
+`_finalize` to print `state.stmts`/`state.addrs` around a `None` entry)
+to see exactly which statement/offset a wild file's table lookup chokes
+on, then author a MINIMAL `.bas` probe reproducing that exact shape,
+compile via `oracle.compile_bas`, and diff its raw line table (`struct.
+unpack_from("<HH", exe, p)` scan for the `(3, first_line)` marker) against
+hand-written hypotheses. Revert any temporary debug prints before
+committing — `git diff tbx/decode0/core.py` should show only the
+intended, permanent change.
 
 ## Ongoing plan (priority order — pick up at the first incomplete step)
 
-1. **schart's cmpax_m consumer at 0xf15f** — fresh small gap, diagnose
-   with --ops context (the file advanced through gaps 46/52 this session;
-   likely another integer-compare shape variant).
-2. **The line-table epic** (above) — unblocks vhfprop byte-exactness AND
-   inv87/invoice (2 files). Start with the zero-length-statement probes.
-3. **Byte 90 (5 files)** — diagnose rstprint.exe's occurrence (one hexdump
+1. **vhfprop's bare-DO-vs-line-table gap** (above) — narrower now than the
+   original "line-table epic," but still open; OR **inv87's nested
+   block-IF** (also above, needs a fresh retry first) — pick whichever
+   turns out smaller once inv87 is retried against today's fixes.
+2. **Byte 90 (5 files)** — diagnose rstprint.exe's occurrence (one hexdump
    settles whether it matches the set-aside NOP-pair shape).
-4. **Byte ea (4 files)** — scope the JMP FAR multi-segment theory on
+3. **Byte ea (4 files)** — scope the JMP FAR multi-segment theory on
    mcmurphy/mf/swbb before deciding attempt vs set-aside.
-5. **INT 8c (3 files)** — ON KEY GOSUB lead; untried probes listed in the
+4. **INT 8c (3 files)** — ON KEY GOSUB lead; untried probes listed in the
    gap section below.
-6. **Byte 06 / gap 19 (3 files)** — CGA snow-avoidance blitter; probe
+5. **Byte 06 / gap 19 (3 files)** — CGA snow-avoidance blitter; probe
    VIEW PRINT / WIDTH PRINT / PCOPY / text GET/PUT one at a time.
-7. **The 2-tier** — re-tally after each closure; for FP gaps check the
+6. **The 2-tier** — re-tally after each closure; for FP gaps check the
    `[si]` FP table for missing rows first.
-8. Singles last, same workflow.
+7. Singles last, same workflow.
 
 ## Recently closed (this campaign, newest first)
 
+- **Line-table epic, DATA/DIM orphan recovery** (2026-07-18, see the full
+  "THE LINE-TABLE EPIC" section above for details): `_line_table` now
+  tolerates codeless-statement duplicate offsets instead of rejecting the
+  whole table; DATA-without-READ and static-array-DIM statements are both
+  now recovered/repositioned from that evidence when a line table is
+  active. Fixtures `t1_dataorph`/`t1_dimorph` (+v10). Did NOT close any
+  wild file outright — vhfprop advances to a narrower, still-open bare-DO
+  issue; inv87/invoice not yet retried against this fix.
+- **Gap 53: cmpax_m AND-chain 2nd+ term ax<->bx shuffle** (2026-07-18):
+  an OR-compound IF condition (t1_orchain, gap 47) resolves by pure
+  short-circuit jumps, no accumulator. An AND-compound condition's 2nd+
+  term genuinely combines via a real `and ax,bx`, so the compiler
+  round-trips the running boolean through bx with a byte-exact no-op
+  shuffle (`mov ax,bx; mov bx,ax`) sandwiched between `cmpax_m` and the
+  `mov ax,-1` value materialization; `cmpax_m`'s value-form lookahead now
+  recognizes that shuffled shape too, letting the generic movrr/movbxax
+  handlers process the housekeeping before the existing pend_icmp ->
+  pend_cmp -> `_lift_bool_tail` chain resumes unchanged. Fixture
+  t1_andchain/v10_t1_andchain (`IF ERR = 25 AND ERR = 27 AND ERR = 57
+  THEN ...`). Closed wild schart.exe's "cmpax_m without a value/IF
+  consumer" stop — schart now decodes COMPLETELY (9th wild decode-ok) but
+  does NOT round-trip byte-exact yet (multi-statement ON ERROR line
+  table, `Program.lines` stays `None` — the same line-table epic blocker
+  as vhfprop, not a new issue).
 - **Gap 52: leading/doubled PRINT commas** (2026-07-18): schart.exe opens
   PRINTs with bare zone-advances (`PRINT ,,X`) and doubles commas between
   items. `ir.Print.commas` migrated from items-aligned bools to GAP-aligned

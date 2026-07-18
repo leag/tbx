@@ -594,9 +594,19 @@ def _line_table(
 ):
     """Locate the error-trap line table: one (u16 code-offset, u16 line-number)
     entry per STATEMENT -- same-line statements repeat the line (t1_errml) --
-    offsets strictly increasing and matching statement starts, closed by an entry
-    at the epilogue offset repeating the last line (t1_onerr/t1_errf). Returns
-    {code_offset: line} without the terminal entry, or None if absent.
+    offsets non-decreasing and matching statement starts, closed by an entry
+    at the epilogue offset repeating the last line (t1_onerr/t1_errf). A
+    codeless statement (DATA with no READ/RESTORE anywhere to trigger its
+    recovery, wild vhfprop.exe) still gets an entry, borrowing the offset of
+    whatever real code follows it -- so two or more entries may share the
+    SAME offset (probes q_lt1/q_lt3: a lone DATA line's entry precedes the
+    next real statement's at that statement's own offset; two same-line DATA
+    statements both precede it). Returns `(ent, orphans)` without the
+    terminal entry, or `None` if absent: `ent` maps {code_offset: line} (last
+    entry wins per offset, i.e. the REAL statement there, since a codeless
+    statement's borrowed-offset entry always precedes it in table order);
+    `orphans` is the list of (offset, line) entries superseded that way, in
+    table order -- the codeless statements' own lines.
     `extra_offs` admits offsets besides statement starts: in a TRON region the
     table entries point PAST the 4-byte trace hook (t1_tronres)."""
     offs = {a - start for a in addrs if a is not None} | set(extra_offs)
@@ -607,15 +617,17 @@ def _line_table(
         p = exe.find(first, p + 1)
         if p < 0 or p + 8 > len(exe):
             return None
-        ent, q, prev_off, prev_line = {}, p, 0, 0
+        ent, orphans, q, prev_off, prev_line = {}, [], p, 0, 0
         while q + 4 <= len(exe):
             off, line = struct.unpack_from("<HH", exe, q)
             if off == epi:  # terminal entry: repeat last line
                 if line == prev_line and ent:
-                    return ent
+                    return ent, orphans
                 break
-            if off not in offs or off <= prev_off or line < prev_line:
+            if off not in offs or off < prev_off or line < prev_line:
                 break
+            if off in ent:
+                orphans.append((off, ent[off]))
             ent[off] = line
             prev_off, prev_line = off, line
             q += 4

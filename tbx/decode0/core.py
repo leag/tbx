@@ -370,6 +370,32 @@ def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, in
 def _finalize(state: DecodeState, addr) -> Program:
     """Program epilogue: static-DIM re-emit, control-flow folds, target
     resolution and canonical rename -> the finished Program."""
+    # Error-trap line table, probed early -- before DATA/dims/COMMON/TRON
+    # synthesis below mutates state.addrs -- so a codeless DATA statement
+    # with no READ/RESTORE anywhere to trigger its recovery (wild
+    # vhfprop.exe) can still be found from its ORPHAN table entry (see
+    # `_line_table`'s docstring). state.stmt_addr is already fully
+    # populated by this point (decode_user_code's dispatch loop, which
+    # calls `_finalize` only once it's done). Gated the same as the final
+    # lookup below: only probe when the ops show error-trap evidence, else
+    # this linear EXE scan risks a spurious match in an unrelated program.
+    data_orphan_lines: list[tuple[int, int]] = []
+    if any(
+        o[1] in ("resume_pre", "on_error", "error_stmt")
+        or (o[1] == "movax_m" and o[2] in (0x72, 0x74))
+        for o in state.ops
+    ):
+        _early = _line_table(
+            state.exe,
+            state.start,
+            state.addrs,
+            addr,
+            extra_offs={a + 4 - state.start for a in state.trace_tbl}
+            | {a - state.start for a in state.stmt_addr.values() if a is not None},
+        )
+        if _early is not None:
+            data_orphan_lines = _early[1]
+
     shared_subs, sub_local_arrays = _scope_procs(state)
     ob = state.option_base if state.option_base is not None else 0
     dims, local_dims, cur_ob = [], {}, 0  # BASIC default at program top
@@ -426,20 +452,85 @@ def _finalize(state: DecodeState, addr) -> Program:
         state.stmts[ins], (ir.SubDef, ir.DefFn)
     ):
         ins += 1
+    dim_lines: list[int] | None = None
+    if dims and data_orphan_lines and len(dims) == len(data_orphan_lines):
+        # Static array DIM declarations are codeless too (recovered from
+        # array bookkeeping records, not a scanned op) and normally
+        # repositioned to this canonical spot -- but when the error-trap
+        # line table shows exactly len(dims) orphan (codeless-statement)
+        # entries in ONE cluster, that's independent evidence these DIMs
+        # actually compiled INLINE at their original position (wild
+        # vhfprop.exe: two static arrays, two orphan "500" entries; probe
+        # q_lt6). Reposition + reline them there instead. A count
+        # coincidence with an UNRELATED codeless construct (e.g. DATA) is
+        # possible in theory but unwitnessed; the single-cluster check
+        # below keeps this narrow.
+        offs = {o for o, _ in data_orphan_lines}
+        if len(offs) == 1:
+            ins = state.addrs.index(state.start + next(iter(offs)))
+            dim_lines = [ln for _, ln in data_orphan_lines]
+            data_orphan_lines = []  # consumed -- DATA recovery below won't fire
     state.stmts[ins:ins] = dims
     state.addrs[ins:ins] = [None] * len(dims)
-    # DATA is codeless: re-emit as a block at the very top. Recover the
-    # pool only when the program consumes it (a READ/RESTORE) so a string-literal
-    # pool frame is never misread as DATA. Split into DATA stmts at item 0 and at
-    # every RESTORE <line> target item index, so the target maps to a real stmt.
-    if any(isinstance(s, (ir.Read, ir.Restore)) for s in state.stmts):
+    # DATA is codeless: re-emit as a block at the very top. Recover the pool
+    # when the program consumes it (a READ/RESTORE) so a string-literal pool
+    # frame is never misread as DATA -- OR when the error-trap line table
+    # itself shows a codeless-statement (ORPHAN) entry, independent evidence
+    # a DATA statement compiled here even with no READ/RESTORE anywhere in
+    # the program to trigger recovery otherwise (wild vhfprop.exe; probes
+    # q_lt1/q_lt3 witnessed DATA's own orphan entry directly). Split into
+    # DATA stmts at item 0 and at every RESTORE <line> target item index, so
+    # the target maps to a real stmt.
+    data_lines: list[int] | None = None  # one line per data_block entry, if known
+    if any(isinstance(s, (ir.Read, ir.Restore)) for s in state.stmts) or data_orphan_lines:
         items = _read_data_pool(state.exe)
+        if not items and data_orphan_lines:
+            raise ValueError(
+                "error-trap line table has a codeless-statement entry but "
+                "no DATA pool was found (unsupported zero-length-statement "
+                "shape)"
+            )
         if items:
-            splits = {0} | {
-                s.target
-                for s in state.stmts
-                if isinstance(s, ir.Restore) and isinstance(s.target, int)
-            }
+            if data_orphan_lines:
+                # A codeless DATA statement has no READ to anchor a split
+                # point via RESTORE targets. `data_orphan_lines` (one entry
+                # per original DATA statement, in source order) tells us
+                # exactly how many statements to split into and each one's
+                # line -- but not the ITEM boundary between them, since the
+                # pool encodes items, not statement boundaries. Probe q_lt4
+                # confirmed the boundary is irrelevant to compiled bytes
+                # (`DATA 1: DATA 2,3,4` == `DATA 1,2: DATA 3,4` byte for
+                # byte): only the STATEMENT COUNT and each one's LINE are
+                # byte-significant. So give every statement but the last
+                # exactly one item; the last absorbs the remainder.
+                if any(
+                    isinstance(s, ir.Restore) and isinstance(s.target, int)
+                    for s in state.stmts
+                ):
+                    raise ValueError(
+                        "codeless DATA statement alongside a RESTORE split "
+                        "is unsupported (no witness)"
+                    )
+                offs = {o for o, _ in data_orphan_lines}
+                if len(offs) != 1:
+                    raise ValueError(
+                        "multiple separate codeless-DATA clusters in one "
+                        "error-trap line table is unsupported (no witness)"
+                    )
+                n = len(data_orphan_lines)
+                if len(items) < n:
+                    raise ValueError(
+                        "error-trap line table shows more codeless DATA "
+                        "statements than recovered DATA items"
+                    )
+                splits = set(range(n))
+                data_lines = [ln for _, ln in data_orphan_lines]
+            else:
+                splits = {0} | {
+                    s.target
+                    for s in state.stmts
+                    if isinstance(s, ir.Restore) and isinstance(s.target, int)
+                }
             data_block, item_to_stmt, pending = [], {}, []
             for i, it in enumerate(items):
                 if i in splits:
@@ -450,8 +541,19 @@ def _finalize(state: DecodeState, addr) -> Program:
                 pending.append(it)
             if pending:
                 data_block.append(ir.Data(tuple(pending)))
-            state.stmts[0:0] = data_block  # prepend: block pos = final index
-            state.addrs[0:0] = [None] * len(data_block)
+            if data_lines is not None:
+                # DATA compiles in TEXTUAL/compile order, not pool order
+                # (probe q_lt3: prepending unconditionally byte-diffs the
+                # line table once the DATA statements' own lines are
+                # byte-significant) -- insert immediately before whatever
+                # statement shares the cluster's borrowed offset, matching
+                # where the compiler actually placed them.
+                j = state.addrs.index(state.start + data_orphan_lines[0][0])
+                state.stmts[j:j] = data_block
+                state.addrs[j:j] = [None] * len(data_block)
+            else:
+                state.stmts[0:0] = data_block  # prepend: block pos = final index
+                state.addrs[0:0] = [None] * len(data_block)
             state.stmts[:] = [
                 (
                     ir.Restore(item_to_stmt[s.target])
@@ -582,7 +684,7 @@ def _finalize(state: DecodeState, addr) -> Program:
         or (o[1] == "movax_m" and o[2] in (0x72, 0x74))
         for o in state.ops
     ):
-        table = _line_table(
+        _late = _line_table(
             state.exe,
             state.start,
             state.addrs,
@@ -594,6 +696,7 @@ def _finalize(state: DecodeState, addr) -> Program:
                 if a is not None
             },  # folded-body statements have table entries too (wild vhfprop)
         )
+        table = _late[0] if _late is not None else None
         if fixed_lines is not None and table is not None:
             # TRON + a line-needing error construct (bare RESUME, ERL):
             # the table coexists with the hooks (t1_tronres), keyed by
@@ -619,7 +722,25 @@ def _finalize(state: DecodeState, addr) -> Program:
             prog.lines = _fill_lines(real, len(prog))
         elif table is not None:
             try:
-                prog.lines = [table[a - state.start] for a in state.addrs]
+                pending_data_lines = iter(data_lines or ())
+                pending_dim_lines = iter(dim_lines or ())
+                lines = []
+                for s, a in zip(prog, state.addrs):
+                    queue = (
+                        pending_data_lines
+                        if isinstance(s, ir.Data)
+                        else pending_dim_lines
+                        if isinstance(s, (ir.Dim, ir.OptionBase))
+                        else None
+                    )
+                    if a is None and queue is not None:
+                        ln = next(queue, None)
+                        if ln is None:
+                            raise TypeError  # falls through to the same
+                        lines.append(ln)  # unsupported-shape ValueError below
+                    else:
+                        lines.append(table[a - state.start])
+                prog.lines = lines
             except (KeyError, TypeError):
                 raise ValueError(
                     "error-trap line table present but statements don't map "
