@@ -55,10 +55,27 @@ def test_screen_optional_args():
     assert prog[2] == ir.Screen(L(2), L(1), L(0), L(0))
 
 
+def test_decode_t1_colorfp():
+    # COLOR fg,bg with a NON-integer (single) argument: the FP->int assign
+    # bridge (FISTP [2C]; FWAIT; MOV AX,[2C]; MOV [tgt],AX) targets one of the
+    # VIEW/COLOR system cells (0x88/0x94/0xA0/0xAC/0xB8/0xC4) instead of an
+    # ordinary scalar/array slot -- previously only ever reached with a plain
+    # immediate or ax-computed value (`fistp`'s sibling `fstp` path already
+    # special-cased these cells for the FP leg), so `state.loc()` rejected the
+    # disp outright. Also surfaced a pre-existing, previously-unreachable gap
+    # in canonical_rename: ir.Color's fg/bg fields were never walked at all
+    # (every other graphics statement is), invisible before because COLOR's
+    # args were always Lit/None, never a Var needing re-lettering.
+    from tbx import decode0
+
+    prog = decode0.decode_user_code(_exe("t1_colorfp.exe"))
+    assert prog[2] == ir.Color(fg=ir.Var("A"), bg=ir.Var("B"))
+
+
 def test_dialect_invariant():
     from tbx import decode0
 
-    for name in ("t1_scr", "t1_scr2"):
+    for name in ("t1_scr", "t1_scr2", "t1_colorfp"):
         assert decode0.decode_user_code(
             _exe(f"v10_{name}.exe")
         ) == decode0.decode_user_code(_exe(f"{name}.exe")), name
@@ -79,6 +96,7 @@ def test_emit_screen():
 if __name__ == "__main__":
     test_decode_t1_scr()
     test_decode_t1_scr2()
+    test_decode_t1_colorfp()
     test_dialect_invariant()
     test_emit_screen()
     print("ALL PASS")

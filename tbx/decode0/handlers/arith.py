@@ -466,6 +466,8 @@ def fp_math(state: DecodeState, op, addr, kind) -> bool:
                 < state.dim_frame["block"] + ARR_BLOCK
             ):
                 state.dim_frame["cells"][tgt - state.dim_frame["block"]] = idx  # bound
+            elif tgt in (0x88, 0x94, 0xA0, 0xAC, 0xB8, 0xC4):  # COLOR/VIEW cell,
+                state.color_cells[tgt] = idx  # rounded via CINT (a non-integer arg)
             else:
                 state.put(ir.Assign(state.loc(tgt), idx), state.cur)
                 state.cur = None

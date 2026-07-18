@@ -256,6 +256,12 @@ Assign(target=Var(name='C%'), value=Lit(value=1))
 CallStmt(name='SUB1', args=(Var(name='C%'),))
 End()
 
+## t1_colorfp
+Assign(target=Var(name='A'), value=SingleLit(value=3.7))
+Assign(target=Var(name='B'), value=SingleLit(value=1.2))
+Color(fg=Var(name='A'), bg=Var(name='B'))
+End()
+
 ## t1_common1
 Common(names=('A%', 'B%', 'C%', 'D%', 'E%', 'F$'))
 Assign(target=Var(name='G$'), value=StrLit(value='HI'))
@@ -2403,6 +2409,12 @@ End()
 
 ## v10_t1_clear
 Clear()
+End()
+
+## v10_t1_colorfp
+Assign(target=Var(name='A'), value=SingleLit(value=3.7))
+Assign(target=Var(name='B'), value=SingleLit(value=1.2))
+Color(fg=Var(name='A'), bg=Var(name='B'))
 End()
 
 ## v10_t1_common2
