@@ -1,6 +1,6 @@
 # Wild-corpus gap campaign — handoff
 
-Status as of 2026-07-18 (session gaps 46-53 + line-table epic progress),
+Status as of 2026-07-18 (session gaps 46-54 + line-table epic progress),
 branch `claude/claude-md-docs-mr8ssz`.
 Standing instruction: close the most common decoder gap first, in frequency
 order, over the 84 wild PC-SIG Turbo Basic EXEs in `wild/hits/` (untracked,
@@ -8,21 +8,21 @@ gitignored, copyrighted shareware — **never commit them**).
 
 ## Where things stand
 
-84 wild EXEs: **8 decode OK** (ck, onelab87, onelabel, mm, autonum, rev,
-startup, schart), 76 fail. vhfprop.exe DROPPED OUT of decode-ok this
-session (was 9) — not a regression, see "vhfprop status" below: it now
-fails LOUD on a real, previously-silent bug instead of silently emitting
-wrong line numbers. Fresh tally (2026-07-18):
+84 wild EXEs: **10 decode OK** (ck, onelab87, onelabel, mm, autonum, rev,
+startup, schart, r, book), 74 fail. vhfprop.exe dropped out of decode-ok
+earlier this session (was 9 before the line-table work) — not a
+regression, see "vhfprop status" below: it now fails LOUD on a real,
+previously-silent bug instead of silently emitting wrong line numbers.
+Fresh tally (2026-07-18, after gap 54):
 
 | count | error | status |
 |---|---|---|
 | 16 | INT cd | unwitnessable runtime-revision artifact — not actionable (see `scan_wild.py` docstring) |
-| 5 | byte 90 | set aside (4, unwitnessable) + rstprint.exe (1, undiagnosed whether it's the same shape) — **next stop** |
+| 5 | byte 90 | ALL 5 now confirmed the same set-aside, unwitnessable shape (rstprint.exe's occurrence checked this session: identical `90 90` then `mov ax,[002C]` byte sequence) — not actionable |
 | 4 | byte ea | likely multi-segment-code JMP FAR (>64K code) — big lift, not a small gap |
-| 3 each | INT 8c; byte 06 | both extensively probed earlier, still undiagnosed (sections below) |
+| 3 each | INT 8c; byte 06 | both extensively probed earlier, still undiagnosed (sections below) — **next stop, tied for most actionable** |
 | 2 each | EC sub 66, EC sub 38 (gap 33, stuck), FP de/1e, FP dc/04, FP da/1c, byte 8c/8b/89/29/1e, system cell 0x8a | mostly untouched |
-| 2 | "jump target 0x15740 is not a statement start" (inv87/invoice) | the LINE-TABLE EPIC below — a GOTO target nested TWO block-IF levels deep; single-level interior targets were closed as gap 51 |
-| 2 | COLOR mask 07 != cells 06 (r.exe + one more) | untouched |
+| 2 | "jump target 0x15740 is not a statement start" (inv87/invoice) | the LINE-TABLE EPIC below — inv87's OWN error-trap line table doesn't even resolve (`_line_table` returns `None`), a SEPARATE, deeper problem than the nested-block-IF issue originally suspected — needs its own diagnosis before the nested-IF fix is even relevant |
 | 1 | "statements don't map 1:1" (vhfprop) | the LINE-TABLE EPIC below — DATA/DIM sub-problems now CLOSED; the bare-DO-normalization sub-problem is what's left |
 | singles | see scan output | untouched |
 
@@ -114,13 +114,26 @@ before guessing.
 
 ### Still open: inv87's nested block-IF GOTO target
 
-inv87's "jump target 0x15740": a Goto nested inside an IfInline inside
-another IfInline (nested numbered block-IFs). The single-level BodyLine
-mechanism (gap 51) doesn't reach it; with the line table now closer to
-usable, interior targets should resolve naturally to original line
-numbers instead of phys arithmetic once inv87 itself is retried (it
-wasn't this session — pick up here next: does inv87 even reach this stop
-now, or does it hit a NEW DATA/DIM/bare-DO-shaped stop first?).
+**Retried against today's fixes (2026-07-18): inv87/invoice still hit
+the exact same "jump target 0x15740 is not a statement start" as
+before** — the DATA/DIM orphan work didn't move them (they don't have
+that shape). Diagnosed one level deeper this session: inv87's error-trap
+line table doesn't even RESOLVE at all — `_line_table(...)` returns
+`None` for inv87.exe (confirmed via the same debug-patch technique,
+checking `t[0].get(0xb850)` for the target's own offset — table is
+`None`, not just missing that entry). So the ORIGINAL plan ("use the
+line table to resolve nested interior targets directly, sidestepping
+phys-arithmetic") is currently BLOCKED on a prior question: WHY doesn't
+inv87's table validate at all? Two independent sub-problems now stack
+here: (1) whatever is preventing `_line_table` from finding/validating
+inv87's table in the first place (undiagnosed — could be yet another
+codeless-statement kind beyond DATA/DIM, or a genuinely different
+issue), and (2) the nested block-IF interior addressing itself (a Goto
+inside an IfInline inside another IfInline; the single-level BodyLine
+mechanism from gap 51 doesn't reach two levels deep). Diagnose (1)
+first with the same debug-patch technique before attempting (2) — no
+point building nested-BodyLine arithmetic if the line-table path was
+going to subsume it anyway once (1) is fixed.
 
 ### Reproducing the investigation
 
@@ -138,24 +151,47 @@ intended, permanent change.
 
 ## Ongoing plan (priority order — pick up at the first incomplete step)
 
-1. **vhfprop's bare-DO-vs-line-table gap** (above) — narrower now than the
-   original "line-table epic," but still open; OR **inv87's nested
-   block-IF** (also above, needs a fresh retry first) — pick whichever
-   turns out smaller once inv87 is retried against today's fixes.
-2. **Byte 90 (5 files)** — diagnose rstprint.exe's occurrence (one hexdump
-   settles whether it matches the set-aside NOP-pair shape).
+1. **INT 8c (3 files)** — ON KEY GOSUB lead; untried probes listed in the
+   gap section below. Tied with byte 06 for most actionable remaining.
+2. **Byte 06 / gap 19 (3 files)** — CGA snow-avoidance blitter; probe
+   VIEW PRINT / WIDTH PRINT / PCOPY / text GET/PUT one at a time.
 3. **Byte ea (4 files)** — scope the JMP FAR multi-segment theory on
    mcmurphy/mf/swbb before deciding attempt vs set-aside.
-4. **INT 8c (3 files)** — ON KEY GOSUB lead; untried probes listed in the
-   gap section below.
-5. **Byte 06 / gap 19 (3 files)** — CGA snow-avoidance blitter; probe
-   VIEW PRINT / WIDTH PRINT / PCOPY / text GET/PUT one at a time.
+4. **inv87's line-table-doesn't-resolve-at-all issue** (above) — diagnose
+   BEFORE the nested-block-IF work; the debug-patch technique documented
+   above finds it fast.
+5. **vhfprop's bare-DO-vs-line-table gap** (above) — narrower than the
+   original "line-table epic," still open.
 6. **The 2-tier** — re-tally after each closure; for FP gaps check the
    `[si]` FP table for missing rows first.
-7. Singles last, same workflow.
+7. Singles last, same workflow. Byte 90 (5 files) and INT cd (16 files)
+   are BOTH fully confirmed unwitnessable now — skip entirely, don't
+   re-diagnose.
 
 ## Recently closed (this campaign, newest first)
 
+- **Gap 54: COLOR's third (border) argument** (2026-07-18): the
+  3-argument GW-BASIC-style `COLOR fg,bg,border` sets an extra mask bit
+  (0x01, cell 0xA0) that `color_commit` never accounted for (only fg
+  0x04/0x88 and bg 0x02/0x94 were known), tripping the "unaccounted
+  cells" check. `ir.Color` gained a `border` field; `render.py` now
+  builds the comma list up to the highest set argument generically
+  (handles a border-only `COLOR ,,n` too) instead of special-casing a
+  third slot; c0 raises `_Unsupported` for a set border (CGA border
+  strip has no visible effect in the PPM/SDL surrogate, but silently
+  dropping an explicit source value would be a mistranslation) — waived
+  in `test_c0.py`. Fixture `t1_color3`/`v10_t1_color3`. Closed wild
+  r.exe/book.exe fully. Wild scan: 8 → 10 decode-ok.
+- **Byte 90, all 5 occurrences confirmed unwitnessable** (2026-07-18):
+  rstprint.exe's occurrence (the one HANDOFF previously flagged
+  "undiagnosed whether it's the same shape") hexdumps to the EXACT same
+  `90 90` (two real x86 NOPs) immediately before `mov ax,[002C]` as the
+  other 4 already-set-aside files — same CINT-style float-to-int
+  round-trip synchronization point, same runtime-revision-skew category
+  as the documented INT CD gap (see `wild-tb-corpus.md` memory for the
+  original investigation). No code change; just settles the "is it the
+  same shape" question. Not actionable without a differently-revisioned
+  oracle.
 - **Line-table epic, DATA/DIM orphan recovery** (2026-07-18, see the full
   "THE LINE-TABLE EPIC" section above for details): `_line_table` now
   tolerates codeless-statement duplicate offsets instead of rejecting the
