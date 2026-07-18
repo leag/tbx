@@ -409,6 +409,93 @@ def test_decode_t1_loccmp():
     )
 
 
+def _names():
+    # canonical rename order: A..Z, then AA, AB, ...
+    import string
+
+    for c in string.ascii_uppercase:
+        yield c
+    for c1 in string.ascii_uppercase:
+        for c2 in string.ascii_uppercase:
+            yield c1 + c2
+
+
+def test_decode_t1_bandwide():
+    # Gap 16, the general mechanism: the compiler stamps the ordinary-scalars
+    # band descriptor (num_size, num_base, str_size, num_base+num_size,
+    # n_static, grid_base, 0, num_base) into the init image, directly
+    # followed by the static slot records -- the record run FLOATS past
+    # variable-length init data, by more than one ARR_BLOCK when the scalar
+    # band is wide (168 bytes here), which pushed it clean out of
+    # find_statics's window AND let the greedy walk "solve" a wrong layout
+    # whose phantom pooled double read past EOF. The stamp-anchored path
+    # (layout.py) now solves these from the stamp itself, before the walk.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_bandwide.exe"))
+    names = _names()
+    lines = ["10 DIM V0(20)", "20 DIM V1(20)"]
+    ln = 30
+    for k in range(40):
+        lines.append(f"{ln} {next(names)} = {k}.5")
+        ln += 10
+    fv, hv = next(names) + "%", next(names) + "%"
+    lines += [
+        f"{ln} FOR {fv} = 1 TO 6",
+        f"{ln + 10} V0({fv}) = {fv}",
+        f"{ln + 20} NEXT {fv}",
+        f"{ln + 30} {hv} = V1(1)",
+        f"{ln + 40} PRINT A, AN, {hv}",
+        f"{ln + 50} END",
+    ]
+    assert ir.For(ir.Var(fv), ir.Lit(1), ir.Lit(6), ir.Lit(1)) in prog
+    assert emit0.emit(prog) == "\n".join(lines) + "\n"
+
+
+def test_decode_t1_bandstr():
+    # Companion witness for the stamp path's STRING sub-band: string scalars
+    # are SEGREGATED after the numerics (stamp str_size > 0, wild schart's
+    # shape) regardless of source order -- the five string assignments here
+    # are interleaved among the singles in the source, yet their descriptors
+    # all sit in the trailing 20-byte string sub-band, and the decode maps
+    # each back to its interleaved source position.
+    from tbx import decode0, emit0
+
+    prog = decode0.decode_user_code(_exe("t1_bandstr.exe"))
+    names = _names()
+    lines = ["10 DIM V0(20)", "20 DIM V1(20)"]
+    ln = 30
+    for k in range(30):
+        lines.append(f"{ln} {next(names)} = {k}.5")
+        ln += 10
+        if k in (4, 9, 14, 19, 24):
+            lines.append(f'{ln} {next(names)}$ = "X{k}"')
+            ln += 10
+    fv, hv = next(names) + "%", next(names) + "%"
+    lines += [
+        f"{ln} FOR {fv} = 1 TO 6",
+        f"{ln + 10} V0({fv}) = {fv}",
+        f"{ln + 20} NEXT {fv}",
+        f"{ln + 30} {hv} = V1(1)",
+        f"{ln + 40} PRINT A, F$, {hv}",
+        f"{ln + 50} END",
+    ]
+    assert emit0.emit(prog) == "\n".join(lines) + "\n"
+
+
+def test_decode_t1_dim4():
+    # Rank-4 static array record (30 populated bytes, same cumulative-span
+    # model as rank 3; surfaced by wild hfprop's DIM x(...,...,...,...)).
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_dim4.exe"))
+    assert prog[0] == ir.Dim("V0", (2, 3, 5, 4))
+    assert emit0.emit(prog) == (
+        "10 DIM V0(2,3,5,4)\n20 V0(1,2,3,4) = 7\n"
+        "30 PRINT V0(1,2,3,4)\n40 END\n"
+    )
+
+
 if __name__ == "__main__":
     test_decode_t1_fcmp()
     test_decode_t1_fori()
@@ -437,4 +524,7 @@ if __name__ == "__main__":
     test_decode_t1_fwd()
     test_decode_t1_locidx()
     test_decode_t1_loccmp()
+    test_decode_t1_bandwide()
+    test_decode_t1_bandstr()
+    test_decode_t1_dim4()
     print("ALL PASS")

@@ -302,6 +302,74 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
                     return lay
         raise ValueError("DGROUP layout not solvable (runtime slot grid anchor)")
 
+    # Stamp-anchored static solve. The compiler stamps the ordinary-scalars
+    # band descriptor into the init image as 8 LE words
+    #   (num_size, num_base, str_size, num_base+num_size,
+    #    n_static, grid_base, 0, num_base)
+    # with num_base == grid_base + ARR_BLOCK*n_static, DIRECTLY followed by
+    # the n_static populated slot records at ARR_BLOCK stride (the COMMON
+    # read_stamp shape below is this stamp's degenerate n_static=0 form,
+    # where the tail collapses to (0, num_base, 0, num_base)). Scalars are
+    # SEGREGATED numerics-first, strings in a trailing sub-band of s2 bytes
+    # (witnessed wild schart: s2=76) -- same band model as COMMON. The
+    # stamp's own file position floats (error-trap line table and
+    # variable-length zero-init data precede it), so it is found by shape.
+    # This must run BEFORE the walk paths: a wide scalar band pushes the
+    # floating record run far past find_statics's window and the greedy walk
+    # can then "solve" a wrong-but-finish-passing layout (witnessed
+    # t1_bandwide, where the walk layout later reads a phantom pooled
+    # double past EOF; t1_bandstr witnesses the string sub-band; wild
+    # schart/hfprop/vhfprop/inv87/invoice are the shapes that surfaced it).
+    # Where both this and the walk paths solve, the layouts agree -- the
+    # stamp is the compiler's own record of the band the walk infers.
+    for pos in range(0, len(exe) - 16, 2):
+        s1, b1, s2, b2, n, gb, z, b4 = struct.unpack_from("<8H", exe, pos)
+        if z or b4 != b1 or b2 != b1 + s1 or gb != vb:
+            continue
+        if not 1 <= n <= 31 or b1 != gb + ARR_BLOCK * n:
+            continue
+        if s1 % 2 or s2 % 4 or s1 >= 0x1000 or s2 >= 0x1000:
+            continue
+        statics = []
+        for i in range(n):
+            rec = _parse_static_slot(exe, pos + 16 + i * ARR_BLOCK)
+            if rec is None:
+                break
+            statics.append(rec)
+        if len(statics) != n:
+            continue
+        pool_base = ((b1 + s1 + s2 + 15) & ~15) + 4
+        ds = P + 4 - pool_base
+        if ds % 16 or ds <= 0:
+            continue
+        # Band-style scalar construction: evidenced widths (walk_run's
+        # priority order), 2-byte int fillers in unreferenced numeric space
+        # (phantom FOR temp slots land here), '$' every 4 string bytes.
+        run, strs, d = {}, set(), b1
+        while d < b1 + s1:
+            if d in int_disps0 or (
+                d in fild_disps0 and d not in fp_disps and d not in fp64_disps
+            ):
+                run[d] = 2
+                d += 2
+            elif d in fp64_disps:
+                run[d] = 8
+                d += 8
+            elif d in fp_disps or d in long_disps0:
+                run[d] = 4
+                d += 4
+            else:
+                run[d] = 2
+                d += 2
+        if d != b1 + s1:
+            continue  # an evidenced width straddles the numeric sub-band edge
+        for d in range(b1 + s1, b1 + s1 + s2, 4):
+            run[d] = 4
+            strs.add(d)
+        lay = finish(ds, n, statics, b1, run, strs, pool_base, 0)
+        if lay is not None:
+            return lay
+
     # No runtime arrays: marker-anchored, delta == 0 (all-witness path). Descending n:
     # a too-small n can misread scalars as pooled literals, but a too-large one can
     # never fabricate records, so the largest consistent candidate is the right one.

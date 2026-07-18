@@ -25,6 +25,9 @@ PAIRS = [
     "t1_fwd",
     "t1_locidx",
     "t1_loccmp",
+    "t1_bandwide",
+    "t1_bandstr",
+    "t1_dim4",
 ]
 
 

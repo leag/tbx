@@ -330,8 +330,8 @@ class _Gen:
         Each DIM bound is an int upper bound (lower comes from OPTION BASE), an
         explicit `(lo, hi)` pair (`DIM A(0:4)`), or Exprs for runtime bounds."""
         rank = len(bounds)
-        if rank > 3:
-            raise _Unsupported("DIM rank > 3 (no witness)")
+        if rank > 4:
+            raise _Unsupported("DIM rank > 4 (no witness)")
         ty = _suffix_ty(name)
         norm = [b if isinstance(b, tuple) else (self.option_base, b) for b in bounds]
         if all(isinstance(lo, int) and isinstance(hi, int) for lo, hi in norm):

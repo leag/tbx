@@ -88,14 +88,19 @@ def _parse_static_slot(exe: bytes, pos: int) -> dict[str, Any] | None:
     per dimension `lo/hi` with a CUMULATIVE element span between dims --
     rank 1: +8/+A lo1/hi1 (12 bytes); rank 2: ... +C span1, +E/+10 lo2/hi2
     (18 bytes); rank 3: ... +12 span2, +14/+16 lo3/hi3 (24 bytes, witnessed
-    t1_dim3: span1 = ext1, span2 = span1*ext2, count = span2*ext3).
+    t1_dim3: span1 = ext1, span2 = span1*ext2, count = span2*ext3); rank 4
+    continues the same cumulative-span pattern to 30 bytes (witnessed
+    t1_dim4; the 0x36 slot itself is exactly a rank-8 record, but ranks
+    above 4 stay unwitnessed and are rejected).
     None if the bytes don't validate."""
+    if pos < 0 or pos + 8 > len(exe):
+        return None
     para, rt, count, esz = struct.unpack_from("<4H", exe, pos)
     # Type byte: 0x00 = integer (esz 2, witnessed t1_getput), 0x02 = long integer,
     # 0x04 = single, 0x06 = double, 0x0A = string; element size 2 (int),
     # 4 (single/long/string desc) or 8 (double).
     if (
-        rt >> 8 not in (1, 2, 3)
+        rt >> 8 not in (1, 2, 3, 4)
         or rt & 0xFF not in (0x00, 0x02, 0x04, 0x06, 0x0A)
         or esz not in (2, 4, 8)
         or count <= 1
@@ -103,6 +108,8 @@ def _parse_static_slot(exe: bytes, pos: int) -> dict[str, Any] | None:
     ):
         return None
     rank = rt >> 8
+    if pos + 6 * rank + 6 > len(exe):
+        return None
     lo, hi, spans = [], [], []
     p, span = pos + 8, 1
     for d in range(rank):
