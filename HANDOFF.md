@@ -57,6 +57,28 @@ this file once diagnosed.
 
 ## Recently closed (this campaign, newest first)
 
+- **Gap 28 follow-up: stamp path generalized to ALL no-runtime-array
+  programs** (2026-07-17, same session): corpus-wide survey showed every
+  one of the 615 no-rt fixtures carries the ordinary-scalars stamp and it
+  reproduces the solved layout exactly — including the n_static=0 form
+  (the tail collapses to `(0, num_base, 0, num_base)`, i.e. the COMMON
+  `read_stamp` shape) and the LINE box-fill fixtures, whose stamp counts
+  the runtime's own 4-byte cell inside the band (`gb == b1 == 0x120`
+  while user slots start 0x124 — the hand-calibrated `vb+4` shift is
+  literally in the stamp). Two hardening invariants, both verified on
+  every no-rt fixture + all gap-16 probes: the ordinary stamp is DIRECTLY
+  preceded by the COMMON band stamp, and that stamp is degenerate exactly
+  when the program has no COMMON (non-degenerate routes to
+  `_bands_layout` as before). Runtime-array programs carry NO stamp
+  (all 28 rt fixtures checked, loose-shape scan) — the grid-anchored rt
+  path stays evidence-based. With the walk loop experimentally disabled,
+  all 643 decodable corpus EXEs still solve — the descending-n walk, the
+  pool-runaway retries and the phantom bridges are now pure fallback for
+  unwitnessed shapes. Zero golden drift; spot byte-exact re-verified
+  t1_poolrun/t1_lineb/t1_linevb/t1_common1/tier0_trivial/t1_arr1/
+  t1_sstat/v10_t1_common2 through the oracle. Possible later stages (not
+  scheduled): unify `_bands_layout` with the stamp band-builder; study
+  the rt init image for an equivalent anchor.
 - **Gap 28, stamp-anchored DGROUP layout + rank-4 arrays — GAP 16 FULLY
   CLOSED** (2026-07-17, this session): the whole offset-formula hunt
   (traces 1–3 + the static-analysis pass, previously a ~370-line section

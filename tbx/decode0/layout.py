@@ -302,34 +302,67 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
                     return lay
         raise ValueError("DGROUP layout not solvable (runtime slot grid anchor)")
 
-    # Stamp-anchored static solve. The compiler stamps the ordinary-scalars
-    # band descriptor into the init image as 8 LE words
+    def read_stamp(pos):
+        """A 16-byte COMMON band stamp at file `pos` (see the COMMON block
+        below): (s1, b1, s2, b1+s1, 0, b1, 0, b1) -> (s1, s2, b1), or None."""
+        if pos < 0 or pos + 16 > len(exe):
+            return None
+        w = struct.unpack_from("<8H", exe, pos)
+        s1, b1, s2, b2, w3, b3, w4, b4 = w
+        if w3 or w4 or b3 != b1 or b4 != b1 or b2 != b1 + s1:
+            return None
+        if b1 < 0x110 or s1 >= 0x1000 or s2 >= 0x1000 or s1 % 2 or s2 % 4:
+            return None
+        return s1, s2, b1
+
+    # Stamp-anchored solve -- the primary path for every program without
+    # runtime arrays. The compiler stamps the ordinary-scalars band
+    # descriptor into the init image as 8 LE words
     #   (num_size, num_base, str_size, num_base+num_size,
     #    n_static, grid_base, 0, num_base)
     # with num_base == grid_base + ARR_BLOCK*n_static, DIRECTLY followed by
-    # the n_static populated slot records at ARR_BLOCK stride (the COMMON
-    # read_stamp shape below is this stamp's degenerate n_static=0 form,
-    # where the tail collapses to (0, num_base, 0, num_base)). Scalars are
-    # SEGREGATED numerics-first, strings in a trailing sub-band of s2 bytes
-    # (witnessed wild schart: s2=76) -- same band model as COMMON. The
-    # stamp's own file position floats (error-trap line table and
-    # variable-length zero-init data precede it), so it is found by shape.
-    # This must run BEFORE the walk paths: a wide scalar band pushes the
-    # floating record run far past find_statics's window and the greedy walk
-    # can then "solve" a wrong-but-finish-passing layout (witnessed
-    # t1_bandwide, where the walk layout later reads a phantom pooled
-    # double past EOF; t1_bandstr witnesses the string sub-band; wild
-    # schart/hfprop/vhfprop/inv87/invoice are the shapes that surfaced it).
-    # Where both this and the walk paths solve, the layouts agree -- the
-    # stamp is the compiler's own record of the band the walk infers.
-    for pos in range(0, len(exe) - 16, 2):
+    # the n_static populated slot records at ARR_BLOCK stride, and DIRECTLY
+    # preceded by the COMMON band stamp (degenerate all-(0,0x110) in a
+    # program without COMMON -- the adjacency + degeneracy pair holds on
+    # every no-rt corpus fixture and disambiguates coincidental byte
+    # matches, witnessed zz_vm_darr_loop's zero-init false candidate).
+    # The n_static=0 tail collapses to (0, num_base, 0, num_base) -- the
+    # same shape read_stamp accepts -- and in the LINE box-fill fixtures
+    # the band base is VAR_BASE with the runtime's own 4-byte cell counted
+    # inside the band (gb == b1 == 0x120 while the user slots start 0x124;
+    # witnessed t1_lineb s1=4 with zero user scalars, t1_linevb s1=8).
+    # Scalars are SEGREGATED numerics-first, strings in a trailing sub-band
+    # of s2 bytes (witnessed wild schart: s2=76) -- same band model as
+    # COMMON. A NON-degenerate COMMON stamp routes to _bands_layout below
+    # instead (segregation is then relative to the COMMON bands, witnessed
+    # t1_common1). The stamp's own file position floats (error-trap line
+    # table and variable-length zero-init data precede it), so it is found
+    # by shape. This must run BEFORE the walk paths: a wide scalar band
+    # pushes the floating record run far past find_statics's window and the
+    # greedy walk can then "solve" a wrong-but-finish-passing layout
+    # (witnessed t1_bandwide, where the walk layout later reads a phantom
+    # pooled double past EOF; t1_bandstr witnesses the string sub-band;
+    # wild schart/hfprop/vhfprop/inv87/invoice surfaced the shape). Where
+    # both this and the walk paths solve, the layouts agree -- the stamp is
+    # the compiler's own record of the band the walk infers (all 615 no-rt
+    # corpus fixtures match it exactly; runtime-array programs carry no
+    # stamp at all and stay on the grid-anchored path above).
+    for pos in range(16, len(exe) - 16, 2):
         s1, b1, s2, b2, n, gb, z, b4 = struct.unpack_from("<8H", exe, pos)
-        if z or b4 != b1 or b2 != b1 + s1 or gb != vb:
+        if z or b4 != b1 or b2 != b1 + s1:
             continue
-        if not 1 <= n <= 31 or b1 != gb + ARR_BLOCK * n:
+        if not 0 <= n <= 31 or b1 != gb + ARR_BLOCK * n:
             continue
         if s1 % 2 or s2 % 4 or s1 >= 0x1000 or s2 >= 0x1000:
             continue
+        if n:
+            if gb != vb:
+                continue
+        elif b1 not in (vb, VAR_BASE):
+            continue  # n=0: gb == b1; VAR_BASE covers the LINE-cell form
+        com = read_stamp(pos - 16)
+        if com is None or com[2] != 0x110 or com[0] or com[1]:
+            continue  # no adjacent degenerate COMMON stamp
         statics = []
         for i in range(n):
             rec = _parse_static_slot(exe, pos + 16 + i * ARR_BLOCK)
@@ -417,16 +450,6 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
     # stamps are found by shape, never position). pool = align16(ord_end) + 4
     # closes the loop on ds. Only engaged for a non-empty COMMON band: plain
     # programs carry degenerate stamps but solve on the walk paths above.
-    def read_stamp(pos):
-        if pos < 0 or pos + 16 > len(exe):
-            return None
-        w = struct.unpack_from("<8H", exe, pos)
-        s1, b1, s2, b2, w3, b3, w4, b4 = w
-        if w3 or w4 or b3 != b1 or b4 != b1 or b2 != b1 + s1:
-            return None
-        if b1 < 0x110 or s1 >= 0x1000 or s2 >= 0x1000 or s1 % 2 or s2 % 4:
-            return None
-        return s1, s2, b1
     if not (addsi_bases or argarr_disps or blit_disps):
         # The walk paths' evidence sets are VAR_BASE-filtered, but the COMMON
         # band starts at 0x110: rebuild them 0x110-filtered so a reference
