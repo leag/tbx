@@ -34,7 +34,12 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
     cursor when it decodes the op at ``p``, else None."""
     if b == 0xE9:  # jmp near rel16 (GOTO / FOR glue)
         rel = struct.unpack_from("<h", exe, p + 1)[0]
-        target = p + 3 + rel
+        # A GOTO spanning more than 32KB of code wraps around the 64KB code
+        # segment (rel16 is signed): normalize the file-linear target back
+        # into [start, start+64K) -- the mapping is linear, so the wrap is
+        # exactly 0x10000 in file terms too (witnessed t1_bigjmp / wild
+        # inv87.exe, an early GOTO +53KB encoded as a negative rel).
+        target = start + ((p + 3 + rel - start) % 0x10000)
         if dia.name == "1.0" and target == start + 3:
             # TB 1.0 RUN: ALWAYS a near jmp to the first statement (start+3),
             # even at short-jmp range (v10_t1_run: e9 fd ff, rel -3) -- a GOTO
@@ -54,9 +59,9 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         ops.append((p, "testw", disp, imm))
         p += 6
         return p
-    if b == 0xE8:  # call near rel16 (GOSUB)
+    if b == 0xE8:  # call near rel16 (GOSUB); same 64KB wrap as jmp (t1_bigjmp)
         rel = struct.unpack_from("<h", exe, p + 1)[0]
-        ops.append((p, "call", p + 3 + rel))
+        ops.append((p, "call", start + ((p + 3 + rel - start) % 0x10000)))
         p += 3
         return p
     if b == 0xEB:  # jmp short rel8

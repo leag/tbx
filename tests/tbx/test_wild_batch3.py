@@ -469,6 +469,47 @@ def test_decode_t1_addpool():
     )
 
 
+def test_decode_t1_bigjmp():
+    # GOTO/GOSUB spanning more than 32KB of code wrap around the 64KB code
+    # segment (rel16 is signed; wild inv87.exe jumps +53KB early on): the
+    # scan now normalizes e9/e8 targets into [start, start+64K). The fixture
+    # is a 2800-statement filler with a wrapped forward GOTO and GOSUB.
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_bigjmp.exe")))
+    lines = src.splitlines()
+    assert lines[0] == "10 GOSUB 28070"
+    assert lines[1] == "20 GOTO 28050"
+    assert lines[-4:] == [
+        '28050 PRINT "OK"',
+        "28060 END",
+        '28070 PRINT "S"',
+        "28080 RETURN",
+    ]
+
+
+def test_decode_t1_blkgoto():
+    # GOTO into a block IF's interior: TB accepts a numbered line inside
+    # IF..END IF as a jump target (wild inv87.exe). The inline-IF region
+    # is forced to block form when a body statement's address is jump-
+    # targeted, the short backward jmps lifts as Goto("addr"), the target
+    # resolves to ir.BodyLine, and emit0 numbers just that physical line.
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_blkgoto.exe")))
+    assert src == (
+        '10 A$ = "X"\n'
+        '20 IF A$ <> "Q" THEN\n'
+        '  PRINT "A"\n'
+        '22 PRINT "B"\n'
+        "END IF\n"
+        '30 IF A$ = "X" THEN 50\n'
+        "40 END\n"
+        '50 A$ = "Q"\n'
+        "60 GOTO 22\n"
+    )
+
+
 def test_decode_t1_miderr():
     # 3-arg MID$ decode clobbered DecodeState.start (`state.start = state.bx`
     # instead of a local), so any program that later needs the error-trap
@@ -767,6 +808,8 @@ if __name__ == "__main__":
     test_decode_t1_strgodo()
     test_decode_t1_ifgoto()
     test_decode_t1_addpool()
+    test_decode_t1_bigjmp()
+    test_decode_t1_blkgoto()
     test_decode_t1_miderr()
     test_decode_t1_strgoto()
     test_decode_t1_orchain()

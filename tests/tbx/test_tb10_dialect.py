@@ -39,6 +39,8 @@ PAIRS = [
     "t1_orchain",
     "t1_strgodo",
     "t1_strgoto",
+    "t1_bigjmp",
+    "t1_blkgoto",
     "t1_lpusing",
 ]
 

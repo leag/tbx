@@ -325,6 +325,28 @@ def _apply_exit_folds(stmts, addrs, exit_folds):
             i += 1
 
 
+def _fold_body_ifgotos(body, end_addr):
+    """An `IF c THEN <line>` followed by MORE statements on the same line is
+    not spellable source (TB raises Error 431, end-of-line expected, after
+    `THEN <line>`); when such an IfGoto inside an inline-IF body targets the
+    body's own END address, the source was a nested inline IF whose skip-jcc
+    merged with the enclosing close -- negate the compare and nest the tail
+    (witnessed t1_nestif / wild vhfprop.exe). Other targets are left alone
+    (fail-loud at recompile until a fixture witnesses them)."""
+    for j, b in enumerate(body[:-1]):
+        if (
+            isinstance(b, ir.IfGoto)
+            and b.target == ("addr", end_addr)
+            and isinstance(b.cond, ir.RelOp)
+        ):
+            tail = _fold_body_ifgotos(body[j + 1 :], end_addr)
+            c = b.cond
+            return body[:j] + (
+                ir.IfInline(ir.RelOp(_NEGATE_REL[c.op], c.lhs, c.rhs), tail),
+            )
+    return body
+
+
 def _jump_targets(stmts) -> frozenset[int]:
     """Every address referenced as a jump target anywhere in the statement
     tree (Goto/IfGoto/Gosub, ON GOTO/GOSUB lists, ON ERROR/RESUME/ON-trap),
@@ -354,7 +376,7 @@ def _jump_targets(stmts) -> frozenset[int]:
     return frozenset(out)
 
 
-def _fold_if(stmts, addrs, bound=None, targets=frozenset()):
+def _fold_if(stmts, addrs, bound=None, targets=frozenset(), stmt_addr=None):
     """Fold multi-line IF blocks, address-level (before target resolution).
     A block IF/ELSE is an IfInline whose body ends in a forward Goto past its own start
     (the else-skip): strip it, take the statements up to the Goto target as the ELSE
@@ -397,6 +419,7 @@ def _fold_if(stmts, addrs, bound=None, targets=frozenset()):
                     addrs[i + 1 : end_idx],
                     bound=end,
                     targets=targets,
+                    stmt_addr=stmt_addr,
                 )
                 if len(else_s) == 1 and isinstance(else_s[0], ir.IfBlock):
                     arms.extend(else_s[0].arms)  # ELSEIF flatten
@@ -407,7 +430,17 @@ def _fold_if(stmts, addrs, bound=None, targets=frozenset()):
                 out_a.append(a)
                 i = end_idx
                 continue
-        if isinstance(s, ir.IfInline) and not _inline_safe(s.body):
+        if isinstance(s, ir.IfInline) and (
+            not _inline_safe(s.body)
+            or (
+                stmt_addr is not None
+                and any(stmt_addr.get(id(b)) in targets for b in s.body)
+            )
+        ):
+            # Second leg: a body statement is a jump target -- the source was
+            # a block IF with a NUMBERED interior line jumped into from
+            # outside (witnessed t1_blkgoto / wild inv87.exe); the block form
+            # lets emit0 number that physical line (ir.BodyLine).
             out_s.append(ir.IfBlock(((s.cond, _fold_body(s.body)),), None))
             out_a.append(a)
             i += 1
@@ -490,12 +523,24 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
     index: dict[Any, Any] = {a: i for i, a in enumerate(addrs) if a is not None}
     if stmt_addr:
         for i, s in enumerate(stmts):
-            body = (
-                s.body
-                if isinstance(s, ir.SubDef)
-                or (isinstance(s, ir.DefFn) and s.is_block)
-                else ()
-            )
+            if isinstance(s, ir.IfBlock):
+                # A single-arm block IF's interior is addressable when the
+                # source numbered the line (t1_blkgoto): phys k+1 counts from
+                # the IF header exactly like a SUB body counts from SUB.
+                # Multi-arm/ELSE interiors are unwitnessed -- their targets
+                # stay unresolved and raise below.
+                body = (
+                    s.arms[0][1]
+                    if len(s.arms) == 1 and s.else_body is None
+                    else ()
+                )
+            else:
+                body = (
+                    s.body
+                    if isinstance(s, ir.SubDef)
+                    or (isinstance(s, ir.DefFn) and s.is_block)
+                    else ()
+                )
             multi = False
             for k, b in enumerate(body):
                 a = stmt_addr.get(id(b))

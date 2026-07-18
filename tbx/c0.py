@@ -641,6 +641,16 @@ class _Gen:
         if isinstance(s, (ir.Goto, ir.IfGoto, ir.Gosub)) and isinstance(
             s.target, ir.BodyLine
         ):
+            if isinstance(s, (ir.Goto, ir.IfGoto)) and isinstance(
+                self.stmts[s.target.stmt], ir.IfBlock
+            ):
+                # numbered line inside a main-level block IF (t1_blkgoto):
+                # C labels are function-scoped, so a plain goto lands inside
+                # the if body with the same semantics as TB
+                g = f"goto LB{s.target.stmt}_{s.target.phys};"
+                if isinstance(s, ir.IfGoto):
+                    return [f"if {self.cond(s.cond)} {{ {g} }}"]
+                return [g]
             raise _Unsupported("jump into a procedure body from main")
         if isinstance(s, ir.Goto):
             return [f"goto L{s.target};"]
@@ -730,6 +740,19 @@ class _Gen:
             for k, (cond, body) in enumerate(s.arms):
                 kw = "if" if k == 0 else "} else if"
                 lines.append(f"{kw} {self.cond(cond)} {{")
+                if (
+                    idx is not None
+                    and k == 0
+                    and any((idx, p) in self.body_labels for p in range(1, 99))
+                ):
+                    # a numbered interior line is jump-targeted (t1_blkgoto);
+                    # phys p = body statement p-1, single-arm only (the
+                    # decoder resolves BodyLine only for that shape)
+                    for p, b in enumerate(body, 1):
+                        if (idx, p) in self.body_labels:
+                            lines.append(f"LB{idx}_{p}:;")
+                        lines.extend(self.gen(b, loops, None))
+                    continue
                 lines.extend(self.gen_body(body, loops))
             if s.else_body is not None:
                 lines.append("} else {")

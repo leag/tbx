@@ -32,6 +32,7 @@ from tbx.decode0.layout import (
 from tbx.decode0.meta import Program, _meta_stmts, _toggles
 from tbx.decode0.lift import (
     _apply_exit_folds,
+    _fold_body_ifgotos,
     _fold_if,
     _is_for_header,
     _jump_targets,
@@ -463,7 +464,10 @@ def _finalize(state: DecodeState, addr) -> Program:
     # exit, then fold `IF c THEN <skip>` + EXIT into `IF negate(c) THEN EXIT`.
     _apply_exit_folds(state.stmts, state.addrs, state.exit_folds)
     state.stmts[:], state.addrs[:] = _fold_if(
-        state.stmts, state.addrs, targets=_jump_targets(state.stmts)
+        state.stmts,
+        state.addrs,
+        targets=_jump_targets(state.stmts),
+        stmt_addr=state.stmt_addr,
     )  # multi-line IF blocks (Task 3.3)
     fixed_lines = None
     trace_partial: dict[int, int] = {}
@@ -583,7 +587,12 @@ def _finalize(state: DecodeState, addr) -> Program:
             state.start,
             state.addrs,
             addr,
-            extra_offs={a + 4 - state.start for a in state.trace_tbl},
+            extra_offs={a + 4 - state.start for a in state.trace_tbl}
+            | {
+                a - state.start
+                for a in state.stmt_addr.values()
+                if a is not None
+            },  # folded-body statements have table entries too (wild vhfprop)
         )
         if fixed_lines is not None and table is not None:
             # TRON + a line-needing error construct (bare RESUME, ERL):
@@ -1075,6 +1084,12 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             # skips it jumps to the LOOP back-edge (this jmps' addr). Fold at epilogue.
             if nxt is not None:
                 state.exit_folds.append((ir.ExitLoop(), addr, nxt[0]))
+        elif op[2] < addr and op[2] in state.stmt_addr.values():
+            # short GOTO to a NUMBERED line inside an already-folded block-IF
+            # body (TB allows jumping into a block interior when the interior
+            # line carries a number -- witnessed t1_blkgoto / wild inv87.exe);
+            # resolves to ir.BodyLine at finalize
+            state.put(ir.Goto(("addr", op[2])), state.cur)
         else:
             raise ValueError(f"unhandled jmp short at {addr:#x}")
         state.cur = None
@@ -1342,6 +1357,9 @@ def decode_user_code(exe: bytes) -> list[Any]:
             for st, ad in zip(body, state.addrs[fr["idx"] :]):
                 if ad is not None:  # retain leaf/body addrs before they drop
                     state.stmt_addr[id(st)] = ad  # (the fold discards addrs[fr.idx:])
+            body = _fold_body_ifgotos(body, fr["target"])  # AFTER the addr
+            # retention: the fold nests the tail statements, and their (and the
+            # consumed IfGoto's) addrs must stay visible to the line table
             del state.stmts[fr["idx"] :], state.addrs[fr["idx"] :]
             state.stmts.append(ir.IfInline(fr["cond"], body))
             state.addrs.append(fr["start"])
