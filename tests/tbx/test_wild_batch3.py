@@ -469,6 +469,25 @@ def test_decode_t1_addpool():
     )
 
 
+def test_decode_t1_pcomma2():
+    # PRINT commas LEADING the items (`PRINT ,,X`) and doubled (`PRINT A,,B`
+    # skips a zone) -- wild schart.exe; ir.Print.commas migrated from
+    # items-aligned bools to gap-aligned counts (len(items)+1 slots). The
+    # trailing-comma form `PRINT A$,,` merges with the following statement's
+    # items (identical bytes), so it canonicalizes to the merged spelling.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_pcomma2.exe"))
+    assert prog[2] == ir.Print(
+        (ir.Var("A$"), ir.Var("B$")), commas=(0, 2, 0)
+    )
+    assert prog[3] == ir.Print((ir.Var("A$"),), commas=(2, 0))
+    assert emit0.emit(prog) == (
+        '10 A$ = "A"\n20 B$ = "B"\n30 PRINT A$,, B$\n'
+        '40 PRINT ,, A$\n50 PRINT A$,, B$\n60 END\n'
+    )
+
+
 def test_decode_t1_bigjmp():
     # GOTO/GOSUB spanning more than 32KB of code wrap around the 64KB code
     # segment (rel16 is signed; wild inv87.exe jumps +53KB early on): the
@@ -598,7 +617,7 @@ def test_decode_t1_fileint():
     prog = decode0.decode_user_code(_exe("t1_fileint.exe"))
     assert prog[4] == ir.InputFile(1, (ir.Var("A%"), ir.Var("B%")))
     assert prog[1] == ir.Print(
-        (ir.Lit(5), ir.Lit(7)), newline=True, file=1, commas=(True, False)
+        (ir.Lit(5), ir.Lit(7)), newline=True, file=1, commas=(0, 1, 0)
     )
     assert emit0.emit(prog) == (
         '10 OPEN "O",#1,"T.DAT"\n'
@@ -808,6 +827,7 @@ if __name__ == "__main__":
     test_decode_t1_strgodo()
     test_decode_t1_ifgoto()
     test_decode_t1_addpool()
+    test_decode_t1_pcomma2()
     test_decode_t1_bigjmp()
     test_decode_t1_blkgoto()
     test_decode_t1_miderr()

@@ -43,11 +43,11 @@ def test_decode_t1_pcomma():
     prog = decode0.decode_user_code(_exe("t1_pcomma.exe"))
     assert prog[1] == ir.Print(
         (ir.StrLit("X"), ir.StrLit("Y"), ir.Var("A$")),
-        commas=(True, True, False),
+        commas=(0, 1, 1, 0),
     )
-    assert prog[2] == ir.Print((L(1), L(2)), commas=(True, False))
+    assert prog[2] == ir.Print((L(1), L(2)), commas=(0, 1, 0))
     assert prog[3] == ir.Print(
-        (ir.StrLit("Z"), ir.StrLit("W")), commas=(True, False)
+        (ir.StrLit("Z"), ir.StrLit("W")), commas=(0, 1, 0)
     )
 
 

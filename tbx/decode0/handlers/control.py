@@ -146,19 +146,23 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             state.cur = None
             state.k += 2
             return True
-        if vec in (0xC1, 0xC3):  # PRINT comma: zone-advance separator after an
-            # item (C1 console / C3 file, witnessed t1_pcomma / t1_fileint)
+        if vec in (0xC1, 0xC3):  # PRINT comma: zone-advance separator (C1
+            # console / C3 file, witnessed t1_pcomma / t1_fileint); commas may
+            # LEAD the items (`PRINT ,,X`) and repeat (`PRINT A,,B` skips a
+            # zone) -- witnessed t1_pcomma2 / wild schart.exe
             want_file = vec == 0xC3
+            if state.pend_print is None and not want_file:
+                state.pend_print = {"items": [], "file": None, "start": state.cur}
             if (
                 state.pend_print is None
                 or state.pend_print.get("mode")
-                or not state.pend_print["items"]
                 or (state.pend_print["file"] is not None) != want_file
+                or (want_file and not state.pend_print["items"])
             ):
                 raise ValueError(f"comma separator without print item at {addr:#x}")
-            state.pend_print.setdefault("commas", set()).add(
-                len(state.pend_print["items"]) - 1
-            )
+            cs = state.pend_print.setdefault("commas", {})
+            gap = len(state.pend_print["items"])
+            cs[gap] = cs.get(gap, 0) + 1
             state.cur = None
             state.k += 1
             return True

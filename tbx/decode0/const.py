@@ -181,13 +181,14 @@ MARKER = b"\x00\x80\x16\x00"  # always immediately precedes the const pool
 ARR_BLOCK = 0x36  # per-array DGROUP bookkeeping block size
 
 
-def _pp_commas(pp) -> tuple[bool, ...] | None:
-    """items-aligned comma-separator flags for a pend_print dict, or None
-    when every separator is the default ';' (see ir.Print.commas)."""
+def _pp_commas(pp) -> tuple[int, ...] | None:
+    """gap-aligned comma counts for a pend_print dict (len(items)+1 slots:
+    slot 0 = commas before the first item, slot i+1 = commas after item i),
+    or None when every separator is the default ';' (see ir.Print.commas)."""
     cs = pp.get("commas")
     if not cs:
         return None
-    return tuple(i in cs for i in range(len(pp["items"])))
+    return tuple(cs.get(i, 0) for i in range(len(pp["items"]) + 1))
 
 
 _FREAD = ("fread",)  # sentinel: an INPUT#-parsed value awaiting its

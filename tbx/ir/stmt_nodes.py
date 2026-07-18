@@ -199,9 +199,11 @@ class Print:
     items: Any  # tuple[StrLit | numeric Expr, ...]; a single item is normalized below
     newline: bool = True
     file: object = None  # int | None
-    # zone-advance separators (INT C1, witnessed t1_pcomma): None = all ';',
-    # else an items-aligned tuple[bool] -- True = a ',' follows item i (the
-    # last flag is the trailing separator when newline=False)
+    # zone-advance separators (INT C1, witnessed t1_pcomma/t1_pcomma2):
+    # None = all ';', else a gap-aligned tuple[int] of len(items)+1 comma
+    # counts -- slot 0 leads the first item (`PRINT ,,X`), slot i+1 follows
+    # item i (2 = a skipped zone), and the last slot is the trailing
+    # separator when newline=False
     commas: Any = None
 
     def __post_init__(self):

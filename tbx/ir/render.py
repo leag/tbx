@@ -272,17 +272,19 @@ def _us_output(s) -> str | None:
     """Render PRINT family, sound and misc actions; None if `s` is not one of them."""
     if isinstance(s, Print):
         txt = "PRINT" + (f" #{s.file}," if s.file is not None else "")
-        cs = s.commas or (False,) * len(s.items)
+        cs = s.commas or (0,) * (len(s.items) + 1)
         if s.items:
             parts = []
+            if cs[0]:
+                parts.append("," * cs[0] + " ")
             for i, item in enumerate(s.items):
                 parts.append(unparse(item))
                 if i < len(s.items) - 1:
-                    parts.append(", " if cs[i] else "; ")
+                    parts.append("," * cs[i + 1] + " " if cs[i + 1] else "; ")
             txt += " " + "".join(parts)
         if s.newline:
             return txt
-        return txt + ("," if s.items and cs[-1] else ";")
+        return txt + ("," * cs[-1] if s.items and cs[-1] else ";")
     if isinstance(s, PrintUsing):
         kw = "LPRINT" if s.lprint else "PRINT"
         pre = f"#{s.file}, " if s.file is not None else ""

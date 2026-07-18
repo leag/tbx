@@ -563,6 +563,8 @@ class _Gen:
         out = []
         if s.file is not None:
             out.append(f"tb_out = tb_file({s.file}); tb_ch = {s.file};")
+        cs = s.commas or (0,) * (len(s.items) + 1)
+        out.extend(["tb_zone();"] * cs[0])
         for i, item in enumerate(s.items):
             if isinstance(item, ir.Call) and item.name in ("TAB", "SPC"):
                 out.append(f"tb_{item.name.lower()}({self.num(item.args[0])});")
@@ -570,8 +572,7 @@ class _Gen:
                 out.append(f"tb_pss({self.s(item)});")
             else:
                 out.append(f"tb_pn({self.num(item)});")
-            if s.commas and s.commas[i]:
-                out.append("tb_zone();")
+            out.extend(["tb_zone();"] * cs[i + 1])
         if s.newline:
             out.append("tb_nl();")
         if s.file is not None:
