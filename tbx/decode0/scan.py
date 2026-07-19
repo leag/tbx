@@ -345,6 +345,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "addm_ax", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4  # e.g. `X% = X% + <expr>` (disp16 sibling of addm_ax_bp,
         return p  # witnessed q_addimm)
+    if b == 0x29 and exe[p + 1] == 0x06:  # sub [disp16], ax: int combine-store,
+        ops.append((p, "subm_ax", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # e.g. `X% = X% - <expr>` (subtract sibling of addm_ax;
+        return p  # wild number.exe)
     if b == 0x89 and exe[p + 1] == 0x46:  # mov [bp+disp8], ax: LOCAL int store
         ops.append((p, "movm_ax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
         p += 3  # (witnessed t1_local2)
@@ -513,9 +517,17 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "far_cmpax_si"))  # relational against a by-ref param
         p += 3  # (witnessed t1_cmpfar)
         return p
+    if b == 0x3B and exe[p + 1] == 0x04:  # cmp ax, [si]: relational against a
+        ops.append((p, "cmpax_si"))  # computed static int-array element
+        p += 2  # (wild number.exe)
+        return p
     if b == 0x26 and exe[p + 1] == 0x03 and exe[p + 2] == 0x04:  # add ax, es:[si]:
         ops.append((p, "far_addax_si"))  # arithmetic fold of a by-ref int
         p += 3  # param, e.g. `N% + 1` (witnessed t1_local2)
+        return p
+    if b == 0x03 and exe[p + 1] == 0x04:  # add ax, [si]: arithmetic fold of a
+        ops.append((p, "addax_si"))  # computed static int-array element
+        p += 2  # e.g. `ARRAY%(i) + 1` (wild number.exe)
         return p
     if b == 0x26 and exe[p + 1] == 0xF7 and exe[p + 2] == 0x2C:  # imul word es:[si]:
         ops.append((p, "far_imulax_si"))  # multiplicative fold of a by-ref

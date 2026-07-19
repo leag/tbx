@@ -46,6 +46,8 @@ PAIRS = [
     "t1_doerr",
     "t1_arrwrite",
     "t1_arrread",
+    "t1_arrcmp",
+    "t1_subm",
     "t1_pcomma2",
     "t1_strgodo",
     "t1_strgoto",

@@ -376,15 +376,22 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         state.k += 1
         return True
     if kind == "shlsi":
-        # `shl si; shl si[; shl si]; (moves_m blk | addsi base); <terminal>` --
-        # the optional third shl appears for 64-bit (x8 stride) elements.
-        if state.k + 3 >= len(state.ops) or state.ops[state.k + 1][1] != "shlsi":
+        # `shl si[; shl si[; shl si]]; (moves_m blk | addsi base); <terminal>` --
+        # one shl for a 2-byte (INTEGER) element stride (x2, wild number.exe:
+        # the single-shl case had no witness until now, so the gate below
+        # unconditionally required a second shl), two for 4-byte (single/
+        # string-descriptor), the optional third for 8-byte (double).
+        if state.k + 1 >= len(state.ops):
             raise ValueError(f"shl si outside an element access at {addr:#x}")
-        ao = (
-            3
-            if state.k + 3 < len(state.ops) and state.ops[state.k + 2][1] == "shlsi"
-            else 2
-        )
+        if state.ops[state.k + 1][1] == "shlsi":
+            ao = (
+                3
+                if state.k + 2 < len(state.ops)
+                and state.ops[state.k + 2][1] == "shlsi"
+                else 2
+            )
+        else:
+            ao = 1
         if state.k + ao + 1 >= len(state.ops) or state.ops[state.k + ao][1] not in (
             "moves_m",
             "addsi",
@@ -498,6 +505,53 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             # sibling of movm_ax_si above -- `X% = ARRAY%(i)` via a computed
             # index (wild number.exe), e.g. as an expression's first term.
             state.ax = ref
+        elif sik[1] == pre + "addax_si":
+            # add ax, [si] (near) / add ax, es:[si] (far): arithmetic fold
+            # of a computed array element (`ARRAY%(i) + <expr>`, wild
+            # number.exe), mem = the array ref (left operand).
+            state.ax = ir.BinOp("+", ref, _rgrp("+", state.ax))
+        elif sik[1] == pre + "cmpax_si":
+            # cmp ax, [si] (near) / cmp ax, es:[si] (far): relational against
+            # a computed array element (`IF ARRAY%(i) = ... THEN ...`, wild
+            # number.exe) -- same (mem, ax) REVERSED-flag orientation as
+            # cmpax_m, mem = the array ref. Only the IF forms are witnessed
+            # (jcc+skip-jmp here; a bare direct jcc follows the same
+            # cmpax_m-derived map) -- the "materialize as a value" form
+            # (movax 0xFFFF) has no witness for a computed array element and
+            # is left to the final raise below.
+            k2 = state.k + ao + 2
+            nxt = state.ops[k2] if k2 < len(state.ops) else None
+            if nxt is not None and nxt[1] == "jcc":
+                cc = nxt[2]
+                j2 = state.ops[k2 + 1] if k2 + 1 < len(state.ops) else None
+                if j2 is not None and j2[1] == "jmp" and nxt[3] == j2[0] + 3:
+                    skiprel = {
+                        0x74: "<>", 0x75: "=", 0x7F: ">=",
+                        0x7D: ">", 0x7C: "<=", 0x7E: "<",
+                    }
+                    if cc not in skiprel:
+                        raise ValueError(f"cmpax_si IF jcc {cc:02x} at {addr:#x}")
+                    state.put(
+                        ir.IfGoto(ir.RelOp(skiprel[cc], ref, state.ax), ("addr", j2[2])),
+                        state.cur,
+                    )
+                    state.ax = None
+                    state.cur = None
+                    state.k = k2 + 2
+                    return True
+                if cc in _JCC_RELOP_VALUE:
+                    state.put(
+                        ir.IfGoto(
+                            ir.RelOp(_JCC_RELOP_VALUE[cc], ref, state.ax),
+                            ("addr", nxt[3]),
+                        ),
+                        state.cur,
+                    )
+                    state.ax = None
+                    state.cur = None
+                    state.k = k2 + 1
+                    return True
+            raise ValueError(f"cmpax_si without an IF jcc consumer at {addr:#x}")
         else:
             raise ValueError(f"element access: unexpected op {sik[1]} at {sik[0]:#x}")
         state.k += ao + 2

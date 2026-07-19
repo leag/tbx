@@ -66,12 +66,24 @@ Assign(target=ArrayRef(name='V1', indices=(Lit(value=2),)), value=Lit(value=6))
 Assign(target=Var(name='A'), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=1),)), rhs=ArrayRef(name='V1', indices=(Lit(value=2),))))
 End()
 
-## t1_arrread
-Dim(name='V0', bounds=(10,), also=())
-Assign(target=ArrayRef(name='V0', indices=(Lit(value=3),)), value=Lit(value=42))
+## t1_arrcmp
+Dim(name='V0%', bounds=(10,), also=())
 Assign(target=Var(name='A'), value=Lit(value=3))
-Assign(target=Var(name='B'), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Var(name='A'),)), rhs=Lit(value=1)))
-Print(items=(Var(name='B'),), newline=True, file=None, commas=None)
+Assign(target=ArrayRef(name='V0%', indices=(Var(name='A'),)), value=Lit(value=42))
+Assign(target=Var(name='B'), value=Lit(value=3))
+IfGoto(cond=RelOp(op='<>', lhs=ArrayRef(name='V0%', indices=(Var(name='B'),)), rhs=Lit(value=42)), target=7)
+Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None)
+Goto(target=8)
+Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None)
+End()
+
+## t1_arrread
+Dim(name='V0%', bounds=(10,), also=())
+Assign(target=Var(name='A'), value=Lit(value=3))
+Assign(target=ArrayRef(name='V0%', indices=(Var(name='A'),)), value=Lit(value=42))
+Assign(target=Var(name='B'), value=Lit(value=3))
+Assign(target=Var(name='C%'), value=BinOp(op='+', lhs=ArrayRef(name='V0%', indices=(Var(name='B'),)), rhs=Lit(value=1)))
+Print(items=(Var(name='C%'),), newline=True, file=None, commas=None)
 End()
 
 ## t1_arrv
@@ -82,10 +94,11 @@ Assign(target=Var(name='B'), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices
 End()
 
 ## t1_arrwrite
-Dim(name='V0', bounds=(10,), also=())
+Dim(name='V0%', bounds=(10,), also=())
 Assign(target=Var(name='A'), value=Lit(value=3))
-Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=Lit(value=42))
-Print(items=(ArrayRef(name='V0', indices=(Lit(value=3),)),), newline=True, file=None, commas=None)
+Assign(target=ArrayRef(name='V0%', indices=(Var(name='A'),)), value=Lit(value=42))
+Assign(target=Var(name='B'), value=Lit(value=3))
+Print(items=(ArrayRef(name='V0%', indices=(Var(name='B'),)),), newline=True, file=None, commas=None)
 End()
 
 ## t1_bandstr
@@ -4949,6 +4962,13 @@ SubDef(name='SUB1', params=(), body=(Gosub(target=BodyLine(stmt=0, phys=3)), Exi
 CallStmt(name='SUB1', args=())
 End()
 
+## t1_subm
+Assign(target=Var(name='A%'), value=Lit(value=100))
+Assign(target=Var(name='B%'), value=Lit(value=5))
+Assign(target=Var(name='A%'), value=BinOp(op='-', lhs=Var(name='A%'), rhs=Var(name='B%')))
+Print(items=(Var(name='A%'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_subsh
 SubDef(name='SUB1', params=(), body=(Shared(names=('A',)), Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1))), Print(items=(StrLit(value='S'), Var(name='A')), newline=True, file=None, commas=None)))
 Assign(target=Var(name='A'), value=Lit(value=5))
@@ -5301,12 +5321,24 @@ Assign(target=ArrayRef(name='V1', indices=(Lit(value=2),)), value=Lit(value=6))
 Assign(target=Var(name='A'), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=1),)), rhs=ArrayRef(name='V1', indices=(Lit(value=2),))))
 End()
 
-## v10_t1_arrread
-Dim(name='V0', bounds=(10,), also=())
-Assign(target=ArrayRef(name='V0', indices=(Lit(value=3),)), value=Lit(value=42))
+## v10_t1_arrcmp
+Dim(name='V0%', bounds=(10,), also=())
 Assign(target=Var(name='A'), value=Lit(value=3))
-Assign(target=Var(name='B'), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Var(name='A'),)), rhs=Lit(value=1)))
-Print(items=(Var(name='B'),), newline=True, file=None, commas=None)
+Assign(target=ArrayRef(name='V0%', indices=(Var(name='A'),)), value=Lit(value=42))
+Assign(target=Var(name='B'), value=Lit(value=3))
+IfGoto(cond=RelOp(op='<>', lhs=ArrayRef(name='V0%', indices=(Var(name='B'),)), rhs=Lit(value=42)), target=7)
+Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None)
+Goto(target=8)
+Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None)
+End()
+
+## v10_t1_arrread
+Dim(name='V0%', bounds=(10,), also=())
+Assign(target=Var(name='A'), value=Lit(value=3))
+Assign(target=ArrayRef(name='V0%', indices=(Var(name='A'),)), value=Lit(value=42))
+Assign(target=Var(name='B'), value=Lit(value=3))
+Assign(target=Var(name='C%'), value=BinOp(op='+', lhs=ArrayRef(name='V0%', indices=(Var(name='B'),)), rhs=Lit(value=1)))
+Print(items=(Var(name='C%'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_arrv
@@ -5317,10 +5349,11 @@ Assign(target=Var(name='B'), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices
 End()
 
 ## v10_t1_arrwrite
-Dim(name='V0', bounds=(10,), also=())
+Dim(name='V0%', bounds=(10,), also=())
 Assign(target=Var(name='A'), value=Lit(value=3))
-Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=Lit(value=42))
-Print(items=(ArrayRef(name='V0', indices=(Lit(value=3),)),), newline=True, file=None, commas=None)
+Assign(target=ArrayRef(name='V0%', indices=(Var(name='A'),)), value=Lit(value=42))
+Assign(target=Var(name='B'), value=Lit(value=3))
+Print(items=(ArrayRef(name='V0%', indices=(Var(name='B'),)),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_bandstr
@@ -9822,6 +9855,13 @@ Print(items=(Call(name='MID$', args=(Var(name='A$'), Lit(value=2), Lit(value=3))
 Print(items=(Call(name='INSTR', args=(Var(name='A$'), StrLit(value='l'))),), newline=True, file=None, commas=None)
 Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None, commas=None)
 Print(items=(Call(name='STR$', args=(Lit(value=42),)),), newline=True, file=None, commas=None)
+End()
+
+## v10_t1_subm
+Assign(target=Var(name='A%'), value=Lit(value=100))
+Assign(target=Var(name='B%'), value=Lit(value=5))
+Assign(target=Var(name='A%'), value=BinOp(op='-', lhs=Var(name='A%'), rhs=Var(name='B%')))
+Print(items=(Var(name='A%'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_svaridx

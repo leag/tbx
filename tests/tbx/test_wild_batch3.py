@@ -833,14 +833,25 @@ def test_decode_t1_arrwrite():
     # all. New op `movm_ax_si`; the array-index dispatch's existing
     # `pre + "..."` far/near naming convention picks up the by-ref-param
     # FAR form for free once the near form is wired in.
+    #
+    # A SEPARATE, more fundamental gap surfaced building this fixture: an
+    # earlier version used a default-typed (SINGLE) array, which needs TWO
+    # `shl si,1` for its 4-byte stride -- the shlsi handler's own gate
+    # unconditionally required a second shl, so it never actually reached
+    # this new code (a 2-byte INTEGER element's computed index needs only
+    # ONE shl). The gate now accepts 1, 2, or 3 consecutive shl si
+    # depending on element size, so this fixture (and t1_arrread) use a
+    # genuine INTEGER array with an all-computed-index read/write to
+    # actually exercise the new near-si ops end to end.
     from tbx import decode0, emit0, ir
 
     prog = decode0.decode_user_code(_exe("t1_arrwrite.exe"))
     assert prog[2] == ir.Assign(
-        ir.ArrayRef("V0", (ir.Var("A"),)), ir.Lit(42)
+        ir.ArrayRef("V0%", (ir.Var("A"),)), ir.Lit(42)
     )
     assert emit0.emit(prog) == (
-        "10 DIM V0(10)\n20 A = 3\n30 V0(A) = 42\n40 PRINT V0(3)\n50 END\n"
+        "10 DIM V0%(10)\n20 A = 3\n30 V0%(A) = 42\n40 B = 3\n"
+        "50 PRINT V0%(B)\n60 END\n"
     )
 
 
@@ -849,17 +860,56 @@ def test_decode_t1_arrread():
     # prefix; `26 8b 04` is the by-ref-param FAR sibling, already scanned
     # as far_movax_si) -- wild number.exe advances here right after the
     # write fix. New op `movax_si`; ax becomes the array-element value,
-    # e.g. as an expression's first term.
+    # e.g. as an expression's first term. The `+ 1` also needed a THIRD
+    # new op, `addax_si` (`add ax, [si]`, near sibling of far_addax_si) --
+    # arith.py's array-index dispatch didn't have an arithmetic-fold
+    # branch for a computed element at all before this.
     from tbx import decode0, emit0, ir
 
     prog = decode0.decode_user_code(_exe("t1_arrread.exe"))
-    assert prog[3] == ir.Assign(
-        ir.Var("B"),
-        ir.BinOp("+", ir.ArrayRef("V0", (ir.Var("A"),)), ir.Lit(1)),
+    assert prog[4] == ir.Assign(
+        ir.Var("C%"),
+        ir.BinOp("+", ir.ArrayRef("V0%", (ir.Var("B"),)), ir.Lit(1)),
     )
     assert emit0.emit(prog) == (
-        "10 DIM V0(10)\n20 V0(3) = 42\n30 A = 3\n40 B = V0(A) + 1\n"
-        "50 PRINT B\n60 END\n"
+        "10 DIM V0%(10)\n20 A = 3\n30 V0%(A) = 42\n40 B = 3\n"
+        "50 C% = V0%(B) + 1\n60 PRINT C%\n70 END\n"
+    )
+
+
+def test_decode_t1_arrcmp():
+    # Companion to t1_arrwrite/t1_arrread: the relational half. `cmp ax,
+    # [si]` (no ES prefix; `26 3b 04` is the by-ref-param FAR sibling,
+    # already scanned as far_cmpax_si) -- a FOURTH new op, `cmpax_si`,
+    # completing the computed-static-int-array-element family (wild
+    # number.exe). Same (mem, ax) reversed-flag orientation as cmpax_m;
+    # only the IF forms are witnessed (here: jcc+skip-jmp).
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_arrcmp.exe"))
+    assert prog[4] == ir.IfGoto(
+        ir.RelOp("<>", ir.ArrayRef("V0%", (ir.Var("B"),)), ir.Lit(42)), 7
+    )
+    assert emit0.emit(prog) == (
+        "10 DIM V0%(10)\n20 A = 3\n30 V0%(A) = 42\n40 B = 3\n"
+        '50 IF V0%(B) <> 42 THEN 80\n60 PRINT "YES"\n70 GOTO 90\n'
+        '80 PRINT "NO"\n90 END\n'
+    )
+
+
+def test_decode_t1_subm():
+    # `sub [disp16],ax` (byte 29 /6, wild number.exe at 0xb713) -- the
+    # subtract sibling of addm_ax's `add [disp16],ax` (byte 01 /6), for a
+    # compound `X% = X% - <expr>` where the store target coincides with
+    # the left operand. Same disp16-direct addressing, mirrored handler.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_subm.exe"))
+    assert prog[2] == ir.Assign(
+        ir.Var("A%"), ir.BinOp("-", ir.Var("A%"), ir.Var("B%"))
+    )
+    assert emit0.emit(prog) == (
+        "10 A% = 100\n20 B% = 5\n30 A% = A% - B%\n40 PRINT A%\n50 END\n"
     )
 
 
