@@ -214,6 +214,23 @@ intended, permanent change.
 
 ## Recently closed (this campaign, newest first)
 
+- **`DO...LOOP UNTIL/WHILE` on a bare numeric value** (2026-07-19): `or
+  ax,ax` testing a just-computed value's truthiness directly, no
+  preceding compare -- wild metric.exe, `DO: K$=INKEY$: LOOP UNTIL
+  LEN(K$)`. Shorter than `_lift_do_tail`'s usual template (which needs
+  an explicit compare to materialize -1/0 first); byte-exact confirmed
+  the explicit `LOOP UNTIL LEN(K$) <> 0` form compiles DIFFERENT bytes,
+  so the bare-vs-explicit distinction must be preserved, not
+  normalized. `ir.Loop.cond` can now hold a bare expression;
+  rename.py's `walk_cond`/render.py's `unparse_cond` needed a fallback
+  (both crashed loudly on the first attempt -- exactly the fail-loud
+  behavior wanted over a silent wrong render). Also added `SUB ...
+  INLINE` support (embedded raw machine code, Appendix C of the
+  handbook) at the user's request -- see the dedicated `$INLINE`
+  reference section below for the full story, including a false
+  positive the mechanism's safety check caught and fixed against
+  CVT2TB.EXE. Fixtures `t1_orax`/`v10_t1_orax`, `t1_inline`/
+  `v10_t1_inline`.
 - **`^` (exponentiation) under TB 1.0** (2026-07-19): dialect.py's own
   docstring predicted this ("TB 1.0 encodes ^ without an ED sub"; TB 1.1
   uses ED sub 3A/fpow). TB 1.0's actual mechanism is INT 3Eh
