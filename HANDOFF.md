@@ -1,12 +1,13 @@
 # Wild-corpus gap campaign — handoff
 
-Status as of 2026-07-19 (session gaps 46-59: line-table epic, nested
+Status as of 2026-07-19 (session gaps 46-60: line-table epic, nested
 block-IF, DO un-synthesis, computed-int-array element family, array-element
-SWAP (int + SINGLE), the modern `OPEN...FOR mode AS #n` syntax, LOF, and
-file-channel LINE INPUT), branch `claude/claude-md-docs-mr8ssz`.
-Standing instruction: close the most common decoder gap first, in frequency
-order, over the 84 wild PC-SIG Turbo Basic EXEs in `wild/hits/` (untracked,
-gitignored, copyrighted shareware — **never commit them**).
+SWAP (int + SINGLE), the modern `OPEN...FOR mode AS #n` syntax, LOF,
+file-channel LINE INPUT, and mixed-type relational compare), branch
+`claude/claude-md-docs-mr8ssz`. Standing instruction: close the most common
+decoder gap first, in frequency order, over the 84 wild PC-SIG Turbo Basic
+EXEs in `wild/hits/` (untracked, gitignored, copyrighted shareware —
+**never commit them**).
 
 ## Where things stand
 
@@ -20,15 +21,16 @@ vhfprop.exe remains the only file blocked purely by the line-table epic
 
 **`OPEN file$ FOR mode AS #n` was the session's biggest single closure**:
 16 of 84 files were blocked on it alone (tied top of the tally at session
-start). Fresh tally (2026-07-19, after LOF/LINE INPUT#/array-SWAP/OPEN-FOR-AS):
+start). Fresh tally (2026-07-19, after LOF/LINE INPUT#/array-SWAP/
+OPEN-FOR-AS/icomp):
 
 | count | error | status |
 |---|---|---|
 | 6 | byte 90 | confirmed unwitnessable (prior sessions) — not actionable |
 | 5 | byte ea | ">64K" theory refuted (prior session) — undiagnosed, not just "big lift" |
-| 5 | FP esc=de modrm=1e | untouched |
-| 3 each | INT EC sub 4c; INT 8c; byte 89; byte 06 | sub 4c is NEW this session (see its section below, undiagnosed: file#+ax-int statement, LOCATE/WIDTH-file guesses both ruled out); INT 8c / byte 06 extensively probed in prior sessions, still undiagnosed |
-| 2 each | INT EC sub ac/42/38; INT ce (NEW, see section below); INT 3E selector 14; FP dc/04, da/1c; byte 8c/8b/1e; system cell 0x8a | mostly untouched |
+| 4 | byte 89 | INVESTIGATED THIS SESSION, NOT LANDED — see the gap section below. Root cause identified (generic `movrr`'s register table is missing `di`) but no minimal witnessed probe found after extensive trying; the fix was written, tested against 3 wild files (all advance cleanly), then REVERTED per the calibration rule since it has no fixture. Whoever picks this up next has a huge head start — the section below has the exact diff to reapply once a probe lands. |
+| 3 each | INT EC sub 4c; INT 8c; byte 06 | sub 4c undiagnosed (file#+ax-int statement, LOCATE/WIDTH-file guesses both ruled out); INT 8c / byte 06 extensively probed in prior sessions, still undiagnosed |
+| 2 each | INT EC sub ac/42/38/04; INT ce; INT 3E selector 14; FP dc/04, da/1c; byte f7/8c/8b/1e; system cell 0x8a | mostly untouched |
 | 1 | "codeless DO...LOOP WHILE/UNTIL ... unwitnessed" (vhfprop) | unchanged, see "vhfprop status" below |
 | singles | see scan output | untouched |
 
@@ -169,7 +171,15 @@ intended, permanent change.
    — the ONLY file left blocked by the line-table epic; the unconditional
    case is closed, this narrower WHILE/UNTIL case needs a witnessed
    non-DO source construct before it can be un-synthesized safely.
-2. **INT EC sub 4c (3 files, NEW)** — see the gap section below. Evidence:
+2. **Byte 89 / missing `di` spill register (4 files)** — see the gap
+   section below FIRST, before touching any code: the exact fix (4
+   small diffs) is already written out verbatim there, tested working
+   against 3 real wild files, but reverted for lack of a witnessed
+   probe. This is almost certainly the fastest actionable closure in
+   this list if a probe can be found — don't re-derive the mechanism,
+   just find the trigger construct (many candidates already ruled out,
+   see the section).
+3. **INT EC sub 4c (3 files, NEW)** — see the gap section below. Evidence:
    `[0060]=1 (file#); mov ax,<int var>; INT EC sub 4c` (raw 0x4A in TB
    1.0), immediately after an `X = LOF(1)` + `ON ERROR` pair, with no
    inline operand bytes on the INT itself. Ruled out: `WIDTH #n,cols`
@@ -178,30 +188,39 @@ intended, permanent change.
    range). Untried: `LOCK #n, range`/`UNLOCK #n, range`, `RENAME`-
    adjacent ops, a record-count/position statement tied to the
    just-computed LOF result.
-3. **INT ce (2 files, NEW)** — see the gap section below. Evidence:
+4. **INT ce (2 files, NEW)** — see the gap section below. Evidence:
    `LOCATE 20,1; CURSOR 1; bx=0; ax=7; INT CEh` (canonical, 2 raw bytes,
    no inline operand) in billadd.exe/file.exe. Ruled out: not the
    single-byte `INTO` (0xCE, no CD prefix) which is already handled
    separately. Untried: full probe sweep of screen-attribute/character-
    at-cursor statements with a fixed bx=0,ax=7 argument shape.
-4. **Byte ea (5 files)** — the ">64K" theory is refuted (see the gap
+5. **Byte ea (5 files)** — the ">64K" theory is refuted (see the gap
    section below); try reproducing elec87.exe's exact shape (a large
    FLAT string-comparison chain alongside whatever else that 155KB
    program does) before guessing further.
-5. **INT 8c (3 files)** — ON KEY GOSUB lead; a follow-on statement INSIDE
+6. **INT 8c (3 files)** — ON KEY GOSUB lead; a follow-on statement INSIDE
    the trap handler body (not more traps/toggles) is the next untried
    category.
-6. **Byte 06 / gap 19 (3 files)** — CGA snow-avoidance blitter; VIEW
+7. **Byte 06 / gap 19 (3 files)** — CGA snow-avoidance blitter; VIEW
    PRINT and PCOPY are ruled out (not real TB keywords); text GET/PUT is
    the remaining untried candidate.
-7. **The 2-tier** — re-tally after each closure; for FP gaps check the
+8. **The 2-tier** — re-tally after each closure; for FP gaps check the
    `[si]` FP table for missing rows first.
-8. Singles last, same workflow. Byte 90 (6 files) and INT cd (formerly
+9. Singles last, same workflow. Byte 90 (6 files) and INT cd (formerly
    16, now CLOSED — was `OPEN...FOR mode AS #n`, see Recently Closed)
    — byte 90 remains fully confirmed unwitnessable, skip it.
 
 ## Recently closed (this campaign, newest first)
 
+- **Mixed-type relational compare (int var vs FP-stack value)** (2026-07-19):
+  `IF A% > B THEN` where A% is INTEGER and B is SINGLE/DOUBLE forces
+  int->FP promotion for the comparison: B pushed via `fld`, then A%'s
+  slot compared via ESC DEh /3 (modrm 1E) -- the m16-int compare sibling
+  of D8h /3's already-handled `fcomp`, simply missing from the disp16
+  kind table. New `icomp` op resolves its memory operand (var slot or
+  pooled int literal) via the exact same expression already calibrated
+  for `ifold`/`ifold_n`. Closed wild grdscn/kinder/night/pfl/stat (all
+  advance further). Fixture `t1_icomp`/`v10_t1_icomp`.
 - **LINE INPUT #n, var$** (2026-07-19): the file-channel sibling of
   console LINE INPUT. `cd ec 66` (canonical; no operand -- unlike sub
   64's `cd ec 64 <prompt_desc> 40`, there's no prompt for a file read)
@@ -679,6 +698,155 @@ intended, permanent change.
   the walk cut at 16-aligned string positions. Fixture t1_poolrun.
 - Gap 12 INCR/DECR (`0e4f0f7`), gap 11 by-ref int param family (`3f1e23d`),
   gap 10 LOCAL (`2ef2b6d`), gap 9 double arrays — see git log.
+
+## Gap byte 89 / the missing `di` spill register (CVT2TB.EXE/catalog.exe/pfl.exe/process.exe), INVESTIGATED, NOT LANDED (2026-07-19)
+
+**Root cause is IDENTIFIED with high confidence** (not a guess -- grounded
+in real x86 semantics and confirmed byte-for-byte against 3 independent
+wild files), but no minimal witnessed probe was found after extensive
+trying, so per the calibration rule the fix was written, verified to
+advance real files, then **reverted** rather than committed unwitnessed.
+This section exists so the next session doesn't have to redo the
+byte-level archaeology.
+
+**The mechanism**: `decode0/scan.py`'s generic `mov reg,reg` recognizer
+(`_scan`, ~line 891) has:
+```python
+if b == 0x89 and (exe[p + 1] & 0xC0) == 0xC0:  # mov reg,reg: the far-index
+    rm, rg = exe[p + 1] & 7, (exe[p + 1] >> 3) & 7  # spill protocol
+    names = {0: "ax", 1: "cx", 3: "bx", 6: "si"}
+    if rm in names and rg in names:
+        ops.append((p, "movrr", names[rm], names[rg]))
+```
+`names` is missing `7: "di"`. Real x86 `MOV r/m16,r16` (opcode 0x89) is
+ONE uniform instruction format across all 8 general registers -- TB's
+existing "spill-protocol shuttle" mechanism (`movrr` in
+`handlers/arith.py`, already calibrated for ax/bx/cx/si as a symbolic
+4-register file in `DecodeState`) clearly also uses `di` as a 5th slot
+once register pressure runs deep enough, and this specific reg is simply
+unrecognized -- confirmed by disassembling ALL FOUR wild hits: `89 CF` /
+`89 D9` / `89 C3` (`mov di,cx; mov cx,bx; mov bx,ax`) in catalog.exe,
+process.exe, and pfl.exe, byte-identical across all three. (CVT2TB.EXE's
+own byte-89 hit, `89 E5` = `mov bp,sp`, is a COMPLETELY different,
+unrelated stack-frame-setup shape that only shares the tally bucket by
+having the same leading byte -- do not conflate the two when re-diagnosing.)
+
+**The fix** (written and tested this session, then reverted -- reapply
+verbatim once a probe lands):
+1. `scan.py`: `names = {0: "ax", 1: "cx", 3: "bx", 6: "si", 7: "di"}`.
+2. `core.py` `DecodeState`: add a `di: Any = None` field (next to `cx`
+   alphabetically) and `state.di = None` in the setup block (next to
+   `state.cx = None`).
+3. `handlers/arith.py`'s `movrr` dispatch: extend the `regs` dict/tuple
+   unpack to include `"di": state.di` (5-way instead of 4-way swap).
+4. `handlers/arith.py`'s `cmpax_m`'s `shuffled` detection (~line 202) is
+   ALSO too narrow -- it hard-codes the exact 2-op `movrr(ax,bx);
+   movbxax` shape. Generalize to a forward-scan loop that skips ANY run
+   of consecutive `movrr`/`movbxax` ops (they're pure register
+   bookkeeping; MOV never touches FLAGS, so any length is safe to skip)
+   and checks whether the op right after is `movax(0xFFFF)`:
+   ```python
+   j = state.k + 1
+   while j < len(state.ops) and state.ops[j][1] in ("movrr", "movbxax"):
+       j += 1
+   shuffled = (
+       j > state.k + 1
+       and j < len(state.ops)
+       and state.ops[j][1] == "movax"
+       and state.ops[j][2] == 0xFFFF
+   )
+   ```
+   Without this, even with `di` recognized at scan level, catalog.exe/
+   process.exe's DEEPER 4-op shuffle (`movrr(ax,bx); movrr(bx,cx);
+   movrr(cx,bx); movbxax`) still fails dispatch with "cmpax_m without a
+   value/IF consumer" since the original code only matched the simple
+   2-op case witnessed by the EXISTING `t1_andchain` fixture.
+
+With all 4 changes applied: pfl.exe advances CLEANLY past its byte-89
+stop into the ALREADY-KNOWN "unreferenced pooled string literals"
+gap (same open issue number.exe/pfl.exe both hit -- see below).
+catalog.exe/process.exe advance to a SECOND, deeper byte-89 occurrence
+(see "what's still missing" below). CVT2TB.EXE is unaffected (different
+root cause, still fails at the same address). All 2109 existing tests
+still pass -- this is a pure ADDITION to the vocabulary, nothing
+existing changes shape.
+
+**What's still missing even with the fix**: catalog.exe/process.exe's
+SECOND occurrence goes deeper still -- `mov [7Eh],di` (a NEW disp16-store
+form, `89 3E dispLO dispHI`, spilling `di` to a MEMORY scratch cell, not
+just another register) followed later by a matching `mov cx,[7Eh]`
+reload INTO A DIFFERENT REGISTER than it was stored from, plus a
+still-unrecognized `INT EDh sub 22`. This is a real, GENUINELY DEEPER
+mechanism (a memory-backed spill slot on top of the register one) that
+would need its own new `DecodeState` field (something like
+`mem_spill: dict[int, Any]`, populated on the disp16 store and consumed
+on reload) -- do not attempt this without first nailing the `di`
+register case's own probe, since the memory-spill case only ever
+appears ON TOP OF it in the evidence gathered so far.
+
+**Extensive probing did NOT find a witness** (all tried via
+`oracle.compile_bas`, dialect 1.1, none reproduced the `di` shuffle):
+- Plain 2-D and 3-D static-array element access (`DIM A%(5,5)` /
+  `DIM A%(3,3,3)`, computed and mixed literal/computed indices,
+  standalone and nested inside an `IF`, plain and with a `+1` sub-
+  expression in one index) -- ALL decode fine already via the EXISTING
+  single-`si`/`addsiax` accumulator machinery, no `di` needed at any
+  rank/nesting tried.
+- AND-chains of local INTEGER variables, 2/3/4 terms deep
+  (`IF A=1 AND B=2 AND C=3 [AND D=4] THEN`) -- ALL compile via the
+  `andaxbx` combinator (a DIFFERENT, simpler mechanism: right operand
+  evaluated first into bx, left into ax, `AND` them), NEVER via
+  `cmpax_m`'s shuffle-chain path, regardless of chain length.
+- The EXISTING `t1_andchain` fixture's own construct (`IF ERR = 25 AND
+  ERR = 27 AND ERR = 57 THEN`, using the special ERR pseudo-variable,
+  disp 0x74) extended to a 4th term -- still only the shallow 2-op
+  shuffle, no escalation to `di` even at 4 terms.
+- SUB by-ref scalar parameters: single param compared against a
+  literal inside a 2-3 term AND-chain (mixed with locals, mixed with
+  other by-ref params, all-by-ref); two by-ref params compared against
+  EACH OTHER. None reproduced `cmpax_m`'s shuffle at all (by-ref-vs-
+  by-ref comparisons take a yet-different path with no `cmpax_m`
+  either); the mixed local+by-ref 3-term chain reached a genuinely
+  DIFFERENT pre-existing gap instead (`cmpax_bp without an IF
+  jcc+skip-jmp`) without ever touching `di`.
+- A `FOR`-loop-plus-by-ref-parameter linear-search shape (closer to
+  what process.exe's SUB actually appears to implement, given the
+  `movax(65535)` "not found" sentinel initialization pattern in its
+  evidence) -- hit an unrelated gap (`unhandled byte 36`, an SS-segment
+  override prefix) before reaching anything relevant.
+- A deep, purely-arithmetic nested expression (`((A+B)*(C+D)) +
+  ((E+F)*(G+H))`, 8 variables) -- decodes fine with only 30 ops and NO
+  register spilling at all, consistent with the theory that pure
+  arithmetic nesting routes through the 8-deep x87 FP stack instead of
+  general-purpose registers, so expression depth alone is not the
+  trigger for `di`.
+
+**What the evidence actually suggests, unconfirmed**: pfl.exe's fuller
+trace (disassembled past the scan failure point with iced-x86 directly,
+bypassing `_scan`) shows something structurally stranger than a plain
+multi-dim subscript: after the `di`-shuffle, the code does `mov ax,[si]`
+(reading a VALUE from the array position just computed), THEN `mov
+si,di` (recovering an EARLIER-stashed partial index), THEN `imul word
+[456h]` (multiplying that JUST-READ ARRAY VALUE by a span constant) and
+accumulating it into `si`. That is: **the array element's own VALUE
+appears to feed into computing a FURTHER index** -- something shaped
+like `B%(A%(i) [* k], j)`, a value-dependent/indirect subscript, not a
+plain multi-dimensional one. This is a substantially different, rarer
+BASIC construct if the reading is right, and would explain why simple
+2-D/3-D probes never came close. catalog.exe/process.exe's shape, by
+contrast, looks like an AND-chain where at least one term is a by-ref
+SUB parameter, nested inside something ELSE that already has bx/cx live
+(the trace shows `movbxax`/`movax_m`/`movrr(cx,bx)` bookkeeping BEFORE
+the by-ref comparison even begins) -- i.e. the trigger is likely about
+REGISTER PRESSURE FROM SURROUNDING CONTEXT (a larger expression or an
+outer `andaxbx` whose right-hand operand is itself this whole by-ref
+comparison), not something reproducible from a short, flat snippet.
+Next probe ideas, untried: a genuinely NESTED `andaxbx`, e.g. `IF (X = 1
+AND Y = 2) AND Z% = 3 THEN` with explicit grouping, or a SUB with LOCAL
+variables ALREADY holding live boolean state from an earlier statement
+in the same body before the AND-chain begins; for pfl.exe, an explicit
+`B%(A%(I), J) = ...` (array value used directly as another array's
+index) compiled and diffed against the exact byte shape above.
 
 ## Gap INT EC sub 4c (be.exe/pwinst.exe/strpfind.exe), UNDIAGNOSED (2026-07-19)
 
