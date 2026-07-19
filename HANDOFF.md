@@ -855,6 +855,52 @@ in the same body before the AND-chain begins; for pfl.exe, an explicit
 `B%(A%(I), J) = ...` (array value used directly as another array's
 index) compiled and diffed against the exact byte shape above.
 
+**MAJOR LEAD, found later the same session, NOT YET CLOSED**: a 4th wild
+file, kinder.exe, was found to hit this SAME `di`-shuffle gap too (its
+own `unhandled byte 89` only surfaced after the unrelated `t1_bload0` fix
+let the file decode further) -- and its surrounding context is dramatically
+more tractable than catalog/process/pfl's: no by-ref params, no arrays,
+just `SCREEN(row,col)` (the ax-returning intrinsic, INT ED sub 0x42, row
+in bx/col in ax) combined with `\` (integer divide) and `MOD`. Probe
+`X = SCREEN(3,1) \ 16` reproduces kinder.exe's shape EXACTLY at the
+2-register level (`movrr(cx,bx); movbxax; ...; fn_screen; movrr(bx,cx);
+cwd; idivbx` -- cx alone preserves the divisor across the SCREEN() call's
+own bx/ax setup) -- confirming SCREEN()+`\`/MOD is unambiguously the
+right construct FAMILY. But kinder.exe's actual trace goes one level
+DEEPER (needs `di` too), and no variant tried this session reproduced
+that extra depth:
+- Two chained `SCREEN(...) \ SCREEN(...)` calls (right operand evaluated
+  first per TB's usual convention, saved to bx, then the left operand's
+  own SCREEN() call reuses cx as its OWN internal scratch) -- still only
+  2 registers deep, `di` untouched.
+- Using VARIABLES (loaded from a preceding `LOCATE R, C` whose R/C values
+  matched kinder.exe's literal 16/3) instead of literal SCREEN() args --
+  adds FP-bridge ops (fild/fistp/movaxmem) but does NOT add register
+  depth; still 2 levels.
+- A THREE-way chain, `SCREEN(a,b) \ SCREEN(c,d) \ SCREEN(e,f)` -- did NOT
+  reproduce `di` either; instead hit a completely different, new,
+  unrelated gap (`unhandled byte 93` at a different address) before
+  reaching anything relevant. Worth investigating on its own merits
+  later, but a distraction from this specific gap -- noted here only so
+  it isn't mistaken for progress on the `di` question if re-tried.
+
+Next probe idea, untried and HIGH-PRIORITY: kinder.exe's actual second
+occurrence used SCREEN(42,1) MOD 16 (not `\`) -- try MIXING `\` and MOD
+in the SAME compound expression (`SCREEN(a,b) \ 16 + SCREEN(c,d) MOD 16`
+or similar), or embedding the SCREEN()-div expression as ONE operand of
+a LARGER arithmetic expression whose OTHER operand is already using bx
+(so that "16" alone isn't the only thing needing cx-preservation -- an
+outer, already-in-progress computation would need the extra `di` slot).
+Also untried: SCREEN() with a 3rd argument (color-plane selector) --
+TB's `SCREEN(row,col,color)` 3-arg form might itself need an extra
+register beyond what the 2-arg form in every probe above used.
+(`W + SCREEN(3,1) \ 16` tried and RULED OUT for the "outer expression"
+idea specifically -- pure arithmetic wrapping routes the SCREEN/DIV
+result through the FP stack via a trailing `fold '+'`, never touching
+general registers at all, consistent with this session's earlier finding
+that plain arithmetic nesting doesn't pressure the register file the
+way comparisons/function-call argument evaluation does.)
+
 ## Gap INT EC sub 4c (be.exe/pwinst.exe/strpfind.exe), UNDIAGNOSED (2026-07-19)
 
 Surfaced fresh this session once the OPEN/LOF/LINE INPUT# gaps ahead of it
