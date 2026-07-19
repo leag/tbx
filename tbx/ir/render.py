@@ -439,9 +439,24 @@ def _us_console(s) -> str | None:
         return f"LINE INPUT {unparse(s.prompt)}; {unparse(s.var)}"
 
 
+_OPEN_MODE_KW = {
+    "O": "OUTPUT",
+    "I": "INPUT",
+    "A": "APPEND",
+    "R": "RANDOM",
+    "B": "BINARY",
+}  # `OPEN f$ FOR mode AS #n` keyword -> packed mode letter (witnessed q_openfor
+# and q_mode_{OUTPUT,INPUT,APPEND,RANDOM,BINARY})
+
+
 def _us_fileio(s) -> str | None:
     """Render file I/O statements; None if `s` is not one of them."""
     if isinstance(s, Open):
+        if s.for_as:
+            kw = _OPEN_MODE_KW.get(s.mode.value)
+            if kw is None or s.reclen is not None:
+                raise ValueError(f"unsupported FOR-AS OPEN mode {s.mode!r}")
+            return f"OPEN {unparse(s.file)} FOR {kw} AS #{s.num}"
         rl = "" if s.reclen is None else f",{unparse(s.reclen)}"
         return f"OPEN {unparse(s.mode)},#{s.num},{unparse(s.file)}{rl}"
     if isinstance(s, InputFile):

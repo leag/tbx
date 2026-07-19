@@ -651,6 +651,12 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
         ops.append((p, "fstsw"))
         p += 2
         return p
+    if vec == 0xCD:  # short-string constructor: builds a 1-char string desc
+        ops.append((p, "shortstr"))  # from the packed (char<<8 | len=1) word
+        p += 2  # just stored at the fixed scratch cell [002E] -- the
+        return p  # compile-time-known mode keyword of `OPEN f$ FOR mode
+        # AS #n` (OUTPUT/INPUT/APPEND/RANDOM/BINARY desugar to a 1-char
+        # mode string this way; wild nvginst.exe et al., probe q_openfor)
     if vec == 0x3D:  # emulated FWAIT (IDX% idiom)
         ops.append((p, "fwait"))
         p += 2

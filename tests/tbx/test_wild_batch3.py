@@ -960,6 +960,30 @@ def test_decode_t1_arrswapf():
     )
 
 
+def test_decode_t1_openfor():
+    # `OPEN file$ FOR mode AS #n` (wild nvginst.exe/photo.exe/pwinst.exe/
+    # pz.exe/tamstart.exe/wb.exe -- the single most common wild gap this
+    # session, 16 hits): the FOR-keyword desugars at compile time to a
+    # PACKED 1-char string (char<<8 | len=1) stored to a fixed scratch
+    # cell [002E], then a bare `INT CDh` (canonical; raw C7 in TB 1.0)
+    # materializes it -- a completely different encoding than the comma
+    # form's real pooled-literal mode string, and NOT byte-identical to
+    # it, so ir.Open carries a for_as flag and the emitter reproduces the
+    # original FOR-keyword spelling rather than normalizing to one form.
+    # Confirmed all 5 modes via oracle probes: OUTPUT/INPUT/APPEND/RANDOM/
+    # BINARY -> O/I/A/R/B.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_openfor.exe"))
+    assert prog[0] == ir.Open(
+        ir.StrLit("O"), 1, ir.StrLit("A.TXT"), None, for_as=True
+    )
+    assert emit0.emit(prog) == (
+        '10 OPEN "A.TXT" FOR OUTPUT AS #1\n20 PRINT #1, "HI"\n'
+        "30 CLOSE #1\n40 END\n"
+    )
+
+
 def test_decode_t1_fileint():
     # INPUT# with INTEGER targets (inv87/invoice at 0x1389c): the numeric
     # read leaves the value on the x87 stack as usual, but an int slot is

@@ -257,7 +257,7 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
         if isinstance(s, ir.LineInput):
             return ir.LineInput(s.prompt, walk(s.var))
         if isinstance(s, ir.Open):
-            return ir.Open(s.mode, s.num, walk(s.file), s.reclen)
+            return ir.Open(s.mode, s.num, walk(s.file), s.reclen, s.for_as)
         if isinstance(s, ir.InputFile):
             return ir.InputFile(s.num, tuple(walk(v) for v in s.vars))
         if isinstance(s, ir.Dim):

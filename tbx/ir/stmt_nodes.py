@@ -707,12 +707,20 @@ class Open:
 
     ax carries the record length; 0x80 is the compiler default and lifts to
     reclen=None (an explicit ",128" is byte-identical, so it normalizes away;
-    witnessed q_open2 -> t1_open2 with reclen 64)."""
+    witnessed q_open2 -> t1_open2 with reclen 64).
+
+    `OPEN file$ FOR mode AS #n` (for_as=True) compiles to genuinely different
+    bytes than the comma form -- the FOR-keyword desugars to a packed 1-char
+    string at a fixed scratch cell instead of a real pooled literal, and the
+    push order/[0060] placement differ too -- so it is NOT normalized away;
+    the emitter must reproduce the original spelling (wild nvginst.exe,
+    witnessed q_openfor)."""
 
     mode: object  # StrLit
     num: int  # file number
     file: object  # StrLit | Var ($)
     reclen: object = None  # Lit | None (None = default 128)
+    for_as: bool = False  # `OPEN file$ FOR mode AS #n` vs `OPEN "m",#n,file$`
 
 
 @dataclass(frozen=True)

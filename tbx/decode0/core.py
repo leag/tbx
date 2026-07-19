@@ -97,7 +97,9 @@ class DecodeState:
     pend_fnum: Any = None
     pend_icmp: Any = None
     pend_input: Any = None
+    pend_mode_lit: Any = None
     pend_print: dict[str, Any] | None = None
+    pend_shortstr: Any = None
     pend_swap: Any = None
     pend_using: Any = None
     prev_dim_end: Any = None
@@ -1411,6 +1413,8 @@ def decode_user_code(exe: bytes) -> list[Any]:
     state.r_arrs = {}  # block disp -> runtime array info
     state.option_base = None  # 0/1 from DIM lower-bound cells
     state.pend_es = None  # block disp loaded into ES (far access)
+    state.pend_shortstr = None  # packed 1-char string awaiting `shortstr`
+    state.pend_mode_lit = None  # OPEN's FOR-keyword mode, once materialized
     state.pend_swap = None  # first ArrayRef of an ES-aliased array-element SWAP
     state.cx = None  # 2nd-level index stash / WAIT and-mask
     state.si = None  # element-index register (raw index / idx token)
@@ -2127,6 +2131,10 @@ def decode_user_code(exe: bytes) -> list[Any]:
                     ir.DefSeg(ir.Lit(op[3])), state.cur
                 )  # store (1.1 uses EC sub 0x26)
                 state.cur = None
+            elif op[2] == 0x2E:  # short-string scratch cell: a compile-time
+                state.pend_shortstr = op[3]  # -known 1-char literal packed
+                # (char<<8 | len=1), staged for the `shortstr` op that
+                # follows (OPEN ... FOR mode AS #n; wild nvginst.exe)
             elif op[2] == 0x78:  # DATA read pointer: RESTORE [line]
                 imm = op[3]  # 0 = bare RESTORE; N = RESTORE <line>
                 if imm == 0:
@@ -2247,6 +2255,19 @@ def decode_user_code(exe: bytes) -> list[Any]:
             state.k += 1
             continue
         if handlers.write_ops(state, op, addr, kind):
+            continue
+        if kind == "shortstr":  # materialize the 1-char literal staged at
+            # [002E] -- the FOR-mode-keyword form of OPEN (`OPEN f$ FOR
+            # OUTPUT AS #n`) desugars its keyword to a packed 1-char string
+            # at compile time instead of a real pooled literal, so this
+            # doesn't go through the normal sstack push (wild nvginst.exe).
+            if state.pend_shortstr is None:
+                raise ValueError(f"shortstr without a staged literal at {addr:#x}")
+            if state.pend_shortstr & 0xFF != 1:
+                raise ValueError(f"shortstr with length != 1 at {addr:#x}")
+            state.pend_mode_lit = ir.StrLit(chr(state.pend_shortstr >> 8))
+            state.pend_shortstr = None
+            state.k += 1
             continue
         if kind == "movsi":  # string operand by descriptor
             nxt = state.ops[state.k + 1][1:] if state.k + 1 < len(state.ops) else None

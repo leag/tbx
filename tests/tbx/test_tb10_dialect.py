@@ -50,6 +50,7 @@ PAIRS = [
     "t1_subm",
     "t1_arrswap",
     "t1_arrswapf",
+    "t1_openfor",
     "t1_pcomma2",
     "t1_strgodo",
     "t1_strgoto",

@@ -23,7 +23,9 @@ if TYPE_CHECKING:
 def fileio(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: open, close, field."""
     if kind == "open":  # OPEN "m",#n,file[,reclen] -- ax = reclen, 0x80 default
-        if state.pend_fnum is None or len(state.sstack) < 2 or not isinstance(
+        for_as = state.pend_mode_lit is not None  # `OPEN f$ FOR mode AS #n`:
+        need = 1 if for_as else 2  # the keyword desugars to a shortstr-
+        if state.pend_fnum is None or len(state.sstack) < need or not isinstance(
             state.ax, ir.Lit
         ):
             raise ValueError(
@@ -31,9 +33,12 @@ def fileio(state: DecodeState, op, addr, kind) -> bool:
                 f"(fnum={state.pend_fnum}, sstack={len(state.sstack)}, ax={state.ax})"
             )
         reclen = None if state.ax == ir.Lit(0x80) else state.ax
-        mode, file = state.sstack.pop(), state.sstack.pop()
-        state.put(ir.Open(mode, state.pend_fnum, file, reclen), state.cur)
-        state.pend_fnum = state.ax = None
+        if for_as:
+            mode, file = state.pend_mode_lit, state.sstack.pop()
+        else:
+            mode, file = state.sstack.pop(), state.sstack.pop()
+        state.put(ir.Open(mode, state.pend_fnum, file, reclen, for_as), state.cur)
+        state.pend_fnum = state.ax = state.pend_mode_lit = None
         state.cur = None
         state.k += 1
         return True
