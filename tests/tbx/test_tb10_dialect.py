@@ -55,6 +55,7 @@ PAIRS = [
     "t1_lineinf",
     "t1_icomp",
     "t1_bload0",
+    "t1_pow10",
     "t1_pcomma2",
     "t1_strgodo",
     "t1_strgoto",

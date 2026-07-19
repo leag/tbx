@@ -1058,6 +1058,29 @@ def test_decode_t1_bload0():
     )
 
 
+def test_decode_v10_t1_pow10():
+    # `^` (exponentiation) under TB 1.0 (wild banker.exe/kinetics.exe):
+    # dialect.py's own docstring already predicted this gap ("TB 1.0
+    # encodes ^ without an ED sub"; TB 1.1 uses ED sub 3A/fpow). TB 1.0's
+    # actual mechanism turns out to be `INT 3Eh` (the transcendental
+    # dispatcher) selector 0x14 -- byte-identical operand push order to
+    # fpow's (base then exponent), so it aliases straight onto the
+    # existing "fpow" op kind rather than needing a new one; the dialect
+    # difference is fully absorbed at scan time like every other TB
+    # 1.0/1.1 numbering shift.
+    from tbx import decode0, emit0, ir
+
+    prog10 = decode0.decode_user_code(_exe("v10_t1_pow10.exe"))
+    prog11 = decode0.decode_user_code(_exe("t1_pow10.exe"))
+    assert prog10 == prog11
+    assert prog10[2] == ir.Assign(
+        ir.Var("C"), ir.BinOp("^", ir.Var("A"), ir.Var("B"))
+    )
+    assert emit0.emit(prog10) == (
+        "10 A = 2.5\n20 B = 1.5\n30 C = A ^ B\n40 PRINT C\n50 END\n"
+    )
+
+
 def test_decode_t1_fileint():
     # INPUT# with INTEGER targets (inv87/invoice at 0x1389c): the numeric
     # read leaves the value on the x87 stack as usual, but an int slot is

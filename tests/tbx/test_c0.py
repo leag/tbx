@@ -310,6 +310,12 @@ _DOS_WAIVED: dict[str, str] = {
     "c0's label-emission loop only tracks a LOCAL per-body position and "
     "doesn't thread the phys offset into a nested IfBlock, so it raises "
     "_Unsupported rather than emit a goto to a label it can't place",
+    "t1_pow10": "TB's own `^` runtime rounds the exponent to the nearest "
+    "integer before computing (confirmed: 2.5^1.5 and 2.5^1.9 both give "
+    "6.25 = 2.5^2 on the real machine) -- a genuine bug/limitation in "
+    "Borland's math library, not documented handbook behavior. c0 uses "
+    "C's pow() (true fractional exponentiation, e.g. 2.5^1.5 = "
+    "3.952847...); reproducing the rounding quirk isn't worth chasing",
 }
 # file-comparison waivers: the screen still must match
 _DOS_FILE_WAIVED = {

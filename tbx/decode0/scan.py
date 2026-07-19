@@ -861,6 +861,10 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
         return p
     if vec == 0x3E:  # transcendental dispatcher:
         sel = exe[p + 2]  # CD 3E <selector>, FP-stack unary
+        if sel == 0x14:  # ^ : TB 1.0's exponentiation (TB 1.1 uses ED sub
+            ops.append((p, "fpow"))  # 3A/fpow instead; same push order,
+            p += 3  # same "fpow" op kind -- wild banker.exe/kinetics.exe,
+            return p  # probe q_pow
         if sel not in _TRANSCEND:
             raise ValueError(f"unhandled INT 3E selector {sel:02x} at {p:#x}")
         ops.append((p, "fn", _TRANSCEND[sel]))

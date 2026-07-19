@@ -4326,6 +4326,13 @@ End()
 Assign(target=Var(name='A%'), value=Call(name='POS', args=(Lit(value=0),)))
 End()
 
+## t1_pow10
+Assign(target=Var(name='A'), value=SingleLit(value=2.5))
+Assign(target=Var(name='B'), value=SingleLit(value=1.5))
+Assign(target=Var(name='C'), value=BinOp(op='^', lhs=Var(name='A'), rhs=Var(name='B')))
+Print(items=(Var(name='C'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_pr2
 Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Print(items=(StrLit(value='A'), Var(name='A'), StrLit(value='B')), newline=True, file=None, commas=None)
@@ -9414,6 +9421,13 @@ End()
 
 ## v10_t1_pos
 Assign(target=Var(name='A%'), value=Call(name='POS', args=(Lit(value=0),)))
+End()
+
+## v10_t1_pow10
+Assign(target=Var(name='A'), value=SingleLit(value=2.5))
+Assign(target=Var(name='B'), value=SingleLit(value=1.5))
+Assign(target=Var(name='C'), value=BinOp(op='^', lhs=Var(name='A'), rhs=Var(name='B')))
+Print(items=(Var(name='C'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_pr2
