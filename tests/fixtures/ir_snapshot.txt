@@ -3135,6 +3135,12 @@ Print(items=(StrLit(value='X'),), newline=True, file=1, commas=None)
 Close(num=None)
 End()
 
+## t1_closevar
+Assign(target=Var(name='A'), value=Lit(value=1))
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='X.DAT'), reclen=None, for_as=True)
+Close(num=Var(name='A'))
+End()
+
 ## t1_cmd
 Assign(target=Var(name='A$'), value=Nullary(name='COMMAND$'))
 Print(items=(Var(name='A$'),), newline=True, file=None, commas=None)
@@ -8454,6 +8460,12 @@ End()
 
 ## v10_t1_clear
 Clear()
+End()
+
+## v10_t1_closevar
+Assign(target=Var(name='A'), value=Lit(value=1))
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='X.DAT'), reclen=None, for_as=True)
+Close(num=Var(name='A'))
 End()
 
 ## v10_t1_color3

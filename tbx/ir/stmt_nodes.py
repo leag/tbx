@@ -740,9 +740,11 @@ class InputFile:
 @dataclass(frozen=True)
 class Close:
     """CLOSE #n -- ax=n, sub 18; bare CLOSE (all channels) is its own sub 16
-    and lifts to num=None (witnessed t1_close)."""
+    and lifts to num=None (witnessed t1_close). n is usually a literal
+    (int) but can be a variable/expression too (wild metric.exe: `CLOSE
+    #N`, N an int variable -- probe q_closevar)."""
 
-    num: object = None  # int file number | None (= close all)
+    num: object = None  # int | Expr | None (None = close all)
 
 
 @dataclass(frozen=True)

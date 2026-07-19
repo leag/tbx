@@ -138,6 +138,8 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
                 newline=s.newline,
                 lprint=s.lprint,
             )
+        if isinstance(s, ir.Close):
+            return ir.Close(None if s.num is None else walk(s.num))
         if isinstance(s, ir.Kill):
             return ir.Kill(walk(s.file))
         if isinstance(s, ir.Play):

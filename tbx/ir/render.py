@@ -470,7 +470,10 @@ def _us_fileio(s) -> str | None:
     if isinstance(s, InputFile):
         return f"INPUT #{s.num}, {', '.join(unparse(v) for v in s.vars)}"
     if isinstance(s, Close):
-        return "CLOSE" if s.num is None else f"CLOSE #{s.num}"
+        if s.num is None:
+            return "CLOSE"
+        n = s.num if isinstance(s.num, int) else unparse(s.num)
+        return f"CLOSE #{n}"
     if isinstance(s, Reset):
         return "RESET"
     if isinstance(s, Files):

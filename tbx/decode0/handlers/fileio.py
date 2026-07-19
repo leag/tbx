@@ -42,10 +42,13 @@ def fileio(state: DecodeState, op, addr, kind) -> bool:
         state.cur = None
         state.k += 1
         return True
-    if kind == "close":  # CLOSE #ax
-        if not isinstance(state.ax, ir.Lit):
-            raise ValueError(f"CLOSE without literal file number at {addr:#x}")
-        state.put(ir.Close(state.ax.value), state.cur)
+    if kind == "close":  # CLOSE #ax -- usually a literal; a variable/
+        # expression is passed through as-is (wild metric.exe, probe
+        # q_closevar)
+        if state.ax is None:
+            raise ValueError(f"CLOSE without a file number at {addr:#x}")
+        num = state.ax.value if isinstance(state.ax, ir.Lit) else state.ax
+        state.put(ir.Close(num), state.cur)
         state.ax = None
         state.cur = None
         state.k += 1

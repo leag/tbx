@@ -1,0 +1,20 @@
+# v10_t1_closevar dialect=1.0 start=075C0
+075C3:fld1
+075C6:fstp:288
+075CD:movsi:308
+075D0:rt:156
+075D2:movm_imm:46:20225
+075D8:shortstr
+075DA:movm_imm:96:1
+075E0:movax:128
+075E3:open
+075E6:fld:288
+075EB:fistp:44
+075F0:fwait
+075F2:movaxmem:44
+075F5:close
+075FA:end
+075FD:epilogue
+# commits
+075CB
+075F8

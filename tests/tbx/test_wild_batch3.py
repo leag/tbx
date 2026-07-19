@@ -1137,6 +1137,23 @@ def test_decode_t1_orax():
     )
 
 
+def test_decode_t1_closevar():
+    # CLOSE #n where n is a variable, not a literal (wild metric.exe,
+    # right after the orax/DO-loop gap): the file number reaches CLOSE's
+    # dispatch via the standard FP-to-int bridge (fld/fistp/fwait/
+    # movaxmem), leaving a Var in ax rather than a Lit. ir.Close.num now
+    # accepts either -- a plain int (existing literal case, unchanged)
+    # or an Expr, with render.py/c0.py each gaining a branch for the
+    # latter.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_closevar.exe"))
+    assert prog[2] == ir.Close(ir.Var("A"))
+    assert emit0.emit(prog) == (
+        '10 A = 1\n20 OPEN "X.DAT" FOR OUTPUT AS #1\n30 CLOSE #A\n40 END\n'
+    )
+
+
 def test_decode_t1_fileint():
     # INPUT# with INTEGER targets (inv87/invoice at 0x1389c): the numeric
     # read leaves the value on the x87 stack as usual, but an int slot is

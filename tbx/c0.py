@@ -967,7 +967,8 @@ class _Gen:
         if isinstance(s, ir.Close):
             if s.num is None:  # bare CLOSE: all channels, like RESET
                 return ["tb_reset();"]
-            return [f"tb_close({s.num});"]
+            n = s.num if isinstance(s.num, int) else f"tb_i({self.num(s.num)})"
+            return [f"tb_close({n});"]
         if isinstance(s, ir.Reset):
             return ["tb_reset();"]
         if isinstance(s, ir.InputFile):

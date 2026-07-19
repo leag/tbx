@@ -58,6 +58,7 @@ PAIRS = [
     "t1_pow10",
     "t1_inline",
     "t1_orax",
+    "t1_closevar",
     "t1_pcomma2",
     "t1_strgodo",
     "t1_strgoto",
