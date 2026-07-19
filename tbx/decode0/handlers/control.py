@@ -483,6 +483,7 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             state.dos,
             state.ifs,
             state.stmts,
+            state.addrs,
             state.put,
             state.flush_pending,
             state.cur,

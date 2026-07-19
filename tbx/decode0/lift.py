@@ -250,12 +250,15 @@ def _lift_bool_do_tail(ops, k, pend_cmp, pb, stmts, addrs, put):
     return k + len(want)
 
 
-def _lift_while(ops, k, pend_cmp, whiles, dos, ifs, stmts, put, flush, cur) -> int:
+def _lift_while(ops, k, pend_cmp, whiles, dos, ifs, stmts, addrs, put, flush, cur) -> int:
     """Consume the materialized loop test at ops[k] (mov ax,0FFFF):
     Jcc(R) +1; inc ax; or ax,ax; <cc> +3; e9 EXIT. With a loop-back before
     EXIT it is a head-test loop -- `DO WHILE cond` (cc 75, continue-if-true) or
     `DO UNTIL cond` (cc 74, continue-if-false); without one it is an inline-IF body
-    skip (cc 75 only)."""
+    skip (cc 75 only), OR (if the trailing jmp itself is backward -- see below)
+    a TAIL-test `DO...LOOP WHILE/UNTIL` whose body ends in something (e.g. a
+    nested FOR...NEXT) that leaves no separate `jmps`-back edge for
+    `_has_jmps_back` to find."""
     want = ["movax", "jcc", "incax", "orax", "jcc", "jmp"]
     if k + len(want) > len(ops) or [o[1] for o in ops[k : k + len(want)]] != want:
         raise ValueError(f"materialization template mismatch at {ops[k][0]:#x}")
@@ -271,7 +274,26 @@ def _lift_while(ops, k, pend_cmp, whiles, dos, ifs, stmts, put, flush, cur) -> i
         kind = "WHILE" if exit_jcc[2] == 0x75 else "UNTIL"
         put(ir.Do(kind, cond), cur)
         dos.append({"test": cur, "exit": exit_jmp[2]})
-    elif exit_jcc[2] == 0x75:  # inline-IF
+    elif exit_jmp[2] < ops[k][0] and exit_jmp[2] in addrs:
+        # Tail-test DO...LOOP WHILE/UNTIL: the retry edge is THIS
+        # template's own trailing jmp (backward, landing on a real
+        # statement), not a separate jmps elsewhere (e.g. the body ends
+        # in a nested FOR...NEXT, which leaves no plain jmps-back for
+        # _has_jmps_back to find) -- the mirror image of _lift_do_tail's
+        # polarity, since here exit_jcc CAUSES the exit and falling
+        # through (to the jmp) retries, rather than the jcc itself being
+        # the retry edge. Checked BEFORE the inline-IF branch below,
+        # since a backward jmp can never be a genuine inline-IF's
+        # forward body-skip -- an UNTIL-form tail loop (cc 75) would
+        # otherwise be misclassified there. Confirmed against wild
+        # metric.exe (probe q_nestedfor: a DO...LOOP WHILE wrapping a
+        # FOR...NEXT, ending a GOSUB'd routine).
+        loop_kind = "WHILE" if exit_jcc[2] == 0x74 else "UNTIL"
+        idx = addrs.index(exit_jmp[2])
+        stmts.insert(idx, ir.Do(None))
+        addrs.insert(idx, None)
+        put(ir.Loop(loop_kind, cond), cur)
+    elif exit_jcc[2] == 0x75:  # inline-IF (forward skip, by exclusion above)
         flush()
         ifs.append(
             {"target": exit_jmp[2], "cond": cond, "start": cur, "idx": len(stmts)}

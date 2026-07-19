@@ -1154,6 +1154,46 @@ def test_decode_t1_closevar():
     )
 
 
+def test_decode_t1_nestfor():
+    # DO...LOOP WHILE wrapping a FOR...NEXT, ending a GOSUB'd routine
+    # (wild metric.exe): the loop-back edge is the materialized test's
+    # OWN trailing jmp (backward, landing on a real statement), not a
+    # separate `jmps` elsewhere for _has_jmps_back to find -- a nested
+    # FOR...NEXT leaves no such edge, since the FOR's own machinery owns
+    # the last backward jump before this point. Mirror image of
+    # _lift_do_tail's polarity: here the materialized jcc CAUSES the
+    # exit and falling through (to the jmp) retries.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_nestfor.exe"))
+    assert prog[9] == ir.Loop(
+        "WHILE", ir.RelOp("<>", ir.Var("A"), ir.Lit(23))
+    )
+    assert emit0.emit(prog) == (
+        "10 GOSUB 40\n20 PRINT A\n30 END\n40 A = 17\n50 DO\n"
+        "60 FOR B = 3 TO 76\n70 C = B\n80 NEXT B\n90 A = A + 1\n"
+        "100 LOOP WHILE A <> 23\n110 RETURN\n"
+    )
+
+
+def test_decode_t1_nestfor2():
+    # Same shape as t1_nestfor but UNTIL (the other exit_jcc polarity) --
+    # pinned separately since the inline-IF branch this new code sits
+    # beside claims cc==0x75 unconditionally, so the ordering that keeps
+    # UNTIL reachable here is itself the thing worth pinning.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_nestfor2.exe"))
+    assert prog[9] == ir.Loop(
+        "UNTIL", ir.RelOp("=", ir.Var("A"), ir.Lit(23))
+    )
+    assert emit0.emit(prog) == (
+        "10 GOSUB 40\n20 PRINT A\n30 END\n40 A = 17\n50 DO\n"
+        "60 FOR B = 3 TO 76\n70 C = B\n80 NEXT B\n90 A = A + 1\n"
+        "100 LOOP UNTIL A = 23\n110 RETURN\n"
+    )
+
+
 def test_decode_t1_fileint():
     # INPUT# with INTEGER targets (inv87/invoice at 0x1389c): the numeric
     # read leaves the value on the x87 stack as usual, but an int slot is

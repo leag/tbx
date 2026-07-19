@@ -4101,6 +4101,32 @@ End()
 Name(old=StrLit(value='X.DAT'), new=StrLit(value='Y.DAT'))
 End()
 
+## t1_nestfor
+Gosub(target=3)
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
+End()
+Assign(target=Var(name='A'), value=Lit(value=17))
+Do(kind=None, cond=None)
+For(var=Var(name='B'), init=Lit(value=3), limit=Lit(value=76), step=Lit(value=1))
+Assign(target=Var(name='C'), value=Var(name='B'))
+NextStmt(var=Var(name='B'))
+Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
+Loop(kind='WHILE', cond=RelOp(op='<>', lhs=Var(name='A'), rhs=Lit(value=23)))
+Return()
+
+## t1_nestfor2
+Gosub(target=3)
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
+End()
+Assign(target=Var(name='A'), value=Lit(value=17))
+Do(kind=None, cond=None)
+For(var=Var(name='B'), init=Lit(value=3), limit=Lit(value=76), step=Lit(value=1))
+Assign(target=Var(name='C'), value=Var(name='B'))
+NextStmt(var=Var(name='B'))
+Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
+Loop(kind='UNTIL', cond=RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=23)))
+Return()
+
 ## t1_nestif2
 Assign(target=Var(name='A$'), value=StrLit(value='X'))
 Assign(target=Var(name='B$'), value=StrLit(value='Y'))
@@ -9255,6 +9281,32 @@ End()
 ## v10_t1_name
 Name(old=StrLit(value='X.DAT'), new=StrLit(value='Y.DAT'))
 End()
+
+## v10_t1_nestfor
+Gosub(target=3)
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
+End()
+Assign(target=Var(name='A'), value=Lit(value=17))
+Do(kind=None, cond=None)
+For(var=Var(name='B'), init=Lit(value=3), limit=Lit(value=76), step=Lit(value=1))
+Assign(target=Var(name='C'), value=Var(name='B'))
+NextStmt(var=Var(name='B'))
+Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
+Loop(kind='WHILE', cond=RelOp(op='<>', lhs=Var(name='A'), rhs=Lit(value=23)))
+Return()
+
+## v10_t1_nestfor2
+Gosub(target=3)
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
+End()
+Assign(target=Var(name='A'), value=Lit(value=17))
+Do(kind=None, cond=None)
+For(var=Var(name='B'), init=Lit(value=3), limit=Lit(value=76), step=Lit(value=1))
+Assign(target=Var(name='C'), value=Var(name='B'))
+NextStmt(var=Var(name='B'))
+Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
+Loop(kind='UNTIL', cond=RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=23)))
+Return()
 
 ## v10_t1_nestif2
 Assign(target=Var(name='A$'), value=StrLit(value='X'))
