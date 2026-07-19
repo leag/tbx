@@ -848,11 +848,26 @@ class MidAssign:
 @dataclass(frozen=True)
 class SubDef:
     """SUB name[(params)] ... END SUB -- procedure definition from the def region.
-    A block: header + indented body + END SUB. Params are name strings ('A', 'A$')."""
+    A block: header + indented body + END SUB. Params are name strings ('A', 'A$').
+
+    `SUB name INLINE ... END SUB` (raw embedded machine code, Appendix C of the
+    handbook) has no proc_enter/proc_ret framing at all -- the compiler copies
+    the $INLINE byte list verbatim with an auto-appended far RET, no params,
+    and no recoverable per-line split -- so it's `body == (Inline(data),)`
+    (params always empty); the emitter detects this shape and prints the
+    `INLINE` header keyword instead of a parameter list (probe q_shriek)."""
 
     name: str
     params: tuple[str, ...]
     body: tuple[Stmt, ...]
+
+
+@dataclass(frozen=True)
+class Inline:
+    """$INLINE byte, byte, ... -- raw machine code inside a SUB ... INLINE body,
+    copied verbatim into the compiled output (no BASIC semantics to recover)."""
+
+    data: bytes
 
 
 @dataclass(frozen=True)

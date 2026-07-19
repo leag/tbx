@@ -1081,6 +1081,40 @@ def test_decode_v10_t1_pow10():
     )
 
 
+def test_decode_t1_inline():
+    # SUB name INLINE ... $INLINE byte, byte, ... END SUB (Appendix C of
+    # the handbook's own worked example, the PC-speaker "Shriek" routine):
+    # embedded raw machine code, copied verbatim into the compiled output
+    # with NO proc_enter/proc_ret framing and an auto-appended bare far
+    # RET (0xCB). _scan's linear pass can't interpret arbitrary bytes as
+    # instructions -- some coincidentally match real opcodes first (`BA 00
+    # 07` legitimately scans as mov dx,0700h before `E4`, IN AL,61h, has
+    # no TB equivalent) -- so _try_inline_rescue only kicks in once the
+    # ordinary scan has already failed: it finds the most recent `jmp`,
+    # confirms its target's preceding byte is a bare 0xCB, and treats the
+    # whole span as one opaque `inline_sub` blob rather than guessing at
+    # individual bytes. The original 4-line $INLINE split has no separate
+    # byte-level representation (confirmed byte-exact both ways), so the
+    # emitter consolidates onto one line.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_inline.exe"))
+    raw = bytes(
+        [
+            0xBA, 0x00, 0x07, 0xE4, 0x61, 0x24, 0xFC, 0x34, 0x02, 0xE6, 0x61,
+            0xB9, 0x40, 0x01, 0xE2, 0xFE, 0x4A, 0x74, 0x02, 0xEB, 0xF2,
+        ]
+    )
+    assert prog[0] == ir.SubDef("SUB1", (), (ir.Inline(raw),))
+    assert prog[1] == ir.CallStmt("SUB1", ())
+    assert emit0.emit(prog) == (
+        "10 SUB SUB1 INLINE\n"
+        "  $INLINE &HBA, &H00, &H07, &HE4, &H61, &H24, &HFC, &H34, &H02, "
+        "&HE6, &H61, &HB9, &H40, &H01, &HE2, &HFE, &H4A, &H74, &H02, &HEB, "
+        "&HF2\nEND SUB\n20 CALL SUB1\n30 END\n"
+    )
+
+
 def test_decode_t1_fileint():
     # INPUT# with INTEGER targets (inv87/invoice at 0x1389c): the numeric
     # read leaves the value on the x87 stack as usual, but an int slot is

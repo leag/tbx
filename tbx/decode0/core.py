@@ -1432,7 +1432,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
     state.pend_dataread = None  # open READ target chain
     state.ifs = []  # open inline-IF bodies
     state.has_procs = any(
-        o[1] in ("proc_enter", "fn_ret") for o in state.ops
+        o[1] in ("proc_enter", "fn_ret", "inline_sub") for o in state.ops
     )  # def region present
     state.proc_names = {}  # proc entry addr -> synthesized name (SUB1.., FNFN1..)
     state.proc_params = {}  # SUB entry addr -> params tuple (declaration order),
@@ -1602,12 +1602,27 @@ def decode_user_code(exe: bytes) -> list[Any]:
             and kind == "jmp"
             and addr == state.main_start
             and state.k + 1 < len(state.ops)
-            and state.ops[state.k + 1][1] == "proc_enter"
+            and state.ops[state.k + 1][1] in ("proc_enter", "inline_sub")
         ):  # chained skip-jmp: consecutive SUB defs are each bracketed by
             # their own jmp, so the entry jmp lands on the next def's jmp;
-            # extend the def region to its target (witnessed q_fwd)
+            # extend the def region to its target (witnessed q_fwd; the
+            # inline_sub sibling is probe q_shriek's `SUB ... INLINE`)
             state.main_start = op[2]
             state.k += 1  # glue, not a GOTO
+            continue
+        if kind == "inline_sub":  # SUB name INLINE: the compiler copies
+            # $INLINE's byte list verbatim with NO proc_enter/proc_ret
+            # framing at all (see _try_inline_rescue in scan.py) -- no
+            # params, no body statements to accumulate, so unlike every
+            # other procedure this is complete in one op (probe q_shriek).
+            state.nsub += 1
+            name = f"SUB{state.nsub}"
+            state.proc_names[addr] = name
+            state.proc_params[addr] = ()
+            state.stmts.append(ir.SubDef(name, (), (ir.Inline(op[2]),)))
+            state.addrs.append(None)  # a SUB definition is never a jump target
+            state.cur = None
+            state.k += 1
             continue
         # A DEF FN body has no proc_enter prologue (terminated by fn_ret): the first
         # op in the def region with no open frame opens one.

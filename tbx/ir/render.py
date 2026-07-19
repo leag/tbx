@@ -71,6 +71,7 @@ from tbx.ir.stmt_nodes import (
     For,
     Get,
     GetGfx,
+    Inline,
     Input,
     InputFile,
     Key,
@@ -498,6 +499,8 @@ def _us_fileio(s) -> str | None:
 
 def _us_procdata(s) -> str | None:
     """Render procedures, OS, event-trap and DATA statements; None if `s` is not one of them."""
+    if isinstance(s, Inline):
+        return "$INLINE " + ", ".join(f"&H{b:02X}" for b in s.data)
     if isinstance(s, CallStmt):
         if s.args:
             return f"CALL {s.name}({','.join(unparse(a) for a in s.args)})"

@@ -873,13 +873,67 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
     return None
 
 
+def _try_inline_rescue(exe: bytes, ops: list[tuple[Any, ...]]) -> int | None:
+    """After a scan failure, check whether we're stuck inside a `SUB ...
+    INLINE` body: the compiler copies $INLINE's byte list verbatim with no
+    proc_enter framing at all, then auto-appends a bare far RET (CB) --
+    Appendix C of the handbook, confirmed byte-for-byte via the oracle
+    (probe q_shriek). The raw bytes are arbitrary and will often partially
+    match real opcodes before finally failing outright (q_shriek: `BA 00
+    07` legitimately scans as `mov dx,0700h` before `E4`, `IN AL,61h`, has
+    no TB equivalent) -- so this only fires once the ordinary scan has
+    already given up, keeping every other gap exactly as fail-loud as before.
+
+    Finds the MOST RECENT `jmp` op; if every op scanned since sits before
+    that jmp's target and the byte right before the target is a bare 0xCB,
+    treats [jmp_end, target-1) as one opaque `inline_sub` blob, truncates
+    the bogus partial-match ops back to just after the jmp, and returns the
+    resume position (the jmp's target). Returns None (no rescue -- the
+    original failure should propagate) otherwise."""
+    for i in range(len(ops) - 1, -1, -1):
+        if ops[i][1] != "jmp":
+            continue
+        target = ops[i][2]
+        if not all(o[0] < target for o in ops[i + 1 :]):
+            return None
+        if exe[target - 1] != 0xCB:
+            return None
+        body_start = ops[i][0] + 3  # jmp is always `e9 rel16`, 3 bytes
+        del ops[i + 1 :]
+        ops.append((body_start, "inline_sub", exe[body_start : target - 1]))
+        return target
+    return None
+
+
 def _scan(
     exe: bytes, start: int, dia: Dialect = TB11, commits: set[int] | None = None
 ) -> list[tuple[Any, ...]]:
-    """Pass 1: pure instruction decode, prologue to END. Each op is (addr, kind, *args);
-    no DS knowledge needed. Raises on anything outside the calibrated vocabulary."""
+    """Pass 1 entry point: runs `_scan_pass`, rescuing a `SUB ... INLINE`
+    body (see `_try_inline_rescue`) and resuming instead of failing."""
     p = start + 3
     ops: list[tuple[Any, ...]] = []
+    while True:
+        try:
+            return _scan_pass(exe, start, dia, commits, ops, p)
+        except ValueError:
+            resume = _try_inline_rescue(exe, ops)
+            if resume is None:
+                raise
+            p = resume
+
+
+def _scan_pass(
+    exe: bytes,
+    start: int,
+    dia: Dialect,
+    commits: set[int] | None,
+    ops: list[tuple[Any, ...]],
+    p: int,
+) -> list[tuple[Any, ...]]:
+    """The actual linear decode, prologue to END. Each op is (addr, kind,
+    *args); no DS knowledge needed. Raises on anything outside the
+    calibrated vocabulary. `ops`/`p` are pre-seeded by `_scan` so a rescued
+    SUB...INLINE body can resume a failed pass instead of restarting it."""
     while p + 1 < len(exe):
         b = exe[p]
         sw = _try_swap(exe, p)

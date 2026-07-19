@@ -316,6 +316,11 @@ _DOS_WAIVED: dict[str, str] = {
     "Borland's math library, not documented handbook behavior. c0 uses "
     "C's pow() (true fractional exponentiation, e.g. 2.5^1.5 = "
     "3.952847...); reproducing the rounding quirk isn't worth chasing",
+    "t1_inline": "SUB ... INLINE embeds raw 8086 machine code (Appendix "
+    "C); the emulated machine has no CPU to execute it on a modern host "
+    "(same reasoning as ir.CallAbsolute, which 'transpiles, then aborts "
+    "if reached') -- ir.Inline raises _Unsupported rather than silently "
+    "dropping a real machine-code payload",
 }
 # file-comparison waivers: the screen still must match
 _DOS_FILE_WAIVED = {
