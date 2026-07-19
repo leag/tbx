@@ -73,6 +73,13 @@ Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=Lit(value=2))
 Assign(target=Var(name='B'), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Var(name='A'),)), rhs=ArrayRef(name='V0', indices=(Lit(value=1),))))
 End()
 
+## t1_arrwrite
+Dim(name='V0', bounds=(10,), also=())
+Assign(target=Var(name='A'), value=Lit(value=3))
+Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=Lit(value=42))
+Print(items=(ArrayRef(name='V0', indices=(Lit(value=3),)),), newline=True, file=None, commas=None)
+End()
+
 ## t1_bandstr
 Dim(name='V0', bounds=(20,), also=())
 Dim(name='V1', bounds=(20,), also=())
@@ -5291,6 +5298,13 @@ Dim(name='V0', bounds=(10,), also=())
 Assign(target=Var(name='A'), value=Lit(value=3))
 Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=Lit(value=2))
 Assign(target=Var(name='B'), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Var(name='A'),)), rhs=ArrayRef(name='V0', indices=(Lit(value=1),))))
+End()
+
+## v10_t1_arrwrite
+Dim(name='V0', bounds=(10,), also=())
+Assign(target=Var(name='A'), value=Lit(value=3))
+Assign(target=ArrayRef(name='V0', indices=(Var(name='A'),)), value=Lit(value=42))
+Print(items=(ArrayRef(name='V0', indices=(Lit(value=3),)),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_bandstr

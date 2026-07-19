@@ -485,6 +485,14 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             if not a.get("str"):
                 raise ValueError(f"string op on numeric array at {addr:#x}")
             state.sstack.append(ref)
+        elif sik[1] == pre + "movm_ax_si":
+            # mov [si], ax (near) / mov es:[si], ax (far, by-ref param array
+            # arg): the INTEGER write sibling of the rt-0x9C string read
+            # above -- `ARRAY%(i) = <int expr>` via a computed index (wild
+            # number.exe). ax already holds the materialized RHS.
+            state.put(ir.Assign(ref, state.ax), state.cur)
+            state.ax = None
+            state.cur = None
         else:
             raise ValueError(f"element access: unexpected op {sik[1]} at {sik[0]:#x}")
         state.k += ao + 2

@@ -822,6 +822,28 @@ def test_decode_t1_doerr():
     )
 
 
+def test_decode_t1_arrwrite():
+    # A computed (variable) index write to a static INTEGER array element
+    # (wild number.exe at "unhandled byte 89"): the shl-si/addsi element-
+    # access chain's terminal-consumer dispatch (arith.py) already handled
+    # the FP load/store, comparison, and string-value cases -- and gap 32
+    # added the string READ (`rt 0x9C` push) -- but the raw integer STORE
+    # `mov [si], ax` (no ES prefix; `26 89 04` is the by-ref-param FAR
+    # sibling, already scanned) was never recognized at the scan level at
+    # all. New op `movm_ax_si`; the array-index dispatch's existing
+    # `pre + "..."` far/near naming convention picks up the by-ref-param
+    # FAR form for free once the near form is wired in.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_arrwrite.exe"))
+    assert prog[2] == ir.Assign(
+        ir.ArrayRef("V0", (ir.Var("A"),)), ir.Lit(42)
+    )
+    assert emit0.emit(prog) == (
+        "10 DIM V0(10)\n20 A = 3\n30 V0(A) = 42\n40 PRINT V0(3)\n50 END\n"
+    )
+
+
 def test_decode_t1_fileint():
     # INPUT# with INTEGER targets (inv87/invoice at 0x1389c): the numeric
     # read leaves the value on the x87 stack as usual, but an int slot is

@@ -1,0 +1,22 @@
+# t1_arrwrite dialect=1.1 start=08700
+08703:fild:358
+08708:fstp:342
+0870F:fild:356
+08714:fld:342
+08719:fistp:44
+0871E:fwait
+08720:movaxmem:44
+08723:movsiax
+08725:shlsi
+08727:shlsi
+08729:addsi:368
+0872D:fstp_si
+08732:fld:380
+08737:rt:187
+08739:rt:184
+0873D:end
+08740:epilogue
+# commits
+0870D
+08730
+0873B

@@ -1,0 +1,22 @@
+# v10_t1_arrwrite dialect=1.0 start=070B0
+070B3:fild:358
+070B8:fstp:342
+070BF:fild:356
+070C4:fld:342
+070C9:fistp:44
+070CE:fwait
+070D0:movaxmem:44
+070D3:movsiax
+070D5:shlsi
+070D7:shlsi
+070D9:addsi:368
+070DD:fstp_si
+070E2:fld:380
+070E7:rt:187
+070E9:rt:184
+070ED:end
+070F0:epilogue
+# commits
+070BD
+070E0
+070EB
