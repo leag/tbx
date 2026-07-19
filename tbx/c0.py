@@ -870,8 +870,15 @@ class _Gen:
             )
             return [self.assign(s.var, _Raw(f"tb_input_str({prompt}, 0)", True))]
         if isinstance(s, ir.Swap):
-            a, b = self.var(s.a.name), self.var(s.b.name)
-            ta, tb_ = _suffix_ty(s.a.name), _suffix_ty(s.b.name)
+            def _lv(v):
+                if isinstance(v, ir.Var):
+                    return self.var(v.name), _suffix_ty(v.name)
+                if isinstance(v, ir.ArrayRef):
+                    return self.aref(v), self.array(v.name, len(v.indices))[0]
+                raise _Unsupported(f"SWAP operand {type(v).__name__}")
+
+            a, ta = _lv(s.a)
+            b, tb_ = _lv(s.b)
             if ta != tb_:
                 raise _Unsupported("SWAP across types")
             cty, _, _ = _VTYPES[ta]

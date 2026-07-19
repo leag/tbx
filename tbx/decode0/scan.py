@@ -240,6 +240,10 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         ops.append((p, "movbxax"))
         p += 2
         return p
+    if b == 0x8B and exe[p + 1] == 0xD8:  # mov bx, ax: opposite-direction encoding
+        ops.append((p, "movbxax"))  # of the same instruction (SWAP of two array
+        p += 2  # elements; probe q_arrswap)
+        return p
     if b == 0xBA:  # mov dx, imm16 (relocated segment)
         ops.append((p, "movdx", struct.unpack_from("<H", exe, p + 1)[0]))
         p += 3
@@ -433,6 +437,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "defseg"))  # mov [001C],ds: bare DEF SEG
         p += 4
         return p
+    if b == 0x8C and exe[p + 1] == 0x1E:  # mov [disp16], ds: DS spill ahead of a
+        ops.append((p, "movm_ds", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # near->far ES alias (SWAP of two array elements; probe q_arrswap)
+        return p
     if b == 0x99:  # cwd: sign-extend ax ahead of idiv
         ops.append((p, "cwd"))
         p += 1
@@ -563,6 +571,18 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "movax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
         p += 3  # (t1_byref1)
         return p
+    if b == 0x26 and exe[p + 1] == 0x8B and exe[p + 2] == 0x07:  # mov ax, es:[bx]:
+        ops.append((p, "far_movax_bx"))  # SWAP-of-array-elements tail: read the
+        p += 3  # first elem via a near-array's ES-aliased address (q_arrswap)
+        return p
+    if b == 0x87 and exe[p + 1] == 0x04:  # xchg ax, [si]: SWAP-of-array-elements
+        ops.append((p, "xchgsi"))  # tail, swap ax with the second (near) elem
+        p += 2  # (q_arrswap)
+        return p
+    if b == 0x26 and exe[p + 1] == 0x89 and exe[p + 2] == 0x07:  # mov es:[bx], ax:
+        ops.append((p, "far_movm_ax_bx"))  # SWAP-of-array-elements tail, store
+        p += 3  # the swapped value back into the first (ES-aliased) elem
+        return p  # (q_arrswap)
     return None
 
 

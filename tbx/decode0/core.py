@@ -98,6 +98,7 @@ class DecodeState:
     pend_icmp: Any = None
     pend_input: Any = None
     pend_print: dict[str, Any] | None = None
+    pend_swap: Any = None
     pend_using: Any = None
     prev_dim_end: Any = None
     proc_frame: Any = None
@@ -1410,6 +1411,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
     state.r_arrs = {}  # block disp -> runtime array info
     state.option_base = None  # 0/1 from DIM lower-bound cells
     state.pend_es = None  # block disp loaded into ES (far access)
+    state.pend_swap = None  # first ArrayRef of an ES-aliased array-element SWAP
     state.cx = None  # 2nd-level index stash / WAIT and-mask
     state.si = None  # element-index register (raw index / idx token)
     state.bchk_subs = []  # Bounds: pending non-final subscripts (F3.5)

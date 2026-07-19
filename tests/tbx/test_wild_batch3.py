@@ -913,6 +913,32 @@ def test_decode_t1_subm():
     )
 
 
+def test_decode_t1_arrswap():
+    # SWAP of two computed static-int-array elements (wild number.exe at
+    # 0xb8b9): the compiler can't XCHG two memory operands directly, so it
+    # spills DS to a scratch cell (movm_ds, `mov [disp16],ds`) while the
+    # first operand's index chain is still live in SI, computes the second
+    # operand's address, then restores DS into ES from that scratch cell
+    # (moves_m) so BOTH computed near addresses are reachable via an
+    # ES-aliased `[bx]`/`[si]` pair: `mov bx,ax` (movbxax, new 8B D8
+    # encoding of the same instruction already used for LOCATE row) / `mov
+    # ax,es:[bx]` (far_movax_bx) / `xchg ax,[si]` (xchgsi) / `mov
+    # es:[bx],ax` (far_movm_ax_bx). shlsi's consumer dispatch stages the
+    # first ArrayRef on `state.pend_swap` at the movm_ds op and folds both
+    # refs into ir.Swap once the second chain's moves_m + fixed tail land.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_arrswap.exe"))
+    assert prog[5] == ir.Swap(
+        ir.ArrayRef("V0%", (ir.Var("A"),)), ir.ArrayRef("V0%", (ir.Var("B"),))
+    )
+    assert emit0.emit(prog) == (
+        "10 DIM V0%(10)\n20 V0%(1) = 11\n30 V0%(2) = 22\n40 A = 1\n50 B = 2\n"
+        "60 SWAP V0%(A), V0%(B)\n70 C = 1\n80 D = 2\n"
+        "90 PRINT V0%(C), V0%(D)\n100 END\n"
+    )
+
+
 def test_decode_t1_fileint():
     # INPUT# with INTEGER targets (inv87/invoice at 0x1389c): the numeric
     # read leaves the value on the x87 stack as usual, but an int slot is

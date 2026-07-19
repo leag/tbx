@@ -552,6 +552,27 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                     state.k = k2 + 1
                     return True
             raise ValueError(f"cmpax_si without an IF jcc consumer at {addr:#x}")
+        elif sik[1] == "movm_ds":
+            # `mov [disp16], ds`: DS spilled to a scratch slot ahead of an
+            # ES-aliased near-array access -- the first operand of `SWAP
+            # ARRAY%(i), ARRAY%(j)` (wild number.exe/q_arrswap). Stage this
+            # ref and keep scanning; the second operand's own shl/addsi
+            # chain (below) ends in the matching `moves_m` that restores
+            # DS->ES so both computed addresses can be reached via ES.
+            state.pend_swap = ref
+        elif sik[1] == "moves_m" and state.pend_swap is not None:
+            # ES restored from the scratch slot: the second operand's index
+            # chain just completed. The fixed 4-op tail that follows does
+            # the actual swap through the ES alias (mov bx,ax; mov
+            # ax,es:[bx]; xchg ax,[si]; mov es:[bx],ax) -- q_arrswap.
+            tail = [t[1] for t in state.ops[state.k + ao + 2 : state.k + ao + 6]]
+            if tail != ["movbxax", "far_movax_bx", "xchgsi", "far_movm_ax_bx"]:
+                raise ValueError(f"array SWAP tail mismatch at {addr:#x}")
+            state.put(ir.Swap(state.pend_swap, ref), state.cur)
+            state.pend_swap = None
+            state.cur = None
+            state.k += ao + 6
+            return True
         else:
             raise ValueError(f"element access: unexpected op {sik[1]} at {sik[0]:#x}")
         state.k += ao + 2
