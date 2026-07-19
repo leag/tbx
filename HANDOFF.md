@@ -1268,6 +1268,30 @@ pattern explicitly (`DIM A$(N), B$(N), C$(N)`, loop or explicit
 statements copying `C$(i) = B$(N-i+1)` interleaved with `C$(i+1) =
 A$(N-i+1)` or similar) to see if THAT specific shape reproduces it.
 
+**Tried, ruled out** (new tool this session, `tbx/tools/batch_probe.py` --
+compiles a directory of candidate .bas files against the oracle and scans
+each, batching what used to be one-at-a-time manual probes; see its
+docstring): the two-array reverse-merge pattern literally as described
+above, in THREE shapes -- straight-line statements matching the observed
+post-failure evidence exactly (`zipmerge.bas`), the same merge driven by a
+`FOR...STEP 2` loop with a hand-decremented index (`zipmerge_loop.bas`),
+and a plain `FOR I%=N% TO 1 STEP -1` descending loop copying a single
+array in reverse into a forward-ordered destination (`zipmerge_negstep.bas`,
+`revidx.bas` for the single-array-only variant) -- all FOUR compiled clean
+and decoded with zero `cd ec 38` occurrences. So the reverse-merge SHAPE
+itself, however constructed, is still not sufficient; whatever triggers
+sub 0x38 is something else again. Also tried, inconclusively: `GET #n,
+r, A$()` / `PUT #n, r, A$()` (a whole runtime array as a random-file
+record target) as a wildcard hypothesis (GET/PUT graphics already use
+this array-block convention, so file GET/PUT might share it) -- the
+oracle automation got stuck mid-compile for both (screen froze on
+"Compiling: SOLVER.EXE / Line: 1 Stmt: 1" with no error banner and no
+produced EXE), which reads more like invalid syntax (TB's random-file
+GET/PUT normally targets a FIELD-defined buffer, not a bare array) than a
+real result -- not informative either way, not worth more oracle cycles
+without first confirming the correct FIELD-based syntax from the
+handbook.
+
 Also tried: a runtime string array SHARED into a SUB (`SUB FILLIT:
 SHARED A$(): A$(1)="X": END SUB`, with `DIM A$(N)` and the CALL in main
 scope) -- this compiled but hit a COMPLETELY DIFFERENT, new dispatch-
