@@ -782,18 +782,54 @@ just assumed.
 
 **If a future gap DOES match the real signature** (isolated unrecognized
 bytes, no proc-enter framing, inside a SUB, non-recurring across files):
-that SUB's content is architecturally NOT byte-exact-decompilable to
-BASIC in the normal sense (there's no "source" to recover beyond the raw
-bytes themselves for the filespec form; for the byte-list form the raw
-bytes ARE fully recoverable byte-for-byte and could in principle be
-re-emitted as a single consolidated `$INLINE b1, b2, ...` statement --
-untested whether TB accepts an arbitrarily long single `$INLINE` line
-the way multiple short ones were used in the handbook's example, but
-nothing in the compiled shape suggests a line-length-driven split was
-ever necessary). No wild file in the current 84-file corpus has been
-shown to need this; not implemented, since CLAUDE.md's calibration rule
-means real decoder work should follow an actual witnessed need, not get
-built speculatively ahead of one.
+**IMPLEMENTED as of 2026-07-19** (`SUB ... INLINE` / `$INLINE`, the
+byte-list form -- user-requested, added despite no wild file needing it
+yet, since it's a real documented language feature). `_scan` gained a
+retry mechanism (`_try_inline_rescue`): on any scan failure, it checks
+whether the most recent `jmp`'s target has a bare 0xCB right before it
+(TB's auto-appended far RET for an inline body); if so, it discards
+whatever bogus ops the raw bytes partially matched, replaces them with
+one opaque `inline_sub` blob, and resumes from the target -- every other
+gap stays exactly as fail-loud as before, since this only fires after
+the ordinary scan has already given up. New `ir.Inline(data: bytes)`
+node; `ir.SubDef` with a single-`Inline` body renders the `INLINE`
+header keyword. Confirmed byte-exact against the handbook's own worked
+example (the "Shriek" PC-speaker routine) both dialects, fixture
+`t1_inline`/`v10_t1_inline`. The filespec (`$INLINE "file"`) form is
+NOT implemented (no external .COM-style blob to test against) -- only
+the byte-list form. c0 raises `_Unsupported` for `ir.Inline` (no CPU in
+the emulated machine to run arbitrary code on).
+
+**The first version of the rescue check (target-1 byte is bare 0xCB, no
+other condition) DID false-positive on the first full wild-corpus
+re-scan**: CVT2TB.EXE's OWN unrelated gap-19 construct (the `push bp; mov
+bp,sp` CGA-blitter shape, using the alternate `89 E5` mov-bp,sp
+encoding -- see that gap's addendum below) legitimately ends in `pop bp;
+retf` (`5D CB`), which coincidentally ALSO satisfies "byte right before
+the jmp target is 0xCB". The rescue fired, silently swallowed 60 bytes
+of what is actually recognizable-shape procedure code as an opaque
+blob, and let the file advance to a LATER, different failure instead of
+its correct one -- caught only because the file's failure ADDRESS moved
+on the standard post-change re-scan (part of this workflow for every
+change, not something added specially for this). Fixed by also
+requiring the body NOT start with `55` followed by either known
+mov-bp,sp encoding (`8B EC` or `89 E5`) -- a real proc-enter shape,
+genuine $INLINE content has no framing at all (confirmed from the
+Shriek probe, which starts directly with its first real byte). Re-ran
+the full 84-file corpus after the fix: zero files produce ANY
+`inline_sub` op now, and CVT2TB.EXE is back to its original, correct
+`unhandled byte 89 at 0xa286`. This is worth remembering as a general
+lesson for this rescue mechanism specifically: it is a heuristic over
+raw bytes, not a calibrated vocabulary match, so ANY future change
+touching it needs the SAME full-corpus re-scan discipline, not just a
+check against the one fixture that motivated it.
+
+Confirmed (after the fix above) that none of this session's other stuck
+gaps are secretly `$INLINE`: an `inline_sub` rescue never fires for ANY
+of the 84 wild files (byte 89/di-register, byte 06, byte ea, INT 8c all
+still fail exactly where they did before this whole feature landed) --
+consistent with the earlier reasoning that those are shared compiler
+templates, not hand-authored assembly.
 
 ## Gap byte 89 / the missing `di` spill register (catalog.exe/pfl.exe/process.exe), INVESTIGATED, NOT LANDED (2026-07-19)
 

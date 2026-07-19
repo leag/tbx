@@ -58,7 +58,7 @@ from tbx.decode0.const import (
     _TRAP_GOSUB,
 )
 from tbx.decode0.dialect import DIALECTS, Dialect, TB10, TB11, _try_swap, find_prologue
-from tbx.decode0.scan import _grp, _orient, _rgrp, _scan
+from tbx.decode0.scan import _grp, _orient, _rgrp, _scan, _try_inline_rescue
 from tbx.decode0.datapool import (
     _data_find_frame,
     _data_find_sentinel,

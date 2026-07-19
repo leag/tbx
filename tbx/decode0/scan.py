@@ -899,6 +899,14 @@ def _try_inline_rescue(exe: bytes, ops: list[tuple[Any, ...]]) -> int | None:
         if exe[target - 1] != 0xCB:
             return None
         body_start = ops[i][0] + 3  # jmp is always `e9 rel16`, 3 bytes
+        if exe[body_start] == 0x55 and exe[body_start + 1 : body_start + 3] in (
+            b"\x8b\xec",
+            b"\x89\xe5",
+        ):  # push bp; mov bp,sp (either encoding): a genuine proc-enter
+            return None  # shape, not $INLINE -- false positive witnessed
+            # in wild CVT2TB.EXE, whose OWN (unrelated, gap-19) construct
+            # ends in a legitimate `pop bp; retf` (5D CB) that coincidentally
+            # also satisfies the bare-target-1-byte-is-CB check above
         del ops[i + 1 :]
         ops.append((body_start, "inline_sub", exe[body_start : target - 1]))
         return target

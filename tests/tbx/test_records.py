@@ -98,3 +98,29 @@ def test_try_swap():
     bad = mov_xchg_mov(0x0120, 0x0124) + mov_xchg_mov(0x0130, 0x0134)
     assert decode0._try_swap(bad, 0) is None
     assert decode0._try_swap(good[:23], 0) is None  # truncated
+
+
+def test_try_inline_rescue():
+    # SUB ... INLINE: the body has NO proc-enter framing, and TB
+    # auto-appends a bare far RET (CB) after it (t1_inline/q_shriek).
+    exe = bytearray(30)
+    exe[10] = 0xBA  # first inline byte -- anything but 0x55 (push bp)
+    exe[19] = 0xCB  # target-1: a bare CB right before the jmp's target
+    ops = [(7, "jmp", 20)]
+    assert decode0._try_inline_rescue(bytes(exe), ops) == 20
+    assert ops == [(7, "jmp", 20), (10, "inline_sub", bytes(exe[10:19]))]
+
+    # False-positive guard (wild CVT2TB.EXE): a genuine `push bp; mov
+    # bp,sp; ...; pop bp; retf` procedure -- either mov-bp,sp encoding --
+    # legitimately ends in 5D CB, which also satisfies "byte before the
+    # target is CB". Must NOT be rescued; it's real proc-enter-shaped
+    # code the ordinary scan should keep failing loud on, not $INLINE.
+    for enc in (b"\x8b\xec", b"\x89\xe5"):
+        exe2 = bytearray(30)
+        exe2[10] = 0x55
+        exe2[11:13] = enc
+        exe2[18] = 0x5D
+        exe2[19] = 0xCB
+        ops2 = [(7, "jmp", 20)]
+        assert decode0._try_inline_rescue(bytes(exe2), ops2) is None
+        assert ops2 == [(7, "jmp", 20)]  # unchanged
