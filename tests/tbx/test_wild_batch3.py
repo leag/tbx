@@ -844,6 +844,25 @@ def test_decode_t1_arrwrite():
     )
 
 
+def test_decode_t1_arrread():
+    # Companion to t1_arrwrite: the READ half. `mov ax, [si]` (no ES
+    # prefix; `26 8b 04` is the by-ref-param FAR sibling, already scanned
+    # as far_movax_si) -- wild number.exe advances here right after the
+    # write fix. New op `movax_si`; ax becomes the array-element value,
+    # e.g. as an expression's first term.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_arrread.exe"))
+    assert prog[3] == ir.Assign(
+        ir.Var("B"),
+        ir.BinOp("+", ir.ArrayRef("V0", (ir.Var("A"),)), ir.Lit(1)),
+    )
+    assert emit0.emit(prog) == (
+        "10 DIM V0(10)\n20 V0(3) = 42\n30 A = 3\n40 B = V0(A) + 1\n"
+        "50 PRINT B\n60 END\n"
+    )
+
+
 def test_decode_t1_fileint():
     # INPUT# with INTEGER targets (inv87/invoice at 0x1389c): the numeric
     # read leaves the value on the x87 stack as usual, but an int slot is

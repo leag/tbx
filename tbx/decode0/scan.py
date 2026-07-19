@@ -525,6 +525,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "far_movax_si"))  # plain read of a by-ref int param
         p += 3  # into ax, e.g. as an expression's first term (t1_byref1)
         return p
+    if b == 0x8B and exe[p + 1] == 0x04:  # mov ax, [si]: the read half of a
+        ops.append((p, "movax_si"))  # computed static int-array element
+        p += 2  # index chain (shl si/addsi), sibling of movm_ax_si's write
+        return p  # (wild number.exe)
     if b == 0x26 and exe[p + 1] == 0x23 and exe[p + 2] == 0x04:  # and ax, es:[si]
         ops.append((p, "far_andax_si"))  # bitwise fold of a by-ref int param
         p += 3  # (t1_byref1)

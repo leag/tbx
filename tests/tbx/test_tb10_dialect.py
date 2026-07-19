@@ -45,6 +45,7 @@ PAIRS = [
     "t1_gotoerr",
     "t1_doerr",
     "t1_arrwrite",
+    "t1_arrread",
     "t1_pcomma2",
     "t1_strgodo",
     "t1_strgoto",

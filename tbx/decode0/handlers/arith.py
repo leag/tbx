@@ -493,6 +493,11 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             state.put(ir.Assign(ref, state.ax), state.cur)
             state.ax = None
             state.cur = None
+        elif sik[1] == pre + "movax_si":
+            # mov ax, [si] (near) / mov ax, es:[si] (far): the INTEGER read
+            # sibling of movm_ax_si above -- `X% = ARRAY%(i)` via a computed
+            # index (wild number.exe), e.g. as an expression's first term.
+            state.ax = ref
         else:
             raise ValueError(f"element access: unexpected op {sik[1]} at {sik[0]:#x}")
         state.k += ao + 2
