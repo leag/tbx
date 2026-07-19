@@ -380,6 +380,9 @@ def _finalize(state: DecodeState, addr) -> Program:
     # lookup below: only probe when the ops show error-trap evidence, else
     # this linear EXE scan risks a spurious match in an unrelated program.
     data_orphan_lines: list[tuple[int, int]] = []
+    orphan_offs: set[int] = set()  # every orphaned offset, independent of DATA/DIM
+    do_lines: list[int] = []  # genuine (kept) synthesized DOs' own lines, in order
+    table_active = False
     if any(
         o[1] in ("resume_pre", "on_error", "error_stmt")
         or (o[1] == "movax_m" and o[2] in (0x72, 0x74))
@@ -394,7 +397,95 @@ def _finalize(state: DecodeState, addr) -> Program:
             | {a - state.start for a in state.stmt_addr.values() if a is not None},
         )
         if _early is not None:
+            table_active = True
             data_orphan_lines = _early[1]
+            orphan_offs = {o for o, _ in _early[1]}
+
+    # A bare backward jmps with no head-test frame is ALWAYS canonicalized
+    # to synthesized `DO ... LOOP` -- as a bare infinite `DO...LOOP` (core.py's
+    # dispatch loop, "bare backward jmps = infinite DO") or, via
+    # `_lift_do_tail`, as `DO...LOOP WHILE/UNTIL cond` -- since an explicit
+    # DO and a plain `<n> ... GOTO <n>` / `<n> ... IF cond THEN GOTO <n>`
+    # compile to byte-identical code and the decoder can't otherwise tell
+    # which the source used. But DO, like DATA/DIM, gets its OWN codeless
+    # line-table entry (probes q_do2/q_goto2/q_lt7: identical code either
+    # way, but only the DO form leaves an orphan entry sharing the loop
+    # body's offset) -- so once a table is active and shows NO orphan
+    # there, the DO spelling would recompile with an extra entry the
+    # original never had. wild vhfprop.exe: two such loops (one bare, one
+    # WHILE-tail-test), neither with orphan evidence -- both are plain
+    # GOTO/IfGoto loops. Un-synthesize them: drop the Do, retarget the
+    # paired Loop as a Goto (bare) or IfGoto (WHILE, same polarity as the
+    # tail test -- "continue if cond true" is exactly `IF cond THEN GOTO`;
+    # UNTIL would need De Morgan negation of a possibly-compound LogOp,
+    # unwitnessed, so it's left to raise below rather than guessed), all
+    # matched by nesting order (DO/LOOP pairs cannot cross in a
+    # well-formed program, so a stack pairs them correctly same as the
+    # loop's own runtime `state.dos` nesting would).
+    if table_active:
+        # Every Do (bare or head-test) is pushed, so a head-test DO's own
+        # closing (bare) Loop pops ITS Do and not some enclosing bare one --
+        # only a BARE Do's pairing is recorded for possible conversion.
+        do_stack: list[tuple[int, bool]] = []
+        do_to_loop: dict[int, int] = {}
+        for i, s in enumerate(state.stmts):
+            if isinstance(s, ir.Do):
+                do_stack.append((i, s.kind is None and s.cond is None))
+            elif isinstance(s, ir.Loop) and do_stack:
+                do_idx, is_bare = do_stack.pop()
+                if is_bare:
+                    do_to_loop[do_idx] = i
+        off_to_line = dict(data_orphan_lines)
+        drop: set[int] = set()
+        claimed_offs: set[int] = set()  # genuine DO's own orphan entry
+        do_idx_lines: dict[int, int] = {}  # do_idx -> its line, genuine DOs only
+        for do_idx, loop_idx in do_to_loop.items():
+            if state.addrs[do_idx] is not None:
+                continue  # a real (non-synthesized) Do -- untouched
+            host = state.addrs[do_idx + 1]
+            if host is None:
+                continue
+            host_off = host - state.start
+            if host_off in orphan_offs:
+                claimed_offs.add(host_off)  # a genuine DO -- not DATA/DIM's to see
+                do_idx_lines[do_idx] = off_to_line[host_off]
+                continue
+            loop_s = state.stmts[loop_idx]
+            assert isinstance(loop_s, ir.Loop)
+            if loop_s.kind is not None:
+                # A tail-test DO...LOOP WHILE/UNTIL's materialize-then-
+                # backward-jcc template (`_lift_do_tail`) is, empirically,
+                # ALSO used with no orphan evidence in wild vhfprop.exe --
+                # but every constructed probe that reaches this same byte
+                # shape (plain `IF compound THEN GOTO earlier`, integer or
+                # float, single or compound-OR condition) instead resolves
+                # through the short-circuit compound-IF machinery (gap 47),
+                # never through `_lift_do_tail`. No witnessed source
+                # construct produces this exact shape without a genuine DO,
+                # so un-synthesizing it (WHILE: plain IfGoto; UNTIL: needs
+                # De Morgan negation, harder still) would be a guess against
+                # the calibration rule despite the suggestive line-table
+                # evidence. Fail loud instead of risk a silent byte mismatch.
+                raise ValueError(
+                    "codeless DO...LOOP WHILE/UNTIL (no orphan evidence) has "
+                    "no witnessed non-DO source construct to un-synthesize to"
+                )
+            state.stmts[loop_idx] = ir.Goto(("addr", host))
+            drop.add(do_idx)
+        if drop:
+            keep = [i for i in range(len(state.stmts)) if i not in drop]
+            state.stmts[:] = [state.stmts[i] for i in keep]
+            state.addrs[:] = [state.addrs[i] for i in keep]
+        if claimed_offs:
+            data_orphan_lines = [
+                (o, ln) for o, ln in data_orphan_lines if o not in claimed_offs
+            ]
+        # Surviving genuine DOs' lines, in the order they'll be walked at
+        # the final prog.lines construction below (ascending do_idx, minus
+        # whatever `drop` removed ahead of them -- but drop only removes
+        # OTHER do_idx entries, never shifts a kept one out of relative
+        # order, so a plain sort by original do_idx matches final order).
+        do_lines = [do_idx_lines[i] for i in sorted(do_idx_lines)]
 
     shared_subs, sub_local_arrays = _scope_procs(state)
     ob = state.option_base if state.option_base is not None else 0
@@ -724,6 +815,7 @@ def _finalize(state: DecodeState, addr) -> Program:
             try:
                 pending_data_lines = iter(data_lines or ())
                 pending_dim_lines = iter(dim_lines or ())
+                pending_do_lines = iter(do_lines or ())
                 lines = []
                 for s, a in zip(prog, state.addrs):
                     queue = (
@@ -731,6 +823,8 @@ def _finalize(state: DecodeState, addr) -> Program:
                         if isinstance(s, ir.Data)
                         else pending_dim_lines
                         if isinstance(s, (ir.Dim, ir.OptionBase))
+                        else pending_do_lines
+                        if isinstance(s, ir.Do)
                         else None
                     )
                     if a is None and queue is not None:

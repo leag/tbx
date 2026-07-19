@@ -783,6 +783,45 @@ def test_decode_t1_nestif2():
     )
 
 
+def test_decode_t1_gotoerr():
+    # A bare backward jmps with no head-test frame is ALWAYS canonicalized
+    # to synthesized `DO ... LOOP` (core.py's "bare backward jmps =
+    # infinite DO"), since an explicit DO and a plain `<n> ... GOTO <n>`
+    # compile to byte-identical code -- fine under free renumbering, but
+    # DO gets its OWN codeless line-table entry (like DATA/DIM) that a
+    # plain GOTO loop never had, so canonicalizing to DO once a line table
+    # is active can recompile with an extra entry the original never had
+    # (wild vhfprop.exe: two such loops, neither with orphan evidence).
+    # When the table shows no orphan at the loop body's borrowed offset,
+    # the synthesized Do/bare-Loop pair is un-synthesized back to a plain
+    # Goto instead.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_gotoerr.exe"))
+    assert not any(isinstance(s, ir.Do) for s in prog)
+    assert prog[4] == ir.Goto(3)
+    assert emit0.emit(prog) == (
+        "10 A% = ERR: B% = ERL\n20 C% = 0\n30 C% = C% + 1\n40 GOTO 30\n"
+    )
+
+
+def test_decode_t1_doerr():
+    # Companion to t1_gotoerr: a GENUINE `DO...LOOP` (explicit in source)
+    # DOES leave its own orphan entry at the body's offset, so the
+    # un-synthesis in test_decode_t1_gotoerr must NOT fire here -- the Do
+    # stays, and gets its own line assigned from that orphan evidence
+    # (same mechanism as DATA/DIM's orphan-driven line recovery).
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_doerr.exe"))
+    assert prog[3] == ir.Do(None)
+    assert prog[5] == ir.Loop(None)
+    assert getattr(prog, "lines", None) == [10, 10, 20, 30, 40, 50]
+    assert emit0.emit(prog) == (
+        "10 A% = ERR: B% = ERL\n20 C% = 0\n30 DO\n40 C% = C% + 1\n50 LOOP\n"
+    )
+
+
 def test_decode_t1_fileint():
     # INPUT# with INTEGER targets (inv87/invoice at 0x1389c): the numeric
     # read leaves the value on the x87 stack as usual, but an int slot is

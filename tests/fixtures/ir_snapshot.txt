@@ -3293,6 +3293,14 @@ Assign(target=ArrayRef(name='V1', indices=(ArrayRef(name='V0', indices=(Var(name
 Assign(target=Var(name='C'), value=ArrayRef(name='V1', indices=(ArrayRef(name='V0', indices=(Var(name='B'), Lit(value=1))), Lit(value=1))))
 End()
 
+## t1_doerr
+Assign(target=Var(name='A%'), value=Err())
+Assign(target=Var(name='B%'), value=Erl())
+Assign(target=Var(name='C%'), value=Lit(value=0))
+Do(kind=None, cond=None)
+Assign(target=Var(name='C%'), value=BinOp(op='+', lhs=Var(name='C%'), rhs=Lit(value=1)))
+Loop(kind=None, cond=None)
+
 ## t1_draw
 Draw(cmd=StrLit(value='U10R10D10L10'))
 End()
@@ -3647,6 +3655,13 @@ Goto(target=3)
 Assign(target=Var(name='A'), value=Lit(value=2))
 Assign(target=Var(name='B'), value=Lit(value=3))
 End()
+
+## t1_gotoerr
+Assign(target=Var(name='A%'), value=Err())
+Assign(target=Var(name='B%'), value=Erl())
+Assign(target=Var(name='C%'), value=Lit(value=0))
+Assign(target=Var(name='C%'), value=BinOp(op='+', lhs=Var(name='C%'), rhs=Lit(value=1)))
+Goto(target=3)
 
 ## t1_icmpmat
 Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
@@ -8406,6 +8421,14 @@ Assign(target=ArrayRef(name='V1', indices=(ArrayRef(name='V0', indices=(Var(name
 Assign(target=Var(name='C'), value=ArrayRef(name='V1', indices=(ArrayRef(name='V0', indices=(Var(name='B'), Lit(value=1))), Lit(value=1))))
 End()
 
+## v10_t1_doerr
+Assign(target=Var(name='A%'), value=Err())
+Assign(target=Var(name='B%'), value=Erl())
+Assign(target=Var(name='C%'), value=Lit(value=0))
+Do(kind=None, cond=None)
+Assign(target=Var(name='C%'), value=BinOp(op='+', lhs=Var(name='C%'), rhs=Lit(value=1)))
+Loop(kind=None, cond=None)
+
 ## v10_t1_draw
 Draw(cmd=StrLit(value='U10R10D10L10'))
 End()
@@ -8733,6 +8756,13 @@ Goto(target=3)
 Assign(target=Var(name='A'), value=Lit(value=2))
 Assign(target=Var(name='B'), value=Lit(value=3))
 End()
+
+## v10_t1_gotoerr
+Assign(target=Var(name='A%'), value=Err())
+Assign(target=Var(name='B%'), value=Erl())
+Assign(target=Var(name='C%'), value=Lit(value=0))
+Assign(target=Var(name='C%'), value=BinOp(op='+', lhs=Var(name='C%'), rhs=Lit(value=1)))
+Goto(target=3)
 
 ## v10_t1_icmpmat
 Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
