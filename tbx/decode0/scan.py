@@ -1181,6 +1181,10 @@ def _scan(
                 ops.append((p, "bload"))
                 p += 3
                 continue
+            if sub == 0x04:  # BLOAD f$: the bare, no-offset form (distinct
+                ops.append((p, "bload0"))  # compiled shape, not merely a
+                p += 3  # default arg; wild varamort.exe, probe q_bload)
+                continue
             if sub == 0x08:  # BSAVE f$, offset, length
                 ops.append((p, "bsave"))
                 p += 3

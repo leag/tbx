@@ -478,7 +478,8 @@ def _us_fileio(s) -> str | None:
     if isinstance(s, Seek):
         return f"SEEK #{s.num}, {unparse(s.pos)}"
     if isinstance(s, Bload):
-        return f"BLOAD {unparse(s.file)}, {unparse(s.offset)}"
+        off = f", {unparse(s.offset)}" if s.offset is not None else ""
+        return f"BLOAD {unparse(s.file)}{off}"
     if isinstance(s, Bsave):
         return f"BSAVE {unparse(s.file)}, {unparse(s.offset)}, {unparse(s.length)}"
     if isinstance(s, Write):

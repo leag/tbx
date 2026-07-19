@@ -1212,7 +1212,8 @@ class _Gen:
             # holds runnable machine code
             return [f"tb_callabs({self.num(s.addr)});"]
         if isinstance(s, ir.Bload):
-            return [f"tb_bload({self.s(s.file)}, {self.num(s.offset)});"]
+            off = "0" if s.offset is None else self.num(s.offset)
+            return [f"tb_bload({self.s(s.file)}, {off});"]
         if isinstance(s, ir.Bsave):
             return [
                 f"tb_bsave({self.s(s.file)}, {self.num(s.offset)}, "

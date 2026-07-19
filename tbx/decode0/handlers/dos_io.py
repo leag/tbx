@@ -84,6 +84,11 @@ def os_system(state: DecodeState, op, addr, kind) -> bool:
         state.cur = None
         state.k += 1
         return True
+    if kind == "bload0":  # BLOAD f$: bare, no-offset form
+        state.put(ir.Bload(state.sstack.pop()), state.cur)
+        state.cur = None
+        state.k += 1
+        return True
     if kind == "bsave":  # BSAVE f$, offset, length
         length = state.stack.pop()
         offset = state.stack.pop()

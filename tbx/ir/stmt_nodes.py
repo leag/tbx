@@ -791,10 +791,13 @@ class Seek:
 
 @dataclass(frozen=True)
 class Bload:
-    """BLOAD f$, offset -- load a memory image."""
+    """BLOAD f$[, offset] -- load a memory image. offset=None: the bare
+    (no-offset) form, INT EC sub 04 -- a distinct compiled shape from the
+    sub-06 with-offset form, not merely a default argument (wild
+    varamort.exe/kinder.exe, probe q_bload)."""
 
     file: object  # StrLit | Var ($)
-    offset: object  # Expr
+    offset: object = None  # Expr | None
 
 
 @dataclass(frozen=True)

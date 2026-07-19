@@ -3046,6 +3046,11 @@ Goto(target=BodyLine(stmt=1, phys=2))
 Bload(file=StrLit(value='X.IMG'), offset=Lit(value=0))
 End()
 
+## t1_bload0
+DefSeg(seg=Lit(value=100))
+Bload(file=StrLit(value='X.BIN'), offset=None)
+End()
+
 ## t1_booluntil
 Do(kind=None, cond=None)
 Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
@@ -8354,6 +8359,11 @@ Goto(target=BodyLine(stmt=1, phys=2))
 
 ## v10_t1_bload
 Bload(file=StrLit(value='X.IMG'), offset=Lit(value=0))
+End()
+
+## v10_t1_bload0
+DefSeg(seg=Lit(value=100))
+Bload(file=StrLit(value='X.BIN'), offset=None)
 End()
 
 ## v10_t1_booluntil

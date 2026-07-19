@@ -1042,6 +1042,22 @@ def test_decode_t1_icomp():
     )
 
 
+def test_decode_t1_bload0():
+    # BLOAD f$ with no offset argument (wild varamort.exe/kinder.exe,
+    # right after `DEF SEG = &HB800`-style video-segment setup): INT EC
+    # sub 04, a genuinely distinct compiled shape from sub 06's
+    # with-offset form -- ir.Bload's offset field defaults to None rather
+    # than folding this into "offset omitted == 0" or similar, since the
+    # byte shapes differ (no FP-stack pop at all for the bare form).
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_bload0.exe"))
+    assert prog[1] == ir.Bload(ir.StrLit("X.BIN"))
+    assert emit0.emit(prog) == (
+        '10 DEF SEG = 100\n20 BLOAD "X.BIN"\n30 END\n'
+    )
+
+
 def test_decode_t1_fileint():
     # INPUT# with INTEGER targets (inv87/invoice at 0x1389c): the numeric
     # read leaves the value on the x87 stack as usual, but an int slot is
