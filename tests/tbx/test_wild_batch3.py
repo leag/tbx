@@ -1021,6 +1021,27 @@ def test_decode_t1_lineinf():
     )
 
 
+def test_decode_t1_icomp():
+    # Mixed-type relational (`IF A% > B THEN` with A% INTEGER and B a
+    # SINGLE variable, wild grdscn.exe/kinder.exe/night.exe/pfl.exe/
+    # stat.exe): B is pushed onto the FP stack (fld), then A%'s slot is
+    # compared against it via ESC DEh /3 (`icomp`, the m16-int compare
+    # sibling of D8h /3's `fcomp`) rather than the fast direct-int
+    # compare path -- the comparison itself forces int->FP promotion.
+    # mem resolution (var slot or a pooled int literal) mirrors the
+    # existing `ifold`/`ifold_n` arithmetic siblings exactly.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_icomp.exe"))
+    assert prog[2] == ir.IfGoto(
+        ir.RelOp("<=", ir.Var("A%"), ir.Var("B")), 5
+    )
+    assert emit0.emit(prog) == (
+        "10 A% = 5\n20 B = 5.5\n30 IF A% <= B THEN 60\n40 PRINT \"YES\"\n"
+        '50 GOTO 70\n60 PRINT "NO"\n70 END\n'
+    )
+
+
 def test_decode_t1_fileint():
     # INPUT# with INTEGER targets (inv87/invoice at 0x1389c): the numeric
     # read leaves the value on the x87 stack as usual, but an int slot is

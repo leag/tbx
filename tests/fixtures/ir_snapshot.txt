@@ -3723,6 +3723,15 @@ IfInline(cond=LogOp(op='OR', lhs=RelOp(op='>=', lhs=Call(name='LEN', args=(Var(n
 Print(items=(Var(name='B'),), newline=True, file=None, commas=None)
 End()
 
+## t1_icomp
+Assign(target=Var(name='A%'), value=Lit(value=5))
+Assign(target=Var(name='B'), value=SingleLit(value=5.5))
+IfGoto(cond=RelOp(op='<=', lhs=Var(name='A%'), rhs=Var(name='B')), target=5)
+Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None)
+Goto(target=6)
+Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_if
 Assign(target=Var(name='A'), value=Lit(value=1))
 Assign(target=Var(name='B'), value=Lit(value=2))
@@ -8903,6 +8912,15 @@ Assign(target=Var(name='B'), value=Lit(value=0))
 IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=2)), rhs=RelOp(op='<', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=9))), body=(Assign(target=Var(name='B'), value=Lit(value=1)),))
 IfInline(cond=LogOp(op='OR', lhs=RelOp(op='>=', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=3)), rhs=RelOp(op='<=', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=1))), body=(Assign(target=Var(name='B'), value=Lit(value=2)),))
 Print(items=(Var(name='B'),), newline=True, file=None, commas=None)
+End()
+
+## v10_t1_icomp
+Assign(target=Var(name='A%'), value=Lit(value=5))
+Assign(target=Var(name='B'), value=SingleLit(value=5.5))
+IfGoto(cond=RelOp(op='<=', lhs=Var(name='A%'), rhs=Var(name='B')), target=5)
+Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None)
+Goto(target=6)
+Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_if

@@ -1347,6 +1347,10 @@ def _scan(
                     (0xD9, 0): "fld",  # m32 scalar read
                     (0xD9, 3): "fstp",  # m32 scalar store (assignment)
                     (0xD8, 3): "fcomp",  # m32 compare (IF / loop tests)
+                    (0xDE, 3): "icomp",  # m16 int compare: int var or pool
+                    # literal vs. an FP-stack value (mixed-type IF/loop
+                    # test, e.g. `IF X% > Y THEN`; wild grdscn.exe et al.,
+                    # probe q_icomp)
                     (0xDD, 0): "fld64",  # m64 load (SELECT CASE selector temp)
                     (0xDD, 3): "fstp64",  # m64 store (SELECT CASE selector temp)
                     (0xDC, 3): "fcomp64",  # m64 compare (SELECT CASE arm test)
