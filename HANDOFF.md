@@ -1,13 +1,13 @@
 # Wild-corpus gap campaign — handoff
 
-Status as of 2026-07-19 (session gaps 46-60: line-table epic, nested
+Status as of 2026-07-19 (session gaps 46-62: line-table epic, nested
 block-IF, DO un-synthesis, computed-int-array element family, array-element
 SWAP (int + SINGLE), the modern `OPEN...FOR mode AS #n` syntax, LOF,
-file-channel LINE INPUT, and mixed-type relational compare), branch
-`claude/claude-md-docs-mr8ssz`. Standing instruction: close the most common
-decoder gap first, in frequency order, over the 84 wild PC-SIG Turbo Basic
-EXEs in `wild/hits/` (untracked, gitignored, copyrighted shareware —
-**never commit them**).
+file-channel LINE INPUT, mixed-type relational compare, BLOAD with no
+offset, and `^` under TB 1.0), branch `claude/claude-md-docs-mr8ssz`.
+Standing instruction: close the most common decoder gap first, in frequency
+order, over the 84 wild PC-SIG Turbo Basic EXEs in `wild/hits/` (untracked,
+gitignored, copyrighted shareware — **never commit them**).
 
 ## Where things stand
 
@@ -22,15 +22,15 @@ vhfprop.exe remains the only file blocked purely by the line-table epic
 **`OPEN file$ FOR mode AS #n` was the session's biggest single closure**:
 16 of 84 files were blocked on it alone (tied top of the tally at session
 start). Fresh tally (2026-07-19, after LOF/LINE INPUT#/array-SWAP/
-OPEN-FOR-AS/icomp):
+OPEN-FOR-AS/icomp/bload0/pow10):
 
 | count | error | status |
 |---|---|---|
 | 6 | byte 90 | confirmed unwitnessable (prior sessions) — not actionable |
 | 5 | byte ea | ">64K" theory refuted (prior session) — undiagnosed, not just "big lift" |
-| 4 | byte 89 | INVESTIGATED THIS SESSION, NOT LANDED — 3 of the 4 (catalog/pfl/process) share one root cause, see the gap section below: generic `movrr`'s register table is missing `di`; fix written, tested (all 3 advance cleanly), then REVERTED per the calibration rule since no probe reproduces it. The 4th (CVT2TB.EXE) is UNRELATED — it's actually gap 19/byte-06 (CGA blitter) in disguise, see that section's addendum. |
+| 4 | byte 89 | INVESTIGATED THIS SESSION, NOT LANDED — 3 of the 4 (catalog/pfl/process/kinder — a 4th, kinder.exe, joined mid-session) share one root cause, see the gap section below: generic `movrr`'s register table is missing `di`; fix written, tested (advances cleanly), then REVERTED per the calibration rule since no probe reproduces it. A STRONG new lead (SCREEN()+`\`/MOD) was found for kinder.exe specifically, narrowing the search a lot — see the gap section's addendum. CVT2TB.EXE's own byte-89 hit is UNRELATED — it's actually gap 19/byte-06 (CGA blitter) in disguise. |
 | 3 each | INT EC sub 4c; INT 8c; byte 06 | sub 4c undiagnosed (file#+ax-int statement, LOCATE/WIDTH-file guesses both ruled out); INT 8c / byte 06 extensively probed in prior sessions, still undiagnosed |
-| 2 each | INT EC sub ac/42/38/04; INT ce; INT 3E selector 14; FP dc/04, da/1c; byte f7/8c/8b/1e; system cell 0x8a | mostly untouched |
+| 2 each | INT EC sub ac/42/38; INT ce; FP dc/04, da/1c; byte f7/8c/8b/1e; system cell 0x8a | mostly untouched |
 | 1 | "codeless DO...LOOP WHILE/UNTIL ... unwitnessed" (vhfprop) | unchanged, see "vhfprop status" below |
 | singles | see scan output | untouched |
 
@@ -174,11 +174,13 @@ intended, permanent change.
 2. **Byte 89 / missing `di` spill register (4 files)** — see the gap
    section below FIRST, before touching any code: the exact fix (4
    small diffs) is already written out verbatim there, tested working
-   against 3 real wild files, but reverted for lack of a witnessed
-   probe. This is almost certainly the fastest actionable closure in
-   this list if a probe can be found — don't re-derive the mechanism,
-   just find the trigger construct (many candidates already ruled out,
-   see the section).
+   against real wild files, but reverted for lack of a witnessed probe.
+   Start with kinder.exe's SCREEN()+`\`/MOD lead (the addendum at the
+   end of the gap section) — it's the most tractable of the four by far,
+   already reproduces the shallow 2-register case exactly, just needs
+   one more nesting level found. This is almost certainly the fastest
+   actionable closure in this list if a probe can be found — don't
+   re-derive the mechanism, just find the trigger construct.
 3. **INT EC sub 4c (3 files, NEW)** — see the gap section below. Evidence:
    `[0060]=1 (file#); mov ax,<int var>; INT EC sub 4c` (raw 0x4A in TB
    1.0), immediately after an `X = LOF(1)` + `ON ERROR` pair, with no
@@ -212,6 +214,34 @@ intended, permanent change.
 
 ## Recently closed (this campaign, newest first)
 
+- **`^` (exponentiation) under TB 1.0** (2026-07-19): dialect.py's own
+  docstring predicted this ("TB 1.0 encodes ^ without an ED sub"; TB 1.1
+  uses ED sub 3A/fpow). TB 1.0's actual mechanism is INT 3Eh
+  (transcendental dispatcher) selector 0x14 -- byte-identical operand
+  push order to fpow's, so it aliases onto the existing `fpow` op kind
+  rather than needing new logic. Closed wild banker.exe/kinetics.exe.
+  Side finding, waived in test_c0.py rather than chased: TB's own `^`
+  runtime rounds the exponent to the nearest integer before computing
+  (confirmed via the oracle: 2.5^1.5 AND 2.5^1.9 both print 6.25 =
+  2.5^2) -- a genuine bug in Borland's math library, not handbook
+  semantics; c0 keeps true fractional exponentiation via C's `pow()`.
+  Fixture `t1_pow10`/`v10_t1_pow10`.
+- **BLOAD f$ with no offset argument** (2026-07-19): INT EC sub 04, a
+  genuinely distinct compiled shape from sub 06's with-offset form (no
+  FP-stack pop at all). `ir.Bload.offset` now defaults to `None`; the
+  emitter omits the trailing comma when unset. Closed wild
+  varamort.exe/kinder.exe's `DEF SEG = &HB800` + bare `BLOAD` video-
+  memory-load idiom. (Tangent worth knowing about: the ORIGINAL probe
+  used `DEF SEG = &HB800`, and recompiling the DECOMPILED source, which
+  necessarily re-emits that as plain decimal `-18432`, did NOT
+  byte-match -- TB compiles a negative HEX literal as a direct pooled
+  constant but a negative DECIMAL literal as `mov ax,imm; neg ax` at
+  runtime, two different byte shapes for the identical value. Sidestepped
+  by using a positive DEF SEG value in the fixture instead of chasing
+  that separately; it's a real, currently-undocumented-elsewhere
+  literal-spelling gap that could bite a future DEF SEG/negative-literal
+  fixture -- worth a dedicated look if it resurfaces.) Fixture
+  `t1_bload0`/`v10_t1_bload0`.
 - **Mixed-type relational compare (int var vs FP-stack value)** (2026-07-19):
   `IF A% > B THEN` where A% is INTEGER and B is SINGLE/DOUBLE forces
   int->FP promotion for the comparison: B pushed via `fld`, then A%'s
