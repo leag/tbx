@@ -261,6 +261,22 @@ def console(state: DecodeState, op, addr, kind) -> bool:
         state.cur = None
         state.k += 3
         return True
+    if kind == "line_input_file":  # LINE INPUT #n, var$
+        if state.pend_fnum is None:
+            raise ValueError(f"LINE INPUT # without a file number at {addr:#x}")
+        nxt = [o[1] for o in state.ops[state.k + 1 : state.k + 3]]
+        if nxt != ["movsi", "strassign"]:
+            raise ValueError(f"LINE INPUT # template mismatch at {addr:#x}")
+        state.put(
+            ir.LineInput(
+                None, state.loc(state.ops[state.k + 1][2]), state.pend_fnum
+            ),
+            state.cur,
+        )
+        state.pend_fnum = None
+        state.cur = None
+        state.k += 3
+        return True
     if kind == "key_list":  # KEY LIST
         state.put(ir.KeyList(), state.cur)
         state.cur = None

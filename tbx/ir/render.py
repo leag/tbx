@@ -434,6 +434,8 @@ def _us_console(s) -> str | None:
         sep = "," if s.comma else ";"
         return f"{kw} {unparse(s.prompt)}{sep} {vs}"
     if isinstance(s, LineInput):
+        if s.file is not None:
+            return f"LINE INPUT #{s.file}, {unparse(s.var)}"
         if s.prompt is None:
             return f"LINE INPUT {unparse(s.var)}"
         return f"LINE INPUT {unparse(s.prompt)}; {unparse(s.var)}"

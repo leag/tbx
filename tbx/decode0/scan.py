@@ -1003,6 +1003,10 @@ def _scan(
                 ops.append((p, "line_input", d16))
                 p += 6
                 continue
+            if sub == 0x66:  # LINE INPUT #n, var$: no prompt, [0060]=n
+                ops.append((p, "line_input_file"))
+                p += 3
+                continue
             if sub == 0x82:  # OPEN
                 ops.append((p, "open"))
                 p += 3

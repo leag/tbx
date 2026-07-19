@@ -1002,6 +1002,25 @@ def test_decode_t1_lof():
     )
 
 
+def test_decode_t1_lineinf():
+    # LINE INPUT #n, var$ (wild billadd.exe/crossref.exe/file.exe/
+    # grdscn.exe/strpfind.exe): the file-channel sibling of console LINE
+    # INPUT -- `cd ec 66` (canonical; no operand -- there's no prompt for
+    # a file read, unlike sub 64's `cd ec 64 <prompt_desc> 40`) + the
+    # same `movsi; strassign` consumer, with [0060] carrying the file
+    # number like OPEN/PRINT#/INPUT#. ir.LineInput grew a `file` field
+    # (prompt and file are mutually exclusive).
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_lineinf.exe"))
+    assert prog[4] == ir.LineInput(None, ir.Var("A$"), 1)
+    assert emit0.emit(prog) == (
+        '10 OPEN "A.TXT" FOR OUTPUT AS #1\n20 PRINT #1, "HELLO"\n'
+        '30 CLOSE #1\n40 OPEN "A.TXT" FOR INPUT AS #1\n'
+        "50 LINE INPUT #1, A$\n60 PRINT A$\n70 CLOSE #1\n80 END\n"
+    )
+
+
 def test_decode_t1_fileint():
     # INPUT# with INTEGER targets (inv87/invoice at 0x1389c): the numeric
     # read leaves the value on the x87 stack as usual, but an int slot is

@@ -864,6 +864,10 @@ class _Gen:
             fn = "tb_input_str" if _suffix_ty(s.var.name) == "STR" else "tb_input_num"
             return [self.assign(s.var, _Raw(f"{fn}({prompt}, {mark})", fn.endswith("str")))]
         if isinstance(s, ir.LineInput):
+            if s.file is not None:
+                return [
+                    self.assign(s.var, _Raw(f"tb_finput_line({s.file})", True))
+                ]
             prompt = (
                 f"TB_S({_cstr(s.prompt.value)})"
                 if s.prompt is not None

@@ -3448,7 +3448,7 @@ Close(num=1)
 End()
 
 ## t1_file2
-LineInput(prompt=None, var=Var(name='A$'))
+LineInput(prompt=None, var=Var(name='A$'), file=None)
 Open(mode=StrLit(value='I'), num=2, file=Var(name='A$'), reclen=None, for_as=False)
 InputFile(num=2, vars=(Var(name='B'), Var(name='C')))
 Close(num=2)
@@ -3775,8 +3775,8 @@ Input(prompt=StrLit(value='X'), var=Var(name='A'), comma=False, semi=False)
 End()
 
 ## t1_inp3
-LineInput(prompt=None, var=Var(name='A$'))
-LineInput(prompt=StrLit(value='X'), var=Var(name='B$'))
+LineInput(prompt=None, var=Var(name='A$'), file=None)
+LineInput(prompt=StrLit(value='X'), var=Var(name='B$'), file=None)
 End()
 
 ## t1_inp4
@@ -3900,6 +3900,16 @@ End()
 
 ## t1_linebst
 LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=Lit(value=2), box='B', step1=False, step2=False, style=HexLit(value=43690))
+End()
+
+## t1_lineinf
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='A.TXT'), reclen=None, for_as=True)
+Print(items=(StrLit(value='HELLO'),), newline=True, file=1, commas=None)
+Close(num=1)
+Open(mode=StrLit(value='I'), num=1, file=StrLit(value='A.TXT'), reclen=None, for_as=True)
+LineInput(prompt=None, var=Var(name='A$'), file=1)
+Print(items=(Var(name='A$'),), newline=True, file=None, commas=None)
+Close(num=1)
 End()
 
 ## t1_lines
@@ -8638,7 +8648,7 @@ Close(num=1)
 End()
 
 ## v10_t1_file2
-LineInput(prompt=None, var=Var(name='A$'))
+LineInput(prompt=None, var=Var(name='A$'), file=None)
 Open(mode=StrLit(value='I'), num=2, file=Var(name='A$'), reclen=None, for_as=False)
 InputFile(num=2, vars=(Var(name='B'), Var(name='C')))
 Close(num=2)
@@ -8941,8 +8951,8 @@ Input(prompt=StrLit(value='X'), var=Var(name='A'), comma=False, semi=False)
 End()
 
 ## v10_t1_inp3
-LineInput(prompt=None, var=Var(name='A$'))
-LineInput(prompt=StrLit(value='X'), var=Var(name='B$'))
+LineInput(prompt=None, var=Var(name='A$'), file=None)
+LineInput(prompt=StrLit(value='X'), var=Var(name='B$'), file=None)
 End()
 
 ## v10_t1_inp4
@@ -9038,6 +9048,16 @@ End()
 
 ## v10_t1_linebst
 LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=Lit(value=2), box='B', step1=False, step2=False, style=HexLit(value=43690))
+End()
+
+## v10_t1_lineinf
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='A.TXT'), reclen=None, for_as=True)
+Print(items=(StrLit(value='HELLO'),), newline=True, file=1, commas=None)
+Close(num=1)
+Open(mode=StrLit(value='I'), num=1, file=StrLit(value='A.TXT'), reclen=None, for_as=True)
+LineInput(prompt=None, var=Var(name='A$'), file=1)
+Print(items=(Var(name='A$'),), newline=True, file=None, commas=None)
+Close(num=1)
 End()
 
 ## v10_t1_lines

@@ -52,6 +52,7 @@ PAIRS = [
     "t1_arrswapf",
     "t1_openfor",
     "t1_lof",
+    "t1_lineinf",
     "t1_pcomma2",
     "t1_strgodo",
     "t1_strgoto",

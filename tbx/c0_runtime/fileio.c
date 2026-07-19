@@ -99,6 +99,21 @@ tb_str tb_finput_str(int n) {
     memcpy(r.p, buf, k);
     return r;
 }
+tb_str tb_finput_line(int n) {
+    /* LINE INPUT #n: the whole line verbatim, no comma/quote parsing
+       (unlike tb_finput_str, which is INPUT#'s field reader) */
+    FILE *f = tb_file(n);
+    int c = fgetc(f);
+    if (c == EOF) tb_error(62);                          /* input past end */
+    char buf[256]; size_t k = 0;
+    while (c != EOF && c != '\n') {
+        if (c != '\r' && k < sizeof buf - 1) buf[k++] = (char)c;
+        c = fgetc(f);
+    }
+    tb_str r = tb_new(k);
+    memcpy(r.p, buf, k);
+    return r;
+}
 void tb_field_start(int n) {
     tb_file(n);
     tb_fieldoff[n] = 0;

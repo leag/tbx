@@ -157,6 +157,7 @@ double tb_eof(double n);
 double tb_lof(double n);
 double tb_finput_num(int n);
 tb_str tb_finput_str(int n);
+tb_str tb_finput_line(int n);
 void tb_field_start(int n);
 void tb_field_reg(int n, tb_str *var, long w);
 void tb_lsetrset(tb_str *var, tb_str src, int right);

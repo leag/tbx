@@ -695,10 +695,16 @@ class Input:
 
 @dataclass(frozen=True)
 class LineInput:
-    """LINE INPUT ["prompt";] var$ -- `cd ec 64 <prompt_desc> 40` + strassign."""
+    """LINE INPUT ["prompt";] var$ -- `cd ec 64 <prompt_desc> 40` + strassign.
+
+    LINE INPUT #n, var$ (file variant) is `cd ec 66` (no operand; [0060]
+    carries the file number, same convention as OPEN/PRINT#/INPUT#) +
+    strassign -- no prompt, so `prompt` and `file` are mutually exclusive
+    (wild billadd.exe et al., probe q_lineinputf)."""
 
     prompt: object  # StrLit | None
     var: object  # Var ($)
+    file: object = None  # int | None
 
 
 @dataclass(frozen=True)
