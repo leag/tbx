@@ -19,7 +19,7 @@ Fresh tally (2026-07-18, after gap 54):
 |---|---|---|
 | 16 | INT cd | unwitnessable runtime-revision artifact — not actionable (see `scan_wild.py` docstring) |
 | 5 | byte 90 | ALL 5 now confirmed the same set-aside, unwitnessable shape (rstprint.exe's occurrence checked this session: identical `90 90` then `mov ax,[002C]` byte sequence) — not actionable |
-| 4 | byte ea | likely multi-segment-code JMP FAR (>64K code) — big lift, not a small gap |
+| 4 | byte ea | the ">64K multi-segment JMP FAR" theory is REFUTED this session (see the byte-ea section below) — genuinely undiagnosed now, not just "big lift" |
 | 3 each | INT 8c; byte 06 | both extensively probed earlier, still undiagnosed (sections below) — **next stop, tied for most actionable** |
 | 2 each | EC sub 66, EC sub 38 (gap 33, stuck), FP de/1e, FP dc/04, FP da/1c, byte 8c/8b/89/29/1e, system cell 0x8a | mostly untouched |
 | 2 | "jump target 0x15740 is not a statement start" (inv87/invoice) | the LINE-TABLE EPIC below — inv87's OWN error-trap line table doesn't even resolve (`_line_table` returns `None`), a SEPARATE, deeper problem than the nested-block-IF issue originally suspected — needs its own diagnosis before the nested-IF fix is even relevant |
@@ -151,12 +151,16 @@ intended, permanent change.
 
 ## Ongoing plan (priority order — pick up at the first incomplete step)
 
-1. **INT 8c (3 files)** — ON KEY GOSUB lead; untried probes listed in the
-   gap section below. Tied with byte 06 for most actionable remaining.
-2. **Byte 06 / gap 19 (3 files)** — CGA snow-avoidance blitter; probe
-   VIEW PRINT / WIDTH PRINT / PCOPY / text GET/PUT one at a time.
-3. **Byte ea (4 files)** — scope the JMP FAR multi-segment theory on
-   mcmurphy/mf/swbb before deciding attempt vs set-aside.
+1. **Byte ea (4 files)** — the ">64K" theory is refuted (see the gap
+   section below); try reproducing elec87.exe's exact shape (a large
+   FLAT string-comparison chain alongside whatever else that 155KB
+   program does) before guessing further.
+2. **INT 8c (3 files)** — ON KEY GOSUB lead; a follow-on statement INSIDE
+   the trap handler body (not more traps/toggles) is the next untried
+   category.
+3. **Byte 06 / gap 19 (3 files)** — CGA snow-avoidance blitter; VIEW
+   PRINT and PCOPY are ruled out (not real TB keywords); text GET/PUT is
+   the remaining untried candidate.
 4. **inv87's line-table-doesn't-resolve-at-all issue** (above) — diagnose
    BEFORE the nested-block-IF work; the debug-patch technique documented
    above finds it fast.
@@ -665,6 +669,76 @@ follows CLS+assignment, not to trap count/toggles/K — still
 undiagnosed; a genuinely different follow-on statement inside the
 handler (e.g. an INKEY$ read, a LOCATE, a nested IF) is the next
 category worth trying, not more ON KEY variations.
+
+## Gap byte ea (elec87/mcmurphy/mf/swbb), UNDIAGNOSED — ">64K" theory REFUTED
+
+The prior assumption ("likely multi-segment-code JMP FAR, >64K code, big
+lift") does NOT survive scrutiny this session. `0xEA` is the raw x86 `JMP
+FAR ptr16:16` opcode (5 bytes: `ea off_lo off_hi seg_lo seg_hi`) — but:
+
+- **All 4 files have ZERO MZ relocation entries** (`e_crlc == 0` in the
+  header). A genuine cross-segment far jump whose target segment depends
+  on the program's LOAD segment would need a relocation entry to patch
+  that segment field at load time; none exists anywhere in these files.
+  So the segment field is either a self-relocating runtime-patched value
+  (unconfirmed) or, more likely given the next finding, not really a
+  segment at all in the usual sense.
+- **The computed linear target (`seg*16 + off`) lands VERY CLOSE to the
+  jump site**, not far away: elec87.exe's occurrence at file offset
+  `0x10a82` (`jmp 0F9Eh:10D6h`) computes to linear `0x10ab6` — only 52
+  bytes past the jump instruction itself. mf.exe's occurrence similarly
+  computes to a target ~14.6KB forward — comfortably within ordinary
+  `e9`/rel16 near-jump range. A genuine ">64K, can't reach with rel16"
+  jump would need a target that's actually far in absolute terms; these
+  aren't.
+- Both distances are trivially reachable with a near jump, and this
+  session's decoder ALREADY handles near jumps at much greater distances
+  elsewhere in the very same files (ops immediately preceding the
+  failure show ordinary `jmp` targets 15-17KB away, handled fine) — so
+  raw distance isn't gating the near-vs-far choice either.
+- Two of the four files (elec87.exe, mf.exe) show the SAME structural
+  shape immediately before the failure: `Jcc rel8=5 (skip); jmp far
+  seg:off` — a dispatch pair exactly analogous to the ordinary `Jcc
+  rel8=3; jmp rel16` "skip this near jump" pattern used everywhere else
+  in the decoder (cmpax_m's IfGoto, the compound-bool machinery, etc.),
+  just with a 5-byte far jump standing in for the usual 3-byte near one.
+  Confirmed NOT coincidental: `_scan()`'s byte-exact instruction-length
+  bookkeeping means every byte before the failure was already consumed
+  by a real, correctly-decoded instruction, so the preceding `Jcc`
+  really does skip exactly this far-jump's length.
+- Extracted the pre-failure op stream via the traceback-frame technique
+  (see "Reproducing the investigation" above): elec87.exe's failure
+  follows **100 `strcmp` ops** already scanned (out of 5839 total ops up
+  to that point) — each `strcmp` paired with its own `Jcc`+`jmp`, i.e. a
+  long chain of string comparisons (a big `SELECT CASE`-on-string or
+  `IF ... ELSEIF A$ = "..." THEN ...` chain, or a command-word parser).
+
+**Ruled out this session** (compiled via the oracle, decoded clean, no
+byte-ea anywhere): a 60-arm `SELECT CASE` on strings (`q_bigselect.bas`,
+37KB total); a 400-arm flat `IF/ELSEIF` chain on strings (`q_bigif.bas`,
+56KB total — comparable to the SIZE where elec87 fails, ~68KB into its
+user code, but the shape didn't reproduce); a 900-arm string chain hit
+an UNRELATED pre-existing gap first (`"string char record not found"`,
+likely a string-pool-scaling limit distinct from gap 30's fix — noted
+but not chased, out of scope here); a 1400-arm chain on INTEGER (not
+string) comparisons scanned cleanly with ordinary near jumps throughout
+(16802 ops, no byte-ea) but hit a `RecursionError` in `_fold_if` at the
+LATER block-folding stage (Python recursion limit from 1400 levels of
+nested ELSEIF-as-nested-IF folding — a real but separate latent bug,
+not relevant to wild files which won't nest anywhere near that deep).
+
+**Not yet tried**: reproducing elec87.exe's specific shape more
+precisely — STRING comparisons specifically (not integer, which didn't
+reproduce it even at large scale) in a FLAT (not deeply-nested) chain,
+at a size in the tens of KB, combined with whatever ELSE elec87.exe's
+program does (its file is 155KB total, likely has arrays/SUBs/graphics
+alongside the string-parser chain — the trigger might depend on
+something in COMBINATION with the string chain, not the chain size
+alone, since a bare 400-arm string chain at a comparable byte offset
+did NOT reproduce it). Also worth checking: does the LAST arm of a
+chain (the one immediately before `END IF`/`CASE ELSE`/`SELECT
+END`) compile differently from earlier arms — the failure might be
+specific to how the FINAL fallthrough is encoded, not to arm count.
 
 ## Gap 19 — byte 06 (filepatc/morcalc/pw, all TB 1.0), UNDIAGNOSED
 
