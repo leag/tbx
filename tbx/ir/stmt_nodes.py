@@ -191,6 +191,19 @@ class OptionBase:
 
 
 @dataclass(frozen=True)
+class DefType:
+    """DEFINT/DEFSTR/DEFSNG/DEFDBL <letter-range>: default-type declaration.
+    Emits no code at all (confirmed via the oracle: DEFINT A-Z and DEFSTR S
+    compile byte-IDENTICAL programs once every variable carries an explicit
+    type suffix, which tbx's own emitted source always does) -- so which
+    keyword/letter-range the original used is unrecoverable AND inconsequential
+    for a byte-exact recompile. Recovered only from an error-trap line-table
+    orphan with no DATA pool to explain it (wild metric.exe); always rendered
+    as the fixed canonical spelling `DEFSNG A-Z`, chosen arbitrarily since any
+    spelling recompiles identically."""
+
+
+@dataclass(frozen=True)
 class Print:
     """PRINT [#n,] item[; item...][;] -- item vectors (console: string BE / numeric BB;
     file: string C0 / numeric BD after [0060]=n), flush (B8/BA) only without a trailing

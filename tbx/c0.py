@@ -638,7 +638,7 @@ class _Gen:
             return self.gen_write(s)
         if isinstance(s, ir.End):
             return ["exit(0);"]
-        if isinstance(s, (ir.Tron, ir.Troff)):
+        if isinstance(s, (ir.Tron, ir.Troff, ir.DefType)):
             return []
         if isinstance(s, (ir.Goto, ir.IfGoto, ir.Gosub)) and isinstance(
             s.target, ir.BodyLine

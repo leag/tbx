@@ -1169,6 +1169,89 @@ test's own trailing jmp rather than a separate `jmps` found by
 `_has_jmps_back`. Kept as a heading here (rather than deleted) so a
 future `grep` for this error string still finds where it was solved.
 
+## Gap "codeless-statement entry but no DATA pool" (metric.exe), SOLVED (2026-07-19)
+
+Surfaced immediately by the nested-FOR-loop fix directly above, in the
+SAME wild file. `core.py` `_finalize`'s DATA-pool fallback (~line 582):
+after DO-unsynthesis claims every bare-Do's orphan and the static-DIM
+count-match runs, 3 of metric.exe's 56 error-trap-line-table orphan
+entries remained unclaimed, and `_read_data_pool` found nothing to
+explain them. They are `DEFINT`/`DEFSTR`/`DEFSNG`/`DEFDBL` default-type
+declarations. These compile with no executable code but each leaves its
+own error-line-table entry. The exact keyword and letter range are erased;
+once emitted variables carry explicit suffixes, canonical `DEFSNG A-Z`
+recompiles byte-identically. Fixture `t1_deftype` witnesses all three wild
+placements (before ON ERROR and before two self-loop IFs) and passes the
+oracle byte-exact round trip.
+
+**The table itself is a genuine oddity worth knowing before diagnosing
+further**: EVERY one of metric.exe's 1733 real entries AND all 56
+orphans show line number **0** -- not just the leftover 3. Confirmed
+this is not a false-positive table match (the walk requires reaching the
+exact epilogue offset with a matching trailing line, which cannot
+realistically happen by chance over ~1789 consecutive 4-byte groups; the
+real-entry count, 1733, exactly equals the file's own decoded statement
+count). Probed and CONFIRMED harmless/expected, not itself the bug:
+plain `ON ERROR GOTO`+`RESUME NEXT` with every line numbered compiles a
+fully correct, non-zero table (`10,20,30...`); a program mixing numbered
+and UNNUMBERED statements shows each unnumbered statement inheriting the
+MOST RECENT preceding numbered line (never 0) -- so metric.exe's
+all-zero table most likely just means its source has NO (or almost no)
+explicit line numbers ANYWHERE, i.e. it's written in the unnumbered/
+label-sparse style, which is a separate, self-consistent finding, not
+obviously connected to the 3 unclaimed orphans. (Whether an all-zero
+table is even byte-significant at all -- i.e. whether `prog.lines` needs
+to preserve it or could safely fall back to free renumbering -- is
+itself unresolved; nothing in this investigation reached the point of
+testing that.)
+
+**The 3 unclaimed orphans, precisely located** (via a temporary spy on
+`core._finalize` capturing `state`/`addr`, then re-running `_line_table`
+directly -- see git history of this commit for the technique):
+- Offset 9: the codeless statement immediately precedes `state.stmts[2]`,
+  `OnError(target=('addr', 67481))` -- the program's `ON ERROR GOTO`
+  itself, preceded by `Cls()` and `Key(on=False)`.
+- Offset 1137: immediately precedes `state.stmts[83]`, a SELF-referential
+  `IfGoto(cond=LEN(INKEY$)=0, target=(same address))` -- the classic
+  "wait for any key" busy-loop idiom, `<n> IF LEN(INKEY$)=0 THEN GOTO
+  <n>` (a bare-line, non-DO-loop spelling of the SAME idea this
+  session's `t1_orax` fixture closed for the DO-loop spelling).
+- Offset 26103: the SAME self-referential-IfGoto shape again, near the
+  very end of the program (inside what looks like the error handler's
+  own body, given `on_error`'s target 67481 and 3 separate `resume_pre`
+  ops all land nearby, ~25750-26014). This one immediately follows the
+  program's "THANK YOU FOR EVALUATING METRIC.EXE... PLEASE SEE
+  METRIC.DOC..." shareware nag screen -- i.e. the error handler
+  plausibly displays this nag and waits for a key before ending.
+  `state.stmts` confirms only 1 `OnError` and each mystery target
+  address is referenced exactly once (ruling out a "multiply-referenced
+  target gets an extra entry" theory).
+
+**Ruled out this session** (all via `oracle.compile_bas`, dialect 1.1,
+none produced an orphan):
+- A bare numbered line with NO statement at all (`900` alone, nothing
+  after it) -- produces NO table entry whatsoever, not even an orphan;
+  the compiler elides it completely and resolves any GOTO/RESUME target
+  straight through to the next real statement. Consistent with REM/`::`
+  already being confirmed non-codeless; genuinely empty lines carry no
+  recoverable payload at all, unlike DATA/DIM.
+- A plain, fully-numbered `IF LEN(INKEY$)=0 THEN GOTO <same line>`
+  self-loop, alone or preceded by unnumbered statements (matching
+  metric.exe's likely mostly-unnumbered style) -- decodes clean, no
+  orphan, in both cases.
+- A realistic multi-branch handler (`IF ERR=5 THEN RESUME NEXT`, `IF
+  ERR=6 THEN RESUME 40`, THEN the nag-screen-and-self-loop shape,
+  mirroring metric.exe's 3-RESUME structure) -- still no orphan.
+- Explicit `OPTION BASE 0` (redundant with the default) was tried directly
+  before `ON ERROR GOTO`: it produces no orphan and is elided on decode.
+  The DEFxxx family was the matching lead.
+
+**batch_probe.py** (`tbx/tools/batch_probe.py`, new this session) is a
+good fit for sweeping the OPTION-BASE/DEFxxx family and any other small
+variations in one pass once there's a concrete list of candidates --
+this investigation mostly predates the tool's construction and was done
+one probe at a time; a future pickup should batch it.
+
 ## Gap 33 — INT EC sub 38 (football.exe/refund.exe/varamort.exe), UNDIAGNOSED
 
 Grew from 2 files to 3 this session: varamort.exe joined once its

@@ -3260,6 +3260,16 @@ Poke(addr=Lit(value=1040), value=Lit(value=1))
 DefSeg(seg=None)
 End()
 
+## t1_deftype
+DefType()
+OnError(target=7)
+DefType()
+IfGoto(cond=RelOp(op='=', lhs=Call(name='LEN', args=(Nullary(name='INKEY$'),)), rhs=Lit(value=0)), target=3)
+DefType()
+IfGoto(cond=RelOp(op='=', lhs=Call(name='LEN', args=(Nullary(name='INKEY$'),)), rhs=Lit(value=0)), target=5)
+End()
+Resume(next_=True, target=None)
+
 ## t1_delay
 Delay(secs=Lit(value=1))
 End()

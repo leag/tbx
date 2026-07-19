@@ -1137,6 +1137,30 @@ def test_decode_t1_orax():
     )
 
 
+def test_decode_t1_deftype():
+    # DEFINT/DEFSTR/DEFSNG/DEFDBL emit no executable code, but each leaves
+    # an orphan entry in an active error-trap line table. The declaration's
+    # exact keyword/range is otherwise erased once all emitted variables are
+    # explicitly suffixed, so normalize each recovered declaration to the
+    # byte-identical canonical spelling DEFSNG A-Z. This fixture deliberately
+    # puts declarations before ON ERROR and before two self-referential IF
+    # loops, matching all three placements seen in wild metric.exe.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_deftype.exe"))
+    assert [i for i, s in enumerate(prog) if isinstance(s, ir.DefType)] == [0, 2, 4]
+    assert emit0.emit(prog) == (
+        "10 DEFSNG A-Z\n"
+        "20 ON ERROR GOTO 100\n"
+        "30 DEFSNG A-Z\n"
+        "40 IF LEN(INKEY$) = 0 THEN 40\n"
+        "50 DEFSNG A-Z\n"
+        "60 IF LEN(INKEY$) = 0 THEN 60\n"
+        "70 END\n"
+        "100 RESUME NEXT\n"
+    )
+
+
 def test_decode_t1_closevar():
     # CLOSE #n where n is a variable, not a literal (wild metric.exe,
     # right after the orax/DO-loop gap): the file number reaches CLOSE's

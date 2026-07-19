@@ -576,15 +576,28 @@ def _finalize(state: DecodeState, addr) -> Program:
     # DATA stmts at item 0 and at every RESTORE <line> target item index, so
     # the target maps to a real stmt.
     data_lines: list[int] | None = None  # one line per data_block entry, if known
+    deftype_lines: list[int] = []  # one line per inserted DefType, in insertion order
     if any(isinstance(s, (ir.Read, ir.Restore)) for s in state.stmts) or data_orphan_lines:
         items = _read_data_pool(state.exe)
         if not items and data_orphan_lines:
-            raise ValueError(
-                "error-trap line table has a codeless-statement entry but "
-                "no DATA pool was found (unsupported zero-length-statement "
-                "shape)"
-            )
-        if items:
+            # No DATA pool at all, yet orphan evidence remains: a DEFINT/
+            # DEFSTR/DEFSNG/DEFDBL default-type declaration (wild metric.exe).
+            # Confirmed via the oracle: DEFINT A-Z and DEFSTR S compile
+            # byte-IDENTICAL programs once every variable is explicitly
+            # suffixed (which tbx's own emitted source always is), so the
+            # original keyword/letter-range is unrecoverable but also
+            # inconsequential -- `ir.DefType` always renders as a fixed
+            # canonical `DEFSNG A-Z`. Each orphan is independent (unlike
+            # DATA's single-cluster item-split, a DEFxxx statement carries
+            # no payload to split), so insert one placeholder per orphan at
+            # its own borrowed offset, in table order.
+            for off, ln in data_orphan_lines:
+                j = state.addrs.index(state.start + off)
+                state.stmts.insert(j, ir.DefType())
+                state.addrs.insert(j, None)
+                deftype_lines.append(ln)
+            data_orphan_lines = []
+        elif items:
             if data_orphan_lines:
                 # A codeless DATA statement has no READ to anchor a split
                 # point via RESTORE targets. `data_orphan_lines` (one entry
@@ -819,6 +832,7 @@ def _finalize(state: DecodeState, addr) -> Program:
                 pending_data_lines = iter(data_lines or ())
                 pending_dim_lines = iter(dim_lines or ())
                 pending_do_lines = iter(do_lines or ())
+                pending_deftype_lines = iter(deftype_lines)
                 lines = []
                 for s, a in zip(prog, state.addrs):
                     queue = (
@@ -828,6 +842,8 @@ def _finalize(state: DecodeState, addr) -> Program:
                         if isinstance(s, (ir.Dim, ir.OptionBase))
                         else pending_do_lines
                         if isinstance(s, ir.Do)
+                        else pending_deftype_lines
+                        if isinstance(s, ir.DefType)
                         else None
                     )
                     if a is None and queue is not None:

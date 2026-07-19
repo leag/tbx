@@ -54,6 +54,7 @@ from tbx.ir.stmt_nodes import (
     DateTimeSet,
     DefFn,
     DefSeg,
+    DefType,
     Delay,
     Dim,
     Do,
@@ -264,6 +265,8 @@ def _us_decl(s) -> str | None:
         return "DIM " + ", ".join(arr(n, b) for n, b in ((s.name, s.bounds), *s.also))
     if isinstance(s, OptionBase):
         return f"OPTION BASE {s.n}"
+    if isinstance(s, DefType):
+        return "DEFSNG A-Z"
     if isinstance(s, Erase):
         return f"ERASE {s.name}"
     if isinstance(s, Shared):
