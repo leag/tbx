@@ -1157,19 +1157,63 @@ expr> / LEN(S$)`, committing to scalar disp 1512, BEFORE the block-396
 statement starts fresh. This confirms sub 0x38 takes no stack-pushed
 argument at all (unlike a hoped-for "resize array to this new size"
 operation, which would need to consume something at disp 1512) — whatever
-0x38 does, it acts on the array block alone. Worth re-examining: get much
-more context AFTER the failure point (patch scan.py's `raise` line to a
-temporary `continue`+print, as this session did, then revert — do NOT
-commit a "handled" stub without an oracle-verified probe) to see what
-STATEMENT-LEVEL pattern (not just the immediately-preceding one) precedes
-this block reference in the actual source, since neither file's `.bas` is
-recoverable. Untried candidate statements: `CLEAR` variants that also
-touch a specific array, `COMMON`-shared dynamic array cleanup, an
-ON-ERROR-triggered implicit ERASE, or a GET/PUT FILE (not graphics)
-`#n, rec` where `rec` is itself a runtime-DIM'd array element buffer
-(distinct from the already-working FIELD-based GET/PUT). Do not guess the
-decoder-side fix without an oracle-confirmed probe reproducing `cd ec 38`
-exactly — per the calibration rule, a byte pattern only joins the
+0x38 does, it acts on the array block alone.
+
+**Context AFTER the failure point, captured this session (2026-07-19)**
+via iced-x86 directly on the raw bytes (properly re-aligned past the
+3-byte `cd ec 38` this time -- an earlier attempt in the same investigation
+misaligned by 3 bytes and produced garbage). Immediately following the
+mystery op, football.exe has a LONG straight-line (no loop/jump) run of
+`mov si,<src>; int 9Ch (push string desc); mov si,<dst>; int A0h (pop-
+assign)` pairs -- i.e. many individual `<dst> = <src>` string assignments,
+NOT a loop. The destination disps are perfectly sequential (FC4, FC8,
+FCC, FD0, FD4, FD8, FDC, FE0 -- +4 each, a string array filled element by
+element). The SOURCE disps looked scattered at first (6F0, 6D8, 6EC, 6D4,
+6E8, 6D0, 6E4, 6CC) but interleave into TWO cleanly-descending sequences
+four apart (odd positions: 6F0, 6EC, 6E8, 6E4; even positions: 6D8, 6D4,
+6D0, 6CC) -- i.e. TWO other arrays, each walked in REVERSE index order,
+zippered together into the destination array in forward order. Very
+plausibly a roster-merge idiom for a program like football.exe (e.g.
+combining two parallel arrays -- first names/last names, or two team
+rosters -- into one, back-to-front). This did NOT pin down what sub 0x38
+itself does (still block-only, no operand, no stack push/pop directly
+around it) but narrows what KIND of array it plausibly sets up: almost
+certainly a STRING array, given everything downstream is string
+assignments.
+
+**Tried this session based on that lead, all compiled clean with ZERO
+`cd ec 38` occurrences (ruled out)**:
+- A runtime-DIM'd (`DIM A$(N)` with N a variable) STRING array: bare
+  single-element assign+read, a 3-element batch assign+read (multiple
+  individual `A$(i) = scalar$` statements in a row, matching the
+  surrounding evidence's shape), an UNINITIALIZED read before any
+  assignment (testing a "must zero-init the descriptor table" theory),
+  and a 2-D runtime-DIM'd STRING array (`DIM A$(N,M)`) with one
+  element assign+read. NONE of these needed anything beyond the
+  already-working `dim_begin`/`dim_end` pair -- so "runtime string
+  array, however it's used" alone is NOT sufficient to trigger sub
+  0x38; something more specific about the SURROUNDING construct (the
+  two-array-merge shape itself? a specific size/element-count
+  threshold? something about the SOURCE arrays' own shape, not just
+  the destination?) is the real trigger, still unidentified.
+
+Next steps: try actually constructing the two-array reverse-merge
+pattern explicitly (`DIM A$(N), B$(N), C$(N)`, loop or explicit
+statements copying `C$(i) = B$(N-i+1)` interleaved with `C$(i+1) =
+A$(N-i+1)` or similar) to see if THAT specific shape reproduces it.
+
+Also tried: a runtime string array SHARED into a SUB (`SUB FILLIT:
+SHARED A$(): A$(1)="X": END SUB`, with `DIM A$(N)` and the CALL in main
+scope) -- this compiled but hit a COMPLETELY DIFFERENT, new dispatch-
+level error (`mov es from non-array cell 0x120`, not a scan-level
+"unhandled byte/INT" at all), meaning it exercises SOME gap but not
+gap 33's specific signature (`cd ec 38` never appeared in this probe's
+ops). Noted but not chased further this session -- worth a fresh probe
+sweep of its own if picked up (start by getting its ops dump and
+comparing against the working plain-runtime-array-in-main-scope case
+to see exactly what SHARED changes). Do not guess the gap-33 decoder-
+side fix without an oracle-confirmed probe reproducing `cd ec 38`
+exactly -- per the calibration rule, a byte pattern only joins the
 vocabulary once witnessed.
 
 ## Gap INT-8c — likely ON KEY GOSUB related, UNDIAGNOSED
