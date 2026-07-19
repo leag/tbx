@@ -1125,6 +1125,75 @@ happens to follow a LOCATE call textually but isn't actually screen-
 related -- the LOCATE/CURSOR proximity could be coincidental source
 adjacency rather than a causal link).
 
+## Gap "unhandled materialized test" (metric.exe), UNDIAGNOSED (2026-07-19)
+
+Surfaced immediately after this session's `orax`/`CLOSE #var` closures
+in the SAME wild file. `lift.py:_lift_while`'s final `else: raise` (the
+function handling HEAD-test `DO WHILE/UNTIL` loops and inline-IF-skip
+bodies). Full evidence at metric.exe 0x10771:
+
+```
+fold '+' 304; fstp 304          -- some_var += <expr>
+fild 2604; fcomp 304; fstsw      -- compare some_var against a pooled
+                                     literal (23, from context)
+movax 0FFFFh; jcc 117 +1; incax   -- materialize a `<>` boolean
+or ax,ax; jcc 116 -> 0x10798        -- exit_jcc: FORWARD to `ret`
+jmp -> 0x10475(ish, backward)        -- exit_jmp: BACKWARD, loop retry
+ret                                    -- immediately follows
+```
+
+`cond` decodes fine as `RelOp('<>', V0130, Lit(23))`. The problem is
+purely about which CONTROL-FLOW SHAPE this is. This matches `_lift_while`'s
+6-op template (`movax,jcc,incax,orax,jcc,jmp`) syntactically, but
+`_lift_while` was written for HEAD-test topology: forward-jcc-to-exit-if-
+false-BEFORE-the-body, with the loop's own backward retry edge being a
+SEPARATE, LATER `jmps` instruction (`_has_jmps_back`) found elsewhere in
+the body. Here there's no such separate retry jmp -- the trailing `jmp`
+IN THE TEMPLATE ITSELF is already the backward edge, and `ret` follows
+immediately after the forward `jcc`'s target. This is structurally the
+MIRROR IMAGE of the already-working tail-test case (this session's
+`t1_orax`/`_lift_do_tail`-adjacent fix): there, a backward jcc IS the
+retry edge and falling through exits; here, a forward jcc exits and
+falling through hits a SEPARATE backward jmp that retries. Neither
+`_lift_do_tail` (5-op, no trailing jmp, and its own `back_jcc[3] >=
+ops[k][0]` check explicitly rejects a FORWARD jcc target) nor
+`_lift_while` (expects the retry edge elsewhere, not in-template) fit as
+written.
+
+**Tried and did NOT reproduce this exact shape**: `SUB COUNTIT: V=0: DO:
+V=V+1: LOOP UNTIL V=23: END SUB` and the same with `LOOP WHILE V <> 23`
+(matching metric.exe's actual `<>` operator) -- BOTH compile via the
+plain 5-op `_lift_do_tail` template already handled by this session's
+earlier fix, no trailing jmp, decode fine. So "a tail-test loop as the
+last thing in a SUB, comparing a variable against a literal" alone does
+NOT trigger the 6-op-with-trailing-backward-jmp shape; something ELSE
+about metric.exe's actual construct is the real trigger -- candidates
+untried: an EXIT SUB/EXIT LOOP inside the loop body (which might need a
+separate compiled path for the "normal" continue vs the early-exit,
+explaining an extra jmp), or a FOR loop (not DO) with a non-unit STEP or
+a computed limit. **Confirmed** (checked directly, not assumed): the op
+at the exit target is a bare `ret` (the plain `C3` near-return), NOT
+`proc_ret` (the `5D CB`/`5D CA` pop-bp+retf pattern every ordinary SUB
+ending produces) -- so this is NOT simply "a tail-test loop as the last
+statement in an ordinary SUB" the way this session's ruled-out probes
+were built; that structural mismatch is likely WHY those probes didn't
+reproduce it. Traced the bare `ret` op's OWN dispatch (`core.py`: `elif
+kind in ("ret","retf"): state.put(ir.Return(), ...)`) -- it's specifically
+GOSUB...RETURN, so tried the concrete, well-targeted probe `GOSUB 100: ...:
+100 V=0: DO: V=V+1: LOOP WHILE V<>23: RETURN` (a tail-test loop ending a
+GOSUB'd subroutine) -- this ALSO decodes fine already, ruled out too. So
+NEITHER SUB nor DEF FN nor GOSUB context (the three most obvious "why
+would a loop be followed by a return-like op" candidates) reproduces the
+6-op-with-trailing-jmp shape on their own; whatever the actual trigger
+is, it's more specific than "tail-test loop immediately before a
+return/exit," matching this session's earlier experience with `t1_orax`
+(also needed the EXACT right condition shape, not just any loop-adjacent
+context). Do not guess the lift.py fix without an oracle-
+confirmed probe reproducing this exact 6-op-plus-context shape --
+per the calibration rule, this is exactly the kind of control-flow
+ambiguity (see also the vhfprop WHILE/UNTIL puzzle above) where guessing
+risks a silent wrong un-negation.
+
 ## Gap 33 — INT EC sub 38 (football.exe/refund.exe), UNDIAGNOSED
 
 Both wild hits are TB 1.1/1.0 respectively (`canon_sub` already normalizes
