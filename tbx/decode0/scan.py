@@ -778,6 +778,10 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
             ops.append((p, "fn_axfp", "FRE"))
             p += 3
             return p
+        if sub == 0x26:  # LOF(n): filenum in ax, FP-stack result (a file's
+            ops.append((p, "fn_axfp", "LOF"))  # length can exceed 16 bits,
+            p += 3  # unlike EOF's boolean; wild nvginst.exe, probe q_lof)
+            return p
         if sub == 0x16:  # FRE(s$): string arg, FP result
             ops.append((p, "fre_str"))
             p += 3

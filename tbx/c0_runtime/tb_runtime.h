@@ -154,6 +154,7 @@ void tb_close(int n);
 void tb_reset(void);
 void tb_open_r(int n, tb_str name, int reclen);
 double tb_eof(double n);
+double tb_lof(double n);
 double tb_finput_num(int n);
 tb_str tb_finput_str(int n);
 void tb_field_start(int n);

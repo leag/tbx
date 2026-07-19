@@ -3946,6 +3946,12 @@ SubDef(name='SUB1', params=(), body=(Dim(name='V0$', bounds=(10,), also=()), Loc
 CallStmt(name='SUB1', args=())
 End()
 
+## t1_lof
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='A.TXT'), reclen=None, for_as=True)
+Print(items=(Call(name='LOF', args=(Lit(value=1),)),), newline=True, file=None, commas=None)
+Close(num=1)
+End()
+
 ## t1_lprint
 Lprint(items=(Lit(value=5),), newline=True)
 End()
@@ -9064,6 +9070,12 @@ End()
 ## v10_t1_locidx
 SubDef(name='SUB1', params=(), body=(Dim(name='V0$', bounds=(10,), also=()), Local(names=('A%',)), For(var=Var(name='A%'), init=Lit(value=1), limit=Lit(value=5), step=Lit(value=1)), Assign(target=ArrayRef(name='V0$', indices=(Var(name='A%'),)), value=StrLit(value='X')), NextStmt(var=Var(name='A%')), Print(items=(ArrayRef(name='V0$', indices=(Lit(value=3),)),), newline=True, file=None, commas=None)))
 CallStmt(name='SUB1', args=())
+End()
+
+## v10_t1_lof
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='A.TXT'), reclen=None, for_as=True)
+Print(items=(Call(name='LOF', args=(Lit(value=1),)),), newline=True, file=None, commas=None)
+Close(num=1)
 End()
 
 ## v10_t1_lprint

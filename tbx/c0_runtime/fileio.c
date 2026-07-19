@@ -64,6 +64,15 @@ double tb_eof(double n) {
     ungetc(c, f);
     return 0;
 }
+double tb_lof(double n) {
+    FILE *f = ((int)n >= 1 && (int)n <= 15) ? tb_files[(int)n] : 0;
+    if (!f) tb_error(52);       /* bad file number, same as tb_eof */
+    long cur = ftell(f);
+    fseek(f, 0, SEEK_END);
+    long len = ftell(f);
+    fseek(f, cur, SEEK_SET);
+    return (double)len;
+}
 double tb_finput_num(int n) {
     FILE *f = tb_file(n); double v = 0;
     if (fscanf(f, " %lf", &v) != 1) tb_error(62);        /* input past end */

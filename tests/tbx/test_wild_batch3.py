@@ -984,6 +984,24 @@ def test_decode_t1_openfor():
     )
 
 
+def test_decode_t1_lof():
+    # LOF(n) (wild nvginst.exe et al., surfaced right after t1_openfor's
+    # gap): INT ED sub 26, filenum in ax like EOF (sub 10) -- but unlike
+    # EOF's boolean, a file's length can exceed 16 bits, so the result
+    # comes back on the FP stack (fn_axfp, the same shape as FRE(n)/sub
+    # 18) rather than in ax.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_lof.exe"))
+    assert prog[1] == ir.Print(
+        (ir.Call("LOF", (ir.Lit(1),)),), newline=True, file=None, commas=None
+    )
+    assert emit0.emit(prog) == (
+        '10 OPEN "A.TXT" FOR OUTPUT AS #1\n20 PRINT LOF(1)\n'
+        "30 CLOSE #1\n40 END\n"
+    )
+
+
 def test_decode_t1_fileint():
     # INPUT# with INTEGER targets (inv87/invoice at 0x1389c): the numeric
     # read leaves the value on the x87 stack as usual, but an int slot is

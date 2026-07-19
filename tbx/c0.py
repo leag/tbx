@@ -123,6 +123,7 @@ _NUM_FUNCS = {
     ("POS", 1): "(double)(tb_cols[0] + 1)",
     ("POINT", 2): "tb_pointf({0}, {1})",
     ("EOF", 1): "tb_eof({0})",
+    ("LOF", 1): "tb_lof({0})",
     # printer head position: nothing has ever been printed on a modern host
     ("LPOS", 1): "1.0",
     # free memory: meaningless on a modern host; a fixed roomy answer keeps
