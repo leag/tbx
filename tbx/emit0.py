@@ -19,16 +19,6 @@ from tbx import ir
 
 
 def emit(stmts) -> str:
-    # Line numbers are normally free (renumber 10, 20, ...), EXCEPT when the image
-    # embeds the error-trap line table (decode0.Program.lines): its entries store
-    # the real line numbers, so the originals must be preserved to round-trip.
-    orig = getattr(stmts, "lines", None)
-    line = (
-        {i: ln for i, ln in enumerate(orig)}
-        if orig is not None
-        else {i: 10 * (i + 1) for i in range(len(stmts))}
-    )
-
     # Jump targets INSIDE a SUB/DEF FN body (ir.BodyLine): physical line k of
     # the block at top-level index i is numbered line[i] + k, and only that
     # targeted line is emitted numbered (witnessed t1_subgsb).
@@ -51,6 +41,27 @@ def emit(stmts) -> str:
 
     for s in stmts:
         scan(s)
+
+    # Line numbers are normally free (renumber 10, 20, ...), EXCEPT when the image
+    # embeds the error-trap line table (decode0.Program.lines): its entries store
+    # the real line numbers, so the originals must be preserved to round-trip.
+    orig = getattr(stmts, "lines", None)
+    if orig is not None:
+        line = {i: ln for i, ln in enumerate(orig)}
+    else:
+        # A statement with a deep BodyLine target (a numbered nested-IF
+        # interior, wild inv87.exe) needs more than the canonical 10-line
+        # gap to its own next statement's number -- widen just that gap to
+        # fit the deepest phys reaching into it, instead of a flat stride.
+        max_phys: dict[int, int] = {}
+        for stmt, phys in body_targets:
+            if phys > max_phys.get(stmt, 0):
+                max_phys[stmt] = phys
+        line = {}
+        cur = 10
+        for i in range(len(stmts)):
+            line[i] = cur
+            cur += max(10, max_phys.get(i, 0) + 1)
 
     def L(t):
         if isinstance(t, ir.BodyLine):

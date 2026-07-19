@@ -304,6 +304,12 @@ _DOS_WAIVED: dict[str, str] = {
     "has no visible effect in the PPM/SDL framebuffer surrogate -- the "
     "border strip is outside the captured display -- so c0 raises "
     "_Unsupported rather than silently dropping a value the source set",
+    "t1_nestif2": "a GOTO into a numbered line nested inside a block IF "
+    "within another block IF: the decoder resolves this via a flat phys "
+    "count that runs through the nested block's header/body/END IF, but "
+    "c0's label-emission loop only tracks a LOCAL per-body position and "
+    "doesn't thread the phys offset into a nested IfBlock, so it raises "
+    "_Unsupported rather than emit a goto to a label it can't place",
 }
 # file-comparison waivers: the screen still must match
 _DOS_FILE_WAIVED = {

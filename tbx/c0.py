@@ -752,6 +752,18 @@ class _Gen:
                     for p, b in enumerate(body, 1):
                         if (idx, p) in self.body_labels:
                             lines.append(f"LB{idx}_{p}:;")
+                        if isinstance(b, ir.IfBlock):
+                            # The decoder's BodyLine phys now counts flat
+                            # through a NESTED single-arm block too (wild
+                            # inv87.exe), but that phys numbering doesn't
+                            # match this loop's local per-body `p` -- c0
+                            # would need to thread a phys offset into the
+                            # nested block to find ITS OWN interior labels,
+                            # which isn't implemented. Fail loud rather than
+                            # silently emit an unreachable `goto`.
+                            raise _Unsupported(
+                                "body-line label inside a nested block IF"
+                            )
                         lines.extend(self.gen(b, loops, None))
                     continue
                 lines.extend(self.gen_body(body, loops))

@@ -3993,6 +3993,15 @@ End()
 Name(old=StrLit(value='X.DAT'), new=StrLit(value='Y.DAT'))
 End()
 
+## t1_nestif2
+Assign(target=Var(name='A$'), value=StrLit(value='X'))
+Assign(target=Var(name='B$'), value=StrLit(value='Y'))
+IfBlock(arms=((RelOp(op='<>', lhs=Var(name='A$'), rhs=StrLit(value='Q')), (IfBlock(arms=((RelOp(op='<>', lhs=Var(name='B$'), rhs=StrLit(value='R')), (Print(items=(StrLit(value='A'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='B'),), newline=True, file=None, commas=None))),), else_body=None),)),), else_body=None)
+IfGoto(cond=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='X')), target=5)
+End()
+Assign(target=Var(name='A$'), value=StrLit(value='Q'))
+Goto(target=BodyLine(stmt=2, phys=3))
+
 ## t1_notron
 Assign(target=Var(name='A%'), value=Lit(value=1))
 Assign(target=Var(name='B%'), value=Lit(value=2))
@@ -9003,6 +9012,15 @@ End()
 ## v10_t1_name
 Name(old=StrLit(value='X.DAT'), new=StrLit(value='Y.DAT'))
 End()
+
+## v10_t1_nestif2
+Assign(target=Var(name='A$'), value=StrLit(value='X'))
+Assign(target=Var(name='B$'), value=StrLit(value='Y'))
+IfBlock(arms=((RelOp(op='<>', lhs=Var(name='A$'), rhs=StrLit(value='Q')), (IfBlock(arms=((RelOp(op='<>', lhs=Var(name='B$'), rhs=StrLit(value='R')), (Print(items=(StrLit(value='A'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='B'),), newline=True, file=None, commas=None))),), else_body=None),)),), else_body=None)
+IfGoto(cond=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='X')), target=5)
+End()
+Assign(target=Var(name='A$'), value=StrLit(value='Q'))
+Goto(target=BodyLine(stmt=2, phys=3))
 
 ## v10_t1_notron
 Assign(target=Var(name='A%'), value=Lit(value=1))

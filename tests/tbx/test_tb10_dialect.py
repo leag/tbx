@@ -41,6 +41,7 @@ PAIRS = [
     "t1_dataorph",
     "t1_dimorph",
     "t1_color3",
+    "t1_nestif2",
     "t1_pcomma2",
     "t1_strgodo",
     "t1_strgoto",

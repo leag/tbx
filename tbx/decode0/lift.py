@@ -288,13 +288,39 @@ def _inline_safe(body) -> bool:
     return not any(isinstance(b, (ir.IfInline, ir.IfBlock)) for b in body[:-1])
 
 
-def _fold_body(body):
+def _body_has_target(body, targets, stmt_addr) -> bool:
+    """True if any statement in `body` -- or, recursively, inside a nested
+    IfInline's own body -- is a jump target. A numbered nested-IF interior
+    line can sit two or more inline-IF levels deep before any of them gets
+    block-folded (wild inv87.exe: neither level is an IfBlock yet at the
+    point this check needs to fire), so a single flat `any(...)` over just
+    the immediate children isn't enough."""
+    if stmt_addr is None:
+        return False
+    for b in body:
+        if stmt_addr.get(id(b)) in targets:
+            return True
+        if isinstance(b, ir.IfInline) and _body_has_target(b.body, targets, stmt_addr):
+            return True
+    return False
+
+
+def _fold_body(body, targets=frozenset(), stmt_addr=None):
     """Recursively block-fold nested non-inline-safe IFs within an arm/else body
-    (bodies carry no Goto-else marker; only the rendering split applies here)."""
+    (bodies carry no Goto-else marker; only the rendering split applies here) --
+    also block-folds an inline-safe IfInline whose OWN body contains a jump
+    target, the same "second leg" `_fold_if` applies at the top level, just
+    applied recursively: a numbered nested-IF interior line can sit two (or
+    more) block levels deep (wild inv87.exe), not only directly under the
+    outermost IF."""
     out = []
     for b in body:
-        if isinstance(b, ir.IfInline) and not _inline_safe(b.body):
-            out.append(ir.IfBlock(((b.cond, _fold_body(b.body)),), None))
+        if isinstance(b, ir.IfInline) and (
+            not _inline_safe(b.body) or _body_has_target(b.body, targets, stmt_addr)
+        ):
+            out.append(
+                ir.IfBlock(((b.cond, _fold_body(b.body, targets, stmt_addr)),), None)
+            )
         else:
             out.append(b)
     return tuple(out)
@@ -325,25 +351,34 @@ def _apply_exit_folds(stmts, addrs, exit_folds):
             i += 1
 
 
-def _fold_body_ifgotos(body, end_addr):
+def _fold_body_ifgotos(body, end_addr, stmt_addr=None):
     """An `IF c THEN <line>` followed by MORE statements on the same line is
     not spellable source (TB raises Error 431, end-of-line expected, after
     `THEN <line>`); when such an IfGoto inside an inline-IF body targets the
     body's own END address, the source was a nested inline IF whose skip-jcc
     merged with the enclosing close -- negate the compare and nest the tail
     (witnessed t1_nestif / wild vhfprop.exe). Other targets are left alone
-    (fail-loud at recompile until a fixture witnesses them)."""
+    (fail-loud at recompile until a fixture witnesses them). The negated
+    IfInline occupies the CONSUMED IfGoto's own position, so its recorded
+    address (if any) transfers to the new node -- otherwise a GOTO targeting
+    that position (from elsewhere in the program, a NUMBERED nested-IF
+    interior line, wild inv87.exe) can never resolve, since the original
+    node no longer exists anywhere in the tree (gap: the address stayed
+    keyed to a discarded object)."""
     for j, b in enumerate(body[:-1]):
         if (
             isinstance(b, ir.IfGoto)
             and b.target == ("addr", end_addr)
             and isinstance(b.cond, ir.RelOp)
         ):
-            tail = _fold_body_ifgotos(body[j + 1 :], end_addr)
+            tail = _fold_body_ifgotos(body[j + 1 :], end_addr, stmt_addr)
             c = b.cond
-            return body[:j] + (
-                ir.IfInline(ir.RelOp(_NEGATE_REL[c.op], c.lhs, c.rhs), tail),
-            )
+            new_node = ir.IfInline(ir.RelOp(_NEGATE_REL[c.op], c.lhs, c.rhs), tail)
+            if stmt_addr is not None:
+                a = stmt_addr.get(id(b))
+                if a is not None:
+                    stmt_addr[id(new_node)] = a
+            return body[:j] + (new_node,)
     return body
 
 
@@ -413,7 +448,7 @@ def _fold_if(stmts, addrs, bound=None, targets=frozenset(), stmt_addr=None):
             ):
                 end_idx = None  # targeted interior: not an ELSE region
             if end_idx is not None:
-                arms = [(s.cond, _fold_body(s.body[:-1]))]
+                arms = [(s.cond, _fold_body(s.body[:-1], targets, stmt_addr))]
                 else_s, _ = _fold_if(
                     stmts[i + 1 : end_idx],
                     addrs[i + 1 : end_idx],
@@ -431,17 +466,15 @@ def _fold_if(stmts, addrs, bound=None, targets=frozenset(), stmt_addr=None):
                 i = end_idx
                 continue
         if isinstance(s, ir.IfInline) and (
-            not _inline_safe(s.body)
-            or (
-                stmt_addr is not None
-                and any(stmt_addr.get(id(b)) in targets for b in s.body)
-            )
+            not _inline_safe(s.body) or _body_has_target(s.body, targets, stmt_addr)
         ):
             # Second leg: a body statement is a jump target -- the source was
             # a block IF with a NUMBERED interior line jumped into from
             # outside (witnessed t1_blkgoto / wild inv87.exe); the block form
             # lets emit0 number that physical line (ir.BodyLine).
-            out_s.append(ir.IfBlock(((s.cond, _fold_body(s.body)),), None))
+            out_s.append(
+                ir.IfBlock(((s.cond, _fold_body(s.body, targets, stmt_addr)),), None)
+            )
             out_a.append(a)
             i += 1
             continue
@@ -519,9 +552,46 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
     `stmt_addr` (id(stmt) -> addr, captured at fold time). phys is the 1-based
     physical-line offset from the header, so it is only computable while every
     preceding body statement renders as one physical line -- anything else
-    raises loudly (only the witnessed flat-body shape, t1_subgsb)."""
+    raises loudly (only the witnessed flat-body shape, t1_subgsb). A nested
+    single-arm, no-else IfBlock (itself only produced when ITS OWN body has
+    an addressable target -- see `_fold_body`'s "second leg") is the one
+    exception: recurse into it, since its header line still occupies exactly
+    one physical line and its own body continues the SAME top_idx's phys
+    count (a numbered nested-IF interior two block levels deep, wild
+    inv87.exe -- gap 51 only reached one level)."""
     index: dict[Any, Any] = {a: i for i, a in enumerate(addrs) if a is not None}
+
     if stmt_addr:
+
+        def map_body(top_idx, body, phys):
+            multi = False
+            for b in body:
+                a = stmt_addr.get(id(b))
+                if a is not None and a not in index:
+                    if multi:
+                        raise ValueError(
+                            f"jump target {a:#x}: body line not addressable past "
+                            "a multi-line statement"
+                        )
+                    index[a] = ir.BodyLine(top_idx, phys)
+                if (
+                    isinstance(b, ir.IfBlock)
+                    and len(b.arms) == 1
+                    and b.else_body is None
+                ):
+                    # Header (already counted as `phys` above) + body
+                    # (recursed, exact) + END IF -- a fully-accounted
+                    # single-arm block, so flat counting can safely continue
+                    # past it (unlike the generic multi-line cases below,
+                    # whose width isn't known).
+                    phys = map_body(top_idx, b.arms[0][1], phys + 1) + 1
+                elif isinstance(b, (ir.IfBlock, ir.SelectCase, ir.SubDef, ir.DefFn)):
+                    multi = True
+                    phys += 1
+                else:
+                    phys += 1
+            return phys
+
         for i, s in enumerate(stmts):
             if isinstance(s, ir.IfBlock):
                 # A single-arm block IF's interior is addressable when the
@@ -541,18 +611,7 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
                     or (isinstance(s, ir.DefFn) and s.is_block)
                     else ()
                 )
-            multi = False
-            for k, b in enumerate(body):
-                a = stmt_addr.get(id(b))
-                if a is not None and a not in index:
-                    if multi:
-                        raise ValueError(
-                            f"jump target {a:#x}: body line not addressable past "
-                            "a multi-line statement"
-                        )
-                    index[a] = ir.BodyLine(i, k + 1)
-                if isinstance(b, (ir.IfBlock, ir.SelectCase, ir.SubDef, ir.DefFn)):
-                    multi = True
+            map_body(i, body, 1)
 
     def fix(s):
         if isinstance(s, (ir.Goto, ir.IfGoto, ir.Gosub)):

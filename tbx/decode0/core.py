@@ -1478,7 +1478,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
             for st, ad in zip(body, state.addrs[fr["idx"] :]):
                 if ad is not None:  # retain leaf/body addrs before they drop
                     state.stmt_addr[id(st)] = ad  # (the fold discards addrs[fr.idx:])
-            body = _fold_body_ifgotos(body, fr["target"])  # AFTER the addr
+            body = _fold_body_ifgotos(body, fr["target"], state.stmt_addr)  # AFTER the addr
             # retention: the fold nests the tail statements, and their (and the
             # consumed IfGoto's) addrs must stay visible to the line table
             del state.stmts[fr["idx"] :], state.addrs[fr["idx"] :]

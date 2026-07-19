@@ -711,6 +711,78 @@ def test_decode_t1_color3():
     assert emit0.emit(prog) == "10 COLOR 1,2,3\n20 END\n"
 
 
+def test_decode_t1_nestif2():
+    # A GOTO into a NUMBERED line two block-IF levels deep (wild inv87.exe/
+    # invoice.exe at "jump target ... is not a statement start", the
+    # LINE-TABLE EPIC's remaining sub-problem): gap 51 only reached a
+    # single-arm block IF's DIRECT body (ir.BodyLine(top_idx, phys), phys
+    # counted flat via k+1). A target nested inside an IF-within-an-IF hits
+    # three compounding gaps, all fixed together: (1) `_fold_body_ifgotos`
+    # discarded the consumed IfGoto's own recorded address when negating it
+    # into the replacement IfInline, orphaning stmt_addr's id-based lookup
+    # for anything AT that position; (2) `_fold_if`/`_fold_body`'s "second
+    # leg" (the block-IF-needed-for-addressability trigger) only checked
+    # DIRECT body children for a jump target, not recursively through a
+    # still-inline nested IF -- `_body_has_target` fixed that; (3)
+    # `_resolve_targets`'s BodyLine walk was single-level only -- it now
+    # recurses into a nested single-arm no-else IfBlock, whose own header +
+    # body + END IF are fully accounted for (so flat counting can safely
+    # continue past it, unlike the other multi-line cases it still can't
+    # measure). Also surfaced a FOURTH, independent gap in emit0's free
+    # line-renumbering: a fixed 10-line stride can't fit a deep BodyLine
+    # phys, so the stride is now widened only for statements that need it.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_nestif2.exe"))
+    assert prog[2] == ir.IfBlock(
+        (
+            (
+                ir.RelOp("<>", ir.Var("A$"), ir.StrLit("Q")),
+                (
+                    ir.IfBlock(
+                        (
+                            (
+                                ir.RelOp("<>", ir.Var("B$"), ir.StrLit("R")),
+                                (
+                                    ir.Print(
+                                        (ir.StrLit("A"),),
+                                        newline=True,
+                                        file=None,
+                                        commas=None,
+                                    ),
+                                    ir.Print(
+                                        (ir.StrLit("B"),),
+                                        newline=True,
+                                        file=None,
+                                        commas=None,
+                                    ),
+                                ),
+                            ),
+                        ),
+                        else_body=None,
+                    ),
+                ),
+            ),
+        ),
+        else_body=None,
+    )
+    assert prog[6] == ir.Goto(ir.BodyLine(stmt=2, phys=3))
+    assert emit0.emit(prog) == (
+        '10 A$ = "X"\n'
+        '20 B$ = "Y"\n'
+        '30 IF A$ <> "Q" THEN\n'
+        '  IF B$ <> "R" THEN\n'
+        '    PRINT "A"\n'
+        "33 PRINT \"B\"\n"
+        "  END IF\n"
+        "END IF\n"
+        "40 IF A$ = \"X\" THEN 60\n"
+        "50 END\n"
+        '60 A$ = "Q"\n'
+        "70 GOTO 33\n"
+    )
+
+
 def test_decode_t1_fileint():
     # INPUT# with INTEGER targets (inv87/invoice at 0x1389c): the numeric
     # read leaves the value on the x87 stack as usual, but an int slot is
