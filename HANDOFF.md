@@ -729,6 +729,72 @@ intended, permanent change.
 - Gap 12 INCR/DECR (`0e4f0f7`), gap 11 by-ref int param family (`3f1e23d`),
   gap 10 LOCAL (`2ef2b6d`), gap 9 double arrays — see git log.
 
+## Reference: `$INLINE` / `SUB ... INLINE`, confirmed via the real handbook + oracle (2026-07-19)
+
+Not a gap -- a piece of ground truth worth keeping, since it came up while
+investigating whether any of this session's stuck gaps (byte 89, byte 06,
+byte ea, INT 8c) might secretly be hand-written embedded assembly rather
+than compiler output. Short answer: **no**, none of them are (see the
+reasoning below) -- but the signature of a REAL `$INLINE` is now precisely
+known if a future gap ever does look like this.
+
+TB's inline-assembly mechanism is real (`Error 492: $INLINE requires SUB
+INLINE`): the correct syntax is `SUB name INLINE` (a trailing modifier
+keyword on the SUB declaration, NOT a sub literally named "INLINE" --
+tried and correctly rejected with `Error 471` first). Inside, `$INLINE
+byte, byte, ...` (integers 0-255) or `$INLINE "filespec"` (a separately-
+assembled, relocatable .COM-style blob) inserts raw machine code
+verbatim. Compiled and disassembled the handbook's own worked example
+(the PC-speaker "Shriek" SUB) via the oracle to confirm the EXACT
+compiled shape:
+
+```
+SUB Shriek INLINE
+$INLINE &HBA, &H00, &H07, &HE4, &H61, &H24
+$INLINE &HFC, &H34, &H02, &HE6, &H61, &HB9
+$INLINE &H40, &H01, &HE2, &HFE, &H4A, &H74
+$INLINE &H02, &HEB, &HF2
+END SUB
+```
+compiles to: the ordinary SUB-skip `jmp` (present on every SUB/DEF FN,
+nothing special) immediately followed by -- **no `push bp`/`mov bp,sp`
+frame setup at all**, unlike every other TB SUB -- the exact 20 bytes
+listed, copied byte-for-byte with zero transformation across all four
+`$INLINE` lines (the multi-line split has NO separate byte-level
+representation, consistent with this session's DATA/orphan-statement
+findings elsewhere: source-level statement boundaries the compiler
+doesn't need for anything are frequently unrecoverable, i.e. genuinely
+lossy, from the compiled bytes alone), then TB **auto-appends a bare
+`CB` (far RET)** -- confirming the handbook's explicit warning not to
+write your own trailing RET.
+
+**Why this rules out $INLINE for the gaps chased this session**: a real
+`$INLINE` block would show up as an ISOLATED byte run inside one SUB,
+with NO frame-setup prologue before it, ending in a bare `CB`, containing
+bytes specific to whatever that one program's author hand-wrote --
+i.e. NOT recurring identically across unrelated files. Every stuck gap
+this session (the `di`-register `89 CF/89 D9/89 C3` shuffle, the byte-06
+CGA-blitter template, etc.) is the OPPOSITE of this signature: interleaved
+with fully-recognized, already-calibrated compiler ops on both sides, and
+byte-IDENTICAL across multiple independent wild files -- the signature of
+a shared compiler template, not hand-authored assembly. Confirmed, not
+just assumed.
+
+**If a future gap DOES match the real signature** (isolated unrecognized
+bytes, no proc-enter framing, inside a SUB, non-recurring across files):
+that SUB's content is architecturally NOT byte-exact-decompilable to
+BASIC in the normal sense (there's no "source" to recover beyond the raw
+bytes themselves for the filespec form; for the byte-list form the raw
+bytes ARE fully recoverable byte-for-byte and could in principle be
+re-emitted as a single consolidated `$INLINE b1, b2, ...` statement --
+untested whether TB accepts an arbitrarily long single `$INLINE` line
+the way multiple short ones were used in the handbook's example, but
+nothing in the compiled shape suggests a line-length-driven split was
+ever necessary). No wild file in the current 84-file corpus has been
+shown to need this; not implemented, since CLAUDE.md's calibration rule
+means real decoder work should follow an actual witnessed need, not get
+built speculatively ahead of one.
+
 ## Gap byte 89 / the missing `di` spill register (catalog.exe/pfl.exe/process.exe), INVESTIGATED, NOT LANDED (2026-07-19)
 
 **Root cause is IDENTIFIED with high confidence** (not a guess -- grounded
