@@ -676,12 +676,14 @@ class Cls:
 
 @dataclass(frozen=True)
 class Locate:
-    """LOCATE row,col[,cursor] -- constant args marshaled through ax/bx; the cursor arg
-    is a separate trailing runtime call."""
+    """LOCATE row,col[,cursor[,start,stop]] -- row/col use INT CF, cursor a
+    trailing INT D0, and the optional cursor scan-line range INT CE."""
 
     row: object  # Expr (Lit)
     col: object  # Expr (Lit)
     cursor: object = None  # Expr (Lit) | None
+    start: object = None  # Expr (Lit) | None
+    stop: object = None  # Expr (Lit) | None
 
 
 @dataclass(frozen=True)

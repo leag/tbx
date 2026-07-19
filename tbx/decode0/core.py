@@ -68,6 +68,7 @@ class DecodeState:
     dos: Any = None
     ds: Any = None
     dsd: Any = None
+    di: Any = None
     dx: Any = None
     exe: Any = None
     exit_folds: Any = None
@@ -1028,6 +1029,9 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     elif kind == "fn_screen":  # SCREEN(row, col): bx, ax
         state.ax = ir.Call("SCREEN", (state.bx, state.ax))
         state.bx = None
+    elif kind == "fn_screen_color":  # SCREEN(row, col, color): cx, bx, ax
+        state.ax = ir.Call("SCREEN", (state.cx, state.bx, state.ax))
+        state.cx = state.bx = None
     elif kind == "fn_ax2":  # two-FP-arg ax intrinsic (POINT)
         y = state.stack.pop()
         x = state.stack.pop()
@@ -1471,6 +1475,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
     state.pend_mode_lit = None  # OPEN's FOR-keyword mode, once materialized
     state.pend_swap = None  # first ArrayRef of an ES-aliased array-element SWAP
     state.cx = None  # 2nd-level index stash / WAIT and-mask
+    state.di = None  # 3rd-level spill stash for nested integer expressions
     state.si = None  # element-index register (raw index / idx token)
     state.bchk_subs = []  # Bounds: pending non-final subscripts (F3.5)
     state.pend_bool = None  # compound-IF first term awaiting its tail

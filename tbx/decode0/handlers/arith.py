@@ -49,12 +49,19 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         state.k += 1
         return True
     if kind == "movrr":  # spill-protocol shuttle
-        regs = {"ax": state.ax, "bx": state.bx, "cx": state.cx, "si": state.si}
+        regs = {
+            "ax": state.ax,
+            "bx": state.bx,
+            "cx": state.cx,
+            "di": state.di,
+            "si": state.si,
+        }
         regs[op[2]], regs[op[3]] = regs[op[3]], None
-        state.ax, state.bx, state.cx, state.si = (
+        state.ax, state.bx, state.cx, state.di, state.si = (
             regs["ax"],
             regs["bx"],
             regs["cx"],
+            regs["di"],
             regs["si"],
         )
         state.k += 1
@@ -199,15 +206,14 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         # (mov ax,bx; mov bx,ax -- a no-op restoring bx's value, byte-exact
         # boilerplate) between the compare and the value materialization;
         # skip over it and let the generic movrr/movbxax handlers process it.
+        j = state.k + 1
+        while j < len(state.ops) and state.ops[j][1] in ("movrr", "movbxax"):
+            j += 1
         shuffled = (
-            nxt is not None
-            and nxt[1] == "movrr"
-            and nxt[2] == "ax"
-            and nxt[3] == "bx"
-            and state.k + 3 < len(state.ops)
-            and state.ops[state.k + 2][1] == "movbxax"
-            and state.ops[state.k + 3][1] == "movax"
-            and state.ops[state.k + 3][2] == 0xFFFF
+            j > state.k + 1
+            and j < len(state.ops)
+            and state.ops[j][1] == "movax"
+            and state.ops[j][2] == 0xFFFF
         )
         if (nxt is not None and nxt[1] == "movax" and nxt[2] == 0xFFFF) or shuffled:
             state.pend_icmp = (mem, state.ax)  # relational-value form
@@ -711,14 +717,16 @@ def fp_math(state: DecodeState, op, addr, kind) -> bool:
                     "ax": state.ax,
                     "bx": state.bx,
                     "cx": state.cx,
+                    "di": state.di,
                     "si": state.si,
                 }
                 dst, src = ("bx", "ax") if sh[1] == "movbxax" else (sh[2], sh[3])
                 regs[dst], regs[src] = regs[src], None
-                state.ax, state.bx, state.cx, state.si = (
+                state.ax, state.bx, state.cx, state.di, state.si = (
                     regs["ax"],
                     regs["bx"],
                     regs["cx"],
+                    regs["di"],
                     regs["si"],
                 )
             state.ax = idx

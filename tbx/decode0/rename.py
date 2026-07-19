@@ -225,6 +225,8 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
                 walk(s.row),
                 walk(s.col),
                 None if s.cursor is None else walk(s.cursor),
+                None if s.start is None else walk(s.start),
+                None if s.stop is None else walk(s.stop),
             )
         if isinstance(s, ir.Color):
             return ir.Color(

@@ -14,8 +14,9 @@ gitignored, copyrighted shareware — **never commit them**).
 
 ## Where things stand
 
-84 wild EXEs: **12 decode OK** (ck, onelab87, onelabel, mm, autonum, rev,
-startup, schart, r, book, inv87, invoice) — unchanged this session; every
+84 wild EXEs: **13 decode OK** (ck, onelab87, onelabel, mm, autonum, rev,
+startup, schart, r, book, inv87, invoice, metric); the DEFxxx recovery
+completed metric.exe. Every
 closure below advanced files further into previously-unreachable territory
 without fully finishing a NEW file, which is expected once the easy/common
 gaps are gone and each file needs several more fixes to reach the end.
@@ -217,6 +218,25 @@ intended, permanent change.
    — byte 90 remains fully confirmed unwitnessable, skip it.
 
 ## Recently closed (this campaign, newest first)
+
+- **Five-argument `LOCATE row,col,cursor,start,stop` / INT CE**
+  (2026-07-19): the previously unknown two-byte INT CE immediately follows
+  LOCATE's existing INT CF row/column and INT D0 cursor calls; its bx/ax
+  operands are the cursor scan-line start/stop arguments. `ir.Locate` now
+  carries and renders both optional fields. Fixture `t1_locate5`, oracle
+  byte-exact. All three wild hits advance: file.exe and kinder.exe reach the
+  shared unreferenced-FRE-string gap; billadd.exe reaches INT C2.
+- **Three-argument `SCREEN(row,col,color)` / INT ED sub 44** (2026-07-19):
+  row/column/color arrive in cx/bx/ax. Fixture `t1_screen3`, oracle byte-exact.
+  kinder.exe advances to the LOCATE/INT-CE gap above and sabpcv3.exe advances
+  to byte EA.
+- **Deep integer-expression spill through DI / byte 89** (2026-07-19):
+  `movrr` now recognizes DI as the fifth symbolic register; both shuttle
+  sites and relational-value lookahead handle arbitrary spill runs. Minimal
+  fixture `t1_dispill` uses a nested SCREEN call while a divisor is live,
+  oracle byte-exact. pfl.exe advances to the FRE-string gap; kinder.exe to
+  SCREEN sub 44. catalog.exe/process.exe advance to their separately
+  documented deeper memory-backed spill (`mov [disp],di`), still open.
 
 - **`DO...LOOP WHILE/UNTIL` whose body ends in a nested `FOR...NEXT`**
   (2026-07-19): a third loop topology for the "materialized boolean
@@ -879,7 +899,14 @@ still fail exactly where they did before this whole feature landed) --
 consistent with the earlier reasoning that those are shared compiler
 templates, not hand-authored assembly.
 
-## Gap byte 89 / the missing `di` spill register (catalog.exe/pfl.exe/process.exe), INVESTIGATED, NOT LANDED (2026-07-19)
+## Gap byte 89 / the missing `di` spill register, DI LEVEL CLOSED; MEMORY-SPILL LEVEL OPEN (2026-07-19)
+
+**Current status:** the DI-register fix described below is now landed and
+oracle-witnessed by `t1_dispill` (nested SCREEN arguments reproduce it).
+pfl.exe advances past the gap. catalog.exe/process.exe now stop at the
+deeper `mov [disp],di` memory-spill form described below; CVT2TB.EXE remains
+an unrelated byte-89 opcode. The remainder of this section preserves the
+investigation history that preceded the fixture.
 
 **Root cause is IDENTIFIED with high confidence** (not a guess -- grounded
 in real x86 semantics and confirmed byte-for-byte against 3 independent

@@ -6,7 +6,7 @@ End()
 
 ## t1_addpool
 Assign(target=Var(name='A$'), value=StrLit(value='AB'))
-Locate(row=Lit(value=1), col=BinOp(op='-', lhs=Lit(value=15), rhs=Call(name='LEN', args=(Var(name='A$'),))), cursor=None)
+Locate(row=Lit(value=1), col=BinOp(op='-', lhs=Lit(value=15), rhs=Call(name='LEN', args=(Var(name='A$'),))), cursor=None, start=None, stop=None)
 Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None)
 End()
 
@@ -3366,6 +3366,10 @@ Assign(target=ArrayRef(name='V1', indices=(ArrayRef(name='V0', indices=(Var(name
 Assign(target=Var(name='C'), value=ArrayRef(name='V1', indices=(ArrayRef(name='V0', indices=(Var(name='B'), Lit(value=1))), Lit(value=1))))
 End()
 
+## t1_dispill
+Assign(target=Var(name='A'), value=BinOp(op='\\', lhs=Call(name='SCREEN', args=(Lit(value=3), Call(name='SCREEN', args=(Lit(value=4), Lit(value=1))))), rhs=Lit(value=16)))
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
+
 ## t1_doerr
 Assign(target=Var(name='A%'), value=Err())
 Assign(target=Var(name='B%'), value=Erl())
@@ -3980,6 +3984,10 @@ SubDef(name='SUB1', params=('A%',), body=(Local(names=('B%', 'C%')), Assign(targ
 Assign(target=Var(name='D%'), value=Lit(value=5))
 CallStmt(name='SUB1', args=(Var(name='D%'),))
 End()
+
+## t1_locate5
+Locate(row=Lit(value=11), col=Lit(value=20), cursor=Lit(value=1), start=Lit(value=0), stop=Lit(value=7))
+Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None)
 
 ## t1_loccmp
 SubDef(name='SUB1', params=(), body=(Local(names=('A%', 'B%')), Assign(target=Var(name='A%'), value=Lit(value=3)), Assign(target=Var(name='B%'), value=Lit(value=9)), IfGoto(cond=RelOp(op='<>', lhs=Var(name='A%'), rhs=Lit(value=0)), target=BodyLine(stmt=0, phys=6)), Print(items=(StrLit(value='Z'),), newline=True, file=None, commas=None), IfGoto(cond=RelOp(op='>=', lhs=Var(name='A%'), rhs=BinOp(op='+', lhs=Var(name='B%'), rhs=Lit(value=1))), target=BodyLine(stmt=0, phys=8)), Print(items=(StrLit(value='W'),), newline=True, file=None, commas=None), Print(items=(Var(name='A%'),), newline=True, file=None, commas=None)))
@@ -4635,22 +4643,26 @@ End()
 
 ## t1_scr
 Cls()
-Locate(row=Lit(value=3), col=Lit(value=5), cursor=None)
+Locate(row=Lit(value=3), col=Lit(value=5), cursor=None, start=None, stop=None)
 Color(fg=Lit(value=1), bg=None, border=None)
-Locate(row=Lit(value=10), col=Lit(value=20), cursor=None)
+Locate(row=Lit(value=10), col=Lit(value=20), cursor=None, start=None, stop=None)
 Color(fg=Lit(value=7), bg=Lit(value=0), border=None)
 Print(items=(StrLit(value='HI'),), newline=True, file=None, commas=None)
 End()
 
 ## t1_scr2
-Locate(row=Lit(value=3), col=Lit(value=5), cursor=Lit(value=1))
-Locate(row=Lit(value=4), col=Lit(value=6), cursor=Lit(value=0))
+Locate(row=Lit(value=3), col=Lit(value=5), cursor=Lit(value=1), start=None, stop=None)
+Locate(row=Lit(value=4), col=Lit(value=6), cursor=Lit(value=0), start=None, stop=None)
 Color(fg=None, bg=Lit(value=2), border=None)
 End()
 
 ## t1_screen
 Screen(mode=Lit(value=1), burst=None, apage=None, vpage=None)
 End()
+
+## t1_screen3
+Assign(target=Var(name='A'), value=Call(name='SCREEN', args=(Lit(value=3), Lit(value=1), Lit(value=1))))
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 
 ## t1_screenb
 Screen(mode=Lit(value=1), burst=Lit(value=0), apage=None, vpage=None)
@@ -5382,7 +5394,7 @@ End()
 
 ## v10_t1_addpool
 Assign(target=Var(name='A$'), value=StrLit(value='AB'))
-Locate(row=Lit(value=1), col=BinOp(op='-', lhs=Lit(value=15), rhs=Call(name='LEN', args=(Var(name='A$'),))), cursor=None)
+Locate(row=Lit(value=1), col=BinOp(op='-', lhs=Lit(value=15), rhs=Call(name='LEN', args=(Var(name='A$'),))), cursor=None, start=None, stop=None)
 Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None)
 End()
 
@@ -9720,16 +9732,16 @@ End()
 
 ## v10_t1_scr
 Cls()
-Locate(row=Lit(value=3), col=Lit(value=5), cursor=None)
+Locate(row=Lit(value=3), col=Lit(value=5), cursor=None, start=None, stop=None)
 Color(fg=Lit(value=1), bg=None, border=None)
-Locate(row=Lit(value=10), col=Lit(value=20), cursor=None)
+Locate(row=Lit(value=10), col=Lit(value=20), cursor=None, start=None, stop=None)
 Color(fg=Lit(value=7), bg=Lit(value=0), border=None)
 Print(items=(StrLit(value='HI'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_scr2
-Locate(row=Lit(value=3), col=Lit(value=5), cursor=Lit(value=1))
-Locate(row=Lit(value=4), col=Lit(value=6), cursor=Lit(value=0))
+Locate(row=Lit(value=3), col=Lit(value=5), cursor=Lit(value=1), start=None, stop=None)
+Locate(row=Lit(value=4), col=Lit(value=6), cursor=Lit(value=0), start=None, stop=None)
 Color(fg=None, bg=Lit(value=2), border=None)
 End()
 

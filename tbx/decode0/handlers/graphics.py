@@ -174,8 +174,25 @@ def graphics(state: DecodeState, op, addr, kind) -> bool:
             or state.stmts[-1].cursor is not None
         ):
             raise ValueError(f"cursor call without open LOCATE at {addr:#x}")
-        state.stmts[-1] = ir.Locate(state.stmts[-1].row, state.stmts[-1].col, state.ax)
+        prev = state.stmts[-1]
+        state.stmts[-1] = ir.Locate(prev.row, prev.col, state.ax)
         state.ax = None
+        state.cur = None
+        state.k += 1
+        return True
+    if kind == "cursor_shape":  # trailing cursor start/stop -> attach
+        if (
+            not state.stmts
+            or not isinstance(state.stmts[-1], ir.Locate)
+            or state.stmts[-1].start is not None
+            or state.stmts[-1].stop is not None
+        ):
+            raise ValueError(f"cursor shape call without open LOCATE at {addr:#x}")
+        prev = state.stmts[-1]
+        state.stmts[-1] = ir.Locate(
+            prev.row, prev.col, prev.cursor, state.bx, state.ax
+        )
+        state.bx = state.ax = None
         state.cur = None
         state.k += 1
         return True

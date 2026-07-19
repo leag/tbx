@@ -112,6 +112,7 @@ _NUM_FUNCS = {
     # SCREEN(row,col) reads a text cell; there is no text buffer on this
     # host, so every cell reads as a blank
     ("SCREEN", 2): "32.0",
+    ("SCREEN", 3): "7.0",  # color-attribute query: white on black surrogate
     # joystick / light pen / music queue: devices absent on a modern host
     ("STICK", 1): "0.0",
     ("STRIG", 1): "0.0",
@@ -1009,6 +1010,7 @@ class _Gen:
                 out.append(
                     f'tb_ps(tb_i({self.num(s.cursor)}) ? "\\033[?25h" : "\\033[?25l");'
                 )
+            # Cursor scan-line shape has no portable terminal equivalent.
             return out
         if isinstance(s, ir.Color):
             if s.border is not None:

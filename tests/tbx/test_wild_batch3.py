@@ -1161,6 +1161,39 @@ def test_decode_t1_deftype():
     )
 
 
+def test_decode_t1_dispill():
+    # A nested SCREEN() used as the outer call's column argument while an
+    # integer divisor is live exhausts ax/bx/cx and makes Turbo Basic spill
+    # through di (`mov di,cx`). This is the minimal witnessed form of the
+    # byte-89 gap shared by wild kinder/catalog/pfl/process.
+    from tbx import decode0, emit0
+
+    assert emit0.emit(decode0.decode_user_code(_exe("t1_dispill.exe"))) == (
+        "10 A = SCREEN(3,SCREEN(4,1)) \\ 16\n20 PRINT A\n"
+    )
+
+
+def test_decode_t1_screen3():
+    # INT ED sub 44 is SCREEN(row,col,color): the extra argument pushes the
+    # row into cx while the column and color arrive in bx/ax. This additional
+    # register pressure is what makes nested uses spill through di.
+    from tbx import decode0, emit0
+
+    assert emit0.emit(decode0.decode_user_code(_exe("t1_screen3.exe"))) == (
+        "10 A = SCREEN(3,1,1)\n20 PRINT A\n"
+    )
+
+
+def test_decode_t1_locate5():
+    # INT CE is the trailing cursor scan-line range of five-argument LOCATE;
+    # start/stop arrive in bx/ax after the existing INT CF + INT D0 calls.
+    from tbx import decode0, emit0
+
+    assert emit0.emit(decode0.decode_user_code(_exe("t1_locate5.exe"))) == (
+        '10 LOCATE 11,20,1,0,7\n20 PRINT "X"\n'
+    )
+
+
 def test_decode_t1_closevar():
     # CLOSE #n where n is a variable, not a literal (wild metric.exe,
     # right after the orax/DO-loop gap): the file number reaches CLOSE's

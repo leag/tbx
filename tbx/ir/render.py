@@ -424,8 +424,10 @@ def _us_console(s) -> str | None:
     if isinstance(s, Cls):
         return "CLS"
     if isinstance(s, Locate):
-        cur = "" if s.cursor is None else f",{unparse(s.cursor)}"
-        return f"LOCATE {unparse(s.row)},{unparse(s.col)}{cur}"
+        args = (s.row, s.col, s.cursor, s.start, s.stop)
+        last = max((i for i, a in enumerate(args) if a is not None), default=1)
+        parts = [unparse(a) if a is not None else "" for a in args[: last + 1]]
+        return "LOCATE " + ",".join(parts)
     if isinstance(s, Color):
         args = (s.fg, s.bg, s.border)
         last = max((i for i, a in enumerate(args) if a is not None), default=-1)

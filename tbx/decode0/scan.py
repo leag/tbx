@@ -824,6 +824,10 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
             ops.append((p, "fn_screen"))
             p += 3
             return p
+        if sub == 0x44:  # SCREEN(row, col, color): row cx, col bx, color ax
+            ops.append((p, "fn_screen_color"))
+            p += 3
+            return p
         if sub not in _FNAX_SUBS:
             raise ValueError(f"unhandled INT ED sub {sub:02x} at {p:#x}")
         ops.append((p, "fn_ax", _FNAX_SUBS[sub]))
@@ -851,6 +855,10 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
         return p
     if vec == 0xD0:  # LOCATE's cursor arg (ax)
         ops.append((p, "cursor"))
+        p += 2
+        return p
+    if vec == 0xCE:  # LOCATE's cursor start/stop args (bx, ax)
+        ops.append((p, "cursor_shape"))
         p += 2
         return p
     if (
@@ -956,7 +964,7 @@ def _scan_pass(
 
         if b == 0x89 and (exe[p + 1] & 0xC0) == 0xC0:  # mov reg,reg: the far-index
             rm, rg = exe[p + 1] & 7, (exe[p + 1] >> 3) & 7  # spill protocol
-            names = {0: "ax", 1: "cx", 3: "bx", 6: "si"}
+            names = {0: "ax", 1: "cx", 3: "bx", 6: "si", 7: "di"}
             if rm in names and rg in names:
                 ops.append((p, "movrr", names[rm], names[rg]))
                 p += 2
