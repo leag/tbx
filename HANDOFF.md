@@ -1,10 +1,13 @@
 # Wild-corpus gap campaign — handoff
 
-Status as of 2026-07-19 (session gaps 46-62: line-table epic, nested
+Status as of 2026-07-19 (session gaps 46-66: line-table epic, nested
 block-IF, DO un-synthesis, computed-int-array element family, array-element
 SWAP (int + SINGLE), the modern `OPEN...FOR mode AS #n` syntax, LOF,
 file-channel LINE INPUT, mixed-type relational compare, BLOAD with no
-offset, and `^` under TB 1.0), branch `claude/claude-md-docs-mr8ssz`.
+offset, `^` under TB 1.0, `SUB...INLINE` (embedded machine code, a new
+feature not a gap), bare-value `DO...LOOP UNTIL/WHILE`, `CLOSE #variable`,
+and a third materialized-boolean-test loop topology (tail-test loop body
+ending in a nested `FOR...NEXT`)), branch `claude/claude-md-docs-mr8ssz`.
 Standing instruction: close the most common decoder gap first, in frequency
 order, over the 84 wild PC-SIG Turbo Basic EXEs in `wild/hits/` (untracked,
 gitignored, copyrighted shareware — **never commit them**).
@@ -22,17 +25,18 @@ vhfprop.exe remains the only file blocked purely by the line-table epic
 **`OPEN file$ FOR mode AS #n` was the session's biggest single closure**:
 16 of 84 files were blocked on it alone (tied top of the tally at session
 start). Fresh tally (2026-07-19, after LOF/LINE INPUT#/array-SWAP/
-OPEN-FOR-AS/icomp/bload0/pow10):
+OPEN-FOR-AS/icomp/bload0/pow10/inline/orax/closevar/nestfor — re-scanned
+via `uv run python tbx/tools/scan_wild.py wild/hits`, still 72 TB-but-fail):
 
 | count | error | status |
 |---|---|---|
 | 6 | byte 90 | confirmed unwitnessable (prior sessions) — not actionable |
 | 5 | byte ea | ">64K" theory refuted (prior session) — undiagnosed, not just "big lift" |
 | 4 | byte 89 | INVESTIGATED THIS SESSION, NOT LANDED — 3 of the 4 (catalog/pfl/process/kinder — a 4th, kinder.exe, joined mid-session) share one root cause, see the gap section below: generic `movrr`'s register table is missing `di`; fix written, tested (advances cleanly), then REVERTED per the calibration rule since no probe reproduces it. A STRONG new lead (SCREEN()+`\`/MOD) was found for kinder.exe specifically, narrowing the search a lot — see the gap section's addendum. CVT2TB.EXE's own byte-89 hit is UNRELATED — it's actually gap 19/byte-06 (CGA blitter) in disguise. |
-| 3 each | INT EC sub 4c; INT 8c; byte 06 | sub 4c undiagnosed (file#+ax-int statement, LOCATE/WIDTH-file guesses both ruled out); INT 8c / byte 06 extensively probed in prior sessions, still undiagnosed |
-| 2 each | INT EC sub ac/42/38; INT ce; FP dc/04, da/1c; byte f7/8c/8b/1e; system cell 0x8a | mostly untouched |
+| 3 each | INT EC sub 4c; INT 8c; byte 06; INT EC sub 38; "unreferenced pooled string literals" | sub 4c undiagnosed (file#+ax-int statement, LOCATE/WIDTH-file guesses both ruled out); INT 8c / byte 06 extensively probed in prior sessions, still undiagnosed; INT EC sub 38 (gap 33) grew 2→3 this session — varamort.exe joined once its unrelated BLOAD-offset gap closed, see Gap 33 below; the pooled-string-literals one is the known FRE(s$) case (hfprop/number/tamstart), undiagnosed, no dedicated writeup yet |
+| 2 each | INT EC sub ac/42; INT ce; FP dc/04, da/1c; byte f7/8c/8b/1e/0b; system cell 0x8a | mostly untouched |
 | 1 | "codeless DO...LOOP WHILE/UNTIL ... unwitnessed" (vhfprop) | unchanged, see "vhfprop status" below |
-| singles | see scan output | untouched |
+| singles | see scan output | untouched; freshest one is metric.exe's new stop, "error-trap line table has a codeless-statement entry but no DATA pool was found (unsupported zero-length-statement shape)", surfaced immediately by this session's nested-FOR-loop fix, not yet investigated |
 
 ## THE LINE-TABLE EPIC (read this first)
 
@@ -214,6 +218,33 @@ intended, permanent change.
 
 ## Recently closed (this campaign, newest first)
 
+- **`DO...LOOP WHILE/UNTIL` whose body ends in a nested `FOR...NEXT`**
+  (2026-07-19): a third loop topology for the "materialized boolean
+  test" byte template (`movax 0xFFFF; jcc; incax; orax; jcc[; jmp]`),
+  alongside the existing head-test (`_lift_while`) and tail-test
+  (`_lift_do_tail`) cases. This one syntactically matches `_lift_while`'s
+  6-op head-test template (trailing jmp present) but with INVERTED
+  polarity: the jcc exits forward, and the trailing jmp -- itself
+  backward -- IS the retry edge, rather than a separate `jmps` found via
+  `_has_jmps_back` elsewhere in the body. The trigger (a nested
+  `FOR...NEXT` as the last thing in the DO-loop body, which leaves no
+  separate backward-jmp for `_has_jmps_back` to find) was only found by
+  reading the full `stmts` context leading up to the failure, not just
+  the raw `ops` -- several earlier probes (SUB-ending, DEF FN-ending,
+  GOSUB-ending tail-test loops) had ruled out simpler theories without
+  reproducing it. `_lift_while` gained the new branch ordered BEFORE the
+  existing inline-IF branch (a backward `exit_jmp` can never legitimately
+  be a genuine inline-IF's forward body-skip, so this doesn't shadow real
+  inline-IF cases -- confirmed via full suite, zero regressions, plus two
+  dedicated probes covering both polarities). Closed wild metric.exe's
+  blocking gap (the file now surfaces a new, not-yet-investigated one).
+  Fixtures `t1_nestfor`/`v10_t1_nestfor` (WHILE polarity),
+  `t1_nestfor2`/`v10_t1_nestfor2` (UNTIL polarity).
+- **`CLOSE #variable`** (2026-07-19): `CLOSE` had only ever been
+  witnessed with a literal file number. `ir.Close.num` now holds either a
+  plain `int` (existing literal case) or an `Expr` (new variable/
+  expression case), mirrored across rename.py/render.py/c0.py. Fixture
+  `t1_closevar`/`v10_t1_closevar`.
 - **`DO...LOOP UNTIL/WHILE` on a bare numeric value** (2026-07-19): `or
   ax,ax` testing a just-computed value's truthiness directly, no
   preceding compare -- wild metric.exe, `DO: K$=INKEY$: LOOP UNTIL
@@ -1125,80 +1156,29 @@ happens to follow a LOCATE call textually but isn't actually screen-
 related -- the LOCATE/CURSOR proximity could be coincidental source
 adjacency rather than a causal link).
 
-## Gap "unhandled materialized test" (metric.exe), UNDIAGNOSED (2026-07-19)
+## Gap "unhandled materialized test" (metric.exe) — CLOSED (2026-07-19)
 
-Surfaced immediately after this session's `orax`/`CLOSE #var` closures
-in the SAME wild file. `lift.py:_lift_while`'s final `else: raise` (the
-function handling HEAD-test `DO WHILE/UNTIL` loops and inline-IF-skip
-bodies). Full evidence at metric.exe 0x10771:
+Was UNDIAGNOSED earlier in this same session (several SUB/DEF FN/GOSUB
+probes tried and ruled out) -- the actual trigger turned out to be a
+DO...LOOP WHILE/UNTIL whose body ends in a NESTED FOR...NEXT (none of
+the ruled-out probes had one). See "Recently closed" above
+(`t1_nestfor`/`t1_nestfor2`) for the full writeup: `_lift_while` gained
+a third branch, mirroring `_lift_do_tail`'s tail-test recognition but
+with inverted jcc polarity, for when the retry edge is the materialized
+test's own trailing jmp rather than a separate `jmps` found by
+`_has_jmps_back`. Kept as a heading here (rather than deleted) so a
+future `grep` for this error string still finds where it was solved.
 
-```
-fold '+' 304; fstp 304          -- some_var += <expr>
-fild 2604; fcomp 304; fstsw      -- compare some_var against a pooled
-                                     literal (23, from context)
-movax 0FFFFh; jcc 117 +1; incax   -- materialize a `<>` boolean
-or ax,ax; jcc 116 -> 0x10798        -- exit_jcc: FORWARD to `ret`
-jmp -> 0x10475(ish, backward)        -- exit_jmp: BACKWARD, loop retry
-ret                                    -- immediately follows
-```
+## Gap 33 — INT EC sub 38 (football.exe/refund.exe/varamort.exe), UNDIAGNOSED
 
-`cond` decodes fine as `RelOp('<>', V0130, Lit(23))`. The problem is
-purely about which CONTROL-FLOW SHAPE this is. This matches `_lift_while`'s
-6-op template (`movax,jcc,incax,orax,jcc,jmp`) syntactically, but
-`_lift_while` was written for HEAD-test topology: forward-jcc-to-exit-if-
-false-BEFORE-the-body, with the loop's own backward retry edge being a
-SEPARATE, LATER `jmps` instruction (`_has_jmps_back`) found elsewhere in
-the body. Here there's no such separate retry jmp -- the trailing `jmp`
-IN THE TEMPLATE ITSELF is already the backward edge, and `ret` follows
-immediately after the forward `jcc`'s target. This is structurally the
-MIRROR IMAGE of the already-working tail-test case (this session's
-`t1_orax`/`_lift_do_tail`-adjacent fix): there, a backward jcc IS the
-retry edge and falling through exits; here, a forward jcc exits and
-falling through hits a SEPARATE backward jmp that retries. Neither
-`_lift_do_tail` (5-op, no trailing jmp, and its own `back_jcc[3] >=
-ops[k][0]` check explicitly rejects a FORWARD jcc target) nor
-`_lift_while` (expects the retry edge elsewhere, not in-template) fit as
-written.
+Grew from 2 files to 3 this session: varamort.exe joined once its
+unrelated BLOAD-with-no-offset gap closed (see "Recently closed" above)
+and it advanced far enough to hit this same `cd ec 38` signature.
+Otherwise unchanged from prior sessions' investigation below.
 
-**Tried and did NOT reproduce this exact shape**: `SUB COUNTIT: V=0: DO:
-V=V+1: LOOP UNTIL V=23: END SUB` and the same with `LOOP WHILE V <> 23`
-(matching metric.exe's actual `<>` operator) -- BOTH compile via the
-plain 5-op `_lift_do_tail` template already handled by this session's
-earlier fix, no trailing jmp, decode fine. So "a tail-test loop as the
-last thing in a SUB, comparing a variable against a literal" alone does
-NOT trigger the 6-op-with-trailing-backward-jmp shape; something ELSE
-about metric.exe's actual construct is the real trigger -- candidates
-untried: an EXIT SUB/EXIT LOOP inside the loop body (which might need a
-separate compiled path for the "normal" continue vs the early-exit,
-explaining an extra jmp), or a FOR loop (not DO) with a non-unit STEP or
-a computed limit. **Confirmed** (checked directly, not assumed): the op
-at the exit target is a bare `ret` (the plain `C3` near-return), NOT
-`proc_ret` (the `5D CB`/`5D CA` pop-bp+retf pattern every ordinary SUB
-ending produces) -- so this is NOT simply "a tail-test loop as the last
-statement in an ordinary SUB" the way this session's ruled-out probes
-were built; that structural mismatch is likely WHY those probes didn't
-reproduce it. Traced the bare `ret` op's OWN dispatch (`core.py`: `elif
-kind in ("ret","retf"): state.put(ir.Return(), ...)`) -- it's specifically
-GOSUB...RETURN, so tried the concrete, well-targeted probe `GOSUB 100: ...:
-100 V=0: DO: V=V+1: LOOP WHILE V<>23: RETURN` (a tail-test loop ending a
-GOSUB'd subroutine) -- this ALSO decodes fine already, ruled out too. So
-NEITHER SUB nor DEF FN nor GOSUB context (the three most obvious "why
-would a loop be followed by a return-like op" candidates) reproduces the
-6-op-with-trailing-jmp shape on their own; whatever the actual trigger
-is, it's more specific than "tail-test loop immediately before a
-return/exit," matching this session's earlier experience with `t1_orax`
-(also needed the EXACT right condition shape, not just any loop-adjacent
-context). Do not guess the lift.py fix without an oracle-
-confirmed probe reproducing this exact 6-op-plus-context shape --
-per the calibration rule, this is exactly the kind of control-flow
-ambiguity (see also the vhfprop WHILE/UNTIL puzzle above) where guessing
-risks a silent wrong un-negation.
-
-## Gap 33 — INT EC sub 38 (football.exe/refund.exe), UNDIAGNOSED
-
-Both wild hits are TB 1.1/1.0 respectively (`canon_sub` already normalizes
-the dialect difference, so it's genuinely the same feature). Byte shape at
-football.exe 0x9e64:
+Both original wild hits are TB 1.1/1.0 respectively (`canon_sub` already
+normalizes the dialect difference, so it's genuinely the same feature).
+Byte shape at football.exe 0x9e64:
 
 ```
 be 8c 01     mov si, 018Ch        -- block disp (a runtime-DIM'd array)
