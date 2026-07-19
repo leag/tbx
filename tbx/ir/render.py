@@ -25,6 +25,7 @@ from tbx.ir.expr_nodes import (
     Neg,
     Not,
     Nullary,
+    RelOp,
     SingleLit,
     StrLit,
     Unknown,
@@ -188,10 +189,14 @@ def unparse(e) -> str:
 
 
 def unparse_cond(c) -> str:
-    """Render an IF/WHILE condition (RelOp or LogOp tree) without parentheses."""
+    """Render an IF/WHILE condition (RelOp or LogOp tree, or a bare
+    numeric-truthiness expression -- no explicit compare in source, e.g.
+    `LOOP UNTIL LEN(K$)`, wild metric.exe) without parentheses."""
     if isinstance(c, LogOp):
         return f"{unparse_cond(c.lhs)} {c.op} {unparse_cond(c.rhs)}"
-    return f"{unparse(c.lhs)} {c.op} {unparse(c.rhs)}"
+    if isinstance(c, RelOp):
+        return f"{unparse(c.lhs)} {c.op} {unparse(c.rhs)}"
+    return unparse(c)
 
 
 def unparse_case_guard(g) -> str:

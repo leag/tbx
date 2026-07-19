@@ -1104,6 +1104,38 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         rhs = state.sstack.pop()  # consumes its own strcmp ops): forward flags
         state.pend_cmp = (state.sstack.pop(), rhs)
         state.pend_cmp_str = True
+    elif kind == "orax" and state.pend_cmp is None and state.ax is not None:
+        # `or ax,ax`: a just-computed value's truthiness tested directly,
+        # with no preceding compare (wild metric.exe, an INKEY$ poll
+        # loop). A BACKWARD jcc right after is a DO-loop's own tail edge
+        # (same cc 75=WHILE/74=UNTIL mapping as _lift_do_tail), but with
+        # no explicit compare to materialize first the LOOP condition is
+        # the bare value itself, not an explicit "<> 0" -- byte-exact
+        # check: `LOOP UNTIL LEN(K$) <> 0` recompiles DIFFERENT bytes
+        # (the full movax-FFFF/jcc/incax materialize template) from
+        # `LOOP UNTIL LEN(K$)`, and only the bare form matches wild
+        # metric.exe (probe q_orax). A forward jcc (a plain `IF <value>
+        # <> 0 THEN ...`) falls through to the generic pend_cmp path,
+        # same as a real compare would feed it.
+        nxt = state.ops[state.k + 1] if state.k + 1 < len(state.ops) else None
+        if (
+            nxt is not None
+            and nxt[1] == "jcc"
+            and nxt[2] in (0x74, 0x75)
+            and nxt[3] < addr
+            and nxt[3] in state.addrs
+        ):
+            loop_kind = "WHILE" if nxt[2] == 0x75 else "UNTIL"
+            idx = state.addrs.index(nxt[3])
+            state.stmts.insert(idx, ir.Do(None))
+            state.addrs.insert(idx, None)
+            state.put(ir.Loop(loop_kind, state.ax), state.cur)
+            state.ax = None
+            state.cur = None
+            state.k += 2
+            return
+        state.pend_cmp = (state.ax, ir.Lit(0))
+        state.ax = None
     elif kind == "fstsw":
         pass
     elif kind == "jcc":

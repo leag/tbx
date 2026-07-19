@@ -75,7 +75,10 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
     def walk_cond(c):
         if isinstance(c, ir.LogOp):
             return ir.LogOp(c.op, walk_cond(c.lhs), walk_cond(c.rhs))
-        return ir.RelOp(c.op, walk(c.lhs), walk(c.rhs))
+        if isinstance(c, ir.RelOp):
+            return ir.RelOp(c.op, walk(c.lhs), walk(c.rhs))
+        return walk(c)  # bare numeric-truthiness condition (no explicit
+        # compare in source, e.g. `LOOP UNTIL LEN(K$)` -- wild metric.exe)
 
     def rn(s):
         if isinstance(s, ir.Assign):

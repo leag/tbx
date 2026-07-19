@@ -37,6 +37,7 @@ _DOSOUT = _ROOT / "tests" / "fixtures" / "dosout"
 # stem -> tb_v86_capture.js key script (JSON). "count" distinguishes the
 # n-th INPUT prompt; bare LINE INPUT prints no prompt, hence sleep steps.
 KEYS = {
+    "t1_orax": '[{"send":"x"}]',
     "t1_and": '[{"wait":"?","send":"2\\r"},{"wait":"?","count":2,"send":"3\\r"}]',
     "t1_ifin": '[{"wait":"?","send":"2\\r"},{"wait":"?","count":2,"send":"3\\r"}]',
     "t1_or": '[{"wait":"?","send":"5\\r"}]',

@@ -1115,6 +1115,28 @@ def test_decode_t1_inline():
     )
 
 
+def test_decode_t1_orax():
+    # `DO...LOOP UNTIL <bare numeric value>` (wild metric.exe, an INKEY$
+    # poll loop): `or ax,ax` testing a just-computed value's truthiness
+    # DIRECTLY, with no preceding compare -- a genuinely different,
+    # shorter compiled shape from _lift_do_tail's usual `movax 0FFFFh;
+    # jcc; incax; or ax,ax; jcc` template (which needs an EXPLICIT
+    # comparison first to materialize a -1/0 boolean). Byte-exact check
+    # confirmed the two source forms compile differently: `LOOP UNTIL
+    # LEN(K$) <> 0` (explicit compare) does NOT recompile this file's
+    # bytes; only the bare `LOOP UNTIL LEN(K$)` does. ir.Loop.cond can
+    # now hold a bare expression, not just RelOp/LogOp -- rename.py's
+    # walk_cond and render.py's unparse_cond both needed a fallback case.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_orax.exe"))
+    assert prog[2] == ir.Loop("UNTIL", ir.Call("LEN", (ir.Var("A$"),)))
+    assert emit0.emit(prog) == (
+        "10 DO\n20 A$ = INKEY$\n30 LOOP UNTIL LEN(A$)\n"
+        "40 PRINT A$\n50 END\n"
+    )
+
+
 def test_decode_t1_fileint():
     # INPUT# with INTEGER targets (inv87/invoice at 0x1389c): the numeric
     # read leaves the value on the x87 stack as usual, but an int slot is
