@@ -1,7 +1,9 @@
 # Wild-corpus gap campaign — handoff
 
-Status as of 2026-07-18 (session gaps 46-54 + line-table epic + nested
-block-IF + DO un-synthesis), branch `claude/claude-md-docs-mr8ssz`.
+Status as of 2026-07-19 (session gaps 46-59: line-table epic, nested
+block-IF, DO un-synthesis, computed-int-array element family, array-element
+SWAP (int + SINGLE), the modern `OPEN...FOR mode AS #n` syntax, LOF, and
+file-channel LINE INPUT), branch `claude/claude-md-docs-mr8ssz`.
 Standing instruction: close the most common decoder gap first, in frequency
 order, over the 84 wild PC-SIG Turbo Basic EXEs in `wild/hits/` (untracked,
 gitignored, copyrighted shareware — **never commit them**).
@@ -9,27 +11,26 @@ gitignored, copyrighted shareware — **never commit them**).
 ## Where things stand
 
 84 wild EXEs: **12 decode OK** (ck, onelab87, onelabel, mm, autonum, rev,
-startup, schart, r, book, inv87, invoice), 72 fail. vhfprop.exe is the only
-recent drop-out (was in the 9-count before the line-table work started
-this session) — not a regression: it fails LOUD on a real bug (a
-`DO...LOOP WHILE/UNTIL` ambiguity with no witnessed resolution, see
-"vhfprop status" below) instead of silently emitting wrong line numbers.
-Fresh tally (2026-07-18, after the DO un-synthesis fix):
+startup, schart, r, book, inv87, invoice) — unchanged this session; every
+closure below advanced files further into previously-unreachable territory
+without fully finishing a NEW file, which is expected once the easy/common
+gaps are gone and each file needs several more fixes to reach the end.
+vhfprop.exe remains the only file blocked purely by the line-table epic
+(see "vhfprop status" below, unchanged this session).
+
+**`OPEN file$ FOR mode AS #n` was the session's biggest single closure**:
+16 of 84 files were blocked on it alone (tied top of the tally at session
+start). Fresh tally (2026-07-19, after LOF/LINE INPUT#/array-SWAP/OPEN-FOR-AS):
 
 | count | error | status |
 |---|---|---|
-| 16 | INT cd | unwitnessable runtime-revision artifact — not actionable (see `scan_wild.py` docstring) |
-| 5 | byte 90 | ALL 5 now confirmed the same set-aside, unwitnessable shape (rstprint.exe's occurrence checked this session: identical `90 90` then `mov ax,[002C]` byte sequence) — not actionable |
-| 4 | byte ea | the ">64K multi-segment JMP FAR" theory is REFUTED this session (see the byte-ea section below) — genuinely undiagnosed now, not just "big lift" |
-| 3 each | INT 8c; byte 06 | both extensively probed earlier, still undiagnosed (sections below) — **next stop, tied for most actionable** |
-| 2 each | EC sub 66, EC sub 38 (gap 33, stuck), FP de/1e, FP dc/04, FP da/1c, byte 8c/8b/89/29/1e, system cell 0x8a | mostly untouched |
-| 1 | "codeless DO...LOOP WHILE/UNTIL ... unwitnessed" (vhfprop) | the LINE-TABLE EPIC below — DATA/DIM, nested-block-IF, AND the unconditional-DO sub-problems are all now CLOSED; only the tail-test (WHILE/UNTIL) DO un-synthesis is unwitnessed and open |
+| 6 | byte 90 | confirmed unwitnessable (prior sessions) — not actionable |
+| 5 | byte ea | ">64K" theory refuted (prior session) — undiagnosed, not just "big lift" |
+| 5 | FP esc=de modrm=1e | untouched |
+| 3 each | INT EC sub 4c; INT 8c; byte 89; byte 06 | sub 4c is NEW this session (see its section below, undiagnosed: file#+ax-int statement, LOCATE/WIDTH-file guesses both ruled out); INT 8c / byte 06 extensively probed in prior sessions, still undiagnosed |
+| 2 each | INT EC sub ac/42/38; INT ce (NEW, see section below); INT 3E selector 14; FP dc/04, da/1c; byte 8c/8b/1e; system cell 0x8a | mostly untouched |
+| 1 | "codeless DO...LOOP WHILE/UNTIL ... unwitnessed" (vhfprop) | unchanged, see "vhfprop status" below |
 | singles | see scan output | untouched |
-
-**inv87.exe/invoice.exe fully CLOSED this session** — see "Nested
-block-IF GOTO targets" below. vhfprop.exe remains the ONLY file blocked
-by the line-table epic, now down to one narrow, well-understood-but-
-unwitnessed sub-problem (see "vhfprop status" below).
 
 ## THE LINE-TABLE EPIC (read this first)
 
@@ -168,24 +169,110 @@ intended, permanent change.
    — the ONLY file left blocked by the line-table epic; the unconditional
    case is closed, this narrower WHILE/UNTIL case needs a witnessed
    non-DO source construct before it can be un-synthesized safely.
-2. **Byte ea (4 files)** — the ">64K" theory is refuted (see the gap
+2. **INT EC sub 4c (3 files, NEW)** — see the gap section below. Evidence:
+   `[0060]=1 (file#); mov ax,<int var>; INT EC sub 4c` (raw 0x4A in TB
+   1.0), immediately after an `X = LOF(1)` + `ON ERROR` pair, with no
+   inline operand bytes on the INT itself. Ruled out: `WIDTH #n,cols`
+   (compiles to a DIFFERENT unhandled sub, EC f0 — a distinct future
+   gap, not this one) and bare `LOCK #n` (not valid TB syntax without a
+   range). Untried: `LOCK #n, range`/`UNLOCK #n, range`, `RENAME`-
+   adjacent ops, a record-count/position statement tied to the
+   just-computed LOF result.
+3. **INT ce (2 files, NEW)** — see the gap section below. Evidence:
+   `LOCATE 20,1; CURSOR 1; bx=0; ax=7; INT CEh` (canonical, 2 raw bytes,
+   no inline operand) in billadd.exe/file.exe. Ruled out: not the
+   single-byte `INTO` (0xCE, no CD prefix) which is already handled
+   separately. Untried: full probe sweep of screen-attribute/character-
+   at-cursor statements with a fixed bx=0,ax=7 argument shape.
+4. **Byte ea (5 files)** — the ">64K" theory is refuted (see the gap
    section below); try reproducing elec87.exe's exact shape (a large
    FLAT string-comparison chain alongside whatever else that 155KB
    program does) before guessing further.
-3. **INT 8c (3 files)** — ON KEY GOSUB lead; a follow-on statement INSIDE
+5. **INT 8c (3 files)** — ON KEY GOSUB lead; a follow-on statement INSIDE
    the trap handler body (not more traps/toggles) is the next untried
    category.
-4. **Byte 06 / gap 19 (3 files)** — CGA snow-avoidance blitter; VIEW
+6. **Byte 06 / gap 19 (3 files)** — CGA snow-avoidance blitter; VIEW
    PRINT and PCOPY are ruled out (not real TB keywords); text GET/PUT is
    the remaining untried candidate.
-5. **The 2-tier** — re-tally after each closure; for FP gaps check the
+7. **The 2-tier** — re-tally after each closure; for FP gaps check the
    `[si]` FP table for missing rows first.
-6. Singles last, same workflow. Byte 90 (5 files) and INT cd (16 files)
-   are BOTH fully confirmed unwitnessable now — skip entirely, don't
-   re-diagnose.
+8. Singles last, same workflow. Byte 90 (6 files) and INT cd (formerly
+   16, now CLOSED — was `OPEN...FOR mode AS #n`, see Recently Closed)
+   — byte 90 remains fully confirmed unwitnessable, skip it.
 
 ## Recently closed (this campaign, newest first)
 
+- **LINE INPUT #n, var$** (2026-07-19): the file-channel sibling of
+  console LINE INPUT. `cd ec 66` (canonical; no operand -- unlike sub
+  64's `cd ec 64 <prompt_desc> 40`, there's no prompt for a file read)
+  + the same `movsi; strassign` consumer, with `[0060]` carrying the
+  file number like OPEN/PRINT#/INPUT#. `ir.LineInput` grew a `file`
+  field (mutually exclusive with `prompt`). c0.py gained
+  `tb_finput_line` (whole line, no comma/quote parsing, unlike
+  `tb_finput_str`). Closed wild billadd/crossref/file/grdscn/strpfind
+  (all also needed for the earlier gaps in this session's chain).
+  Fixture `t1_lineinf`/`v10_t1_lineinf`.
+- **LOF(n)** (2026-07-19): surfaced immediately by the OPEN-FOR-AS fix
+  below. INT ED sub 26, filenum in ax like EOF (sub 10), but unlike
+  EOF's boolean the file length can exceed 16 bits, so the result comes
+  back on the FP stack (`fn_axfp`, same shape as FRE(n)/sub 18) instead
+  of in ax. c0.py gained `tb_lof` (ftell/fseek round trip). Fixture
+  `t1_lof`/`v10_t1_lof`.
+- **`OPEN file$ FOR mode AS #n`** (2026-07-19) — **the session's biggest
+  single closure, 16 of 84 files**. All 16 hit "unhandled INT cd"
+  (canonical; raw C7 in TB 1.0) at wildly different addresses, but the
+  preceding bytes were byte-identical across every one: `movsi <str>;
+  rt 9C` (push a filename) then `mov word[002Eh], (char<<8 | 1); INT
+  CDh`. The packed word's high byte is always an uppercase letter --
+  confirmed via oracle probes (`OUTPUT`/`INPUT`/`APPEND`/`RANDOM`/
+  `BINARY` -> `O`/`I`/`A`/`R`/`B`) to be the FOR-keyword form of OPEN
+  desugaring its mode to a compile-time 1-char string at a fixed
+  scratch cell instead of a real pooled literal, materialized by a new
+  bare `INT CDh` ("shortstr") vector. NOT byte-identical to the comma
+  form (different push order, +16 bytes), so `ir.Open` grew a `for_as`
+  flag and the emitter reproduces the original FOR-keyword spelling
+  rather than normalizing. **Trap for next time**: `rename.py` rebuilds
+  IR nodes on the rename pass and had ALREADY silently dropped a new
+  field once before (`for_as` itself, caught by the oracle byte-exact
+  check) — when adding a field to an existing IR node, grep
+  `rename.py` for that node's rebuild site immediately, don't wait for
+  the byte-exact check to catch it (it *did* catch it here, so no
+  wrong output shipped, but it cost a debugging round trip). Fixture
+  `t1_openfor`/`v10_t1_openfor`.
+- **SWAP of two computed SINGLE (4-byte) array elements** (2026-07-19):
+  extends the int-array SWAP tail (below) to 4-byte elements -- after
+  the low-word swap, a second round at a fixed +2 byte offset handles
+  the high word (`far_movax_bx2`/`xchgsi2`/`far_movm_ax_bx2`). Gated on
+  `ao==2` (double `shl si,1`, the existing 4-byte-stride signal); 8-byte
+  DOUBLE (`ao==3`) is left to raise, unwitnessed. Fixture
+  `t1_arrswapf`/`v10_t1_arrswapf`.
+- **SWAP of two computed static-int-array elements** (2026-07-19):
+  closes number.exe's next stop after the array-access family below.
+  The compiler can't XCHG two memory operands directly, so it spills DS
+  to a scratch cell (`movm_ds`, `mov [disp16],ds`) while the first
+  operand's index chain is still live in SI, computes the second
+  operand's address, restores DS into ES from that cell (the existing
+  `moves_m` op, now ALSO a valid shlsi consumer), then does the swap
+  through the ES alias: `mov bx,ax` (a second, `8B D8` encoding of the
+  existing `movbxax`) / `mov ax,es:[bx]` (`far_movax_bx`) / `xchg
+  ax,[si]` (`xchgsi`) / `mov es:[bx],ax` (`far_movm_ax_bx`). New
+  `DecodeState.pend_swap` stages the first ArrayRef across the second
+  operand's own shl/addsi chain. The new `movm_ds` byte pattern (`8C
+  1E`) collides with bare DEF SEG's `mov [001C],ds` -- reordered so the
+  disp==0x1C-specific check keeps priority. Also fixed c0.py's SWAP
+  lowering, which assumed both operands were plain Vars. Fixture
+  `t1_arrswap`/`v10_t1_arrswap`.
+- **Computed-int-array cmp/add + shlsi gatekeeper fix + compound
+  subtract** (2026-07-19): `cmp ax,[si]`/`add ax,[si]` complete the
+  computed-static-INTEGER-array-element family alongside movm_ax_si/
+  movax_si. Exposed a foundational bug: shlsi's gatekeeper required 2-3
+  consecutive `shl si,1`, silently barring the single-shl (2-byte
+  INTEGER stride) case PROJECT-WIDE -- fixed to accept 1-3 shifts. Also
+  `sub [disp16],ax` (subm_ax), the subtract sibling of addm_ax. Wild
+  number.exe. Fixtures `t1_arrwrite`/`t1_arrread` (rebuilt -- the
+  originals accidentally used default-SINGLE `DIM A(10)`, masking the
+  gatekeeper bug via the unrelated float path), `t1_arrcmp` (new),
+  `t1_subm` (new).
 - **Un-synthesize bare-jmps DO when the line table shows no DO** (2026-07-18):
   the "bare backward jmps = infinite DO" canonicalization (an explicit
   `DO...LOOP` and a plain `<n> ... GOTO <n>` compile identically, so the
@@ -592,6 +679,81 @@ intended, permanent change.
   the walk cut at 16-aligned string positions. Fixture t1_poolrun.
 - Gap 12 INCR/DECR (`0e4f0f7`), gap 11 by-ref int param family (`3f1e23d`),
   gap 10 LOCAL (`2ef2b6d`), gap 9 double arrays — see git log.
+
+## Gap INT EC sub 4c (be.exe/pwinst.exe/strpfind.exe), UNDIAGNOSED (2026-07-19)
+
+Surfaced fresh this session once the OPEN/LOF/LINE INPUT# gaps ahead of it
+closed. All three hits are TB 1.0 (raw sub 0x4A, canon_sub +2 -> canonical
+0x4C). Full evidence, pwinst.exe at 0x81f4:
+
+```
+8b 06 0e 02        mov ax,[020Eh]      (movax_m, disp=526 -- a plain int var)
+cd ec 4a           INT EC sub 4Ah (raw) = canonical 4C -- THE GAP
+```
+
+Immediately BEFORE this (pwinst.exe): `movax(1); fn_axfp LOF; fstp(520)`
+(i.e. `X = LOF(1)`) then `on_error(35379)` then `movm_imm(96,1)` ([0060] =
+file# 1). So the shape is: `X = LOF(1)`, `ON ERROR GOTO ...`, `[0060]=1`,
+`ax = <int var>`, then this INT with **no inline operand bytes** (a plain
+3-byte `cd ec 4a`, argument entirely in ax) -- same "[0060] + ax" calling
+convention as WIDTH's `[0060]`-scoped sibling would use, but NOT WIDTH
+itself (see below). Right after, unrelated code resumes with a fresh
+`movsi`+`strcmp` (a SELECT CASE string arm) in the ops actually captured,
+so this is a clean, complete, single statement.
+
+**Ruled out this session**:
+- `WIDTH #n, cols` (plain `WIDTH n` is a DIFFERENT, already-implemented
+  sub 0xEC with an ax operand) -- compiles fine but scans to a
+  **different** unhandled sub, `EC f0` (a distinct, not-yet-tallied
+  future gap -- worth a probe of its own later, but it is NOT this one).
+- Bare `LOCK #n` -- not valid TB syntax at all (`Error 414: "=" expected`,
+  the parser reads `LOCK` as an assignment target). TB's LOCK likely
+  needs a range operand (`LOCK #n, r1 TO r2`?) which would change the
+  byte shape (probably 2 args, not 1) -- untried.
+
+**Untried candidates**: `LOCK #n, range`/`UNLOCK #n, range` (proper
+syntax, needs the manual or more probes to find the right grammar);
+something record/position-based that consumes the just-computed LOF
+result (though the two aren't provably linked -- could be coincidental
+adjacency in source); a RENAME-family statement. Since ax carries a
+PLAIN INTEGER (not a file position/record on the FP stack like GET/PUT/
+SEEK, which all pop `state.stack`), whatever this is takes its argument
+via a DIFFERENT, ax-based convention from the existing random-access
+family -- narrows the search but doesn't pin it down. Next step:
+compile candidate one-liners after `OPEN ... AS #1` and diff the exact
+`[0060]=n; ax=<expr>; cd ec 4a` shape.
+
+## Gap INT ce (billadd.exe/file.exe), UNDIAGNOSED (2026-07-19)
+
+Also surfaced fresh once LINE INPUT# unblocked these two files further.
+A genuine 2-byte `INT CEh` (`cd ce`, canonical -- do not confuse with the
+UNRELATED, already-handled single-byte `0xCE` = raw `INTO`, the
+Overflow-toggle check, which has no `cd` prefix). Evidence, billadd.exe
+at 0xf0b3:
+
+```
+movbxax; movax(20); locate     -- LOCATE 20, 1  (row=bx, col=ax convention)
+movax(1); cursor                -- CURSOR 1  (cursor visible/blink arg)
+xorax; movbxax                  -- bx = 0
+movax(7)                        -- ax = 7
+cd ce                            -- THE GAP: 2-byte INT CEh, no inline operand
+```
+
+So: position the cursor at row 20 col 1, turn the cursor on, then call
+something with bx=0, ax=7 and no further operand bytes. Screen/cursor
+context strongly suggests a text-mode attribute or character write at
+the (now-positioned) cursor, but nothing has been tried yet this
+session -- no probes attempted, no keywords ruled out. VIEW PRINT and
+PCOPY are already known non-keywords in this dialect (ruled out for the
+UNRELATED byte-06 gap, but the same "not real TB keywords" fact applies
+here too if either comes up as a candidate again). Next step: probe
+sweep of statements that take two small integer args and run right
+after LOCATE+CURSOR in a "draw at cursor" context (candidates worth
+trying: `WRITE` in some special zero-arg-adjacent form, a low-level
+`OUT`/`WAIT`-family statement, or something PLAY/SOUND-adjacent that
+happens to follow a LOCATE call textually but isn't actually screen-
+related -- the LOCATE/CURSOR proximity could be coincidental source
+adjacency rather than a causal link).
 
 ## Gap 33 — INT EC sub 38 (football.exe/refund.exe), UNDIAGNOSED
 
