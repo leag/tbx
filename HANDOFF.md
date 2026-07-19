@@ -28,7 +28,7 @@ OPEN-FOR-AS/icomp):
 |---|---|---|
 | 6 | byte 90 | confirmed unwitnessable (prior sessions) — not actionable |
 | 5 | byte ea | ">64K" theory refuted (prior session) — undiagnosed, not just "big lift" |
-| 4 | byte 89 | INVESTIGATED THIS SESSION, NOT LANDED — see the gap section below. Root cause identified (generic `movrr`'s register table is missing `di`) but no minimal witnessed probe found after extensive trying; the fix was written, tested against 3 wild files (all advance cleanly), then REVERTED per the calibration rule since it has no fixture. Whoever picks this up next has a huge head start — the section below has the exact diff to reapply once a probe lands. |
+| 4 | byte 89 | INVESTIGATED THIS SESSION, NOT LANDED — 3 of the 4 (catalog/pfl/process) share one root cause, see the gap section below: generic `movrr`'s register table is missing `di`; fix written, tested (all 3 advance cleanly), then REVERTED per the calibration rule since no probe reproduces it. The 4th (CVT2TB.EXE) is UNRELATED — it's actually gap 19/byte-06 (CGA blitter) in disguise, see that section's addendum. |
 | 3 each | INT EC sub 4c; INT 8c; byte 06 | sub 4c undiagnosed (file#+ax-int statement, LOCATE/WIDTH-file guesses both ruled out); INT 8c / byte 06 extensively probed in prior sessions, still undiagnosed |
 | 2 each | INT EC sub ac/42/38/04; INT ce; INT 3E selector 14; FP dc/04, da/1c; byte f7/8c/8b/1e; system cell 0x8a | mostly untouched |
 | 1 | "codeless DO...LOOP WHILE/UNTIL ... unwitnessed" (vhfprop) | unchanged, see "vhfprop status" below |
@@ -699,7 +699,7 @@ intended, permanent change.
 - Gap 12 INCR/DECR (`0e4f0f7`), gap 11 by-ref int param family (`3f1e23d`),
   gap 10 LOCAL (`2ef2b6d`), gap 9 double arrays — see git log.
 
-## Gap byte 89 / the missing `di` spill register (CVT2TB.EXE/catalog.exe/pfl.exe/process.exe), INVESTIGATED, NOT LANDED (2026-07-19)
+## Gap byte 89 / the missing `di` spill register (catalog.exe/pfl.exe/process.exe), INVESTIGATED, NOT LANDED (2026-07-19)
 
 **Root cause is IDENTIFIED with high confidence** (not a guess -- grounded
 in real x86 semantics and confirmed byte-for-byte against 3 independent
@@ -708,6 +708,13 @@ trying, so per the calibration rule the fix was written, verified to
 advance real files, then **reverted** rather than committed unwitnessed.
 This section exists so the next session doesn't have to redo the
 byte-level archaeology.
+
+(This tally bucket originally showed a 4th file, CVT2TB.EXE -- that one
+turned out to be UNRELATED to the `di` register and has since been
+identified as a repeated instance of the already-tracked gap 19/byte-06
+CGA blitter mystery instead, with its own separate encoding wrinkle; see
+the addendum at the end of the "Gap 19 — byte 06" section below. Don't
+go looking for it here.)
 
 **The mechanism**: `decode0/scan.py`'s generic `mov reg,reg` recognizer
 (`_scan`, ~line 891) has:
@@ -1257,6 +1264,31 @@ VIEW PRINT/PCOPY just turned out not to exist).
 trace — that was a mis-filed duplicate of the gap-16 investigation, since
 resolved by gap 28; schart.exe is unrelated to this byte-06/by-ref-param
 gap.)
+
+**CVT2TB.EXE identified as a 10x-repeated instance of THIS SAME gap, with
+an encoding wrinkle (2026-07-19)**: while investigating a separate
+"byte 89" tally entry, CVT2TB.EXE's occurrence turned out to be `push bp;
+mov bp,sp; push es; push ds; les si,[bp+06/0Ah]; ...` -- byte-for-byte
+this SAME gap-19 template, appearing 10 TIMES in the file, not a
+different construct. The only difference: CVT2TB.EXE's compiler encodes
+`mov bp,sp` as `89 E5` (the "MOV r/m,r" direction, reg=sp/rm=bp) instead
+of gap-19's original witness's `8B EC` ("MOV r,r/m", reg=bp/rm=sp) --
+the SAME two-encodings-for-one-instruction ambiguity already fixed
+elsewhere this session for `mov bx,ax` (`8B D8` vs `89 C3`, see the
+array-SWAP gap in Recently Closed). Both `89 e5` (10x) and `8b ec` (80x)
+coexist throughout CVT2TB.EXE, so this isn't a wholesale different
+compiler build -- something CONTEXTUAL selects the encoding, but
+several DEF FN / nested-string-concat probes this session produced
+`8b ec` in 100% of cases (42+ instances checked across one probe, zero
+`89 e5`), so the specific trigger for the alternate encoding is still
+unfound. **Do not add scan support for `89 E5` as mov_bp_sp in isolation
+without a witness** -- it was tried this session and reverted (same
+calibration-rule reasoning as the byte-89/`di` register section above:
+mechanically obvious, zero risk, but no fixture). Once gap 19's actual
+triggering BASIC construct is found (whatever compiles to this whole
+push-bp/mov-bp-sp/push-es/push-ds/les template), check which encoding
+IT produces and land that one first; the other encoding will still need
+its own separate witness if it doesn't naturally appear too.
 
 ## The workflow (each gap, see gap 9–14 commits for examples)
 
