@@ -1,7 +1,7 @@
 # Wild-corpus gap campaign — handoff
 
 Status as of 2026-07-18 (session gaps 46-54 + line-table epic + nested
-block-IF), branch `claude/claude-md-docs-mr8ssz`.
+block-IF + DO un-synthesis), branch `claude/claude-md-docs-mr8ssz`.
 Standing instruction: close the most common decoder gap first, in frequency
 order, over the 84 wild PC-SIG Turbo Basic EXEs in `wild/hits/` (untracked,
 gitignored, copyrighted shareware — **never commit them**).
@@ -11,9 +11,10 @@ gitignored, copyrighted shareware — **never commit them**).
 84 wild EXEs: **12 decode OK** (ck, onelab87, onelabel, mm, autonum, rev,
 startup, schart, r, book, inv87, invoice), 72 fail. vhfprop.exe is the only
 recent drop-out (was in the 9-count before the line-table work started
-this session) — not a regression, see "vhfprop status" below: it now
-fails LOUD on a real, previously-silent bug instead of silently emitting
-wrong line numbers. Fresh tally (2026-07-18, after the nested block-IF fix):
+this session) — not a regression: it fails LOUD on a real bug (a
+`DO...LOOP WHILE/UNTIL` ambiguity with no witnessed resolution, see
+"vhfprop status" below) instead of silently emitting wrong line numbers.
+Fresh tally (2026-07-18, after the DO un-synthesis fix):
 
 | count | error | status |
 |---|---|---|
@@ -22,12 +23,13 @@ wrong line numbers. Fresh tally (2026-07-18, after the nested block-IF fix):
 | 4 | byte ea | the ">64K multi-segment JMP FAR" theory is REFUTED this session (see the byte-ea section below) — genuinely undiagnosed now, not just "big lift" |
 | 3 each | INT 8c; byte 06 | both extensively probed earlier, still undiagnosed (sections below) — **next stop, tied for most actionable** |
 | 2 each | EC sub 66, EC sub 38 (gap 33, stuck), FP de/1e, FP dc/04, FP da/1c, byte 8c/8b/89/29/1e, system cell 0x8a | mostly untouched |
-| 1 | "statements don't map 1:1" (vhfprop) | the LINE-TABLE EPIC below — DATA/DIM AND nested-block-IF sub-problems now CLOSED; the bare-DO-normalization sub-problem is what's left, alone |
+| 1 | "codeless DO...LOOP WHILE/UNTIL ... unwitnessed" (vhfprop) | the LINE-TABLE EPIC below — DATA/DIM, nested-block-IF, AND the unconditional-DO sub-problems are all now CLOSED; only the tail-test (WHILE/UNTIL) DO un-synthesis is unwitnessed and open |
 | singles | see scan output | untouched |
 
 **inv87.exe/invoice.exe fully CLOSED this session** — see "Nested
-block-IF GOTO targets" below. That leaves vhfprop.exe as the ONLY
-file still blocked by the line-table epic.
+block-IF GOTO targets" below. vhfprop.exe remains the ONLY file blocked
+by the line-table epic, now down to one narrow, well-understood-but-
+unwitnessed sub-problem (see "vhfprop status" below).
 
 ## THE LINE-TABLE EPIC (read this first)
 
@@ -85,35 +87,53 @@ colliding with orphan evidence, are explicitly rejected (fail loud, no
 witness) rather than guessed — narrow the check if a future wild file
 needs it.
 
-### vhfprop status: NEW, narrower blocker found (bare-DO vs line tables)
+### vhfprop status: bare-DO un-synthesis CLOSED for unconditional loops; the WHILE/UNTIL case is a genuinely new, still-open puzzle
 
-After the DATA/DIM fixes, vhfprop.exe advances to a NEW error:
-`"error-trap line table present but statements don't map 1:1 to its
-entries"` — a REAL bug, not a regression. Root cause (confirmed via a
-temporary debug patch, then a matching probe q_lt8): `core.py`'s "bare
-backward jmps = infinite DO" path (~line 1217-1221, comment: `elif op[2]
-< addr and op[2] in state.addrs`) ALWAYS canonicalizes a backward jump
-loop into synthesized `ir.Do(None)` + `ir.Loop(None)`, regardless of
-whether the ORIGINAL source spelled it `DO...LOOP` or was a plain
-`GOTO`-based loop — both compile to IDENTICAL bytes, so the decoder can't
-tell which from the op stream alone. Probe q_lt8 proved an EXPLICIT
-`DO...LOOP` (no WHILE/UNTIL) DOES get its own codeless orphan entry in
-the table (same borrowing convention as DATA/DIM) — but vhfprop's TWO
-`Do` statements (prog indices 259, 281; body starts at file offsets
-0xf62/0x1100) have NO matching orphan anywhere in vhfprop's validated
-734-real-entry table (confirmed: `ent[0xf62]=600`, `ent[0x1100]=722`,
-single entries, no duplicates). So vhfprop's loops were almost certainly
-plain `GOTO`-based in the original source, not `DO...LOOP` — meaning the
-EXISTING bare-DO canonicalization is ALREADY lossy in a way that's
-invisible under free renumbering but genuinely non-byte-exact once a line
-table is active: emitting our canonicalized "DO" would introduce an EXTRA
-table entry the original never had.
-**Not fixed this session** — this needs either (a) reproducing literal
-`GOTO`-loop syntax instead of canonicalizing to DO when the table shows no
-orphan there (invasive: touches the existing, previously-untested-against-
-line-tables DO-canonicalization convention), or (b) accepting the
-combination as unsupported for now. Diagnose fresh with `_line_table`
-before guessing.
+`core.py`'s "bare backward jmps = infinite DO" path ALWAYS canonicalized
+a backward jump loop into synthesized `ir.Do(None)` + `ir.Loop(None)`,
+regardless of whether the ORIGINAL source spelled it `DO...LOOP` or was a
+plain `GOTO`-based loop — both compile to IDENTICAL bytes. Fixed this
+session (see "Un-synthesize bare-jmps DO..." in Recently Closed): DO,
+like DATA/DIM, gets its OWN codeless line-table entry, so when the table
+is active and shows NO orphan evidence at the loop's borrowed offset,
+the Do/Loop pair is un-synthesized back to a plain Goto. Verified
+byte-exact (fixtures `t1_gotoerr`/`t1_doerr`).
+
+**vhfprop.exe itself is STILL blocked**, on a narrower, different case:
+BOTH its loops turned out to be tail-test (`Do(None)` paired with a
+CONDITIONAL `Loop("WHILE"/"UNTIL", cond)`, from `_lift_do_tail`'s
+materialize-then-backward-jcc byte template — NOT the simple
+unconditional case above), and NEITHER has orphan evidence (confirmed:
+`ent[0xf62]=600`, `ent[0x1100]=722`, single entries, no duplicates, in
+vhfprop's validated 734-real-entry table). The line-table EVIDENCE says
+"no DO was here" just as clearly as for the unconditional case — but
+**every constructed probe that reaches `_lift_do_tail`'s exact byte
+shape does so ONLY via a genuine `DO...LOOP WHILE/UNTIL` in source**:
+tried a plain `IF compound THEN GOTO earlier` with integer operands
+(hit an unrelated gap, `int compound relational jcc 7f`, not yet
+supported for signed comparisons), with float operands (single and
+compound-OR condition, both resolved through the SHORT-CIRCUIT
+compound-IF machinery — gap 47 — never through `_lift_do_tail`). No
+witnessed non-DO construct produces the tail-test shape, so
+un-synthesizing it (WHILE: a plain IfGoto; UNTIL: needs De Morgan
+negation of what might be a compound LogOp, unwitnessed and harder
+still) would be guessing against the calibration rule, DESPITE the
+suggestive table evidence. `core.py` now raises a specific, clear error
+for this case rather than either crashing obscurely or silently risking
+a wrong byte. **Next step for a future session**: find what OTHER
+BASIC construct (not yet tried: `WHILE...WEND`, an `EXIT DO/LOOP`
+interacting with the tail test, a compound condition used as a VALUE
+elsewhere that happens to feed into the same materialize infrastructure,
+CALL/GOSUB-adjacent control flow) produces `_lift_do_tail`'s exact byte
+template without a genuine DO — or, failing that, treat this as a
+deliberately accepted gap and move to something else. vhfprop.exe was
+also unblocked at fully decoding briefly during this session's
+investigation and hit a SEPARATE, apparently pre-existing "Error 431:
+End-of-line expected" issue elsewhere in the file when attempting the
+oracle round-trip — bisection narrowed it to somewhere in BASIC lines
+907–4600ish (large region, mostly array-literal DATA assignments, not
+yet isolated further) — a DIFFERENT gap, unrelated to the DO work,
+worth investigating once vhfprop reaches full decode again.
 
 ### CLOSED: inv87.exe/invoice.exe's nested block-IF GOTO target
 
@@ -144,9 +164,10 @@ intended, permanent change.
 
 ## Ongoing plan (priority order — pick up at the first incomplete step)
 
-1. **vhfprop's bare-DO-vs-line-table gap** (above) — the ONLY file left
-   blocked by the line-table epic now; narrower than the original scope,
-   still open.
+1. **vhfprop's tail-test DO...LOOP WHILE/UNTIL un-synthesis gap** (above)
+   — the ONLY file left blocked by the line-table epic; the unconditional
+   case is closed, this narrower WHILE/UNTIL case needs a witnessed
+   non-DO source construct before it can be un-synthesized safely.
 2. **Byte ea (4 files)** — the ">64K" theory is refuted (see the gap
    section below); try reproducing elec87.exe's exact shape (a large
    FLAT string-comparison chain alongside whatever else that 155KB
@@ -165,6 +186,26 @@ intended, permanent change.
 
 ## Recently closed (this campaign, newest first)
 
+- **Un-synthesize bare-jmps DO when the line table shows no DO** (2026-07-18):
+  the "bare backward jmps = infinite DO" canonicalization (an explicit
+  `DO...LOOP` and a plain `<n> ... GOTO <n>` compile identically, so the
+  decoder always picked DO) turns out to be lossy once a line table is
+  active, same root cause as the DATA/DIM orphan work: DO gets its own
+  codeless table entry a plain GOTO loop never had. `core.py` now pairs
+  every synthesized bare Do with its closing Loop by nesting order (a
+  stack tracking ALL Do/Loop pairs, including head-test ones, so a
+  head-test DO's own bare closing Loop can't get mismatched to an
+  unrelated bare Do sitting deeper on the stack), and un-synthesizes an
+  UNCONDITIONAL Do/Loop pair to a plain Goto when the table shows no
+  orphan at the loop body's borrowed offset. Byte-exact verified.
+  Fixtures `t1_gotoerr` (the un-synthesized case) / `t1_doerr` (a
+  genuine DO, confirming it's untouched and still gets its own line
+  from real orphan evidence). Deliberately does NOT cover the
+  conditional (WHILE/UNTIL) tail-test case — see "vhfprop status" above
+  for why that one stayed open despite the same suggestive table
+  evidence. Wild scan stayed at 12 (this fix's own witnessed case
+  doesn't happen to be the thing blocking any currently-failing wild
+  file, including vhfprop, which needs the WHILE/UNTIL case).
 - **Nested block-IF GOTO targets** (2026-07-18, closes wild inv87.exe/
   invoice.exe): a GOTO into a numbered line nested TWO block-IF levels
   deep needed four compounding fixes (gap 51 only reached a single-arm
