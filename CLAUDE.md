@@ -78,7 +78,7 @@ Corpus naming (`tests/fixtures/corpus/`): `.exe` files are compiled fixtures, `.
 
 ## Debugging a decode failure
 
-`tbx PROGRAM.EXE --ops` shows how far the scan got. For an `unhandled byte ... at ...` error, `python -m tbx.tools.cfgview PROGRAM.EXE [--out cfg.dot]` disassembles the user-code region as raw x86 (needs the `debug` extra) to identify the missing compiler template. These tools are triage-only, never part of the decompile pipeline.
+`tbx PROGRAM.EXE --ops` shows how far the scan got. For an `unhandled byte ... at ...` error, `python -m tbx.tools.cfgview PROGRAM.EXE [--out cfg.dot]` disassembles the user-code region as raw x86 (needs the `debug` extra) to identify the missing compiler template. When the missing template's trigger isn't obvious and there are several plausible source shapes to try, `python tbx/tools/batch_probe.py PROBE_DIR [--want SUBSTRING] [--dialect 1.0|1.1]` batches the write-probe/compile/scan loop: it compiles every `.bas` in `PROBE_DIR` against the oracle and scans each one, reporting which (if any) reproduce the target gap. These tools are triage-only, never part of the decompile pipeline.
 
 ## Style notes
 
