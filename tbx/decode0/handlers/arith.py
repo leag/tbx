@@ -568,10 +568,27 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             tail = [t[1] for t in state.ops[state.k + ao + 2 : state.k + ao + 6]]
             if tail != ["movbxax", "far_movax_bx", "xchgsi", "far_movm_ax_bx"]:
                 raise ValueError(f"array SWAP tail mismatch at {addr:#x}")
+            extra = 0
+            if ao == 2:
+                # 4-byte element (SINGLE): a second word-swap round at +2
+                # handles the high word (wild number.exe).
+                tail2 = [
+                    t[1] for t in state.ops[state.k + ao + 6 : state.k + ao + 9]
+                ]
+                if tail2 != ["far_movax_bx2", "xchgsi2", "far_movm_ax_bx2"]:
+                    raise ValueError(
+                        f"array SWAP high-word tail mismatch at {addr:#x}"
+                    )
+                extra = 3
+            elif ao == 3:
+                raise ValueError(
+                    f"array SWAP of an 8-byte (DOUBLE) element is unwitnessed "
+                    f"at {addr:#x}"
+                )
             state.put(ir.Swap(state.pend_swap, ref), state.cur)
             state.pend_swap = None
             state.cur = None
-            state.k += ao + 6
+            state.k += ao + 6 + extra
             return True
         else:
             raise ValueError(f"element access: unexpected op {sik[1]} at {sik[0]:#x}")

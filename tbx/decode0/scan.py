@@ -583,6 +583,22 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "far_movm_ax_bx"))  # SWAP-of-array-elements tail, store
         p += 3  # the swapped value back into the first (ES-aliased) elem
         return p  # (q_arrswap)
+    if (
+        b == 0x26 and exe[p + 1] == 0x8B and exe[p + 2] == 0x47 and exe[p + 3] == 2
+    ):  # mov ax, es:[bx+2]: SWAP-of-array-elements tail, high word of a
+        ops.append((p, "far_movax_bx2"))  # 4-byte (SINGLE) element -- second
+        p += 4  # word-swap round after the low-word one (wild number.exe)
+        return p
+    if b == 0x87 and exe[p + 1] == 0x44 and exe[p + 2] == 2:  # xchg ax, [si+2]:
+        ops.append((p, "xchgsi2"))  # high-word half of a 4-byte element swap
+        p += 3  # (wild number.exe)
+        return p
+    if (
+        b == 0x26 and exe[p + 1] == 0x89 and exe[p + 2] == 0x47 and exe[p + 3] == 2
+    ):  # mov es:[bx+2], ax: high-word store, closing a 4-byte element swap
+        ops.append((p, "far_movm_ax_bx2"))  # (wild number.exe)
+        p += 4
+        return p
     return None
 
 

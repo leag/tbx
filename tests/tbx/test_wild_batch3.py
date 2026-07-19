@@ -939,6 +939,27 @@ def test_decode_t1_arrswap():
     )
 
 
+def test_decode_t1_arrswapf():
+    # SWAP of two computed SINGLE (4-byte) array elements (wild number.exe
+    # at 0xc280): same ES-aliased tail as t1_arrswap's INTEGER case (ao=2
+    # for the double `shl si,1`, one per byte of stride beyond the first),
+    # but a 4-byte element needs the low-word swap AND a second, high-word
+    # round at a fixed +2 byte offset: `mov ax,es:[bx+2]` (far_movax_bx2) /
+    # `xchg ax,[si+2]` (xchgsi2) / `mov es:[bx+2],ax` (far_movm_ax_bx2).
+    # The 8-byte (DOUBLE) case is left to raise -- unwitnessed.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_arrswapf.exe"))
+    assert prog[5] == ir.Swap(
+        ir.ArrayRef("V0", (ir.Var("A"),)), ir.ArrayRef("V0", (ir.Var("B"),))
+    )
+    assert emit0.emit(prog) == (
+        "10 DIM V0(10)\n20 V0(1) = 1.5#\n30 V0(2) = 2.5#\n40 A = 1\n50 B = 2\n"
+        "60 SWAP V0(A), V0(B)\n70 C = 1\n80 D = 2\n"
+        "90 PRINT V0(C), V0(D)\n100 END\n"
+    )
+
+
 def test_decode_t1_fileint():
     # INPUT# with INTEGER targets (inv87/invoice at 0x1389c): the numeric
     # read leaves the value on the x87 stack as usual, but an int slot is
