@@ -15,9 +15,13 @@ future session proves that it made progress.
 - Current worktree at plan creation: scanner-report tooling plus this plan
 - Baseline validation: 2168 passed, 14 skipped after repairing the missing
   four-statement `t1_getstr` IR snapshot section.
-- Immediate target: identify `INT ED sub 1e` in `be.exe` and `budfin.exe`
+- Immediate target: investigate `INT EC sub 38` after `INT ED sub 1e` was
+  classified as an unresolved shape/revision mismatch.
 - Important negative result: a minimal `CINT(1.7)` oracle probe compiles cleanly
   without producing this gap; do not label sub `1e` as `CINT` from intuition.
+- Additional negative result: variable `CINT` and numeric-conversion probes emit
+  inline `FISTP/FILD` sequences rather than `INT ED sub 1e`; no safe mapping is
+  justified yet. Keep the wild pattern fail-loud and retain it in the ledger.
 
 The number 70 is a count of blocked executables, not distinct missing features.
 Every fix can reveal a later failure in the same executable. Completion therefore
@@ -117,8 +121,9 @@ not overwrite it with only the latest state.
 These have explicit opcode boundaries and are the best candidates for safe,
 fixture-backed closures.
 
-- [ ] `INT ED sub 1e` — 2 files (`be.exe`, `budfin.exe`). Inspect argument/result
-  convention first. `CINT` has already been ruled out by a minimal probe.
+- [~] `INT ED sub 1e` — 2 files (`be.exe`, `invent.exe`). Variable `CINT` and
+  conversion probes do not reproduce it; classify as unresolved shape/revision
+  mismatch pending a better source hypothesis. Do not add a guessed intrinsic.
 - [ ] `INT EC sub 38` — 3 files. Re-open Gap 33 evidence in `HANDOFF.md`, build a
   statement-family probe matrix, and test both dialects.
 - [ ] `INT EC sub 42` — 2 files (`styled.exe`, `styllist.exe`). Their common
