@@ -14,8 +14,9 @@ outside this repository (a sister project); tbx depends only on this contract:
         (`file: NAME SIZE` lines). Exit 3 = the program never returned to the
         DOS prompt (interactive/graphics/hang) -- no usable capture.
 
-Locate it with TBX_ORACLE=/path/to/oracle (default: ../frame/oracle relative
-to the repo root, if present). Needs node and mtools. Like cfgview, this is
+Locate it with TBX_ORACLE=/path/to/oracle (default: the vendored
+`vendor/turbo_basic_oracle`, falling back to `../frame/oracle`). Needs node and
+mtools. Like cfgview, this is
 never part of the decompile pipeline; everything here is for verifying new
 fixtures byte-exact and capturing behavior goldens.
 """
@@ -36,7 +37,14 @@ _FLOPPIES = {"1.1": None, "1.0": "tb10_floppy.img"}  # None = oracle default
 def oracle_dir() -> Path:
     """The oracle directory, or raise with setup instructions."""
     env = os.environ.get("TBX_ORACLE")
-    cand = Path(env) if env else _REPO.parent / "frame" / "oracle"
+    if env:
+        cand = Path(env)
+    else:
+        # Prefer the repository-vendored harness; retain the historical sibling
+        # checkout as a fallback for existing development environments.
+        vendored = _REPO / "vendor" / "turbo_basic_oracle"
+        sibling = _REPO.parent / "frame" / "oracle"
+        cand = vendored if (vendored / "tb_v86.js").is_file() else sibling
     if not (cand / "tb_v86.js").is_file():
         raise RuntimeError(
             f"Turbo Basic oracle not found at {cand} -- set TBX_ORACLE to the "
