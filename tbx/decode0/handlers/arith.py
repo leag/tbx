@@ -832,6 +832,8 @@ def stack_ops(state: DecodeState, op, addr, kind) -> bool:
         "les_si_ss_bx",
         "str_temp_free",
         "push_bp",
+        "push_es",
+        "push_ds",
         "pop_bp",
         "mov_bp_sp",
         "str_free_temp",
