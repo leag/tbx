@@ -141,3 +141,9 @@ def test_try_inline_rescue():
             (0x1E, 0x1A, 0x16, 0x12, 0x0E, 0x0A, 0x06),
         ),
     ]
+
+    helper2 = decode0._OPAQUE_HELPER_BODY_2
+    exe4 = b"\x00" * 10 + helper2 + b"\x00"
+    ops4 = [(7, "jmp", 10 + len(helper2)), (10, "proc_enter")]
+    assert decode0._try_inline_rescue(bytes(exe4), ops4) == 10 + len(helper2)
+    assert ops4[1][1] == "opaque_helper" and ops4[1][2] == helper2

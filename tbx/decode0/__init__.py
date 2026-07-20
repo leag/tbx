@@ -60,6 +60,7 @@ from tbx.decode0.const import (
 from tbx.decode0.dialect import DIALECTS, Dialect, TB10, TB11, _try_swap, find_prologue
 from tbx.decode0.scan import (
     _OPAQUE_HELPER_BODY,
+    _OPAQUE_HELPER_BODY_2,
     _grp,
     _orient,
     _rgrp,

@@ -28,8 +28,8 @@ edition/runtime tag, and evidence provenance.
 - Current strict result: 14 decode OK, 70 blocked. Several blocked files have
   advanced through multiple signatures even though the strict count is flat.
 - Current validation: 2183 passed, 14 skipped.
-- Immediate target: decode the `8E` instruction family newly exposed in five
-  files after recognizing their identical opaque compiler/library helper.
+- Immediate target: decode the next signature exposed in five files after
+  recognizing their two identical opaque compiler/library helper variants.
 - Important negative result: a minimal `CINT(1.7)` oracle probe compiles cleanly
   without producing this gap; do not label sub `1e` as `CINT` from intuition.
 - Additional negative result: variable `CINT` and numeric-conversion probes emit
@@ -166,16 +166,17 @@ fixture-backed closures.
 
 ### Wave 3 — decoder state and structural recovery
 
-- [x] Recognize the exact 116-byte framed helper shared by `catalog.exe`,
-  `filepatc.exe`, `morcalc.exe`, `process.exe`, and `pw.exe` as explicit
-  coverage-only `OpaqueHelper` IR. The match is a full SHA-256-pinned body
-  (`28bc583a260b9ef7...`), not a generic framed-procedure fallback; source output
-  carries a visible marker and the C backend rejects it.
+- [x] Recognize the exact 116-byte and 125-byte framed helpers shared by
+  `catalog.exe`, `filepatc.exe`, `morcalc.exe`, `process.exe`, and `pw.exe` as
+  explicit coverage-only `OpaqueHelper` IR. Both matches are full pinned bodies
+  (`28bc583a260b9ef7...` and `77dcc7f864dcd116...`), not a generic
+  framed-procedure fallback; source output carries a visible marker and the C
+  backend rejects it.
 - [ ] Identify the source/runtime semantics of that opaque helper if stronger
   evidence appears. Opaque coverage advances scanning but does not count as
   semantic closure or byte-exact source recovery.
-- [ ] Decode the `8E` instruction family now exposed immediately after the
-  helper in those same five files.
+- [ ] Decode the next signature now exposed immediately after these helpers in
+  those same five files.
 - [ ] unknown system cell `0x8a` — 2 files; correlate reads/writes and runtime
   consumers before assigning semantics.
 - [ ] unknown system cell `0x110` — 1 file.
@@ -277,7 +278,8 @@ Include newly exposed blockers because they are evidence of forward progress.
 |---|---|---|---|---|
 | 2026-07-19 | `25fbe9c` | Decode `INP(port)` / ED sub 24 | 14 OK / 70 blocked; `be.exe` advanced | ED sub 1e |
 | 2026-07-19 | pending | Add JSON scanner report, durable checkpoint design, resumable plan, and `t1_getstr` snapshot repair | 14 OK / 70 blocked | Green full suite, then ED sub 1e |
-| 2026-07-19 | this change | Preserve one fully fingerprinted framed helper as explicit coverage-only opaque IR | 14 OK / 70 blocked; 5 files advanced from byte `C5` to byte `8E` | Decode the shared `8E` continuation |
+| 2026-07-19 | `796c9c0` | Preserve one fully fingerprinted framed helper as explicit coverage-only opaque IR | 14 OK / 70 blocked; 5 files advanced from byte `C5` to byte `8E` | Decode the shared `8E` continuation |
+| 2026-07-19 | pending | Recognize the second 125-byte opaque helper variant and the emulated far `FIMUL` alias (`INT 3C DE 0C`) | 14 OK / 70 blocked; 5 files advanced beyond `DE/0C` to distinct next signatures | Triage the five newly exposed signatures |
 
 ## Completion checklist
 

@@ -46,6 +46,18 @@ _OPAQUE_HELPER_BODY = bytes.fromhex(
     24 8b f5 43 ab e2 f3 1f 07 5d cb
     """
 )
+_OPAQUE_HELPER_BODY_2 = bytes.fromhex(
+    """
+    55 8b ec 1e 06 ba da 03 a1 00 00 8e c0 c5 76 1a 8b 04
+    c5 76 1e 8b 0c c5 76 12 8b 5c 02 c5 76 0a 8e 1c 06 50
+    c4 7e 0e 26 8b 05 03 d8 c4 7e 06 26 8b 35 c4 7e 16 26
+    8b 7d 02 03 f8 58 07 d1 e6 fc 3d 00 00 74 23 b4 09 ec
+    d0 d8 72 fb fa ec 22 c4 74 fb ad fb 26 88 05 8b ef 8b
+    fb 26 88 25 8b fd 43 47 e2 e1 3b c0 74 11 ad 26 88 05
+    8b ef 8b fb 26 88 25 8b fd 43 47 e2 ef 07 1f 5d cb
+    """
+)
+_OPAQUE_HELPER_BODIES = (_OPAQUE_HELPER_BODY, _OPAQUE_HELPER_BODY_2)
 _OPAQUE_HELPER_PARAM_OFFSETS = (0x1E, 0x1A, 0x16, 0x12, 0x0E, 0x0A, 0x06)
 
 
@@ -966,7 +978,7 @@ def _try_inline_rescue(exe: bytes, ops: list[tuple[Any, ...]]) -> int | None:
             b"\x89\xe5",
         ):  # push bp; mov bp,sp (either encoding): a genuine proc-enter
             body = exe[body_start:target]
-            if body == _OPAQUE_HELPER_BODY:
+            if body in _OPAQUE_HELPER_BODIES:
                 del ops[i + 1 :]
                 ops.append(
                     (
@@ -1474,6 +1486,7 @@ def _scan_pass(
                     (0xDB, 0): "fild_si32",
                     (0xDB, 3): "fstp_si32",
                     (0xDF, 0): "fild_si",  # m16 int onto the FP stack, e.g. a
+                    (0xDE, 1): "imulax_si",  # FIMUL m16 by-ref integer
                 }.get((esc, reg))  # by-ref int param for PRINT (t1_byref1)
                 if kind:
                     ops.append((p, pre + kind))
