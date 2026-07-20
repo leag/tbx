@@ -1485,6 +1485,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
     state.cx = None  # 2nd-level index stash / WAIT and-mask
     state.di = None  # 3rd-level spill stash for nested integer expressions
     state.si = None  # element-index register (raw index / idx token)
+    state.reg_spills = {}  # scratch-cell saves used beyond the register spill chain
     state.bchk_subs = []  # Bounds: pending non-final subscripts (F3.5)
     state.pend_bool = None  # compound-IF first term awaiting its tail
     state.pend_print = None  # open PRINT item chain

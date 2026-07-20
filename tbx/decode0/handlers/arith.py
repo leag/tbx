@@ -66,6 +66,27 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         )
         state.k += 1
         return True
+    if kind == "spill_store":
+        value = {"di": state.di}[op[2]]
+        if value is None:
+            raise ValueError(f"empty {op[2]} spill at {addr:#x}")
+        state.reg_spills[op[3]] = value
+        state.di = None
+        state.k += 1
+        return True
+    if kind == "spill_load":
+        try:
+            value = state.reg_spills.pop(op[3])
+        except KeyError:
+            raise ValueError(f"unknown spill cell {op[3]:#x} at {addr:#x}") from None
+        if op[2] == "cx":
+            state.cx = value
+        elif op[2] == "di":
+            state.di = value
+        else:
+            raise ValueError(f"unsupported spill target {op[2]} at {addr:#x}")
+        state.k += 1
+        return True
     if kind == "movsim":
         # mov si,[disp16]: FOR-loop variable as a raw element index.
         state.si = state.loc(op[2])

@@ -355,6 +355,18 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "movm_ax", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4
         return p
+    if b == 0x89 and exe[p + 1] == 0x3E:  # mov [disp16], di: deep spill
+        ops.append((p, "spill_store", "di", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4
+        return p
+    if b == 0x8B and exe[p + 1] == 0x0E:  # mov cx, [disp16]: restore spill
+        ops.append((p, "spill_load", "cx", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4
+        return p
+    if b == 0x8B and exe[p + 1] == 0x3E:  # mov di, [disp16]: restore spill
+        ops.append((p, "spill_load", "di", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4
+        return p
     if b == 0x89 and exe[p + 1] == 0x04:  # mov [si], ax: the store half of a
         ops.append((p, "movm_ax_si"))  # computed static int-array element
         p += 2  # index chain (shl si/addsi), the write sibling of the
