@@ -147,3 +147,14 @@ def test_try_inline_rescue():
     ops4 = [(7, "jmp", 10 + len(helper2)), (10, "proc_enter")]
     assert decode0._try_inline_rescue(bytes(exe4), ops4) == 10 + len(helper2)
     assert ops4[1][1] == "opaque_helper" and ops4[1][2] == helper2
+
+
+def test_string_selector_cleanup_runtime_alias():
+    from tbx.decode0.scan import _scan_direct2
+
+    body = bytes.fromhex(
+        "31 d2 31 f6 87 16 5c 00 87 36 5e 00 cd cc"
+    )
+    ops = []
+    assert _scan_direct2(body, 0, body[0], ops) == len(body)
+    assert ops == [(0, "str_free_temp")]

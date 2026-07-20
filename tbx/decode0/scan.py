@@ -326,8 +326,8 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         and exe[p + 2 : p + 4] == b"\x31\xf6"
         and exe[p + 4 : p + 6] == b"\x87\x16"
         and exe[p + 8 : p + 10] == b"\x87\x36"
-        and exe[p + 12 : p + 14] == b"\xcd\xd2"
-    ):  # string SELECT CASE selector-temp free
+        and exe[p + 12 : p + 14] in (b"\xcd\xd2", b"\xcd\xcc")
+    ):  # string SELECT CASE selector-temp free; CC is a runtime-revision alias
         ops.append((p, "str_free_temp"))
         p += 14
         return p
