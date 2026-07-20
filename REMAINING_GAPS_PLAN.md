@@ -1,9 +1,22 @@
 # Remaining decoder gaps — execution plan
 
-This is the resumable work plan for finishing the wild-corpus decoder campaign.
+This is the resumable work plan for finishing the Turbo Basic decoder campaign.
 It is deliberately separate from `HANDOFF.md`: the handoff preserves discoveries
 and historical evidence; this file says what to do next, in what order, and how a
 future session proves that it made progress.
+
+## Project scope
+
+The project target is **all Turbo Basic syntax**, across documented language
+editions, compiler dialects, and compatible runtime revisions—not merely the
+constructs currently listed in the Borland handbook. The handbook is a reference
+and source of semantics, not a whitelist or completion boundary.
+
+Track support in three dimensions: source syntax recognition, bytecode decoding,
+and semantic/runtime fidelity. A construct may be source-known but bytecode-
+unwitnessed, or bytecode-known but absent from the handbook; neither case is
+silently discarded. Every new fixture and gap-ledger entry records its dialect,
+edition/runtime tag, and evidence provenance.
 
 ## Live checkpoint
 
@@ -61,8 +74,9 @@ At the start of every session:
 
 A gap is closed only when all applicable gates pass:
 
-- The source construct is identified from compiler-oracle evidence or an equally
-  strong byte-level proof. Similar-looking opcodes are not sufficient.
+- The source construct is identified from compiler-oracle evidence, dialect
+  documentation, surviving compiler/runtime artifacts, or an equally strong
+  byte-level proof. Similar-looking opcodes are not sufficient.
 - A minimal fixture is added under `tests/fixtures/corpus/` when the oracle can
   reproduce the byte pattern, with matching ops/user-code snapshots.
 - Decoder and IR/render/C changes preserve fail-loud behavior for shapes that are
@@ -73,10 +87,12 @@ A gap is closed only when all applicable gates pass:
   shows no reduction in the decode-OK count.
 - The change is committed independently with the progress log updated.
 
-If the installed compiler cannot reproduce a wild pattern, classify it as
-`revision-skew` and retain fail-loud decoding. Such a classification needs the
-probe matrix and byte context recorded in `HANDOFF.md`; it does not count as
-84/84 completion unless project policy is explicitly changed.
+If the installed compiler cannot reproduce a wild pattern, classify it by the
+strongest available evidence: `oracle-verified`, `dialect-verified`,
+`documentation-backed`, `runtime-revision`, or `unresolved`. Runtime-revision and
+documentation-backed constructs remain in scope; a missing local oracle is an
+evidence limitation, not a scope exclusion. Preserve fail-loud behavior only for
+genuinely unclassified bytes.
 
 ## Standard gap workflow
 
@@ -176,6 +192,19 @@ fixture-backed closures.
 Wave 4 is intentionally last: permissive handling here could hide corrupt control
 flow and produce plausible but wrong BASIC.
 
+### Wave 5 — syntax inventory beyond the handbook
+
+- [ ] Build a versioned syntax inventory from all available Turbo Basic manuals,
+  compiler media, sample programs, and existing IR nodes. Record aliases,
+  edition/dialect tags, argument grammar, and runtime behavior.
+- [ ] Add parser/IR coverage for inventory entries that are absent, even when no
+  wild executable exercises them yet.
+- [ ] Add dialect-specific fixtures or golden source cases for constructs the
+  local oracle cannot emit, with explicit provenance.
+- [ ] Maintain a compatibility matrix separating syntax, decoder, renderer, and
+  generated-C/runtime support. A missing C primitive must produce a diagnostic,
+  not erase syntax coverage.
+
 ## Tooling work
 
 - [x] Add `scan_wild.py --report FILE`: JSON totals, per-file results, and stable
@@ -198,6 +227,10 @@ flow and produce plausible but wrong BASIC.
 - [ ] Assign stable IDs such as `G-ED-1E` to active gaps and keep hypothesis,
   evidence, confidence, and disposition in a compact ledger. Error text remains
   a symptom and may change without creating a new logical gap.
+- [ ] Extend gap records and fixtures with `edition`, `dialect`, `runtime_revision`,
+  and `evidence_class` fields so non-handbook syntax remains traceable.
+- [ ] Add stable syntax-inventory IDs alongside gap IDs, so source coverage can
+  be tracked even before a bytecode gap appears.
 - [ ] Make scanner runs re-entrant by clearing module-level counters at `main()`;
   this matters for tests and future programmatic use.
 - [ ] Add tests for report normalization, deterministic group ordering, schema
@@ -237,9 +270,12 @@ Include newly exposed blockers because they are evidence of forward progress.
 
 ## Completion checklist
 
-- [ ] Wild corpus reaches 84/84 decode OK, or each exclusion is explicitly
-  accepted in project policy with a byte-exact reason.
+- [ ] Wild corpus reaches 84/84 decode OK, or each remaining executable is
+  explicitly classified with a byte-exact reason and concrete follow-up.
 - [ ] No fixture, regression, lint, or formatting failures.
+- [ ] The syntax inventory has no unclassified Turbo Basic language entry.
+- [ ] The compatibility matrix shows source, decoder, renderer, and C-runtime
+  status for every inventory entry.
 - [ ] Every new IR node and intrinsic has render, rename, and C behavior (or an
   explicit unsupported-C diagnostic) as applicable.
 - [ ] The final JSON report is archived in a tracked, copyright-safe summary that
