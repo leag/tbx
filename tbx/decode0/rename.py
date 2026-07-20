@@ -222,8 +222,8 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.DefSeg(None if s.seg is None else walk(s.seg))
         if isinstance(s, ir.Locate):
             return ir.Locate(
-                walk(s.row),
-                walk(s.col),
+                None if s.row is None else walk(s.row),
+                None if s.col is None else walk(s.col),
                 None if s.cursor is None else walk(s.cursor),
                 None if s.start is None else walk(s.start),
                 None if s.stop is None else walk(s.stop),

@@ -25,10 +25,11 @@ edition/runtime tag, and evidence provenance.
 - Baseline commit: `25fbe9c` (`Decode INP intrinsic dispatcher`)
 - Corpus: `wild/hits/` (84 Turbo Basic executables; gitignored, never commit)
 - Baseline result: 14 decode OK, 70 fail at their first visible gap
-- Current strict result: 14 decode OK, 70 blocked. Several blocked files have
+- Current strict result: 15 decode OK, 69 blocked. Several blocked files have
   advanced through multiple signatures even though the strict count is flat.
-- Current validation: 2194 passed, 14 skipped (2026-07-20), including focused
-  coverage for `ED/1e` and oracle-byte-exact bare `FILES` fixtures.
+- Current validation: 2206 passed, 14 skipped (2026-07-20), including
+  oracle-byte-exact 1.0/1.1 fixtures for cursor-only `LOCATE`, stale comparison
+  state, and parenthesized logical-value inline `IF` dispatch.
 - Immediate target: `INT EC sub 38` (four files), continuing from Gap 33 in
   `HANDOFF.md`; the six `byte ea` hits remain a later, higher-risk class.
 - `INT ED sub 1e` is now identified as the missing three-argument
@@ -165,8 +166,9 @@ fixture-backed closures.
   already partly covered by the DI work.
 - [ ] byte `8c`, `8b`, `0b`, `1e`, `f7` — 2 files each. Cluster by the complete
   instruction and nearby ops rather than by first byte alone.
-- [ ] relational/materialization gaps: integer compound `jcc 7f` (2), singleton
-  `jcc 75`, and materialization-template mismatch.
+- [~] relational/materialization gaps: the two apparent integer `IF jcc 7f`
+  failures were stale `pend_cmp_str` state after a materialized string condition
+  and are closed; singleton `jcc 75` and materialization-template mismatch remain.
 - [ ] singleton instruction bytes `ff`, `38`, `36`, `21`, `18`, `16`.
 
 ### Wave 3 — decoder state and structural recovery
@@ -187,8 +189,10 @@ fixture-backed closures.
 - [ ] unknown system cell `0x110` — 1 file.
 - [ ] numeric `INPUT` read without `FSTP` — identify alternate target/store shape.
 - [ ] `LINE INPUT` trailing byte `c0` and `LINE INPUT #` template mismatch.
-- [ ] cursor call without open `LOCATE` — test optional-argument and statement
-  coalescing assumptions.
+- [x] cursor call without open `LOCATE` — cursor-only `LOCATE ,,cursor` and
+  shape-only `LOCATE ,,,start,stop` emit independent runtime legs. Adjacent
+  cursor/shape statements are byte-identical to one combined LOCATE and
+  canonicalize accordingly. `pz.exe` now decodes fully.
 - [ ] displacement neither scalar nor array element — revisit DGROUP symbol
   classification with local references.
 - [ ] FP/DGROUP layout not solvable — isolate whether metadata calibration or a
@@ -296,6 +300,9 @@ Include newly exposed blockers because they are evidence of forward progress.
 | 2026-07-20 | pending | Identify missing runtime-revision `INSTR(start, haystack$, needle$)` entry at `INT ED sub 1e` | 14 OK / 70 blocked; four files advanced and the signature disappeared with no regression | `EC sub 38`; separately triage the later structural errors in `be`/`invent` |
 | 2026-07-20 | pending | Decode bare `FILES` / canonical `EC sub 42` | 14 OK / 70 blocked; `styled` and `styllist` advanced to cursor-without-LOCATE | Triage their shared cursor fold; continue `EC sub 38` separately |
 | 2026-07-20 | pending | Replace fixed oracle sleeps with readiness polling and isolate each compile workspace; add parallel/retained probe batches | Byte-exact checks pass for both dialects and a larger fixture; small compile ~25s → 8.8s, two concurrent in 8.9s | Consider warm snapshot workers only if probe throughput remains limiting |
+| 2026-07-20 | pending | Decode cursor-only and shape-only optional `LOCATE` runtime legs | 15 OK / 69 blocked; `pz` fully decoded, `styled` → jcc 75, `styllist` → IF jcc 7f | Re-tally relational JCC gaps |
+| 2026-07-20 | pending | Clear stale string-compare orientation when `cmpax_bx` starts a numeric relation | 15 OK / 69 blocked; `photo` → movsi continuation, `styllist` → later stack fold | Triage exposed blockers; investigate `styled`/`hfprop` jcc 75 separately |
+| 2026-07-20 | pending | Lift direct JNZ dispatch of a fully parenthesized logical value as an inline `IF` | 15 OK / 69 blocked; both installed runtimes verify byte-exact; nested short-circuit targets remain fail-loud | Reproduce the nested spill topology independently before extending this rule |
 
 ## Completion checklist
 

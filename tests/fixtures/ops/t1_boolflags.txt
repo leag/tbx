@@ -1,0 +1,31 @@
+# t1_boolflags dialect=1.1 start=08700
+08703:fldz
+08706:fstp:292
+0870D:fld1
+08710:fstp:288
+08717:fldz
+0871A:fcomp:288
+0871F:fstsw
+08721:movax:65535
+08724:jcc:116:34599
+08726:incax
+08727:fldz
+0872A:fcomp:292
+0872F:fstsw
+08731:movbxax
+08733:movax:65535
+08736:jcc:116:34617
+08738:incax
+08739:oraxbx
+0873D:jcc:117:34626
+0873F:jmp:34635
+08742:movsi:308
+08745:rt:156
+08747:rt:190
+08749:rt:184
+0874B:end
+0874E:epilogue
+# commits
+0870B
+08715
+0873B

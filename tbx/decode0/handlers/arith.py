@@ -347,6 +347,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         # source RHS evaluates first and shuttles to bx, LHS lands in ax, and
         # the signed Jcc rides _JCC_RELOP's 7C-7F rows (witnessed t1_cmpax)
         state.pend_cmp = (state.ax, state.bx)
+        state.pend_cmp_str = False  # replace any materialized string flags
         state.ax = state.bx = None
         state.k += 1
         return True

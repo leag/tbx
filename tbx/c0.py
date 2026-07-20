@@ -1007,7 +1007,13 @@ class _Gen:
             # no modern-terminal counterpart (same surrogate as KEY ON/OFF)
             return []
         if isinstance(s, ir.Locate):
-            out = [f"tb_locate({self.num(s.row)}, {self.num(s.col)});"]
+            out = []
+            if s.row is not None or s.col is not None:
+                # The terminal surrogate cannot query a missing coordinate;
+                # decoded cursor-only/shape-only forms take the empty path.
+                if s.row is None or s.col is None:
+                    raise _Unsupported("LOCATE with one omitted coordinate")
+                out.append(f"tb_locate({self.num(s.row)}, {self.num(s.col)});")
             if s.cursor is not None:
                 out.append(
                     f'tb_ps(tb_i({self.num(s.cursor)}) ? "\\033[?25h" : "\\033[?25l");'

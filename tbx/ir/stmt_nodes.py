@@ -676,11 +676,11 @@ class Cls:
 
 @dataclass(frozen=True)
 class Locate:
-    """LOCATE row,col[,cursor[,start,stop]] -- row/col use INT CF, cursor a
-    trailing INT D0, and the optional cursor scan-line range INT CE."""
+    """LOCATE [row][,col][,cursor[,start,stop]] -- omitted leading arguments
+    produce no row/column runtime call; cursor and shape are independent legs."""
 
-    row: object  # Expr (Lit)
-    col: object  # Expr (Lit)
+    row: object  # Expr (Lit) | None
+    col: object  # Expr (Lit) | None
     cursor: object = None  # Expr (Lit) | None
     start: object = None  # Expr (Lit) | None
     stop: object = None  # Expr (Lit) | None

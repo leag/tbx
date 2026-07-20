@@ -1,0 +1,10 @@
+# t1_loccurs dialect=1.1 start=087C0
+087C3:movax:1
+087C6:cursor
+087C8:movax:6
+087CB:movbxax
+087CD:movax:7
+087D0:cursor_shape
+087D2:end
+087D5:epilogue
+# commits

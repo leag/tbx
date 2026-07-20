@@ -28,8 +28,9 @@ from roughly 25 seconds to 8.8 seconds, and two concurrent compiles finish in
 
 ## Where things stand
 
-84 wild EXEs: **14 decode OK** (ck, onelab87, onelabel, mm, autonum, rev,
-startup, schart, r, book, inv87, invoice, metric, strpfind); the DEFxxx recovery
+84 wild EXEs: **15 decode OK** (ck, onelab87, onelabel, mm, autonum, rev,
+startup, schart, r, book, inv87, invoice, metric, strpfind, pz); cursor-only
+LOCATE recovery completed pz.exe. The DEFxxx recovery
 completed metric.exe. Every
 closure below advanced files further into previously-unreachable territory
 without fully finishing a NEW file, which is expected once the easy/common
@@ -233,6 +234,41 @@ intended, permanent change.
 
 ## Recently closed (this campaign, newest first)
 
+- **Parenthesized logical-value direct JNZ inline `IF`** (2026-07-20): a fully
+  parenthesized logical expression can finish with `OR/AND AX,BX` and feed JNZ
+  directly, without the usual `OR AX,AX` or comparison materialization. When
+  JNZ skips a following far jump and that jump lands on a scanned op boundary,
+  the pair brackets an inline body. The decoder now retains the outer
+  source-significant `Group` and opens the normal inline-IF frame instead of
+  inventing `logical-expression = 0`. Fixtures `t1_boolflags` and
+  `v10_t1_boolflags` verify byte-exact under both installed runtimes. The rule is
+  deliberately boundary-gated: `styled.exe` and `hfprop.exe` contain deeper
+  nested short-circuit spill topologies whose far targets are internal expression
+  addresses, so they remain fail-loud pending their own oracle reproducer.
+- **Stale string-comparison orientation before numeric `jcc 7f`**
+  (2026-07-20): `photo.exe` and `styllist.exe` both materialize a compound
+  string condition, then later evaluate `LEN(s$) > literal` through the signed
+  `cmpax_bx` path. The earlier string fold left `pend_cmp_str=True`, causing the
+  already-supported signed 7F row to be looked up in the unsigned string table.
+  `cmpax_bx` now explicitly replaces the comparison orientation as well as the
+  operands. Fixture `t1_cmpstale` reproduces the exact string-condition →
+  concatenation → LEN comparison sequence; both dialects are oracle byte-exact.
+  `photo.exe` advances to a later `movsi` continuation and `styllist.exe` to a
+  later stack-fold error. Full suite: 2202 passed, 14 skipped.
+- **Cursor-only/shape-only optional `LOCATE` legs** (2026-07-20): the compiler
+  emits `INT D0` with AX for `LOCATE ,,cursor` even when no row/column `INT CF`
+  precedes it, and similarly emits `INT CE` with BX/AX for
+  `LOCATE ,,,start,stop`. The graphics handler now starts an `ir.Locate` from
+  either independent leg as well as attaching them to an existing row/column
+  leg. Two adjacent source statements (`LOCATE ,,1` then `LOCATE ,,,6,7`) are
+  byte-identical to combined `LOCATE ,,1,6,7`, so the decoder intentionally
+  canonicalizes that ambiguous sequence as one statement. Renderer and rename
+  preserve leading omitted arguments; C emits cursor visibility without trying
+  to move the terminal and treats scan-line shape as the existing no-op
+  surrogate. Fixtures `t1_loccurs`/`v10_t1_loccurs` are oracle byte-exact.
+  `pz.exe` now decodes fully (strict corpus 14→15); `styled.exe` advances to
+  `jcc 75`, and `styllist.exe` to signed relational `IF jcc 7f`. Full suite:
+  2198 passed, 14 skipped.
 - **Bare `FILES` / canonical INT EC sub 42** (2026-07-20): both TB 1.0
   wild hits call the dispatcher with no prepared operand; `styled.exe` also
   contains the adjacent, already-known sub 44 form with a pushed filespec in

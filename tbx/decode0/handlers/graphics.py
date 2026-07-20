@@ -168,30 +168,27 @@ def graphics(state: DecodeState, op, addr, kind) -> bool:
         state.k += 1
         return True
     if kind == "cursor":  # trailing cursor arg -> attach
-        if (
-            not state.stmts
-            or not isinstance(state.stmts[-1], ir.Locate)
-            or state.stmts[-1].cursor is not None
-        ):
-            raise ValueError(f"cursor call without open LOCATE at {addr:#x}")
-        prev = state.stmts[-1]
-        state.stmts[-1] = ir.Locate(prev.row, prev.col, state.ax)
+        if state.stmts and isinstance(state.stmts[-1], ir.Locate):
+            prev = state.stmts[-1]
+            if prev.cursor is not None:
+                raise ValueError(f"duplicate LOCATE cursor call at {addr:#x}")
+            state.stmts[-1] = ir.Locate(prev.row, prev.col, state.ax)
+        else:  # LOCATE ,,cursor: no row/column runtime call precedes it
+            state.put(ir.Locate(None, None, state.ax), state.cur)
         state.ax = None
         state.cur = None
         state.k += 1
         return True
     if kind == "cursor_shape":  # trailing cursor start/stop -> attach
-        if (
-            not state.stmts
-            or not isinstance(state.stmts[-1], ir.Locate)
-            or state.stmts[-1].start is not None
-            or state.stmts[-1].stop is not None
-        ):
-            raise ValueError(f"cursor shape call without open LOCATE at {addr:#x}")
-        prev = state.stmts[-1]
-        state.stmts[-1] = ir.Locate(
-            prev.row, prev.col, prev.cursor, state.bx, state.ax
-        )
+        if state.stmts and isinstance(state.stmts[-1], ir.Locate):
+            prev = state.stmts[-1]
+            if prev.start is not None or prev.stop is not None:
+                raise ValueError(f"duplicate LOCATE cursor shape call at {addr:#x}")
+            state.stmts[-1] = ir.Locate(
+                prev.row, prev.col, prev.cursor, state.bx, state.ax
+            )
+        else:  # LOCATE ,,,start,stop: the shape call is the whole statement
+            state.put(ir.Locate(None, None, None, state.bx, state.ax), state.cur)
         state.bx = state.ax = None
         state.cur = None
         state.k += 1

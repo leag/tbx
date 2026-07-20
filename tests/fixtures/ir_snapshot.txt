@@ -3051,6 +3051,12 @@ DefSeg(seg=Lit(value=100))
 Bload(file=StrLit(value='X.BIN'), offset=None)
 End()
 
+## t1_boolflags
+Assign(target=Var(name='A'), value=Lit(value=0))
+Assign(target=Var(name='B'), value=Lit(value=1))
+IfInline(cond=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='A'), rhs=Lit(value=0))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='B'), rhs=Lit(value=0))))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None),))
+End()
+
 ## t1_booluntil
 Do(kind=None, cond=None)
 Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
@@ -3159,6 +3165,16 @@ End()
 SubDef(name='SUB1', params=('A%',), body=(Assign(target=Var(name='B%'), value=BinOp(op='=', lhs=Var(name='A%'), rhs=Lit(value=1))), Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)))
 Assign(target=Var(name='C%'), value=Lit(value=1))
 CallStmt(name='SUB1', args=(Var(name='C%'),))
+End()
+
+## t1_cmpstale
+Assign(target=Var(name='A$'), value=StrLit(value='#'))
+Assign(target=Var(name='B$'), value=StrLit(value='X'))
+IfInline(cond=LogOp(op='AND', lhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='#')), rhs=RelOp(op='<>', lhs=Var(name='B$'), rhs=StrLit(value=''))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None),))
+Assign(target=Var(name='B$'), value=BinOp(op='+', lhs=Var(name='A$'), rhs=Var(name='B$')))
+IfGoto(cond=RelOp(op='<=', lhs=Call(name='LEN', args=(Var(name='B$'),)), rhs=Lit(value=4)), target=6)
+Assign(target=Var(name='B$'), value=Call(name='RIGHT$', args=(Var(name='B$'), Lit(value=4))))
+Print(items=(Var(name='B$'),), newline=True, file=None, commas=None)
 End()
 
 ## t1_color3
@@ -4071,6 +4087,10 @@ Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None)
 ## t1_loccmp
 SubDef(name='SUB1', params=(), body=(Local(names=('A%', 'B%')), Assign(target=Var(name='A%'), value=Lit(value=3)), Assign(target=Var(name='B%'), value=Lit(value=9)), IfGoto(cond=RelOp(op='<>', lhs=Var(name='A%'), rhs=Lit(value=0)), target=BodyLine(stmt=0, phys=6)), Print(items=(StrLit(value='Z'),), newline=True, file=None, commas=None), IfGoto(cond=RelOp(op='>=', lhs=Var(name='A%'), rhs=BinOp(op='+', lhs=Var(name='B%'), rhs=Lit(value=1))), target=BodyLine(stmt=0, phys=8)), Print(items=(StrLit(value='W'),), newline=True, file=None, commas=None), Print(items=(Var(name='A%'),), newline=True, file=None, commas=None)))
 CallStmt(name='SUB1', args=())
+End()
+
+## t1_loccurs
+Locate(row=None, col=None, cursor=Lit(value=1), start=Lit(value=6), stop=Lit(value=7))
 End()
 
 ## t1_locidx
@@ -8525,6 +8545,12 @@ DefSeg(seg=Lit(value=100))
 Bload(file=StrLit(value='X.BIN'), offset=None)
 End()
 
+## v10_t1_boolflags
+Assign(target=Var(name='A'), value=Lit(value=0))
+Assign(target=Var(name='B'), value=Lit(value=1))
+IfInline(cond=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='A'), rhs=Lit(value=0))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='B'), rhs=Lit(value=0))))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None),))
+End()
+
 ## v10_t1_booluntil
 Do(kind=None, cond=None)
 Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
@@ -8600,6 +8626,16 @@ End()
 Assign(target=Var(name='A'), value=Lit(value=1))
 Open(mode=StrLit(value='O'), num=1, file=StrLit(value='X.DAT'), reclen=None, for_as=True)
 Close(num=Var(name='A'))
+End()
+
+## v10_t1_cmpstale
+Assign(target=Var(name='A$'), value=StrLit(value='#'))
+Assign(target=Var(name='B$'), value=StrLit(value='X'))
+IfInline(cond=LogOp(op='AND', lhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='#')), rhs=RelOp(op='<>', lhs=Var(name='B$'), rhs=StrLit(value=''))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None),))
+Assign(target=Var(name='B$'), value=BinOp(op='+', lhs=Var(name='A$'), rhs=Var(name='B$')))
+IfGoto(cond=RelOp(op='<=', lhs=Call(name='LEN', args=(Var(name='B$'),)), rhs=Lit(value=4)), target=6)
+Assign(target=Var(name='B$'), value=Call(name='RIGHT$', args=(Var(name='B$'), Lit(value=4))))
+Print(items=(Var(name='B$'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_color3
@@ -9342,6 +9378,10 @@ End()
 ## v10_t1_loccmp
 SubDef(name='SUB1', params=(), body=(Local(names=('A%', 'B%')), Assign(target=Var(name='A%'), value=Lit(value=3)), Assign(target=Var(name='B%'), value=Lit(value=9)), IfGoto(cond=RelOp(op='<>', lhs=Var(name='A%'), rhs=Lit(value=0)), target=BodyLine(stmt=0, phys=6)), Print(items=(StrLit(value='Z'),), newline=True, file=None, commas=None), IfGoto(cond=RelOp(op='>=', lhs=Var(name='A%'), rhs=BinOp(op='+', lhs=Var(name='B%'), rhs=Lit(value=1))), target=BodyLine(stmt=0, phys=8)), Print(items=(StrLit(value='W'),), newline=True, file=None, commas=None), Print(items=(Var(name='A%'),), newline=True, file=None, commas=None)))
 CallStmt(name='SUB1', args=())
+End()
+
+## v10_t1_loccurs
+Locate(row=None, col=None, cursor=Lit(value=1), start=Lit(value=6), stop=Lit(value=7))
 End()
 
 ## v10_t1_locidx

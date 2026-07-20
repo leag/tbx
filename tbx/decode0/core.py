@@ -1173,6 +1173,43 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     elif kind == "jcc":
         cc, t = op[2], op[3]
         nxt = state.ops[state.k + 1] if state.k + 1 < len(state.ops) else None
+        prev = state.ops[state.k - 1] if state.k else None
+        if (
+            state.pend_cmp is None
+            and state.ax is not None
+            and cc == 0x75
+            and prev is not None
+            and prev[1] in ("andaxbx", "oraxbx", "xoraxbx")
+            and nxt is not None
+            and nxt[1] == "jmp"
+            and t == nxt[0] + 3
+            # This witnessed inline body ends at a scanned op. A target in the middle
+            # of a later materialized expression is a nested short-circuit
+            # gate and needs its spill protocol preserved instead.
+            and any(candidate[0] == nxt[2] for candidate in state.ops)
+        ):
+            # A parenthesized logical value can feed JNZ directly: the final
+            # AX/BX fold already set ZF, so no separate `or ax,ax` or compare
+            # materialization appears.  JNZ skips the following far jump when
+            # the value is true; that far jump skips the inline body.  Keep the
+            # BinOp/Group tree as a bare truthiness condition: spelling it as
+            # `expr = 0` changes both its polarity and TB's lowering.
+            state.flush_pending()
+            state.ifs.append(
+                {
+                    "target": nxt[2],
+                    # The direct flag use is itself evidence that the complete
+                    # logical value was parenthesized in source; without this
+                    # outer Group TB chooses its short-circuit IF template.
+                    "cond": ir.Group(state.ax),
+                    "start": state.cur,
+                    "idx": len(state.stmts),
+                }
+            )
+            state.ax = None
+            state.cur = None
+            state.k += 2
+            return
         relop_map = _JCC_RELOP_STR if state.pend_cmp_str else _JCC_RELOP
         if state.pend_cmp and nxt and nxt[1] == "jmp" and t == nxt[0] + 3:
             if cc not in relop_map:
