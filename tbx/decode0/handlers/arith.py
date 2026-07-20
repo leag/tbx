@@ -213,6 +213,10 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         state.ax = state.loc_local(op[2])  # expression's first term (t1_byref1)
         state.k += 1
         return True
+    if kind == "idiv_m":  # ax (dividend) \ [disp16] (memory divisor)
+        state.ax = ir.BinOp("\\", state.ax, _rgrp("\\", state.loc(op[2])))
+        state.k += 1
+        return True
     if kind == "idivbx":  # ax (dividend) \ bx (divisor) -> ax
         if state.bx is None:
             raise ValueError(f"idivbx without a bx divisor at {addr:#x}")

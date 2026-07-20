@@ -511,6 +511,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "idivbx"))
         p += 2
         return p
+    if b == 0xF7 and exe[p + 1] == 0x3E:  # idiv word [disp16]
+        ops.append((p, "idiv_m", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4
+        return p
     if b == 0xF7 and exe[p + 1] == 0xEB:  # imul bx (reg-reg combine)
         ops.append((p, "imulbx"))
         p += 2

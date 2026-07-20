@@ -158,3 +158,12 @@ def test_string_selector_cleanup_runtime_alias():
     ops = []
     assert _scan_direct2(body, 0, body[0], ops) == len(body)
     assert ops == [(0, "str_free_temp")]
+
+
+def test_integer_divide_memory_template():
+    from tbx.decode0.scan import _scan_direct2
+
+    exe = bytes.fromhex("f7 3e 54 10")
+    ops = []
+    assert _scan_direct2(exe, 0, exe[0], ops) == 4
+    assert ops == [(0, "idiv_m", 0x1054)]

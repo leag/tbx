@@ -281,6 +281,7 @@ Include newly exposed blockers because they are evidence of forward progress.
 | 2026-07-19 | `796c9c0` | Preserve one fully fingerprinted framed helper as explicit coverage-only opaque IR | 14 OK / 70 blocked; 5 files advanced from byte `C5` to byte `8E` | Decode the shared `8E` continuation |
 | 2026-07-19 | pending | Recognize the second 125-byte opaque helper variant and the emulated far `FIMUL` alias (`INT 3C DE 0C`) | 14 OK / 70 blocked; 5 files advanced beyond `DE/0C` to distinct next signatures | Triage the five newly exposed signatures |
 | 2026-07-19 | pending | Accept the exact selector-temp cleanup shape's `INT CC` runtime-revision alias | 14 OK / 70 blocked; `catalog.exe` advanced from byte `31` to `INT EC sub 38` | Re-open shared `INT EC sub 38` evidence |
+| 2026-07-19 | pending | Decode signed integer division by a memory cell (`CWD; F7 3E disp16`) | 14 OK / 70 blocked; `filepatc.exe` advanced beyond byte `F7` | Triage its next exposed gap |
 
 ## Completion checklist
 
