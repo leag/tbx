@@ -271,7 +271,12 @@ def console(state: DecodeState, op, addr, kind) -> bool:
         if nxt != ["movsi", "strassign"]:
             raise ValueError(f"LINE INPUT template mismatch at {addr:#x}")
         prompt = None if op[2] == state.lay["pool_base"] - 4 else state._pool_str(op[2])
-        state.put(ir.LineInput(prompt, state.loc(state.ops[state.k + 1][2])), state.cur)
+        state.put(
+            ir.LineInput(
+                prompt, state.loc(state.ops[state.k + 1][2]), semi=op[3]
+            ),
+            state.cur,
+        )
         state.cur = None
         state.k += 3
         return True

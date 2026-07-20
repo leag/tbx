@@ -462,6 +462,28 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             state.cur = None
             return True
         if (
+            state.direct_bool_gate
+            and state.bx is not None
+            and not state.pend_cmp_str
+            and state.k + 3 < len(state.ops)
+            and state.ops[state.k + 1][1] == "jcc"
+            and state.ops[state.k + 2][1] == "incax"
+            and state.ops[state.k + 3][1] == "andaxbx"
+            and state.ops[state.k + 1][3] == state.ops[state.k + 3][0]
+            and state.ops[state.k + 1][2] in _JCC_RELOP_TRUE
+        ):
+            # The right side of `((a) OR (b)) AND (c)` is a single
+            # parenthesized relation. It materializes directly into AX and is
+            # immediately combined with the short-circuited left side in BX,
+            # rather than using the normal six-op IF/loop tail template.
+            lhs, rhs = state.pend_cmp
+            state.ax = ir.Group(
+                ir.BinOp(_JCC_RELOP_TRUE[state.ops[state.k + 1][2]], lhs, rhs)
+            )
+            state.pend_cmp = None
+            state.k += 3
+            return True
+        if (
             not state.pend_cmp_str
             and state.k + 3 < len(state.ops)
             and state.ops[state.k + 1][1] == "jcc"

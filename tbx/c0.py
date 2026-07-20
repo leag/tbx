@@ -874,7 +874,10 @@ class _Gen:
                 if s.prompt is not None
                 else "((tb_str){0, 0})"
             )
-            return [self.assign(s.var, _Raw(f"tb_input_str({prompt}, 0)", True))]
+            mark = 2 if s.semi else 0
+            return [
+                self.assign(s.var, _Raw(f"tb_input_str({prompt}, {mark})", True))
+            ]
         if isinstance(s, ir.Swap):
             def _lv(v):
                 if isinstance(v, ir.Var):

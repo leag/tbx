@@ -65,6 +65,7 @@ class DecodeState:
     dia: Any = None
     dim_frame: dict[str, Any] | None = None
     discard_strs: Any = None
+    direct_bool_gate: bool = False
     data_items: Any = None
     dos: Any = None
     ds: Any = None
@@ -1174,15 +1175,41 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         cc, t = op[2], op[3]
         nxt = state.ops[state.k + 1] if state.k + 1 < len(state.ops) else None
         prev = state.ops[state.k - 1] if state.k else None
-        if (
+        direct_bool = (
             state.pend_cmp is None
             and state.ax is not None
-            and cc == 0x75
+            and cc in (0x74, 0x75)
             and prev is not None
             and prev[1] in ("andaxbx", "oraxbx", "xoraxbx")
             and nxt is not None
             and nxt[1] == "jmp"
             and t == nxt[0] + 3
+        )
+        if cc == 0x75 and direct_bool and any(
+            candidate[0] == nxt[2] - 2 and candidate[1] == "andaxbx"
+            for candidate in state.ops[state.k + 2 :]
+        ):
+            # Short-circuit gate inside an ungrouped outer AND. The current
+            # logical value stays in AX while the right operand is evaluated;
+            # its movbxax/movrr spill sequence below preserves and combines it.
+            # The far target is the address immediately after that final AND,
+            # not a statement boundary (t1_nestedbool; wild styled/hfprop).
+            state.direct_bool_gate = True
+            state.k += 2
+            return
+        if cc == 0x74 and direct_bool and state.direct_bool_gate:
+            # Direct-GOTO sibling of the inline-body form: JZ skips the far
+            # jump when the completed logical value is false, so the far jump
+            # itself is the source THEN target (t1_nestedgoto; wild styled).
+            state.put(ir.IfGoto(state.ax, ("addr", nxt[2])), state.cur)
+            state.ax = None
+            state.direct_bool_gate = False
+            state.cur = None
+            state.k += 2
+            return
+        if (
+            cc == 0x75
+            and direct_bool
             # This witnessed inline body ends at a scanned op. A target in the middle
             # of a later materialized expression is a nested short-circuit
             # gate and needs its spill protocol preserved instead.
@@ -1201,12 +1228,15 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                     # The direct flag use is itself evidence that the complete
                     # logical value was parenthesized in source; without this
                     # outer Group TB chooses its short-circuit IF template.
-                    "cond": ir.Group(state.ax),
+                    "cond": (
+                        state.ax if state.direct_bool_gate else ir.Group(state.ax)
+                    ),
                     "start": state.cur,
                     "idx": len(state.stmts),
                 }
             )
             state.ax = None
+            state.direct_bool_gate = False
             state.cur = None
             state.k += 2
             return

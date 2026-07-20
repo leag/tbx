@@ -698,7 +698,14 @@ def int_bitwise_bx(state: DecodeState, op, addr, kind) -> bool:
         }[kind]
         if state.ax is None or state.bx is None:
             raise ValueError(f"ax,bx combine with empty regs at {addr:#x}")
-        state.ax = ir.BinOp(comb, state.ax, _rgrp(comb, state.bx))
+        if kind == "andaxbx" and state.direct_bool_gate:
+            # An ungrouped outer logical AND evaluates its short-circuiting
+            # left group first and preserves it through BX/CX while AX computes
+            # the right group (t1_nestedbool), reversing the usual arithmetic
+            # register-evaluation order.
+            state.ax = ir.BinOp(comb, state.bx, _rgrp(comb, state.ax))
+        else:
+            state.ax = ir.BinOp(comb, state.ax, _rgrp(comb, state.bx))
         state.bx = None
         state.k += 1
         return True

@@ -234,6 +234,25 @@ intended, permanent change.
 
 ## Recently closed (this campaign, newest first)
 
+- **Leading-semicolon `LINE INPUT;` / EC sub 64 flag C0** (2026-07-20):
+  console LINE INPUT uses trailing flag `40` normally and `C0` when the source
+  has the leading semicolon, exactly mirroring INPUT's keep-cursor-on-line bit.
+  `LineInput` now retains that source-significant flag through render, rename,
+  and C generation. Bare and prompted forms are covered together by
+  `t1_linec0`/`v10_t1_linec0`; both are oracle byte-exact. `cal.exe` and
+  `cal87.exe` advance from `LINE INPUT trailing byte c0` to the later shared
+  `INT EC sub ee` gap.
+- **Nested parenthesized logical short-circuit spills** (2026-07-20): an
+  ungrouped outer AND whose left side is a parenthesized OR emits a direct JNZ
+  plus far-jump gate, preserves the left logical value through BX/CX, and then
+  combines the right materialized relation/value with `AND AX,BX`. The decoder
+  now preserves both the short-circuit gate and the otherwise-reversed source
+  operand order. Inline-body, direct-GOTO, two-group, and single-relation-right
+  forms are covered by `t1_nestedbool`, `t1_nestedgoto`, and `t1_nestedone`,
+  each byte-exact in 1.0 and 1.1. `hfprop.exe` advances to unknown displacement
+  `0x2b2`; `styled.exe` advances to a later RESTORE/DATA target error. Other
+  nested topologies from the probe matrix remain fail-loud rather than being
+  generalized without fixtures.
 - **Parenthesized logical-value direct JNZ inline `IF`** (2026-07-20): a fully
   parenthesized logical expression can finish with `OR/AND AX,BX` and feed JNZ
   directly, without the usual `OR AX,AX` or comparison materialization. When

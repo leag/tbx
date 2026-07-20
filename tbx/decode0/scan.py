@@ -1157,13 +1157,14 @@ def _scan_pass(
                 ops.append((p, "data_read_str"))
                 p += 3
                 continue
-            if sub == 0x64:  # LINE INPUT <prompt_desc> 40
+            if sub == 0x64:  # LINE INPUT <prompt_desc> flags
                 d16 = struct.unpack_from("<H", exe, p + 3)[0]
-                if exe[p + 5] != 0x40:
+                flags = exe[p + 5]
+                if flags not in (0x40, 0xC0):
                     raise ValueError(
-                        f"LINE INPUT trailing byte {exe[p + 5]:02x} at {p:#x}"
+                        f"LINE INPUT trailing byte {flags:02x} at {p:#x}"
                     )
-                ops.append((p, "line_input", d16))
+                ops.append((p, "line_input", d16, flags == 0xC0))
                 p += 6
                 continue
             if sub == 0x66:  # LINE INPUT #n, var$: no prompt, [0060]=n

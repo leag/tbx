@@ -27,9 +27,9 @@ edition/runtime tag, and evidence provenance.
 - Baseline result: 14 decode OK, 70 fail at their first visible gap
 - Current strict result: 15 decode OK, 69 blocked. Several blocked files have
   advanced through multiple signatures even though the strict count is flat.
-- Current validation: 2206 passed, 14 skipped (2026-07-20), including
-  oracle-byte-exact 1.0/1.1 fixtures for cursor-only `LOCATE`, stale comparison
-  state, and parenthesized logical-value inline `IF` dispatch.
+- Current validation: 2222 passed, 14 skipped (2026-07-20); eight new 1.0/1.1
+  oracle round trips are byte-exact for nested logical short-circuit forms and
+  leading-semicolon `LINE INPUT;`.
 - Immediate target: `INT EC sub 38` (four files), continuing from Gap 33 in
   `HANDOFF.md`; the six `byte ea` hits remain a later, higher-risk class.
 - `INT ED sub 1e` is now identified as the missing three-argument
@@ -168,7 +168,9 @@ fixture-backed closures.
   instruction and nearby ops rather than by first byte alone.
 - [~] relational/materialization gaps: the two apparent integer `IF jcc 7f`
   failures were stale `pend_cmp_str` state after a materialized string condition
-  and are closed; singleton `jcc 75` and materialization-template mismatch remain.
+  and are closed. Nested outer-AND forms now cover the `jcc 75`/`jcc 74`, BX/CX
+  spill, direct-GOTO, and single-relation-right shapes witnessed by
+  `styled`/`hfprop`; other materialization topologies remain fail-loud.
 - [ ] singleton instruction bytes `ff`, `38`, `36`, `21`, `18`, `16`.
 
 ### Wave 3 — decoder state and structural recovery
@@ -188,7 +190,9 @@ fixture-backed closures.
   consumers before assigning semantics.
 - [ ] unknown system cell `0x110` — 1 file.
 - [ ] numeric `INPUT` read without `FSTP` — identify alternate target/store shape.
-- [ ] `LINE INPUT` trailing byte `c0` and `LINE INPUT #` template mismatch.
+- [x] `LINE INPUT` trailing byte `c0` — leading-semicolon `LINE INPUT;`, with
+  or without a prompt; dual-dialect oracle fixtures are byte-exact.
+- [ ] `LINE INPUT #` template mismatch.
 - [x] cursor call without open `LOCATE` — cursor-only `LOCATE ,,cursor` and
   shape-only `LOCATE ,,,start,stop` emit independent runtime legs. Adjacent
   cursor/shape statements are byte-identical to one combined LOCATE and
@@ -303,6 +307,8 @@ Include newly exposed blockers because they are evidence of forward progress.
 | 2026-07-20 | pending | Decode cursor-only and shape-only optional `LOCATE` runtime legs | 15 OK / 69 blocked; `pz` fully decoded, `styled` → jcc 75, `styllist` → IF jcc 7f | Re-tally relational JCC gaps |
 | 2026-07-20 | pending | Clear stale string-compare orientation when `cmpax_bx` starts a numeric relation | 15 OK / 69 blocked; `photo` → movsi continuation, `styllist` → later stack fold | Triage exposed blockers; investigate `styled`/`hfprop` jcc 75 separately |
 | 2026-07-20 | pending | Lift direct JNZ dispatch of a fully parenthesized logical value as an inline `IF` | 15 OK / 69 blocked; both installed runtimes verify byte-exact; nested short-circuit targets remain fail-loud | Reproduce the nested spill topology independently before extending this rule |
+| 2026-07-20 | pending | Decode nested logical outer-AND spill gates, including inline and direct-GOTO dispatch | 15 OK / 69 blocked; `hfprop` → displacement `0x2b2`, `styled` → RESTORE target 87 | Triage exposed structural gaps; retain fail-loud behavior for other nesting topologies |
+| 2026-07-20 | pending | Preserve leading-semicolon `LINE INPUT;` flag C0 | 15 OK / 69 blocked; `cal`/`cal87` → shared `EC sub ee` | Probe `EC/ee` only if installed runtimes reproduce it |
 
 ## Completion checklist
 

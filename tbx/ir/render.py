@@ -449,9 +449,10 @@ def _us_console(s) -> str | None:
     if isinstance(s, LineInput):
         if s.file is not None:
             return f"LINE INPUT #{s.file}, {unparse(s.var)}"
+        kw = "LINE INPUT;" if s.semi else "LINE INPUT"
         if s.prompt is None:
-            return f"LINE INPUT {unparse(s.var)}"
-        return f"LINE INPUT {unparse(s.prompt)}; {unparse(s.var)}"
+            return f"{kw} {unparse(s.var)}"
+        return f"{kw} {unparse(s.prompt)}; {unparse(s.var)}"
 
 
 _OPEN_MODE_KW = {
