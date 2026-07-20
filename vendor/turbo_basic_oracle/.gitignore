@@ -1,0 +1,6 @@
+node_modules/
+*.img
+SOLVER_v86.EXE
+work_*.img
+*.EXE
+*.tmp
