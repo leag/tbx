@@ -167,3 +167,13 @@ def test_integer_divide_memory_template():
     ops = []
     assert _scan_direct2(exe, 0, exe[0], ops) == 4
     assert ops == [(0, "idiv_m", 0x1054)]
+
+
+def test_tb10_cvl_vector_alias():
+    from tbx.decode0.dialect import TB10
+    from tbx.decode0.scan import _scan_int
+
+    ops = []
+    vec = TB10.canon_vec(0xA9)
+    assert _scan_int(b"\xcd\xa9", 0, set(), TB10, ops, 0, vec) == 2
+    assert ops == [(0, "str2num", "CVL")]

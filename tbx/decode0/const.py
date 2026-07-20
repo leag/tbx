@@ -130,6 +130,7 @@ _STR2NUM_VECS = {
     0xA7: "CVD",
     0xA8: "CVI",
     0xA9: "CVL",
+    0xAF: "CVL",  # TB 1.0's raw A9 after service-vector canonicalization
     0xAA: "CVS",
 }
 # INT ED sub-vectors that are string-arg numeric-result intrinsics (LEN=0x22 in the
