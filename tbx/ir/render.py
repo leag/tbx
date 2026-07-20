@@ -7,8 +7,6 @@ Statement-level blocks (IfBlock/SelectCase/SubDef/DefFn) are emitted by
 
 from __future__ import annotations
 
-import hashlib
-
 from tbx.ir.expr_nodes import (
     ArrayRef,
     BinOp,
