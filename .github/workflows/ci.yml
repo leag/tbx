@@ -4,19 +4,24 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      # The full suite is intentionally run one interpreter at a time.  Keeping
+      # the matrix from fanning out avoids multiplying its memory footprint on
+      # constrained runners.
+      max-parallel: 1
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - run: uv sync
+      - run: uv sync --locked
       - run: uv run ruff check
       - run: uv run ty check
       - run: uv run pytest
@@ -44,7 +49,7 @@ jobs:
       CC: ${{ matrix.cc }}
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
       - if: runner.os == 'Linux'
@@ -52,5 +57,5 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libsdl2-dev
       - if: runner.os == 'macOS'
         run: brew install sdl2
-      - run: uv sync
+      - run: uv sync --locked
       - run: uv run pytest tests/tbx/test_c0.py -q
