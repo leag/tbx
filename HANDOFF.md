@@ -219,6 +219,17 @@ intended, permanent change.
 
 ## Recently closed (this campaign, newest first)
 
+- **Large shared literal/DATA pool and multiple codeless clusters**
+  (2026-07-19): the framed character record uses a 15-bit
+  `length|0x8000` word, not an 8-bit length. Unreferenced descriptors in
+  that shared pool are DATA items when no `fre_str` sites exist; they are
+  stored in reverse source order. `_finalize` now places DATA statements at
+  multiple borrowed offsets and canonicalizes excess payload-free entries
+  as DEFxxx declarations. Fixture `t1_databig` combines a >255-byte pool,
+  DATA+DEF at one host, separate DEF clusters, READ, and an error table;
+  oracle byte-exact. This closes the former six-file “unreferenced pooled
+  string literals” bucket (file/hfprop/kinder/number/pfl/tamstart), all of
+  which advance to later gaps, while metric.exe remains fully decoded.
 - **Five-argument `LOCATE row,col,cursor,start,stop` / INT CE**
   (2026-07-19): the previously unknown two-byte INT CE immediately follows
   LOCATE's existing INT CF row/column and INT D0 cursor calls; its bx/ax
@@ -1202,14 +1213,13 @@ Surfaced immediately by the nested-FOR-loop fix directly above, in the
 SAME wild file. `core.py` `_finalize`'s DATA-pool fallback (~line 582):
 after DO-unsynthesis claims every bare-Do's orphan and the static-DIM
 count-match runs, 3 of metric.exe's 56 error-trap-line-table orphan
-entries remained unclaimed, and `_read_data_pool` found nothing to
-explain them. They are `DEFINT`/`DEFSTR`/`DEFSNG`/`DEFDBL` default-type
-declarations. These compile with no executable code but each leaves its
-own error-line-table entry. The exact keyword and letter range are erased;
-once emitted variables carry explicit suffixes, canonical `DEFSNG A-Z`
-recompiles byte-identically. Fixture `t1_deftype` witnesses all three wild
-placements (before ON ERROR and before two self-loop IFs) and passes the
-oracle byte-exact round trip.
+entries remained unclaimed, and `_read_data_pool` appeared to find nothing.
+The original diagnosis treated them as `DEFINT`/`DEFSTR`/`DEFSNG`/`DEFDBL`
+declarations because the DATA reader incorrectly rejected metric's >255-byte
+shared literal pool. After the 15-bit frame fix, all three recover as
+separate DATA clusters. DEFxxx remains a real, oracle-witnessed codeless
+construct (`t1_deftype`), and mixed DATA+DEF recovery is pinned by
+`t1_databig`; metric itself canonicalizes these three entries as DATA.
 
 **The table itself is a genuine oddity worth knowing before diagnosing
 further**: EVERY one of metric.exe's 1733 real entries AND all 56

@@ -1194,6 +1194,23 @@ def test_decode_t1_locate5():
     )
 
 
+def test_decode_t1_databig():
+    # DATA shares the ordinary literal pool. Its 15-bit framed character
+    # record can exceed 255 bytes, and unreferenced descriptors are the DATA
+    # items rather than erased FRE(s$) operands. This also pins DATA and
+    # payload-free DEFxxx entries sharing or occupying separate orphan
+    # clusters in an active error-line table (wild metric.exe).
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_databig.exe")))
+    assert src == open(
+        os.path.join(_ROOT, "fixtures", "usercode", "t1_databig.bas")
+    ).read()
+    assert src.count("DATA ") == 4
+    assert src.count("DEFSNG A-Z") == 3
+    assert "60 ON ERROR GOTO 200" in src
+
+
 def test_decode_t1_closevar():
     # CLOSE #n where n is a variable, not a literal (wild metric.exe,
     # right after the orax/DO-loop gap): the file number reaches CLOSE's

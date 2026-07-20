@@ -9,16 +9,18 @@ from tbx import ir
 
 def _data_find_frame(exe: bytes):
     """Backward scan from EOF for the DATA framed text buffer
-    `<L> 80 00 00 00 00 <L bytes> <L> 80`. Returns (frame_start, L) or None."""
+    `<L|8000:u16> 00000000 <L bytes> <L|8000:u16>`. Returns
+    `(frame_start, L)` or None. L is 15-bit; wild pools exceed 255 bytes."""
     if len(exe) < 8:
         return None
     for f in range(len(exe) - 8, -1, -1):
-        if exe[f + 1] != 0x80 or exe[f + 2 : f + 6] != b"\x00\x00\x00\x00":
+        framed = struct.unpack_from("<H", exe, f)[0]
+        if not framed & 0x8000 or exe[f + 2 : f + 6] != b"\x00\x00\x00\x00":
             continue
-        l = exe[f]
+        l = framed & 0x7FFF
         if l == 0 or f + 6 + l + 1 >= len(exe):
             continue
-        if exe[f + 6 + l] == l and exe[f + 6 + l + 1] == 0x80:
+        if struct.unpack_from("<H", exe, f + 6 + l)[0] == framed:
             return f, l
     return None
 

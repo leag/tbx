@@ -65,6 +65,7 @@ class DecodeState:
     dia: Any = None
     dim_frame: dict[str, Any] | None = None
     discard_strs: Any = None
+    data_items: Any = None
     dos: Any = None
     ds: Any = None
     dsd: Any = None
@@ -578,11 +579,13 @@ def _finalize(state: DecodeState, addr) -> Program:
     # the target maps to a real stmt.
     data_lines: list[int] | None = None  # one line per data_block entry, if known
     deftype_lines: list[int] = []  # one line per inserted DefType, in insertion order
+    deftype_places: list[tuple[int, int]] = []
+    data_places: list[tuple[int, int]] = []  # (borrowed offset, line) per DATA stmt
     if any(isinstance(s, (ir.Read, ir.Restore)) for s in state.stmts) or data_orphan_lines:
-        items = _read_data_pool(state.exe)
+        items = state.data_items or _read_data_pool(state.exe)
         if not items and data_orphan_lines:
             # No DATA pool at all, yet orphan evidence remains: a DEFINT/
-            # DEFSTR/DEFSNG/DEFDBL default-type declaration (wild metric.exe).
+            # DEFSTR/DEFSNG/DEFDBL default-type declaration.
             # Confirmed via the oracle: DEFINT A-Z and DEFSTR S compile
             # byte-IDENTICAL programs once every variable is explicitly
             # suffixed (which tbx's own emitted source always is), so the
@@ -619,20 +622,16 @@ def _finalize(state: DecodeState, addr) -> Program:
                         "codeless DATA statement alongside a RESTORE split "
                         "is unsupported (no witness)"
                     )
-                offs = {o for o, _ in data_orphan_lines}
-                if len(offs) != 1:
-                    raise ValueError(
-                        "multiple separate codeless-DATA clusters in one "
-                        "error-trap line table is unsupported (no witness)"
-                    )
-                n = len(data_orphan_lines)
-                if len(items) < n:
-                    raise ValueError(
-                        "error-trap line table shows more codeless DATA "
-                        "statements than recovered DATA items"
-                    )
+                # Every DATA statement needs at least one item. Any excess
+                # orphan entries are another payload-free codeless construct;
+                # canonicalize those to DefType. This also handles multiple
+                # DATA clusters (wild metric.exe) because each recovered DATA
+                # is inserted at its own borrowed offset below.
+                n = min(len(items), len(data_orphan_lines))
+                data_places = data_orphan_lines[:n]
+                deftype_places = data_orphan_lines[n:]
                 splits = set(range(n))
-                data_lines = [ln for _, ln in data_orphan_lines]
+                data_lines = [ln for _, ln in data_places]
             else:
                 splits = {0} | {
                     s.target
@@ -654,14 +653,22 @@ def _finalize(state: DecodeState, addr) -> Program:
                 # (probe q_lt3: prepending unconditionally byte-diffs the
                 # line table once the DATA statements' own lines are
                 # byte-significant) -- insert immediately before whatever
-                # statement shares the cluster's borrowed offset, matching
-                # where the compiler actually placed them.
-                j = state.addrs.index(state.start + data_orphan_lines[0][0])
-                state.stmts[j:j] = data_block
-                state.addrs[j:j] = [None] * len(data_block)
+                # statement shares each entry's borrowed offset, matching
+                # where the compiler actually placed multiple clusters.
+                for s, (off, _) in zip(data_block, data_places):
+                    j = state.addrs.index(state.start + off)
+                    state.stmts.insert(j, s)
+                    state.addrs.insert(j, None)
             else:
                 state.stmts[0:0] = data_block  # prepend: block pos = final index
                 state.addrs[0:0] = [None] * len(data_block)
+            # Insert payload-free codeless declarations after DATA placement;
+            # when both borrow the same host offset this preserves table order.
+            for off, ln in deftype_places:
+                j = state.addrs.index(state.start + off)
+                state.stmts.insert(j, ir.DefType())
+                state.addrs.insert(j, None)
+                deftype_lines.append(ln)
             state.stmts[:] = [
                 (
                     ir.Restore(item_to_stmt[s.target])
@@ -1548,6 +1555,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
     # "Z","AA","BBB" in source lands as BBB/AA/Z), so the unreferenced ones are
     # queued reversed and handed to fre_str sites in code order.
     state.discard_strs = []
+    state.data_items = []
     state.have_fre = any(o[1] == "fre_str" for o in state.ops)
     if state.desc_disps or state.have_fre:
         all_descs = []
@@ -1591,21 +1599,34 @@ def decode_user_code(exe: bytes) -> list[Any]:
         unref = [(ln, ptr) for d, ln, ptr in all_descs if d not in state.desc_disps]
         if unref:
             if not state.have_fre:
-                raise ValueError(
-                    "unreferenced pooled string literals without a "
-                    "FRE(s$) site to carry them (unsupported)"
-                )
-            state.discard_strs = [
-                ir.StrLit(
-                    exe[
+                # Unreferenced descriptors without FRE sites are DATA items.
+                # The shared literal pool stores them in reverse source order;
+                # code-referenced literals were removed by desc_disps above.
+                for ln, ptr in reversed(unref):
+                    text = exe[
                         state.dsd + state.ss_base + ptr : state.dsd
                         + state.ss_base
                         + ptr
                         + ln
                     ].decode("latin-1")
-                )
-                for ln, ptr in reversed(unref)
-            ]
+                    try:
+                        float(text)
+                        is_str = False
+                    except ValueError:
+                        is_str = True
+                    state.data_items.append(ir.DataItem(text, is_str))
+            else:
+                state.discard_strs = [
+                    ir.StrLit(
+                        exe[
+                            state.dsd + state.ss_base + ptr : state.dsd
+                            + state.ss_base
+                            + ptr
+                            + ln
+                        ].decode("latin-1")
+                    )
+                    for ln, ptr in reversed(unref)
+                ]
 
     state.k = 0
     while state.k < len(state.ops):

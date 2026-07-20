@@ -3211,6 +3211,20 @@ Data(items=(DataItem(text='1', is_str=False), DataItem(text='2', is_str=False), 
 Read(targets=(Var(name='A'), Var(name='B'), Var(name='C')))
 End()
 
+## t1_databig
+Data(items=(DataItem(text='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', is_str=True),))
+Data(items=(DataItem(text='BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB', is_str=True),))
+Data(items=(DataItem(text='CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC', is_str=True),))
+Data(items=(DataItem(text='DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD', is_str=True),))
+DefType()
+OnError(target=11)
+DefType()
+Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None)
+DefType()
+Read(targets=(Var(name='A$'),))
+End()
+Resume(next_=True, target=None)
+
 ## t1_dataorph
 Assign(target=Var(name='A%'), value=Err())
 Assign(target=Var(name='B%'), value=Erl())
