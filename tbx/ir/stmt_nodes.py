@@ -791,6 +791,15 @@ class Get:
 
 
 @dataclass(frozen=True)
+class GetString:
+    """GET$ #n, count, string$ -- read a binary string."""
+
+    num: int
+    count: object
+    target: object
+
+
+@dataclass(frozen=True)
 class Put:
     """PUT #n, rec -- write a random-access record."""
 

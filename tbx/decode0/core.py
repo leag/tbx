@@ -96,6 +96,7 @@ class DecodeState:
     pend_dataread: Any = None
     pend_es: Any = None
     pend_filein: Any = None
+    pend_getstr: Any = None
     pend_fnum: Any = None
     pend_icmp: Any = None
     pend_input: Any = None
@@ -1489,6 +1490,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
     state.pend_print = None  # open PRINT item chain
     state.pend_using = None  # open PRINT USING value chain
     state.pend_filein = None  # open INPUT# target chain
+    state.pend_getstr = None
     state.pend_dataread = None  # open READ target chain
     state.ifs = []  # open inline-IF bodies
     state.has_procs = any(
@@ -2410,6 +2412,10 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 ):  # INPUT# string target
                     state.sstack.pop()
                     state._fread_target(state.loc(d))
+                elif state.pend_getstr is not None:
+                    num, count = state.pend_getstr
+                    state.pend_getstr = None
+                    state.put(ir.GetString(num, count, state.loc(d)), state.cur)
                 elif (
                     state.sstack and state.sstack[-1] is _READDATA
                 ):  # READ string target

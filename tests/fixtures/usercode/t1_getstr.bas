@@ -1,0 +1,4 @@
+10 OPEN "X" FOR BINARY AS #1
+20 A% = 4
+30 GET$ #1, A%, B$
+40 END

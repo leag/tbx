@@ -14,8 +14,8 @@ gitignored, copyrighted shareware — **never commit them**).
 
 ## Where things stand
 
-84 wild EXEs: **13 decode OK** (ck, onelab87, onelabel, mm, autonum, rev,
-startup, schart, r, book, inv87, invoice, metric); the DEFxxx recovery
+84 wild EXEs: **14 decode OK** (ck, onelab87, onelabel, mm, autonum, rev,
+startup, schart, r, book, inv87, invoice, metric, strpfind); the DEFxxx recovery
 completed metric.exe. Every
 closure below advanced files further into previously-unreachable territory
 without fully finishing a NEW file, which is expected once the easy/common
@@ -219,6 +219,11 @@ intended, permanent change.
 
 ## Recently closed (this campaign, newest first)
 
+- **Binary `GET$ #file,count,string$` / INT EC sub 4c** (2026-07-19):
+  the previously unknown sub is the binary-file string read. `GetString`
+  carries the file number, AX count expression, and following string target;
+  fixture `t1_getstr` is oracle byte-exact. `strpfind.exe` now decodes fully;
+  `be.exe` and `pwinst.exe` advance to their next distinct gaps.
 - **Large shared literal/DATA pool and multiple codeless clusters**
   (2026-07-19): the framed character record uses a 15-bit
   `length|0x8000` word, not an 8-bit length. Unreferenced descriptors in

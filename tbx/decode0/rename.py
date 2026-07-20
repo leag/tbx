@@ -290,6 +290,8 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.Name(walk(s.old), walk(s.new))
         if isinstance(s, ir.Get):
             return ir.Get(s.num, walk(s.pos))
+        if isinstance(s, ir.GetString):
+            return ir.GetString(s.num, walk(s.count), walk(s.target))
         if isinstance(s, ir.Put):
             return ir.Put(s.num, walk(s.pos))
         if isinstance(s, ir.Seek):

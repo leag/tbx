@@ -1211,6 +1211,19 @@ def test_decode_t1_databig():
     assert "60 ON ERROR GOTO 200" in src
 
 
+def test_decode_t1_getstr():
+    # INT EC sub 4C is binary GET$: file number comes from [0060], count is
+    # in AX, and the following movsi/strassign names the string target.
+    from tbx import decode0, emit0
+
+    assert emit0.emit(decode0.decode_user_code(_exe("t1_getstr.exe"))) == (
+        '10 OPEN "X" FOR BINARY AS #1\n'
+        "20 A% = 4\n"
+        "30 GET$ #1, A%, B$\n"
+        "40 END\n"
+    )
+
+
 def test_decode_t1_closevar():
     # CLOSE #n where n is a variable, not a literal (wild metric.exe,
     # right after the orax/DO-loop gap): the file number reaches CLOSE's

@@ -72,6 +72,7 @@ from tbx.ir.stmt_nodes import (
     FnResult,
     For,
     Get,
+    GetString,
     GetGfx,
     Inline,
     Input,
@@ -487,6 +488,8 @@ def _us_fileio(s) -> str | None:
         return f"NAME {unparse(s.old)} AS {unparse(s.new)}"
     if isinstance(s, Get):
         return f"GET #{s.num}, {unparse(s.pos)}"
+    if isinstance(s, GetString):
+        return f"GET$ #{s.num}, {unparse(s.count)}, {unparse(s.target)}"
     if isinstance(s, Put):
         return f"PUT #{s.num}, {unparse(s.pos)}"
     if isinstance(s, Seek):

@@ -121,6 +121,13 @@ def file_read(state: DecodeState, op, addr, kind) -> bool:
         (state.stack if kind == "read_file_num" else state.sstack).append(_FREAD)
         state.k += 1
         return True
+    if kind == "get_str":
+        if state.pend_fnum is None or state.ax is None:
+            raise ValueError(f"GET$ without file/count at {addr:#x}")
+        state.pend_getstr = (state.pend_fnum, state.ax)
+        state.pend_fnum = state.ax = None
+        state.k += 1
+        return True
     return False
 
 

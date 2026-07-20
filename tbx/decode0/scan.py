@@ -1239,6 +1239,10 @@ def _scan_pass(
                 ops.append((p, "get"))
                 p += 3
                 continue
+            if sub == 0x4C:  # GET$ #n, count, string$
+                ops.append((p, "get_str"))
+                p += 3
+                continue
             if sub == 0xA8:  # PUT #n, rec
                 ops.append((p, "put"))
                 p += 3
