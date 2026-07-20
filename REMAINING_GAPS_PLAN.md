@@ -283,6 +283,7 @@ Include newly exposed blockers because they are evidence of forward progress.
 | 2026-07-19 | `4e9769c` | Accept the exact selector-temp cleanup shape's `INT CC` runtime-revision alias | 14 OK / 70 blocked; `catalog.exe` advanced from byte `31` to `INT EC sub 38` | Re-open shared `INT EC sub 38` evidence |
 | 2026-07-19 | `ecbb40f` | Decode signed integer division by a memory cell (`CWD; F7 3E disp16`) | 14 OK / 70 blocked; `filepatc.exe` advanced beyond byte `F7` | Triage its next exposed gap |
 | 2026-07-19 | pending | Canonicalize TB 1.0 raw `CD A9` to the existing `CVL` string-to-number vector | 14 OK / 70 blocked; `morcalc.exe` and `pwinst.exe` advanced beyond `INT AF` | Triage their newly exposed gaps |
+| 2026-07-19 | pending | Decode near-array double FP folds (`INT 38 DC /r [SI]`) through the existing FP array fold path | 14 OK / 70 blocked; `morcalc.exe` advanced beyond `DC/0C` | Triage its next exposed gap |
 
 ## Completion checklist
 

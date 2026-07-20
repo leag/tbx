@@ -1500,6 +1500,14 @@ def _scan_pass(
                     ops.append((p, pre + "fold_si", _FOLD_OPS[reg]))
                     p = mo + 1
                     continue
+                if esc == 0xDC and reg in _FOLD_OPS:
+                    ops.append((p, pre + "fold64_si", _FOLD_OPS[reg]))
+                    p = mo + 1
+                    continue
+                if esc == 0xDC and reg in _FOLD_OPS_N:
+                    ops.append((p, pre + "fold_n64_si", _FOLD_OPS_N[reg]))
+                    p = mo + 1
+                    continue
                 if esc == 0xD8 and reg in _FOLD_OPS_N:
                     ops.append((p, pre + "fold_n_si", _FOLD_OPS_N[reg]))
                     p = mo + 1
