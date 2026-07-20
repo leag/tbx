@@ -64,3 +64,19 @@ def test_integer_call_argument_temp_staging():
     assert arith.int_alu(state, ops[0], 0, "movm_ax_temp")
     assert state.pend_args == [value]
     assert state.ax is None and state.cur is None and state.k == 1
+
+
+def test_non_for_integer_add_immediate():
+    var = ir.Var("A%")
+    emitted = []
+    state = SimpleNamespace(
+        fors=[],
+        loc=lambda _disp: var,
+        put=lambda stmt, addr: emitted.append((stmt, addr)),
+        cur=100,
+        k=0,
+    )
+    op = (100, "addm_i8", 0x382, 50)
+    assert arith.int_alu(state, op, 100, "addm_i8")
+    assert emitted == [(ir.Assign(var, ir.BinOp("+", var, ir.Lit(50))), 100)]
+    assert state.cur is None and state.k == 1

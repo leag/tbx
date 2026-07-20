@@ -377,9 +377,14 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         # test address. Rewrite the already-emitted ir.For statement's step
         # in place -- it was provisionally Lit(1) when the header was folded,
         # before this NEXT-side evidence was available (q_forstep/
-        # q_forstepneg). No bare (non-FOR) form is witnessed; fail loud.
+        # q_forstepneg). Outside a FOR this is the multi-unit sibling of
+        # inc_m: `X% = X% + literal` (wild number.exe).
         if not (state.fors and state.fors[-1]["v"] == op[2]):
-            raise ValueError(f"unhandled addm_i8 (not an open FOR's var) at {addr:#x}")
+            var = state.loc(op[2])
+            state.put(ir.Assign(var, ir.BinOp("+", var, ir.Lit(op[3]))), state.cur)
+            state.cur = None
+            state.k += 1
+            return True
         f = state.fors[-1]
         old = state.stmts[f["idx"]]
         state.stmts[f["idx"]] = ir.For(old.var, old.init, old.limit, ir.Lit(op[3]))
