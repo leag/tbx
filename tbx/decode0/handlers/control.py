@@ -380,13 +380,20 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             # Integer compare feeding the compound-IF/WHILE materialization
             # template (`IF ERR = 25 OR ERR = 27 ...`, witnessed t1_orchain /
             # wild vhfprop.exe): hand the compare to the pend_cmp machinery
-            # below. Only the orientation-neutral equality codes may pass --
-            # _JCC_RELOP_TRUE's signed rows are written for cmpax_bx's FORWARD
-            # flag order and would silently flip cmpax_m's REVERSED (mem, ax)
-            # operand order.
+            # below. Preserve cmpax_m's stored source orientation: reversing
+            # the operands is logically equivalent but recompiles to different
+            # bytes. Wild number.exe/pfl.exe and t1_orrel exercise JG/JL.
             cc = state.ops[state.k + 1][2]
-            if cc not in (0x74, 0x75):
+            if cc not in _JCC_RELOP_VALUE:
                 raise ValueError(f"int compound relational jcc {cc:02x} at {addr:#x}")
+            if cc in (0x7C, 0x7D, 0x7E, 0x7F):
+                # The generic compound lifter reads _JCC_RELOP_TRUE, while
+                # cmpax_m's materialized-value shape uses the inverse signed
+                # relation table. Normalize only the condition code consumed by
+                # the lifter; the jump target and scanned golden op stay raw.
+                mapped = {0x7C: 0x7F, 0x7D: 0x7E, 0x7E: 0x7D, 0x7F: 0x7C}[cc]
+                jcc = state.ops[state.k + 1]
+                state.ops[state.k + 1] = (jcc[0], jcc[1], mapped, *jcc[3:])
             state.pend_cmp = state.pend_icmp
             state.pend_icmp = None
         else:

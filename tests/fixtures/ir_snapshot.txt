@@ -4316,6 +4316,13 @@ Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None)
 IfInline(cond=LogOp(op='OR', lhs=LogOp(op='OR', lhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=25)), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=27))), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=57))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='Z'),), newline=True, file=None, commas=None)))
 Resume(next_=False, target=3)
 
+## t1_orrel
+Assign(target=Var(name='A%'), value=Lit(value=1))
+Assign(target=Var(name='B%'), value=Lit(value=2))
+Assign(target=Var(name='C%'), value=Lit(value=3))
+IfInline(cond=LogOp(op='OR', lhs=RelOp(op='>', lhs=Var(name='A%'), rhs=Var(name='B%')), rhs=RelOp(op='<', lhs=Var(name='A%'), rhs=Var(name='C%'))), body=(Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None),))
+End()
+
 ## t1_out
 Out(port=Lit(value=888), value=Lit(value=1))
 End()
@@ -9480,6 +9487,13 @@ End()
 Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None)
 IfInline(cond=LogOp(op='OR', lhs=LogOp(op='OR', lhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=25)), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=27))), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=57))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='Z'),), newline=True, file=None, commas=None)))
 Resume(next_=False, target=3)
+
+## v10_t1_orrel
+Assign(target=Var(name='A%'), value=Lit(value=1))
+Assign(target=Var(name='B%'), value=Lit(value=2))
+Assign(target=Var(name='C%'), value=Lit(value=3))
+IfInline(cond=LogOp(op='OR', lhs=RelOp(op='>', lhs=Var(name='A%'), rhs=Var(name='B%')), rhs=RelOp(op='<', lhs=Var(name='A%'), rhs=Var(name='C%'))), body=(Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None),))
+End()
 
 ## v10_t1_out
 Out(port=Lit(value=888), value=Lit(value=1))

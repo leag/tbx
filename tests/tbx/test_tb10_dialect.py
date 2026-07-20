@@ -37,6 +37,7 @@ PAIRS = [
     "t1_imulpool",
     "t1_miderr",
     "t1_orchain",
+    "t1_orrel",
     "t1_andchain",
     "t1_dataorph",
     "t1_dimorph",
