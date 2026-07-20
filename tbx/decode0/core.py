@@ -1636,6 +1636,9 @@ def decode_user_code(exe: bytes) -> list[Any]:
     while state.k < len(state.ops):
         op = state.ops[state.k]
         addr, kind = op[0], op[1]
+        if kind == "nop":
+            state.k += 1
+            continue
         if kind == "into":
             # Overflow-toggle check (0xCE, no operand): the compiler inserts
             # this after arithmetic that could overflow when the 'O' IDE

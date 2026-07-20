@@ -64,6 +64,9 @@ _OPAQUE_HELPER_PARAM_OFFSETS = (0x1E, 0x1A, 0x16, 0x12, 0x0E, 0x0A, 0x06)
 def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
     """Byte-dispatch family split out of _scan. Returns the new
     cursor when it decodes the op at ``p``, else None."""
+    if b == 0x90:  # NOP padding around compiler templates
+        ops.append((p, "nop"))
+        return p + 1
     if b == 0xE9:  # jmp near rel16 (GOTO / FOR glue)
         rel = struct.unpack_from("<h", exe, p + 1)[0]
         # A GOTO spanning more than 32KB of code wraps around the 64KB code

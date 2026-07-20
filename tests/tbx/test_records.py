@@ -149,6 +149,14 @@ def test_try_inline_rescue():
     assert ops4[1][1] == "opaque_helper" and ops4[1][2] == helper2
 
 
+def test_scan_nop_padding():
+    from tbx.decode0.scan import _scan_direct
+
+    ops = []
+    assert _scan_direct(b"\x90", 0, 0x90, None, ops, 0) == 1
+    assert ops == [(0, "nop")]
+
+
 def test_string_selector_cleanup_runtime_alias():
     from tbx.decode0.scan import _scan_direct2
 
