@@ -124,3 +124,20 @@ def test_try_inline_rescue():
         ops2 = [(7, "jmp", 20)]
         assert decode0._try_inline_rescue(bytes(exe2), ops2) is None
         assert ops2 == [(7, "jmp", 20)]  # unchanged
+
+    # One fully fingerprinted framed library helper is intentionally retained
+    # as coverage-only opaque IR. Exact full-body matching keeps the CVT2TB
+    # false-positive guard intact for every other framed procedure.
+    helper = decode0._OPAQUE_HELPER_BODY
+    exe3 = b"\x00" * 10 + helper + b"\x00"
+    ops3 = [(7, "jmp", 10 + len(helper)), (10, "proc_enter")]
+    assert decode0._try_inline_rescue(exe3, ops3) == 10 + len(helper)
+    assert ops3 == [
+        (7, "jmp", 10 + len(helper)),
+        (
+            10,
+            "opaque_helper",
+            helper,
+            (0x1E, 0x1A, 0x16, 0x12, 0x0E, 0x0A, 0x06),
+        ),
+    ]

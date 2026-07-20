@@ -493,3 +493,7 @@ def test_unsupported_raises():
     ]
     with pytest.raises(ValueError):
         c0.emit_c(prog)
+
+    opaque = [ir.SubDef("SUB1", (), (ir.OpaqueHelper(b"\x55\xcb"),))]
+    with pytest.raises(ValueError, match="opaque machine-code helper"):
+        c0.emit_c(opaque)

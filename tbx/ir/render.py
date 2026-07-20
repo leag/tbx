@@ -7,6 +7,8 @@ Statement-level blocks (IfBlock/SelectCase/SubDef/DefFn) are emitted by
 
 from __future__ import annotations
 
+import hashlib
+
 from tbx.ir.expr_nodes import (
     ArrayRef,
     BinOp,
@@ -97,6 +99,7 @@ from tbx.ir.stmt_nodes import (
     OnGosub,
     OnGoto,
     OnTrap,
+    OpaqueHelper,
     Open,
     OptionBase,
     Out,
@@ -517,6 +520,9 @@ def _us_procdata(s) -> str | None:
     """Render procedures, OS, event-trap and DATA statements; None if `s` is not one of them."""
     if isinstance(s, Inline):
         return "$INLINE " + ", ".join(f"&H{b:02X}" for b in s.data)
+    if isinstance(s, OpaqueHelper):
+        digest = hashlib.sha256(s.data).hexdigest()[:16].upper()
+        return f"REM $OPAQUE HELPER {len(s.data)} BYTES SHA256 {digest}"
     if isinstance(s, CallStmt):
         if s.args:
             return f"CALL {s.name}({','.join(unparse(a) for a in s.args)})"

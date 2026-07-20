@@ -917,6 +917,8 @@ class _Gen:
         if isinstance(s, ir.SubDef):
             self.gen_subdef(s, idx)
             return []
+        if isinstance(s, ir.OpaqueHelper):
+            raise _Unsupported("opaque machine-code helper (coverage-only IR)")
         if isinstance(s, ir.Shared):
             # scope declaration only: the decoder already resolved every name
             # to its program-unique slot, so there is nothing to generate

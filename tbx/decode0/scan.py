@@ -29,6 +29,26 @@ from tbx.decode0.const import (
 from tbx.decode0.dialect import Dialect, TB11, _try_swap
 
 
+# A compiler/library helper shared byte-for-byte by catalog.exe, filepatc.exe,
+# morcalc.exe, process.exe and pw.exe.  It is a real framed far procedure, not
+# source $INLINE, but its seven far-pointer arguments and direct port I/O make
+# a source-level meaning impossible to infer safely from the corpus alone.
+# Match the entire routine (including RETF), never merely its prologue, before
+# allowing the coverage-only opaque-helper rescue.
+_OPAQUE_HELPER_BODY = bytes.fromhex(
+    """
+    55 8b ec 06 1e 8b 16 00 00 c5 76 0a 8e 04 c5 76 06
+    8b 3c c5 76 1a 8b 04 50 c5 76 0e 8b 04 c5 76 12 8b
+    5c 02 03 d8 c5 76 1e 8b 0c c5 76 16 8b 74 02 03 f0
+    58 d1 e7 fc 8e da 3d 00 00 74 25 ba da 03 ac 8b ee 8b
+    f3 8a 24 43 8b f5 8b e8 b4 09 ec d0 d8 72 fb fa ec 22
+    c4 74 fb 8b c5 ab fb e2 e1 eb 0e 90 ac 8b ee 8b f3 8a
+    24 8b f5 43 ab e2 f3 1f 07 5d cb
+    """
+)
+_OPAQUE_HELPER_PARAM_OFFSETS = (0x1E, 0x1A, 0x16, 0x12, 0x0E, 0x0A, 0x06)
+
+
 def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
     """Byte-dispatch family split out of _scan. Returns the new
     cursor when it decodes the op at ``p``, else None."""
@@ -912,8 +932,10 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
 
 
 def _try_inline_rescue(exe: bytes, ops: list[tuple[Any, ...]]) -> int | None:
-    """After a scan failure, check whether we're stuck inside a `SUB ...
-    INLINE` body: the compiler copies $INLINE's byte list verbatim with no
+    """After a scan failure, check whether we're stuck inside opaque code.
+
+    The general case is a `SUB ... INLINE` body: the compiler copies
+    $INLINE's byte list verbatim with no
     proc_enter framing at all, then auto-appends a bare far RET (CB) --
     Appendix C of the handbook, confirmed byte-for-byte via the oracle
     (probe q_shriek). The raw bytes are arbitrary and will often partially
@@ -927,7 +949,9 @@ def _try_inline_rescue(exe: bytes, ops: list[tuple[Any, ...]]) -> int | None:
     treats [jmp_end, target-1) as one opaque `inline_sub` blob, truncates
     the bogus partial-match ops back to just after the jmp, and returns the
     resume position (the jmp's target). Returns None (no rescue -- the
-    original failure should propagate) otherwise."""
+    original failure should propagate) otherwise. One fully fingerprinted
+    framed compiler/library routine is also retained as ``opaque_helper``;
+    every other proc-enter-shaped body remains a hard failure."""
     for i in range(len(ops) - 1, -1, -1):
         if ops[i][1] != "jmp":
             continue
@@ -941,6 +965,18 @@ def _try_inline_rescue(exe: bytes, ops: list[tuple[Any, ...]]) -> int | None:
             b"\x8b\xec",
             b"\x89\xe5",
         ):  # push bp; mov bp,sp (either encoding): a genuine proc-enter
+            body = exe[body_start:target]
+            if body == _OPAQUE_HELPER_BODY:
+                del ops[i + 1 :]
+                ops.append(
+                    (
+                        body_start,
+                        "opaque_helper",
+                        body,
+                        _OPAQUE_HELPER_PARAM_OFFSETS,
+                    )
+                )
+                return target
             return None  # shape, not $INLINE -- false positive witnessed
             # in wild CVT2TB.EXE, whose OWN (unrelated, gap-19) construct
             # ends in a legitimate `pop bp; retf` (5D CB) that coincidentally
@@ -954,8 +990,8 @@ def _try_inline_rescue(exe: bytes, ops: list[tuple[Any, ...]]) -> int | None:
 def _scan(
     exe: bytes, start: int, dia: Dialect = TB11, commits: set[int] | None = None
 ) -> list[tuple[Any, ...]]:
-    """Pass 1 entry point: runs `_scan_pass`, rescuing a `SUB ... INLINE`
-    body (see `_try_inline_rescue`) and resuming instead of failing."""
+    """Pass 1 entry point: runs `_scan_pass`, rescuing explicitly recognized
+    opaque bodies (see `_try_inline_rescue`) and resuming instead of failing."""
     p = start + 3
     ops: list[tuple[Any, ...]] = []
     while True:

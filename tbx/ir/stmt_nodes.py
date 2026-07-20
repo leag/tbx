@@ -897,6 +897,19 @@ class Inline:
 
 
 @dataclass(frozen=True)
+class OpaqueHelper:
+    """Coverage-only marker for a known framed machine-code helper.
+
+    Unlike ``Inline``, this was not recovered as a source-level ``$INLINE``
+    declaration.  The bytes are retained so the decoder can advance without
+    pretending it understands the helper's semantics.  Source emission makes
+    that limitation explicit and native C emission rejects the node.
+    """
+
+    data: bytes
+
+
+@dataclass(frozen=True)
 class Shared:
     """SHARED v[, v(), ...] -- inside a SUB/DEF FN body, binds names to the main
     program's slots instead of procedure-local statics. Synthesized by the decoder

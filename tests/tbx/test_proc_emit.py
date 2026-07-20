@@ -22,6 +22,16 @@ def test_emit_sub_with_params_and_call_args():
     )
 
 
+def test_emit_opaque_helper_is_explicitly_coverage_only():
+    raw = b"\x55\x8b\xec\x5d\xcb"
+    stmts = [ir.SubDef("SUB1", ("A",), (ir.OpaqueHelper(raw),))]
+    assert emit0.emit(stmts) == (
+        "10 SUB SUB1(A)\n"
+        "  REM $OPAQUE HELPER 5 BYTES SHA256 989A58344CC39C1E\n"
+        "END SUB\n"
+    )
+
+
 def test_emit_inline_deffn_and_fncall():
     stmts = [
         ir.DefFn("FNFN1", ("A",), ir.BinOp("*", ir.Var("A"), ir.Lit(2))),

@@ -1495,7 +1495,8 @@ def decode_user_code(exe: bytes) -> list[Any]:
     state.pend_dataread = None  # open READ target chain
     state.ifs = []  # open inline-IF bodies
     state.has_procs = any(
-        o[1] in ("proc_enter", "fn_ret", "inline_sub") for o in state.ops
+        o[1] in ("proc_enter", "fn_ret", "inline_sub", "opaque_helper")
+        for o in state.ops
     )  # def region present
     state.proc_names = {}  # proc entry addr -> synthesized name (SUB1.., FNFN1..)
     state.proc_params = {}  # SUB entry addr -> params tuple (declaration order),
@@ -1679,7 +1680,8 @@ def decode_user_code(exe: bytes) -> list[Any]:
             and kind == "jmp"
             and addr == state.main_start
             and state.k + 1 < len(state.ops)
-            and state.ops[state.k + 1][1] in ("proc_enter", "inline_sub")
+            and state.ops[state.k + 1][1]
+            in ("proc_enter", "inline_sub", "opaque_helper")
         ):  # chained skip-jmp: consecutive SUB defs are each bracketed by
             # their own jmp, so the entry jmp lands on the next def's jmp;
             # extend the def region to its target (witnessed q_fwd; the
@@ -1698,6 +1700,20 @@ def decode_user_code(exe: bytes) -> list[Any]:
             state.proc_params[addr] = ()
             state.stmts.append(ir.SubDef(name, (), (ir.Inline(op[2]),)))
             state.addrs.append(None)  # a SUB definition is never a jump target
+            state.cur = None
+            state.k += 1
+            continue
+        if kind == "opaque_helper":
+            # Coverage-only recovery for a fully fingerprinted framed helper.
+            # Its declaration-order parameter offsets are known from the BP
+            # frame, but its source semantics and parameter types are not.
+            state.nsub += 1
+            name = f"SUB{state.nsub}"
+            params = tuple(f"P{off:02X}" for off in op[3])
+            state.proc_names[addr] = name
+            state.proc_params[addr] = params
+            state.stmts.append(ir.SubDef(name, params, (ir.OpaqueHelper(op[2]),)))
+            state.addrs.append(None)
             state.cur = None
             state.k += 1
             continue
