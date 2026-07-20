@@ -17,5 +17,10 @@ TBX_ORACLE=$PWD/vendor/turbo_basic_oracle \
   python -c 'from tbx.tools.oracle import compile_bas; compile_bas("vendor/turbo_basic_oracle/examples/inline_file_probe.bas")'
 ```
 
+`examples/opaque1_probe.bas` and `opaque2_probe.bas` use `OPQ1.BIN` and
+`OPQ2.BIN`, the two recovered opaque-helper payloads (without their final
+`CB`). The fixed harness compiles each payload and the compiler appends `CB`,
+reproducing the exact 116-byte and 125-byte executable bodies byte-for-byte.
+
 Generated disk images and compiler outputs are intentionally not part of the
 vendored set. The v86 dependency is installed from `package-lock.json`.
