@@ -80,3 +80,17 @@ def test_non_for_integer_add_immediate():
     assert arith.int_alu(state, op, 100, "addm_i8")
     assert emitted == [(ir.Assign(var, ir.BinOp("+", var, ir.Lit(50))), 100)]
     assert state.cur is None and state.k == 1
+
+
+def test_non_for_memory_to_ax_integer_compare():
+    lhs, rhs = ir.Var("A%"), ir.Var("B%")
+    state = SimpleNamespace(
+        ax=rhs,
+        pend_cmp=None,
+        loc=lambda _disp: lhs,
+        k=0,
+    )
+    op = (100, "cmpm_ax", 0x382)
+    assert arith.int_alu(state, op, 100, "cmpm_ax")
+    assert state.pend_cmp == (lhs, rhs)
+    assert state.ax is None and state.k == 1

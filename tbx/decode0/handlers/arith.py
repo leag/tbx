@@ -287,6 +287,13 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                 state.k += 2
                 return True
         raise ValueError(f"cmpax_m without a value/IF consumer at {addr:#x}")
+    if kind == "cmpm_ax":  # cmp [mem],ax outside the FOR/NEXT template
+        if state.ax is None:
+            raise ValueError(f"cmpm_ax without ax operand at {addr:#x}")
+        state.pend_cmp = (state.loc(op[2]), state.ax)
+        state.ax = None
+        state.k += 1
+        return True
     if kind == "cmpax_bp":  # cmp ax,[bp+d8]: relational against a LOCAL int
         # (q_loccmp). The compiler evaluates the SOURCE RHS into ax and
         # compares the LOCAL as memory, so flags are rhs-vs-lhs; the emitted
