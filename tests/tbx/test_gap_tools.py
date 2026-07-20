@@ -51,3 +51,16 @@ def test_deep_register_spill_store_and_restore():
     assert state.di is None and state.reg_spills == {0x7E: value}
     assert arith.int_alu(state, ops[1], 4, "spill_load")
     assert state.cx == value and state.reg_spills == {}
+
+
+def test_integer_call_argument_temp_staging():
+    ops = []
+    code = bytes.fromhex("36 89 04")
+    assert _scan_direct2(code, 0, code[0], ops) == 3
+    assert ops == [(0, "movm_ax_temp")]
+
+    value = ir.Lit(9)
+    state = SimpleNamespace(ax=value, pend_args=[], cur=123, k=0)
+    assert arith.int_alu(state, ops[0], 0, "movm_ax_temp")
+    assert state.pend_args == [value]
+    assert state.ax is None and state.cur is None and state.k == 1

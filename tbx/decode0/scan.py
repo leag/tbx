@@ -371,6 +371,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "movm_ax_si"))  # computed static int-array element
         p += 2  # index chain (shl si/addsi), the write sibling of the
         return p  # existing rt-0x9C read consumer (gap 32; wild number.exe)
+    if b == 0x36 and exe[p + 1 : p + 3] == b"\x89\x04":
+        ops.append((p, "movm_ax_temp"))  # mov ss:[si],ax: staged by-ref CALL arg
+        p += 3
+        return p
     if b == 0x01 and exe[p + 1] == 0x06:  # add [disp16], ax: int combine-store,
         ops.append((p, "addm_ax", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4  # e.g. `X% = X% + <expr>` (disp16 sibling of addm_ax_bp,

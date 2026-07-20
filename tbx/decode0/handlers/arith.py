@@ -87,6 +87,14 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             raise ValueError(f"unsupported spill target {op[2]} at {addr:#x}")
         state.k += 1
         return True
+    if kind == "movm_ax_temp":
+        if state.ax is None:
+            raise ValueError(f"empty integer temp argument at {addr:#x}")
+        state.pend_args.append(state.ax)
+        state.ax = None
+        state.cur = None
+        state.k += 1
+        return True
     if kind == "movsim":
         # mov si,[disp16]: FOR-loop variable as a raw element index.
         state.si = state.loc(op[2])
