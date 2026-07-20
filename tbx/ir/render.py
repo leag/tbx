@@ -521,8 +521,12 @@ def _us_procdata(s) -> str | None:
     if isinstance(s, Inline):
         return "$INLINE " + ", ".join(f"&H{b:02X}" for b in s.data)
     if isinstance(s, OpaqueHelper):
-        digest = hashlib.sha256(s.data).hexdigest()[:16].upper()
-        return f"REM $OPAQUE HELPER {len(s.data)} BYTES SHA256 {digest}"
+        # Framed helpers recovered from the wild corpus are external
+        # `$INLINE "file"` payloads after linking.  The compiler contributes
+        # the final far RET (CB), so emit the payload as byte-list INLINE and
+        # let Turbo BASIC append CB again on recompilation.
+        data = s.data[:-1] if s.data.endswith(b"\xCB") else s.data
+        return "$INLINE " + ", ".join(f"&H{b:02X}" for b in data)
     if isinstance(s, CallStmt):
         if s.args:
             return f"CALL {s.name}({','.join(unparse(a) for a in s.args)})"

@@ -22,12 +22,12 @@ def test_emit_sub_with_params_and_call_args():
     )
 
 
-def test_emit_opaque_helper_is_explicitly_coverage_only():
+def test_emit_opaque_helper_as_inline_payload():
     raw = b"\x55\x8b\xec\x5d\xcb"
     stmts = [ir.SubDef("SUB1", ("A",), (ir.OpaqueHelper(raw),))]
     assert emit0.emit(stmts) == (
-        "10 SUB SUB1(A)\n"
-        "  REM $OPAQUE HELPER 5 BYTES SHA256 989A58344CC39C1E\n"
+        "10 SUB SUB1 INLINE\n"
+        "  $INLINE &H55, &H8B, &HEC, &H5D\n"
         "END SUB\n"
     )
 

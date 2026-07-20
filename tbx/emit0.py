@@ -128,7 +128,9 @@ def emit(stmts) -> str:
             out.append("END SELECT")
             return "\n".join(out)
         if isinstance(s, ir.SubDef):
-            is_inline = len(s.body) == 1 and isinstance(s.body[0], ir.Inline)
+            is_inline = len(s.body) == 1 and isinstance(
+                s.body[0], (ir.Inline, ir.OpaqueHelper)
+            )
             header = f"SUB {s.name} INLINE" if is_inline else f"SUB {s.name}{ir.params_sig(s.params)}"
             inner = block_lines(s.body, txt)
             return f"{header}\nEND SUB" if not inner else f"{header}\n{inner}\nEND SUB"
