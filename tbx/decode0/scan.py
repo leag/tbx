@@ -119,7 +119,7 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         ops.append((p, "push_bp"))
         p += 1
         return p
-    if b == 0x06:  # push es (inline far-pointer/frame glue)
+    if b == 0x06 and exe[p + 1] != 0x56:  # standalone push es frame glue
         ops.append((p, "push_es"))
         p += 1
         return p
