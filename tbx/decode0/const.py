@@ -96,6 +96,7 @@ _AXARG_SUBS = {
     0x4A: "STRIG",  # intrinsics
     0x10: "EOF",
     0x28: "LPOS",
+    0x24: "INP",
 }
 _AX0_SUBS = {
     0x0A: "CSRLIN",
