@@ -1917,6 +1917,18 @@ def decode_user_code(exe: bytes) -> list[Any]:
             state.pend_arg = None
             state.k += 1
             continue
+        if state.pend_arg is not None and kind == "far_strassign":
+            # Far string assignment through a by-reference SUB parameter:
+            # STRING$ (or another string expression) leaves the value on the
+            # string stack, and LES SI,[BP+off] + far_strassign stores it into
+            # the caller's descriptor (wild morcalc.exe).
+            off = state.pend_arg
+            state.proc_str_offs.add(off)
+            state.put(ir.Assign(ir.Var(f"P{off:02X}$"), state.sstack.pop()), state.cur)
+            state.pend_arg = None
+            state.cur = None
+            state.k += 1
+            continue
         if state.pend_arg is not None and kind.endswith("_si"):
             argvar = ir.Var(f"P{state.pend_arg:02X}")
             base = kind[4:] if kind.startswith("far_") else kind  # strip far_ prefix
