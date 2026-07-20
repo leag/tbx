@@ -3732,6 +3732,12 @@ GetGfx(x1=Lit(value=0), y1=Lit(value=0), x2=Lit(value=10), y2=Lit(value=10), arr
 PutGfx(x=Lit(value=20), y=Lit(value=20), array='V0%', action=None)
 End()
 
+## t1_getstr
+Open(mode=StrLit(value='B'), num=1, file=StrLit(value='X'), reclen=None, for_as=True)
+Assign(target=Var(name='A%'), value=Lit(value=4))
+GetString(num=1, count=Var(name='A%'), target=Var(name='B$'))
+End()
+
 ## t1_gosub
 Assign(target=Var(name='A'), value=Lit(value=1))
 Gosub(target=4)
