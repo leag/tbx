@@ -17,6 +17,7 @@ PAIRS = [
     "t1_inpmulti",
     "t1_inpmixed",
     "t1_relval",
+    "t1_inpdbl",
 ]
 
 
@@ -113,6 +114,18 @@ def test_decode_t1_inpmulti():
     assert '10 INPUT "VALS"; A, B, C' in src
     prog = decode0.decode_user_code(_exe("t1_inpmixed.exe"))
     assert prog[0] == ir.Input(None, (ir.Var("A$"), ir.Var("B")))
+
+
+def test_decode_t1_inpdbl():
+    from tbx import decode0, emit0
+
+    want = [
+        ir.Input(None, ir.Var("A#")),
+        ir.Print((ir.Var("A#"),)),
+        ir.End(),
+    ]
+    assert decode0.decode_user_code(_exe("t1_inpdbl.exe")) == want
+    assert emit0.emit(want) == "10 INPUT A#\n20 PRINT A#\n30 END\n"
 
 
 def test_decode_t1_relval():

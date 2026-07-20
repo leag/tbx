@@ -242,6 +242,13 @@ intended, permanent change.
   `t1_linec0`/`v10_t1_linec0`; both are oracle byte-exact. `cal.exe` and
   `cal87.exe` advance from `LINE INPUT trailing byte c0` to the later shared
   `INT EC sub ee` gap.
+
+- **EC sub EE remains unresolved after a bounded oracle matrix** (2026-07-20):
+  the three wild hits (`cal.exe`, `cal87.exe`, `kinetics.exe`) remain fail-loud.
+  The restored vendored oracle produced no `cd ec ee` for ordinary `PRINT`,
+  `LPRINT`, `SHELL`, `RUN`, `CHAIN`, `NAME`, `OPEN`, or `DATE$` probes, nor
+  for the accepted optional `CHAIN`/`RUN` forms. This is negative evidence,
+  not a semantic identification; no scanner mapping was added.
 - **Nested parenthesized logical short-circuit spills** (2026-07-20): an
   ungrouped outer AND whose left side is a parenthesized OR emits a direct JNZ
   plus far-jump gate, preserves the left logical value through BX/CX, and then
@@ -616,6 +623,49 @@ intended, permanent change.
   straight to ir.Assign instead of _fread_target/_readdata_target. Also
   witnessed INT C3 = PRINT#'s comma separator (console is C1). Fixture
   t1_fileint (writes a T.DAT file golden).
+
+- **Numeric console INPUT into DOUBLE** (2026-07-20): `banker.exe`'s
+  `INPUT` prologue carries the numeric type bit and its read terminal is
+  `fstp64 [disp]`, not the previously supported `fstp [disp]` SINGLE form or
+  the integer FISTP bridge. The continuation is the same one-target
+  `_input_target` path, with no new IR shape. `t1_inpdbl` and
+  `v10_t1_inpdbl` compile byte-exactly against the vendored 1.1/1.0 oracles;
+  the wild file now advances to `stray USING emit`.
+
+- **TAB/SPC inside PRINT USING** (2026-07-20): after the DOUBLE INPUT fix,
+  `banker.exe` exposed `TAB/SPC` between two USING value emits. The oracle
+  reproduces this with `PRINT USING "##"; A; TAB(5); B` and the matching
+  `LPRINT` form in both dialects. The decoder now retains TAB/SPC as a Call
+  expression in `PrintUsing.values`; the renderer preserves the semicolon
+  spelling and the C backend emits the tab operation rather than formatting
+  the column number as a USING value. `t1_usingtab`/`v10_t1_usingtab` are
+  byte-exact fixtures. `banker.exe` advances to `unhandled op testw`.
+
+- **Non-adjacent x87 FOR/NEXT sign test** (2026-07-20): after the USING-chain
+  fix, `banker.exe` stopped at `testw [0x012A],8000h`. Its loop variable is at
+  `0x0208`, with limit `0x012C` and step `0x0128`, so the existing `v-4/v-8`
+  FOR-header assumption could not open the loop. The decoder now recognizes
+  the complete two-path x87 test prefix, verifies that the three preceding
+  assignments target those exact slots, and passes explicit `lim`/`stp`
+  displacements to the existing NEXT lifter. This is deliberately narrower
+  than accepting arbitrary `testw`. The real corpus hit decodes to 3029 IR
+  statements; `tests/tbx/test_wild_batch3.py` keeps it as a regression witness.
+  The fresh 84-file scan is 16 OK / 68 blocked, with no regressions; the next
+  first blocker is the seven-file `unhandled byte ea` group.
+
+- **Far `JMP` (`EA`) runtime-revision group** (2026-07-20): seven wild files
+  stopped on the raw 16-bit `EA off:seg` transfer. The existing far-call
+  convention establishes that segment-zero offsets rebase from the user-code
+  start while relocated segments use the preceding-byte origin; applying that
+  rule lands the non-zero targets on the corresponding wild code streams.
+  Zero-offset transfers are the fixed cleanup/event handoff and terminate the
+  scan like the existing `EC/E8` epilogue. The scanner now records non-zero
+  transfers as `jmpf`, and conditional `JCC`/far-jump pairs use the five-byte
+  skip length. The fresh scan removes `unhandled byte ea` from all seven files,
+  with no regressions; each now exposes an independent later blocker. The
+  oracle probe matrix for ERROR/RESUME, ON KEY, ON GOTO, nested IF, and GOTO
+  did not emit `EA`, so this remains a wild runtime-revision closure rather than
+  an oracle fixture.
 
 - **Gap 32: variable-indexed static string array element as a string
   value** (2026-07-17, follow-up session): the shl-si/addsi computed-

@@ -35,6 +35,7 @@ from tbx.decode0.lift import (
     _fold_body_ifgotos,
     _fold_if,
     _is_for_header,
+    _loose_for_header,
     _jump_targets,
     _lift_midblock_troff,
     _lift_next,
@@ -1182,8 +1183,8 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             and prev is not None
             and prev[1] in ("andaxbx", "oraxbx", "xoraxbx")
             and nxt is not None
-            and nxt[1] == "jmp"
-            and t == nxt[0] + 3
+            and nxt[1] in ("jmp", "jmpf")
+            and t == nxt[0] + (5 if nxt[1] == "jmpf" else 3)
         )
         if cc == 0x75 and direct_bool and any(
             candidate[0] == nxt[2] - 2 and candidate[1] == "andaxbx"
@@ -1241,7 +1242,12 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             state.k += 2
             return
         relop_map = _JCC_RELOP_STR if state.pend_cmp_str else _JCC_RELOP
-        if state.pend_cmp and nxt and nxt[1] == "jmp" and t == nxt[0] + 3:
+        if (
+            state.pend_cmp
+            and nxt
+            and nxt[1] in ("jmp", "jmpf")
+            and t == nxt[0] + (5 if nxt[1] == "jmpf" else 3)
+        ):
             if cc not in relop_map:
                 raise ValueError(f"unhandled IF jcc {cc:02x} at {addr:#x}")
             lhs, rhs = state.pend_cmp
@@ -1285,11 +1291,35 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             state.k += 1
             return
         raise ValueError(f"unhandled jcc {cc:02x} at {addr:#x}")
-    elif kind == "jmp":
+    elif kind in ("jmp", "jmpf"):
         t = op[2]
         frame = state.proc_frame if state.proc_frame is not None else state.fn_frame
         cmp_at_t = next((o for o in state.ops if o[0] == t), None)
-        if _is_for_header(state.stmts, state.vdisp):
+        test_k = next((i for i, o in enumerate(state.ops) if o[0] == t), None)
+        loose = (
+            _loose_for_header(state.ops, test_k, state.stmts, state.vdisp)
+            if test_k is not None
+            else None
+        )
+        if loose is not None:
+            lim, stp, vdisp = loose
+            lim_s, stp_s, init_s = state.stmts[-3:]
+            del state.stmts[-3:]
+            a = state.addrs[-3]
+            del state.addrs[-3:]
+            state.put(ir.For(init_s.target, init_s.value, lim_s.value, stp_s.value), a)
+            state.fors.append(
+                {
+                    "v": vdisp,
+                    "lim": lim,
+                    "stp": stp,
+                    "test": t,
+                    "body": state.ops[state.k + 1][0]
+                    if state.k + 1 < len(state.ops)
+                    else None,
+                }
+            )
+        elif _is_for_header(state.stmts, state.vdisp):
             lim_s, stp_s, init_s = state.stmts[-3:]
             del state.stmts[-3:]
             a = state.addrs[-3]

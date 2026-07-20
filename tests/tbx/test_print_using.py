@@ -5,7 +5,7 @@ from tbx import ir
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-PAIRS = ["t1_pr2", "t1_kill", "t1_play"]
+PAIRS = ["t1_pr2", "t1_kill", "t1_play", "t1_usingtab"]
 
 
 def _exe(name):
@@ -30,6 +30,31 @@ def test_decode_t1_pr2():
         ir.End(),
     ]
     assert decode0.decode_user_code(_exe("t1_pr2.exe")) == want
+
+
+def test_decode_t1_using_tab_item():
+    from tbx import decode0, emit0
+
+    want = [
+        ir.Assign(ir.Var("A"), ir.Lit(1)),
+        ir.Assign(ir.Var("B"), ir.Lit(2)),
+        ir.PrintUsing(
+            ir.StrLit("##"),
+            (ir.Var("A"), ir.Call("TAB", (ir.Lit(5),)), ir.Var("B")),
+        ),
+        ir.End(),
+    ]
+    prog = decode0.decode_user_code(_exe("t1_usingtab.exe"))
+    assert prog == want
+    assert emit0.emit(prog) == (
+        '10 A = 1\n20 B = 2\n'
+        '30 PRINT USING "##"; A; TAB(5); B\n40 END\n'
+    )
+    from tbx import c0
+
+    generated = c0.emit_c(prog, standalone=False)
+    assert "tb_tab(5);" in generated
+    assert "tb_pu_val(5);" not in generated
 
 
 def test_decode_t1_kill():

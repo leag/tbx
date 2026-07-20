@@ -1,0 +1,23 @@
+# v10_t1_usingtab dialect=1.0 start=075E0
+075E3:fld1
+075E6:fstp:292
+075ED:fild:314
+075F2:fstp:288
+075F9:movsi:308
+075FC:rt:156
+075FE:rt:202
+07600:fld:292
+07605:rt:203
+07607:rt:190
+07609:movax:5
+0760C:tabspc:199
+0760E:fld:288
+07613:rt:203
+07615:rt:190
+07617:rt:184
+0761B:end
+0761E:epilogue
+# commits
+075EB
+075F7
+07619

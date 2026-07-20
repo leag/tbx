@@ -39,6 +39,48 @@ def test_decode_t1_fori():
     assert prog[3] == ir.NextStmt(ir.Var("B%"))
 
 
+def test_decode_wild_banker_nonadjacent_for():
+    # banker.exe uses the x87 sign-test FOR template with limit/step/loop
+    # slots that are not the usual v-4/v-8 neighbors.  Keep the corpus hit as
+    # a regression witness rather than allowing the generic testw handler to
+    # drift back to an unhandled opcode.
+    from tbx import decode0
+
+    exe = open(os.path.join(_ROOT, "..", "wild", "hits", "banker.exe"), "rb").read()
+    prog = decode0.decode_user_code(exe)
+    loops = [s for s in prog if isinstance(s, ir.For)]
+    assert any(
+        isinstance(s.limit, ir.BinOp)
+        and s.limit.op == "-"
+        and s.limit.lhs == ir.Lit(66)
+        for s in loops
+    )
+
+
+def test_scan_wild_far_jump_group():
+    # Seven runtime-revision wild binaries use EA far transfers.  The scanner
+    # must preserve their rebased target (or the fixed zero-offset handoff)
+    # instead of stopping at the raw x86 byte; later decoder failures are
+    # separate, file-specific gaps.
+    from tbx import decode0
+
+    cases = (
+        ("elec87.exe", 5),
+        ("electron.exe", 5),
+        ("mcmurphy.exe", 0),
+        ("mf.exe", 8),
+        ("sabpcv3.exe", 0),
+        ("swbb.exe", 0),
+        ("wb.exe", 3),
+    )
+    for name, count in cases:
+        exe = open(os.path.join(_ROOT, "..", "wild", "hits", name), "rb").read()
+        start, dialect = decode0.find_prologue(exe)
+        ops = decode0._scan(exe, start, dialect, set())
+        assert sum(op[1] == "jmpf" for op in ops) == count
+        assert ops[-1][1] == "epilogue"
+
+
 def test_decode_t1_strif():
     # INT 9A outside SELECT CASE: string relational IF; flags are FORWARD
     # (lhs cmp rhs), riding _JCC_RELOP_STR

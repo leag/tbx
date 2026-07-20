@@ -25,13 +25,63 @@ def _is_for_header(stmts, vdisp) -> bool:
     return vdisp(lim_s.target) == v - 4 and vdisp(stp_s.target) == v - 8
 
 
+def _loose_for_header(ops, k, stmts, vdisp):
+    """Recognize the x87 FOR header when its temp slots are non-adjacent.
+
+    The normal compiler layout puts limit and step at ``v-4``/``v-8``.  Some
+    wild programs retain earlier user variables between those slots, but the
+    sign-test at the target still names the three slots explicitly.  Return
+    the three displacements only for the complete, distinctive test prefix;
+    otherwise return None so an arbitrary ``testw`` cannot become a FOR.
+    """
+    if len(stmts) < 3 or not all(isinstance(s, ir.Assign) for s in stmts[-3:]):
+        return None
+    lim_s, stp_s, init_s = stmts[-3:]
+    if not all(isinstance(s.target, ir.Var) for s in (lim_s, stp_s, init_s)):
+        return None
+    if any(s.target.name.endswith("$") for s in (lim_s, stp_s, init_s)):
+        return None
+    if k >= len(ops) or ops[k][1] != "testw":
+        return None
+    test, jcc, skip = ops[k : k + 3]
+    if jcc[1] != "jcc" or jcc[2] != 0x74 or skip[1] != "jmp":
+        return None
+    if k + 6 >= len(ops):
+        return None
+    first_fld, first_cmp, first_sw = ops[k + 3 : k + 6]
+    if (first_fld[1], first_cmp[1], first_sw[1]) != ("fld", "fcomp", "fstsw"):
+        return None
+    if jcc[3] != first_fld[0]:
+        return None
+    if k + 10 >= len(ops):
+        return None
+    body_jcc, body_skip = ops[k + 6 : k + 8]
+    second_fld, second_cmp, second_sw = ops[k + 8 : k + 11]
+    if body_jcc[1] != "jcc" or body_skip[1] != "jmp":
+        return None
+    if (second_fld[1], second_cmp[1], second_sw[1]) != ("fld", "fcomp", "fstsw"):
+        return None
+    if skip[2] != second_fld[0]:
+        return None
+    lim, var = first_fld[2], first_cmp[2]
+    stp = test[2] - 2
+    if (second_fld[2], second_cmp[2]) != (lim, var):
+        return None
+    if (vdisp(lim_s.target), vdisp(stp_s.target), vdisp(init_s.target)) != (
+        lim, stp, var
+    ):
+        return None
+    return lim, stp, var
+
+
 def _lift_next(ops, k, fors, stmts, addrs, exit_folds) -> int:
     """Consume the NEXT template at ops[k] (a testw at the open FOR's test address):
     testw [step+2],8000h; 74 +3; e9 NEG; FLD lim; FCOMP v; fstsw; <73 BODY>; e9 EXIT;
     NEG: FLD lim; FCOMP v; fstsw; <76 BODY>.  Each <jcc BODY> is short, or the long
     form `jcc-inverse +3; e9 BODY` when the body is out of short reach."""
     f = fors[-1]
-    v, lim, stp = f["v"], f["v"] - 4, f["v"] - 8
+    v = f["v"]
+    lim, stp = f.get("lim", v - 4), f.get("stp", v - 8)
 
     def expect(i, want):
         if i + len(want) > len(ops):

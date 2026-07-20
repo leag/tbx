@@ -25,13 +25,14 @@ edition/runtime tag, and evidence provenance.
 - Baseline commit: `25fbe9c` (`Decode INP intrinsic dispatcher`)
 - Corpus: `wild/hits/` (84 Turbo Basic executables; gitignored, never commit)
 - Baseline result: 14 decode OK, 70 fail at their first visible gap
-- Current strict result: 15 decode OK, 69 blocked. Several blocked files have
+- Current strict result: 16 decode OK, 68 blocked. Several blocked files have
   advanced through multiple signatures even though the strict count is flat.
-- Current validation: 2222 passed, 14 skipped (2026-07-20); eight new 1.0/1.1
+- Current validation: 2233 passed, 14 skipped (2026-07-20); eight new 1.0/1.1
   oracle round trips are byte-exact for nested logical short-circuit forms and
   leading-semicolon `LINE INPUT;`.
-- Immediate target: `INT EC sub 38` (four files), continuing from Gap 33 in
-  `HANDOFF.md`; the six `byte ea` hits remain a later, higher-risk class.
+- Immediate target: `unhandled INT 8c` (four files), continuing from Gap 33 in
+  `HANDOFF.md`; the seven-file `byte ea` group is now advanced and documented
+  as a runtime-revision closure.
 - `INT ED sub 1e` is now identified as the missing three-argument
   `INSTR(start, haystack$, needle$)` runtime entry. Four independent wild
   programs establish the same AX-plus-two-string calling convention. The
@@ -189,7 +190,9 @@ fixture-backed closures.
 - [ ] unknown system cell `0x8a` — 2 files; correlate reads/writes and runtime
   consumers before assigning semantics.
 - [ ] unknown system cell `0x110` — 1 file.
-- [ ] numeric `INPUT` read without `FSTP` — identify alternate target/store shape.
+- [x] numeric `INPUT` read without `FSTP` — `INPUT A#` stores through the
+  existing `fstp64` double-variable terminal; verified in both dialects by
+  `t1_inpdbl`/`v10_t1_inpdbl`. `banker.exe` advances to a later USING fold.
 - [x] `LINE INPUT` trailing byte `c0` — leading-semicolon `LINE INPUT;`, with
   or without a prompt; dual-dialect oracle fixtures are byte-exact.
 - [ ] `LINE INPUT #` template mismatch.
@@ -235,7 +238,7 @@ flow and produce plausible but wrong BASIC.
   address-normalized failure groups for cross-session comparison.
 - [x] Commit-ready sanitized baseline under `gap_reports/`; `/tmp` is working storage,
   not a resumable checkpoint.
-- [ ] Add `compare_gap_reports.py` before the next decoder closure. It must show
+- [x] Add `compare_gap_reports.py` before the next decoder closure. It shows
   files newly decoded, regressed, advanced to a different signature, unchanged,
   signatures removed, and newly exposed signatures. Its advanced-file output is
   the input to the unlock graph.
@@ -308,7 +311,12 @@ Include newly exposed blockers because they are evidence of forward progress.
 | 2026-07-20 | pending | Clear stale string-compare orientation when `cmpax_bx` starts a numeric relation | 15 OK / 69 blocked; `photo` → movsi continuation, `styllist` → later stack fold | Triage exposed blockers; investigate `styled`/`hfprop` jcc 75 separately |
 | 2026-07-20 | pending | Lift direct JNZ dispatch of a fully parenthesized logical value as an inline `IF` | 15 OK / 69 blocked; both installed runtimes verify byte-exact; nested short-circuit targets remain fail-loud | Reproduce the nested spill topology independently before extending this rule |
 | 2026-07-20 | pending | Decode nested logical outer-AND spill gates, including inline and direct-GOTO dispatch | 15 OK / 69 blocked; `hfprop` → displacement `0x2b2`, `styled` → RESTORE target 87 | Triage exposed structural gaps; retain fail-loud behavior for other nesting topologies |
-| 2026-07-20 | pending | Preserve leading-semicolon `LINE INPUT;` flag C0 | 15 OK / 69 blocked; `cal`/`cal87` → shared `EC sub ee` | Probe `EC/ee` only if installed runtimes reproduce it |
+| 2026-07-20 | `0ea9d98` | Preserve leading-semicolon `LINE INPUT;` flag C0 and close nested logical spill topologies | 15 OK / 69 blocked; `cal`/`cal87` → shared `EC sub ee`; no regressions | Probe `EC/ee` only if installed runtimes reproduce it |
+| 2026-07-20 | working tree | Archive the current sanitized scan and verify report comparison | 15 OK / 69 blocked; 1 newly decoded, 26 advanced, 0 regressed versus baseline | Continue evidence-led triage; keep `EC/38` and `EC/ee` fail-loud |
+| 2026-07-20 | working tree | Decode numeric console `INPUT` into a DOUBLE variable (`fstp64`) | 15 OK / 69 blocked; `banker.exe` advanced from numeric INPUT to stray USING emit; 0 regressions | Investigate the exposed USING-chain shape |
+| 2026-07-20 | working tree | Preserve TAB/SPC as inter-item expressions inside PRINT/LPRINT USING | 15 OK / 69 blocked; `banker.exe` advanced to `unhandled op testw`; 0 regressions | Identify the next `testw` control-flow template |
+| 2026-07-20 | working tree | Lift x87 FOR/NEXT sign tests with non-adjacent limit/step slots | 16 OK / 68 blocked; `banker.exe` newly decodes completely, 0 regressions, `testw` signature removed | Triage the seven-file `unhandled byte ea` group |
+| 2026-07-20 | working tree | Decode runtime-revision far `JMP` (`EA`) transfers and fixed zero-offset handoffs | 16 OK / 68 blocked; all seven `byte ea` files advanced, 0 regressions, signature removed | Triage the newly exposed file-specific gaps |
 
 ## Completion checklist
 

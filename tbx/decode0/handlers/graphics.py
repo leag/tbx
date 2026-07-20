@@ -305,7 +305,23 @@ def console(state: DecodeState, op, addr, kind) -> bool:
         name, leg = _TABSPC_VECS[op[2]]
         if state.ax is None or isinstance(state.ax, tuple):
             raise ValueError(f"{name} without an ax argument at {addr:#x}")
-        if state.pend_using is not None:  # unwitnessed inside USING chains
+        if state.pend_using is not None:
+            # TAB/SPC is an item inside a PRINT USING chain only when another
+            # USING emit follows it. A trailing TAB starts the next statement
+            # in existing wild output, so retain the old lazy flush there.
+            in_chain = False
+            for look in state.ops[state.k + 1 : state.k + 18]:
+                if look[1] == "rt" and look[2] in (0xCB, 0xCC):
+                    in_chain = True
+                    break
+                if look[1] == "rt" and look[2] in (0xCA, 0xB8, 0xB9):
+                    break
+            if in_chain:
+                state.pend_using["values"].append(ir.Call(name, (state.ax,)))
+                state.ax = None
+                state.cur = None
+                state.k += 1
+                return True
             state.flush_pending()
         if leg == "lprint":  # printer leg joins/opens an LPRINT chain (t1_ltab)
             if (

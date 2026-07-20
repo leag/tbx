@@ -1180,10 +1180,13 @@ class _Gen:
             elif s.file is not None:
                 out.append(f"tb_out = tb_file({s.file}); tb_ch = {s.file};")
             out.append(f"tb_pu_begin({self.s(s.fmt)});")
-            out.extend(
-                f"tb_pu_sval({self.s(v)});" if _is_str(v) else f"tb_pu_val({self.num(v)});"
-                for v in s.values
-            )
+            for v in s.values:
+                if isinstance(v, ir.Call) and v.name in ("TAB", "SPC"):
+                    out.append(f"tb_{v.name.lower()}({self.num(v.args[0])});")
+                elif _is_str(v):
+                    out.append(f"tb_pu_sval({self.s(v)});")
+                else:
+                    out.append(f"tb_pu_val({self.num(v)});")
             out.append("tb_pu_flush();")
             if s.newline:
                 out.append("tb_nl();")

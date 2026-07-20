@@ -152,7 +152,7 @@ def data_read(state: DecodeState, op, addr, kind) -> bool:
         nxt = state.ops[state.k + 1] if state.k + 1 < len(state.ops) else None
         if state.pend_input is None or nxt is None:
             raise ValueError(f"numeric INPUT read without target at {addr:#x}")
-        if nxt[1] == "fstp":  # FP variable target
+        if nxt[1] in ("fstp", "fstp64"):  # SINGLE/DOUBLE variable target
             var, used = state.loc(nxt[2]), 2
         elif (
             nxt[1] == "fistp"

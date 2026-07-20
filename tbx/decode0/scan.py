@@ -1063,6 +1063,20 @@ def _scan_pass(
             p = np
             continue
 
+        if b == 0xEA:  # far JMP ptr16:16; segment-relative code target
+            off, seg = struct.unpack_from("<HH", exe, p + 1)
+            if off == 0:
+                # Fixed runtime handoff used by the legacy cleanup/event tail.
+                ops.append((p, "epilogue"))
+                return ops
+            # Segment-zero calls use the user-code origin; relocated code
+            # segments use the preceding byte as their logical origin (the
+            # same one-byte convention seen in wild far-call targets).
+            target = (start if seg == 0 else start - 1) + off
+            ops.append((p, "jmpf", target, seg, off))
+            p += 5
+            continue
+
         if b == 0x9B and 0xD8 <= exe[p + 1] <= 0xDF:
             # 8087-required codegen (toggle '8', mask 0x80): FWAIT + the real ESC
             # opcode in place of the emulation INT 34h+n, with identical modrm/
