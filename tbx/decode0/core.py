@@ -2013,12 +2013,26 @@ def decode_user_code(exe: bytes) -> list[Any]:
             if op[2] != f["v"]:
                 raise ValueError(f"int NEXT: cmp disp mismatch at {addr:#x}")
             wantcc = (0x7D,) if f.get("step", 1) < 0 else (0x7E, 0x76)
-            if (
-                state.k + 1 >= len(state.ops)
-                or state.ops[state.k + 1][1] != "jcc"
-                or state.ops[state.k + 1][2] not in wantcc
-                or state.ops[state.k + 1][3] != f["body"]
-            ):
+            direct = (
+                state.k + 1 < len(state.ops)
+                and state.ops[state.k + 1][1] == "jcc"
+                and state.ops[state.k + 1][2] in wantcc
+                and state.ops[state.k + 1][3] == f["body"]
+            )
+            # A body beyond short-jump range uses the inverse short condition
+            # over a near JMP back to the body: JG/JA skip; JMP body. Wild
+            # number.exe witnesses the ascending signed JG form.
+            invcc = (0x7C,) if f.get("step", 1) < 0 else (0x7F, 0x77)
+            indirect = (
+                state.k + 2 < len(state.ops)
+                and state.ops[state.k + 1][1] == "jcc"
+                and state.ops[state.k + 1][2] in invcc
+                and state.ops[state.k + 2][1] == "jmp"
+                and state.ops[state.k + 2][2] == f["body"]
+                and state.ops[state.k + 1][3]
+                == state.ops[state.k + 2][0] + 3
+            )
+            if not (direct or indirect):
                 raise ValueError(f"int NEXT: expected JLE/JBE/JGE to body at {addr:#x}")
             state.put(
                 ir.NextStmt(
@@ -2028,7 +2042,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
             )
             state.fors.pop()
             state.cur = None
-            state.k += 2
+            state.k += 3 if indirect else 2
             continue
         if handlers.int_alu(state, op, addr, kind):
             continue
