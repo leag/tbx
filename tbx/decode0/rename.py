@@ -285,7 +285,7 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
         if isinstance(s, ir.KeyDef):
             return ir.KeyDef(walk(s.num), walk(s.text))
         if isinstance(s, ir.Files):
-            return ir.Files(walk(s.spec))
+            return ir.Files(None if s.spec is None else walk(s.spec))
         if isinstance(s, ir.Name):
             return ir.Name(walk(s.old), walk(s.new))
         if isinstance(s, ir.Get):

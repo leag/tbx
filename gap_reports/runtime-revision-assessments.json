@@ -1,0 +1,179 @@
+{
+  "schema_version": 1,
+  "document_type": "tbx.runtime_revision_assessments",
+  "updated": "2026-07-20",
+  "corpus_fingerprint": "2043f80bf6bf929b0a8058ebb0b83e3ec6b63664855e4428b4781db63c4924a3",
+  "evidence_classes": [
+    "oracle-verified",
+    "dialect-verified",
+    "documentation-backed",
+    "runtime-revision",
+    "candidate-runtime-revision",
+    "unresolved"
+  ],
+  "assessments": [
+    {
+      "id": "RR-ED-1E",
+      "title": "Three-argument INSTR runtime entry",
+      "signatures": [
+        "unhandled INT ED sub 1e"
+      ],
+      "disposition": "closed",
+      "evidence_class": "runtime-revision",
+      "confidence": "high",
+      "files": [
+        "wild/hits/be.exe",
+        "wild/hits/crossref.exe",
+        "wild/hits/hebrew.exe",
+        "wild/hits/invent.exe"
+      ],
+      "assessment": "Canonical ED/1e is INSTR(start, haystack$, needle$): AX carries start, haystack and needle are pushed in that order, and AX carries the result. Four independent binary witnesses span TB 1.0 and 1.1. Adjacent ED/1c is the oracle-verified two-argument INSTR entry; the IR and C runtime already supported arity three.",
+      "negative_evidence": [
+        "Literal and variable CINT probes use inline FISTP/FILD and never ED/1e.",
+        "The vendored oracle rejects the common three-argument INSTR source spellings, so this is not oracle-verified."
+      ],
+      "implementation": "Scanner accepts only canonical ED/1e and the fold consumes the existing AX value plus exactly two string-stack operands.",
+      "source": "HANDOFF.md: CLOSED 2026-07-20 — missing runtime-revision three-argument INSTR"
+    },
+    {
+      "id": "RR-INT-8C",
+      "title": "TB 1.0 event-handler runtime vector",
+      "signatures": [
+        "unhandled INT 8c"
+      ],
+      "disposition": "candidate",
+      "evidence_class": "candidate-runtime-revision",
+      "confidence": "medium-high",
+      "files": [
+        "wild/hits/baby.exe",
+        "wild/hits/help.exe",
+        "wild/hits/prtguide.exe",
+        "wild/hits/readme.exe"
+      ],
+      "assessment": "All current hits are TB 1.0. The strongest common source evidence is ON KEY(n) GOSUB and code inside event-handler bodies, suggesting a missing event-runtime poll/check entry rather than arbitrary inline x86.",
+      "negative_evidence": [
+        "One, two, and eight ON KEY declarations did not reproduce the vector.",
+        "TB 1.0 keyboard-break toggles, dense KEY ON/OFF control, and simple CLS-plus-assignment handler bodies did not reproduce it."
+      ],
+      "promotion_criteria": "Recover a source listing, find a differently revised compiler/runtime that emits the vector, or establish one invariant register/control-flow contract across every hit and a neighboring known event-runtime entry.",
+      "source": "HANDOFF.md: Gap INT-8c — likely ON KEY GOSUB related"
+    },
+    {
+      "id": "RR-CGA-HELPERS",
+      "title": "Linked CGA snow-avoidance runtime helpers",
+      "signatures": [
+        "opaque helper semantic identity",
+        "unhandled byte 06"
+      ],
+      "disposition": "coverage-only",
+      "evidence_class": "candidate-runtime-revision",
+      "confidence": "high-for-library-origin",
+      "files": [
+        "wild/hits/CVT2TB.EXE",
+        "wild/hits/catalog.exe",
+        "wild/hits/filepatc.exe",
+        "wild/hits/morcalc.exe",
+        "wild/hits/process.exe",
+        "wild/hits/pw.exe"
+      ],
+      "assessment": "Two complete 116/125-byte helpers are already recognized by full-body fingerprints. Related framed procedures use CGA port 0x3DA, CLI/STI, and direct video-memory writes. This is compiler/runtime-library code, but the source statement or compiler option that links it is unknown.",
+      "negative_evidence": [
+        "No fixture corpus executable contains the helper signature, including ordinary TB 1.0 PRINT programs.",
+        "Minimal SCREEN 0, WIDTH 40, and PRINT probes did not link it.",
+        "VIEW PRINT and PCOPY are rejected by this Turbo Basic parser."
+      ],
+      "implementation": "Exact helper bodies produce coverage-only OpaqueHelper IR; this does not claim semantic source recovery.",
+      "promotion_criteria": "Identify the source trigger or compiler/runtime option and reproduce a helper byte-exact, or recover authoritative runtime-library provenance.",
+      "source": "HANDOFF.md: Gap 19 — byte 06 and REMAINING_GAPS_PLAN.md Wave 3"
+    },
+    {
+      "id": "RR-SYSCELL-8A",
+      "title": "Unknown runtime system cell 0x8a",
+      "signatures": [
+        "store to unknown system cell 0x8a"
+      ],
+      "disposition": "candidate",
+      "evidence_class": "candidate-runtime-revision",
+      "confidence": "medium",
+      "files": [
+        "wild/hits/bill.exe",
+        "wild/hits/color.exe"
+      ],
+      "assessment": "A shared low-DGROUP cell may represent runtime state added or moved by another library revision. It may instead be a known statement argument cell missing from the decoder's system-cell map.",
+      "promotion_criteria": "Correlate every write with its consuming runtime call and value meaning; compare the surrounding system-cell layout against oracle-built programs before assigning semantics.",
+      "source": "REMAINING_GAPS_PLAN.md Wave 3"
+    },
+    {
+      "id": "RR-LINEINPUT",
+      "title": "Alternate LINE INPUT encodings",
+      "signatures": [
+        "LINE INPUT trailing byte c0",
+        "LINE INPUT # template mismatch"
+      ],
+      "disposition": "candidate",
+      "evidence_class": "candidate-runtime-revision",
+      "confidence": "medium",
+      "files": [
+        "wild/hits/cal.exe",
+        "wild/hits/cal87.exe",
+        "wild/hits/file.exe"
+      ],
+      "assessment": "The source-level statements are already known, making stable alternate tails or setup sequences plausible runtime-template variants. The two CAL files may be duplicate builds and therefore count as one independent shape until provenance is checked.",
+      "promotion_criteria": "Capture complete templates, separate independent builds, and demonstrate that operand and result state match the existing LINE INPUT/LINE INPUT # handlers.",
+      "source": "REMAINING_GAPS_PLAN.md Wave 3"
+    },
+    {
+      "id": "RR-DISPATCH-HOLES",
+      "title": "Unidentified runtime dispatcher entries",
+      "signatures": [
+        "unhandled INT EC sub ac",
+        "unhandled INT c2",
+        "unhandled INT d4",
+        "unhandled INT EC sub ee"
+      ],
+      "disposition": "unresolved",
+      "evidence_class": "unresolved",
+      "confidence": "low",
+      "files": [],
+      "assessment": "Dispatcher holes are plausible revision-specific entries, but they are equally likely to be ordinary statements or intrinsics not yet identified. Grouping them here is a triage hypothesis, not a shared semantic classification.",
+      "promotion_criteria": "Record the complete calling convention and neighboring statement context for each sub independently; promote only entries with cross-file or external runtime evidence.",
+      "source": "REMAINING_GAPS_PLAN.md Wave 1"
+    },
+    {
+      "id": "RR-BYTE-EA",
+      "title": "Far-jump or inline-data pattern",
+      "signatures": [
+        "unhandled byte ea"
+      ],
+      "disposition": "unresolved",
+      "evidence_class": "unresolved",
+      "confidence": "low",
+      "files": [
+        "wild/hits/elec87.exe",
+        "wild/hits/electron.exe",
+        "wild/hits/mcmurphy.exe",
+        "wild/hits/mf.exe",
+        "wild/hits/sabpcv3.exe",
+        "wild/hits/swbb.exe",
+        "wild/hits/wb.exe"
+      ],
+      "assessment": "A different segmented code model or runtime layout is possible, but the earlier greater-than-64K theory was refuted. Reachable far JMP, inline data, and an unrecognized compiler template remain indistinguishable.",
+      "promotion_criteria": "Prove control-flow reachability and decode the complete far target, or prove the bytes belong to a bounded data record. Do not accept generic EA handling.",
+      "source": "HANDOFF.md: Gap byte ea"
+    },
+    {
+      "id": "RR-NOP-90",
+      "title": "Compiler-emitted NOP padding",
+      "signatures": [
+        "unhandled byte 90"
+      ],
+      "disposition": "closed",
+      "evidence_class": "runtime-revision",
+      "confidence": "high",
+      "files": [],
+      "assessment": "Formerly classified as unwitnessable synchronization padding around a CINT-style float-to-int round trip. The scanner now safely decodes literal x86 NOP padding; this is retained to prevent the stale signature from being reopened as an active gap.",
+      "implementation": "Closed by commit 631597b (Decode compiler-emitted NOP padding).",
+      "source": "HANDOFF.md: Byte 90 and git commit 631597b"
+    }
+  ]
+}

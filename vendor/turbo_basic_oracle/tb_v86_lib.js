@@ -6,11 +6,12 @@ const { execFileSync } = require("child_process");
 // Build work.img = tb_floppy.img + <basPath> as SOLVER.BAS (CRLF), referenced
 // external $INLINE files, and staged dbx/*.DAT.
 // `tbFloppy` selects an alternate base image (e.g. tb10_floppy.img for Turbo Basic 1.0).
-function buildWorkImg(basPath, here, tbFloppy) {
-  const work = path.join(here, "work.img");
+function buildWorkImg(basPath, here, tbFloppy, workspace = here) {
+  fs.mkdirSync(workspace, { recursive: true });
+  const work = path.join(workspace, "work.img");
   fs.copyFileSync(path.join(here, tbFloppy || "tb_floppy.img"), work);
   const basText = fs.readFileSync(basPath, "latin1").replace(/\r?\n/g, "\r\n");
-  const tmp = path.join(here, ".solver.bas.tmp");
+  const tmp = path.join(workspace, ".solver.bas.tmp");
   fs.writeFileSync(tmp, basText, "latin1");
   execFileSync("mcopy", ["-o", "-i", work, tmp, "::SOLVER.BAS"]);
   // Turbo BASIC's `$INLINE "file"` form reads the file from DOS while the
@@ -103,6 +104,40 @@ function attachScreen(emulator) {
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+async function waitForStableScreen(scrFn, stableMs, timeoutMs) {
+  const started = Date.now();
+  let last = scrFn(), since = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    await sleep(100);
+    const now = scrFn();
+    if (now !== last) { last = now; since = Date.now(); }
+    else if (Date.now() - since >= stableMs) return true;
+  }
+  return false;
+}
+
+async function waitForExe(emulator, imagePath, guestName, outPath, timeoutMs) {
+  const started = Date.now();
+  let lastSize = -1, stable = 0;
+  while (Date.now() - started < timeoutMs) {
+    await sleep(200);
+    try {
+      await saveFdb(emulator, imagePath);
+      fs.rmSync(outPath, { force: true });
+      extractExe(imagePath, guestName, outPath);
+      const size = fs.statSync(outPath).size;
+      if (size > 0 && size === lastSize) stable++;
+      else stable = 0;
+      lastSize = size;
+      if (stable >= 2) return true;
+    } catch (_) {
+      stable = 0;
+      lastSize = -1;
+    }
+  }
+  return false;
+}
+
 // Keyboard driving primitives (XT make/break scancodes).
 const ENTER = 0x1C;
 function makeDriver(emulator) {
@@ -126,4 +161,4 @@ async function saveFdb(emulator, outPath) {
   return outPath;
 }
 
-module.exports = { buildWorkImg, extractExe, parseUdToken, bootEmulator, attachScreen, makeDriver, saveFdb, sleep, ENTER };
+module.exports = { buildWorkImg, extractExe, parseUdToken, bootEmulator, attachScreen, makeDriver, saveFdb, waitForStableScreen, waitForExe, sleep, ENTER };

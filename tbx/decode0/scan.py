@@ -873,6 +873,10 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
             ops.append((p, "str2num", _ED_STR_SUBS[sub]))
             p += 3
             return p
+        if sub == 0x1E:  # INSTR(start, haystack$, needle$): start in ax
+            ops.append((p, "instr3"))
+            p += 3
+            return p
         if sub in _FNAX2_SUBS:  # two-FP-arg ax intrinsic (POINT)
             ops.append((p, "fn_ax2", _FNAX2_SUBS[sub]))
             p += 3
@@ -1208,6 +1212,10 @@ def _scan_pass(
                 continue
             if sub == 0x44:  # FILES f$ (pops spec string)
                 ops.append((p, "files"))
+                p += 3
+                continue
+            if sub == 0x42:  # bare FILES (no string operand)
+                ops.append((p, "files_bare"))
                 p += 3
                 continue
             if sub == 0x6E:  # NAME a$ AS b$ (pops two strings)

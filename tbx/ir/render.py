@@ -484,7 +484,7 @@ def _us_fileio(s) -> str | None:
     if isinstance(s, Reset):
         return "RESET"
     if isinstance(s, Files):
-        return f"FILES {unparse(s.spec)}"
+        return "FILES" if s.spec is None else f"FILES {unparse(s.spec)}"
     if isinstance(s, Name):
         return f"NAME {unparse(s.old)} AS {unparse(s.new)}"
     if isinstance(s, Get):

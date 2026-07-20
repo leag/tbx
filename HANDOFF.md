@@ -12,6 +12,20 @@ Standing instruction: close the most common decoder gap first, in frequency
 order, over the 84 wild PC-SIG Turbo Basic EXEs in `wild/hits/` (untracked,
 gitignored, copyrighted shareware — **never commit them**).
 
+Machine-readable runtime-revision classifications are persisted separately from
+generated scan checkpoints in `gap_reports/runtime-revision-assessments.json`.
+Candidate status is not decoder authorization; each entry records its promotion
+criteria and points back into this handoff for the full investigation.
+
+Oracle performance checkpoint (2026-07-20): the vendored v86 harness now polls
+for the DOS prompt, stable editor screen, and a stable compiled EXE instead of
+sleeping a fixed 5+4+9 seconds. `compile_bas` uses a private temporary workspace,
+so concurrent compiles cannot race on floppy/output paths. `batch_probe.py` adds
+dependency preflight, immediate output, `--keep DIR`, and `--jobs N`. Byte-exact
+verification passes for both dialects and `t1_nestif2`; a small compile improved
+from roughly 25 seconds to 8.8 seconds, and two concurrent compiles finish in
+8.9 seconds on this machine.
+
 ## Where things stand
 
 84 wild EXEs: **14 decode OK** (ck, onelab87, onelabel, mm, autonum, rev,
@@ -219,6 +233,15 @@ intended, permanent change.
 
 ## Recently closed (this campaign, newest first)
 
+- **Bare `FILES` / canonical INT EC sub 42** (2026-07-20): both TB 1.0
+  wild hits call the dispatcher with no prepared operand; `styled.exe` also
+  contains the adjacent, already-known sub 44 form with a pushed filespec in
+  the same routine. A minimal `FILES` probe reproduces sub 42 directly. `Files`
+  now carries an optional spec, renders the bare spelling, survives canonical
+  rename, and maps to `*.*` in the behavioral C backend. Fixtures `t1_files0`/
+  `v10_t1_files0` are oracle byte-exact. Both wild files advance to the same
+  later `cursor call without open LOCATE` fold gap. Full suite: 2193 passed,
+  14 skipped.
 - **Binary `GET$ #file,count,string$` / INT EC sub 4c** (2026-07-19):
   the previously unknown sub is the binary-file string read. `GetString`
   carries the file number, AX count expression, and following string target;
@@ -1294,12 +1317,88 @@ variations in one pass once there's a concrete list of candidates --
 this investigation mostly predates the tool's construction and was done
 one probe at a time; a future pickup should batch it.
 
-## Gap 33 — INT EC sub 38 (football.exe/refund.exe/varamort.exe), UNDIAGNOSED
+## CLOSED 2026-07-20 — missing runtime-revision three-argument INSTR (`INT ED sub 1e`)
 
-Grew from 2 files to 3 this session: varamort.exe joined once its
+`INT ED sub 1e` is the runtime entry for the three-argument form
+`INSTR(start, haystack$, needle$)`. This is a missing Turbo Basic runtime
+variant, not `CINT` and not a new IR intrinsic: the existing `ir.Call("INSTR",
+args)` already supports both arities, the renderer preserves the argument list,
+and the C backend already maps arity three to `tb_instr(start, haystack,
+needle)`.
+
+### Byte-level calling convention
+
+Four independent executables hit the same canonical dispatcher sub across both
+compiler dialects: `be.exe` (1.0), `crossref.exe` (1.1), `hebrew.exe` (1.0),
+and `invent.exe` (1.0). At every site:
+
+1. the search start is evaluated into AX;
+2. the haystack string descriptor is pushed;
+3. the needle string descriptor is pushed;
+4. `CD ED 1E` executes (after dialect canonicalization); and
+5. the integer result remains in AX and is immediately stored or consumed.
+
+Representative raw shapes (addresses are file offsets in the untracked wild
+executables; no executable bytes are tracked):
+
+- `be.exe @ 0x7ee3`: `mov ax,[002c]`; push strings at displacements `0188` and
+  `0208`; `INT ED,1e`; `mov [002c],ax`.
+- `crossref.exe @ 0xa6bd`: load the start expression, push the two string
+  descriptors, `INT ED,1e`; `mov [002c],ax`. A second occurrence follows near
+  `0xa6ef`, showing the same two-string-plus-AX contract.
+- `hebrew.exe @ 0xcbc3`: form AX as `1 + [02cc]`, push strings `02f2` and
+  `0760`, call `ED/1e`, then store AX back to `[02cc]` inside a loop.
+- `invent.exe @ 0x8ddf`: load literal start `63` into AX, push strings `02be`
+  and `03d8`, call `ED/1e`, then store the result through `[002c]`.
+
+This matches the neighboring, already oracle-verified `ED/1c` two-argument
+`INSTR(haystack$, needle$)` entry exactly, with the sole additional live input
+being AX. It also explains why the existing C runtime had an unused `start`
+parameter and why `c0.py` already contained separate arity-two and arity-three
+mappings.
+
+### Negative evidence and evidence classification
+
+The earlier `CINT` hypothesis is ruled out: literal and variable `CINT` probes,
+plus general numeric-conversion probes, compile to inline x87 `FISTP/FILD`
+sequences and never emit `ED/1e`.
+
+The vendored Turbo Basic oracle rejects all common three-argument spellings
+tested (`INSTR(2,A$,"C")`, `INSTR(A$,"C",2)`, and the latter with a variable
+start). Therefore no minimal oracle fixture can honestly be claimed. The entry
+is classified as **runtime-revision evidence**: four independent binary
+witnesses, both dialect paths, a consistent register/string-stack ABI, adjacency
+to the known two-argument entry, and pre-existing semantic support in the IR and
+C runtime. The scanner accepts only canonical `ED/1e`; the fold requires the
+existing AX value and exactly consumes haystack then needle from the string
+stack. No generic unknown-dispatch fallback was added.
+
+### Validation and unlock result
+
+Focused scanner/fold coverage pins `CD ED 1E` to an `ir.Call("INSTR",
+(start, haystack, needle))`. The full suite passes at **2188 passed, 14 skipped**;
+Ruff passes, and `git diff --check` is clean. A before/after gap-report comparison
+reported **four advanced, zero regressed**, removed the `unhandled INT ED sub
+1e` signature, and kept the strict corpus result at 14 decode OK / 70 blocked.
+
+Newly exposed blockers:
+
+- `crossref.exe`: `unhandled byte 8b at 0xbda5`;
+- `hebrew.exe`: `unhandled byte 36 at 0xdd02`;
+- `be.exe`: later `pop from empty list` structural fold;
+- `invent.exe`: later `READ chain closed without any stored target` structural
+  fold.
+
+The latter two are new gaps, not evidence against the `ED/1e` identification:
+both programs scan and fold beyond every former dispatcher site before failing.
+
+## Gap 33 — INT EC sub 38 (catalog/football/refund/varamort), UNDIAGNOSED
+
+Grew from 2 files to 3 in the prior session when varamort.exe joined once its
 unrelated BLOAD-with-no-offset gap closed (see "Recently closed" above)
-and it advanced far enough to hit this same `cd ec 38` signature.
-Otherwise unchanged from prior sessions' investigation below.
+and it advanced far enough to hit this same `cd ec 38` signature. It now blocks
+four files: `catalog.exe` independently reaches it after the opaque-helper and
+selector-cleanup closures. Otherwise unchanged from the investigation below.
 
 Both original wild hits are TB 1.1/1.0 respectively (`canon_sub` already
 normalizes the dialect difference, so it's genuinely the same feature).
@@ -1387,6 +1486,15 @@ assignments.
   two-array-merge shape itself? a specific size/element-count
   threshold? something about the SOURCE arrays' own shape, not just
   the destination?) is the real trigger, still unidentified.
+
+**Reconfirmed 2026-07-20 with the restored vendored oracle:** a minimal
+runtime-DIM'd string array followed by `ERASE V0$` emits canonical EC sub 36,
+the same entry as numeric ERASE, and round-trips through the existing handler.
+Temporarily routing sub 38 through the ERASE fold made all four wild files scan
+past the call, proving only that they share the same array-block ABI; it did not
+establish source semantics and was reverted. `CLEAR` is also ruled out by the
+owner's handbook: it is parameterless and already has the distinct zero-operand
+sub 14 entry. Do not identify sub 38 as type-specific ERASE or CLEAR.
 
 Next steps: try actually constructing the two-array reverse-merge
 pattern explicitly (`DIM A$(N), B$(N), C$(N)`, loop or explicit

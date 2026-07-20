@@ -3512,6 +3512,10 @@ End()
 Files(spec=StrLit(value='*.*'))
 End()
 
+## t1_files0
+Files(spec=None)
+End()
+
 ## t1_fn
 Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Assign(target=Var(name='B'), value=Call(name='ABS', args=(Var(name='A'),)))
@@ -8851,6 +8855,10 @@ End()
 
 ## v10_t1_files
 Files(spec=StrLit(value='*.*'))
+End()
+
+## v10_t1_files0
+Files(spec=None)
 End()
 
 ## v10_t1_fn

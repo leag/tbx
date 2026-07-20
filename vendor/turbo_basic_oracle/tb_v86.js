@@ -15,7 +15,8 @@ const ROWS = opt("--rows", "0-24");
 const COMPILE_EXE = args.includes("--compile-exe");
 if (!basArg) { console.error("usage: node tb_v86.js <file.bas> [--run-ms N] [--rows a-b] [--compile-exe]"); process.exit(2); }
 
-const workImg = lib.buildWorkImg(basArg, HERE, opt("--floppy", undefined));
+const WORKSPACE = path.resolve(opt("--workspace", HERE));
+const workImg = lib.buildWorkImg(basArg, HERE, opt("--floppy", undefined), WORKSPACE);
 console.error(`[harness] work.img built with SOLVER.BAS`);
 
 const emulator = lib.bootEmulator({ here: HERE, workImg });
@@ -25,13 +26,20 @@ const sleep = lib.sleep, ENTER = lib.ENTER;
 const fs = require("fs");
 
 (async () => {
-  await sleep(5000);
+  // Drive readiness from the DOS prompt instead of paying a fixed boot delay.
+  // Keep a bounded fallback: a changed FreeDOS banner must never make us type
+  // into the BIOS screen.
+  const booted = await waitFor(scr, ":\\>", 12000);
+  if (!booted) throw new Error("FreeDOS prompt did not appear");
   await typeSlow("b:"); await tapKey(ENTER, 800);
   await typeSlow("tb.exe solver.bas"); await tapKey(ENTER, 0);
   await waitFor(scr, "Turbo Basic", 15000);
   // Wait for the file to finish loading into the editor (large files take a while to
   // tokenize; sending menu keys while TB is busy drops them).
-  const loaded = await waitFor(scr, "SOLVER.BAS", 20000); await sleep(4000);
+  const loaded = await waitFor(scr, "SOLVER.BAS", 20000);
+  // SOLVER.BAS appears before a large source has completely tokenized. Wait
+  // until the visible editor is stable, but avoid the old unconditional 4 s.
+  if (loaded) await lib.waitForStableScreen(scr, 700, 20000);
   console.error("[harness] auto-loaded:", loaded);
   if (!loaded) { await altKey(0x21); await tapKey(0x26, 700); await typeSlow("SOLVER.BAS"); await tapKey(ENTER, 2500); }
 
@@ -54,18 +62,14 @@ const fs = require("fs");
     console.error("[harness] Compile to: EXE file");
     await held(0x01, 500);             // Esc to close the Options menu
     await altKey(0x2E);                 // Alt-C = Compile (writes SOLVER.EXE to B:)
-    await waitFor(scr, "Compiling", 4000);
-    await sleep(RUN_MS);               // let the compile + EXE write finish
-    // Pull the guest floppy back (writes live in v86 RAM) and extract the EXE.
-    const outImg = path.join(HERE, "work_out.img");
-    const out = path.join(HERE, "SOLVER_v86.EXE");
-    let ok = false;
-    try {
-      await lib.saveFdb(emulator, outImg);
-      lib.extractExe(outImg, "SOLVER.EXE", out);
-      ok = fs.existsSync(out) && fs.statSync(out).size > 0;
-      console.error("[harness] extracted", out, ok ? `(${fs.statSync(out).size} B)` : "(empty/failed)");
-    } catch (e) { console.error("[harness] EXE extract failed:", e.message); }
+    if (!await waitFor(scr, "Compiling", 4000))
+      throw new Error("Turbo Basic did not enter the compile screen");
+    // Poll the guest floppy for a stable, closed SOLVER.EXE. This replaces the
+    // fixed 9-second sleep and naturally accommodates both tiny and huge files.
+    const outImg = path.join(WORKSPACE, "work_out.img");
+    const out = path.join(WORKSPACE, "SOLVER_v86.EXE");
+    const ok = await lib.waitForExe(emulator, outImg, "SOLVER.EXE", out, RUN_MS);
+    console.error("[harness] extracted", out, ok ? `(${fs.statSync(out).size} B)` : "(empty/timeout)");
     console.log("=== COMPILE-EXE screen ==="); console.log(scr());
     process.exit(ok ? 0 : 1);
   }

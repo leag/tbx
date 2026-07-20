@@ -1041,7 +1041,8 @@ class _Gen:
             # a missing source file is TB error 53 (witnessed: t1_name dosout)
             return [f"if (rename(tb_cs({self.s(s.old)}), tb_cs({self.s(s.new)}))) tb_error(53);"]
         if isinstance(s, ir.Files):
-            return [f"tb_files_({self.s(s.spec)});"]
+            spec = ir.StrLit("*.*") if s.spec is None else s.spec
+            return [f"tb_files_({self.s(spec)});"]
         if isinstance(s, ir.DateTimeSet):
             fn = "tb_set_date" if s.name == "DATE$" else "tb_set_time"
             return [f"{fn}({self.s(s.value)});"]

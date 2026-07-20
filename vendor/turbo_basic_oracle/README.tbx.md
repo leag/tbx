@@ -24,3 +24,23 @@ reproducing the exact 116-byte and 125-byte executable bodies byte-for-byte.
 
 Generated disk images and compiler outputs are intentionally not part of the
 vendored set. The v86 dependency is installed from `package-lock.json`.
+
+## Performance and concurrency
+
+The harness uses screen/disk readiness checks instead of fixed boot, load, and
+compile sleeps. `--run-ms N` is now the maximum time allowed for an EXE to
+appear and stabilize on the guest floppy, not an unconditional delay.
+
+Each Python `compile_bas` call supplies a private `--workspace`, so concurrent
+oracle processes do not race through `work.img`, `work_out.img`, temporary
+source, or `SOLVER_v86.EXE`. Probe matrices can use this directly:
+
+```sh
+uv run python tbx/tools/batch_probe.py /tmp/probes --jobs 4 --keep /tmp/exes
+```
+
+`batch_probe.py` preflights Node, mtools, and the locked `v86` dependency before
+booting, prints each result as soon as it completes, and optionally retains each
+compiled executable outside the repository. On the project fixtures, a small
+compile fell from roughly 25 seconds to 8.8 seconds; two concurrent compiles
+also complete in about 8.9 seconds on the reference development machine.

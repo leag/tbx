@@ -20,21 +20,22 @@ edition/runtime tag, and evidence provenance.
 
 ## Live checkpoint
 
-- Updated: 2026-07-19
+- Updated: 2026-07-20
 - Branch: `claude/claude-md-docs-mr8ssz`
 - Baseline commit: `25fbe9c` (`Decode INP intrinsic dispatcher`)
 - Corpus: `wild/hits/` (84 Turbo Basic executables; gitignored, never commit)
 - Baseline result: 14 decode OK, 70 fail at their first visible gap
 - Current strict result: 14 decode OK, 70 blocked. Several blocked files have
   advanced through multiple signatures even though the strict count is flat.
-- Current validation: 2183 passed, 14 skipped.
-- Immediate target: decode the next signature exposed in five files after
-  recognizing their two identical opaque compiler/library helper variants.
-- Important negative result: a minimal `CINT(1.7)` oracle probe compiles cleanly
-  without producing this gap; do not label sub `1e` as `CINT` from intuition.
-- Additional negative result: variable `CINT` and numeric-conversion probes emit
-  inline `FISTP/FILD` sequences rather than `INT ED sub 1e`; no safe mapping is
-  justified yet. Keep the wild pattern fail-loud and retain it in the ledger.
+- Current validation: 2194 passed, 14 skipped (2026-07-20), including focused
+  coverage for `ED/1e` and oracle-byte-exact bare `FILES` fixtures.
+- Immediate target: `INT EC sub 38` (four files), continuing from Gap 33 in
+  `HANDOFF.md`; the six `byte ea` hits remain a later, higher-risk class.
+- `INT ED sub 1e` is now identified as the missing three-argument
+  `INSTR(start, haystack$, needle$)` runtime entry. Four independent wild
+  programs establish the same AX-plus-two-string calling convention. The
+  vendored compiler rejects all common three-argument source spellings, so this
+  closure is classified as `runtime-revision`, not `oracle-verified`.
 
 The number 70 is a count of blocked executables, not distinct missing features.
 Every fix can reveal a later failure in the same executable. Completion therefore
@@ -137,13 +138,17 @@ not overwrite it with only the latest state.
 These have explicit opcode boundaries and are the best candidates for safe,
 fixture-backed closures.
 
-- [~] `INT ED sub 1e` — 2 files (`be.exe`, `invent.exe`). Variable `CINT` and
-  conversion probes do not reproduce it; classify as unresolved shape/revision
-  mismatch pending a better source hypothesis. Do not add a guessed intrinsic.
+- [x] `INT ED sub 1e` — missing runtime-revision entry for
+  `INSTR(start, haystack$, needle$)`. Four files (`be.exe`, `crossref.exe`,
+  `hebrew.exe`, `invent.exe`) independently preserve the start position in AX,
+  push haystack then needle, and consume the AX result. The adjacent `ED/1c`
+  entry is the already-verified two-argument `INSTR`. See the full evidence and
+  oracle limitation in `HANDOFF.md`.
 - [ ] `INT EC sub 38` — 3 files. Re-open Gap 33 evidence in `HANDOFF.md`, build a
   statement-family probe matrix, and test both dialects.
-- [ ] `INT EC sub 42` — 2 files (`styled.exe`, `styllist.exe`). Their common
-  provenance may make source-shape comparison especially useful.
+- [x] `INT EC sub 42` — bare `FILES`; the adjacent sub 44 is `FILES spec$`.
+  Oracle fixtures cover both 1.0 and 1.1. `styled.exe` and `styllist.exe`
+  advance to the same later cursor/LOCATE fold gap.
 - [ ] `INT EC sub ac` — 2 files.
 - [ ] raw `INT af` — 2 files; determine whether it is a string/array runtime vector
   by tracking stack and descriptor setup.
@@ -226,18 +231,21 @@ flow and produce plausible but wrong BASIC.
   files newly decoded, regressed, advanced to a different signature, unchanged,
   signatures removed, and newly exposed signatures. Its advanced-file output is
   the input to the unlock graph.
-- [ ] Extend `batch_probe.py` with optional retained artifacts (`--keep DIR`) so a
-  winning oracle executable can be inspected without recompiling. Ensure the
-  output directory is outside the repository by default and never auto-commit it.
+- [x] Extend `batch_probe.py` with optional retained artifacts (`--keep DIR`) so a
+  winning oracle executable can be inspected without recompiling. It now also
+  preflights dependencies, flushes results immediately, and supports isolated
+  concurrent oracle workers through `--jobs N`.
 - [ ] Add a context dumper accepting `EXE OFFSET` that prints raw bytes, nearby
   scanned ops, dialect-canonical interrupt numbers, and decoder register/stack
   state where available. Reuse `insns.py`/`dump_ops.py` rather than duplicating
   disassembly logic.
 - [x] Add report schema version, generator identity, and content-based corpus
   fingerprint so comparisons can reject incompatible formats or different corpora.
-- [ ] Assign stable IDs such as `G-ED-1E` to active gaps and keep hypothesis,
-  evidence, confidence, and disposition in a compact ledger. Error text remains
-  a symptom and may change without creating a new logical gap.
+- [~] Assign stable IDs to active gaps and keep hypothesis, evidence, confidence,
+  and disposition in a compact ledger. Runtime-revision candidates now live in
+  `gap_reports/runtime-revision-assessments.json` with stable `RR-*` IDs and
+  promotion criteria; extend the same model to every non-runtime gap. Error text
+  remains a symptom and may change without creating a new logical gap.
 - [ ] Extend gap records and fixtures with `edition`, `dialect`, `runtime_revision`,
   and `evidence_class` fields so non-handbook syntax remains traceable.
 - [ ] Add stable syntax-inventory IDs alongside gap IDs, so source coverage can
@@ -285,6 +293,9 @@ Include newly exposed blockers because they are evidence of forward progress.
 | 2026-07-19 | pending | Canonicalize TB 1.0 raw `CD A9` to the existing `CVL` string-to-number vector | 14 OK / 70 blocked; `morcalc.exe` and `pwinst.exe` advanced beyond `INT AF` | Triage their newly exposed gaps |
 | 2026-07-19 | `fc24e04` | Decode near-array double FP folds (`INT 38 DC /r [SI]`) through the existing FP array fold path | 14 OK / 70 blocked; `morcalc.exe` advanced beyond `DC/0C` | Triage its next exposed gap |
 | 2026-07-19 | `cb65dc2` | Decode far string assignment through a by-reference SUB parameter | 14 OK / 70 blocked; `morcalc.exe` advanced beyond `far_strassign` | Triage its next exposed gap |
+| 2026-07-20 | pending | Identify missing runtime-revision `INSTR(start, haystack$, needle$)` entry at `INT ED sub 1e` | 14 OK / 70 blocked; four files advanced and the signature disappeared with no regression | `EC sub 38`; separately triage the later structural errors in `be`/`invent` |
+| 2026-07-20 | pending | Decode bare `FILES` / canonical `EC sub 42` | 14 OK / 70 blocked; `styled` and `styllist` advanced to cursor-without-LOCATE | Triage their shared cursor fold; continue `EC sub 38` separately |
+| 2026-07-20 | pending | Replace fixed oracle sleeps with readiness polling and isolate each compile workspace; add parallel/retained probe batches | Byte-exact checks pass for both dialects and a larger fixture; small compile ~25s → 8.8s, two concurrent in 8.9s | Consider warm snapshot workers only if probe throughput remains limiting |
 
 ## Completion checklist
 

@@ -1,10 +1,16 @@
 import pytest
+import json
+from pathlib import Path
 from types import SimpleNamespace
 
 from tbx import ir
 from tbx.decode0.handlers import arith
 from tbx.decode0.scan import _scan_direct2
+from tbx.tools import batch_probe
 from tbx.tools.compare_gap_reports import compare
+
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def report(hits=(), failures=()):
@@ -31,6 +37,50 @@ def test_compare_rejects_different_corpus():
     new["corpus_fingerprint"] = "different"
     with pytest.raises(ValueError, match="different corpus"):
         compare(old, new)
+
+
+def test_runtime_revision_assessment_ledger_is_well_formed():
+    path = ROOT / "gap_reports" / "runtime-revision-assessments.json"
+    ledger = json.loads(path.read_text())
+    assert ledger["schema_version"] == 1
+    assert ledger["document_type"] == "tbx.runtime_revision_assessments"
+    assert len(ledger["corpus_fingerprint"]) == 64
+
+    entries = ledger["assessments"]
+    ids = [entry["id"] for entry in entries]
+    assert len(ids) == len(set(ids))
+    for entry in entries:
+        assert entry["signatures"]
+        assert entry["disposition"] in {
+            "candidate", "closed", "coverage-only", "unresolved"
+        }
+        assert entry["evidence_class"] in ledger["evidence_classes"]
+        if entry["disposition"] != "closed":
+            assert entry["promotion_criteria"]
+
+
+def test_batch_probe_parallel_keep(tmp_path, monkeypatch, capsys):
+    probes, kept = tmp_path / "probes", tmp_path / "kept"
+    probes.mkdir()
+    for name in ("a", "b"):
+        (probes / f"{name}.bas").write_text("10 END\n")
+
+    monkeypatch.setattr(batch_probe.oracle, "preflight", lambda: None)
+    monkeypatch.setattr(
+        batch_probe,
+        "probe_one",
+        lambda path, dialect: ("clean", f"{dialect} {path.stem}", path.stem.encode()),
+    )
+    assert batch_probe.main(
+        [str(probes), "--dialect", "1.0", "--jobs", "2", "--keep", str(kept)]
+    ) == 0
+    assert {path.name: path.read_bytes() for path in kept.iterdir()} == {
+        "a.exe": b"a",
+        "b.exe": b"b",
+    }
+    output = capsys.readouterr().out
+    assert "clean  a: 1.0 a" in output
+    assert "clean  b: 1.0 b" in output
 
 
 def test_deep_register_spill_store_and_restore():

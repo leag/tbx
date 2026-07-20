@@ -24,7 +24,9 @@ fixtures byte-exact and capturing behavior goldens.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -32,6 +34,23 @@ _REPO = Path(__file__).resolve().parent.parent.parent
 
 # dialect -> the oracle floppy image carrying that compiler
 _FLOPPIES = {"1.1": None, "1.0": "tb10_floppy.img"}  # None = oracle default
+
+
+def preflight() -> None:
+    """Fail early when the external oracle harness cannot run."""
+    d = oracle_dir()
+    missing = [name for name in ("node", "mcopy") if shutil.which(name) is None]
+    if missing:
+        raise RuntimeError(f"Turbo Basic oracle missing tools: {', '.join(missing)}")
+    check = subprocess.run(
+        ["node", "-e", "require.resolve('v86')"], cwd=d,
+        capture_output=True, text=True,
+    )
+    if check.returncode:
+        raise RuntimeError(
+            f"Turbo Basic oracle dependency v86 is unavailable in {d}; "
+            "run npm ci there"
+        )
 
 
 def oracle_dir() -> Path:
@@ -56,18 +75,21 @@ def oracle_dir() -> Path:
 def compile_bas(bas: Path | str, dialect: str = "1.1", timeout: int = 300) -> bytes:
     """Compile a .BAS with the real Turbo Basic compiler; return the EXE bytes."""
     d = oracle_dir()
-    out = d / "SOLVER_v86.EXE"
-    out.unlink(missing_ok=True)
-    cmd = ["node", "tb_v86.js", str(Path(bas).resolve()), "--compile-exe"]
-    floppy = _FLOPPIES[dialect]
-    if floppy:
-        cmd += ["--floppy", floppy]
-    r = subprocess.run(cmd, cwd=d, capture_output=True, text=True, timeout=timeout)
-    if not out.is_file():
-        raise RuntimeError(
-            f"oracle compile failed for {bas}:\n{r.stdout[-2000:]}\n{r.stderr[-2000:]}"
-        )
-    return out.read_bytes()
+    with tempfile.TemporaryDirectory(prefix="tbx-oracle-") as workspace:
+        out = Path(workspace) / "SOLVER_v86.EXE"
+        cmd = [
+            "node", "tb_v86.js", str(Path(bas).resolve()), "--compile-exe",
+            "--workspace", workspace,
+        ]
+        floppy = _FLOPPIES[dialect]
+        if floppy:
+            cmd += ["--floppy", floppy]
+        r = subprocess.run(cmd, cwd=d, capture_output=True, text=True, timeout=timeout)
+        if not out.is_file():
+            raise RuntimeError(
+                f"oracle compile failed for {bas}:\n{r.stdout[-2000:]}\n{r.stderr[-2000:]}"
+            )
+        return out.read_bytes()
 
 
 @dataclass

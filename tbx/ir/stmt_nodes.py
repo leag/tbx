@@ -769,9 +769,9 @@ class Reset:
 
 @dataclass(frozen=True)
 class Files:
-    """FILES spec$ -- directory listing; push spec + EC sub."""
+    """FILES [spec$] -- bare and filespec directory listings."""
 
-    spec: object  # StrLit | Var ($)
+    spec: object = None  # StrLit | Var ($) | None
 
 
 @dataclass(frozen=True)

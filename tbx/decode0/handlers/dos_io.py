@@ -25,6 +25,8 @@ def filesystem(state: DecodeState, op, addr, kind) -> bool:
         state.put(ir.Kill(state.sstack.pop()), state.cur)
     elif kind == "files":  # FILES spec$
         state.put(ir.Files(state.sstack.pop()), state.cur)
+    elif kind == "files_bare":  # FILES
+        state.put(ir.Files(), state.cur)
     elif kind == "name":  # NAME old$ AS new$ (new pushed first)
         new, old = state.sstack.pop(), state.sstack.pop()
         state.put(ir.Name(old, new), state.cur)

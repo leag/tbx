@@ -185,3 +185,23 @@ def test_tb10_cvl_vector_alias():
     vec = TB10.canon_vec(0xA9)
     assert _scan_int(b"\xcd\xa9", 0, set(), TB10, ops, 0, vec) == 2
     assert ops == [(0, "str2num", "CVL")]
+
+
+def test_scan_instr_with_start_dispatch():
+    from tbx import ir
+    from tbx.decode0.core import DecodeState, fp_dispatch
+    from tbx.decode0.dialect import TB11
+    from tbx.decode0.scan import _scan_int
+
+    ops = []
+    assert _scan_int(b"\xcd\xed\x1e", 0, set(), TB11, ops, 0, 0xED) == 3
+    assert ops == [(0, "instr3")]
+
+    state = DecodeState(
+        ax=ir.Lit(2), k=0, sstack=[ir.Var("A$"), ir.StrLit("C")]
+    )
+    fp_dispatch(state, ops[0], 0, "instr3")
+    assert state.ax == ir.Call(
+        "INSTR", (ir.Lit(2), ir.Var("A$"), ir.StrLit("C"))
+    )
+    assert state.sstack == []

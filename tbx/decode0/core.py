@@ -993,6 +993,10 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             state.stack.append(call)  # result on the FP stack
         else:
             state.ax = call  # ASC/LEN/INSTR/CVI: result in ax
+    elif kind == "instr3":  # INSTR start in ax, strings pushed haystack first
+        needle = state.sstack.pop()
+        haystack = state.sstack.pop()
+        state.ax = ir.Call("INSTR", (state.ax, haystack, needle))
     elif kind == "fchs":
         state.stack.append(ir.Neg(state.stack.pop()))
     elif kind == "fabs":
