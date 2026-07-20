@@ -127,6 +127,10 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         ops.append((p, "mov_bp_sp"))
         p += 2
         return p
+    if b == 0x89 and exe[p + 1] == 0xE5:  # mov bp,sp (alternate encoding)
+        ops.append((p, "mov_bp_sp"))
+        p += 2
+        return p
     if b == 0x9A:  # far call (proc entry; seg loader-relocated)
         off = struct.unpack_from("<H", exe, p + 1)[0]
         ops.append(
