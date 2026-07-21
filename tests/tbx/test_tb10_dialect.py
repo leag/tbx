@@ -74,6 +74,7 @@ PAIRS = [
     "t1_cmppool",
     "t1_cmpsival",
     "t1_loc2",
+    "t1_fprintblank",
 ]
 
 

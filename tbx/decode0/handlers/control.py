@@ -267,7 +267,10 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             elif not want_file:
                 state.put(ir.Print(()), state.cur)  # bare PRINT (blank line)
             else:
-                raise ValueError(f"file flush without items at {addr:#x}")
+                # bare `PRINT #n,` (wild be.exe/styllist.exe, probe
+                # q_fprintblank): a blank-line flush to a file channel, no
+                # staged pend_print at all since there were no items.
+                state.put(ir.Print((), file=state.pend_fnum), state.cur)
             if want_file:
                 state.pend_fnum = None
             state.cur = None

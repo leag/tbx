@@ -3821,6 +3821,12 @@ Assign(target=Var(name='C'), value=Lit(value=5.0))
 Print(items=(Var(name='A'), Var(name='B'), Var(name='C')), newline=True, file=None, commas=None)
 End()
 
+## t1_fprintblank
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='T.DAT'), reclen=None, for_as=True)
+Print(items=(), newline=True, file=1, commas=None)
+Close(num=1)
+End()
+
 ## t1_fre
 Assign(target=Var(name='A'), value=Call(name='FRE', args=(Lit(value=0),)))
 Assign(target=Var(name='B'), value=Call(name='FRE', args=(StrLit(value=''),)))
@@ -9268,6 +9274,12 @@ Assign(target=Var(name='A'), value=Lit(value=0.0))
 Assign(target=Var(name='B'), value=Lit(value=1.0))
 Assign(target=Var(name='C'), value=Lit(value=5.0))
 Print(items=(Var(name='A'), Var(name='B'), Var(name='C')), newline=True, file=None, commas=None)
+End()
+
+## v10_t1_fprintblank
+Open(mode=StrLit(value='O'), num=1, file=StrLit(value='T.DAT'), reclen=None, for_as=True)
+Print(items=(), newline=True, file=1, commas=None)
+Close(num=1)
 End()
 
 ## v10_t1_fre

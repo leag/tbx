@@ -1436,6 +1436,22 @@ def test_decode_t1_fileint():
     )
 
 
+def test_decode_t1_fprintblank():
+    # Bare `PRINT #n,` (wild be.exe/styllist.exe): a blank-line flush to a
+    # file channel with no items staged at all, so the B8/BA flush-vector
+    # handler's "no pend_print, but want_file" branch previously just
+    # raised. Emits ir.Print((), file=n), the file-channel sibling of the
+    # existing bare-console-PRINT case just above it. Closes wild be.exe
+    # fully; styllist.exe advances to a distinct gap.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_fprintblank.exe"))
+    assert prog[1] == ir.Print((), file=1)
+    assert emit0.emit(prog) == (
+        '10 OPEN "T.DAT" FOR OUTPUT AS #1\n20 PRINT #1,\n30 CLOSE #1\n40 END\n'
+    )
+
+
 def test_decode_t1_addimm():
     # 01 06 = add [disp16], ax: the disp16 sibling of addm_ax_bp (t1_local1's
     # LOCAL combine-store) -- `X% = X% + <expr>` when the RHS isn't a bare
