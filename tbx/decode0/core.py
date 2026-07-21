@@ -2464,6 +2464,16 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 0xC4,
             ):  # VIEW color/border cells
                 state.color_cells[op[2]] = ir.Lit(op[3])
+            elif op[2] in (0x8A, 0x96, 0xA2, 0xAE, 0xBA, 0xC6):
+                # Same COLOR/VIEW cell family, uniformly +2 from the above --
+                # a runtime-revision-skewed table shift (RR-COLORCELL-SHIFT):
+                # no oracle probe (SCREEN mode/switch/page variants, COLOR
+                # with/without KEY OFF or DEF SEG) ever produced this
+                # offset, only wild bill.exe/color.exe, but all 3 cells
+                # witnessed there (fg/bg/border) shift by the same +2 and
+                # the semantics are otherwise identical, so it normalizes to
+                # the canonical cell with no effect on emitted source.
+                state.color_cells[op[2] - 2] = ir.Lit(op[3])
             elif op[2] == 0x1C:  # TB 1.0 DEF SEG = n: inline imm
                 state.put(
                     ir.DefSeg(ir.Lit(op[3])), state.cur
@@ -2492,6 +2502,11 @@ def decode_user_code(exe: bytes) -> list[Any]:
             continue
         if kind == "movm_ax" and op[2] in (0x88, 0x94, 0xA0, 0xAC):
             state.color_cells[op[2]] = state.ax  # VIEW coord cell (ax leg)
+            state.ax = None
+            state.k += 1
+            continue
+        if kind == "movm_ax" and op[2] in (0x8A, 0x96, 0xA2, 0xAE):
+            state.color_cells[op[2] - 2] = state.ax  # RR-COLORCELL-SHIFT, see above
             state.ax = None
             state.k += 1
             continue

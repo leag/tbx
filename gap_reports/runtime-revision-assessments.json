@@ -92,16 +92,16 @@
       "signatures": [
         "store to unknown system cell 0x8a"
       ],
-      "disposition": "candidate",
-      "evidence_class": "candidate-runtime-revision",
-      "confidence": "medium",
+      "disposition": "closed",
+      "evidence_class": "runtime-revision",
+      "confidence": "high",
       "files": [
         "wild/hits/bill.exe",
         "wild/hits/color.exe"
       ],
-      "assessment": "A shared low-DGROUP cell may represent runtime state added or moved by another library revision. It may instead be a known statement argument cell missing from the decoder's system-cell map.",
-      "promotion_criteria": "Correlate every write with its consuming runtime call and value meaning; compare the surrounding system-cell layout against oracle-built programs before assigning semantics.",
-      "source": "REMAINING_GAPS_PLAN.md Wave 3"
+      "assessment": "Confirmed: cell 0x8A (and 0x96, 0xA2 -- the whole COLOR fg/bg + VIEW-border cell family, uniformly +2 from the canonical 0x88/0x94/0xA0/0xAC/0xB8/0xC4) is a runtime-revision-skewed table shift, the same category as RR-NOP-90/RR-NOP-FWAIT/RR-BYTE-EA. No oracle probe (SCREEN mode/colorswitch/page variants, COLOR with/without KEY OFF or DEF SEG, PALETTE) ever produced the shifted offset -- only wild bill.exe and color.exe do, and in both, all three color-cell writes observed there (fg/bg/border) shift by the identical +2, strongly suggesting a whole-table shift in whichever compiler build produced these two EXEs rather than a different statement. The cell only ever feeds COLOR/VIEW/PAINT construction (state.color_cells), so aliasing it to the canonical cell number changes no emitted source -- semantically inert.",
+      "source": "wild bill.exe/color.exe, sessions 2026-07-19 (candidate) and 2026-07-21 (closed)",
+      "implementation": "Closed by session 2026-07-21: core.py's movm_imm/movm_ax system-cell dispatch and arith.py's fp_math FP->int bridge each gained a second branch accepting 0x8A/0x96/0xA2/0xAE/0xBA/0xC6, normalizing to cell-2 before storing into state.color_cells. Closed bill.exe and color.exe fully."
     },
     {
       "id": "RR-LINEINPUT",

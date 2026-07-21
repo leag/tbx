@@ -3760,6 +3760,12 @@ Print(items=(Var(name='A%'),), newline=True, file=None, commas=None)
 NextStmt(var=Var(name='A%'))
 End()
 
+## t1_forstepm1
+For(var=Var(name='A%'), init=Lit(value=10), limit=Lit(value=1), step=Lit(value=-1))
+Print(items=(Var(name='A%'),), newline=True, file=None, commas=None)
+NextStmt(var=Var(name='A%'))
+End()
+
 ## t1_forstepn
 For(var=Var(name='A%'), init=Lit(value=100), limit=Lit(value=1), step=Lit(value=-10))
 Print(items=(Var(name='A%'),), newline=True, file=None, commas=None)
@@ -9358,6 +9364,12 @@ End()
 
 ## v10_t1_forstep
 For(var=Var(name='A%'), init=Lit(value=1), limit=Lit(value=100), step=Lit(value=10))
+Print(items=(Var(name='A%'),), newline=True, file=None, commas=None)
+NextStmt(var=Var(name='A%'))
+End()
+
+## v10_t1_forstepm1
+For(var=Var(name='A%'), init=Lit(value=10), limit=Lit(value=1), step=Lit(value=-1))
 Print(items=(Var(name='A%'),), newline=True, file=None, commas=None)
 NextStmt(var=Var(name='A%'))
 End()

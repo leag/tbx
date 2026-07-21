@@ -1690,6 +1690,24 @@ def test_decode_t1_localvarstep():
     assert "FOR B% = 1 TO 10 STEP D%" in src
 
 
+def test_decode_t1_forstepm1():
+    # Literal STEP -1: TB special-cases both +1 and -1 to a bare INC/DEC at
+    # the NEXT (inc_m / dec_m) instead of the generic addm_i8 fast path any
+    # OTHER literal step uses (t1_forstepn covers -10) -- dec_m's FOR-frame
+    # branch previously fail-loud raised, assuming this shape unwitnessed.
+    # Same placeholder-patch as addm_i8: the header folds a provisional
+    # Lit(1) step before the NEXT-side DEC confirms it's actually -1
+    # (wild bill.exe, closed fully by this fixture + the COLOR-cell
+    # runtime-revision-shift alias).
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_forstepm1.exe"))
+    assert prog[0] == ir.For(ir.Var("A%"), ir.Lit(10), ir.Lit(1), ir.Lit(-1))
+    assert emit0.emit(prog) == (
+        "10 FOR A% = 10 TO 1 STEP -1\n20 PRINT A%\n30 NEXT A%\n40 END\n"
+    )
+
+
 if __name__ == "__main__":
     test_decode_t1_fcmp()
     test_decode_t1_fori()
@@ -1738,4 +1756,5 @@ if __name__ == "__main__":
     test_decode_t1_dim4()
     test_decode_t1_imulsi()
     test_decode_t1_localvarstep()
+    test_decode_t1_forstepm1()
     print("ALL PASS")

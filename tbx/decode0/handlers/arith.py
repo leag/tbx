@@ -383,11 +383,20 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             return True
         raise ValueError(f"inc [bp+{op[2]}] outside a FOR at {addr:#x}")
     if kind == "dec_m":
-        # DECR normalization: bare DEC [disp16] compiles `X = X - 1`; never
-        # witnessed inside a FOR (negative-step FOR-NEXT is a separate,
-        # unwitnessed shape) so any FOR-frame match is fail-loud
+        # DECR normalization: bare DEC [disp16] compiles `X = X - 1`. Inside
+        # an open FOR whose loop var this is, it's STEP -1's increment --
+        # the descending sibling of inc_m (STEP +1), both special-cased
+        # instead of the generic addm_i8 (any OTHER literal step). Same
+        # placeholder-patch as addm_i8: the header folded a provisional
+        # Lit(1) step before this NEXT-side evidence was available (wild
+        # bill.exe).
         if state.fors and state.fors[-1]["v"] == op[2]:
-            raise ValueError(f"dec_m matches the open FOR's loop var at {addr:#x}")
+            f = state.fors[-1]
+            old = state.stmts[f["idx"]]
+            state.stmts[f["idx"]] = ir.For(old.var, old.init, old.limit, ir.Lit(-1))
+            f["step"] = -1
+            state.k += 1
+            return True
         var = state.loc(op[2])
         state.put(ir.Assign(var, ir.BinOp("-", var, ir.Lit(1))), state.cur)
         state.cur = None
@@ -826,6 +835,8 @@ def fp_math(state: DecodeState, op, addr, kind) -> bool:
                 state.dim_frame["cells"][tgt - state.dim_frame["block"]] = idx  # bound
             elif tgt in (0x88, 0x94, 0xA0, 0xAC, 0xB8, 0xC4):  # COLOR/VIEW cell,
                 state.color_cells[tgt] = idx  # rounded via CINT (a non-integer arg)
+            elif tgt in (0x8A, 0x96, 0xA2, 0xAE, 0xBA, 0xC6):  # same cell family,
+                state.color_cells[tgt - 2] = idx  # +2 shifted (RR-COLORCELL-SHIFT)
             elif idx is _FREAD:  # INPUT# int target via the bridge (t1_fileint)
                 state._fread_target(state.loc(tgt))
                 state.cur = None
