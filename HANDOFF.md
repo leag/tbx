@@ -60,7 +60,7 @@ toggle-compile script (`tb_v86_compile.js`), which isn't vendored.
 ## Where things stand
 
 **Updated 2026-07-21 (latest session): 23 of 84 wild EXEs decode-ok** (unchanged
-count, but bmaster.exe/ifi.exe both advanced two gaps deeper without yet
+count, but bmaster.exe/ifi.exe both advanced three gaps deeper without yet
 finishing). Picked up the tied-top-of-tally "DGROUP layout not solvable"
 gap (menu/night/sprogh/swbb) first per the frequency-order standing
 instruction, but the hand-derive-`ds` promotion criteria in
@@ -108,24 +108,34 @@ tally instead and found a clean, oracle-verified two-gap chain:
   byte-exact both dialects. Advanced wild bmaster.exe/ifi.exe past this
   gap too (both now fail at the SAME later offset 0x9081 — see below).
 
-**New gap surfaced, NOT investigated further this session**: bmaster.exe/
-ifi.exe now both fail at the identical `unhandled byte 26 at 0x9081`. Raw
-bytes at that offset: `26 ff 04` = `INC word ES:[SI]` (a far/by-ref-param
-INC, the ES-shortcut family's own increment op, missing from the existing
-`26 <op> es:[si]` table alongside the already-handled read/AND/write/
-write-const/imul rows from gaps 11/18) — immediately followed by `8b 46
-3e` (`mov ax,[bp+3Eh]`, a LOCAL limit reload) then `c4 76 16` (`les
-si,[bp+16h]`, reload the by-ref param pointer) then `26 39 04` (`cmp
-word es:[si],ax`, a FAR/by-ref-param sibling of `cmpm_ax_bp` just closed
-above). This looks like the SAME "variable-limit FOR" family a third time,
-now with the loop variable itself being a BY-REF INTEGER PARAMETER rather
-than a plain LOCAL — i.e. a `far_cmpm_ax_si` + `far_incax_si`-style pair
-would need adding to close it, mirroring this session's `cmpm_ax_bp` work
-but through the ES:[SI] indirection instead of bp-relative. Not attempted
-this session (ran out of scope after two verified closures); worth
-picking up directly next time with a probe like `SUB TEST(N%): FOR N% = 1
-TO <something bigger>` (a by-ref INTEGER parameter used directly as the
-FOR loop variable) to confirm the exact shape before implementing.
+- **Integer FOR over a BY-REF INTEGER PARAMETER used directly as the loop
+  var, with a VARIABLE limit** (2026-07-21): the SAME "variable-limit FOR"
+  family a third time, now via the ES:[SI] by-ref indirection instead of
+  bp-relative LOCAL storage. Byte shape at the test: `les si,[bp+P]; 26 ff
+  04` (`INC word ES:[SI]`, new op `far_inc_si`) then `mov ax,[limit-temp]`
+  (`movax_bp`, unchanged) then `les si,[bp+P]` (reload) then `26 39 04`
+  (`CMP word ES:[SI],AX`, new op `far_cmpm_ax_si` — the far mem-first
+  sibling of `cmpm_ax`/`cmpm_ax_bp`). Since the loop var IS the parameter
+  (never occupies its own LOCAL slot), the header only reserves the
+  [step-temp, limit-temp] pair, with limit-temp == step-temp + 2 — the
+  SAME relationship as the pure-LOCAL case above, where the loop var's own
+  slot simply precedes them (`v`, `v+2`, `v+4` vs. here just `v+2`,
+  `v+4`-equivalent starting from the pair's own base). The by-ref case
+  needed its own header-recognition and NEXT-continuation branches (an
+  extra `arg_ref` op sits between the limit reload and the far compare,
+  breaking the two-op adjacency check the LOCAL case's combined branch
+  used) but reuses `far_movm_imm_si`'s EXISTING init-statement production
+  unchanged (`Assign(Var("Pxx%"), Lit(1))` already looks exactly like the
+  scalar/LOCAL init shape the header recognizer expects — `vdisp` already
+  strips any single-letter prefix uniformly, so no new machinery was
+  needed there). `far_inc_si` is gated exactly like `inc_bp`/`inc_m`
+  (silently consumed only when `state.fors[-1]["v"] == state.pend_arg`,
+  fail-loud otherwise — unwitnessed as a bare `by-ref X% = X% + 1`, which
+  already has its own op, `far_addm_ax_si`). Fixture `t1_byrefforvar`
+  (`SUB TEST(N%,M%): FOR N% = 1 TO M% ...`), byte-exact both dialects.
+  Advanced wild bmaster.exe/ifi.exe past this gap too (both now fail at
+  the SAME later offset 0x935f, `unhandled byte 16 at 0x935f`, NOT yet
+  investigated this session).
 
 Previously, updated 2026-07-21 (earlier session): 23 of 84 wild EXEs decode-ok, up from 22.
 `90250ca` closes tamstart.exe fully via three gaps found while chasing

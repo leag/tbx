@@ -1530,6 +1530,59 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             )
         elif (
             cmp_at_t is not None
+            and cmp_at_t[1] == "movax_bp"
+            and state.stmts
+            and isinstance(state.stmts[-1], ir.Assign)
+            and isinstance(state.stmts[-1].target, ir.Var)
+            and isinstance(state.stmts[-1].value, ir.Lit)
+            and (nxt_t := next((o for o in state.ops if o[0] > t), None)) is not None
+            and nxt_t[1] == "arg_ref"
+            and (nxt_t2 := next((o for o in state.ops if o[0] > nxt_t[0]), None))
+            is not None
+            and nxt_t2[1] == "far_cmpm_ax_si"
+            and nxt_t[2] == state.vdisp(state.stmts[-1].target)
+        ):
+            # Integer FOR header, VARIABLE limit, BY-REF PARAM loop var: the
+            # ES:[SI] mirror of the movax_m/movax_bp cases just above -- the
+            # loop var is itself a by-ref INTEGER parameter (`arg_ref P; les
+            # si,[bp+P]; cmp es:[si],ax`), used directly as the FOR
+            # variable, so it never occupies a LOCAL slot itself -- only
+            # the [step-temp, limit-temp] pair is reserved (limit-temp ==
+            # step-temp + 2, same relationship as the pure-LOCAL case where
+            # the loop var's own slot precedes them; wild bmaster.exe/
+            # ifi.exe, probe q_byrefforvar).
+            init_s = state.stmts.pop()
+            a = state.addrs.pop()
+            limit = state.loc_local(cmp_at_t[2])
+            if (
+                state.stmts
+                and isinstance(state.stmts[-1], ir.Assign)
+                and isinstance(state.stmts[-1].target, ir.Var)
+                and state.vdisp(state.stmts[-1].target) == cmp_at_t[2]
+            ):
+                limit = state.stmts.pop().value
+                a = state.addrs.pop()
+            if state.proc_frame is not None:
+                locs = state.proc_frame["locals"] or {}
+                locs.pop(cmp_at_t[2] - 2, None)
+                state.proc_frame.setdefault("hidden_locals", set()).add(
+                    cmp_at_t[2]
+                )
+            state.put(
+                ir.For(init_s.target, init_s.value, limit, ir.Lit(1)),
+                a,
+            )
+            state.fors.append(
+                {
+                    "v": nxt_t[2],
+                    "test": t,
+                    "body": state.ops[state.k + 1][0]
+                    if state.k + 1 < len(state.ops)
+                    else None,
+                }
+            )
+        elif (
+            cmp_at_t is not None
             and cmp_at_t[1] == "orax_self"
             and state.ops[state.k - 1][1] in ("movax_m", "movax_bp")
             and len(state.stmts) >= 2
@@ -2275,6 +2328,14 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 state.proc_int_offs.add(state.pend_arg)  # by-ref INT param
                 state.put(ir.Assign(argvar, ir.Lit(op[2])), state.cur)  # (t1_byref1)
                 state.cur = None
+            elif base == "inc_si":  # inc es:[si]: FOR-NEXT increment of a
+                # by-ref int param used directly as the loop var -- implicit
+                # in BASIC; consume silently, same as inc_m/inc_bp (wild
+                # bmaster.exe/ifi.exe). A bare INC via ES:[SI] outside a FOR
+                # is unwitnessed (by-ref `X% = X% + 1` compiles to
+                # far_addm_ax_si, t1_local2) -- fail loud.
+                if not (state.fors and state.fors[-1]["v"] == state.pend_arg):
+                    raise ValueError(f"inc es:[si] outside a FOR at {addr:#x}")
             else:
                 raise ValueError(f"unhandled by-ref param op {kind} at {addr:#x}")
             state.pend_arg = None
@@ -2340,6 +2401,29 @@ def decode_user_code(exe: bytes) -> list[Any]:
             state.fors.pop()
             state.cur = None
             state.k += 3
+            continue
+        if (
+            kind == "movax_bp"
+            and state.fors
+            and addr == state.fors[-1]["test"]
+            and state.k + 3 < len(state.ops)
+            and state.ops[state.k + 1][1] == "arg_ref"
+            and state.ops[state.k + 1][2] == state.fors[-1]["v"]
+            and state.ops[state.k + 2][1] == "far_cmpm_ax_si"
+        ):
+            # Variable-limit integer NEXT, BY-REF PARAM loop var: the
+            # ES:[SI] mirror of the two cases just above -- the loop var
+            # is itself a by-ref int parameter, addressed fresh via its own
+            # arg_ref/les at every test (wild bmaster.exe/ifi.exe, probe
+            # q_byrefforvar).
+            f = state.fors[-1]
+            jcc = state.ops[state.k + 3]
+            if jcc[1] != "jcc" or jcc[2] not in (0x7E, 0x76) or jcc[3] != f["body"]:
+                raise ValueError(f"int NEXT (var limit): expected JLE to body at {addr:#x}")
+            state.put(ir.NextStmt(ir.Var(f"P{f['v']:02X}%")), state.cur)
+            state.fors.pop()
+            state.cur = None
+            state.k += 4
             continue
         if (
             kind in ("cmp_mi8", "cmp_mi16", "cmp_bpi8")

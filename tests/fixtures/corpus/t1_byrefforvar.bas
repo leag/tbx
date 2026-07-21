@@ -1,0 +1,8 @@
+SUB TEST(N%, M%)
+FOR N% = 1 TO M%
+PRINT N%
+NEXT N%
+END SUB
+
+CALL TEST(1, 5)
+END

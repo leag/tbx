@@ -650,6 +650,14 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "far_movm_imm_si", struct.unpack_from("<h", exe, p + 3)[0]))
         p += 5  # (t1_byref1)
         return p
+    if b == 0x26 and exe[p + 1] == 0xFF and exe[p + 2] == 0x04:  # inc word es:[si]:
+        ops.append((p, "far_inc_si"))  # FOR-NEXT increment of a by-ref int
+        p += 3  # param used directly as the loop var (wild bmaster.exe/ifi.exe)
+        return p
+    if b == 0x26 and exe[p + 1] == 0x39 and exe[p + 2] == 0x04:  # cmp es:[si], ax:
+        ops.append((p, "far_cmpm_ax_si"))  # the far mem-first sibling of
+        p += 3  # cmpm_ax/cmpm_ax_bp -- a by-ref int param's own FOR test with
+        return p  # a VARIABLE limit (wild bmaster.exe/ifi.exe)
     if b == 0x8B and exe[p + 1] == 0x46:  # mov ax, [bp+disp8]: LOCAL int read
         ops.append((p, "movax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
         p += 3  # (t1_byref1)

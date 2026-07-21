@@ -1790,6 +1790,29 @@ def test_decode_t1_locforvarlim():
     )
 
 
+def test_decode_t1_byrefforvar():
+    # Integer FOR over a BY-REF INTEGER PARAMETER used directly as the loop
+    # var, with a VARIABLE (non-literal) limit: the ES:[SI] mirror of
+    # t1_locforvarlim just above -- `arg_ref P; les si,[bp+P]; cmp
+    # es:[si],ax` at the test, `inc es:[si]` at the NEXT, new ops
+    # far_cmpm_ax_si/far_inc_si. The loop var itself never occupies a
+    # LOCAL slot (it's the parameter's own storage); only the
+    # [step-temp, limit-temp] pair is reserved, same relationship
+    # (limit-temp == step-temp + 2) as the pure-LOCAL case (wild
+    # bmaster.exe/ifi.exe, once past the t1_locforvarlim gap above).
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_byrefforvar.exe"))
+    sub = next(s for s in prog if isinstance(s, ir.SubDef))
+    assert not any(isinstance(s, ir.Local) for s in sub.body)
+    for_stmt = next(s for s in sub.body if isinstance(s, ir.For))
+    assert for_stmt == ir.For(ir.Var("A%"), ir.Lit(1), ir.Var("B%"), ir.Lit(1))
+    assert emit0.emit(prog) == (
+        "10 SUB SUB1(A%, B%)\n  FOR A% = 1 TO B%\n"
+        "  PRINT A%\n  NEXT A%\nEND SUB\n20 CALL SUB1(1,5)\n30 END\n"
+    )
+
+
 if __name__ == "__main__":
     test_decode_t1_fcmp()
     test_decode_t1_fori()
@@ -1843,4 +1866,5 @@ if __name__ == "__main__":
     test_decode_t1_fwdcall()
     test_decode_t1_licomp()
     test_decode_t1_locforvarlim()
+    test_decode_t1_byrefforvar()
     print("ALL PASS")

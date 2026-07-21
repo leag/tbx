@@ -36,6 +36,7 @@ PAIRS = [
     "t1_fwdcall",
     "t1_licomp",
     "t1_locforvarlim",
+    "t1_byrefforvar",
     "t1_strch",
     "t1_svaridx",
     "t1_addpool",
