@@ -28,9 +28,24 @@ from roughly 25 seconds to 8.8 seconds, and two concurrent compiles finish in
 
 ## Where things stand
 
-**Updated 2026-07-21: still 20 of 84 wild EXEs decode-ok**, but two more
-gaps closed this session (both byte-exact both dialects), each advancing
-a file further without yet finishing it:
+**Updated 2026-07-21 (later): 22 of 84 wild EXEs decode-ok**, up from 20.
+Two MORE closures this round, together fully closing bill.exe and
+color.exe (both previously stalled at 99%/93% through their files):
+- `06a729a` literal `STEP -1` FOR-NEXT: TB special-cases both +1 and -1
+  to a bare INC/DEC at the NEXT instead of the generic `addm_i8` path
+  any other literal step uses. `dec_m`'s FOR-frame branch previously
+  fail-loud raised on this, assuming it unwitnessed. Fixture
+  `t1_forstepm1`, byte-exact both dialects.
+- `06a729a` (same commit) the COLOR fg/bg + VIEW-border cell family
+  (0x88/0x94/0xA0/0xAC/0xB8/0xC4) has a runtime-revision-skewed
+  +2-shifted sibling (0x8A/0x96/0xA2/0xAE/0xBA/0xC6) in whichever
+  compiler build produced bill.exe/color.exe -- resolves the
+  `RR-SYSCELL-8A` candidate a prior session had opened but left
+  unresolved. See `gap_reports/runtime-revision-assessments.json` for
+  the full writeup.
+
+Before that, two more gaps closed (both byte-exact both dialects), each
+advancing a file further without yet finishing it:
 - `bab24ce` bare `imul word [si]` (no ES prefix): the DS-relative sibling
   of the already-handled `far_imulax_si` (byref-param multiply), for a
   multiplicative fold of a computed static int-array element
