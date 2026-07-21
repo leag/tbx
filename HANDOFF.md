@@ -134,7 +134,28 @@ tally instead and found a clean, oracle-verified two-gap chain:
   already has its own op, `far_addm_ax_si`). Fixture `t1_byrefforvar`
   (`SUB TEST(N%,M%): FOR N% = 1 TO M% ...`), byte-exact both dialects.
   Advanced wild bmaster.exe/ifi.exe past this gap too (both now fail at
-  the SAME later offset 0x935f, `unhandled byte 16 at 0x935f`, NOT yet
+  the SAME later offset 0x935f, `unhandled byte 16 at 0x935f` — see next).
+
+- **`CALL SUB2(A%)` where `A%` is a LOCAL var declared in the CALLING
+  sub** (2026-07-21): the byte-16 gap above turned out to be UNRELATED to
+  the FOR-loop chain — a THIRD wild file, resume.exe, hit the identical
+  message independently, pulling the tally bucket up to 3 and making it
+  worth chasing on its own. Byte shape: `push ss; mov ax,off; add ax,bp;
+  push ax` — the LOCAL-frame sibling of the already-calibrated
+  `arg_push_ref` (DGROUP scalars: `push ds; mov ax,off; push ax`, no
+  `add ax,bp` needed since DGROUP disps are compile-time absolute; a
+  LOCAL's bp-relative address needs the extra runtime add). New op
+  `arg_push_ref_bp`, consumed identically to `arg_push_ref` via
+  `state.loc_local` instead of `state.loc`. Found directly on the first
+  probe try (`CALL SUB2(A%)` from inside a SUB with `A%` declared
+  `LOCAL`) — an earlier guess (`MID$` statement mutating a LOCAL string)
+  was a dead end that turned out to hit the ALREADY-documented "FP/string
+  -typed LOCAL variables are unsupported" gap instead, one existing
+  `loc_local` caveat away from being a false lead; the CALL-arg guess
+  matched the byte shape exactly on the next attempt. Fixture
+  `t1_localargcall`, byte-exact both dialects. Advances all three wild
+  files further (bmaster.exe/ifi.exe to a NEW `unhandled byte 26 at
+  0x9446`; resume.exe to a NEW `unhandled byte 29 at 0xa043` — neither
   investigated this session).
 
 Previously, updated 2026-07-21 (earlier session): 23 of 84 wild EXEs decode-ok, up from 22.

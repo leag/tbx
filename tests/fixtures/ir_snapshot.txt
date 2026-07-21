@@ -4225,6 +4225,12 @@ Assign(target=Var(name='D%'), value=Lit(value=5))
 CallStmt(name='SUB1', args=(Var(name='D%'),))
 End()
 
+## t1_localargcall
+SubDef(name='SUB1', params=('A%',), body=(Assign(target=Var(name='A%'), value=BinOp(op='+', lhs=Var(name='A%'), rhs=Lit(value=1))),))
+SubDef(name='SUB2', params=(), body=(Local(names=('B%',)), Assign(target=Var(name='B%'), value=Lit(value=5)), CallStmt(name='SUB1', args=(Var(name='B%'),)), Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)))
+CallStmt(name='SUB2', args=())
+End()
+
 ## t1_localvarstep
 SubDef(name='SUB1', params=('A%',), body=(Local(names=('B%', 'C%', 'D%')), Assign(target=Var(name='C%'), value=Lit(value=0)), Assign(target=Var(name='D%'), value=Var(name='A%')), For(var=Var(name='B%'), init=Lit(value=1), limit=Lit(value=10), step=Var(name='D%')), Assign(target=Var(name='C%'), value=BinOp(op='+', lhs=Var(name='C%'), rhs=Var(name='B%'))), NextStmt(var=Var(name='B%')), Print(items=(Var(name='C%'),), newline=True, file=None, commas=None)))
 CallStmt(name='SUB1', args=(Lit(value=2),))
@@ -9813,6 +9819,12 @@ Open(mode=StrLit(value='O'), num=1, file=StrLit(value='T.DAT'), reclen=None, for
 Assign(target=Var(name='A'), value=Call(name='LOC', args=(Lit(value=1),)))
 Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 Close(num=1)
+End()
+
+## v10_t1_localargcall
+SubDef(name='SUB1', params=('A%',), body=(Assign(target=Var(name='A%'), value=BinOp(op='+', lhs=Var(name='A%'), rhs=Lit(value=1))),))
+SubDef(name='SUB2', params=(), body=(Local(names=('B%',)), Assign(target=Var(name='B%'), value=Lit(value=5)), CallStmt(name='SUB1', args=(Var(name='B%'),)), Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)))
+CallStmt(name='SUB2', args=())
 End()
 
 ## v10_t1_localvarstep

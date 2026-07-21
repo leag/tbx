@@ -103,6 +103,10 @@ def cargs(state: DecodeState, op, addr, kind) -> bool:
         state.pend_args.append(state.loc(op[2]))
         state.k += 1
         return True
+    if kind == "arg_push_ref_bp":  # push a by-ref CALL arg, LOCAL-frame
+        state.pend_args.append(state.loc_local(op[2]))  # caller's var
+        state.k += 1
+        return True
     if kind == "arg_push_fwd":  # forward the enclosing SUB's by-ref param as a
         # CALL arg; typed at far_call from the callee's signature (q_fwd)
         state.pend_args.append(("fwd", op[2]))

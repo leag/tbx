@@ -197,6 +197,18 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         ops.append((p, "arg_push_ref", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 5
         return p
+    if (
+        b == 0x16
+        and exe[p + 1] == 0xB8
+        and exe[p + 4] == 0x03
+        and exe[p + 5] == 0xC5
+        and exe[p + 6] == 0x50
+    ):  # push ss; mov ax,off; add ax,bp; push ax: the LOCAL-frame sibling of
+        # arg_push_ref -- forwards a LOCAL var's address as a by-ref CALL
+        # arg (wild bmaster.exe/ifi.exe/resume.exe, probe q_localargcall)
+        ops.append((p, "arg_push_ref_bp", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 7
+        return p
     # Literal-arg staging glue (positions SI at a stack temp, saves/restores SP).
     if b == 0x89 and exe[p + 1] == 0x26:  # mov [disp],sp (save cleanup SP)
         ops.append((p, "mov_mem_sp", struct.unpack_from("<H", exe, p + 2)[0]))

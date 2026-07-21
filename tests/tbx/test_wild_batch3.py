@@ -1813,6 +1813,26 @@ def test_decode_t1_byrefforvar():
     )
 
 
+def test_decode_t1_localargcall():
+    # CALL SUB2(A%) where A% is a LOCAL variable declared in the CALLING
+    # sub: `push ss; mov ax,off; add ax,bp; push ax` -- the LOCAL-frame
+    # sibling of arg_push_ref (DGROUP scalars: `push ds; mov ax,off; push
+    # ax`, no `add ax,bp` needed since DGROUP disps are compile-time
+    # absolute). New op arg_push_ref_bp, consumed identically to
+    # arg_push_ref via loc_local instead of loc (wild bmaster.exe/ifi.exe/
+    # resume.exe, all three sharing this exact "unhandled byte 16" gap).
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_localargcall.exe"))
+    sub2 = next(s for s in prog if isinstance(s, ir.SubDef) and s.name == "SUB2")
+    assert ir.CallStmt("SUB1", (ir.Var("B%"),)) in sub2.body
+    assert emit0.emit(prog) == (
+        "10 SUB SUB1(A%)\n  A% = A% + 1\nEND SUB\n"
+        "20 SUB SUB2\n  LOCAL B%\n  B% = 5\n  CALL SUB1(B%)\n"
+        "  PRINT B%\nEND SUB\n30 CALL SUB2\n40 END\n"
+    )
+
+
 if __name__ == "__main__":
     test_decode_t1_fcmp()
     test_decode_t1_fori()
@@ -1867,4 +1887,5 @@ if __name__ == "__main__":
     test_decode_t1_licomp()
     test_decode_t1_locforvarlim()
     test_decode_t1_byrefforvar()
+    test_decode_t1_localargcall()
     print("ALL PASS")
