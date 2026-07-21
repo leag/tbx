@@ -3,4 +3,5 @@ node_modules/
 SOLVER_v86.EXE
 work_*.img
 *.EXE
+*.exe
 *.tmp

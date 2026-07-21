@@ -26,6 +26,37 @@ verification passes for both dialects and `t1_nestif2`; a small compile improved
 from roughly 25 seconds to 8.8 seconds, and two concurrent compiles finish in
 8.9 seconds on this machine.
 
+**A real alternate TB build was sourced and tested against `RR-SYSCELL-8A`,
+negative result (2026-07-21)**: rather than patch the oracle's compiler
+binary to fake the `RR-SYSCELL-8A` shift (circular evidence), a genuinely
+different, independently-obtained TB.EXE was found and tested instead --
+a German-market build (Oct 1987, 212524 bytes, from archive.org's
+KryoFlux dump of `BorlandTurboBasic1.0German`, disk3), registered as
+`vendor/turbo_basic_oracle/tb11_de_floppy.img` (the raw EXE sits
+alongside it as `tb_german_d3.exe`, kept intentionally, not wired into
+`oracle.py`'s dialect dict since it's investigative, not first-class).
+Batch-compiled all 297 `t1_*` corpus fixtures with it and diffed each
+against the verified English `.exe`, restricted to the user-code region
+(every file differs earlier, from a harmless linked-runtime-library
+reshuffle present in 100% of outputs): 272 byte-identical, 15 differ
+only in whole-file size (user-code identical once offset), and exactly 3
+(`t1_view`/`t1_wait`/`t1_window`) show real diffs -- but every one lands
+strictly after the compiled program's `epilogue`, in trailing padding
+the decoder never scans. This build is functionally identical to the
+oracle's existing TB 1.1 everywhere that matters, including the exact
+COLOR/SCREEN pairing that triggers the bill.exe/color.exe shift -- it
+does not explain `RR-SYSCELL-8A` and does not narrow any other gap.
+Don't re-test this same build; if pursuing this further, the French TB
+1.1 disk exists on WinWorld/vetusware but needs an authenticated
+download this session couldn't complete. Also corrected while doing
+this: the oracle `oracle.py` actually resolves to (`oracle_dir()`) is the
+vendored copy at `tbx/vendor/turbo_basic_oracle`, NOT the sibling
+`../frame/oracle` checkout some earlier session notes assumed -- the
+vendored copy's `tb_v86.js` properly honors `--workspace` where
+`frame/oracle`'s silently ignores it (always writing to
+`<oracle_dir>/SOLVER_v86.EXE`); `frame/oracle` is still needed for the
+toggle-compile script (`tb_v86_compile.js`), which isn't vendored.
+
 ## Where things stand
 
 **Updated 2026-07-21 (later): 22 of 84 wild EXEs decode-ok**, up from 20.
