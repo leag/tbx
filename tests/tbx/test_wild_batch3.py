@@ -1652,6 +1652,21 @@ def test_decode_t1_dim4():
     )
 
 
+def test_decode_t1_imulsi():
+    # `imul word [si]` with NO es: prefix (wild grdscn.exe/ziptest.exe):
+    # multiplicative fold of a computed static int-array element, the DS
+    # sibling of far_imulax_si (which is es:[si]-prefixed and reserved for
+    # by-ref SUB params). mem = the array ref (left operand), same
+    # orientation as addax_si. When the SECOND factor is itself a computed
+    # array element needing its own index math (e.g. a 2-D array), TB
+    # round-trips the first factor through bx (movbxax/movrr) across that
+    # computation -- already-generic ops, so no extra handling was needed.
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_imulsi.exe")))
+    assert "130 D% = D% + V0%(A%) * V1%(A%,A%)" in src
+
+
 if __name__ == "__main__":
     test_decode_t1_fcmp()
     test_decode_t1_fori()
@@ -1698,4 +1713,5 @@ if __name__ == "__main__":
     test_decode_t1_bandwide()
     test_decode_t1_bandstr()
     test_decode_t1_dim4()
+    test_decode_t1_imulsi()
     print("ALL PASS")

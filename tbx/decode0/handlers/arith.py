@@ -598,6 +598,16 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             # of a computed array element (`ARRAY%(i) + <expr>`, wild
             # number.exe), mem = the array ref (left operand).
             state.ax = ir.BinOp("+", ref, _rgrp("+", state.ax))
+        elif sik[1] == "imul_si":
+            # imul word [si]: multiplicative fold of a computed array
+            # element (`ARRAY1%(k) * ARRAY2%(i,j)`, wild grdscn.exe) --
+            # mem = the array ref (left operand), same orientation as
+            # addax_si. When the OTHER factor is itself a computed array
+            # element, its value round-trips through bx (movbxax/movrr,
+            # both already generic) across this element's own index
+            # computation -- no special handling needed here since ax
+            # just holds whatever expression was staged before this ran.
+            state.ax = ir.BinOp("*", ref, _rgrp("*", state.ax))
         elif sik[1] == pre + "cmpax_si":
             # cmp ax, [si] (near) / cmp ax, es:[si] (far): relational against
             # a computed array element (`IF ARRAY%(i) = ... THEN ...`, wild
