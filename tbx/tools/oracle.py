@@ -73,7 +73,11 @@ def oracle_dir() -> Path:
 
 
 def compile_bas(bas: Path | str, dialect: str = "1.1", timeout: int = 300) -> bytes:
-    """Compile a .BAS with the real Turbo Basic compiler; return the EXE bytes."""
+    """Compile a .BAS with the real Turbo Basic compiler; return EXE bytes.
+
+    The vendored harness stages external ``$INCLUDE`` and ``$INLINE``
+    dependencies relative to the source file before invoking Turbo Basic.
+    """
     d = oracle_dir()
     with tempfile.TemporaryDirectory(prefix="tbx-oracle-") as workspace:
         out = Path(workspace) / "SOLVER_v86.EXE"

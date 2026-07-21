@@ -14,26 +14,68 @@ function buildWorkImg(basPath, here, tbFloppy, workspace = here) {
   const tmp = path.join(workspace, ".solver.bas.tmp");
   fs.writeFileSync(tmp, basText, "latin1");
   execFileSync("mcopy", ["-o", "-i", work, tmp, "::SOLVER.BAS"]);
-  // Turbo BASIC's `$INLINE "file"` form reads the file from DOS while the
-  // compiler is running.  The old harness only staged SOLVER.BAS, so the
-  // compiler always reported Error 496 for valid external inline files.  Find
-  // quoted files in the source, resolve them beside the .BAS file (or as an
-  // explicit absolute path), and copy them into the image under their DOS
-  // basename.  Byte-list `$INLINE` remains source-only and needs no staging.
-  const inlineFiles = new Set();
-  for (const m of basText.matchAll(/\$INLINE\s+"([^"]+)"/ig)) {
-    const requested = m[1];
-    const candidate = path.isAbsolute(requested)
-      ? requested
-      : path.join(path.dirname(path.resolve(basPath)), requested);
-    if (!fs.existsSync(candidate)) {
-      throw new Error(`$INLINE file not found on host: ${requested}`);
+  // Turbo BASIC's external `$INLINE "file"` and `$INCLUDE "file"` forms
+  // read host files from DOS while the compiler is running.  Stage the
+  // dependencies explicitly: SOLVER.BAS alone is insufficient, and an
+  // unstaged include otherwise produces Error 493.  Includes may nest (the
+  // compiler documents six levels), so walk them relative to each source
+  // file.  Byte-list `$INLINE` remains source-only and needs no staging.
+  const staged = new Map(); // DOS basename -> { host, include }; detect collisions
+  const pending = [{ host: path.resolve(basPath), text: basText }];
+  const seen = new Set();
+  while (pending.length) {
+    const current = pending.shift();
+    const sourceDir = path.dirname(current.host);
+    const patterns = [
+      { re: /^\s*\$INCLUDE\s*:?\s*(?:"([^"]+)"|'([^']+)')/gim, ext: ".BAS", label: "$INCLUDE" },
+      { re: /\$INLINE\s+"([^"]+)"/ig, ext: "", label: "$INLINE" },
+    ];
+    for (const { re, ext, label } of patterns) {
+      for (const m of current.text.matchAll(re)) {
+        const requested = m[1] || m[2];
+        const normalized = requested.replace(/[\\/]/g, path.sep);
+        const rooted = path.isAbsolute(normalized)
+          ? normalized
+          : path.join(sourceDir, normalized);
+        const candidates = [rooted];
+        if (ext && !path.extname(rooted)) candidates.push(rooted + ext);
+        const candidate = candidates.find((f) => fs.existsSync(f));
+        if (!candidate) {
+          throw new Error(`${label} file not found on host: ${requested}`);
+        }
+        const resolved = path.resolve(candidate);
+        const dosName = path.basename(resolved).toUpperCase();
+        const prior = staged.get(dosName);
+        if (prior && prior.host !== resolved) {
+          throw new Error(`DOS filename collision while staging ${requested}`);
+        }
+        staged.set(dosName, {
+          host: resolved,
+          include: (prior && prior.include) || label === "$INCLUDE",
+        });
+        if (!seen.has(resolved)) {
+          seen.add(resolved);
+          pending.push({
+            host: resolved,
+            text: fs.readFileSync(resolved, "latin1"),
+          });
+        }
+      }
     }
-    inlineFiles.add(candidate);
   }
-  for (const f of inlineFiles) {
-    const dosName = path.basename(f).toUpperCase();
-    execFileSync("mcopy", ["-o", "-i", work, f, "::" + dosName]);
+  const includeTemps = [];
+  for (const [dosName, entry] of staged) {
+    let source = entry.host;
+    if (entry.include) {
+      source = path.join(workspace, `.include-${includeTemps.length}.tmp`);
+      const text = fs.readFileSync(entry.host, "latin1").replace(/\r?\n/g, "\r\n");
+      fs.writeFileSync(source, text, "latin1");
+      includeTemps.push(source);
+    }
+    execFileSync("mcopy", ["-o", "-i", work, source, "::" + dosName]);
+  }
+  for (const f of includeTemps) {
+    fs.unlinkSync(f);
   }
   const dbx = path.join(here, "dbx");
   if (fs.existsSync(dbx)) {
