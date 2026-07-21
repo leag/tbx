@@ -1710,6 +1710,28 @@ def test_decode_t1_localforstepm1():
     )
 
 
+def test_decode_t1_localsingle():
+    # SINGLE-precision LOCAL variable (`LOCAL X!`): fld_bp/fstp_bp had NO
+    # case at all for state.proc_frame is not None (only fn_frame's DEF FN
+    # params/result and a "main frame: FN-call staging" fallback that
+    # silently no-ops fld_bp, dropping the value) -- a genuinely
+    # unimplemented feature, not a missing byte pattern (documented
+    # earlier this campaign against ziptest.exe, never landed). Spans TWO
+    # consecutive 2-byte words of the LOCAL zero-fill range; the first
+    # word's phantom int name gets its suffix corrected to '!' on first
+    # touch and the second word is dropped entirely -- one FP variable,
+    # not two ints. Surfaced chasing wild resume.exe's own FP-typed LOCAL.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_localsingle.exe"))
+    sub = next(s for s in prog if isinstance(s, ir.SubDef))
+    assert ir.Local(("A",)) in sub.body
+    assert emit0.emit(prog) == (
+        "10 SUB SUB1\n  LOCAL A\n  A = 1.5#\n  A = A + 1\n"
+        "  PRINT A\nEND SUB\n20 CALL SUB1\n30 END\n"
+    )
+
+
 def test_decode_t1_localsub1():
     # Bare LOCAL DECR (`X% = X% - 1`, outside any FOR): `sub [bp+d8], ax`
     # -- the subtraction sibling of the already-calibrated addm_ax_bp
@@ -1979,6 +2001,7 @@ if __name__ == "__main__":
     test_decode_t1_dim4v()
     test_decode_t1_imulsi()
     test_decode_t1_localforstepm1()
+    test_decode_t1_localsingle()
     test_decode_t1_localsub1()
     test_decode_t1_localvarstep()
     test_decode_t1_forstepm1()

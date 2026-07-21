@@ -114,6 +114,7 @@ class DecodeState:
     proc_params: Any = None
     proc_int_offs: Any = None
     proc_str_offs: Any = None
+    fp64_bridge: Any = None
     r_arrs: Any = None
     si: Any = None
     slot_info: Any = None
@@ -148,13 +149,17 @@ class DecodeState:
             raise
 
     def fpval64(self, disp):
-        """Double FP mem operand: variable/element via loc(), or a pooled IEEE-754
-        double literal (8 LE bytes) in the pool window. fpval at f64 width."""
+        """Double FP mem operand: variable/element via loc(), a pooled IEEE-754
+        double literal (8 LE bytes) in the pool window, or a cached value from
+        the transient fp64_bridge scratch cell (see its own comment).
+        fpval at f64 width."""
         try:
             return self.loc(disp)
         except ValueError:
             if disp >= self.lay["pool_base"] - 4:
                 return ir.DblLit(struct.unpack_from("<d", self.exe, self.dsd + disp)[0])
+            if disp in self.fp64_bridge:
+                return self.fp64_bridge[disp]
             raise
 
     def loc(self, disp):
@@ -376,7 +381,7 @@ def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, in
     return shared_subs, sub_local_arrays
 
 
-def _resolve_calls(stmts, proc_names):
+def _resolve_calls(stmts, proc_names, proc_params, proc_int_offs, proc_str_offs):
     """A CALL to a SUB defined later in the file staged a ("addr", n)
     placeholder (see handlers.control.calls) since proc_names had no entry
     for it yet at that point in the scan; every SUB has been decoded by the
@@ -390,15 +395,41 @@ def _resolve_calls(stmts, proc_names):
     bodies, so rebuilding a SubDef/IfBlock/etc that contains no pending call
     -- which is the common case, every time -- would silently orphan any
     jump target landing inside it (wild inv87.exe/invoice.exe: caught by a
-    first version of this fix that rebuilt unconditionally)."""
+    first version of this fix that rebuilt unconditionally).
+
+    A forwarded by-ref arg (arg_push_fwd) to a callee ALSO defined later
+    staged its own ("fwdpending", target, index, off) placeholder (see
+    handlers.control.calls) since the callee's own param list wasn't known
+    at that point either -- resolved here too, the same way (wild
+    resume.exe)."""
+
+    def fix_args(args):
+        changed = False
+        new_args = list(args)
+        for i, a in enumerate(args):
+            if isinstance(a, tuple) and a and a[0] == "fwdpending":
+                _, target, _idx, off = a
+                params = proc_params[target]
+                sfx = params[_idx][-1] if params[_idx][-1] in "%$" else ""
+                if sfx == "%":
+                    proc_int_offs.add(off)
+                elif sfx == "$":
+                    proc_str_offs.add(off)
+                new_args[i] = ir.Var(f"P{off:02X}{sfx}")
+                changed = True
+        return (tuple(new_args) if changed else args), changed
 
     def walk(body):
         new = [fix(s) for s in body]
         return body if all(a is b for a, b in zip(body, new)) else new
 
     def fix(s):
-        if isinstance(s, ir.CallStmt) and isinstance(s.name, tuple):
-            return ir.CallStmt(proc_names[s.name[1]], s.args)
+        if isinstance(s, ir.CallStmt):
+            new_args, args_changed = fix_args(s.args)
+            if isinstance(s.name, tuple):
+                return ir.CallStmt(proc_names[s.name[1]], new_args)
+            if args_changed:
+                return ir.CallStmt(s.name, new_args)
         if isinstance(s, ir.SubDef):
             new_body = walk(s.body)
             return s if new_body is s.body else ir.SubDef(s.name, s.params, tuple(new_body))
@@ -448,7 +479,13 @@ def _resolve_calls(stmts, proc_names):
 def _finalize(state: DecodeState, addr) -> Program:
     """Program epilogue: static-DIM re-emit, control-flow folds, target
     resolution and canonical rename -> the finished Program."""
-    state.stmts[:] = _resolve_calls(state.stmts, state.proc_names)
+    state.stmts[:] = _resolve_calls(
+        state.stmts,
+        state.proc_names,
+        state.proc_params,
+        state.proc_int_offs,
+        state.proc_str_offs,
+    )
     # Error-trap line table, probed early -- before DATA/dims/COMMON/TRON
     # synthesis below mutates state.addrs -- so a codeless DATA statement
     # with no READ/RESTORE anywhere to trigger its recovery (wild
@@ -973,6 +1010,11 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             state._fread_target(state.loc(op[2]))
         elif v is _READDATA:
             state._readdata_target(state.loc(op[2]))
+        elif op[2] < VAR_BASE and op[2] not in state.lay["scalars"]:
+            # Transient promote-once/compare-many scratch cell (see
+            # state.fp64_bridge's own comment) -- invisible in the source,
+            # not a real variable.
+            state.fp64_bridge[op[2]] = v
         else:
             state.put(ir.Assign(state.loc(op[2]), v), state.cur)
         state.cur = None
@@ -1814,6 +1856,12 @@ def decode_user_code(exe: bytes) -> list[Any]:
     state.dim_frame = None  # open runtime-DIM bracket
     state.prev_dim_end = None  # last allocate's addr: comma-chain test
     state.r_arrs = {}  # block disp -> runtime array info
+    state.fp64_bridge = {}  # transient sub-VAR_BASE fstp64/fld64 scratch cache
+    # (promote-once/compare-many idiom, e.g. `IF N%=1 THEN...ELSEIF N%=2
+    # THEN...` promotes N% to DOUBLE once and rereads the cache for each
+    # comparison -- the same "stage, then reread" shape as the fistp[0x2C]
+    # IDX% bridge, just for a variable-position scratch cell instead of a
+    # fixed one; wild resume.exe)
     state.option_base = None  # 0/1 from DIM lower-bound cells
     state.pend_es = None  # block disp loaded into ES (far access)
     state.pend_shortstr = None  # packed 1-char string awaiting `shortstr`

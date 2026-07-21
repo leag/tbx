@@ -182,7 +182,23 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
     if kind == "subax_m":
         blk = next((b for b in state.slot_info if b <= op[2] < b + ARR_BLOCK), None)
         if blk is None:
-            raise ValueError(f"sub ax,[{op[2]:#x}] outside array blocks at {addr:#x}")
+            # Not a far-IDX lo-subscript normalization cell -- a plain
+            # subtraction fold instead (`<expr> - <mem>`), mem on the
+            # RIGHT (unlike addax_m's mem-LEFT convention, since SUB
+            # isn't commutative and `sub ax,[mem]` computes ax-mem
+            # directly). Same pool-literal fallback as addax_m/imul_m
+            # (wild resume.exe).
+            try:
+                mem = state.loc(op[2])
+            except ValueError:
+                if op[2] < state.lay["pool_base"] - 4:
+                    raise
+                mem = state.pool_lit(op[2])
+            if isinstance(state.ax, tuple) or state.ax is None:
+                raise ValueError(f"sub ax,[{op[2]:#x}] with non-Expr ax at {addr:#x}")
+            state.ax = ir.BinOp("-", state.ax, _rgrp("-", mem))
+            state.k += 1
+            return True
         off = op[2] - blk
         if isinstance(state.ax, tuple) or state.ax is None:
             raise ValueError(f"far-IDX normalization of non-Expr ax at {addr:#x}")
@@ -344,7 +360,19 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         # cmpax_m's (mem, ax) source order.
         nxt = state.ops[state.k + 1] if state.k + 1 < len(state.ops) else None
         local = state.loc_local(op[2])
-        if nxt is not None and nxt[1] == "movax" and nxt[2] == 0xFFFF:
+        # AND-chain 2nd+ term (wild resume.exe): same ax<->bx no-op round
+        # trip as cmpax_m's own AND-chain case above -- skip over it and
+        # let the generic movrr/movbxax handlers process it.
+        j = state.k + 1
+        while j < len(state.ops) and state.ops[j][1] in ("movrr", "movbxax"):
+            j += 1
+        shuffled = (
+            j > state.k + 1
+            and j < len(state.ops)
+            and state.ops[j][1] == "movax"
+            and state.ops[j][2] == 0xFFFF
+        )
+        if (nxt is not None and nxt[1] == "movax" and nxt[2] == 0xFFFF) or shuffled:
             state.pend_icmp = (local, state.ax)
             state.ax = None
             state.k += 1
@@ -575,6 +603,18 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         ref = ir.ArrayRef(a["name"], state.si[2])
         state.si = None
         sik = state.ops[state.k + ao + 1]
+        # A NEG AX interposed right after the index resolves negates
+        # whatever the CALLER already staged in ax (unrelated to this
+        # element itself, e.g. `ARRAY(i) + (-2)`) before the real terminal
+        # combines it with the element -- not part of the element-access
+        # protocol, just a coincidental neighbor; apply it and keep
+        # looking for the actual terminal (wild resume.exe).
+        while sik[1] == "negax":
+            if state.ax is None:
+                raise ValueError(f"negax with empty ax at {sik[0]:#x}")
+            state.ax = ir.Neg(state.ax)
+            ao += 1
+            sik = state.ops[state.k + ao + 1]
         pre = "far_" if far else ""
         if sik[1] in ("far_spush", "far_strassign") or (
             not far and sik[1] == "strassign"
@@ -631,6 +671,13 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             if not a.get("str"):
                 raise ValueError(f"string op on numeric array at {addr:#x}")
             state.sstack.append(ref)
+        elif sik[1] == "arg_push_arr":
+            # by-ref CALL arg: a COMPUTED array element's address, pushed
+            # via ES:SI directly -- the shlsi/moves_m sibling of the
+            # movsi-disp16 constant-index case (core.py's own movsi;movdx;
+            # movesdx;arg_push_arr handling), just via a computed si
+            # instead of a fixed disp16 (wild resume.exe).
+            state.pend_args.append(ref)
         elif sik[1] == pre + "movm_ax_si":
             # mov [si], ax (near) / mov es:[si], ax (far, by-ref param array
             # arg): the INTEGER write sibling of the rt-0x9C string read
@@ -993,6 +1040,32 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
                     top = ir.Group(top)
                 state.stack.append(ir.BinOp(op[2], top, pvar))
             else:  # fcomp_bp (EXIT DEF tests)
+                state.pend_cmp = (pvar, state.stack.pop())
+        elif state.proc_frame is not None:
+            # SINGLE-precision LOCAL variable (fld_bp/fstp_bp are the m32/
+            # SINGLE FP ops -- a DOUBLE LOCAL would need fld64_bp/fstp64_bp,
+            # unwitnessed). Spans TWO consecutive 2-byte words of the
+            # zero-filled LOCAL range; rename the first word's phantom int
+            # name to a '!' suffix on first touch and drop the second word
+            # entirely -- one FP variable, not two ints (wild resume.exe).
+            locs = state.proc_frame["locals"] or {}
+            if bp_off in locs and locs[bp_off].endswith("%"):
+                locs[bp_off] = locs[bp_off][:-1] + "!"
+                locs.pop(bp_off + 2, None)
+            pvar = ir.Var(locs[bp_off])
+            if kind == "fld_bp":
+                state.stack.append(pvar)
+            elif kind == "fstp_bp":
+                state.put(ir.Assign(pvar, state.stack.pop()), state.cur)
+                state.cur = None
+            elif kind == "fold_bp":
+                state.stack.append(_orient(op[2], pvar, state.stack.pop()))
+            elif kind == "fold_n_bp":
+                top = state.stack.pop()
+                if isinstance(top, ir.BinOp) and _PREC[top.op] < _PREC[op[2]]:
+                    top = ir.Group(top)
+                state.stack.append(ir.BinOp(op[2], top, pvar))
+            else:  # fcomp_bp
                 state.pend_cmp = (pvar, state.stack.pop())
         else:  # main frame: FN-call staging
             if kind == "fstp_bp":  # stage a literal/computed call arg

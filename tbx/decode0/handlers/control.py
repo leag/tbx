@@ -51,7 +51,16 @@ def calls(state: DecodeState, op, addr, kind) -> bool:
                 # same position -- and mark the enclosing SUB's param with the
                 # same type so both headers agree (q_fwd).
                 params = state.proc_params.get(op[2])
-                if params is None or i >= len(params):
+                if params is None:
+                    # CALL to a SUB defined LATER in the file: the callee's
+                    # own param list isn't known yet either. Stage a second
+                    # placeholder (alongside the CallStmt name's own
+                    # ("addr", n) one below), resolved together once every
+                    # SUB has been decoded (wild resume.exe, extending the
+                    # existing forward-CALL machinery to forwarded args).
+                    args.append(("fwdpending", op[2], i, a[1]))
+                    continue
+                if i >= len(params):
                     raise ValueError(
                         f"forwarded arg to unknown callee params at {addr:#x}"
                     )

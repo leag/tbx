@@ -32,6 +32,7 @@ PAIRS = [
     "t1_dim4v",
     "t1_imulsi",
     "t1_localforstepm1",
+    "t1_localsingle",
     "t1_localsub1",
     "t1_localvarstep",
     "t1_forstepm1",

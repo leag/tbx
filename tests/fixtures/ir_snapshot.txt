@@ -4259,6 +4259,11 @@ SubDef(name='SUB1', params=(), body=(Local(names=('A%',)), For(var=Var(name='A%'
 CallStmt(name='SUB1', args=())
 End()
 
+## t1_localsingle
+SubDef(name='SUB1', params=(), body=(Local(names=('A',)), Assign(target=Var(name='A'), value=DblLit(value=1.5)), Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1))), Print(items=(Var(name='A'),), newline=True, file=None, commas=None)))
+CallStmt(name='SUB1', args=())
+End()
+
 ## t1_localsub1
 SubDef(name='SUB1', params=(), body=(Local(names=('A%',)), Assign(target=Var(name='A%'), value=BinOp(op='-', lhs=Var(name='A%'), rhs=Lit(value=1))), Print(items=(Var(name='A%'),), newline=True, file=None, commas=None)))
 CallStmt(name='SUB1', args=())
@@ -9886,6 +9891,11 @@ End()
 
 ## v10_t1_localforstepm1
 SubDef(name='SUB1', params=(), body=(Local(names=('A%',)), For(var=Var(name='A%'), init=Lit(value=5), limit=Lit(value=1), step=Lit(value=-1)), Print(items=(Var(name='A%'),), newline=True, file=None, commas=None), NextStmt(var=Var(name='A%'))))
+CallStmt(name='SUB1', args=())
+End()
+
+## v10_t1_localsingle
+SubDef(name='SUB1', params=(), body=(Local(names=('A',)), Assign(target=Var(name='A'), value=DblLit(value=1.5)), Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1))), Print(items=(Var(name='A'),), newline=True, file=None, commas=None)))
 CallStmt(name='SUB1', args=())
 End()
 
