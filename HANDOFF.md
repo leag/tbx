@@ -202,17 +202,34 @@ intended, permanent change.
 
 ## Ongoing plan (priority order — pick up at the first incomplete step)
 
-**Refreshed 2026-07-20** (previous version of this list was stale — several
-entries below it had already been closed without the list being updated;
-re-derived from a fresh `scan_wild.py wild/hits` run, 68 TB-but-fail / 16
-decode-ok). Cross-check `gap_reports/runtime-revision-assessments.json`
-before investigating any of these from scratch — several have an existing
-candidate/unresolved writeup there with negative evidence already collected.
+**Refreshed again 2026-07-20, end of the later session** (65 TB-but-fail /
+20 decode-ok; the immediately-preceding version of this list was already
+stale after that session's 9 closures). Cross-check
+`gap_reports/runtime-revision-assessments.json` before investigating any
+of these from scratch — several have an existing candidate/unresolved
+writeup there with negative evidence already collected.
 
 1. **vhfprop's tail-test DO...LOOP WHILE/UNTIL un-synthesis gap** (see
    "vhfprop status" above) — the ONLY file left blocked by the line-table
    epic; still open, unchanged.
-2. **`DGROUP layout not solvable` (4 files: menu, night, sprogh, swbb)** —
+2. **Mixed AND/OR compound-IF chains (2 files: state.exe, state87.exe,
+   NEW this session)** — "jump target ... is not a statement start": the
+   failing `IfGoto`'s own target address lands INSIDE that same
+   statement's own compiled bytes (confirmed by comparing statement
+   addresses directly), consistent with a 3+-term chain whose combinator
+   CHANGES partway through (e.g. `IF A AND B OR C THEN`). The existing
+   3+-term cascade fold (`_lift_bool_tail`/`_match_bool_term1` in lift.py,
+   gap 36) requires the SAME combinator (`andaxbx` or `orax`) at every
+   mid-segment continuation -- a genuine mixed chain would fail that
+   check and silently fall back to finalizing early as a 2-term chain,
+   orphaning the remaining term's bytes exactly as observed. Not yet
+   oracle-probed; next step is `IF A AND B OR C THEN`-shaped probes (try
+   both orderings and both TB operator-precedence groupings) to confirm
+   the byte shape before touching the fold logic -- this is a real
+   feature gap (mixed-combinator compound conditions), not a small patch,
+   since it likely needs a genuine LogOp tree instead of the current
+   flat-chain-with-one-op model.
+3. **`DGROUP layout not solvable` (4 files: menu, night, sprogh, swbb)** —
    see `RR-DGROUP-BIGARR` in the runtime-revision JSON for the full
    writeup: zero stamp candidates anywhere in any of the 4 files, and the
    descending-n walk never solves either; menu.exe's failing movsi disp
@@ -225,7 +242,7 @@ candidate/unresolved writeup there with negative evidence already collected.
    technique from the original gap-16 investigation. mf.exe fails
    similarly but through the OTHER (runtime-grid-anchored) path with a
    distinct message — check separately, don't assume same cause.
-3. **`byte 8b` / SUB-LOCAL dynamically-sized arrays (4 files: cleanup,
+4. **`byte 8b` / SUB-LOCAL dynamically-sized arrays (4 files: cleanup,
    crossref, filepatc, reformat)** — confirmed via oracle probe
    (`q_localarr.bas`) to be `LOCAL A()` + runtime `DIM A(n)` inside a SUB.
    The address-of-local primitive itself (`mov si,bp; add si,imm8; push
@@ -239,7 +256,7 @@ candidate/unresolved writeup there with negative evidence already collected.
    runtime segment), not a small patch — scope a fresh session around it,
    starting with more oracle probes isolating what follows dim_begin for
    a plain integer/single LOCAL array before attempting any code.
-4. **`INT EC sub 38` (4 files: catalog, football, refund, varamort)** —
+5. **`INT EC sub 38` (4 files: catalog, football, refund, varamort)** —
    the runtime-array-block-reference family's 4th member (alongside
    dim_begin/dim_end/erase), block-only, no operand. Six candidate probes
    already ruled out (string/2-D ERASE, multi-array ERASE, SUB-local array
@@ -247,24 +264,22 @@ candidate/unresolved writeup there with negative evidence already collected.
    rejects that syntax, REDIM — not a TB keyword). Untried: CLEAR
    variants, COMMON-shared dynamic array cleanup, ON-ERROR implicit
    ERASE, GET/PUT #n with an array-backed record buffer.
-5. **`INT 8c` (4 files: baby, help, prtguide, readme)** — see
+6. **`INT 8c` (4 files: baby, help, prtguide, readme)** — see
    `RR-INT-8C`; all TB 1.0, ON KEY(n) GOSUB is the only shared source
    feature, several trap-count/toggle hypotheses ruled out. Untried: a
    follow-on statement INSIDE the trap handler body.
-6. **`INT EC sub ee` (3 files: cal, cal87, kinetics)** — see
+7. **`INT EC sub ee` (3 files: cal, cal87, kinetics)** — see
    `RR-LINEINPUT`/HANDOFF's "EC sub EE remains unresolved" entry: a wide
    oracle probe matrix (PRINT/LPRINT/SHELL/RUN/CHAIN/NAME/OPEN/DATE$, plus
    the optional CHAIN/RUN forms) produced no `cd ec ee` at all — negative
    evidence only, no lead yet.
-7. **`INT EC sub ac` (3 files: nvginst, pwinst, secure)** — see
+8. **`INT EC sub ac` (3 files: nvginst, pwinst, secure)** — see
    `RR-DISPATCH-HOLES`; untouched, no candidate hypothesis recorded yet.
-8. **"displacement ... neither scalar nor array element" (3 files: hfprop,
-   mymenu, sabpcv3)** — untouched this campaign; likely 3 distinct causes
-   bucketed by error message shape, triage each independently before
-   assuming a shared root cause (the gap-30/31 precedent).
-9. **`shl si outside an element access` (2 files: mcmurphy, rstprint)** —
-   rstprint.exe just arrived here via this session's IDX%-bridge fix;
-   untouched, no diagnosis yet.
+9. **"displacement ... neither scalar nor array element" (2 files:
+   hfprop, sabpcv3)** — mymenu.exe's own hit in this bucket closed this
+   session (cmpax_m pooled-literal fix); the remaining 2 are untouched,
+   likely still 2 distinct causes bucketed by error message shape (the
+   gap-30/31 precedent) — triage each independently.
 10. **The 2-tier and singles** — re-tally after each closure
     (`uv run python tbx/tools/scan_wild.py wild/hits`); for FP gaps check
     the `[si]` FP table for missing rows first. Byte 90 (see `RR-NOP-90`)
