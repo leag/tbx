@@ -212,23 +212,30 @@ writeup there with negative evidence already collected.
 1. **vhfprop's tail-test DO...LOOP WHILE/UNTIL un-synthesis gap** (see
    "vhfprop status" above) — the ONLY file left blocked by the line-table
    epic; still open, unchanged.
-2. **Mixed AND/OR compound-IF chains (2 files: state.exe, state87.exe,
-   NEW this session)** — "jump target ... is not a statement start": the
-   failing `IfGoto`'s own target address lands INSIDE that same
-   statement's own compiled bytes (confirmed by comparing statement
-   addresses directly), consistent with a 3+-term chain whose combinator
-   CHANGES partway through (e.g. `IF A AND B OR C THEN`). The existing
-   3+-term cascade fold (`_lift_bool_tail`/`_match_bool_term1` in lift.py,
-   gap 36) requires the SAME combinator (`andaxbx` or `orax`) at every
-   mid-segment continuation -- a genuine mixed chain would fail that
-   check and silently fall back to finalizing early as a 2-term chain,
-   orphaning the remaining term's bytes exactly as observed. Not yet
-   oracle-probed; next step is `IF A AND B OR C THEN`-shaped probes (try
-   both orderings and both TB operator-precedence groupings) to confirm
-   the byte shape before touching the fold logic -- this is a real
-   feature gap (mixed-combinator compound conditions), not a small patch,
-   since it likely needs a genuine LogOp tree instead of the current
-   flat-chain-with-one-op model.
+2. **Intra-inline-IF-body GOTO targets (2 files: state.exe, state87.exe)**
+   — CLOSED the mixed-AND/OR-combinator gap that used to sit here (commit
+   4c0bde6, `t1_mixedbool`); both files now advance to a DIFFERENT, bigger
+   gap still under the same "jump target ... is not a statement start"
+   message. Traced (recursive search through IfInline/IfBlock bodies, not
+   just top-level `state.stmts`) to: a giant `IfInline` (~40 statements,
+   a flattened GOTO-based keyboard-input state machine -- no block
+   IF/END IF in the source, just one unbroken chain of `IF cond THEN
+   <lineY>` statements) whose body contains a `Goto`/`IfGoto` targeting
+   ANOTHER statement inside that SAME body. `_resolve_targets`'s `index`
+   (built in lift.py) only maps TOP-LEVEL `state.addrs` entries; nested
+   body statements have no address entry at all unless the existing
+   BodyLine mechanism (gap 51, built for block-IF interiors jumped into
+   from OUTSIDE the block) applies -- but this is a jump WITHIN the same
+   already-flattened inline body, a different case that mechanism
+   doesn't cover. This is a real, substantial feature gap (making every
+   nested body statement's address resolvable inside inline-IF bodies
+   too, not just block-IF ones), comparable in scope to the byte-8b
+   LOCAL-array gap below -- scope a fresh session around it rather than
+   patching in a hurry. Next step: confirm the shape with a minimal
+   oracle probe (several chained `IF...THEN <lineY>` statements with a
+   later one jumping back into an earlier one's line, all inside what
+   the source spells as ONE physical line via `:`) before touching
+   `_resolve_targets`/`_fold_if`.
 3. **`DGROUP layout not solvable` (4 files: menu, night, sprogh, swbb)** —
    see `RR-DGROUP-BIGARR` in the runtime-revision JSON for the full
    writeup: zero stamp candidates anywhere in any of the 4 files, and the
