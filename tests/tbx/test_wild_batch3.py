@@ -1470,6 +1470,24 @@ def test_decode_t1_fpcomma():
     )
 
 
+def test_decode_t1_resumestart():
+    # RESUME <line>, where <line> is the program's own FIRST statement
+    # (wild styllist.exe): TB 1.0's E9-near-jump canonicalization tags ANY
+    # jump landing on target == start+3 (the first statement's address) as
+    # "run", the same tag a bare RUN's jump-to-start gets, since the bytes
+    # are identical either way. resume_pre's tail now recognizes this
+    # (RESUME can never trigger a genuine full-reset RUN, so it's always
+    # the plain first-statement target). The jump distance has to exceed
+    # short-jcc range to force the E9 form; a plain short probe never hits
+    # this shape under either dialect. Closes wild styllist.exe fully.
+    from tbx import decode0, emit0
+
+    prog = decode0.decode_user_code(_exe("t1_resumestart.exe"))
+    src = emit0.emit(prog)
+    assert src.splitlines()[0] == "10 ON ERROR GOTO 900"
+    assert src.splitlines()[-1] == "900 RESUME 10"
+
+
 def test_decode_t1_addimm():
     # 01 06 = add [disp16], ax: the disp16 sibling of addm_ax_bp (t1_local1's
     # LOCAL combine-store) -- `X% = X% + <expr>` when the RHS isn't a bare

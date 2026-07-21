@@ -334,6 +334,18 @@ def errors_trap(state: DecodeState, op, addr, kind) -> bool:
             node = ir.Resume(next_=True)
         elif nxt is not None and nxt[1] in ("jmps", "jmp"):
             node = ir.Resume(target=("addr", nxt[2]))
+        elif nxt is not None and nxt[1] == "run":
+            # RESUME <line>, where <line> is the program's very FIRST
+            # statement: the target address coincides exactly with a bare
+            # RUN's own jump-to-start byte pattern (TB 1.0's E9-near form
+            # canonicalizes any target == start+3, the first statement's
+            # own address, regardless of source construct), so the
+            # scanner tags it "run" instead of jmp/jmps (wild
+            # styllist.exe, probe q_resumestart3). RESUME can never
+            # trigger a genuine full-reset RUN (that would erase the
+            # error state it's resuming from), so this is always the
+            # plain first-statement target, start+3 in both dialects.
+            node = ir.Resume(target=("addr", state.start + 3))
         else:
             raise ValueError(f"RESUME tail {nxt} at {addr:#x} (unsupported)")
         state.put(node, state.cur)
