@@ -1,0 +1,19 @@
+# t1_inpsarr dialect=1.1 start=08830
+08833:movm_imm:342:2
+08839:input:352:0
+08840:read_str
+08843:movsim:342
+08847:shlsi
+08849:shlsi
+0884B:addsi:368
+0884F:strassign
+08851:movsim:342
+08855:shlsi
+08857:shlsi
+08859:addsi:368
+0885D:rt:156
+0885F:rt:190
+08861:rt:184
+08863:end
+08866:epilogue
+# commits

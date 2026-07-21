@@ -538,6 +538,11 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                 v = state.sstack.pop()
                 if v is _FREAD:  # INPUT# far string target
                     state._fread_target(ref)
+                elif v is _READDATA:  # READ target: computed string-array
+                    state._readdata_target(ref)  # element (wild pfl.exe/
+                elif v is _INPUTREAD:  # invent.exe); console INPUT target:
+                    state._input_target(ref, is_str=True)  # computed
+                    # string-array element (wild invent.exe)
                 else:
                     state.put(ir.Assign(ref, v), state.cur)
                 state.cur = None

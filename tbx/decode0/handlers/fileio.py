@@ -180,7 +180,25 @@ def data_read(state: DecodeState, op, addr, kind) -> bool:
         state.k += used
         return True
     if kind == "read_str":  # INPUT string read (movsi+strassign
-        state.k += 1  # next; handled by the movsi case)
+        nxt = state.ops[state.k + 1] if state.k + 1 < len(state.ops) else None
+        if nxt is not None and nxt[1] != "movsi":
+            # Computed string-array-element target (wild invent.exe, probe
+            # q_inpsarr): the index expression's own evaluation runs
+            # between the read and the element store -- an FP-typed index
+            # needs the fistp/fwait/movaxmem bridge first (fld/fild
+            # starts it), an already-integer one loads straight into si
+            # (movsim/movsi_bp) -- so the parsed value waits on the
+            # STRING stack as a sentinel meanwhile, the string sibling of
+            # read_num's numeric _INPUTREAD case above. The only OTHER
+            # continuation is the plain scalar target (movsi + strassign,
+            # handled generically below); anything but a direct movsi at
+            # this position must be an index computation starting. The
+            # store terminal (the shlsi element-access handler's
+            # strassign branch) names the target; pend_input stays open.
+            state.sstack.append(_INPUTREAD)
+            state.k += 1
+            return True
+        state.k += 1  # plain scalar target; handled by the movsi case)
         return True
     return False
 

@@ -1,0 +1,19 @@
+# v10_t1_inpsarr dialect=1.0 start=071E0
+071E3:movm_imm:342:2
+071E9:input:352:0
+071F0:read_str
+071F3:movsim:342
+071F7:shlsi
+071F9:shlsi
+071FB:addsi:368
+071FF:strassign
+07201:movsim:342
+07205:shlsi
+07207:shlsi
+07209:addsi:368
+0720D:rt:156
+0720F:rt:190
+07211:rt:184
+07213:end
+07216:epilogue
+# commits

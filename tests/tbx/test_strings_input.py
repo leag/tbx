@@ -18,6 +18,8 @@ PAIRS = [
     "t1_inpmixed",
     "t1_relval",
     "t1_inpdbl",
+    "t1_readsarr",
+    "t1_inpsarr",
 ]
 
 
@@ -98,6 +100,33 @@ def test_decode_t1_inparr():
     assert prog[2] == ir.Input(
         None, ir.ArrayRef("V0", (ir.Var("A"),))
     )
+
+
+def test_decode_t1_readsarr():
+    # READ into a computed STRING-array element (wild pfl.exe/invent.exe):
+    # data_read_str pushes _READDATA onto the STRING stack same as the
+    # scalar case, but the shlsi element-access handler's near-strassign
+    # branch only checked for _FREAD (INPUT#), never _READDATA -- the
+    # string sibling of gap 38's numeric array-READ support.
+    from tbx import decode0
+
+    prog = decode0.decode_user_code(_exe("t1_readsarr.exe"))
+    assert prog[3] == ir.Read((ir.ArrayRef("V0$", (ir.Var("A%"),)),))
+
+
+def test_decode_t1_inpsarr():
+    # console INPUT into a computed STRING-array element (wild
+    # invent.exe): read_str unconditionally assumed a plain scalar target
+    # (movsi + strassign) and never recognized an index computation
+    # starting instead -- the string sibling of t1_inparr's numeric
+    # _INPUTREAD sentinel. An integer-typed index loads straight into si
+    # (movsim); a float-typed one needs the fistp/fwait/movaxmem bridge
+    # first (fld/fild) -- either way, anything but a direct movsi at this
+    # position must be an index computation, not a plain scalar target.
+    from tbx import decode0
+
+    prog = decode0.decode_user_code(_exe("t1_inpsarr.exe"))
+    assert prog[2] == ir.Input(None, ir.ArrayRef("V0$", (ir.Var("A%"),)))
 
 
 def test_decode_t1_inpmulti():
