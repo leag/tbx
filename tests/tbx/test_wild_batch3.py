@@ -1747,6 +1747,49 @@ def test_decode_t1_fwdcall():
     )
 
 
+def test_decode_t1_licomp():
+    # ESC DA modrm=1C (mod=0,reg=3,rm=4): a computed-index LONG (`&`) array
+    # element compared against an FP-stack value (`IF A&(J%) > 5 THEN`) --
+    # the [si] sibling of icomp's disp16 scalar form, missing from the
+    # [si] kind table (wild bmaster.exe/ifi.exe, both at the identical
+    # offset 0x8fdd -- near-duplicate binaries).
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_licomp.exe"))
+    ifgoto = next(s for s in prog if isinstance(s, ir.IfGoto))
+    assert ifgoto.cond == ir.RelOp(
+        "<=", ir.ArrayRef("V0&", (ir.Var("B%"),)), ir.Lit(5)
+    )
+    assert emit0.emit(prog) == (
+        "10 DIM V0&(5)\n20 FOR A% = 1 TO 5\n"
+        "30 V0&(A%) = A% * 1000000\n40 NEXT A%\n50 B% = 3\n"
+        "60 IF V0&(B%) <= 5 THEN 80\n70 PRINT \"Y\"\n80 END\n"
+    )
+
+
+def test_decode_t1_locforvarlim():
+    # Integer FOR over a LOCAL var with a VARIABLE (non-literal) limit: the
+    # bp-relative mirror of t1_fori's DGROUP `movax_m`/`cmpm_ax` pair, using
+    # `movax_bp`/`cmpm_ax_bp` throughout (wild bmaster.exe/ifi.exe, once
+    # past the t1_licomp gap above). The header reserves a [step-temp,
+    # limit-temp] word pair right after the loop var, same as the
+    # literal-limit LOCAL FOR case -- here the step-temp is unused (dropped
+    # immediately) but the limit-temp IS read again at every iteration's
+    # test, so it can't be dropped from the LOCAL name table until the SUB
+    # body is fully decoded.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_locforvarlim.exe"))
+    sub = next(s for s in prog if isinstance(s, ir.SubDef))
+    assert ir.Local(("B%",)) in sub.body
+    for_stmt = next(s for s in sub.body if isinstance(s, ir.For))
+    assert for_stmt == ir.For(ir.Var("B%"), ir.Lit(1), ir.Var("A%"), ir.Lit(1))
+    assert emit0.emit(prog) == (
+        "10 SUB SUB1(A%)\n  LOCAL B%\n  FOR B% = 1 TO A%\n"
+        "  PRINT B%\n  NEXT B%\nEND SUB\n20 CALL SUB1(5)\n30 END\n"
+    )
+
+
 if __name__ == "__main__":
     test_decode_t1_fcmp()
     test_decode_t1_fori()
@@ -1798,4 +1841,6 @@ if __name__ == "__main__":
     test_decode_t1_forstepm1()
     test_decode_t1_forvarinit()
     test_decode_t1_fwdcall()
+    test_decode_t1_licomp()
+    test_decode_t1_locforvarlim()
     print("ALL PASS")

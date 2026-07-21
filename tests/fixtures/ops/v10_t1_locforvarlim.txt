@@ -1,0 +1,31 @@
+# v10_t1_locforvarlim dialect=1.0 start=070B0
+070B3:jmp:28919
+070B6:proc_enter
+070B9:local_init:3:10
+070CD:arg_ref:6
+070D0:far_movax_si
+070D3:movm_ax_bp:14
+070D6:mov_bp_imm:10:1
+070DB:jmp:28907
+070DE:fild_bp:10
+070E2:rt:187
+070E4:rt:184
+070E8:inc_bp:10
+070EB:movax_bp:14
+070EE:cmpm_ax_bp:10
+070F1:jcc:126:28894
+070F3:proc_ret:10
+070F7:mov_mem_sp:102
+070FB:sub_sp:8
+070FE:movax:5
+07101:movsi:6
+07104:add_si_sp
+07106:movm_ax_temp
+07109:arg_push_temp
+0710B:movm_imm:102:0
+07111:far_call:28854
+07116:add_sp:2
+07119:end
+0711C:epilogue
+# commits
+070E6

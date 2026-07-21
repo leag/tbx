@@ -596,6 +596,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "cmpm_ax", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4  # test with a VARIABLE limit (witnessed t1_fori)
         return p
+    if b == 0x39 and exe[p + 1] == 0x46:  # cmp [bp+d8], ax: the LOCAL-frame
+        ops.append((p, "cmpm_ax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # mirror of cmpm_ax (a LOCAL int FOR test with a VARIABLE
+        return p  # limit, wild bmaster.exe/ifi.exe)
     if b == 0x26 and exe[p + 1] == 0x3B and exe[p + 2] == 0x04:  # cmp ax, es:[si]:
         ops.append((p, "far_cmpax_si"))  # relational against a by-ref param
         p += 3  # (witnessed t1_cmpfar)
@@ -1521,6 +1525,11 @@ def _scan_pass(
                     (0xD9, 3): "fstp_si",
                     (0xD8, 3): "fcomp_si",
                     (0xDC, 3): "fcomp_si64",  # m64 compare (double array elem)
+                    (0xDA, 3): "icomp_si32",  # m32 long-int compare: a computed
+                    # LONG (`&`) array element vs. an FP-stack value (mixed-type
+                    # IF/loop test, e.g. `IF A&(J%) > 5 THEN`; the [si] sibling
+                    # of icomp's disp16 scalar form; wild bmaster.exe/ifi.exe,
+                    # probe q_licomp)
                     (0xDD, 0): "fld_si64",
                     (0xDD, 3): "fstp_si64",
                     (0xDB, 0): "fild_si32",

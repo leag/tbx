@@ -1,0 +1,32 @@
+# v10_t1_licomp dialect=1.0 start=070B0
+070B3:movm_imm:348:1
+070B9:jmp:28891
+070BC:fild32:362
+070C1:ifold:*:348
+070C6:movsim:348
+070CA:shlsi
+070CC:shlsi
+070CE:addsi:384
+070D2:fstp_si32
+070D7:inc_m:348
+070DB:cmp_mi8:348:5
+070E0:jcc:126:28860
+070E2:movm_imm:342:3
+070E8:fild:366
+070ED:movsim:342
+070F1:shlsi
+070F3:shlsi
+070F5:addsi:384
+070F9:icomp_si32
+070FC:fstsw
+07100:jcc:114:28933
+07102:jmp:28942
+07105:movsi:356
+07108:rt:156
+0710A:rt:190
+0710C:rt:184
+0710E:end
+07111:epilogue
+# commits
+070D5
+070FE

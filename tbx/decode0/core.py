@@ -1464,13 +1464,14 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             )
         elif (
             cmp_at_t is not None
-            and cmp_at_t[1] == "movax_m"
+            and cmp_at_t[1] in ("movax_m", "movax_bp")
             and state.stmts
             and isinstance(state.stmts[-1], ir.Assign)
             and isinstance(state.stmts[-1].target, ir.Var)
             and isinstance(state.stmts[-1].value, ir.Lit)
             and (nxt_t := next((o for o in state.ops if o[0] > t), None)) is not None
-            and nxt_t[1] == "cmpm_ax"
+            and nxt_t[1]
+            == {"movax_m": "cmpm_ax", "movax_bp": "cmpm_ax_bp"}[cmp_at_t[1]]
             and nxt_t[2] == state.vdisp(state.stmts[-1].target)
         ):
             # Integer FOR header, VARIABLE limit: the ops at the test are
@@ -1478,10 +1479,18 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             # copies the TO expression into the temp just before the init
             # (`mov ax,[N%]; mov [temp],ax; mov [I%],1; jmp test`) -- fold
             # that copy back into the FOR so the temp slot never surfaces
-            # as a variable (witnessed t1_fori)
+            # as a variable (witnessed t1_fori). A LOCAL loop var uses the
+            # bp-relative forms throughout (movax_bp/cmpm_ax_bp/mov_bp_imm --
+            # vdisp and loc_local's L-names already disambiguate uniformly,
+            # same as the literal-step/variable-step LOCAL FOR cases above;
+            # wild bmaster.exe/ifi.exe, probe q_locforvarlim).
             init_s = state.stmts.pop()
             a = state.addrs.pop()
-            limit = state.loc(cmp_at_t[2])
+            limit = (
+                state.loc_local(cmp_at_t[2])
+                if cmp_at_t[1] == "movax_bp"
+                else state.loc(cmp_at_t[2])
+            )
             if (
                 state.stmts
                 and isinstance(state.stmts[-1], ir.Assign)
@@ -1490,6 +1499,22 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             ):
                 limit = state.stmts.pop().value
                 a = state.addrs.pop()
+            if cmp_at_t[1] == "movax_bp" and state.proc_frame is not None:
+                # A variable-limit FOR over a LOCAL reserves the SAME
+                # [step-temp, limit-temp] word pair as the literal-limit
+                # case above, right after the loop var -- the step-temp
+                # (v+2) is unused with a literal step and dropped
+                # immediately, but the limit-temp (v+4, == cmp_at_t[2]) is
+                # read again at every iteration's test (movax_bp reloads
+                # it), so it can't be dropped yet; stash it and strip it
+                # only once the SUB body is fully decoded (proc_ret),
+                # mirroring the variable-STEP LOCAL case's step-temp
+                # handling above.
+                locs = state.proc_frame["locals"] or {}
+                locs.pop(nxt_t[2] + 2, None)
+                state.proc_frame.setdefault("hidden_locals", set()).add(
+                    cmp_at_t[2]
+                )
             state.put(
                 ir.For(init_s.target, init_s.value, limit, ir.Lit(1)),
                 a,
@@ -2292,6 +2317,26 @@ def decode_user_code(exe: bytes) -> list[Any]:
             if jcc[1] != "jcc" or jcc[2] not in (0x7E, 0x76) or jcc[3] != f["body"]:
                 raise ValueError(f"int NEXT (var limit): expected JLE to body at {addr:#x}")
             state.put(ir.NextStmt(state.loc(f["v"])), state.cur)
+            state.fors.pop()
+            state.cur = None
+            state.k += 3
+            continue
+        if (
+            kind == "movax_bp"
+            and state.fors
+            and addr == state.fors[-1]["test"]
+            and state.k + 2 < len(state.ops)
+            and state.ops[state.k + 1][1] == "cmpm_ax_bp"
+            and state.ops[state.k + 1][2] == state.fors[-1]["v"]
+        ):
+            # Variable-limit integer NEXT, LOCAL loop var: the bp-relative
+            # mirror of the movax_m/cmpm_ax case just above (wild
+            # bmaster.exe/ifi.exe, probe q_locforvarlim).
+            f = state.fors[-1]
+            jcc = state.ops[state.k + 2]
+            if jcc[1] != "jcc" or jcc[2] not in (0x7E, 0x76) or jcc[3] != f["body"]:
+                raise ValueError(f"int NEXT (var limit): expected JLE to body at {addr:#x}")
+            state.put(ir.NextStmt(state.loc_local(f["v"])), state.cur)
             state.fors.pop()
             state.cur = None
             state.k += 3

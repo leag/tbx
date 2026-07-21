@@ -4134,6 +4134,16 @@ Return()
 Kill(file=StrLit(value='X.DAT'))
 End()
 
+## t1_licomp
+Dim(name='V0&', bounds=(5,), also=())
+For(var=Var(name='A%'), init=Lit(value=1), limit=Lit(value=5), step=Lit(value=1))
+Assign(target=ArrayRef(name='V0&', indices=(Var(name='A%'),)), value=BinOp(op='*', lhs=Var(name='A%'), rhs=Lit(value=1000000)))
+NextStmt(var=Var(name='A%'))
+Assign(target=Var(name='B%'), value=Lit(value=3))
+IfGoto(cond=RelOp(op='<=', lhs=ArrayRef(name='V0&', indices=(Var(name='B%'),)), rhs=Lit(value=5)), target=7)
+Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_line
 LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=None, box='', step1=False, step2=False, style=None)
 End()
@@ -4226,6 +4236,11 @@ End()
 
 ## t1_loccurs
 Locate(row=None, col=None, cursor=Lit(value=1), start=Lit(value=6), stop=Lit(value=7))
+End()
+
+## t1_locforvarlim
+SubDef(name='SUB1', params=('A%',), body=(Local(names=('B%',)), For(var=Var(name='B%'), init=Lit(value=1), limit=Var(name='A%'), step=Lit(value=1)), Print(items=(Var(name='B%'),), newline=True, file=None, commas=None), NextStmt(var=Var(name='B%'))))
+CallStmt(name='SUB1', args=(Lit(value=5),))
 End()
 
 ## t1_locidx
@@ -9716,6 +9731,16 @@ Return()
 Kill(file=StrLit(value='X.DAT'))
 End()
 
+## v10_t1_licomp
+Dim(name='V0&', bounds=(5,), also=())
+For(var=Var(name='A%'), init=Lit(value=1), limit=Lit(value=5), step=Lit(value=1))
+Assign(target=ArrayRef(name='V0&', indices=(Var(name='A%'),)), value=BinOp(op='*', lhs=Var(name='A%'), rhs=Lit(value=1000000)))
+NextStmt(var=Var(name='A%'))
+Assign(target=Var(name='B%'), value=Lit(value=3))
+IfGoto(cond=RelOp(op='<=', lhs=ArrayRef(name='V0&', indices=(Var(name='B%'),)), rhs=Lit(value=5)), target=7)
+Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None)
+End()
+
 ## v10_t1_line
 LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=None, box='', step1=False, step2=False, style=None)
 End()
@@ -9792,6 +9817,11 @@ End()
 
 ## v10_t1_loccurs
 Locate(row=None, col=None, cursor=Lit(value=1), start=Lit(value=6), stop=Lit(value=7))
+End()
+
+## v10_t1_locforvarlim
+SubDef(name='SUB1', params=('A%',), body=(Local(names=('B%',)), For(var=Var(name='B%'), init=Lit(value=1), limit=Var(name='A%'), step=Lit(value=1)), Print(items=(Var(name='B%'),), newline=True, file=None, commas=None), NextStmt(var=Var(name='B%'))))
+CallStmt(name='SUB1', args=(Lit(value=5),))
 End()
 
 ## v10_t1_locidx

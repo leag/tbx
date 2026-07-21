@@ -576,8 +576,9 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             state.stack.append(_orient(sik[2], ref, state.stack.pop()))
         elif sik[1] == pre + "fold_n64_si":
             state.stack.append(ir.BinOp(sik[2], state.stack.pop(), ref))
-        elif sik[1] in (pre + "fcomp_si", pre + "fcomp_si64"):
-            # IF on an array element (m64 witnessed t1_dblar2)
+        elif sik[1] in (pre + "fcomp_si", pre + "fcomp_si64", pre + "icomp_si32"):
+            # IF on an array element (m64 witnessed t1_dblar2; LONG mixed-type
+            # compare witnessed wild bmaster.exe/ifi.exe, probe q_licomp)
             state.pend_cmp = (ref, state.stack.pop())
         elif sik[1] == "rt" and sik[2] == 0x9C:
             # push (var desc): a VARIABLE-indexed static string array element

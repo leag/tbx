@@ -34,6 +34,8 @@ PAIRS = [
     "t1_forstepm1",
     "t1_forvarinit",
     "t1_fwdcall",
+    "t1_licomp",
+    "t1_locforvarlim",
     "t1_strch",
     "t1_svaridx",
     "t1_addpool",

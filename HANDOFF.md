@@ -59,7 +59,75 @@ toggle-compile script (`tb_v86_compile.js`), which isn't vendored.
 
 ## Where things stand
 
-**Updated 2026-07-21 (latest): 23 of 84 wild EXEs decode-ok**, up from 22.
+**Updated 2026-07-21 (latest session): 23 of 84 wild EXEs decode-ok** (unchanged
+count, but bmaster.exe/ifi.exe both advanced two gaps deeper without yet
+finishing). Picked up the tied-top-of-tally "DGROUP layout not solvable"
+gap (menu/night/sprogh/swbb) first per the frequency-order standing
+instruction, but the hand-derive-`ds` promotion criteria in
+`RR-DGROUP-BIGARR` led nowhere new this round: brute-force-scanning
+menu.exe for `_parse_static_slot`-valid runs (both tightly-packed and
+ARR_BLOCK-strided) only ever turns up the SAME false-positive family
+already on record, clustered right before the pool marker with
+implausible counts (3001/8002/etc) — extending the descending-n walk past
+its current 31-array cap up to n=200 doesn't surface anything better
+either. Left exactly as documented in the JSON entry; do not re-attempt
+this exact brute-force without a new idea (e.g. actually reading what
+`_is_rt_slot`/COMMON-adjacent shapes look like around the real 0x2f2-0x400
+movsi run, which never got explained). Pivoted to `byte 8b`'s sibling
+tally instead and found a clean, oracle-verified two-gap chain:
+
+- **ESC DA modrm=1C, the `[si]` (computed-index) sibling of `icomp`**
+  (2026-07-21): `mod=0,reg=3,rm=4` with `esc=DA` is a computed-index LONG
+  (`&`) array element compared against an FP-stack value (`IF A&(J%) > 5
+  THEN`) — reg=3 under the DA (m32 long-int) ESC family is FICOMP, and the
+  `[si]` kind table already has the m64/m32-store/etc siblings but never
+  this one. New op `icomp_si32`, consumed identically to `fcomp_si`/
+  `fcomp_si64` (`state.pend_cmp = (ref, state.stack.pop())` — same
+  handler branch, just added to the tuple). Fixture `t1_licomp`
+  (`DIM A&(5)` + a variable-index compare), byte-exact both dialects.
+  Closed the ORIGINAL blocker for wild bmaster.exe/ifi.exe (both fail at
+  the identical file offset 0x8fdd — near-duplicate binaries), which then
+  advanced to a new "LOCAL FOR, variable limit" gap immediately below.
+- **Integer FOR over a LOCAL var with a VARIABLE (non-literal) limit**
+  (2026-07-21): the bp-relative mirror of the already-working DGROUP
+  `movax_m`/`cmpm_ax` variable-limit pair (`t1_fori`), using new ops
+  `cmpm_ax_bp` (scan-level: `39 46 d8` = `cmp [bp+d8],ax`, the bp-relative
+  sibling of `cmpm_ax`'s `39 06 disp16`) plus a NEXT-side continuation
+  branch mirroring the existing `movax_m`+`cmpm_ax` FOR-test recognizer,
+  both keyed off `cmp_at_t[1] in ("movax_m","movax_bp")` so the same
+  header-fold code serves both frames (vdisp/`loc_local`'s L-names already
+  disambiguate uniformly, same trick used by the variable-STEP LOCAL case
+  and the literal-limit LOCAL case before it). The header reserves a
+  [step-temp, limit-temp] word pair right after the loop var, same
+  convention as those two prior LOCAL-FOR gaps: the step-temp (v+2) is
+  unused here (literal step 1) and dropped immediately, but the
+  limit-temp (v+4) is read again at every iteration's test (`movax_bp`
+  reloads it) so it has to be stashed in `hidden_locals` and stripped only
+  at `proc_ret`, exactly like the variable-STEP case's own step-temp.
+  Fixture `t1_locforvarlim` (`SUB TEST(N%): LOCAL I%: FOR I% = 1 TO N% ...`),
+  byte-exact both dialects. Advanced wild bmaster.exe/ifi.exe past this
+  gap too (both now fail at the SAME later offset 0x9081 — see below).
+
+**New gap surfaced, NOT investigated further this session**: bmaster.exe/
+ifi.exe now both fail at the identical `unhandled byte 26 at 0x9081`. Raw
+bytes at that offset: `26 ff 04` = `INC word ES:[SI]` (a far/by-ref-param
+INC, the ES-shortcut family's own increment op, missing from the existing
+`26 <op> es:[si]` table alongside the already-handled read/AND/write/
+write-const/imul rows from gaps 11/18) — immediately followed by `8b 46
+3e` (`mov ax,[bp+3Eh]`, a LOCAL limit reload) then `c4 76 16` (`les
+si,[bp+16h]`, reload the by-ref param pointer) then `26 39 04` (`cmp
+word es:[si],ax`, a FAR/by-ref-param sibling of `cmpm_ax_bp` just closed
+above). This looks like the SAME "variable-limit FOR" family a third time,
+now with the loop variable itself being a BY-REF INTEGER PARAMETER rather
+than a plain LOCAL — i.e. a `far_cmpm_ax_si` + `far_incax_si`-style pair
+would need adding to close it, mirroring this session's `cmpm_ax_bp` work
+but through the ES:[SI] indirection instead of bp-relative. Not attempted
+this session (ran out of scope after two verified closures); worth
+picking up directly next time with a probe like `SUB TEST(N%): FOR N% = 1
+TO <something bigger>` (a by-ref INTEGER parameter used directly as the
+FOR loop variable) to confirm the exact shape before implementing.
+
+Previously, updated 2026-07-21 (earlier session): 23 of 84 wild EXEs decode-ok, up from 22.
 `90250ca` closes tamstart.exe fully via three gaps found while chasing
 the same generic "materialization template mismatch"/KeyError signature
 across four files (tamstart/grdscn/kinder/process):
