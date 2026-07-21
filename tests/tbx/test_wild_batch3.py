@@ -1452,6 +1452,24 @@ def test_decode_t1_fprintblank():
     )
 
 
+def test_decode_t1_fpcomma():
+    # Leading zone-advance comma on a FILE-channel PRINT (`PRINT #1, , A`,
+    # wild styllist.exe): the console PRINT already auto-creates an empty
+    # pend_print for a leading comma (gap 52, t1_pcomma2), but the file
+    # channel's C3 vector never got the same treatment -- it required
+    # pend_print["items"] to be non-empty, which a leading comma can never
+    # satisfy. Mirrors the console auto-create, staging file=pend_fnum.
+    # Closes wild styllist.exe's blocker; advances to a distinct gap.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_fpcomma.exe"))
+    assert prog[2] == ir.Print((ir.Var("A"),), file=1, commas=(1, 0))
+    assert emit0.emit(prog) == (
+        '10 OPEN "T.DAT" FOR OUTPUT AS #1\n20 A = 5\n30 PRINT #1, , A\n'
+        "40 CLOSE #1\n50 END\n"
+    )
+
+
 def test_decode_t1_addimm():
     # 01 06 = add [disp16], ax: the disp16 sibling of addm_ax_bp (t1_local1's
     # LOCAL combine-store) -- `X% = X% + <expr>` when the RHS isn't a bare
