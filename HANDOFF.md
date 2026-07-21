@@ -355,32 +355,88 @@ existing test suite (zero regressions) — no NEW fixture needed, same as
 how the original two bodies are treated (their own source trigger isn't
 inferred either).
 
-**This closes the helper-family blocker but does NOT fully close
-resume.exe.** Past all seven helpers, the file hits a NEW, different kind
-of gap: `displacement 0x52 is neither scalar nor array element`, from an
-`fstp64` (store a DOUBLE) whose target disp (82 decimal) sits WAY below
-every known scalar-band floor — below `VAR_BASE` (0x120/288) AND below
-COMMON's own floor (0x110/272). Confirmed via direct trace: the file's
-LOWEST successfully-registered ordinary scalar is at disp `0x306`
-(774) — a ~500-byte unaccounted-for gap between `VAR_BASE` and the real
-scalar band start, and `state.lay["arrs"]` is empty (no static/runtime
-arrays at all), so this isn't an array-record-floating case either
-(ruling out the gap-16/28-style "record run floats past variable-length
-init data" explanation, which is about array records, not scalars, and
-which needs `n_static > 0`). The value being stored comes from a BY-REF
-INTEGER parameter (`arg_ref 10; far_fild_si`, i.e. `FILD` promoting an
-int by-ref param onto the FP stack) immediately at the very start of a
-SUB body, right after `local_init`/a `trap_hook` stamp. **Not attempted
-further this session** — this needs its own dedicated `layout.py`
-investigation (the ordinary walk/stamp paths both anchor everything to
-`sb >= vb`, so a genuinely sub-`VAR_BASE`, sub-COMMON scalar needs either
-a new anchor mechanism or confirmation that disp 82 is actually some
-undocumented system cell, not a user scalar at all) — do not guess a
-layout.py evidence-gathering change without oracle confirmation; the
-existing `movm_imm` VAR_BASE-gate-deferral precedent (commit `b20bdc6`)
-does NOT apply directly here since it relied on `state.loc()` ALREADY
-succeeding via a properly-registered COMMON band, which this disp is
-still below.
+Past all seven helpers, resume.exe hit a chain of SIX more gaps, each
+found and fixed in turn (see the dedicated commit for the full writeup
+of each) — all verified against the real wild file's exact byte trace
+plus the full test suite/wild-scan regression check after every step:
+
+1. **`fp64_bridge`**: the `displacement 0x52 ...` gap turned out to be a
+   transient sub-`VAR_BASE` scratch cell, NOT a real scalar — an
+   `fstp64`/`fcomp64` "promote once, compare many times" idiom
+   (`IF N%=1 THEN...ELSEIF N%=2 THEN...` promotes the by-ref INT param to
+   DOUBLE once and rereads the cache for each comparison), the exact same
+   "stage, then reread" shape as the existing `fistp[0x2C]` IDX% bridge,
+   just at a variable position. Confirmed via direct trace (repeated
+   `fcomp64` reads of the identical disp) — NOT a `layout.py` scalar-band
+   floor issue at all, so the earlier session's specific concern about
+   `movm_imm`'s VAR_BASE-gate precedent not applying doesn't matter; this
+   needed a wholly different (correct) mechanism.
+2. **FP-typed LOCAL variables in SUB bodies**: the SAME gap ziptest.exe
+   hit and left unresolved earlier this campaign. `fld_bp`/`fstp_bp`/
+   `fold_bp`/`fold_n_bp`/`fcomp_bp` had NO case for `state.proc_frame`,
+   silently no-oping. Implemented for SINGLE precision (spans two LOCAL
+   words, renaming the first's phantom int name to `!` and dropping the
+   second). Fixture `t1_localsingle`, byte-exact both dialects. (DOUBLE
+   LOCALs, spanning four words, remain unimplemented — unwitnessed so
+   far.)
+3. **`arg_push_arr` as a shlsi-chain terminal**: a computed array
+   element's address pushed as a by-ref CALL arg — the computed-index
+   sibling of core.py's existing constant-index (movsi-disp16) handling.
+4. **Deferred forwarded-arg type resolution**: a CALL to a SUB defined
+   LATER in the file, forwarding an enclosing SUB's own by-ref param,
+   needs the callee's param list to type the arg — unknown yet for a
+   forward reference. Stages a second `("fwdpending", ...)` placeholder,
+   resolved by the same post-pass that fixes up forward CallStmt names.
+5. **`cmpax_bp`'s AND-chain shuffle**: the ax↔bx no-op round trip that
+   preserves a running AND-accumulator across a compare (already handled
+   for `cmpax_m`), extended to `cmpax_bp`.
+6. **`subax_m`'s general fallback**: previously ONLY handled far-IDX
+   array lo-subscript normalization, raising for anything else. Added
+   the same pool-literal/scalar fallback `addax_m` already has, for a
+   plain `<expr> - <mem>` fold (mem on the RIGHT, since SUB isn't
+   commutative).
+7. **`negax` spliced out of an element-access terminal lookahead**:
+   negates whatever's already staged in ax (unrelated to the array
+   element itself, e.g. `ARRAY(i) + (-2)`) before the real terminal
+   combines it — not part of the element-access protocol.
+
+None of gaps 1, 3–7 have a dedicated oracle-verified fixture (probes
+built for several didn't reproduce the exact optimization trigger) —
+verified instead via direct trace against the real wild file plus the
+full regression suite, the same standard the existing `movm_imm`
+VAR_BASE-gate-deferral fix (`b20bdc6`) already established as acceptable
+for logic fixes that reuse already-verified resolution paths.
+
+**resume.exe is STILL not fully closed.** The next (and, as far as this
+session traced, LAST) blocker: `LOCAL zero-fill outside a fresh SUB
+body`. Root cause fully diagnosed: this file has a **DEF FN that ALSO
+declares LOCAL variables** — a combination with no existing support at
+all (`local_init`'s handler hard-requires `state.proc_frame`, which only
+`proc_enter`/SUB bodies ever set; DEF FN's own `state.fn_frame` has no
+"locals" concept whatsoever). Compounding this, the auto-fn_frame-
+creation that would normally open `fn_frame` for an unframed DEF FN body
+NEVER fires for this specific DEF FN, because it's gated on `addr <
+state.main_start`, and `state.main_start` is `None` for this whole file:
+the ONE-TIME check that sets it (`state.k == 0 and kind == "jmp"`)
+requires the file's very FIRST op to be literally a `jmp`, but this
+file's first op is a `trap_hook` stamp (confirmed via direct trace: `ops[0]
+== ('trap_hook',)`, `ops[1] == ('strfn', 'COMMAND$')` — no leading skip-jmp
+at all in this file's compiled layout). Implementing this needs BOTH:
+(a) a narrow, low-risk trigger — auto-create `fn_frame` (or a
+fn_frame-scoped "locals" dict) directly from `local_init` itself when hit
+with no open `proc_frame`/`fn_frame`, rather than depending on
+`main_start` at all (safe: this path currently ALWAYS raises, so no
+currently-passing file's behavior can regress); AND (b) properly
+separating DEF FN "locals" from DEF FN "params" in `fp_bp`'s handler and
+`fn_ret`'s closing logic — `fn_ret` currently computes `nparams =
+max_off // 4` from the single highest bp-offset EVER touched, assuming
+EVERY touched offset is a positional parameter; LOCAL variables would
+need to be excluded from that count and instead emitted via their own
+`ir.Local(...)`, mirroring `proc_ret`'s existing SUB-side treatment. This
+is a real, if bounded, new subsystem — not attempted this session given
+the risk of rushing it; next session should implement it carefully with
+its own probe/verification pass (a `DEF FN...LOCAL...END DEF` construct,
+byte-exact both dialects) before trusting it.
 
 Previously, updated 2026-07-21 (earlier session): 23 of 84 wild EXEs decode-ok, up from 22.
 `90250ca` closes tamstart.exe fully via three gaps found while chasing
