@@ -83,6 +83,19 @@ CASES = [
     ("fbd_t1_sarr.exe", "B", None),  # string-array variable index (bchk covers it)
     ("fbd_t1_dimm.exe", "B", None),  # 2-D variable index (bchk_span, F3.5)
     ("v10_fkb_t1_beep.exe", "K", "10 BEEP\n20 END\n"),
+    (  # INTO after a shl-si element-address computation under Overflow: the
+        # position varies by dialect (1.1 between the two shl's; 1.0 after
+        # the last shl AND after addsi, right before the terminal consumer)
+        # but is always a semantic-free skip like the other INTO cases
+        "fov_t1_shlovf.exe",
+        "O",
+        "10 DIM V0(10)\n20 A% = 3\n30 V0(A%) = 5\n40 PRINT V0(A%)\n50 END\n",
+    ),
+    (
+        "v10_fov_t1_shlovf.exe",
+        "O",
+        "10 DIM V0(10)\n20 A% = 3\n30 V0(A%) = 5\n40 PRINT V0(A%)\n50 END\n",
+    ),
 ]
 
 

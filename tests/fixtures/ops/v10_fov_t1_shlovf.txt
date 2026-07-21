@@ -1,0 +1,24 @@
+# v10_fov_t1_shlovf dialect=1.0 start=070B0
+070B3:movm_imm:342:3
+070B9:fild:356
+070BE:movsim:342
+070C2:shlsi
+070C4:shlsi
+070C6:into
+070C7:addsi:368
+070CB:into
+070CC:fstp_si
+070D1:movsim:342
+070D5:shlsi
+070D7:shlsi
+070D9:into
+070DA:addsi:368
+070DE:into
+070DF:fld_si
+070E2:rt:187
+070E4:rt:184
+070E8:end
+070EB:epilogue
+# commits
+070CF
+070E6

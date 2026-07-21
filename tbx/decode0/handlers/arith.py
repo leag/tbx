@@ -433,22 +433,39 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         # the single-shl case had no witness until now, so the gate below
         # unconditionally required a second shl), two for 4-byte (single/
         # string-descriptor), the optional third for 8-byte (double).
+        # An INTO (Overflow-toggle check, semantic-free) can land after ANY
+        # arithmetic step in this chain -- each shl/addsi is itself
+        # arithmetic that can overflow under the 'O' IDE Options toggle, and
+        # its position varies by dialect (TB 1.1 puts it between the two
+        # shl's; TB 1.0 puts one after the LAST shl and another after addsi,
+        # right before the terminal consumer). Splicing it out at every join
+        # point keeps every downstream `ao`-relative offset in this handler
+        # valid, since it assumes strict shlsi/terminal adjacency otherwise
+        # (wild mcmurphy.exe/rstprint.exe, probe q_ovfshl compiled with
+        # --toggles O, byte-exact both dialects).
+        def _skip_into(i):
+            while i < len(state.ops) and state.ops[i][1] == "into":
+                del state.ops[i]
+
+        _skip_into(state.k + 1)
         if state.k + 1 >= len(state.ops):
             raise ValueError(f"shl si outside an element access at {addr:#x}")
         if state.ops[state.k + 1][1] == "shlsi":
-            ao = (
-                3
-                if state.k + 2 < len(state.ops)
-                and state.ops[state.k + 2][1] == "shlsi"
-                else 2
-            )
+            _skip_into(state.k + 2)
+            if state.k + 2 < len(state.ops) and state.ops[state.k + 2][1] == "shlsi":
+                _skip_into(state.k + 3)
+                ao = 3
+            else:
+                ao = 2
         else:
             ao = 1
+        _skip_into(state.k + ao)
         if state.k + ao + 1 >= len(state.ops) or state.ops[state.k + ao][1] not in (
             "moves_m",
             "addsi",
         ):
             raise ValueError(f"shl si outside an element access at {addr:#x}")
+        _skip_into(state.k + ao + 1)
         far = state.ops[state.k + ao][1] == "moves_m"
         if far:
             blk = state.ops[state.k + ao][2]
