@@ -336,6 +336,52 @@ buffer segment might need exactly this kind of juggling); or bisect
 stat.exe's own source-adjacent statements directly if a source listing for
 this specific shareware title is ever found.
 
+## Gap: resume.exe's CGA-blitter helper family (CLOSED) + a new sub-VAR_BASE FP64 scalar (OPEN)
+
+resume.exe's `unhandled byte c4`/`byte b4` sequence turned out to be gap
+19's already-recognized-but-only-partially-fingerprinted opaque-helper
+family (see `_OPAQUE_HELPER_BODY`/`_OPAQUE_HELPER_BODY_2`'s existing
+docstring — a real framed far procedure the compiler links in, source
+semantics deliberately not inferred, "coverage-only recovery"): the file
+places SEVEN of these back-to-back, each skipped by its own `JMP`, almost
+certainly one per video-mode/pixel-depth combination for a single
+graphics primitive (all share the exact `push bp; mov bp,sp; push ds;
+push es; ...; pop es; pop ds; pop bp; int3; retf` framing and the CGA
+horizontal-retrace-wait idiom). Extracted each exact byte sequence via
+the existing `_try_inline_rescue` machinery (byte-for-byte, not
+approximate) and registered all six new ones (`_OPAQUE_HELPER_BODY_3`
+through `_8`) alongside the two already known. Verified via the full
+existing test suite (zero regressions) — no NEW fixture needed, same as
+how the original two bodies are treated (their own source trigger isn't
+inferred either).
+
+**This closes the helper-family blocker but does NOT fully close
+resume.exe.** Past all seven helpers, the file hits a NEW, different kind
+of gap: `displacement 0x52 is neither scalar nor array element`, from an
+`fstp64` (store a DOUBLE) whose target disp (82 decimal) sits WAY below
+every known scalar-band floor — below `VAR_BASE` (0x120/288) AND below
+COMMON's own floor (0x110/272). Confirmed via direct trace: the file's
+LOWEST successfully-registered ordinary scalar is at disp `0x306`
+(774) — a ~500-byte unaccounted-for gap between `VAR_BASE` and the real
+scalar band start, and `state.lay["arrs"]` is empty (no static/runtime
+arrays at all), so this isn't an array-record-floating case either
+(ruling out the gap-16/28-style "record run floats past variable-length
+init data" explanation, which is about array records, not scalars, and
+which needs `n_static > 0`). The value being stored comes from a BY-REF
+INTEGER parameter (`arg_ref 10; far_fild_si`, i.e. `FILD` promoting an
+int by-ref param onto the FP stack) immediately at the very start of a
+SUB body, right after `local_init`/a `trap_hook` stamp. **Not attempted
+further this session** — this needs its own dedicated `layout.py`
+investigation (the ordinary walk/stamp paths both anchor everything to
+`sb >= vb`, so a genuinely sub-`VAR_BASE`, sub-COMMON scalar needs either
+a new anchor mechanism or confirmation that disp 82 is actually some
+undocumented system cell, not a user scalar at all) — do not guess a
+layout.py evidence-gathering change without oracle confirmation; the
+existing `movm_imm` VAR_BASE-gate-deferral precedent (commit `b20bdc6`)
+does NOT apply directly here since it relied on `state.loc()` ALREADY
+succeeding via a properly-registered COMMON band, which this disp is
+still below.
+
 Previously, updated 2026-07-21 (earlier session): 23 of 84 wild EXEs decode-ok, up from 22.
 `90250ca` closes tamstart.exe fully via three gaps found while chasing
 the same generic "materialization template mismatch"/KeyError signature
