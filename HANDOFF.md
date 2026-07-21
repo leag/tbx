@@ -28,15 +28,30 @@ from roughly 25 seconds to 8.8 seconds, and two concurrent compiles finish in
 
 ## Where things stand
 
-84 wild EXEs: **15 decode OK** (ck, onelab87, onelabel, mm, autonum, rev,
-startup, schart, r, book, inv87, invoice, metric, strpfind, pz); cursor-only
-LOCATE recovery completed pz.exe. The DEFxxx recovery
-completed metric.exe. Every
-closure below advanced files further into previously-unreachable territory
-without fully finishing a NEW file, which is expected once the easy/common
-gaps are gone and each file needs several more fixes to reach the end.
-vhfprop.exe remains the only file blocked purely by the line-table epic
-(see "vhfprop status" below, unchanged this session).
+**Updated 2026-07-20 (later session, commits 4f29e9b..f2ae494): 20 of 84
+wild EXEs decode OK**, up from 16 at this session's start (ck, onelab87,
+onelabel, mm, autonum, rev, startup, schart, r, book, inv87, invoice,
+metric, strpfind, pz, rstprint, mymenu, be, invent, and one more --
+re-run `scan_wild.py` for the exact current list, this session added
+rstprint/mymenu/be/invent). Nine gaps closed this session, each verified
+byte-exact both dialects via the oracle (see "Recently closed" for the
+full list): the IDX% bridge's nop;nop fwait alias, computed
+(variable) FOR-STEP, an INTO interposed in a shl-si element-address
+chain, cmpax_m's pooled-literal left operand, a computed array
+element's relational-value materialization, a mislabeled LOC(n) vector
+(was "INP") plus its implicit fstp bridge, a bare file-channel
+`PRINT #n,`, a leading zone-advance comma on a file-channel PRINT, RESUME
+to the program's own first statement, and READ/INPUT into a computed
+string-array element. `gap_reports/runtime-revision-assessments.json`
+also got a pass: one stale "unresolved" entry corrected to "closed",
+one new "closed" entry added for the nop-fwait fix, and one new
+"unresolved" entry (`RR-DGROUP-BIGARR`) opened for a fresh finding (see
+below). Every closure advanced files further into previously-unreachable
+territory without fully finishing a NEW file every time, which is
+expected once the easy/common gaps are gone and each file needs several
+more fixes to reach the end. vhfprop.exe remains the only file blocked
+purely by the line-table epic (see "vhfprop status" below, unchanged
+this session).
 
 **`OPEN file$ FOR mode AS #n` was the session's biggest single closure**:
 16 of 84 files were blocked on it alone (tied top of the tally at session
@@ -258,6 +273,44 @@ candidate/unresolved writeup there with negative evidence already collected.
 
 ## Recently closed (this campaign, newest first)
 
+- **Session summary, 8 more closures after the FOR-STEP/nop-fwait entry
+  below** (2026-07-20, commits 8336d0f..f2ae494, wild 16->20 decode-ok):
+  each is its own commit with the full byte-trace/probe writeup; this is
+  just an index.
+  - `8336d0f` INTO interposed in a computed-array-element shl-si chain
+    (dialect-dependent position; fixture fov_t1_shlovf). Closed
+    rstprint.exe fully.
+  - `1f6c110` cmpax_m's pooled int-literal LEFT operand (`IF 180 =
+    LEN(A$) THEN`), the same fallback imul_m already had (gap 43).
+    Fixture t1_cmppool. Closed mymenu.exe fully.
+  - `83c8f76` A computed array element's relational-value materialization
+    (`B% = (A%(I%) = 5)`), hooked into the same pend_cmp/movax-0xFFFF
+    path the scalar case already uses. Fixture t1_cmpsival. Advanced
+    pfl.exe/number.exe (not fully closed).
+  - `d8feff6` `_AXARG_SUBS[0x24]` was mislabeled "INP" -- it's actually
+    LOC(n) (INP(n) always compiles inline, never reaches this vector);
+    plus fstp's implicit ax->FP bridge for LOC(n)'s result. Fixture
+    t1_loc2. Fixed a real crash (bare IndexError) in be.exe/styllist.exe.
+  - `4cd81da` Bare file-channel `PRINT #n,` (blank-line flush with no
+    staged items). Fixture t1_fprintblank. Closed be.exe fully.
+  - `8ba4df1` Leading zone-advance comma on a file-channel PRINT (`PRINT
+    #1, , A`), mirroring the existing console-PRINT auto-create. Fixture
+    t1_fpcomma. Advanced styllist.exe.
+  - `ae49657` RESUME to the program's own first statement: TB 1.0's
+    E9-near jump canonicalization tags it "run" (same bytes as a bare
+    RUN), colliding with resume_pre's tail check. Fixture t1_resumestart.
+    Advanced styllist.exe (still open, a RESTORE line-item KeyError next).
+  - `f2ae494` READ/INPUT into a computed STRING-array element: two gaps
+    (data_read_str's _READDATA sentinel wasn't checked in the shlsi
+    element-access handler's strassign branch; read_str never recognized
+    an index computation starting instead of a plain scalar target).
+    Fixtures t1_readsarr/t1_inpsarr. Closed invent.exe fully.
+  - Still open, untouched further this session: styled.exe/styllist.exe's
+    shared "87" (a RESTORE/DATA item-index KeyError -- traced to
+    `item_to_stmt[87]` missing because a RESTORE target's raw item-index
+    exceeds `len(items)`, root cause not yet found); pfl.exe's new
+    "element access: unexpected op fistp"; number.exe's new "ax,bx
+    combine with empty regs".
 - **Computed (variable) `FOR...STEP`, and the IDX% bridge's nop;nop fwait
   alias** (2026-07-20, commit 4f29e9b): `FOR I% = a TO b STEP J%` can't
   pick ascending vs. descending continuation at compile time (J% isn't a
