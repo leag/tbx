@@ -23,7 +23,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: uv sync --locked
       - run: uv run ruff check
-      - run: uv run ty check
+      # - run: uv run ty check  # disabled: ty blows up memory (50GB+) on this repo, see session notes
       - run: uv run pytest
 
   # the c0 native-recompile back end across platforms and compilers
