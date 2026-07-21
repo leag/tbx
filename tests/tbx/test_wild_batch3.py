@@ -1708,6 +1708,45 @@ def test_decode_t1_forstepm1():
     )
 
 
+def test_decode_t1_forvarinit():
+    # Computed (variable) FOR INIT: `FOR I% = N% TO 23` compiles the same
+    # header shape as a literal-init FOR (assign; jmp test; ... cmp_mi8 ...)
+    # but via movm_ax instead of movm_imm, since the init value is whatever
+    # expression was in ax -- the header recognizer required a Lit init,
+    # rejecting this shape outright even though nothing downstream actually
+    # needs it to be one (wild tamstart.exe, closed fully by this fixture).
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_forvarinit.exe"))
+    assert prog[1] == ir.For(ir.Var("B%"), ir.Var("A%"), ir.Lit(23), ir.Lit(1))
+    assert emit0.emit(prog) == (
+        "10 A% = 5\n20 FOR B% = A% TO 23\n30 PRINT B%\n40 NEXT B%\n50 END\n"
+    )
+
+
+def test_decode_t1_fwdcall():
+    # CALL to a SUB defined LATER in the file (address-ascending scan
+    # order): proc_names has no entry yet at that point, since it's only
+    # populated once the callee's OWN proc_ret has been processed (wild
+    # process.exe, whose SUBs call each other in both directions). Staged
+    # as a ("addr", n) placeholder, resolved once every SUB has been
+    # decoded -- and since a CallStmt can nest inside ANOTHER SUB's body
+    # (one SUB calling another), the resolution has to walk the same
+    # nested shapes _resolve_targets's own fix() recurses into, not just
+    # the top level (caught by an early version of this fix that only
+    # scanned state.stmts directly).
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_fwdcall.exe"))
+    sub1 = next(s for s in prog if isinstance(s, ir.SubDef) and s.name == "SUB1")
+    assert ir.CallStmt("SUB2", ()) in sub1.body
+    assert emit0.emit(prog) == (
+        "10 SUB SUB1(A%)\n  PRINT A%\n  CALL SUB2\nEND SUB\n"
+        "20 SUB SUB2\n  PRINT \"IN SUB2\"\nEND SUB\n"
+        "30 B% = 5\n40 CALL SUB1(B%)\n50 END\n"
+    )
+
+
 if __name__ == "__main__":
     test_decode_t1_fcmp()
     test_decode_t1_fori()
@@ -1757,4 +1796,6 @@ if __name__ == "__main__":
     test_decode_t1_imulsi()
     test_decode_t1_localvarstep()
     test_decode_t1_forstepm1()
+    test_decode_t1_forvarinit()
+    test_decode_t1_fwdcall()
     print("ALL PASS")

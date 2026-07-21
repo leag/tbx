@@ -65,7 +65,15 @@ def calls(state: DecodeState, op, addr, kind) -> bool:
             else:
                 args.append(a)
         state.pend_args.clear()
-        state.put(ir.CallStmt(state.proc_names[op[2]], tuple(args)), addr)
+        # A CALL to a SUB defined LATER in the file (address-ascending scan
+        # order) hasn't had its proc_ret processed yet, so proc_names has no
+        # entry for it (wild process.exe: SUB-to-SUB calls going both
+        # directions). Stage the raw target address as a placeholder,
+        # resolved once every SUB has been decoded (state._resolve_calls,
+        # the CallStmt sibling of ir.Restore's block-index epilogue
+        # resolution).
+        name = state.proc_names.get(op[2], ("addr", op[2]))
+        state.put(ir.CallStmt(name, tuple(args)), addr)
         state.cur = None
         state.k += 1
         return True
@@ -497,6 +505,36 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             # parenthesized relation. It materializes directly into AX and is
             # immediately combined with the short-circuited left side in BX,
             # rather than using the normal six-op IF/loop tail template.
+            lhs, rhs = state.pend_cmp
+            state.ax = ir.Group(
+                ir.BinOp(_JCC_RELOP_TRUE[state.ops[state.k + 1][2]], lhs, rhs)
+            )
+            state.pend_cmp = None
+            state.k += 3
+            return True
+        if (
+            not state.direct_bool_gate
+            and state.bx is not None
+            and not state.pend_cmp_str
+            and state.k + 3 < len(state.ops)
+            and state.ops[state.k + 1][1] == "jcc"
+            and state.ops[state.k + 2][1] == "incax"
+            and state.ops[state.k + 3][1] in ("andaxbx", "oraxbx")
+            and state.ops[state.k + 1][3] == state.ops[state.k + 3][0]
+            and state.ops[state.k + 1][2] in _JCC_RELOP_TRUE
+        ):
+            # A second relational term materializes directly into AX with no
+            # dispatch pair (no orax self-test/jcc/jmp) -- immediately
+            # combined with an earlier, INDEPENDENTLY materialized value
+            # already stashed in BX via the generic andaxbx/oraxbx fold that
+            # follows (wild process.exe/tamstart.exe): `V = (term1) AND
+            # (term2)` used as a plain assignable value that's never
+            # branched on, so TB skips the dispatch-tail template entirely
+            # for BOTH terms (the first one already went through the
+            # FP-relational-as-VALUE case below, landing in BX via the
+            # generic movbxax right after). Distinct from the
+            # direct_bool_gate case above, which is for a short-circuited
+            # CODE-FLOW value, not two independently materialized terms.
             lhs, rhs = state.pend_cmp
             state.ax = ir.Group(
                 ir.BinOp(_JCC_RELOP_TRUE[state.ops[state.k + 1][2]], lhs, rhs)

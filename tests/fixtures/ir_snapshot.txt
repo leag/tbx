@@ -3772,6 +3772,13 @@ Print(items=(Var(name='A%'),), newline=True, file=None, commas=None)
 NextStmt(var=Var(name='A%'))
 End()
 
+## t1_forvarinit
+Assign(target=Var(name='A%'), value=Lit(value=5))
+For(var=Var(name='B%'), init=Var(name='A%'), limit=Lit(value=23), step=Lit(value=1))
+Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)
+NextStmt(var=Var(name='B%'))
+End()
+
 ## t1_forvarstep
 Assign(target=Var(name='A%'), value=Lit(value=2))
 For(var=Var(name='B%'), init=Lit(value=1), limit=Lit(value=10), step=Var(name='A%'))
@@ -3867,6 +3874,13 @@ SubDef(name='SUB2', params=('A%',), body=(CallStmt(name='SUB1', args=(Var(name='
 Assign(target=Var(name='B%'), value=Lit(value=5))
 CallStmt(name='SUB2', args=(Var(name='B%'),))
 Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)
+End()
+
+## t1_fwdcall
+SubDef(name='SUB1', params=('A%',), body=(Print(items=(Var(name='A%'),), newline=True, file=None, commas=None), CallStmt(name='SUB2', args=())))
+SubDef(name='SUB2', params=(), body=(Print(items=(StrLit(value='IN SUB2'),), newline=True, file=None, commas=None),))
+Assign(target=Var(name='B%'), value=Lit(value=5))
+CallStmt(name='SUB1', args=(Var(name='B%'),))
 End()
 
 ## t1_getfile
@@ -9380,6 +9394,13 @@ Print(items=(Var(name='A%'),), newline=True, file=None, commas=None)
 NextStmt(var=Var(name='A%'))
 End()
 
+## v10_t1_forvarinit
+Assign(target=Var(name='A%'), value=Lit(value=5))
+For(var=Var(name='B%'), init=Var(name='A%'), limit=Lit(value=23), step=Lit(value=1))
+Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)
+NextStmt(var=Var(name='B%'))
+End()
+
 ## v10_t1_forvarstep
 Assign(target=Var(name='A%'), value=Lit(value=2))
 For(var=Var(name='B%'), init=Lit(value=1), limit=Lit(value=10), step=Var(name='A%'))
@@ -9475,6 +9496,13 @@ SubDef(name='SUB2', params=('A%',), body=(CallStmt(name='SUB1', args=(Var(name='
 Assign(target=Var(name='B%'), value=Lit(value=5))
 CallStmt(name='SUB2', args=(Var(name='B%'),))
 Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)
+End()
+
+## v10_t1_fwdcall
+SubDef(name='SUB1', params=('A%',), body=(Print(items=(Var(name='A%'),), newline=True, file=None, commas=None), CallStmt(name='SUB2', args=())))
+SubDef(name='SUB2', params=(), body=(Print(items=(StrLit(value='IN SUB2'),), newline=True, file=None, commas=None),))
+Assign(target=Var(name='B%'), value=Lit(value=5))
+CallStmt(name='SUB1', args=(Var(name='B%'),))
 End()
 
 ## v10_t1_getfile

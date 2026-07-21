@@ -32,6 +32,8 @@ PAIRS = [
     "t1_imulsi",
     "t1_localvarstep",
     "t1_forstepm1",
+    "t1_forvarinit",
+    "t1_fwdcall",
     "t1_strch",
     "t1_svaridx",
     "t1_addpool",

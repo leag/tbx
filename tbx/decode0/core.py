@@ -376,9 +376,79 @@ def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, in
     return shared_subs, sub_local_arrays
 
 
+def _resolve_calls(stmts, proc_names):
+    """A CALL to a SUB defined later in the file staged a ("addr", n)
+    placeholder (see handlers.control.calls) since proc_names had no entry
+    for it yet at that point in the scan; every SUB has been decoded by the
+    time _finalize runs, so every entry is now resolvable (wild
+    process.exe). A CallStmt can nest inside a SUB body (one SUB calling
+    another) or a conditional arm, so this has to walk the same shapes
+    _resolve_targets's own `fix()` recurses into, not just the top level --
+    but unlike that walk, this one must preserve the `is` identity of every
+    UNCHANGED statement: `_resolve_targets` (run right after this) keys
+    `stmt_addr` off `id(stmt)` to place BodyLine jump targets inside SUB/IF
+    bodies, so rebuilding a SubDef/IfBlock/etc that contains no pending call
+    -- which is the common case, every time -- would silently orphan any
+    jump target landing inside it (wild inv87.exe/invoice.exe: caught by a
+    first version of this fix that rebuilt unconditionally)."""
+
+    def walk(body):
+        new = [fix(s) for s in body]
+        return body if all(a is b for a, b in zip(body, new)) else new
+
+    def fix(s):
+        if isinstance(s, ir.CallStmt) and isinstance(s.name, tuple):
+            return ir.CallStmt(proc_names[s.name[1]], s.args)
+        if isinstance(s, ir.SubDef):
+            new_body = walk(s.body)
+            return s if new_body is s.body else ir.SubDef(s.name, s.params, tuple(new_body))
+        if isinstance(s, ir.DefFn) and s.is_block:
+            new_body = walk(s.body)
+            return (
+                s
+                if new_body is s.body
+                else ir.DefFn(s.name, s.params, tuple(new_body), True)
+            )
+        if isinstance(s, ir.IfInline):
+            new_body = walk(s.body)
+            return s if new_body is s.body else ir.IfInline(s.cond, tuple(new_body))
+        if isinstance(s, ir.IfBlock):
+            changed = False
+            arms = []
+            for c, b in s.arms:
+                nb = walk(b)
+                changed = changed or nb is not b
+                arms.append((c, tuple(nb)))
+            else_body = s.else_body
+            if s.else_body is not None:
+                neb = walk(s.else_body)
+                if neb is not s.else_body:
+                    changed = True
+                    else_body = tuple(neb)
+            return s if not changed else ir.IfBlock(tuple(arms), else_body)
+        if isinstance(s, ir.SelectCase):
+            changed = False
+            arms = []
+            for arm in s.arms:
+                nb = walk(arm.body)
+                changed = changed or nb is not arm.body
+                arms.append(ir.CaseArm(arm.guards, tuple(nb)))
+            case_else = s.case_else
+            if s.case_else is not None:
+                nce = walk(s.case_else)
+                if nce is not s.case_else:
+                    changed = True
+                    case_else = tuple(nce)
+            return s if not changed else ir.SelectCase(s.selector, tuple(arms), case_else)
+        return s
+
+    return walk(stmts)
+
+
 def _finalize(state: DecodeState, addr) -> Program:
     """Program epilogue: static-DIM re-emit, control-flow folds, target
     resolution and canonical rename -> the finished Program."""
+    state.stmts[:] = _resolve_calls(state.stmts, state.proc_names)
     # Error-trap line table, probed early -- before DATA/dims/COMMON/TRON
     # synthesis below mutates state.addrs -- so a codeless DATA statement
     # with no READ/RESTORE anywhere to trigger its recovery (wild
@@ -1353,7 +1423,6 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             and state.stmts
             and isinstance(state.stmts[-1], ir.Assign)
             and isinstance(state.stmts[-1].target, ir.Var)
-            and isinstance(state.stmts[-1].value, ir.Lit)
             and cmp_at_t[2] == state.vdisp(state.stmts[-1].target)
         ):
             # Integer FOR header: `I% = init; jmp cmp_addr` where the op at the
@@ -1364,7 +1433,10 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             # q_forstepneg). A LOCAL loop var uses the bp-relative forms
             # (mov_bp_imm init / cmp_bpi8 test / inc_bp step -- q_locidx);
             # vdisp on its L-name yields the bp offset, disjoint from static
-            # disps (>= VAR_BASE).
+            # disps (>= VAR_BASE). `init` need not be a literal -- `FOR I% =
+            # N% TO 23` compiles this same shape via movm_ax instead of
+            # movm_imm, the init value just being whatever expression was in
+            # ax (wild tamstart.exe, probe q_forvarinit).
             init_s = state.stmts.pop()
             a = state.addrs.pop()
             state.put(
