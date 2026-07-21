@@ -59,8 +59,55 @@ toggle-compile script (`tb_v86_compile.js`), which isn't vendored.
 
 ## Where things stand
 
-**Updated 2026-07-21 (later): 22 of 84 wild EXEs decode-ok**, up from 20.
-Two MORE closures this round, together fully closing bill.exe and
+**Updated 2026-07-21 (latest): 23 of 84 wild EXEs decode-ok**, up from 22.
+`90250ca` closes tamstart.exe fully via three gaps found while chasing
+the same generic "materialization template mismatch"/KeyError signature
+across four files (tamstart/grdscn/kinder/process):
+- Computed (variable) FOR init (`FOR I% = N% TO 23`, via `movm_ax`
+  instead of `movm_imm`): the header recognizer required a `Lit` init,
+  rejecting this outright though nothing downstream needed it to be
+  one. Fixture `t1_forvarinit`.
+- CALL to a SUB defined LATER in the file (address-ascending scan
+  order): `proc_names` has no entry yet at that point (only populated
+  once the callee's own `proc_ret` is processed). Staged as a pending
+  placeholder, resolved once every SUB is decoded. Fixture `t1_fwdcall`.
+  **This one regressed inv87.exe/invoice.exe on first landing** (a
+  previously-full-decode-ok file broke with "jump target ... is not a
+  statement start") because the resolver rebuilt every SubDef/IfBlock/
+  SelectCase container unconditionally while walking for pending calls,
+  changing `id()` even when nothing inside needed fixing --
+  `_resolve_targets` keys `stmt_addr` off `id(stmt)` for body jump
+  targets, so this silently orphaned targets inside untouched SUB
+  bodies. Caught only by re-running the FULL WILD SCAN before declaring
+  done, not by the corpus test suite (2318 tests, all green throughout
+  -- neither new fixture happens to exercise a jump landing inside an
+  unrelated body). Fixed by making the walk identity-preserving.
+  **Lesson: after any fix touching statement-tree structure, re-scan
+  the whole wild corpus, not just the new fixture and `pytest`.**
+- A second relational term materializing directly into AX with no
+  orax/jcc/jmp dispatch tail, combined via andaxbx/oraxbx as a plain
+  assignable value (`V = (term1) AND (term2)`, never branched on) --
+  generalizes an existing narrower branch for the same shape gated on
+  short-circuit code flow specifically.
+
+grdscn.exe/kinder.exe's OWN occurrences of "materialization template
+mismatch" are a DIFFERENT root cause (grdscn.exe's is the previously-
+documented 3-term short-circuit/combinator chain) and remain open.
+process.exe advanced through the CallStmt/AND-value fixes into the
+already-documented, extensively-investigated `di`-register memory-spill
+gap ("Gap byte 89", below) -- do not re-open that investigation without
+reading its existing notes first.
+
+Also this round: `movm_imm`'s system-cell gate (`op[2] < VAR_BASE`)
+deferred to the solved layout before raising -- VAR_BASE is only the
+typical scalar floor, not a hard one; a program using fewer of the low
+reserved cells can legitimately have real scalars below it (confirmed
+by direct trace against wild tamstart.exe, not an oracle fixture --
+no probe reproduced a sub-VAR_BASE scalar after trying varied
+combinations). Advanced tamstart.exe further without alone closing it.
+
+Previously, updated 2026-07-21 (earlier): 22 of 84 wild EXEs decode-ok, up
+from 20. Two closures that round, together fully closing bill.exe and
 color.exe (both previously stalled at 99%/93% through their files):
 - `06a729a` literal `STEP -1` FOR-NEXT: TB special-cases both +1 and -1
   to a bare INC/DEC at the NEXT instead of the generic `addm_i8` path
