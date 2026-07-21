@@ -433,10 +433,40 @@ max_off // 4` from the single highest bp-offset EVER touched, assuming
 EVERY touched offset is a positional parameter; LOCAL variables would
 need to be excluded from that count and instead emitted via their own
 `ir.Local(...)`, mirroring `proc_ret`'s existing SUB-side treatment. This
-is a real, if bounded, new subsystem — not attempted this session given
-the risk of rushing it; next session should implement it carefully with
-its own probe/verification pass (a `DEF FN...LOCAL...END DEF` construct,
-byte-exact both dialects) before trusting it.
+is a real, if bounded, new subsystem.
+
+**Attempted and REVERTED this session** (the risk assessment above turned
+out to be justified): implemented (a) and part of (b) -- `local_init`
+auto-creating `fn_frame` retroactively when hit with no open frame at
+all, and `fp_bp`'s handler (fld_bp/fstp_bp/fold_bp/fold_n_bp/fcomp_bp)
+checking `fn_frame["locals"]` before falling back to the positional-param
+assumption, reusing the SAME `_single_local` SINGLE-precision logic the
+`t1_localsingle` fix (above) already established for the SUB case. This
+correctly created the frame and registered the one declared LOCAL (disp
+6) -- but immediately surfaced a SECOND, unrelated failure: `movax_bp 2`
+(a PLAIN integer LOCAL read, a DIFFERENT op from fld_bp) tried to resolve
+bp+2 as a LOCAL and failed, because bp+2 is NOT a user LOCAL in a DEF FN
+at all -- it's the SAME fixed "string result descriptor pointer" cell
+`mov_bp_imm`'s own docstring already documents (a single-line STRING FN
+zeroes only bp+2; a multi-line/numeric FN zeroes bp+0 AND bp+2). This
+means `movax_bp` reading bp+2 inside an open `fn_frame` needs its OWN
+DEF-FN-specific interpretation (distinct from a LOCAL read), and there is
+no way to know in advance how MANY of the other bp-relative handlers
+(`movsi_bp`, `movm_ax_bp`, `cmp_bpi8`, `inc_bp`, `dec_bp`, ...) have the
+SAME kind of collision between "DEF FN's own reserved cells" and "a
+LOCAL variable that happens to reuse a low bp offset" without checking
+each one individually against real evidence. Given the project's own
+calibration rule (fail-loud over guessing) and that getting this WRONG
+would mean a BYTE-EXACT decompiler silently mis-rendering DEF FN bodies
+containing LOCAL rather than failing loudly, the partial implementation
+was reverted (`git checkout --` back to the previous commit) rather than
+left half-correct. **Next session: enumerate every bp-relative op kind's
+existing DEF-FN-frame special-casing FIRST (grep for `state.fn_frame` in
+core.py/handlers/arith.py), cross-reference against `mov_bp_imm`'s
+documented bp+0/bp+2 special cells, and build a dedicated oracle probe
+for `DEF FN...LOCAL...END DEF` BEFORE touching any handler** -- this is
+not safe to implement via wild-file trial and error alone, unlike the six
+gaps closed earlier in this same investigation.
 
 Previously, updated 2026-07-21 (earlier session): 23 of 84 wild EXEs decode-ok, up from 22.
 `90250ca` closes tamstart.exe fully via three gaps found while chasing
