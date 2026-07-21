@@ -57,7 +57,93 @@ _OPAQUE_HELPER_BODY_2 = bytes.fromhex(
     8b ef 8b fb 26 88 25 8b fd 43 47 e2 ef 07 1f 5d cb
     """
 )
-_OPAQUE_HELPER_BODIES = (_OPAQUE_HELPER_BODY, _OPAQUE_HELPER_BODY_2)
+# Six more framed far-procedure helpers, all sharing the family's exact
+# "push bp; mov bp,sp; push ds; push es; ...; pop es; pop ds; pop bp;
+# int3; retf" (55 8b ec 1e 06 ... 07 1f 5d cc cb) framing and CGA
+# snow-avoidance retrace-wait idiom, witnessed together in wild
+# resume.exe (all seven placed back-to-back, each skipped by its own
+# JMP -- almost certainly per-video-mode/per-pixel-depth variants of one
+# graphics primitive, matching this file's BODY/BODY_2's own established
+# "source-level meaning impossible to infer safely" precedent).
+_OPAQUE_HELPER_BODY_3 = bytes.fromhex(
+    """
+    55 8b ec 1e 06 c4 7e 0a 26 8b 0d 81 e1 ff 7f e3
+    5b 51 8b 16 00 00 52 b4 0f cd 10 3c 07 75 08 bb
+    00 b0 ba ba 03 eb 06 bb 00 b8 ba da 03 53 07 52
+    33 db 8a dc c5 76 12 8b 04 48 f7 e3 d1 e0 c5 76
+    0e 8b 1c 4b d1 e3 03 d8 8b fb c5 76 06 8b 1c c5
+    76 0a 8b 74 02 5a 1f 59 fc fa ec a8 01 75 fb ec
+    a8 01 74 fb a4 26 88 1d 47 e2 ef fb 07 1f 5d cc
+    cb
+    """
+)
+_OPAQUE_HELPER_BODY_4 = bytes.fromhex(
+    """
+    55 8b ec 1e 06 c4 7e 0a 26 8b 0d 81 e1 ff 7f e3
+    6a 51 8b 16 00 00 52 b4 0f cd 10 3c 07 75 08 bb
+    00 b0 ba ba 03 eb 06 bb 00 b8 ba da 03 53 07 52
+    33 db 8a dc c5 76 16 8b 04 48 f7 e3 d1 e0 c5 76
+    12 8a 1c c5 76 0e 8a 3c 02 df 32 ff d1 eb d1 e9
+    2b d9 4b d1 e3 03 d8 8b fb c5 76 06 8b 1c c5 76
+    0a 8b 74 02 5a 1f 59 fc fa ec a8 01 75 fb ec a8
+    01 74 fb a4 26 88 1d 47 e2 ef fb 07 1f 5d cc cb
+    """
+)
+_OPAQUE_HELPER_BODY_5 = bytes.fromhex(
+    """
+    55 8b ec 1e 06 b4 0f cd 10 3c 07 75 08 bb 00 b0
+    ba ba 03 eb 06 bb 00 b8 ba da 03 53 07 c5 76 12
+    8b 0c 51 52 33 db 8a dc c5 76 1a 8b 04 48 f7 e3
+    d1 e0 c5 76 16 8b 1c 4b d1 e3 03 d8 8b fb c5 76
+    0a 8b 04 8a d8 c5 76 06 8b 04 8a e0 fc c5 76 0e
+    8b 34 5a 57 8b ce fa ec a8 01 75 fb ec a8 01 74
+    fb 8a c3 ab e2 f1 fb 5f 59 49 e3 07 51 81 c7 a0
+    00 eb e0 07 1f 5d cc cb
+    """
+)
+_OPAQUE_HELPER_BODY_6 = bytes.fromhex(
+    """
+    55 8b ec 1e 06 b4 0f cd 10 3c 07 75 08 bb 00 b0
+    ba ba 03 eb 06 bb 00 b8 ba da 03 53 07 c5 76 0e
+    8b 0c 51 52 33 db 8a dc c5 76 16 8b 04 48 f7 e3
+    d1 e0 c5 76 12 8b 1c 4b d1 e3 03 d8 8b fb c5 76
+    06 8b 1c fc c5 76 0a 8b 34 5a 57 fa 8b ce 47 ec
+    a8 01 75 fb ec a8 01 74 fb 8a c3 aa e2 f0 fb 5f
+    59 49 e3 07 51 81 c7 a0 00 eb df 07 1f 5d cc cb
+    """
+)
+_OPAQUE_HELPER_BODY_7 = bytes.fromhex(
+    """
+    55 8b ec 1e 06 b4 0f cd 10 3c 07 75 08 bb 00 b0
+    ba ba 03 eb 06 bb 00 b8 ba da 03 53 1f c4 7e 0e
+    26 8b 0d 51 52 33 db 8a dc c4 7e 16 26 8b 05 48
+    f7 e3 d1 e0 c4 7e 12 26 8b 1d 4b d1 e3 03 d8 8b
+    f3 c4 7e 0a 26 8b 1d c4 7e 06 fc 5a 56 fa 8b cb
+    ec a8 01 75 fb ec a8 01 74 fb a5 e2 f3 fb 5e 59
+    49 e3 07 51 81 c6 a0 00 eb e2 07 1f 5d cc cb
+    """
+)
+_OPAQUE_HELPER_BODY_8 = bytes.fromhex(
+    """
+    55 8b ec 1e 06 b4 0f cd 10 3c 07 75 08 bb 00 b0
+    ba ba 03 eb 06 bb 00 b8 ba da 03 53 07 c5 76 0e
+    8b 0c 51 52 33 db 8a dc c5 76 16 8b 04 48 f7 e3
+    d1 e0 c5 76 12 8b 1c 4b d1 e3 03 d8 8b fb c5 76
+    0a 8b 1c c5 76 06 fc 5a 57 fa 8b cb ec a8 01 75
+    fb ec a8 01 74 fb a5 e2 f3 fb 5f 59 49 e3 07 51
+    81 c7 a0 00 eb e2 07 1f 5d cc cb
+    """
+)
+_OPAQUE_HELPER_BODIES = (
+    _OPAQUE_HELPER_BODY,
+    _OPAQUE_HELPER_BODY_2,
+    _OPAQUE_HELPER_BODY_3,
+    _OPAQUE_HELPER_BODY_4,
+    _OPAQUE_HELPER_BODY_5,
+    _OPAQUE_HELPER_BODY_6,
+    _OPAQUE_HELPER_BODY_7,
+    _OPAQUE_HELPER_BODY_8,
+)
 _OPAQUE_HELPER_PARAM_OFFSETS = (0x1E, 0x1A, 0x16, 0x12, 0x0E, 0x0A, 0x06)
 
 
