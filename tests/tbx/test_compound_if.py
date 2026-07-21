@@ -13,6 +13,7 @@ PAIRS = [
     "t1_boolwh",
     "t1_booluntil",
     "t1_and3",
+    "t1_mixedbool",
 ]
 
 
@@ -110,6 +111,33 @@ def test_decode_t1_and3():
             ir.RelOp("=", V("C"), L(2)),
         ),
         5,
+    )
+
+
+def test_decode_t1_mixedbool():
+    # Combinator SWITCH mid-chain: `A AND B OR C` (wild state.exe/
+    # state87.exe). TB gives AND/OR equal precedence, left-associative,
+    # so this parses (A AND B) OR C, same as t1_and3's shape but the
+    # THIRD term's fold uses the OTHER combinator (orax instead of
+    # andaxbx) -- _lift_bool_tail's mid-segment lookahead now tries both
+    # combinators, since the same-comb-only check silently finalized as
+    # a 2-term chain and orphaned the third term's bytes, producing an
+    # IfGoto whose target landed inside its own compiled statement.
+    from tbx import decode0
+
+    L, V = ir.Lit, ir.Var
+    prog = decode0.decode_user_code(_exe("t1_mixedbool.exe"))
+    assert prog[3] == ir.IfGoto(
+        ir.LogOp(
+            "OR",
+            ir.LogOp(
+                "AND",
+                ir.RelOp("=", V("A$"), ir.StrLit("L")),
+                ir.RelOp("=", V("B"), L(15)),
+            ),
+            ir.RelOp("=", V("C"), L(1)),
+        ),
+        6,
     )
 
 

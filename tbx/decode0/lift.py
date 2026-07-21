@@ -313,16 +313,36 @@ def _lift_bool_tail(ops, k, pend_cmp, pb, put, whiles, ifs, stmts, flush):
         )
     r2 = ir.RelOp(_JCC_RELOP_TRUE[m_jcc[2]], *pend_cmp)
     cond = ir.LogOp(pb["op"], pb["r1"], r2)
+    # Same-combinator continuation (t1_and3: A AND B AND C) as well as a
+    # combinator SWITCH (`A AND B OR C` -- TB gives AND/OR equal precedence,
+    # left-associative, so this parses (A AND B) OR C exactly like the
+    # same-combinator case, just with the OTHER fold template at the next
+    # segment: wild state.exe/state87.exe, probe q_mixedbool2). Try both;
+    # whichever matches becomes the accumulator's combinator for the NEXT
+    # step (the just-finished term's own combinator, pb["op"], is already
+    # folded into `cond` above and is not needed again).
+    other_op = "OR" if pb["op"] == "AND" else "AND"
+    other_comb = "orax" if comb == "andaxbx" else "andaxbx"
+    other_delta = 0 if delta == 2 else 2
     for j in range(k + 6, min(k + 36, len(ops) - 3)):
-        if (
-            ops[j][1] == "movax"
-            and ops[j][2] == 0xFFFF
-            and [o[1] for o in ops[j + 1 : j + 4]] == ["jcc", "incax", comb]
-            and f_jmp[2] == ops[j + 3][0] + delta
-        ):  # mid segment: chain continues at ops[j]'s fold
+        if ops[j][1] != "movax" or ops[j][2] != 0xFFFF:
+            continue
+        nxt3 = [o[1] for o in ops[j + 1 : j + 4]]
+        if nxt3 == ["jcc", "incax", comb] and f_jmp[2] == ops[j + 3][0] + delta:
+            # mid segment: chain continues at ops[j]'s fold, same combinator
             return k + 6, {
                 "r1": cond,
                 "op": pb["op"],
+                "sc": f_jmp[2],
+                "start": pb["start"],
+            }
+        if (
+            nxt3 == ["jcc", "incax", other_comb]
+            and f_jmp[2] == ops[j + 3][0] + other_delta
+        ):  # mid segment: chain continues, combinator switches
+            return k + 6, {
+                "r1": cond,
+                "op": other_op,
                 "sc": f_jmp[2],
                 "start": pb["start"],
             }
