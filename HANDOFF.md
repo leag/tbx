@@ -221,12 +221,9 @@ fixes elsewhere in the tally:
   `state.pool_lit` for the pooled-literal fallback (mirroring `ifold32`'s
   existing long-pool-literal pattern). Fixture `t1_icomp32`, byte-exact
   both dialects — found and verified on the very first probe. Advances
-  wild stat.exe (does NOT close it — next stop is an ES-segment-save
-  sequence around a Bounds-checked DOUBLE array element, `MOV
-  ES,[legacy]; MOV [0062h],ES`; several probe hypotheses — plain SWAP,
-  passing a by-ref DOUBLE array element as a CALL arg, copying between
-  two different runtime DOUBLE arrays — all compiled clean with none
-  reproducing the exact byte shape; not yet diagnosed).
+  wild stat.exe (does NOT close it — see the dedicated ES/DS-segment-save
+  writeup near the end of this section; the SAME shape blocks mdb.exe/
+  mdb87.exe too, tallied there as "byte 8c").
 
 - **Rank-4 static array accessed at a COMPUTED (variable) index, all four
   subscripts** (2026-07-21): pivoted away from bmaster.exe/ifi.exe/zip.exe
@@ -286,6 +283,58 @@ fixes elsewhere in the tally:
   of block-IF, or some other structural cue) — needs more probe variants
   before extending `dec_bp`'s outside-FOR case; do not guess it in per
   the calibration rule.
+
+## Gap: segment-register juggling around a far array access (stat.exe/mdb.exe/mdb87.exe), INVESTIGATED, NOT LANDED (2026-07-21)
+
+Shared root cause behind stat.exe's "byte 8c" (surfaced by this session's
+`icomp32` fix) and mdb.exe/mdb87.exe's OWN independent "byte 8c" hits
+(same message, confirmed via trace to be the identical mechanism, not a
+coincidence). The immediate byte is `8C 06 <disp16>` = `MOV [disp16], ES`
+— the STORE-direction sibling of the already-calibrated `moves_m` (`8E 06
+<disp16>` = `MOV ES,[disp16]`, LOAD direction). Byte-traced context in
+mdb.exe: a bounds-checked/computed STRING array element access
+(`shlsi;shlsi;moves_m <block>` — ES now holds that array's segment) is
+IMMEDIATELY followed by this store (stash ES into a scratch cell, disp
+`0x62` in every witnessed case), then — one instruction added and tested
+in isolation, reverted after each step since none of it is oracle-verified —
+`8E 1E <disp16>` = `MOV DS,[disp16]` (reloading the SAME scratch cell, but
+into DS, not ES), then a THIRD unidentified `unhandled byte 8b` immediately
+after that. Confirmed via `state.pend_es`/`state.r_arrs` reading that
+`moves_m`'s existing gate (`op[2] not in state.r_arrs: raise`) is scoped to
+runtime arrays specifically — this shape's context (bounds-checked/computed
+STATIC string array in stat.exe) doesn't obviously fit that gate as-is, so
+even the FIRST new op (`movm_es`) would need its own semantics, not just a
+copy of `moves_m`'s.
+
+**Working theory, unconfirmed**: DS gets temporarily repointed to the SAME
+segment ES just held (a static or bounds-checked array's own segment) so
+that a SECOND array can be addressed via ES SIMULTANEOUSLY, letting the
+compiler reuse the ordinary near (DS-implied) op set for one array and the
+far (ES:) op set for the other in the same copy/compare/swap sequence —
+i.e. likely a two-array element operation (copy, compare, or swap) where at
+least one of the two arrays is NOT a plain runtime-DIM'd array (ruling out
+`moves_m`'s current `r_arrs` gate as sufficient).
+
+**Ruled out this session** (all compiled clean, oracle-verified, zero `8C 06`
+occurrences in the resulting EXE): plain `SWAP` of two computed STRING array
+elements (both int- and single-typed loop variable index); `MID$` statement
+on a computed STRING array element; copying an element between two DIFFERENT
+runtime-DIM'd (`DIM ...(N%)`) arrays, both integer; copying between two
+DIFFERENT runtime-DIM'd DOUBLE arrays under Bounds checking; passing a
+Bounds-checked computed DOUBLE array element by reference to a SUB (this
+one DID hit a DIFFERENT gap, `far_fold64_si`, so Bounds-checked far DOUBLE
+by-ref args are a separate, also-open gap, not this one).
+
+**Do not add `movm_es`/a DS-reload op speculatively** — three sessions'
+worth of the calibration rule violations in one place is exactly the
+"guessing" the rule forbids; a real fixture reproducing the exact `8C 06;
+[something]; 8E 1E; [byte 8b]` chain is needed before writing any of this
+in for real. Next steps: try a computed STRING array element used in an
+IF-compound (not SWAP) with a DIFFERENT static/bounds-checked STRING array
+on the other side; try FIELD/RANDOM-file record buffers (a `FIELD`-defined
+buffer segment might need exactly this kind of juggling); or bisect
+stat.exe's own source-adjacent statements directly if a source listing for
+this specific shareware title is ever found.
 
 Previously, updated 2026-07-21 (earlier session): 23 of 84 wild EXEs decode-ok, up from 22.
 `90250ca` closes tamstart.exe fully via three gaps found while chasing
