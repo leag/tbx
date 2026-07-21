@@ -187,53 +187,104 @@ intended, permanent change.
 
 ## Ongoing plan (priority order — pick up at the first incomplete step)
 
-1. **vhfprop's tail-test DO...LOOP WHILE/UNTIL un-synthesis gap** (above)
-   — the ONLY file left blocked by the line-table epic; the unconditional
-   case is closed, this narrower WHILE/UNTIL case needs a witnessed
-   non-DO source construct before it can be un-synthesized safely.
-2. **Byte 89 / missing `di` spill register (4 files)** — see the gap
-   section below FIRST, before touching any code: the exact fix (4
-   small diffs) is already written out verbatim there, tested working
-   against real wild files, but reverted for lack of a witnessed probe.
-   Start with kinder.exe's SCREEN()+`\`/MOD lead (the addendum at the
-   end of the gap section) — it's the most tractable of the four by far,
-   already reproduces the shallow 2-register case exactly, just needs
-   one more nesting level found. This is almost certainly the fastest
-   actionable closure in this list if a probe can be found — don't
-   re-derive the mechanism, just find the trigger construct.
-3. **INT EC sub 4c (3 files, NEW)** — see the gap section below. Evidence:
-   `[0060]=1 (file#); mov ax,<int var>; INT EC sub 4c` (raw 0x4A in TB
-   1.0), immediately after an `X = LOF(1)` + `ON ERROR` pair, with no
-   inline operand bytes on the INT itself. Ruled out: `WIDTH #n,cols`
-   (compiles to a DIFFERENT unhandled sub, EC f0 — a distinct future
-   gap, not this one) and bare `LOCK #n` (not valid TB syntax without a
-   range). Untried: `LOCK #n, range`/`UNLOCK #n, range`, `RENAME`-
-   adjacent ops, a record-count/position statement tied to the
-   just-computed LOF result.
-4. **INT ce (2 files, NEW)** — see the gap section below. Evidence:
-   `LOCATE 20,1; CURSOR 1; bx=0; ax=7; INT CEh` (canonical, 2 raw bytes,
-   no inline operand) in billadd.exe/file.exe. Ruled out: not the
-   single-byte `INTO` (0xCE, no CD prefix) which is already handled
-   separately. Untried: full probe sweep of screen-attribute/character-
-   at-cursor statements with a fixed bx=0,ax=7 argument shape.
-5. **Byte ea (5 files)** — the ">64K" theory is refuted (see the gap
-   section below); try reproducing elec87.exe's exact shape (a large
-   FLAT string-comparison chain alongside whatever else that 155KB
-   program does) before guessing further.
-6. **INT 8c (3 files)** — ON KEY GOSUB lead; a follow-on statement INSIDE
-   the trap handler body (not more traps/toggles) is the next untried
-   category.
-7. **Byte 06 / gap 19 (3 files)** — CGA snow-avoidance blitter; VIEW
-   PRINT and PCOPY are ruled out (not real TB keywords); text GET/PUT is
-   the remaining untried candidate.
-8. **The 2-tier** — re-tally after each closure; for FP gaps check the
-   `[si]` FP table for missing rows first.
-9. Singles last, same workflow. Byte 90 (6 files) and INT cd (formerly
-   16, now CLOSED — was `OPEN...FOR mode AS #n`, see Recently Closed)
-   — byte 90 remains fully confirmed unwitnessable, skip it.
+**Refreshed 2026-07-20** (previous version of this list was stale — several
+entries below it had already been closed without the list being updated;
+re-derived from a fresh `scan_wild.py wild/hits` run, 68 TB-but-fail / 16
+decode-ok). Cross-check `gap_reports/runtime-revision-assessments.json`
+before investigating any of these from scratch — several have an existing
+candidate/unresolved writeup there with negative evidence already collected.
+
+1. **vhfprop's tail-test DO...LOOP WHILE/UNTIL un-synthesis gap** (see
+   "vhfprop status" above) — the ONLY file left blocked by the line-table
+   epic; still open, unchanged.
+2. **`DGROUP layout not solvable` (4 files: menu, night, sprogh, swbb)** —
+   see `RR-DGROUP-BIGARR` in the runtime-revision JSON for the full
+   writeup: zero stamp candidates anywhere in any of the 4 files, and the
+   descending-n walk never solves either; menu.exe's failing movsi disp
+   (0x400) sits at the end of a long, cleanly 4-byte-spaced run (0x310..
+   0x400, ~60 entries) suggesting a static string array too large (or a
+   static-array COUNT too high, possibly past the stamp's `n<=31` cap) for
+   the current record/stamp assumptions. NOT yet confirmed runtime-revision
+   — could be a plain unimplemented shape. Next step: hand-derive `ds` for
+   menu.exe (smallest of the four) via the brute-force ARR_BLOCK-scan
+   technique from the original gap-16 investigation. mf.exe fails
+   similarly but through the OTHER (runtime-grid-anchored) path with a
+   distinct message — check separately, don't assume same cause.
+3. **`byte 8b` / SUB-LOCAL dynamically-sized arrays (4 files: cleanup,
+   crossref, filepatc, reformat)** — confirmed via oracle probe
+   (`q_localarr.bas`) to be `LOCAL A()` + runtime `DIM A(n)` inside a SUB.
+   The address-of-local primitive itself (`mov si,bp; add si,imm8; push
+   ss; pop es`) is simple, but the follow-on element access resolves
+   through the x87 ESC 0x34-0x3B range (already-handled FP ops, NOT new
+   vectors — re-verify before assuming otherwise) and loads a SEGMENT out
+   of the array's own descriptor, meaning these are genuinely
+   HEAP-allocated at runtime (unlike every other runtime-DIM array so far,
+   which lives in a fixed-size compile-time DGROUP block). This is a real
+   new subsystem (heap alloc representation + element addressing through a
+   runtime segment), not a small patch — scope a fresh session around it,
+   starting with more oracle probes isolating what follows dim_begin for
+   a plain integer/single LOCAL array before attempting any code.
+4. **`INT EC sub 38` (4 files: catalog, football, refund, varamort)** —
+   the runtime-array-block-reference family's 4th member (alongside
+   dim_begin/dim_end/erase), block-only, no operand. Six candidate probes
+   already ruled out (string/2-D ERASE, multi-array ERASE, SUB-local array
+   ERASE, array-level SWAP, `SUB SUB1(B())` by-ref array param — TB
+   rejects that syntax, REDIM — not a TB keyword). Untried: CLEAR
+   variants, COMMON-shared dynamic array cleanup, ON-ERROR implicit
+   ERASE, GET/PUT #n with an array-backed record buffer.
+5. **`INT 8c` (4 files: baby, help, prtguide, readme)** — see
+   `RR-INT-8C`; all TB 1.0, ON KEY(n) GOSUB is the only shared source
+   feature, several trap-count/toggle hypotheses ruled out. Untried: a
+   follow-on statement INSIDE the trap handler body.
+6. **`INT EC sub ee` (3 files: cal, cal87, kinetics)** — see
+   `RR-LINEINPUT`/HANDOFF's "EC sub EE remains unresolved" entry: a wide
+   oracle probe matrix (PRINT/LPRINT/SHELL/RUN/CHAIN/NAME/OPEN/DATE$, plus
+   the optional CHAIN/RUN forms) produced no `cd ec ee` at all — negative
+   evidence only, no lead yet.
+7. **`INT EC sub ac` (3 files: nvginst, pwinst, secure)** — see
+   `RR-DISPATCH-HOLES`; untouched, no candidate hypothesis recorded yet.
+8. **"displacement ... neither scalar nor array element" (3 files: hfprop,
+   mymenu, sabpcv3)** — untouched this campaign; likely 3 distinct causes
+   bucketed by error message shape, triage each independently before
+   assuming a shared root cause (the gap-30/31 precedent).
+9. **`shl si outside an element access` (2 files: mcmurphy, rstprint)** —
+   rstprint.exe just arrived here via this session's IDX%-bridge fix;
+   untouched, no diagnosis yet.
+10. **The 2-tier and singles** — re-tally after each closure
+    (`uv run python tbx/tools/scan_wild.py wild/hits`); for FP gaps check
+    the `[si]` FP table for missing rows first. Byte 90 (see `RR-NOP-90`)
+    and byte ea (see `RR-BYTE-EA`) are both fully CLOSED — don't reopen
+    them if they resurface in a tally, they're a scanner-level decode now.
 
 ## Recently closed (this campaign, newest first)
 
+- **Computed (variable) `FOR...STEP`, and the IDX% bridge's nop;nop fwait
+  alias** (2026-07-20, commit 4f29e9b): `FOR I% = a TO b STEP J%` can't
+  pick ascending vs. descending continuation at compile time (J% isn't a
+  literal), so the compiler copies the step expression into a temp cell at
+  the header and emits BOTH `cmp;jcc` continuation blocks (ascending
+  JLE/JBE, descending JGE, each either the direct short-jcc form or the
+  indirect inverse-jcc-skip+jmp form already used by the literal-step
+  case), selecting between them at runtime via `or ax,ax; jns` on the
+  just-used step value (new `orax_self` op). The header fold pops the
+  step-temp-copy and int-init statements into `ir.For` with a `Lit(0)`
+  limit placeholder, patched in place once the dual branches are decoded
+  (mirrors `addm_i8`'s existing step patch-up, just for the limit
+  instead). Fixtures `t1_forvarstep`/`t1_forvarstep2` (+v10), byte-exact
+  both dialects; `t1_forvarstep2` has a long body to force the indirect
+  jcc form. Closed wild stat.exe's blocker; menu.exe also advanced past it
+  (it separately needs a variable LIMIT too, not yet folded in — see
+  `RR-DGROUP-BIGARR` below for what it hit next). Separately: electron.exe/
+  rstprint.exe's `IDX% bridge mismatch` turned out to be a nop;nop pair
+  standing in for `fwait` at the exact x87-sync point between
+  `fistp[0x2C]` and `movaxmem[0x2C]` — a runtime-revision-skewed encoding
+  (same category as the byte-90/far-JMP precedents; no oracle probe ever
+  reproduces the raw NOP pair there). New `_sync_len` helper in
+  `arith.py`'s `fp_math` accepts either 1 op (fwait) or 2 (nop;nop) at
+  that position, in both the FP->int assign and element-subscript bridge
+  shapes. See `gap_reports/runtime-revision-assessments.json`'s
+  `RR-NOP-FWAIT` for the full writeup. Wild scan: still 16 decode-ok, 68
+  fail (both fixes advance files deeper without finishing a new one).
 - **Leading-semicolon `LINE INPUT;` / EC sub 64 flag C0** (2026-07-20):
   console LINE INPUT uses trailing flag `40` normally and `C0` when the source
   has the leading semicolon, exactly mirroring INPUT's keep-cursor-on-line bit.

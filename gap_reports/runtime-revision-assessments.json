@@ -145,21 +145,13 @@
       "signatures": [
         "unhandled byte ea"
       ],
-      "disposition": "unresolved",
-      "evidence_class": "unresolved",
-      "confidence": "low",
-      "files": [
-        "wild/hits/elec87.exe",
-        "wild/hits/electron.exe",
-        "wild/hits/mcmurphy.exe",
-        "wild/hits/mf.exe",
-        "wild/hits/sabpcv3.exe",
-        "wild/hits/swbb.exe",
-        "wild/hits/wb.exe"
-      ],
-      "assessment": "A different segmented code model or runtime layout is possible, but the earlier greater-than-64K theory was refuted. Reachable far JMP, inline data, and an unrecognized compiler template remain indistinguishable.",
-      "promotion_criteria": "Prove control-flow reachability and decode the complete far target, or prove the bytes belong to a bounded data record. Do not accept generic EA handling.",
-      "source": "HANDOFF.md: Gap byte ea"
+      "disposition": "closed",
+      "evidence_class": "runtime-revision",
+      "confidence": "high",
+      "files": [],
+      "assessment": "Stale: this entry predates the closure. 0xEA is a raw 16-bit `EA off:seg` far transfer; the existing far-call convention (segment-zero offsets rebase from the user-code start, relocated segments use the preceding-byte origin) resolves every non-zero target, and a zero-offset transfer is the fixed cleanup/event handoff that terminates the scan like the existing EC/E8 epilogue. No oracle probe (ERROR/RESUME, ON KEY, ON GOTO, nested IF, GOTO) ever emitted EA, so this remains a wild-only runtime-revision closure, never an oracle fixture.",
+      "implementation": "Closed by commit (Far JMP (EA) runtime-revision group, 2026-07-20): scanner records non-zero transfers as `jmpf`; conditional JCC/far-jump pairs use the five-byte skip length.",
+      "source": "HANDOFF.md: 'Far JMP (EA) runtime-revision group' (2026-07-20)"
     },
     {
       "id": "RR-NOP-90",
@@ -174,6 +166,40 @@
       "assessment": "Formerly classified as unwitnessable synchronization padding around a CINT-style float-to-int round trip. The scanner now safely decodes literal x86 NOP padding; this is retained to prevent the stale signature from being reopened as an active gap.",
       "implementation": "Closed by commit 631597b (Decode compiler-emitted NOP padding).",
       "source": "HANDOFF.md: Byte 90 and git commit 631597b"
+    },
+    {
+      "id": "RR-NOP-FWAIT",
+      "title": "IDX% bridge x87-sync marker: bare NOP pair as an fwait alias",
+      "signatures": [
+        "IDX% bridge mismatch",
+        "FP->int bridge mismatch"
+      ],
+      "disposition": "closed",
+      "evidence_class": "runtime-revision",
+      "confidence": "high",
+      "files": [],
+      "assessment": "A follow-on to RR-NOP-90: once the scanner could decode a bare NOP pair generically, electron.exe and rstprint.exe advanced one layer deeper and stopped at the IDX% bridge consumer instead, which only recognized the canonical `fwait` (INT 3D) op at the fistp[0x2C]->movaxmem[0x2C] sync point. A `nop;nop` pair occupies the identical 2-byte span there in both files. Same runtime-revision-skew category as RR-NOP-90/RR-BYTE-EA: no oracle probe (computed row/col, both, explicit CINT()) ever produced the raw NOP pair at this position, only INT 3Dh, so it cannot be fixture-witnessed -- but a NOP is semantically inert and the surrounding bridge is otherwise byte-identical either way, so accepting it as an alias changes no emitted source.",
+      "implementation": "Closed by commit 4f29e9b (Decode computed FOR-STEP sign test and runtime-skewed IDX% sync): arith.py's fp_math gained a `_sync_len` helper accepting either 1 op (fwait) or 2 ops (nop;nop) at the sync point, in both the FP->int assign and element-subscript bridge shapes.",
+      "source": "wild electron.exe/rstprint.exe, session 2026-07-20"
+    },
+    {
+      "id": "RR-DGROUP-BIGARR",
+      "title": "DGROUP layout not solvable: large static string array defeats stamp + walk",
+      "signatures": [
+        "DGROUP layout not solvable from the calibrated rules"
+      ],
+      "disposition": "unresolved",
+      "evidence_class": "unresolved",
+      "confidence": "low",
+      "files": [
+        "wild/hits/menu.exe",
+        "wild/hits/night.exe",
+        "wild/hits/sprogh.exe",
+        "wild/hits/swbb.exe"
+      ],
+      "assessment": "All four files show ZERO candidate stamp matches anywhere in the file (the primary stamp-anchored path in layout.py never fires) and the descending-n walk path also never solves for any n in 0..31. In every file the failure is the SAME shape: a `movsi` disp far beyond anything the walk or any tried static-array record explains (menu.exe 0x400, night.exe 0xa00, sprogh.exe 0x800, swbb.exe 0x1440), read back at the guessed pool position as plain low-value (non-descriptor-tagged) words -- and for menu.exe those movsi disps form a clean, long run of 4-byte-spaced constant-index accesses (0x310..0x400, ~60 entries) immediately after what looks like a cluster of ARR_BLOCK(0x36)-spaced array bases (0x156, 0x18c, 0x1c2, 0x1f8, 0x22e, 0x264). This strongly suggests a static STRING array with a large enough element count (or too many total static arrays, possibly exceeding the stamp's `0<=n<=31` cap) that the current record-parsing/stamp-shape assumptions in `_parse_static_slot`/the stamp search don't hold -- not confirmed to be a runtime-revision issue at all, just an unimplemented or mis-modeled shape. mf.exe fails similarly but with the DISTINCT message 'DGROUP layout not solvable (runtime slot grid anchor)' (has rt_blocks, so it's the grid-anchored path failing instead) -- likely a related but separate cause, not yet checked against this hypothesis.",
+      "promotion_criteria": "Hand-derive ds for menu.exe (smallest file of the four) using the ARR_BLOCK-spaced brute-force scan technique from the original gap-16 investigation, confirm whether a big static string array record actually sits where hypothesized, and if so identify what specifically breaks `_parse_static_slot`/the stamp shape for it (element count, rank, or the n<=31 cap) before writing an oracle probe to reproduce a minimal case.",
+      "source": "session 2026-07-20, surfaced once the computed-FOR-STEP fix (commit 4f29e9b) let menu.exe's scan reach this far"
     }
   ]
 }
