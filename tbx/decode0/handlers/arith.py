@@ -634,6 +634,36 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                     state.cur = None
                     state.k = k2 + 1
                     return True
+            else:
+                # Materialized as a VALUE, not a direct IF condition (`B =
+                # (ARRAY%(I) = 5)`, wild pfl.exe): hand off to the generic
+                # pend_cmp/movax-0xFFFF materialization path (control.py)
+                # exactly like the IF forms above, just without consuming
+                # the movax itself -- re-point state.k at k2 so the main
+                # dispatch loop's next pass picks it up. An AND-chain
+                # 2nd+ term (wild number.exe) round-trips the running
+                # accumulator through an ax<->bx shuffle first (same
+                # boilerplate cmpax_m's own AND-chain case skips over,
+                # gap 53); the shuffle ops have their own generic
+                # handlers, so re-pointing at k2 handles both shapes.
+                j = k2
+                while j < len(state.ops) and state.ops[j][1] in ("movrr", "movbxax"):
+                    j += 1
+                if (
+                    nxt is not None
+                    and nxt[1] == "movax"
+                    and nxt[2] == 0xFFFF
+                    or (
+                        j > k2
+                        and j < len(state.ops)
+                        and state.ops[j][1] == "movax"
+                        and state.ops[j][2] == 0xFFFF
+                    )
+                ):
+                    state.pend_cmp = (ref, state.ax)
+                    state.ax = None
+                    state.k = k2
+                    return True
             raise ValueError(f"cmpax_si without an IF jcc consumer at {addr:#x}")
         elif sik[1] == "movm_ds":
             # `mov [disp16], ds`: DS spilled to a scratch slot ahead of an

@@ -3173,6 +3173,14 @@ IfGoto(cond=RelOp(op='<>', lhs=Lit(value=180), rhs=Call(name='LEN', args=(Var(na
 Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None)
 End()
 
+## t1_cmpsival
+Dim(name='V0%', bounds=(10,), also=())
+Assign(target=ArrayRef(name='V0%', indices=(Lit(value=1),)), value=Lit(value=5))
+Assign(target=Var(name='A%'), value=Lit(value=1))
+Assign(target=Var(name='B%'), value=Group(inner=BinOp(op='=', lhs=ArrayRef(name='V0%', indices=(Var(name='A%'),)), rhs=Lit(value=5))))
+Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_cmpstale
 Assign(target=Var(name='A$'), value=StrLit(value='#'))
 Assign(target=Var(name='B$'), value=StrLit(value='X'))
@@ -8719,6 +8727,14 @@ End()
 Assign(target=Var(name='A$'), value=StrLit(value='HELLO'))
 IfGoto(cond=RelOp(op='<>', lhs=Lit(value=180), rhs=Call(name='LEN', args=(Var(name='A$'),))), target=3)
 Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None)
+End()
+
+## v10_t1_cmpsival
+Dim(name='V0%', bounds=(10,), also=())
+Assign(target=ArrayRef(name='V0%', indices=(Lit(value=1),)), value=Lit(value=5))
+Assign(target=Var(name='A%'), value=Lit(value=1))
+Assign(target=Var(name='B%'), value=Group(inner=BinOp(op='=', lhs=ArrayRef(name='V0%', indices=(Var(name='A%'),)), rhs=Lit(value=5))))
+Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_cmpstale

@@ -1,0 +1,19 @@
+# t1_cmpsival dialect=1.1 start=08700
+08703:movm_imm:370:5
+08709:movm_imm:344:1
+0870F:movax:5
+08712:movsim:344
+08716:shlsi
+08718:addsi:368
+0871C:cmpax_si
+0871E:movax:65535
+08721:jcc:116:34596
+08723:incax
+08724:movm_ax:342
+08728:fild:342
+0872D:rt:187
+0872F:rt:184
+08733:end
+08736:epilogue
+# commits
+08731

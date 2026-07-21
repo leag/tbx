@@ -503,6 +503,23 @@ def test_decode_t1_cmppool():
     assert "20 IF 180 <> LEN(A$) THEN 40" in src
 
 
+def test_decode_t1_cmpsival():
+    # cmpax_si materialized as a VALUE, not a direct IF condition:
+    # `B% = (A%(I%) = 5)` -- the shlsi element-access handler's cmpax_si
+    # branch only recognized the IF-consumer forms (jcc+skip-jmp, bare
+    # jcc); a following `movax 0xFFFF` (the generic boolean-value
+    # materialization, control.py) had no witness for a computed array
+    # element. Hands off to the same pend_cmp/movax-0xFFFF path the
+    # scalar cmpax_m case already uses. Closed wild pfl.exe's blocker
+    # (advances to a distinct gap); number.exe's own AND-chain shuffle
+    # variant of this shape also now decodes past cmpax_si (advances
+    # further too, to an unrelated "ax,bx combine with empty regs" gap).
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_cmpsival.exe")))
+    assert "40 B% = (V0%(A%) = 5)" in src
+
+
 def test_decode_t1_strgodo():
     # String direct conditional GOTO (`IF A$ = "X" THEN <line>`, backward
     # target): strcmp + bare jcc with no skip-jmp -- forward strcmp flags,
