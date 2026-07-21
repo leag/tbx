@@ -28,8 +28,35 @@ from roughly 25 seconds to 8.8 seconds, and two concurrent compiles finish in
 
 ## Where things stand
 
-**Updated 2026-07-20 (later session, commits 4f29e9b..f2ae494): 20 of 84
-wild EXEs decode OK**, up from 16 at this session's start (ck, onelab87,
+**Updated 2026-07-21: still 20 of 84 wild EXEs decode-ok**, but two more
+gaps closed this session (both byte-exact both dialects), each advancing
+a file further without yet finishing it:
+- `bab24ce` bare `imul word [si]` (no ES prefix): the DS-relative sibling
+  of the already-handled `far_imulax_si` (byref-param multiply), for a
+  multiplicative fold of a computed static int-array element
+  (`ARRAY1%(k) * ARRAY2%(i,j)`). Fixture `t1_imulsi`. Advanced grdscn.exe
+  past its `unhandled byte f7` into a NEW, unrelated gap (see below).
+- `b6c5ecc` computed (variable) `FOR...STEP` over a **LOCAL** variable:
+  the bp-relative mirror of the already-working DGROUP case (`orax_self`
+  sign test), using `movax_bp`/`movm_ax_bp`/`mov_bp_imm`/`cmp_bpi8`
+  throughout. The header also reserves a `[limit-temp, step-temp]` word
+  pair as the LAST two words of the LOCAL span (not v-relative like the
+  literal-step case), and the step-temp is read again at NEXT so its
+  removal from the LOCAL name table has to wait until the SUB body is
+  fully decoded. Fixture `t1_localvarstep`. Does NOT close ziptest.exe
+  (see the new FP-LOCAL gap below) despite matching its `TEST
+  word[bp+d8],8000h` signature at the byte level -- ziptest.exe's actual
+  loop variable turned out to be FP-typed, a different, bigger gap.
+
+Two new gaps surfaced and were investigated but NOT closed this session
+(see their own sections below for the full writeup): **FP-typed LOCAL
+variables are unsupported in SUB bodies at all** (ziptest.exe), and
+grdscn.exe's next blocker is a 3-term string-comparison chain mixing
+short-circuit branching with a combinator fold, a new control-flow
+template distinct from both `t1_and3` and `t1_mixedbool`.
+
+Previously, updated 2026-07-20 (session, commits 4f29e9b..f2ae494): 20 of 84
+wild EXEs decode OK, up from 16 at this session's start (ck, onelab87,
 onelabel, mm, autonum, rev, startup, schart, r, book, inv87, invoice,
 metric, strpfind, pz, rstprint, mymenu, be, invent, and one more --
 re-run `scan_wild.py` for the exact current list, this session added
@@ -68,6 +95,125 @@ via `uv run python tbx/tools/scan_wild.py wild/hits`, still 72 TB-but-fail):
 | 2 each | INT EC sub ac/42; INT ce; FP dc/04, da/1c; byte f7/8c/8b/1e/0b; system cell 0x8a | mostly untouched |
 | 1 | "codeless DO...LOOP WHILE/UNTIL ... unwitnessed" (vhfprop) | unchanged, see "vhfprop status" below |
 | singles | see scan output | untouched; freshest one is metric.exe's new stop, "error-trap line table has a codeless-statement entry but no DATA pool was found (unsupported zero-length-statement shape)", surfaced immediately by this session's nested-FOR-loop fix, not yet investigated |
+
+## Gap: FP-typed LOCAL variables are unsupported in SUB bodies at all (ziptest.exe), INVESTIGATED, NOT LANDED (2026-07-21)
+
+ziptest.exe fails with `unhandled byte f7 at 0xa5c6`, byte pattern `f7 46
+0e 00 80` = `TEST word [bp+0Eh], 8000h`. At first glance this looks like
+the LOCAL-frame analog of the already-supported DGROUP computed-STEP
+integer FOR-NEXT's `orax_self` sign test (which this session DID add —
+see `b6c5ecc` above) — same "sign-test on a variable step" shape. A
+probe built to test that hypothesis (`q_localvarstep.bas`, an INTEGER
+LOCAL var-step FOR) reproduced a *different* missing op entirely
+(`unhandled op orax_self`, since integer LOCAL FORs go through AX/
+`orax_self`, not a raw memory TEST) — that gap got fixed and promoted as
+`t1_localvarstep`, but **it did not close ziptest.exe**: the wild file's
+`scan_wild.py` re-run still fails at the exact same byte.
+
+Building a second, more targeted probe (`q_localfpvarstep.bas`: `SUB
+SUB1(N%): LOCAL I!, S!, ST!: ... FOR I! = 1 TO 10 STEP ST! ... NEXT I!`)
+reproduced the exact byte pattern. Full op-stream trace (via
+`decode0._scan`'s partial `ops` list, extracted from the exception
+traceback since `--ops` fails wholesale on a scan-level gap):
+
+```
+fldz; fstp_bp 14              ; S! = 0
+arg_ref 6; far_fild_si; fstp_bp 18   ; ST! = N% (byref, FILD-converted)
+fild 294; fstp_bp 26          ; limit-temp = FLOAT(pooled 10)
+fld_bp 18; fstp_bp 22         ; step-temp = ST! (copy)
+fld1; fstp_bp 10              ; I! = 1.0 (init)
+jmp test
+BODY: fld_bp 10; fold_bp + 14; fstp_bp 14   ; S! = S! + I!
+      fld_bp 22; fold_bp + 10; fstp_bp 10   ; I! = I! + step-temp
+test: fwait
+      TEST word [bp+18h], 8000h    <-- the missing op (step-temp's disp
+                                        is 22 decimal = 0x16; +2 = 0x18,
+                                        i.e. its HIGH WORD = IEEE sign bit)
+      je +3; jmp NEG
+      FLD [bp+1Ah] (limit-temp); FCOMP [bp+0Ah] (I!); fstsw; jae BODY
+      jmp EXIT
+NEG:  FLD [bp+1Ah]; FCOMP [bp+0Ah]; fstsw; jbe BODY
+```
+
+This is **structurally identical** to the already-working DGROUP FP
+var-STEP FOR-NEXT (`lift.py`'s `_lift_next`/`_loose_for_header`, which
+uses `testw`/`fld`/`fcomp`/`fstsw` — note this is a SEPARATE, older
+template from the integer `orax_self` one; DGROUP already has both).
+The fix for the scan+lift half is a small, direct mirror of work already
+done twice this session:
+- scan.py needs one new op, `TEST word [bp+disp8], imm16` (mirroring the
+  existing DGROUP `testw` at scan.py:92) — call it `testw_bp`.
+- `_loose_for_header`/`_lift_next` need to accept `testw_bp`/`fld_bp`/
+  `fcomp_bp` as the bp-relative siblings of `testw`/`fld`/`fcomp`
+  (`fcomp_bp` and `fld_bp` already exist and are used elsewhere; only
+  `testw_bp` is new). `fstsw` takes no memory operand so needs no mirror.
+- The increment-statement check in `_lift_next` currently reconstructs
+  the loop var's name via `_slot(v)` (DGROUP `V####` scheme) — same
+  V-vs-L naming-scheme problem this session's `_lift_var_step_next` fix
+  already hit and solved by reading the name off the already-lifted
+  `ir.For` statement instead of reconstructing it; the same fix applies
+  here.
+
+**What actually blocks this, and why it wasn't landed**: `fp_bp` in
+`handlers/arith.py` (the handler for `fld_bp`/`fstp_bp`/`fold_bp`/
+`fold_n_bp`/`fcomp_bp`) only implements two cases — `state.fn_frame is
+not None` (a DEF FN body's params/result/folds) and an `else` branch
+that's ONLY valid for FN-call argument staging in the main frame. There
+is **no case at all for `state.proc_frame is not None`** (a LOCAL
+variable inside a SUB) — hitting any of these ops with an open SUB frame
+raises `unexpected {kind} in main body`. This matches `loc_local`'s own
+docstring ("every slot in the zero-filled range is a 2-byte int for
+now (no fixture has witnessed a mixed-type LOCAL declaration yet)") —
+FP-typed LOCALs are a genuinely unimplemented feature, not just a
+missing byte pattern. Closing ziptest.exe for real needs:
+1. `loc_local`/the `local_init` name table to carry the right type
+   suffix (`!`/`#`) instead of hardcoding `%`, presumably by inferring
+   type from which op family (fld_bp vs the int ops) first touches each
+   slot — no fixture has witnessed how TB actually distinguishes
+   int/single/double LOCAL slot *sizes* in the zero-fill span itself
+   (a SINGLE needs 4 bytes, a DOUBLE 8 — does `local_init`'s `cnt`
+   still count in fixed 2-byte words with FP locals spanning multiple
+   entries, per this trace's `fstp_bp 18` -> next real local at `26`,
+   an 8-word gap for 2 FP locals? needs a dedicated fixture to pin).
+2. A LOCAL-frame branch in `fp_bp` covering read/write/fold/compare,
+   the SUB-body mirror of the `fn_frame` branch already there.
+3. Then the FOR-header/NEXT mirror described above.
+
+This is a full new subsystem (FP-typed LOCAL variable support), not a
+quick patch — same category as the earlier-documented SUB-LOCAL
+dynamically-sized array gap. Left undiagnosed further; the probes
+(`q_localfpvarstep.bas`) are reproducible and byte-matching, so the next
+session can pick this up directly without re-deriving the shape.
+
+## Gap: grdscn.exe's 3-term mixed short-circuit/combinator string-compare chain, NEW (2026-07-21)
+
+Surfaced by this session's `imul_si` fix (`bab24ce`), which advanced
+grdscn.exe past its old blocker into new territory: `materialization
+template mismatch at 0xa8f9` (raised by `lift.py`'s `_lift_while`, whose
+template is `["movax","jcc","incax","orax","jcc","jmp"]` but the actual
+op at that point continues with `movsi` instead of `orax`).
+
+Op-stream trace (`tbx --ops`, addresses `0A8DC`-`0A91D`) shows THREE
+string-compare terms (`strcmp`) chained together, but NOT via the
+already-supported accumulator-fold shape (`t1_and3`'s same-combinator
+chain, or `t1_mixedbool`'s combinator-switch-mid-chain, both closed
+earlier this session/campaign): here each term materializes
+**independently** (`movax 0xFFFF; jcc; incax; orax; jcc; jmp` — the
+same 6-op shape `_lift_while` expects for a WHOLE compound, not a term),
+and the jcc's TRUE branch jumps directly into the NEXT term's code
+(control-flow short-circuit, no register accumulator) for the first two
+terms; only the THIRD term's fold actually uses register combinators
+(`movbxax`/`movrr:cx:bx`/`oraxbx`/`movrr:bx:cx`/`andaxbx`) to combine
+the three terms' results together. This looks like it could be a
+parenthesized/mixed-precedence expression (e.g. `A$="x" AND B$="y" OR
+(C$="z" AND D$="w")`) or possibly a compiled `SELECT CASE` over string
+equality — not yet disambiguated. This is a new, more complex
+control-flow template than anything in `_lift_bool_tail`'s existing
+family and needs its own dedicated investigation (probably a fresh
+probe sweeping compound-string-IF shapes with explicit parens); not
+attempted further this session given the scope. `state.exe`/
+`state87.exe`'s own next blocker (the intra-inline-IF-body GOTO gap,
+already documented above) remains separately unresolved too.
 
 ## THE LINE-TABLE EPIC (read this first)
 
