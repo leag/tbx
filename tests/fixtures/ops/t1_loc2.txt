@@ -1,0 +1,21 @@
+# t1_loc2 dialect=1.1 start=08C60
+08C63:movsi:308
+08C66:rt:156
+08C68:movm_imm:46:20225
+08C6E:shortstr
+08C70:movm_imm:96:1
+08C76:movax:128
+08C79:open
+08C7C:movax:1
+08C7F:fn_ax_ax:LOC
+08C82:fstp:288
+08C89:fld:288
+08C8E:rt:187
+08C90:rt:184
+08C94:movax:1
+08C97:close
+08C9A:end
+08C9D:epilogue
+# commits
+08C87
+08C92

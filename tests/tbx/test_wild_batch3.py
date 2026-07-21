@@ -1107,6 +1107,28 @@ def test_decode_t1_lof():
     )
 
 
+def test_decode_t1_loc2():
+    # LOC(n) (wild be.exe/styllist.exe): `_AXARG_SUBS[0x24]` was mislabeled
+    # "INP" -- INP(n) always compiles inline (movdx/xorah/in_al, witnessed
+    # t1_inpf) and never reaches this ax-arg/ax-returning vector, so the
+    # label was never actually exercised by any existing fixture. Oracle-
+    # confirmed via `X = LOC(1)` reproducing the exact byte shape both
+    # wild files stopped on. Also: unlike EOF(n) (fed into an orax/jcc
+    # boolean test), LOC(n)'s ax result here flows STRAIGHT into an
+    # `fstp` FP-typed target with no explicit fistp/movmem_ax/fild bridge
+    # at all -- `fstp`'s handler now falls back to `state.ax` (an
+    # ir.Call) when the FP stack is empty. Closes wild be.exe/
+    # styllist.exe's blocker; both advance to a distinct, shared new gap
+    # ("file flush without items").
+    from tbx import decode0, emit0
+
+    prog = decode0.decode_user_code(_exe("t1_loc2.exe"))
+    assert emit0.emit(prog) == (
+        '10 OPEN "T.DAT" FOR OUTPUT AS #1\n20 A = LOC(1)\n30 PRINT A\n'
+        "40 CLOSE #1\n50 END\n"
+    )
+
+
 def test_decode_t1_lineinf():
     # LINE INPUT #n, var$ (wild billadd.exe/crossref.exe/file.exe/
     # grdscn.exe/strpfind.exe): the file-channel sibling of console LINE

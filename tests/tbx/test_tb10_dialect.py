@@ -73,6 +73,7 @@ PAIRS = [
     "t1_forvarstep2",
     "t1_cmppool",
     "t1_cmpsival",
+    "t1_loc2",
 ]
 
 

@@ -1104,7 +1104,18 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     elif kind == "fstp" and op[2] in (0x88, 0x94, 0xA0, 0xAC):
         state.color_cells[op[2]] = state.stack.pop()  # WINDOW world-coord cell (FP leg)
     elif kind == "fstp":
-        v = state.stack.pop()
+        if state.stack:
+            v = state.stack.pop()
+        elif isinstance(state.ax, ir.Call):
+            # An ax-arg/ax-returning intrinsic (LOC(n): `movax n; fn_ax_ax`)
+            # feeding STRAIGHT into an FP-typed target with no explicit
+            # fistp/movmem_ax/fild bridge at all -- the compiler promotes
+            # ax to FP implicitly here rather than through the usual
+            # int->FP round trip (wild be.exe/styllist.exe, probe q_loc1).
+            v = state.ax
+            state.ax = None
+        else:
+            raise ValueError(f"fstp with empty FP stack at {addr:#x}")
         # Implicit-single narrowing: a pooled f64 literal stored to a width-4
         # non-long slot was an unsuffixed source literal (`A = 1.5`) -- render
         # it plain (a `#` or `!` suffix would not be byte-faithful).

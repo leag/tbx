@@ -96,7 +96,10 @@ _AXARG_SUBS = {
     0x4A: "STRIG",  # intrinsics
     0x10: "EOF",
     0x28: "LPOS",
-    0x24: "INP",
+    0x24: "LOC",  # file position, NOT INP -- INP(n) always compiles inline
+    # (movdx/xorah/in_al; witnessed t1_inpf) and never reaches this vector;
+    # oracle-confirmed via `X = LOC(1)` reproducing this exact byte shape
+    # (probe q_loc1, wild be.exe/styllist.exe)
 }
 _AX0_SUBS = {
     0x0A: "CSRLIN",
