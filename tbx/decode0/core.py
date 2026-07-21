@@ -2495,9 +2495,22 @@ def decode_user_code(exe: bytes) -> list[Any]:
                     )  # raw item index; resolved at epilogue
                 state.cur = None
             else:
-                raise ValueError(
-                    f"store to unknown system cell {op[2]:#x} at {addr:#x}"
-                )
+                # Not one of the known fixed-purpose system cells -- but
+                # VAR_BASE is only the TYPICAL scalar floor, not a hard one:
+                # a program using fewer of the low reserved cells can have
+                # its layout solver legitimately place real scalars below
+                # it (witnessed wild tamstart.exe, whose cmpax_m already
+                # resolves the same disp here via state.loc with no
+                # VAR_BASE gate at all -- this movm_imm path was the odd
+                # one out). Defer to the solved layout before giving up.
+                try:
+                    var = state.loc(op[2])
+                except ValueError:
+                    raise ValueError(
+                        f"store to unknown system cell {op[2]:#x} at {addr:#x}"
+                    ) from None
+                state.put(ir.Assign(var, ir.Lit(op[3])), state.cur)
+                state.cur = None
             state.k += 1
             continue
         if kind == "movm_ax" and op[2] in (0x88, 0x94, 0xA0, 0xAC):
