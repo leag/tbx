@@ -408,6 +408,21 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             state.k += 1
             return True
         raise ValueError(f"inc [bp+{op[2]}] outside a FOR at {addr:#x}")
+    if kind == "dec_bp":
+        # LOCAL-var STEP -1 FOR-NEXT decrement, the descending sibling of
+        # inc_bp -- same step patch-up as dec_m's FOR branch (the header
+        # folded a provisional Lit(1) step before this NEXT-side evidence
+        # was available). A bare dec [bp+d8] outside a FOR is unwitnessed
+        # (LOCAL `X% = X% - 1` compiles to a generic subtract, not this
+        # opcode -- confirmed by probe) -- fail loud (wild horses.exe).
+        if state.fors and state.fors[-1]["v"] == op[2]:
+            f = state.fors[-1]
+            old = state.stmts[f["idx"]]
+            state.stmts[f["idx"]] = ir.For(old.var, old.init, old.limit, ir.Lit(-1))
+            f["step"] = -1
+            state.k += 1
+            return True
+        raise ValueError(f"dec [bp+{op[2]}] outside a FOR at {addr:#x}")
     if kind == "dec_m":
         # DECR normalization: bare DEC [disp16] compiles `X = X - 1`. Inside
         # an open FOR whose loop var this is, it's STEP -1's increment --

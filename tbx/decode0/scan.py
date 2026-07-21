@@ -438,6 +438,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "addm_ax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
         p += 3  # combine-store, e.g. `X% = X% + 1` (witnessed t1_local1)
         return p
+    if b == 0x29 and exe[p + 1] == 0x46:  # sub [bp+disp8], ax: LOCAL int
+        ops.append((p, "subm_ax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # combine-store, e.g. `X% = X% - <expr>` (subtract sibling
+        return p  # of addm_ax_bp; wild horses.exe)
     if b == 0xA3:  # mov [imm16], ax (scratch bridge)
         ops.append((p, "movmem_ax", struct.unpack_from("<H", exe, p + 1)[0]))
         p += 3
@@ -458,6 +462,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "inc_bp", struct.unpack_from("<b", exe, p + 2)[0]))
         p += 3  # FOR step (witnessed q_locidx)
         return p
+    if b == 0xFF and exe[p + 1] == 0x4E:  # dec word [bp+d8]: the LOCAL int
+        ops.append((p, "dec_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # STEP -1 FOR-NEXT decrement, the descending sibling of
+        return p  # inc_bp (wild horses.exe, probe q_localforstepm1)
     if b == 0x83 and exe[p + 1] == 0x7E:  # cmp word [bp+d8], imm8: the LOCAL
         bp_off, i8 = struct.unpack_from("<bb", exe, p + 2)  # int FOR-NEXT
         ops.append((p, "cmp_bpi8", bp_off, i8))  # limit test (q_locidx)

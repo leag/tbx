@@ -261,6 +261,32 @@ fixes elsewhere in the tally:
   solving bug for this file specifically, not a decoder-vocabulary gap;
   untouched, needs its own `layout.py`-focused session.
 
+- **LOCAL FOR-NEXT with literal `STEP -1`, plus bare LOCAL DECR** (2026-07-21):
+  pivoted to horses.exe's "unhandled byte ff", following the same
+  "sibling of an existing op" playbook. `dec_bp` (`FF 4E d8` = `DEC word
+  [bp+d8]`) is the LOCAL-frame mirror of `dec_m`, gated exactly like
+  `inc_bp` — consumed silently only inside a matching open FOR (patches
+  the already-emitted `ir.For`'s step to `Lit(-1)`, mirroring `dec_m`'s
+  own patch-up); fixture `t1_localforstepm1`, byte-exact both dialects.
+  Advancing past that surfaced `subm_ax_bp` (`29 46 d8` = `SUB word
+  [bp+d8], AX`), the subtraction sibling of the already-calibrated
+  `addm_ax_bp` (bare LOCAL DECR, `X% = X% - 1`, outside any FOR) —
+  fixture `t1_localsub1`, byte-exact both dialects. **Neither fix closes
+  horses.exe**: it advances to a THIRD occurrence of the raw `DEC
+  [bp+0x2E]` byte pattern, but this time genuinely OUTSIDE any open FOR
+  (confirmed via trace: `CMP AX,[BP+46]` as a materialized-boolean VALUE
+  comparison, then an IF/ELSE-shaped branch where the ELSE arm is the
+  bare `DEC`) — i.e. dec_bp's fail-loud "outside a FOR" gate is legitimately
+  hit by a REAL, un-witnessed shape, not a bug in the gate. A dedicated
+  probe reproducing the EXACT same-looking source (`IF cond THEN X%=5
+  ELSE X%=X%-1`, both TB 1.0 and 1.1) compiled to `subm_ax_bp` instead of
+  a raw `dec_bp` in every attempt — so whatever specific difference
+  triggers horses.exe's raw-DEC encoding for a NON-FOR decrement is still
+  unidentified (possibly: statement position, a GOTO-based flow instead
+  of block-IF, or some other structural cue) — needs more probe variants
+  before extending `dec_bp`'s outside-FOR case; do not guess it in per
+  the calibration rule.
+
 Previously, updated 2026-07-21 (earlier session): 23 of 84 wild EXEs decode-ok, up from 22.
 `90250ca` closes tamstart.exe fully via three gaps found while chasing
 the same generic "materialization template mismatch"/KeyError signature

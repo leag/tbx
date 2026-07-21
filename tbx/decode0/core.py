@@ -2823,6 +2823,16 @@ def decode_user_code(exe: bytes) -> list[Any]:
             state.cur = None
             state.k += 1
             continue
+        if kind == "subm_ax_bp":  # LOCAL int var = var - ax expression, the
+            local = state.loc_local(op[2])  # subtract sibling of addm_ax_bp
+            state.put(  # (wild horses.exe)
+                ir.Assign(local, ir.BinOp("-", local, _rgrp("-", state.ax))),
+                state.cur,
+            )
+            state.ax = None
+            state.cur = None
+            state.k += 1
+            continue
         if handlers.os_system(state, op, addr, kind):
             continue
         if handlers.sound(state, op, addr, kind):

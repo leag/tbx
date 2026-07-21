@@ -1691,6 +1691,41 @@ def test_decode_t1_imulsi():
     assert "130 D% = D% + V0%(A%) * V1%(A%,A%)" in src
 
 
+def test_decode_t1_localforstepm1():
+    # Integer FOR over a LOCAL var with a literal STEP -1: `dec [bp+d8]`
+    # at the NEXT -- the bp-relative sibling of dec_m, gated exactly like
+    # inc_bp (consumed silently only inside a matching open FOR; a bare
+    # DEC via this opcode outside a FOR is a SEPARATE, unwitnessed shape
+    # -- see t1_localsub1 below for how bare LOCAL DECR actually compiles,
+    # wild horses.exe).
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_localforstepm1.exe"))
+    sub = next(s for s in prog if isinstance(s, ir.SubDef))
+    for_stmt = next(s for s in sub.body if isinstance(s, ir.For))
+    assert for_stmt == ir.For(ir.Var("A%"), ir.Lit(5), ir.Lit(1), ir.Lit(-1))
+    assert emit0.emit(prog) == (
+        "10 SUB SUB1\n  LOCAL A%\n  FOR A% = 5 TO 1 STEP -1\n"
+        "  PRINT A%\n  NEXT A%\nEND SUB\n20 CALL SUB1\n30 END\n"
+    )
+
+
+def test_decode_t1_localsub1():
+    # Bare LOCAL DECR (`X% = X% - 1`, outside any FOR): `sub [bp+d8], ax`
+    # -- the subtraction sibling of the already-calibrated addm_ax_bp
+    # (bare LOCAL INCR uses `add [bp+d8], ax`, t1_local1). Surfaced
+    # chasing wild horses.exe's next gap after t1_localforstepm1 above.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_localsub1.exe"))
+    sub = next(s for s in prog if isinstance(s, ir.SubDef))
+    assert ir.Assign(ir.Var("A%"), ir.BinOp("-", ir.Var("A%"), ir.Lit(1))) in sub.body
+    assert emit0.emit(prog) == (
+        "10 SUB SUB1\n  LOCAL A%\n  A% = A% - 1\n  PRINT A%\nEND SUB\n"
+        "20 CALL SUB1\n30 CALL SUB1\n40 END\n"
+    )
+
+
 def test_decode_t1_localvarstep():
     # Computed (variable) STEP FOR over a LOCAL (wild ziptest.exe): the
     # LOCAL-frame mirror of t1_forvarstep, using movax_bp/movm_ax_bp/
@@ -1943,6 +1978,8 @@ if __name__ == "__main__":
     test_decode_t1_dim4()
     test_decode_t1_dim4v()
     test_decode_t1_imulsi()
+    test_decode_t1_localforstepm1()
+    test_decode_t1_localsub1()
     test_decode_t1_localvarstep()
     test_decode_t1_forstepm1()
     test_decode_t1_forvarinit()
