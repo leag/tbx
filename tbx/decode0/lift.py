@@ -153,13 +153,18 @@ def _lift_var_step_next(ops, k, fors, stmts, addrs) -> int:
     time (the ir.For's limit was a Lit(0) placeholder) and gets patched
     into the already-emitted statement here, the limit-side mirror of
     addm_i8's step patch-up (q_forvarstep/q_forvarstep2; wild menu.exe/
-    stat.exe)."""
+    stat.exe). A LOCAL loop var's sign test compares via cmp_bpi8 instead
+    of cmp_mi8/16 (wild ziptest.exe, probe q_localvarstep); either way the
+    loop var's own name is read back off the already-lifted ir.For (set
+    correctly by loc/loc_local at header time) rather than reconstructed
+    from the bp-offset/disp, since the two frames use different name
+    schemes (V#### vs L##%)."""
     f = fors[-1]
     v = f["v"]
 
     def branch(i, wantcc, invcc):
         o = ops[i] if i < len(ops) else None
-        if o is None or o[1] not in ("cmp_mi8", "cmp_mi16") or o[2] != v:
+        if o is None or o[1] not in ("cmp_mi8", "cmp_mi16", "cmp_bpi8") or o[2] != v:
             raise ValueError(f"FOR-STEP sign test: expected cmp [v] at index {i}")
         lim = o[3]
         nxt = ops[i + 1] if i + 1 < len(ops) else None
@@ -212,13 +217,13 @@ def _lift_var_step_next(ops, k, fors, stmts, addrs) -> int:
         )
 
     inc = stmts[-1]
-    slot_v = _slot(v) + "%"  # always integer: this template is int arithmetic only
-    if not (
+    var = stmts[f["idx"]].var  # the FOR's own loop var name (V#### or L##%,
+    if not (  # already correctly resolved by loc/loc_local at header time)
         isinstance(inc, ir.Assign)
-        and inc.target == ir.Var(slot_v)
+        and inc.target == var
         and isinstance(inc.value, ir.BinOp)
         and inc.value.op == "+"
-        and ir.Var(slot_v) in (inc.value.lhs, inc.value.rhs)
+        and var in (inc.value.lhs, inc.value.rhs)
     ):
         raise ValueError(f"FOR-STEP NEXT increment mismatch: {inc}")
     a = addrs[-1]
@@ -227,7 +232,7 @@ def _lift_var_step_next(ops, k, fors, stmts, addrs) -> int:
     old = stmts[f["idx"]]
     stmts[f["idx"]] = ir.For(old.var, old.init, ir.Lit(asc_lim), old.step)
 
-    stmts.append(ir.NextStmt(ir.Var(slot_v)))
+    stmts.append(ir.NextStmt(var))
     addrs.append(a)
     fors.pop()
     return i

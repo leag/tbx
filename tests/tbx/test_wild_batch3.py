@@ -1667,6 +1667,29 @@ def test_decode_t1_imulsi():
     assert "130 D% = D% + V0%(A%) * V1%(A%,A%)" in src
 
 
+def test_decode_t1_localvarstep():
+    # Computed (variable) STEP FOR over a LOCAL (wild ziptest.exe): the
+    # LOCAL-frame mirror of t1_forvarstep, using movax_bp/movm_ax_bp/
+    # mov_bp_imm/cmp_bpi8 throughout instead of the DGROUP movax_m/movm_ax/
+    # cmpm_ax family -- vdisp and loc_local's L-names already disambiguate
+    # the two frames uniformly (same as the literal-step LOCAL FOR). The
+    # header reserves a [limit-temp, step-temp] word pair as the LAST two
+    # words of the LOCAL span (here only the step-temp is actually read,
+    # since the limit is a literal) -- unlike the literal-step case's
+    # temps, the step-temp IS read again at NEXT, so it can't be dropped
+    # from the LOCAL name table until the SUB body is fully decoded.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_localvarstep.exe"))
+    sub = next(s for s in prog if isinstance(s, ir.SubDef))
+    assert ir.Local(("B%", "C%", "D%")) in sub.body
+    for_stmt = next(s for s in sub.body if isinstance(s, ir.For))
+    assert for_stmt == ir.For(ir.Var("B%"), ir.Lit(1), ir.Lit(10), ir.Var("D%"))
+    src = emit0.emit(prog)
+    assert "LOCAL B%, C%, D%" in src
+    assert "FOR B% = 1 TO 10 STEP D%" in src
+
+
 if __name__ == "__main__":
     test_decode_t1_fcmp()
     test_decode_t1_fori()
@@ -1714,4 +1737,5 @@ if __name__ == "__main__":
     test_decode_t1_bandstr()
     test_decode_t1_dim4()
     test_decode_t1_imulsi()
+    test_decode_t1_localvarstep()
     print("ALL PASS")

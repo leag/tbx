@@ -1434,7 +1434,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         elif (
             cmp_at_t is not None
             and cmp_at_t[1] == "orax_self"
-            and state.ops[state.k - 1][1] == "movax_m"
+            and state.ops[state.k - 1][1] in ("movax_m", "movax_bp")
             and len(state.stmts) >= 2
             and isinstance(state.stmts[-1], ir.Assign)
             and isinstance(state.stmts[-1].target, ir.Var)
@@ -1455,10 +1455,33 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             # below); a placeholder is patched in place once seen, the
             # mirror image of addm_i8's step patch-up for a literal-step
             # header (q_forvarstep/q_forvarstep2; wild menu.exe/stat.exe).
+            # A LOCAL loop var uses the bp-relative forms throughout
+            # (movax_bp/movm_ax_bp/mov_bp_imm/cmp_bpi8/addm_ax_bp -- vdisp
+            # and loc_local's L-names already disambiguate uniformly, same
+            # as the literal-step LOCAL FOR above; wild ziptest.exe,
+            # probe q_localvarstep).
             init_s = state.stmts.pop()
             a = state.addrs.pop()
             step_s = state.stmts.pop()
             state.addrs.pop()
+            if state.ops[state.k - 1][1] == "movax_bp" and state.proc_frame is not None:
+                # A variable-STEP FOR over a LOCAL reserves a [limit-temp,
+                # step-temp] pair as the LAST two words of the LOCAL span
+                # (unlike the literal-step case above, where v+2/v+4 works
+                # only because that fixture's loop var happens to be the
+                # last declared local too) -- a literal limit (as here)
+                # needs no runtime limit-temp, but both words are still
+                # reserved and neither is a declared LOCAL (probe
+                # q_localvarstep; wild ziptest.exe). Unlike the literal
+                # case's temps, the step-temp IS read again at NEXT time
+                # (movax_bp reloads it for the increment/sign-test), so it
+                # can't be dropped from `locals` yet -- stash both disps
+                # and strip them from the LOCAL statement's name list only
+                # once the SUB body is fully decoded (proc_ret).
+                step_disp = state.vdisp(step_s.target)
+                state.proc_frame.setdefault("hidden_locals", set()).update(
+                    (step_disp, step_disp + 2)
+                )
             state.put(
                 ir.For(init_s.target, init_s.value, ir.Lit(0), step_s.value),
                 a,
@@ -1939,9 +1962,14 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 state.addrs[state.proc_frame["idx"] :],
             )
             locs = state.proc_frame["locals"]
-            if locs:  # the zero-fill always runs right after proc_enter,
-                # regardless of where LOCAL appears in source, so it's
-                # always the body's first physical line (t1_local1)
+            for d in state.proc_frame.get("hidden_locals") or ():
+                if locs is not None:
+                    locs.pop(d, None)  # var-STEP FOR temps (see above): never
+            if locs:  # declared LOCALs, just deferred out of the dict
+                # until every reference to them was resolved. The
+                # zero-fill always runs right after proc_enter, regardless
+                # of where LOCAL appears in source, so it's always the
+                # body's first physical line (t1_local1)
                 body = (ir.Local(tuple(locs.values())),) + body
             state.nsub += 1
             name = f"SUB{state.nsub}"
