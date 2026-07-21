@@ -1593,6 +1593,11 @@ def _scan_pass(
                     # literal vs. an FP-stack value (mixed-type IF/loop
                     # test, e.g. `IF X% > Y THEN`; wild grdscn.exe et al.,
                     # probe q_icomp)
+                    (0xDA, 3): "icomp32",  # m32 long-int compare: a plain
+                    # LONG (`&`) scalar var or pooled literal vs. an
+                    # FP-stack value (`IF X& > 5.5 THEN`) -- the disp16
+                    # sibling of icomp_si32's [si] form; wild stat.exe,
+                    # probe q_icomp32
                     (0xDD, 0): "fld64",  # m64 load (SELECT CASE selector temp)
                     (0xDD, 3): "fstp64",  # m64 store (SELECT CASE selector temp)
                     (0xDC, 3): "fcomp64",  # m64 compare (SELECT CASE arm test)

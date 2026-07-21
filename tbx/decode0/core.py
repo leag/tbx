@@ -1210,6 +1210,14 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             state.loc(op[2]) if op[2] in state.lay["scalars"] else state.pool_lit(op[2])
         )
         state.pend_cmp = (mem, state.stack.pop())
+    elif kind == "icomp32":  # m32 long-int var/pool-literal compare: the
+        # LONG (`&`) sibling of icomp (`IF X& > 5.5 THEN`; wild stat.exe)
+        mem = (
+            state.loc(op[2])
+            if op[2] in state.lay["scalars"]
+            else state.pool_lit32(op[2])
+        )
+        state.pend_cmp = (mem, state.stack.pop())
     elif kind == "fcomp64":  # m64 direct compare outside SELECT CASE (which
         # consumes its own): double var or pooled f64 (witnessed t1_dblarr)
         state.pend_cmp = (state.fpval64(op[2]), state.stack.pop())

@@ -1652,6 +1652,30 @@ def test_decode_t1_dim4():
     )
 
 
+def test_decode_t1_dim4v():
+    # Rank-4 static array accessed at a COMPUTED (variable) index, all four
+    # subscripts: the far-IDX register machine's addsiax/imul_m chain only
+    # recognized span1 (jspan, blk+0x0C) and span2 (kspan, blk+0x12) --
+    # missing span3 (blk+0x18) and the third combine level (si=lspan +
+    # ax=kspan -> kl; si=kl + ax=jspan -> jkl) needed for a 4th dimension.
+    # t1_dim4 (constant indices) never exercises this chain at all --
+    # those compile through the movsi-disp16 path (gap 15), not shl-si/
+    # imul_m (wild hfprop.exe, probe q_dim4var).
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_dim4v.exe"))
+    assign = next(
+        s for s in prog if isinstance(s, ir.Assign) and isinstance(s.target, ir.ArrayRef)
+    )
+    assert assign.target == ir.ArrayRef(
+        "V0", (ir.Var("A%"), ir.Var("B%"), ir.Var("C%"), ir.Var("D%"))
+    )
+    assert emit0.emit(prog) == (
+        "10 DIM V0(2,3,5,4)\n20 A% = 1\n30 B% = 2\n40 C% = 3\n50 D% = 4\n"
+        "60 V0(A%,B%,C%,D%) = 7\n70 PRINT V0(A%,B%,C%,D%)\n80 END\n"
+    )
+
+
 def test_decode_t1_imulsi():
     # `imul word [si]` with NO es: prefix (wild grdscn.exe/ziptest.exe):
     # multiplicative fold of a computed static int-array element, the DS
@@ -1764,6 +1788,22 @@ def test_decode_t1_licomp():
         "10 DIM V0&(5)\n20 FOR A% = 1 TO 5\n"
         "30 V0&(A%) = A% * 1000000\n40 NEXT A%\n50 B% = 3\n"
         "60 IF V0&(B%) <= 5 THEN 80\n70 PRINT \"Y\"\n80 END\n"
+    )
+
+
+def test_decode_t1_icomp32():
+    # ESC DA modrm=1E (mod=0,reg=3,rm=6, [disp16]): a plain LONG (`&`)
+    # SCALAR variable compared against an FP-stack value (`IF X& > 5.5
+    # THEN`) -- the disp16 sibling of icomp_si32's [si] (computed-index
+    # array) form, missing from the disp16 kind table alongside icomp
+    # (the m16 int version). Wild stat.exe.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_icomp32.exe"))
+    ifgoto = next(s for s in prog if isinstance(s, ir.IfGoto))
+    assert ifgoto.cond == ir.RelOp("<=", ir.Var("A&"), ir.DblLit(5.5))
+    assert emit0.emit(prog) == (
+        "10 A& = 100000\n20 IF A& <= 5.5# THEN 40\n30 PRINT \"Y\"\n40 END\n"
     )
 
 
@@ -1901,12 +1941,14 @@ if __name__ == "__main__":
     test_decode_t1_bandwide()
     test_decode_t1_bandstr()
     test_decode_t1_dim4()
+    test_decode_t1_dim4v()
     test_decode_t1_imulsi()
     test_decode_t1_localvarstep()
     test_decode_t1_forstepm1()
     test_decode_t1_forvarinit()
     test_decode_t1_fwdcall()
     test_decode_t1_licomp()
+    test_decode_t1_icomp32()
     test_decode_t1_locforvarlim()
     test_decode_t1_byrefforvar()
     test_decode_t1_byrefsub()

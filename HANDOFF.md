@@ -207,6 +207,60 @@ start from this exact writeup (probes `q_byrefforstepm1.bas`/
 either thread `local_init`'s base disp through to the FOR-header
 recognizer, or find some other live anchor before re-implementing.
 
+**Goal tightened mid-session to require a FULL wild-file closure, not just
+advancing gaps** — pivoted away from the bmaster.exe/ifi.exe/zip.exe chain
+(none looked close to fully closing) to hunt for smaller, more mechanical
+fixes elsewhere in the tally:
+
+- **ESC DA modrm=1E, the disp16 sibling of `icomp`** (2026-07-21):
+  `mod=0,reg=3,rm=6` with `esc=DA` is a plain LONG (`&`) SCALAR variable
+  (or pooled literal) compared against an FP-stack value (`IF X& > 5.5
+  THEN`) — the disp16 counterpart of this SAME session's `icomp_si32`
+  ([si], computed-index array form). New op `icomp32`, consumed
+  identically to `icomp` but via `state.pool_lit32` instead of
+  `state.pool_lit` for the pooled-literal fallback (mirroring `ifold32`'s
+  existing long-pool-literal pattern). Fixture `t1_icomp32`, byte-exact
+  both dialects — found and verified on the very first probe. Advances
+  wild stat.exe (does NOT close it — next stop is an ES-segment-save
+  sequence around a Bounds-checked DOUBLE array element, `MOV
+  ES,[legacy]; MOV [0062h],ES`; several probe hypotheses — plain SWAP,
+  passing a by-ref DOUBLE array element as a CALL arg, copying between
+  two different runtime DOUBLE arrays — all compiled clean with none
+  reproducing the exact byte shape; not yet diagnosed).
+
+- **Rank-4 static array accessed at a COMPUTED (variable) index, all four
+  subscripts** (2026-07-21): pivoted away from bmaster.exe/ifi.exe/zip.exe
+  (all stalled this round) to hfprop.exe's own long-open "displacement
+  0x2b2 is neither scalar nor array element", per the `imul_m`/`icomp32`
+  precedent that this error class is often a mechanical evidence-table
+  gap, not fresh reverse-engineering. Confirmed: the far-IDX register
+  machine's `imul_m`/`addsiax` chain (used for a computed multi-dim
+  element's index arithmetic) only ever recognized TWO span cells
+  (`jspan`@blk+0x0C for span1, `kspan`@blk+0x12 for span2) and one combine
+  level (`jk`) — enough for rank ≤ 3, but a rank-4 array's 4th dimension
+  needs a THIRD span cell (`lspan`@blk+0x18, i.e. span3) and a second
+  combine level (`kl` = lspan+kspan, then `jkl` = kl+jspan, then finally
+  `idx` = jkl+i). The existing `t1_dim4` fixture never exercised this at
+  all — CONSTANT-index rank-4 access compiles through the movsi-disp16
+  path (gap 15), a completely different mechanism from computed-index's
+  shl-si/imul_m chain. Fixture `t1_dim4v` (`DIM Q(2,3,5,4)` with all four
+  subscripts as variables), byte-exact both dialects — the FIRST fix this
+  session verified on the first probe attempt. Only an OPTION-BASE-0
+  (bare span multiply) 4th dimension is calibrated; a rank-4 array under
+  OPTION BASE 1 would ALSO need `subax_m`'s lo-subtraction off-check
+  extended to `blk+0x1A` (l - lo4) — unwitnessed, left fail-loud
+  deliberately rather than guessed. Advances wild hfprop.exe (does NOT
+  close it — next stop is a NEW, separately-documented "ax,bx combine
+  with empty regs" gap, likely the SAME still-open 3-term mixed
+  short-circuit/combinator control-flow puzzle grdscn.exe already
+  surfaced and left unresolved earlier in the campaign — read that
+  writeup before re-investigating). sabpcv3.exe's OWN "displacement ..."
+  hit is a DIFFERENT root cause (a `movm_imm` target inside the ordinary
+  scalar band failing to resolve, right after a `RANDOMIZE`/`TIMER`
+  materialized-boolean sequence) — smells like a genuine DGROUP layout
+  solving bug for this file specifically, not a decoder-vocabulary gap;
+  untouched, needs its own `layout.py`-focused session.
+
 Previously, updated 2026-07-21 (earlier session): 23 of 84 wild EXEs decode-ok, up from 22.
 `90250ca` closes tamstart.exe fully via three gaps found while chasing
 the same generic "materialization template mismatch"/KeyError signature

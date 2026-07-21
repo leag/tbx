@@ -1,0 +1,17 @@
+# t1_icomp32 dialect=1.1 start=08700
+08703:fild32:320
+08708:fistp32:288
+0870F:fld64:312
+08714:icomp32:288
+08719:fstsw
+0871D:jcc:114:34594
+0871F:jmp:34603
+08722:movsi:308
+08725:rt:156
+08727:rt:190
+08729:rt:184
+0872B:end
+0872E:epilogue
+# commits
+0870D
+0871B

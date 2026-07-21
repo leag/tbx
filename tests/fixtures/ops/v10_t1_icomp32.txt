@@ -1,0 +1,17 @@
+# v10_t1_icomp32 dialect=1.0 start=070B0
+070B3:fild32:320
+070B8:fistp32:288
+070BF:fld64:312
+070C4:icomp32:288
+070C9:fstsw
+070CD:jcc:114:28882
+070CF:jmp:28891
+070D2:movsi:308
+070D5:rt:156
+070D7:rt:190
+070D9:rt:184
+070DB:end
+070DE:epilogue
+# commits
+070BD
+070CB

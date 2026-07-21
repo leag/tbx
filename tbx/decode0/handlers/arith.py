@@ -127,6 +127,30 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         # rank 2: si=jspan + ax=i -> idx(i, j)
         # rank 3: si=kspan + ax=jspan -> jk(j, k); si=jk + ax=i -> idx(i, j, k)
         # (rank-3 witnessed t1_dim3v)
+        # rank 4: si=lspan + ax=kspan -> kl(k, l); si=kl + ax=jspan -> jkl(j, k, l);
+        # si=jkl + ax=i -> idx(i, j, k, l) (wild hfprop.exe, probe q_dim4var)
+        if (
+            isinstance(state.si, tuple)
+            and state.si[0] == "lspan"
+            and isinstance(state.ax, tuple)
+            and state.ax[0] == "kspan"
+            and state.ax[1] == state.si[1]
+        ):
+            state.si = ("kl", state.si[1], (state.ax[2], state.si[2]))
+            state.ax = None
+            state.k += 1
+            return True
+        if (
+            isinstance(state.si, tuple)
+            and state.si[0] == "kl"
+            and isinstance(state.ax, tuple)
+            and state.ax[0] == "jspan"
+            and state.ax[1] == state.si[1]
+        ):
+            state.si = ("jkl", state.si[1], (state.ax[2], *state.si[2]))
+            state.ax = None
+            state.k += 1
+            return True
         if (
             isinstance(state.si, tuple)
             and state.si[0] == "kspan"
@@ -138,7 +162,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             state.ax = None
             state.k += 1
             return True
-        if not (isinstance(state.si, tuple) and state.si[0] in ("jspan", "jk")):
+        if not (isinstance(state.si, tuple) and state.si[0] in ("jspan", "jk", "jkl")):
             raise ValueError(f"add si,ax with si={state.si} ax={state.ax} at {addr:#x}")
         if (
             isinstance(state.ax, tuple)
@@ -150,7 +174,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             i_expr = state.ax  # base-0: no i-lo sub
         else:
             raise ValueError(f"add si,ax with si={state.si} ax={state.ax} at {addr:#x}")
-        rest = state.si[2] if state.si[0] == "jk" else (state.si[2],)
+        rest = state.si[2] if state.si[0] in ("jk", "jkl") else (state.si[2],)
         state.si = ("idx", state.si[1], (i_expr, *rest))
         state.ax = None
         state.k += 1
@@ -182,14 +206,16 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         raise ValueError(f"sub ax from unexpected cell offset {off:#x} at {addr:#x}")
     if kind == "imul_m":
         blk = next(
-            (b for b in state.slot_info if op[2] in (b + 0x0C, b + 0x12)), None
+            (b for b in state.slot_info if op[2] in (b + 0x0C, b + 0x12, b + 0x18)),
+            None,
         )
         if blk is not None:  # bare span multiply: OPTION BASE 0
             if isinstance(state.ax, tuple) or state.ax is None:  # far-IDX j-leg
                 raise ValueError(f"span imul of non-Expr ax at {addr:#x}")
+            off = op[2] - blk
             state.ax = (
-                "jspan" if op[2] == blk + 0x0C else "kspan",  # span2: t1_dim3v
-                blk,
+                {0x0C: "jspan", 0x12: "kspan", 0x18: "lspan"}[off],  # span3
+                blk,  # (dim 4, wild hfprop.exe): t1_dim3v/t1_dim4v
                 state.ax,
             )
         else:
