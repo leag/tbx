@@ -39,6 +39,7 @@ from tbx.decode0.lift import (
     _jump_targets,
     _lift_midblock_troff,
     _lift_next,
+    _lift_var_step_next,
     _resolve_targets,
 )
 from tbx.decode0.rename import _slot, _str_lit, canonical_rename
@@ -1420,6 +1421,49 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 }
             )
         elif (
+            cmp_at_t is not None
+            and cmp_at_t[1] == "orax_self"
+            and state.ops[state.k - 1][1] == "movax_m"
+            and len(state.stmts) >= 2
+            and isinstance(state.stmts[-1], ir.Assign)
+            and isinstance(state.stmts[-1].target, ir.Var)
+            and isinstance(state.stmts[-1].value, ir.Lit)
+            and isinstance(state.stmts[-2], ir.Assign)
+            and isinstance(state.stmts[-2].target, ir.Var)
+            and state.vdisp(state.stmts[-2].target) == state.ops[state.k - 1][2]
+        ):
+            # Integer FOR header, VARIABLE (computed) STEP: the step's sign
+            # is unknown at compile time, so the header copies the STEP
+            # expression into a temp cell right before the loop var's own
+            # init (`mov ax,<step-expr>; mov [step-temp],ax; mov [I%],init;
+            # mov ax,[step-temp]; jmp test`) -- fold that temp copy back
+            # into the FOR's step field, mirroring the variable-limit case
+            # just above (t1_fori) but for STEP instead of TO. The limit
+            # isn't known yet here (it's inside the dual ascending/
+            # descending compare at the orax_self test itself, decoded
+            # below); a placeholder is patched in place once seen, the
+            # mirror image of addm_i8's step patch-up for a literal-step
+            # header (q_forvarstep/q_forvarstep2; wild menu.exe/stat.exe).
+            init_s = state.stmts.pop()
+            a = state.addrs.pop()
+            step_s = state.stmts.pop()
+            state.addrs.pop()
+            state.put(
+                ir.For(init_s.target, init_s.value, ir.Lit(0), step_s.value),
+                a,
+            )
+            state.fors.append(
+                {
+                    "v": state.vdisp(init_s.target),
+                    "test": t,
+                    "idx": len(state.stmts) - 1,
+                    "var_step": True,
+                    "body": state.ops[state.k + 1][0]
+                    if state.k + 1 < len(state.ops)
+                    else None,
+                }
+            )
+        elif (
             frame is not None and t == frame["exit"]
         ):  # jmp to ProcRet/FnRet = EXIT SUB/DEF
             exit_stmt = ir.ExitSub() if state.proc_frame is not None else ir.ExitDef()
@@ -2108,6 +2152,17 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 state.stmts,
                 state.addrs,
                 state.exit_folds,
+            )
+            state.cur = None
+            continue
+        if (
+            kind == "orax_self"
+            and state.fors
+            and addr == state.fors[-1]["test"]
+            and state.fors[-1].get("var_step")
+        ):
+            state.k = _lift_var_step_next(
+                state.ops, state.k, state.fors, state.stmts, state.addrs
             )
             state.cur = None
             continue

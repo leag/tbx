@@ -574,6 +574,12 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "cmpax_m", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4
         return p
+    if b == 0x0B and exe[p + 1] == 0xC0:  # or ax,ax: sign test of a just-loaded
+        ops.append((p, "orax_self"))  # value with no memory write -- the
+        p += 2  # computed-STEP FOR-NEXT continuation gate (step's sign is
+        return p  # unknown at compile time, so both ascending/descending
+        # comparisons are emitted and this picks one at runtime;
+        # wild menu.exe/stat.exe, q_forvarstep)
     if b == 0x03 and exe[p + 1] == 0x46:  # add ax, [bp+d8]: fold a LOCAL int
         ops.append((p, "addax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
         p += 3  # into ax (witnessed q_loccmp)

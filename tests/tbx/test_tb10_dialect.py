@@ -69,6 +69,8 @@ PAIRS = [
     "t1_bigjmp",
     "t1_blkgoto",
     "t1_lpusing",
+    "t1_forvarstep",
+    "t1_forvarstep2",
 ]
 
 

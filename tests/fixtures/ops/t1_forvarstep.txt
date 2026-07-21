@@ -1,0 +1,24 @@
+# t1_forvarstep dialect=1.1 start=08700
+08703:movm_imm:294:2
+08709:movax_m:294
+0870D:movm_ax:288
+08711:movm_imm:292:1
+08717:movax_m:288
+0871B:jmp:34609
+0871E:fild:292
+08723:rt:187
+08725:rt:184
+08729:movax_m:288
+0872D:addm_ax:292
+08731:orax_self
+08733:jcc:121:34616
+08735:jmp:34626
+08738:cmp_mi8:292:10
+0873D:jcc:126:34590
+0873F:jmp:34633
+08742:cmp_mi8:292:10
+08747:jcc:125:34590
+08749:end
+0874C:epilogue
+# commits
+08727

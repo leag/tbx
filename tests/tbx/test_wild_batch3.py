@@ -361,6 +361,40 @@ def test_decode_t1_forbig():
     )
 
 
+def test_decode_t1_forvarstep():
+    # Computed (variable) STEP: the step's sign is unknown at compile time,
+    # so the header copies the step expression into a temp cell (`mov
+    # ax,step-expr; mov [temp],ax; mov [I%],init; mov ax,[temp]; jmp test`)
+    # and the continuation test at `test` runs a runtime `or ax,ax; jns`
+    # sign check that picks between two otherwise-identical ascending
+    # (JLE/JBE) / descending (JGE) `cmp [I%],limit; jcc body` blocks --
+    # wild menu.exe/stat.exe. This fixture uses the DIRECT (short-jcc) form
+    # of both blocks; t1_forvarstep2 covers the indirect (far-body) form.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_forvarstep.exe"))
+    assert prog[0] == ir.Assign(ir.Var("A%"), ir.Lit(2))
+    assert prog[1] == ir.For(ir.Var("B%"), ir.Lit(1), ir.Lit(10), ir.Var("A%"))
+    assert emit0.emit(prog) == (
+        "10 A% = 2\n20 FOR B% = 1 TO 10 STEP A%\n30 PRINT B%\n40 NEXT B%\n50 END\n"
+    )
+
+
+def test_decode_t1_forvarstep2():
+    # Same computed-STEP shape as t1_forvarstep, but with a body long enough
+    # to force the INDIRECT (far-jump) form of both the ascending and
+    # descending comparison blocks (inverse jcc skip + jmp, instead of a
+    # direct short jcc to body) -- the same direct/indirect duality the
+    # literal-step NEXT-side guard already has, now exercised for the
+    # runtime-selected branch too.
+    from tbx import decode0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_forvarstep2.exe"))
+    assert prog[0] == ir.Assign(ir.Var("A%"), ir.Lit(2))
+    assert prog[1] == ir.For(ir.Var("B%"), ir.Lit(1), ir.Lit(10), ir.Var("A%"))
+    assert prog[-2] == ir.NextStmt(ir.Var("B%"))
+
+
 def test_decode_t1_for10arr():
     # Gap 16: a literal-limit FOR loop's variable + the ordinary scalars
     # allocated after it can land inside the LAST static array's own 0x36

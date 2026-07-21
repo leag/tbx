@@ -94,6 +94,7 @@ from tbx.decode0.lift import (
     _lift_do_tail,
     _lift_midblock_troff,
     _lift_next,
+    _lift_var_step_next,
     _lift_while,
     _match_bool_term1,
     _resolve_targets,

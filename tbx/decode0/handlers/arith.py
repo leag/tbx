@@ -712,17 +712,39 @@ def int_bitwise_bx(state: DecodeState, op, addr, kind) -> bool:
     return False
 
 
+def _sync_len(ops, j) -> int | None:
+    """Width (in ops) of the x87-stack-sync marker starting at ``j``: the
+    canonical ``fwait`` (1 op), or a bare ``nop; nop`` pair occupying the
+    identical 2-byte span -- a runtime-revision-skewed alias (wild
+    electron.exe/rstprint.exe): neither the 1.0 nor 1.1 oracle compiler ever
+    emits the raw NOP pair here (same category as the documented byte-90/
+    INT-CD/far-JMP gaps in HANDOFF.md), so it can't be fixture-witnessed,
+    but a NOP is already a fully generic, zero-effect op elsewhere in the
+    scanner, and this position is otherwise byte-identical either way.
+    Returns None if neither shape matches."""
+    if j < len(ops) and ops[j][1] == "fwait":
+        return 1
+    if j + 1 < len(ops) and ops[j][1] == "nop" and ops[j + 1][1] == "nop":
+        return 2
+    return None
+
+
 def fp_math(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: fistp, fpow, fwait, fstp_temp."""
     if kind == "fistp":  # IDX% scratch: array idx OR FP->int
         if op[2] != 0x2C:
             raise ValueError(f"FISTP to unexpected scratch [{op[2]:#x}]")
         idx = state.stack.pop()
-        nxt3 = [o[1] for o in state.ops[state.k + 1 : state.k + 4]]
-        if nxt3 == ["fwait", "movaxmem", "movm_ax"]:  # FP->int assign
-            if state.ops[state.k + 2][2] != 0x2C:
+        n = _sync_len(state.ops, state.k + 1)
+        if (
+            n is not None
+            and state.k + n + 2 < len(state.ops)
+            and state.ops[state.k + 1 + n][1] == "movaxmem"
+            and state.ops[state.k + 2 + n][1] == "movm_ax"
+        ):  # FP->int assign
+            if state.ops[state.k + 1 + n][2] != 0x2C:
                 raise ValueError(f"FP->int bridge mismatch at {addr:#x}")
-            tgt = state.ops[state.k + 3][2]
+            tgt = state.ops[state.k + 2 + n][2]
             if (
                 state.dim_frame is not None
                 and state.dim_frame["block"]
@@ -741,7 +763,7 @@ def fp_math(state: DecodeState, op, addr, kind) -> bool:
             else:
                 state.put(ir.Assign(state.loc(tgt), idx), state.cur)
                 state.cur = None
-            state.k += 4
+            state.k += n + 3
             return True
         # Element-subscript bridge: optional spill shuttles (the a1 below clobbers
         # ax, so in-flight tokens move through bx/cx first), then
@@ -751,10 +773,15 @@ def fp_math(state: DecodeState, op, addr, kind) -> bool:
         j = state.k + 1
         while j < len(state.ops) and state.ops[j][1] in ("movrr", "movbxax"):
             j += 1
-        nxt2 = state.ops[j + 2][1] if j + 2 < len(state.ops) else None
+        m = _sync_len(state.ops, j)
+        mi = j + m if m is not None else None  # movaxmem's own index
+        nxt2 = (
+            state.ops[mi + 1][1] if mi is not None and mi + 1 < len(state.ops) else None
+        )
         if (
-            [o[1] for o in state.ops[j : j + 2]] == ["fwait", "movaxmem"]
-            and state.ops[j + 1][2] == 0x2C
+            mi is not None
+            and state.ops[mi][1] == "movaxmem"
+            and state.ops[mi][2] == 0x2C
             and nxt2 != "movm_ax"
         ):
             # CINT(x): the round-trip tail is movmem_ax[0x2C]; fild[0x2C] (round
@@ -762,11 +789,11 @@ def fp_math(state: DecodeState, op, addr, kind) -> bool:
             # CINT(). A genuine subscript bridge continues with other ops here,
             # and the ASC-style int bridge has no preceding fistp at all.
             if (
-                j + 3 < len(state.ops)
-                and state.ops[j + 2][1] == "movmem_ax"
-                and state.ops[j + 2][2] == 0x2C
-                and state.ops[j + 3][1] == "fild"
-                and state.ops[j + 3][2] == 0x2C
+                mi + 2 < len(state.ops)
+                and state.ops[mi + 1][1] == "movmem_ax"
+                and state.ops[mi + 1][2] == 0x2C
+                and state.ops[mi + 2][1] == "fild"
+                and state.ops[mi + 2][2] == 0x2C
             ):
                 state.cint_round = True
             for sh in state.ops[state.k + 1 : j]:  # apply the shuttles in order
@@ -787,7 +814,7 @@ def fp_math(state: DecodeState, op, addr, kind) -> bool:
                     regs["si"],
                 )
             state.ax = idx
-            state.k = j + 2
+            state.k = mi + 1
             return True
         raise ValueError(f"IDX% bridge mismatch at {addr:#x}")
     if kind == "fpow":  # ^ : top = base, below = exponent

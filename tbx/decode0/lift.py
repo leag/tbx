@@ -140,6 +140,99 @@ def _lift_next(ops, k, fors, stmts, addrs, exit_folds) -> int:
     return i
 
 
+def _lift_var_step_next(ops, k, fors, stmts, addrs) -> int:
+    """Consume the computed (variable) STEP FOR's NEXT template at ops[k]
+    (an orax_self at the open FOR's test address): the increment `v = v +
+    step` was already lifted as the preceding Assign -- fold it in, exactly
+    like _lift_next. Then `or ax,ax; jns +3; jmp DESC` picks between two
+    otherwise-identical `cmp [v],lim; jcc BODY` blocks (ascending JLE/JBE,
+    descending JGE), each direct (short jcc) or the indirect long form
+    (inverse jcc skip + jmp) -- the runtime mirror of the compile-time
+    sign choice a literal step makes in the caller of this function. Both
+    blocks must reference the SAME limit; that limit was unknown at header
+    time (the ir.For's limit was a Lit(0) placeholder) and gets patched
+    into the already-emitted statement here, the limit-side mirror of
+    addm_i8's step patch-up (q_forvarstep/q_forvarstep2; wild menu.exe/
+    stat.exe)."""
+    f = fors[-1]
+    v = f["v"]
+
+    def branch(i, wantcc, invcc):
+        o = ops[i] if i < len(ops) else None
+        if o is None or o[1] not in ("cmp_mi8", "cmp_mi16") or o[2] != v:
+            raise ValueError(f"FOR-STEP sign test: expected cmp [v] at index {i}")
+        lim = o[3]
+        nxt = ops[i + 1] if i + 1 < len(ops) else None
+        if (
+            nxt is not None
+            and nxt[1] == "jcc"
+            and nxt[2] in wantcc
+            and nxt[3] == f["body"]
+        ):
+            return lim, i + 2
+        nxt2 = ops[i + 2] if i + 2 < len(ops) else None
+        if (
+            nxt is not None
+            and nxt[1] == "jcc"
+            and nxt[2] in invcc
+            and nxt2 is not None
+            and nxt2[1] == "jmp"
+            and nxt2[2] == f["body"]
+            and nxt[3] == nxt2[0] + 3
+        ):
+            return lim, i + 3
+        raise ValueError(f"FOR-STEP sign test: branch mismatch at {o[0]:#x}")
+
+    jns, jmp_desc = ops[k + 1], ops[k + 2]
+    if (
+        jns[1] != "jcc"
+        or jns[2] != 0x79
+        or jmp_desc[1] != "jmp"
+        or jns[3] != jmp_desc[0] + 3
+    ):
+        raise ValueError(f"FOR-STEP sign test: expected jns+jmp at {ops[k][0]:#x}")
+    asc_lim, i = branch(k + 3, (0x7E, 0x76), (0x7F, 0x77))
+    skip = ops[i] if i < len(ops) else None
+    if (
+        skip is None
+        or skip[1] != "jmp"
+        or i + 1 >= len(ops)
+        or ops[i + 1][0] != jmp_desc[2]
+    ):
+        # `skip` jumps PAST the descending block to the loop exit (unrelated
+        # to jmp_desc's own target); the descending block must instead start
+        # right where the JNS's negative branch lands, at index i+1.
+        raise ValueError(
+            f"FOR-STEP sign test: expected skip-descending jmp at {ops[k][0]:#x}"
+        )
+    desc_lim, i = branch(i + 1, (0x7D,), (0x7C,))
+    if asc_lim != desc_lim:
+        raise ValueError(
+            f"FOR-STEP sign test: ascending/descending limit mismatch at {ops[k][0]:#x}"
+        )
+
+    inc = stmts[-1]
+    slot_v = _slot(v) + "%"  # always integer: this template is int arithmetic only
+    if not (
+        isinstance(inc, ir.Assign)
+        and inc.target == ir.Var(slot_v)
+        and isinstance(inc.value, ir.BinOp)
+        and inc.value.op == "+"
+        and ir.Var(slot_v) in (inc.value.lhs, inc.value.rhs)
+    ):
+        raise ValueError(f"FOR-STEP NEXT increment mismatch: {inc}")
+    a = addrs[-1]
+    del stmts[-1], addrs[-1]
+
+    old = stmts[f["idx"]]
+    stmts[f["idx"]] = ir.For(old.var, old.init, ir.Lit(asc_lim), old.step)
+
+    stmts.append(ir.NextStmt(ir.Var(slot_v)))
+    addrs.append(a)
+    fors.pop()
+    return i
+
+
 def _match_bool_term1(ops, k):
     """ops[k] = movax FFFF with a pending compare. Detect a compound-IF first
     term: the materialization header whose closing jmp short-circuits INTO the
