@@ -71,6 +71,7 @@ PAIRS = [
     "t1_lpusing",
     "t1_forvarstep",
     "t1_forvarstep2",
+    "t1_cmppool",
 ]
 
 

@@ -491,6 +491,18 @@ def test_decode_t1_imulpool():
     assert "30 C = B * 2 - 1 + 180 * (A > 0)" in src
 
 
+def test_decode_t1_cmppool():
+    # cmpax_m with a POOLED int-literal LEFT operand: `IF 180 = LEN(A$)
+    # THEN` pools the literal and compares it against the computed right
+    # side -- the same loc->pool_lit fallback imul_m already has (gap 43),
+    # cmpax_m was just missing it. Closed wild mymenu.exe fully; sabpcv3.exe
+    # advances to a distinct, unrelated construct.
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_cmppool.exe")))
+    assert "20 IF 180 <> LEN(A$) THEN 40" in src
+
+
 def test_decode_t1_strgodo():
     # String direct conditional GOTO (`IF A$ = "X" THEN <line>`, backward
     # target): strcmp + bare jcc with no skip-jmp -- forward strcmp flags,

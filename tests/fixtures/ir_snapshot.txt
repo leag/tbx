@@ -3167,6 +3167,12 @@ Assign(target=Var(name='C%'), value=Lit(value=1))
 CallStmt(name='SUB1', args=(Var(name='C%'),))
 End()
 
+## t1_cmppool
+Assign(target=Var(name='A$'), value=StrLit(value='HELLO'))
+IfGoto(cond=RelOp(op='<>', lhs=Lit(value=180), rhs=Call(name='LEN', args=(Var(name='A$'),))), target=3)
+Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_cmpstale
 Assign(target=Var(name='A$'), value=StrLit(value='#'))
 Assign(target=Var(name='B$'), value=StrLit(value='X'))
@@ -8707,6 +8713,12 @@ End()
 Assign(target=Var(name='A'), value=Lit(value=1))
 Open(mode=StrLit(value='O'), num=1, file=StrLit(value='X.DAT'), reclen=None, for_as=True)
 Close(num=Var(name='A'))
+End()
+
+## v10_t1_cmppool
+Assign(target=Var(name='A$'), value=StrLit(value='HELLO'))
+IfGoto(cond=RelOp(op='<>', lhs=Lit(value=180), rhs=Call(name='LEN', args=(Var(name='A$'),))), target=3)
+Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_cmpstale
