@@ -37,6 +37,7 @@ PAIRS = [
     "t1_licomp",
     "t1_locforvarlim",
     "t1_byrefforvar",
+    "t1_byrefsub",
     "t1_localargcall",
     "t1_strch",
     "t1_svaridx",

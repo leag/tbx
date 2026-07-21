@@ -155,8 +155,57 @@ tally instead and found a clean, oracle-verified two-gap chain:
   matched the byte shape exactly on the next attempt. Fixture
   `t1_localargcall`, byte-exact both dialects. Advances all three wild
   files further (bmaster.exe/ifi.exe to a NEW `unhandled byte 26 at
-  0x9446`; resume.exe to a NEW `unhandled byte 29 at 0xa043` — neither
-  investigated this session).
+  0x9446`; resume.exe to a NEW `unhandled byte 29 at 0xa043`).
+
+- **`N% = N% - <expr>` where `N%` is a by-ref INTEGER parameter**
+  (2026-07-21): the byte-26 gap above (bmaster.exe/ifi.exe) turned out to
+  bundle at least two DIFFERENT unrelated ops sharing the `26` ES-prefix
+  byte. `26 29 04` = `SUB word ES:[SI], AX` is simply the subtraction
+  sibling of the already-calibrated `far_addm_ax_si` (`26 01 04` = `ADD
+  word ES:[SI], AX`) — new op `far_subm_ax_si`, consumed identically via
+  `BinOp("-", ...)` instead of `("+", ...)`. Fixture `t1_byrefsub`,
+  byte-exact both dialects.
+
+**Investigated at length but NOT landed this session**: the OTHER byte-26
+op at the SAME offset (0x9446 in bmaster.exe) is `26 ff 0c` = `DEC word
+ES:[SI]` — the STEP -1 descending sibling of `far_inc_si` (just closed
+above), for a by-ref INTEGER parameter used directly as a FOR loop
+variable. A full probe (`SUB TEST(N%): FOR N% = 5 TO 1 STEP -1: ...`)
+reproduces it exactly, alongside a literal-limit sibling of
+`far_cmpm_ax_si`: `26 83 3C imm8` = `CMP word ES:[SI], imm8` (the far
+mem-first analog of `cmp_mi8`/`cmp_bpi8`). Both ops' scan-level shapes,
+consumers, and a full header/NEXT-continuation recognizer pair were
+implemented and got the probe decoding completely — **but the emitted
+source was WRONG** (`LOCAL B%, C%` appeared where the original source
+declares no LOCALs at all), and the recompiled bytes did NOT match the
+original EXE. Root cause: `local_init` still reserves a [step-temp,
+limit-temp] word pair for this shape (exactly as it does for the
+LITERAL-limit LOCAL-loop-var case, `cmp_bpi8`), but NEITHER word is ever
+referenced anywhere in the ops stream when both the limit AND the
+loop-var storage are unavailable as anchors (no `movax_bp` reload to
+supply the limit-temp's disp, unlike the *variable*-limit by-ref case;
+no loop-var LOCAL slot to compute `v+2`/`v+4` from, unlike the pure-LOCAL
+case) — so there is genuinely no live evidence pointing at either
+disp, and nothing in the header-fold code currently has access to
+`local_init`'s own raw base displacement to hide them by direct
+position. A follow-up probe (`SUB TEST(N%): LOCAL Z%: Z%=99: FOR N%=5 TO
+1 STEP -1: ...`) confirmed the two phantom words are placed in SOURCE
+DECLARATION ORDER right where a LOCAL slot for `Z%` was NOT needed for
+the FOR (`local_init 3, 10`: disp 10 = `Z%` since it's declared first,
+disps 12/14 = the FOR's phantom pair) — i.e. the phantom pair's position
+depends on how many OTHER locals precede this FOR textually, which the
+current header-fold code has no way to know without either (a) plumbing
+`local_init`'s raw base/`disp` argument through to the fold logic instead
+of just the derived `locals` dict, or (b) scanning the ENTIRE remaining
+proc body for any reference to a candidate disp before deciding it's
+dead. Given the fix didn't verify byte-exact, ALL of it (both new scan
+ops, both new consumers, and both new header/NEXT branches) was reverted
+before committing — only the unrelated, independently-verified
+`far_subm_ax_si` fix from the same investigation was kept. Next session:
+start from this exact writeup (probes `q_byrefforstepm1.bas`/
+`q_byrefstepm1local.bas`, not saved as fixtures since unverified) and
+either thread `local_init`'s base disp through to the FOR-header
+recognizer, or find some other live anchor before re-implementing.
 
 Previously, updated 2026-07-21 (earlier session): 23 of 84 wild EXEs decode-ok, up from 22.
 `90250ca` closes tamstart.exe fully via three gaps found while chasing

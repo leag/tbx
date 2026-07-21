@@ -1813,6 +1813,28 @@ def test_decode_t1_byrefforvar():
     )
 
 
+def test_decode_t1_byrefsub():
+    # `N% = N% - <expr>` where N% is a by-ref INTEGER parameter: `sub
+    # es:[si], ax` -- the subtraction sibling of the already-calibrated
+    # far_addm_ax_si (compound-store add into a by-ref param). New op
+    # far_subm_ax_si, consumed identically via BinOp("-", ...) instead of
+    # ("+", ...) (wild bmaster.exe, surfaced chasing the byte-16 gap chain
+    # further; a separate, still-open FOR-loop shape -- a by-ref param used
+    # directly as a STEP -1 loop var -- was found in the same file but not
+    # landed this session, see HANDOFF.md).
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_byrefsub.exe"))
+    sub = next(s for s in prog if isinstance(s, ir.SubDef))
+    assert sub.body == (
+        ir.Assign(ir.Var("A%"), ir.BinOp("-", ir.Var("A%"), ir.Lit(3))),
+    )
+    assert emit0.emit(prog) == (
+        "10 SUB SUB1(A%)\n  A% = A% - 3\nEND SUB\n"
+        "20 B% = 10\n30 CALL SUB1(B%)\n40 PRINT B%\n50 END\n"
+    )
+
+
 def test_decode_t1_localargcall():
     # CALL SUB2(A%) where A% is a LOCAL variable declared in the CALLING
     # sub: `push ss; mov ax,off; add ax,bp; push ax` -- the LOCAL-frame
@@ -1887,5 +1909,6 @@ if __name__ == "__main__":
     test_decode_t1_licomp()
     test_decode_t1_locforvarlim()
     test_decode_t1_byrefforvar()
+    test_decode_t1_byrefsub()
     test_decode_t1_localargcall()
     print("ALL PASS")

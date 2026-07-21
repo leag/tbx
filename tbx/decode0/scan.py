@@ -652,6 +652,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "far_addm_ax_si"))  # compound-store add into a by-ref
         p += 3  # int param, e.g. `A% = A% + 1` in the callee (witnessed q_fwd)
         return p
+    if b == 0x26 and exe[p + 1] == 0x29 and exe[p + 2] == 0x04:  # sub es:[si], ax:
+        ops.append((p, "far_subm_ax_si"))  # compound-store subtract into a
+        p += 3  # by-ref int param, e.g. `A% = A% - <expr>` (wild bmaster.exe)
+        return p
     if b == 0x26 and exe[p + 1] == 0x89 and exe[p + 2] == 0x04:  # mov es:[si], ax:
         ops.append((p, "far_movm_ax_si"))  # write ax into a by-ref int param
         p += 3  # (t1_byref1)

@@ -2323,6 +2323,15 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 )
                 state.ax = None
                 state.cur = None
+            elif base == "subm_ax_si":  # sub es:[si], ax: compound-store
+                argvar = ir.Var(f"P{state.pend_arg:02X}%")  # subtract into a
+                state.proc_int_offs.add(state.pend_arg)  # by-ref INT param
+                state.put(
+                    ir.Assign(argvar, ir.BinOp("-", argvar, _rgrp("-", state.ax))),
+                    state.cur,
+                )
+                state.ax = None
+                state.cur = None
             elif base == "movm_imm_si":  # mov word es:[si], imm16: write a
                 argvar = ir.Var(f"P{state.pend_arg:02X}%")  # constant into a
                 state.proc_int_offs.add(state.pend_arg)  # by-ref INT param
