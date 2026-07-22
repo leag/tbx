@@ -578,17 +578,62 @@ all), and a plain no-param `CALL SUBNAME` where the callee's first
 statement is also `CLS` (compiles completely normally, with a real
 `proc_enter` immediately at the target -- ruling out "TB skips the
 prologue for param-less SUBs"). None of these reproduce a `far_call`
-landing on bare mid-flow statement code. **Whatever source construct
-this is remains unidentified** -- worth trying next: `CALL ABSOLUTE`
-(unlikely, that pops a computed address off `state.stack`, not an
-embedded immediate, so wouldn't scan as `far_call` at all, but worth
-confirming), `ON KEY/TIMER/COM/PEN/STRIG GOSUB` (event-trap
+landing on bare mid-flow statement code.
+
+**Follow-up (same day, continued session): this is a FAMILY, not a
+one-off, and there's a strong new structural clue.** A full survey of
+every `far_call` in the file (144 total) turns up not one but FOURTEEN
+calls, targeting SIX distinct addresses that never resolve to a named
+proc: `86343`, `56020`, `56378`, `87474`, `87925`, and `55776` -- the
+last one alone is the target of NINE separate calls, scattered from
+file offset 50209 all the way to 84774. Every one of these callers
+shares an identical shape: the
+already-understood `andaxbx` materialized-AND-chain idiom (`movax
+FFFF/jcc/incax/andaxbx/jcc/jmp <loop-top>`), i.e. structurally `IF
+condA AND condB THEN CALL <mystery>` -- but reproducing that EXACT
+statement shape (`IF...AND...THEN CALL SUBNAME`) via an oracle probe
+still gets a completely normal `proc_enter`. Also tried and still
+normal: `IF...AND...THEN GOSUB` and `SELECT CASE ... CALL` (menu-letter
+dispatch is clearly what this file is doing, given its embedded UI
+strings -- this is "Resume Shop", a menu-driven 1988 shareware
+resume-builder, not related to the BASIC `RESUME` statement at all).
+
+The new clue: at FOUR of these six distinct target addresses (56020,
+55776, 87474, 87925 -- checked directly), the op stream shows a bare
+`retf` (0xCB with no matching `5D` pop-bp, i.e. NOT the fused
+`proc_ret` pattern) sitting in ORDINARY MAIN-CODE FLOW immediately
+before the mystery target -- e.g. `far_call 43166 (a normal, already-
+resolved proc) / retf / <mystery target begins>`. A bare `retf` with no
+corresponding `proc_enter`-style frame anywhere upstream is otherwise
+inexplicable main-code content (RETF pops a return address+segment off
+the stack; if nothing pushed one, execution would jump to garbage) --
+this is real evidence that these mystery regions are THEMSELVES
+returning targets of some OTHER, so-far-unidentified calling mechanism,
+laid out back-to-back with no distinguishing start marker of their own
+(each one's only boundary evidence is "the previous one's retf just
+happened"). This is consistent with a class of procedure the compiler
+can frame WITHOUT the standard `push bp; mov bp,sp` prologue because it
+touches no LOCAL/parameter (bp-relative) storage at all -- but why
+`SUB...END SUB` bodies never get this treatment even when equally
+frame-free (every reproduction attempt, param-less or not, keeps
+getting a full `proc_enter`) is still the open question. **Whatever
+source construct produces this remains unidentified.** Worth trying
+next: `CALL ABSOLUTE` (unlikely -- pops a computed address off
+`state.stack`, not an embedded immediate, so probably wouldn't scan as
+`far_call` at all, but worth confirming with a real probe rather than
+reasoning alone), `ON KEY/TIMER/COM/PEN/STRIG GOSUB` (event-trap
 installation, unwitnessed all session -- see the separate "Gap INT-8c"
 section below for a related, also-undiagnosed event-trap mystery this
-might connect to), and `CHAIN`. A `cfgview`/iced-x86 disassembly of the
-raw bytes around both the call site and the target confirms the
-instruction decode (nothing hidden or misaligned) but adds no semantic
-information beyond what the op-stream trace already showed.
+might connect to), and tracing EACH of the other 10 mystery targets'
+immediate predecessors the same way (only 4 of 5 distinct addresses
+were checked) in case one has cleaner surrounding context than 55776's
+(whose own backward trace, followed ~100 ops, is a long, undifferentiated
+stretch of "print text at row N" calls with no proc_enter or other
+landmark in reach -- tracing further back was not exhausted). A
+`cfgview`/iced-x86 disassembly of the raw bytes around the call site and
+target confirms the instruction decode (nothing hidden or misaligned,
+manually re-verified byte-by-byte against the op stream) but adds no
+semantic information beyond what the op-stream trace already showed.
 
 Previously, updated 2026-07-21 (earlier session): 23 of 84 wild EXEs decode-ok, up from 22.
 `90250ca` closes tamstart.exe fully via three gaps found while chasing
