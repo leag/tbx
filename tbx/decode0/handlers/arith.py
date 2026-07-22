@@ -252,7 +252,15 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         state.k += 1
         return True
     if kind == "movax_bp":  # mov ax, [bp+d8]: LOCAL int read, e.g. as an
-        state.ax = state.loc_local(op[2])  # expression's first term (t1_byref1)
+        # expression's first term (t1_byref1) -- OR, at bp+0 outside any open
+        # SUB/DEF FN body, the caller reading back a just-called integer FN's
+        # result from the shared staged frame (fn_call always stages the
+        # FnCall node onto the float-oriented `state.stack`; this is that
+        # value's ax-register sibling -- wild resume.exe).
+        if op[2] == 0 and state.proc_frame is None and state.fn_frame is None:
+            state.ax = state.stack.pop()
+        else:
+            state.ax = state.loc_local(op[2])
         state.k += 1
         return True
     if kind == "idiv_m":  # ax (dividend) \ [disp16] (memory divisor)
@@ -1008,9 +1016,11 @@ def fp_math(state: DecodeState, op, addr, kind) -> bool:
 
 def fp_bp(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: fld_bp, fstp_bp, fold_bp, fold_n_bp, fcomp_bp, fild_bp."""
-    if kind == "fild_bp":  # LOCAL int onto the FP stack, e.g. for PRINT
-        if state.proc_frame is None:
-            raise ValueError(f"fild_bp outside a SUB body at {addr:#x}")
+    if kind == "fild_bp":  # LOCAL (or DEF FN param) int onto the FP stack,
+        # e.g. for PRINT, or an int LOCAL/param promoted into a float result
+        # expression (wild resume.exe / probe_d)
+        if state.proc_frame is None and state.fn_frame is None:
+            raise ValueError(f"fild_bp outside a SUB/DEF FN body at {addr:#x}")
         if state.cur is None:  # may open a statement (e.g. PRINT A% as an
             state.cur = addr  # IF's skip-goto target, q_loccmp)
         state.stack.append(state.loc_local(op[2]))
@@ -1019,8 +1029,8 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
     if kind in ("fld_bp", "fstp_bp", "fold_bp", "fold_n_bp", "fcomp_bp"):
         bp_off = op[2] if kind in ("fld_bp", "fstp_bp", "fcomp_bp") else op[3]
         if state.fn_frame is not None:  # DEF FN body: param read / result / fold
-            if bp_off > state.fn_frame["max_off"]:
-                state.fn_frame["max_off"] = bp_off
+            if bp_off != 0:  # bp+0 is the result cell, not a param
+                state.fn_frame["param_offs"].add(bp_off)
             pvar = ir.Var(f"P{bp_off:02X}")
             if kind == "fld_bp":
                 state.stack.append(pvar)
@@ -1104,6 +1114,18 @@ def far_fp(state: DecodeState, op, addr, kind) -> bool:
 
 def stack_ops(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: mov_si_sp, add_si_sp, sub_sp, add_sp, arg_push_temp, mov_bx_sp, les_si_ss_bx, str_temp_free, push_bp, pop_bp, mov_bp_sp, str_free_temp, bchk_base."""
+    if kind == "push_bp":  # opens a call-staging temp frame -- save the
+        # enclosing context's SP-save cell (if any) so a NESTED call used as
+        # this call's own argument can freely overwrite it via its own
+        # mov_mem_sp without corrupting the outer movm_imm-glue match once
+        # control returns here (wild resume.exe)
+        state.sp_save_stack.append(state.sp_save_cell)
+        state.k += 1
+        return True
+    if kind == "pop_bp":  # closes a call-staging temp frame: restore
+        state.sp_save_cell = state.sp_save_stack.pop()  # the enclosing SP-
+        state.k += 1  # save cell (wild resume.exe)
+        return True
     if kind in (
         "mov_si_sp",
         "add_si_sp",
@@ -1113,10 +1135,8 @@ def stack_ops(state: DecodeState, op, addr, kind) -> bool:
         "mov_bx_sp",
         "les_si_ss_bx",
         "str_temp_free",
-        "push_bp",
         "push_es",
         "push_ds",
-        "pop_bp",
         "mov_bp_sp",
         "str_free_temp",
         "bchk_base",  # Bounds: array-descriptor setup (F3.4)

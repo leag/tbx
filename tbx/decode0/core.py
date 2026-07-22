@@ -119,6 +119,7 @@ class DecodeState:
     si: Any = None
     slot_info: Any = None
     sp_save_cell: Any = None
+    sp_save_stack: Any = None
     ss_base: Any = None
     sstack: Any = None
     stack: Any = None
@@ -197,15 +198,32 @@ class DecodeState:
         raise ValueError(f"displacement {disp:#x} is neither scalar nor array element")
 
     def loc_local(self, bp_off):
-        """A [bp+off] operand inside an open SUB body: a LOCAL statement's
-        per-call stack slot (never a by-ref param, which is only ever reached
-        indirectly through `les si,[bp+off]` -- witnessed t1_local1). Every
-        slot in the zero-filled range is a 2-byte int for now (no fixture has
-        witnessed a mixed-type LOCAL declaration yet)."""
-        locs = self.proc_frame["locals"] if self.proc_frame else None
-        if locs is None or bp_off not in locs:
-            raise ValueError(f"[bp+{bp_off}] outside the open LOCAL frame")
-        return ir.Var(locs[bp_off])
+        """A [bp+off] operand inside an open SUB or DEF FN body: a LOCAL
+        statement's per-call stack slot (never a by-ref param, which is only
+        ever reached indirectly through `les si,[bp+off]` -- witnessed
+        t1_local1). Every slot in the zero-filled range is a 2-byte int for
+        now (no fixture has witnessed a mixed-type LOCAL declaration yet)."""
+        if self.proc_frame is not None:
+            locs = self.proc_frame["locals"]
+            if locs is None or bp_off not in locs:
+                raise ValueError(f"[bp+{bp_off}] outside the open LOCAL frame")
+            return ir.Var(locs[bp_off])
+        if self.fn_frame is not None:
+            locs = self.fn_frame["locals"]
+            if locs is not None and bp_off in locs:
+                return ir.Var(locs[bp_off])
+            # Not a declared LOCAL: an integer-typed DEF FN param read via the
+            # ax-register path (fp_bp handles the FP-typed equivalent) --
+            # params aren't always the fixed 4-byte-stride slots a
+            # float-only FN uses; an all-integer param list packs 2 bytes
+            # apiece starting right after the result cell (wild resume.exe).
+            self.fn_frame["param_offs"].add(bp_off)
+            self.fn_frame["int_offs"].add(bp_off)
+            return ir.Var(f"P{bp_off:02X}%")  # suffix must match the `params`
+            # tuple's own spelling below, or rename.py sees two "different"
+            # variables for the one param (byte-exact needs the declared
+            # name and every body reference to agree)
+        raise ValueError(f"[bp+{bp_off}] outside the open LOCAL frame")
 
     def flush_pending(self):
         """A trailing-';' print has no flush vector: the chain is proven
@@ -1896,6 +1914,10 @@ def decode_user_code(exe: bytes) -> list[Any]:
     state.pend_arg = None  # by-ref param bp_off from arg_ref (les si,[bp+N])
     state.pend_args = []  # accumulated CALL args, drained by far_call
     state.sp_save_cell = None  # cell holding saved SP (literal-arg staging)
+    state.sp_save_stack = []  # nested call-staging frames: a call used as its
+    # OWN outer call's argument opens a new push_bp/mov_mem_sp/.../pop_bp
+    # region before the outer's own movm_imm-glue cell is reached (wild
+    # resume.exe) -- restored on the matching pop_bp
     state.proc_str_offs = (
         set()
     )  # bp_offs the open proc reads as strings (arg_ref;far_spush)
@@ -2077,6 +2099,30 @@ def decode_user_code(exe: bytes) -> list[Any]:
             state.main_start = op[2]
             state.k += 1  # glue, not a GOTO
             continue
+        if (
+            state.has_procs
+            and kind == "jmp"
+            and state.fn_frame is None
+            and state.proc_frame is None
+            and state.k > 0
+        ):
+            j = state.k - 1
+            while j >= 0 and state.ops[j][1] == "trap_hook":
+                j -= 1  # event-trapping stamps sit between the closer and the jmp
+            if j < 0 or state.ops[j][1] in ("proc_ret", "fn_ret"):
+                # Not every file brackets its WHOLE def region with one leading
+                # skip-jmp (the k==0 case above): some interleave definitions
+                # with main code, each bracketed by its own trailing jmp right
+                # after the previous def's closer -- so main_start never gets
+                # set by the k==0 case at all. A jmp appearing exactly where a
+                # definition just closed is unambiguously more of that same
+                # glue (witnessed resume.exe: `proc_ret,8 / trap_hook / jmp`
+                # lands right before an un-proc_enter'd DEF FN body -- without
+                # this, the DEF FN's own auto-open below never fires because
+                # it's gated on `addr < main_start`, which stays None forever).
+                state.main_start = op[2]
+                state.k += 1  # glue, not a GOTO
+                continue
         if kind == "inline_sub":  # SUB name INLINE: the compiler copies
             # $INLINE's byte list verbatim with NO proc_enter/proc_ret
             # framing at all (see _try_inline_rescue in scan.py) -- no
@@ -2119,11 +2165,20 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 "entry": addr,
                 "idx": len(state.stmts),
                 "result": None,
-                "max_off": 0,
+                "param_offs": set(),  # bp offsets touched as a param read/
+                # fold/result -- the actual set IS the param list (not every
+                # param uses the same byte stride: an all-FP or all-string
+                # param list packs 4 bytes apiece, an all-integer one packs 2
+                # -- wild resume.exe, probe_d)
                 "exit": next(o[0] for o in state.ops[state.k :] if o[1] == "fn_ret"),
                 "block": False,
                 "str": False,  # string-valued FN (result stored via INT A2)
                 "str_offs": set(),  # bp offsets of string params (INT 9E)
+                "int_offs": set(),  # bp offsets of INTEGER params (ax-path
+                # reads, e.g. movax_bp/imul_bp/fild_bp -- the source needs
+                # the explicit `%` suffix to recompile byte-exact, mirroring
+                # SUB's proc_int_offs)
+                "locals": None,  # a DEF FN body's own LOCAL declaration, if any
             }
             state.cur = None  # fall through to lift this op into the body
         if kind == "proc_enter":
@@ -2140,15 +2195,22 @@ def decode_user_code(exe: bytes) -> list[Any]:
             state.k += 1
             continue
         if kind == "local_init":  # LOCAL statement's zero-fill prologue
-            if state.proc_frame is None or len(state.stmts) != state.proc_frame["idx"]:
-                raise ValueError(f"LOCAL zero-fill outside a fresh SUB body at {addr:#x}")
+            frame = (
+                state.proc_frame if state.proc_frame is not None else state.fn_frame
+            )
+            if frame is None or len(state.stmts) != frame["idx"]:
+                raise ValueError(
+                    f"LOCAL zero-fill outside a fresh SUB/DEF FN body at {addr:#x}"
+                )
             cnt, disp = op[2], op[3]
-            state.proc_frame["locals"] = {
+            frame["locals"] = {
                 disp + 2 * i: f"L{disp + 2 * i:02X}%" for i in range(cnt)
             }
-            state.proc_frame["frame_words"] = cnt  # retf pop math needs the
-            # full zero-filled span even after FOR temp words are dropped
-            # from the dict (q_locidx)
+            if state.proc_frame is not None:
+                state.proc_frame["frame_words"] = cnt  # retf pop math needs the
+                # full zero-filled span even after FOR temp words are dropped
+                # from the dict (q_locidx) -- a SUB-only concern: DEF FN's
+                # fn_ret closing has no analogous pop-count computation
             state.cur = None
             state.k += 1
             continue
@@ -2206,15 +2268,15 @@ def decode_user_code(exe: bytes) -> list[Any]:
             # numeric/block FNs zero [bp+0] AND [bp+2]; a single-line STRING
             # FN zeroes only [bp+2] (the descriptor's pointer word) -- so
             # only the [bp+0] init marks the multi-line form (t1_fnstr).
-            if state.fn_frame is not None:
-                if op[2] == 0:
-                    state.fn_frame["block"] = True
-                elif op[2] != 2:
-                    raise ValueError(f"[bp+{op[2]}] init in DEF FN body at {addr:#x}")
-            elif (
-                state.proc_frame is not None
-                and (state.proc_frame["locals"] or {}).get(op[2]) is not None
-            ):  # LOCAL int var = constant, e.g. a FOR init (q_locidx)
+            frame = state.proc_frame if state.proc_frame is not None else state.fn_frame
+            if (
+                frame is not None and (frame["locals"] or {}).get(op[2]) is not None
+            ):  # LOCAL int var = constant, e.g. a FOR init (q_locidx) -- same
+                # shape whether the LOCAL lives in a SUB or a DEF FN body
+                # (wild resume.exe: `LOCAL B% ... B% = 5` inside a DEF FN);
+                # checked BEFORE the DEF-FN reserved-cell branch below since a
+                # LOCAL can reuse a low bp offset the result slot doesn't use
+                # (e.g. a zero-param FN's first LOCAL sits at bp+2).
                 if state.cur is None:
                     state.cur = addr
                 state.put(
@@ -2223,20 +2285,31 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 state.cur = None
                 state.k += 1
                 continue
-            elif op[3] != 0:  # caller: zero-init of a staged string-arg
-                raise ValueError(  # descriptor slot (t1_fnstr)
-                    f"mov [bp+{op[2]}],{op[3]} outside a DEF FN body at {addr:#x}"
-                )
+            if state.fn_frame is not None:
+                if op[2] == 0:
+                    state.fn_frame["block"] = True
+                elif op[2] != 2:
+                    raise ValueError(f"[bp+{op[2]}] init in DEF FN body at {addr:#x}")
+            elif op[3] != 0:  # caller: literal-int FN-call arg staging (wild
+                state.fn_args[op[2]] = ir.Lit(op[3])  # resume.exe, probe_d) --
+                # a zero literal is indistinguishable from the zero-init of a
+                # staged string-arg descriptor pointer (t1_fnstr) and stays
+                # unsupported until a fixture disambiguates the two.
             state.k += 1
             continue
         if kind == "fn_ret":  # close the open DEF FN body
             assert state.fn_frame is not None  # fn_ret only closes an open DEF FN body
-            nparams = (
-                state.fn_frame["max_off"] // 4
-            )  # P04 = 1, P08 = 2, ... (off 0 = result)
+            # The touched bp offsets ARE the param list, in ascending order:
+            # an all-FP or all-string param list packs 4 bytes/param (P04,
+            # P08, ...), an all-integer one packs 2 (P04, P06, ... -- wild
+            # resume.exe, probe_d) -- no fixed stride can be assumed.
             params = tuple(
-                f"P{off:02X}$" if off in state.fn_frame["str_offs"] else f"P{off:02X}"
-                for off in (4 + 4 * i for i in range(nparams))
+                f"P{off:02X}$"
+                if off in state.fn_frame["str_offs"]
+                else (
+                    f"P{off:02X}%" if off in state.fn_frame["int_offs"] else f"P{off:02X}"
+                )
+                for off in sorted(state.fn_frame["param_offs"])
             )
             state.nfn += 1
             name = f"FNFN{state.nfn}" + ("$" if state.fn_frame["str"] else "")
@@ -2254,6 +2327,9 @@ def decode_user_code(exe: bytes) -> list[Any]:
                     state.stmts[state.fn_frame["idx"] :],
                     state.addrs[state.fn_frame["idx"] :],
                 )
+                locs = state.fn_frame["locals"]
+                if locs:  # declared LOCALs (wild resume.exe), mirroring
+                    body = (ir.Local(tuple(locs.values())),) + body  # proc_ret
                 state.stmts.append(ir.DefFn(name, params, body, True))
             else:  # single-line DEF FN = expr
                 expr = state.fn_frame["result"]
@@ -2855,7 +2931,28 @@ def decode_user_code(exe: bytes) -> list[Any]:
             state.cur = None
             state.k += 1
             continue
-        if kind == "movm_ax_bp":  # LOCAL int var = ax expression
+        if kind == "movm_ax_bp":  # LOCAL int var = ax expression, OR --
+            # bp+0 inside an open DEF FN body -- the block-form FN's own
+            # integer result store, mirroring fstp_bp's float-result special
+            # case (bp+0 is the frame-link word in a SUB, never a real LOCAL,
+            # so this can only mean the FN result there; wild resume.exe).
+            if state.fn_frame is not None and op[2] == 0:
+                if state.fn_frame["block"]:
+                    state.put(ir.FnResult(state.ax), state.cur)
+                    state.cur = None
+                else:
+                    state.fn_frame["result"] = state.ax
+                state.ax = None
+                state.k += 1
+                continue
+            if state.fn_frame is None and state.proc_frame is None:
+                # caller: computed (or ax-routed literal) int FN-call arg
+                # staging -- the ax-register sibling of mov_bp_imm's literal
+                # form above (wild resume.exe)
+                state.fn_args[op[2]] = state.ax
+                state.ax = None
+                state.k += 1
+                continue
             state.put(ir.Assign(state.loc_local(op[2]), state.ax), state.cur)
             state.ax = None
             state.cur = None
@@ -2927,8 +3024,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 continue
             if nxt == ("spush_bp",):  # push string param [bp+si]: DEF FN body
                 assert state.fn_frame is not None  # (witnessed t1_fnstr)
-                if d > state.fn_frame["max_off"]:
-                    state.fn_frame["max_off"] = d
+                state.fn_frame["param_offs"].add(d)
                 state.fn_frame["str_offs"].add(d)
                 state.sstack.append(ir.Var(f"P{d:02X}$"))
                 state.k += 2

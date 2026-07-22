@@ -3649,6 +3649,16 @@ End()
 Print(items=(Call(name='VAL', args=(StrLit(value='42'),)),), newline=True, file=None, commas=None)
 End()
 
+## t1_fnlocal
+DefFn(name='FNFN1', params=('A',), body=(Local(names=('B%',)), Assign(target=Var(name='B%'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1))), FnResult(value=BinOp(op='+', lhs=Var(name='B%'), rhs=Lit(value=2)))), is_block=True)
+Print(items=(FnCall(name='FNFN1', args=(Lit(value=3),)),), newline=True, file=None, commas=None)
+End()
+
+## t1_fnlocalint
+DefFn(name='FNFN1', params=('A%', 'B%'), body=(Local(names=('C%',)), Assign(target=Var(name='C%'), value=BinOp(op='*', lhs=Var(name='A%'), rhs=Var(name='B%'))), IfGoto(cond=RelOp(op='<=', lhs=Var(name='C%'), rhs=Lit(value=100)), target=BodyLine(stmt=0, phys=5)), Assign(target=Var(name='C%'), value=BinOp(op='+', lhs=Var(name='C%'), rhs=Lit(value=1))), FnResult(value=Var(name='C%'))), is_block=True)
+Print(items=(FnCall(name='FNFN1', args=(Lit(value=3), Lit(value=4))),), newline=True, file=None, commas=None)
+End()
+
 ## t1_fnstr
 DefFn(name='FNFN1$', params=('A$', 'B'), body=BinOp(op='+', lhs=Var(name='A$'), rhs=Call(name='STR$', args=(Var(name='B'),))), is_block=False)
 Print(items=(FnCall(name='FNFN1$', args=(StrLit(value='X'), Lit(value=3))),), newline=True, file=None, commas=None)
@@ -9352,6 +9362,16 @@ End()
 
 ## v10_t1_fn_val
 Print(items=(Call(name='VAL', args=(StrLit(value='42'),)),), newline=True, file=None, commas=None)
+End()
+
+## v10_t1_fnlocal
+DefFn(name='FNFN1', params=('A',), body=(Local(names=('B%',)), Assign(target=Var(name='B%'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1))), FnResult(value=BinOp(op='+', lhs=Var(name='B%'), rhs=Lit(value=2)))), is_block=True)
+Print(items=(FnCall(name='FNFN1', args=(Lit(value=3),)),), newline=True, file=None, commas=None)
+End()
+
+## v10_t1_fnlocalint
+DefFn(name='FNFN1', params=('A%', 'B%'), body=(Local(names=('C%',)), Assign(target=Var(name='C%'), value=BinOp(op='*', lhs=Var(name='A%'), rhs=Var(name='B%'))), IfGoto(cond=RelOp(op='<=', lhs=Var(name='C%'), rhs=Lit(value=100)), target=BodyLine(stmt=0, phys=5)), Assign(target=Var(name='C%'), value=BinOp(op='+', lhs=Var(name='C%'), rhs=Lit(value=1))), FnResult(value=Var(name='C%'))), is_block=True)
+Print(items=(FnCall(name='FNFN1', args=(Lit(value=3), Lit(value=4))),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_for

@@ -92,6 +92,8 @@ PAIRS = [
     "t1_fprintblank",
     "t1_fpcomma",
     "t1_resumestart",
+    "t1_fnlocal",
+    "t1_fnlocalint",
 ]
 
 

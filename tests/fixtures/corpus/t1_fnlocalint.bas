@@ -1,0 +1,8 @@
+10 DEF FNW(A%, N%)
+20 LOCAL B%
+30 B% = A% * N%
+40 IF B% > 100 THEN B% = B% + 1
+50 FNW = B%
+60 END DEF
+70 PRINT FNW(3, 4)
+80 END

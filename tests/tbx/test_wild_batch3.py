@@ -1952,6 +1952,52 @@ def test_decode_t1_localargcall():
     )
 
 
+def test_decode_t1_fnlocal():
+    # DEF FN body declaring its own LOCAL: `local_init`'s zero-fill was
+    # previously hard-gated to `state.proc_frame` (SUB bodies only) and
+    # `loc_local` only ever consulted it too, so a DEF FN's LOCAL raised
+    # "LOCAL zero-fill outside a fresh SUB body" unconditionally. Also
+    # exercises the auto-fn_frame-open generalization: this file's DEF FN
+    # is reached via a per-definition trailing skip-jmp right after the
+    # preceding proc_ret (mod trap_hook stamps), not one leading skip-jmp
+    # over the whole def region, so `state.main_start` alone never used to
+    # open it (wild resume.exe, probe_a).
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_fnlocal.exe"))
+    fn = next(s for s in prog if isinstance(s, ir.DefFn))
+    assert fn.params == ("A",)
+    assert ir.Local(("B%",)) in fn.body
+    assert emit0.emit(prog) == (
+        "10 DEF FNFN1(A)\n  LOCAL B%\n  B% = A + 1\n"
+        "  FNFN1 = B% + 2\nEND DEF\n20 PRINT FNFN1(3)\n30 END\n"
+    )
+
+
+def test_decode_t1_fnlocalint():
+    # DEF FN with two plain-INTEGER params (packed 2 bytes apiece right
+    # after the result cell, NOT the 4-byte stride an FP/string param list
+    # uses) plus a LOCAL: exercises loc_local's new fn_frame param
+    # fallback (the touched bp-offset set IS the param list -- no fixed
+    # stride assumed), the int-typed FN result store via movm_ax_bp 0, the
+    # caller-side literal/computed int-arg staging (mov_bp_imm / movm_ax_bp
+    # into state.fn_args), the caller-side integer-result reload
+    # (movax_bp 0 popping the FnCall off state.stack), and the nested-call
+    # sp_save_cell save/restore across push_bp/pop_bp (wild resume.exe,
+    # probe_d).
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_fnlocalint.exe"))
+    fn = next(s for s in prog if isinstance(s, ir.DefFn))
+    assert fn.params == ("A%", "B%")
+    assert ir.Local(("C%",)) in fn.body
+    assert emit0.emit(prog) == (
+        "10 DEF FNFN1(A%, B%)\n  LOCAL C%\n  C% = A% * B%\n"
+        "  IF C% <= 100 THEN 15\n  C% = C% + 1\n15 FNFN1 = C%\nEND DEF\n"
+        "20 PRINT FNFN1(3,4)\n30 END\n"
+    )
+
+
 if __name__ == "__main__":
     test_decode_t1_fcmp()
     test_decode_t1_fori()
@@ -2013,4 +2059,6 @@ if __name__ == "__main__":
     test_decode_t1_byrefforvar()
     test_decode_t1_byrefsub()
     test_decode_t1_localargcall()
+    test_decode_t1_fnlocal()
+    test_decode_t1_fnlocalint()
     print("ALL PASS")
