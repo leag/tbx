@@ -12,6 +12,138 @@ Standing instruction: close the most common decoder gap first, in frequency
 order, over the 84 wild PC-SIG Turbo Basic EXEs in `wild/hits/` (untracked,
 gitignored, copyrighted shareware — **never commit them**).
 
+## Session 2026-07-22: two closures from the official handbook + three negative results
+
+Prompted by the user adding a scanned/OCR'd copy of the 1987 Turbo Basic
+Owner's Handbook to `docs/`, this session cross-referenced its Chapter 5
+reference directory and appendices against the open-gap list above instead
+of guessing blind. Two real, oracle-verified closures landed (23/84 wild
+count unchanged — neither happens to unlock a full wild file, see below),
+plus three investigations that came up empty but are worth recording so a
+future session doesn't repeat them.
+
+**CLOSED: `WIDTH device$, cols` (canonical `EC sub EE`).** The handbook's
+own WIDTH entry documents `WIDTH device$, size` / `WIDTH #filenum, size`
+(device options `SCRN:`/`LPT1:`-`LPT3:`/`COM1:`-`COM2:`) alongside the
+already-implemented bare `WIDTH n`. Its own worked example is literally
+`WIDTH "LPT1:",130` — compiling that exact line reproduced `unhandled INT
+EC sub ee` on the first oracle probe. Byte shape: device string pushed
+(`movsi <pooled-str>; rt 156`), then `mov ax,cols`, then `int EC sub EE` —
+no new scan-time state needed. `ir.Width` gained a `device: object = None`
+field (default keeps the old 1-arg `Width(cols)` call sites working
+unchanged in `rename.py`/tests); `render.py` emits `WIDTH dev,cols` only
+when `device is not None`. Fixtures `t1_widthdev`/`v10_t1_widthdev`
+(`WIDTH "LPT1:",130`), byte-exact both dialects. Advanced wild
+`cal.exe`/`cal87.exe`/`kinetics.exe` (all three independently hit this
+exact signature) into three DIFFERENT later gaps (numeric INPUT without
+FSTP; `LINE flag 00`; a new raw-byte signature) — none fully closes yet.
+A sibling form surfaced in the same probe batch, `WIDTH #filenum, cols`
+(canonical `EC sub f0`) — NOT implemented: unlike the device-string form,
+its filenum is read back from system cell `0x60` (the same cell
+`pend_fnum`/OPEN/SEEK already use) rather than passed through ax at the
+call site, and no wild file currently blocks on it. Pick this up alongside
+the `IOCTL`/`0x60`-cell material below if revisited.
+
+**CLOSED: `IOCTL #n, s$` (canonical `EC sub 50`) and `IOCTL$(n)` (canonical
+`EE sub 14`).** Neither statement was in `tbx`'s vocabulary at all before
+this session (absent from `docs/decoder-statement-support.md`) — a genuine
+Wave-5 "syntax inventory" gap, found while chasing `EC sub ac` below (see
+next entry) on the theory that installer/security-utility wild files
+(nvginst/pwinst/secure) doing `SEEK` then something with a filenum+string
+might be `IOCTL`. That theory's specific target (`sub ac`) was WRONG, but
+probing `IOCTL #1, A$` and `A$ = IOCTL$(#1)` directly (handbook: "IOCTL and
+IOCTL$ communicate with a device driver... filenum ... string expression")
+turned up two real, previously-unhandled sub-ops: `EC sub 50` (statement:
+filenum via the `[0060]` cell like `WIDTH #n`/`SEEK`, then a pushed
+string) and `EE sub 14` (function: filenum in ax, string result via the
+ordinary `strfn`/`ir.Call` path — reuses the SAME ax-arg branch as
+`CHR$`/`SPACE$`/`MKI$`/`INPUT$`, no new IR node needed). `sub 14` sits
+alphabetically between `INPUT$F` (0x12) and `LCASE$` (0x16) in
+`_EE_STRFN_SUBS` — exactly the kind of alphabetical dispatch-table gap
+gap-17's precedent said to check first. New `ir.Ioctl(num, text)` statement
+node (c0 raises `_Unsupported`, no device-driver surrogate on the emulated
+machine). Fixtures `t1_ioctl`/`v10_t1_ioctl` (statement) and
+`t1_ioctlfn`/`v10_t1_ioctlfn` (function), byte-exact both dialects and both
+render forms (`IOCTL$(1)` renders fine even though the source used
+`IOCTL$(#1)` — the oracle accepts either and compiles identically, i.e.
+the leading `#` is source-level sugar with no separate byte encoding).
+Does not touch any wild file (none currently reach either sub).
+
+**CLOSED (same session, follow-up tick): `EC sub ac` was `PUT$ #n, s$`.**
+The IOCTL lead above was a false positive on the exact sub value, but its
+"filenum-cell + one pushed string" calling convention was the right shape
+to keep searching for. `OPEN COM` (checked and ruled out — it's just
+`OPEN`'s ordinary filename-string argument, no separate op) wasn't it;
+the actual match came from the handbook's GET$ FUNCTION entry's own
+cross-reference: "GET$, PUT$, and SEEK provide a low-level alternative...
+byte-by-byte" — `PUT$ [#] filenum, string expression` (binary-mode write,
+the complement of the already-implemented `GetString`/`GET$`). Compiling
+`OPEN ... FOR BINARY AS #1` + `SEEK #1,1` + `PUT$ #1,"HELLO"` reproduced
+`EC sub ac` exactly on the first probe — matching the wild files' own
+`SEEK` immediately preceding it in all three. New `ir.PutString(num,
+text)` node, consumed identically to the existing `ir.Ioctl` (no c0 case
+added, same as `GetString` already has none — both fall through to c0's
+generic `_Unsupported("statement ...")`). Fixtures
+`t1_putstr`/`v10_t1_putstr`, byte-exact both dialects. Advanced all three
+wild files (nvginst/pwinst/secure) into 3 DIFFERENT new gaps (`byte f7`;
+`byte 36`; a jump-target error) — none fully closes on its own, each
+needs its own triage.
+
+**INVESTIGATED, NOT CLOSED (via a NEW, now-ruled-out angle): `INT 8c` (4
+files: baby, help, prtguide, readme, all TB 1.0).** Previous sessions'
+negative probes all varied the ON KEY(n) GOSUB shape itself (still
+unresolved, see the existing `RR-INT-8C` entry). This session tried a
+DIFFERENT angle first: all four wild files carry the Keyboard-break ('K')
+IDE Options toggle (`_toggles()` confirms), matching the exact
+"already-supported toggle can still hide an uncalibrated runtime-check
+byte pattern if no fixture happens to exercise it" gotcha gap-21 (Overflow)
+hit. Directly refuted: compiled a trivial program with `--toggles K`
+(`frame/oracle`'s `tb_v86_compile.js`) against the SAME program without
+the toggle and byte-diffed the two EXEs — for both a straight-line
+program and a `FOR/NEXT` loop, the ONLY byte that differs anywhere in the
+whole file is the toggle flag byte itself (`_toggles()`'s own read); ZERO
+runtime-check code is inserted by 'K' for either shape. So Keyboard-break
+does NOT explain `INT 8c` (whatever it does at runtime, it must read the
+flag from ALREADY-existing dispatch code rather than emitting a new
+instruction) — don't re-try this angle. The ON KEY(n) GOSUB shared-feature
+observation from prior sessions still stands as the strongest lead;
+untried per the existing note: a follow-on statement INSIDE the trap
+handler body.
+
+**INVESTIGATED, NOT CLOSED (exhaustively, this session): `EC sub 38` (4
+files: catalog, football, refund, varamort — 2 dialects, so not a dialect
+artifact).** Re-examined with a corrected trace (a broken debug patch in
+an earlier pass of this same session had mislabeled the SECOND of two
+back-to-back `sub 38` occurrences as `erase`/`sub 36` — they are BOTH
+canonical `sub 38`; TB 1.0's raw byte is `0x36`, which `canon_sub`'s +2
+shift maps to canonical `0x38`, coincidentally reusing ERASE's raw byte,
+which is what caused the original confusion). With that corrected, ALL
+FOUR files' occurrences are plain, standalone `movsi <block>; movdx
+<reloc-seg>; movesdx; int EC sub 38` on a runtime dynamic-array block,
+sometimes gated by a materialized-boolean `IF` (string- or numeric-compare
+based), sometimes followed by a plain `RET` (end of a GOSUB'd
+subroutine), never adjacent to a REAL erase. Ruled out this session (all
+oracle-verified clean, zero `sub 38` occurrences): `CLEAR` with 1-3
+dynamic arrays (any mix of numeric/string); `ERASE` of a 2-D or 3-D
+dynamic array; `ERASE` of a `LONG`/`DOUBLE` dynamic array; `ERASE` inside
+a conditional `GOSUB` (both string- and numeric-compare gated, both at
+top level and inside the GOSUB body); re-`DIM DYNAMIC` of an array after
+`ERASE`ing it (same size and a larger size); `ERASE A,B` with mixed
+type (numeric+string) or mixed rank (1-D+2-D) in one statement (extending
+the already-ruled-out same-type/same-rank case from a prior session).
+`COMMON`-declared dynamic array + `ERASE` failed to compile in this
+session's probes (syntax needs revisiting, not oracle-confirmed clean —
+don't count this as ruled out). Genuinely still unidentified; the
+"GET/PUT #n with an array-backed record buffer" candidate from
+`REMAINING_GAPS_PLAN.md` was NOT tried (the handbook's own GET/PUT (files)
+section only documents a FIELD-string-variable record buffer, no
+array-typed one, casting doubt on this candidate specifically — but not
+conclusively, since the handbook isn't a completeness guarantee per this
+project's own scope statement). Next session: try the COMMON+dynamic
+combination with correct syntax, and try ON-ERROR-implicit-cleanup paths
+more thoroughly (a GOSUB'd error handler that erases/touches two arrays
+in sequence, rather than a plain top-level `ON ERROR GOTO`).
+
 Machine-readable runtime-revision classifications are persisted separately from
 generated scan checkpoints in `gap_reports/runtime-revision-assessments.json`.
 Candidate status is not decoder authorization; each entry records its promotion

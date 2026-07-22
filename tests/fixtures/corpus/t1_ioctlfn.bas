@@ -1,0 +1,4 @@
+10 OPEN "R", #1, "TEST.DAT"
+20 A$ = IOCTL$(#1)
+30 CLOSE #1
+40 END

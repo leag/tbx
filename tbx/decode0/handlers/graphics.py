@@ -201,6 +201,14 @@ def graphics(state: DecodeState, op, addr, kind) -> bool:
         state.cur = None
         state.k += 1
         return True
+    if kind == "width_dev":  # WIDTH device$, cols (device string pushed, ax=cols)
+        if state.ax is None or isinstance(state.ax, tuple):
+            raise ValueError(f"WIDTH without an ax argument at {addr:#x}")
+        state.put(ir.Width(state.ax, state.sstack.pop()), state.cur)
+        state.ax = None
+        state.cur = None
+        state.k += 1
+        return True
     return False
 
 

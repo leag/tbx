@@ -249,7 +249,7 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
         if isinstance(s, ir.Window):
             return ir.Window(walk(s.x1), walk(s.y1), walk(s.x2), walk(s.y2), s.screen)
         if isinstance(s, ir.Width):
-            return ir.Width(walk(s.cols))
+            return ir.Width(walk(s.cols), walk(s.device) if s.device is not None else None)
         if isinstance(s, ir.Write):
             return ir.Write(tuple(walk(i) for i in s.items), file=s.file)
         if isinstance(s, ir.Lprint):
@@ -294,8 +294,12 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.GetString(s.num, walk(s.count), walk(s.target))
         if isinstance(s, ir.Put):
             return ir.Put(s.num, walk(s.pos))
+        if isinstance(s, ir.PutString):
+            return ir.PutString(s.num, walk(s.text))
         if isinstance(s, ir.Seek):
             return ir.Seek(s.num, walk(s.pos))
+        if isinstance(s, ir.Ioctl):
+            return ir.Ioctl(s.num, walk(s.text))
         if isinstance(s, ir.Bload):
             return ir.Bload(walk(s.file), walk(s.offset))
         if isinstance(s, ir.Bsave):

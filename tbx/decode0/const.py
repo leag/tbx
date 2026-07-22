@@ -167,6 +167,9 @@ _EE_STRFN_SUBS = {
     0x0E: "INKEY$",
     0x04: "DATE$",
     0x26: "TIME$",
+    0x14: "IOCTL$",  # IOCTL$(n): filenum in ax (t1_ioctlfn); sits alphabetically
+    # between INPUT$F (0x12) and LCASE$ (0x16), the gap gap-17 flagged as
+    # worth checking first when diagnosing an "unhandled INT EE sub" error
 }
 
 # TAB(n)/SPC(n) print item vectors (canonical): name + leg (None = console,

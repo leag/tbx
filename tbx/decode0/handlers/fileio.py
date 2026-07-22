@@ -80,6 +80,22 @@ def fileio(state: DecodeState, op, addr, kind) -> bool:
         state.cur = None
         state.k = j
         return True
+    if kind == "ioctl":  # IOCTL #n, s$ -- filenum via [0060], string pushed
+        if state.pend_fnum is None:
+            raise ValueError(f"IOCTL without a file number at {addr:#x}")
+        state.put(ir.Ioctl(state.pend_fnum, state.sstack.pop()), state.cur)
+        state.pend_fnum = None
+        state.cur = None
+        state.k += 1
+        return True
+    if kind == "put_str":  # PUT$ #n, s$ -- filenum via [0060], string pushed
+        if state.pend_fnum is None:
+            raise ValueError(f"PUT$ without a file number at {addr:#x}")
+        state.put(ir.PutString(state.pend_fnum, state.sstack.pop()), state.cur)
+        state.pend_fnum = None
+        state.cur = None
+        state.k += 1
+        return True
     return False
 
 

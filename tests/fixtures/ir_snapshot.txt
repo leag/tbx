@@ -4142,6 +4142,19 @@ Assign(target=Var(name='G'), value=BinOp(op='+', lhs=Var(name='A%'), rhs=Var(nam
 Assign(target=Var(name='H%'), value=Var(name='G'))
 End()
 
+## t1_ioctl
+Open(mode=StrLit(value='R'), num=1, file=StrLit(value='TEST.DAT'), reclen=None, for_as=False)
+Assign(target=Var(name='A$'), value=StrLit(value='X'))
+Ioctl(num=1, text=Var(name='A$'))
+Close(num=1)
+End()
+
+## t1_ioctlfn
+Open(mode=StrLit(value='R'), num=1, file=StrLit(value='TEST.DAT'), reclen=None, for_as=False)
+Assign(target=Var(name='A$'), value=Call(name='IOCTL$', args=(Lit(value=1),)))
+Close(num=1)
+End()
+
 ## t1_key
 KeyDef(num=Lit(value=1), text=BinOp(op='+', lhs=StrLit(value='DIR'), rhs=Call(name='CHR$', args=(Lit(value=13),))))
 Key(on=True)
@@ -4821,6 +4834,13 @@ End()
 ## t1_putfile
 Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'), reclen=None, for_as=False)
 Put(num=1, pos=Lit(value=1))
+Close(num=1)
+End()
+
+## t1_putstr
+Open(mode=StrLit(value='B'), num=1, file=StrLit(value='TEST.DAT'), reclen=None, for_as=True)
+Seek(num=1, pos=Lit(value=1))
+PutString(num=1, text=StrLit(value='HELLO'))
 Close(num=1)
 End()
 
@@ -5779,7 +5799,11 @@ Loop(kind=None, cond=None)
 End()
 
 ## t1_width
-Width(cols=Lit(value=80))
+Width(cols=Lit(value=80), device=None)
+End()
+
+## t1_widthdev
+Width(cols=Lit(value=130), device=StrLit(value='LPT1:'))
 End()
 
 ## t1_window
@@ -9806,6 +9830,19 @@ Assign(target=Var(name='G'), value=BinOp(op='+', lhs=Var(name='A%'), rhs=Var(nam
 Assign(target=Var(name='H%'), value=Var(name='G'))
 End()
 
+## v10_t1_ioctl
+Open(mode=StrLit(value='R'), num=1, file=StrLit(value='TEST.DAT'), reclen=None, for_as=False)
+Assign(target=Var(name='A$'), value=StrLit(value='X'))
+Ioctl(num=1, text=Var(name='A$'))
+Close(num=1)
+End()
+
+## v10_t1_ioctlfn
+Open(mode=StrLit(value='R'), num=1, file=StrLit(value='TEST.DAT'), reclen=None, for_as=False)
+Assign(target=Var(name='A$'), value=Call(name='IOCTL$', args=(Lit(value=1),)))
+Close(num=1)
+End()
+
 ## v10_t1_keylist
 KeyList()
 End()
@@ -10386,6 +10423,13 @@ End()
 ## v10_t1_putfile
 Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'), reclen=None, for_as=False)
 Put(num=1, pos=Lit(value=1))
+Close(num=1)
+End()
+
+## v10_t1_putstr
+Open(mode=StrLit(value='B'), num=1, file=StrLit(value='TEST.DAT'), reclen=None, for_as=True)
+Seek(num=1, pos=Lit(value=1))
+PutString(num=1, text=StrLit(value='HELLO'))
 Close(num=1)
 End()
 
@@ -11202,7 +11246,11 @@ Loop(kind=None, cond=None)
 End()
 
 ## v10_t1_width
-Width(cols=Lit(value=80))
+Width(cols=Lit(value=80), device=None)
+End()
+
+## v10_t1_widthdev
+Width(cols=Lit(value=130), device=StrLit(value='LPT1:'))
 End()
 
 ## v10_t1_window

@@ -617,9 +617,12 @@ class Swap:
 
 @dataclass(frozen=True)
 class Width:
-    """WIDTH cols (INT ECh sub ECh) -- cols in ax (mov ax,imm)."""
+    """WIDTH cols (INT ECh sub ECh) -- cols in ax (mov ax,imm).
+    WIDTH device$, cols (INT ECh sub EEh) -- device string pushed first,
+    cols in ax (device is not None; witnessed t1_widthdev)."""
 
     cols: object  # Expr
+    device: object = None  # Expr | None -- device$ in `WIDTH device$, cols`
 
 
 @dataclass(frozen=True)
@@ -803,6 +806,18 @@ class GetString:
 
 
 @dataclass(frozen=True)
+class PutString:
+    """PUT$ #n, s$ -- write a binary string (INT ECh sub ACh): filenum via
+    the [0060] cell, s$ pushed (witnessed t1_putstr). The BINARY-mode
+    counterpart of GetString; found via the handbook's "GET$, PUT$, and
+    SEEK provide a low-level alternative" cross-reference while chasing
+    the shared filenum+string calling convention IOCTL also uses."""
+
+    num: int
+    text: object  # Expr (string)
+
+
+@dataclass(frozen=True)
 class Put:
     """PUT #n, rec -- write a random-access record."""
 
@@ -816,6 +831,15 @@ class Seek:
 
     num: int  # file number
     pos: object  # Expr (position)
+
+
+@dataclass(frozen=True)
+class Ioctl:
+    """IOCTL #n, s$ -- send a string to a device driver (INT ECh sub 50h):
+    filenum via the [0060] cell, s$ pushed (witnessed t1_ioctl)."""
+
+    num: int  # file number
+    text: object  # Expr (string)
 
 
 @dataclass(frozen=True)

@@ -151,11 +151,40 @@ fixture-backed closures.
 - [x] `INT EC sub 42` — bare `FILES`; the adjacent sub 44 is `FILES spec$`.
   Oracle fixtures cover both 1.0 and 1.1. `styled.exe` and `styllist.exe`
   advance to the same later cursor/LOCATE fold gap.
-- [ ] `INT EC sub ac` — 2 files.
+- [x] `INT EC sub ac` — `PUT$ #n, s$` (binary-mode string write, the
+  complement of the already-implemented `GetString`/`GET$`). Same
+  filenum+pushed-string calling convention as `IOCTL`, which is what made
+  it look like IOCTL at first (it's not — `IOCTL #n,s$` is `EC sub 50`,
+  confirmed separately). Found via the handbook's own GET$ function entry
+  cross-referencing "GET$, PUT$, and SEEK provide a low-level alternative
+  ... byte-by-byte". Fixtures `t1_putstr`/`v10_t1_putstr`
+  (`OPEN...FOR BINARY` + `SEEK` + `PUT$`), byte-exact both dialects.
+  Closed the LAST occurrence of this signature: advanced all 3 wild files
+  (nvginst, pwinst, secure) into 3 distinct new gaps (`byte f7`; `byte 36`;
+  a jump-target error), 0 regressions.
+- [x] `IOCTL #n, s$` / `IOCTL$(n)` — not in the original work-queue (found
+  while chasing `EC sub ac` above), but a real Wave-5 gap: neither
+  statement was implemented at all. `EC sub 50` (statement) / `EE sub 14`
+  (function, alphabetically between `INPUT$F` and `LCASE$`). Fixtures
+  `t1_ioctl`/`t1_ioctlfn` (+v10), byte-exact both dialects. Touches no wild
+  file.
 - [ ] raw `INT af` — 2 files; determine whether it is a string/array runtime vector
   by tracking stack and descriptor setup.
 - [ ] raw `INT c2` — 2 files.
-- [ ] singleton dispatches: `INT d4`, `INT EC sub ee`.
+- [x] `INT EC sub ee` — `WIDTH device$, cols` (device string pushed, cols in
+  ax; the handbook's own example literal, `WIDTH "LPT1:",130`, reproduced it
+  on the first oracle probe). New `ir.Width.device` field (default `None`
+  keeps the existing `WIDTH cols` form unchanged). Fixtures
+  `t1_widthdev`/`v10_t1_widthdev`, byte-exact both dialects. Advanced wild
+  `cal.exe`/`cal87.exe`/`kinetics.exe` past this signature into distinct
+  later gaps (numeric INPUT without FSTP; LINE flag 00; a new raw-byte
+  signature) — none fully closed by this fix alone. A sibling form, `WIDTH
+  #filenum, cols` (canonical `EC sub f0`), was also identified via the same
+  probe batch but not implemented: its filenum is read back from system
+  cell `0x60` rather than passed in ax at the call site, and no wild file
+  currently blocks on it — leave for a session that wants to chase the
+  `0x60` cell convention.
+- [ ] singleton dispatches: `INT d4`.
 
 ### Wave 2 — repeated instruction and x87 templates
 
@@ -317,6 +346,9 @@ Include newly exposed blockers because they are evidence of forward progress.
 | 2026-07-20 | working tree | Preserve TAB/SPC as inter-item expressions inside PRINT/LPRINT USING | 15 OK / 69 blocked; `banker.exe` advanced to `unhandled op testw`; 0 regressions | Identify the next `testw` control-flow template |
 | 2026-07-20 | working tree | Lift x87 FOR/NEXT sign tests with non-adjacent limit/step slots | 16 OK / 68 blocked; `banker.exe` newly decodes completely, 0 regressions, `testw` signature removed | Triage the seven-file `unhandled byte ea` group |
 | 2026-07-20 | working tree | Decode runtime-revision far `JMP` (`EA`) transfers and fixed zero-offset handoffs | 16 OK / 68 blocked; all seven `byte ea` files advanced, 0 regressions, signature removed | Triage the newly exposed file-specific gaps |
+| 2026-07-22 | pending | Decode `WIDTH device$, cols` (`EC sub ee`), found via the newly-added handbook's own worked example | 23 OK / 61 blocked; `cal`/`cal87`/`kinetics` advanced past this signature into 3 distinct later gaps, 0 regressions; `EC sub ee` signature removed | Triage the 3 newly exposed signatures |
+| 2026-07-22 | pending | Decode `IOCTL #n,s$` / `IOCTL$(n)` (`EC sub 50` / `EE sub 14`), a Wave-5 syntax-inventory gap found while chasing `EC sub ac` | 23 OK / 61 blocked; 0 regressions; touches no wild file | `EC sub ac` is confirmed NOT `IOCTL` despite the identical filenum+string calling convention — still unidentified, see `HANDOFF.md` |
+| 2026-07-22 | pending | Decode `PUT$ #n,s$` (`EC sub ac`) — binary-mode string write, GetString's complement | 23 OK / 61 blocked; `nvginst`/`pwinst`/`secure` all advanced past this signature into 3 distinct new gaps, 0 regressions; `EC sub ac` signature removed | Triage the 3 newly exposed signatures (`byte f7`, `byte 36`, a jump-target error) |
 
 ## Completion checklist
 

@@ -970,6 +970,9 @@ class _Gen:
         if isinstance(s, ir.Seek):
             # SEEK on a random-mode channel is TB error 54 (t1_seek dosout)
             return [f"tb_seek({s.num}, {self.num(s.pos)});"]
+        if isinstance(s, ir.Ioctl):
+            # no device-driver surrogate on the emulated machine
+            raise _Unsupported("IOCTL (device driver communication)")
         if isinstance(s, ir.Close):
             if s.num is None:  # bare CLOSE: all channels, like RESET
                 return ["tb_reset();"]

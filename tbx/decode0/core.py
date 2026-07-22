@@ -1070,7 +1070,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         state.stack.append(ir.Call("CLNG", (state.stack.pop(),)))
     elif kind == "strfn":  # string-result intrinsic
         name = op[2]
-        if name in ("CHR$", "SPACE$", "MKI$", "INPUT$"):  # integer arg in ax
+        if name in ("CHR$", "SPACE$", "MKI$", "INPUT$", "IOCTL$"):  # integer arg in ax
             args = (state.ax,)
             state.ax = None
         elif name == "INPUT$F":  # INPUT$(n, f): n in bx (shuttled), f in ax

@@ -77,6 +77,7 @@ from tbx.ir.stmt_nodes import (
     Inline,
     Input,
     InputFile,
+    Ioctl,
     Key,
     KeyDef,
     KeyList,
@@ -110,6 +111,7 @@ from tbx.ir.stmt_nodes import (
     Pset,
     Put,
     PutGfx,
+    PutString,
     Randomize,
     Read,
     RegSet,
@@ -399,6 +401,8 @@ def _us_graphics(s) -> str | None:
             f"-({unparse(s.x2)},{unparse(s.y2)})"
         )
     if isinstance(s, Width):
+        if s.device is not None:
+            return f"WIDTH {unparse(s.device)},{unparse(s.cols)}"
         return f"WIDTH {unparse(s.cols)}"
     if isinstance(s, Key):
         return "KEY ON" if s.on else "KEY OFF"
@@ -494,8 +498,12 @@ def _us_fileio(s) -> str | None:
         return f"GET$ #{s.num}, {unparse(s.count)}, {unparse(s.target)}"
     if isinstance(s, Put):
         return f"PUT #{s.num}, {unparse(s.pos)}"
+    if isinstance(s, PutString):
+        return f"PUT$ #{s.num}, {unparse(s.text)}"
     if isinstance(s, Seek):
         return f"SEEK #{s.num}, {unparse(s.pos)}"
+    if isinstance(s, Ioctl):
+        return f"IOCTL #{s.num}, {unparse(s.text)}"
     if isinstance(s, Bload):
         off = f", {unparse(s.offset)}" if s.offset is not None else ""
         return f"BLOAD {unparse(s.file)}{off}"

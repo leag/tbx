@@ -1436,6 +1436,11 @@ def _scan_pass(
                 ops.append((p, "width"))
                 p += 3
                 continue
+            if sub == 0xEE:  # WIDTH device$, n: device string pushed, n in ax
+                # (t1_widthdev; wild cal.exe/cal87.exe/kinetics.exe)
+                ops.append((p, "width_dev"))
+                p += 3
+                continue
             if sub == 0x54:  # KEY ON
                 ops.append((p, "key_on"))
                 p += 3
@@ -1579,6 +1584,14 @@ def _scan_pass(
                 continue
             if sub == 0xE0:  # TIME$ = s$ (pops string stack)
                 ops.append((p, "timeset"))
+                p += 3
+                continue
+            if sub == 0x50:  # IOCTL #n, s$: filenum via the [0060] cell,
+                ops.append((p, "ioctl"))  # string pushed (t1_ioctl)
+                p += 3
+                continue
+            if sub == 0xAC:  # PUT$ #n, s$: filenum via the [0060] cell,
+                ops.append((p, "put_str"))  # string pushed (t1_putstr)
                 p += 3
                 continue
             raise ValueError(f"unhandled INT EC sub {sub:02x} at {p:#x}")

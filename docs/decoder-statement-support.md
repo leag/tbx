@@ -105,7 +105,7 @@ known source subset does not provide a direct source-level witness for them.
 | `Cls` | `CLS` | Supported; corpus observed |
 | `Locate` | `LOCATE ...` | Supported; corpus observed |
 | `Color` | `COLOR ...` | Supported; corpus observed |
-| `Width` | `WIDTH ...` | Supported; no direct source witness |
+| `Width` | `WIDTH cols` / `WIDTH device$, cols` | Supported; `device$` form oracle-verified, no wild witness |
 | `Key` | `KEY ON|OFF` | Supported; corpus observed |
 | `KeyDef` | `KEY n, string$` | Supported; corpus observed in key fixtures |
 | `KeyList` | `KEY LIST` | Supported; no direct source witness |
@@ -124,6 +124,9 @@ known source subset does not provide a direct source-level witness for them.
 | `GetString` | `GET$ #n, count, string$` | Supported; no source witness |
 | `Put` | `PUT #n, record` | Supported; corpus observed |
 | `Seek` | `SEEK #n, position` | Supported; no source witness |
+| `Ioctl` | `IOCTL #n, string$` | Supported; oracle-verified, no wild witness |
+| `Call("IOCTL$", (n,))` | `IOCTL$(n)` | Supported; oracle-verified, no wild witness |
+| `PutString` | `PUT$ #n, string$` | Supported; corpus observed (wild nvginst/pwinst/secure) |
 | `Field` | `FIELD #n, width AS string$` | Supported; no source witness |
 | `Lset` / `Rset` | `LSET` / `RSET` | Supported; no source witness |
 | `MidAssign` | `MID$(target$, start[, length]) = source$` | Supported; no source witness |

@@ -1,0 +1,21 @@
+# t1_ioctl dialect=1.1 start=08C70
+08C73:movm_imm:96:1
+08C79:movsi:312
+08C7C:rt:156
+08C7E:movsi:316
+08C81:rt:156
+08C83:movax:128
+08C86:open
+08C89:movsi:308
+08C8C:rt:156
+08C8E:movsi:288
+08C91:strassign
+08C93:movm_imm:96:1
+08C99:movsi:288
+08C9C:rt:156
+08C9E:ioctl
+08CA1:movax:1
+08CA4:close
+08CA7:end
+08CAA:epilogue
+# commits
