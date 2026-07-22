@@ -460,13 +460,135 @@ calibration rule (fail-loud over guessing) and that getting this WRONG
 would mean a BYTE-EXACT decompiler silently mis-rendering DEF FN bodies
 containing LOCAL rather than failing loudly, the partial implementation
 was reverted (`git checkout --` back to the previous commit) rather than
-left half-correct. **Next session: enumerate every bp-relative op kind's
-existing DEF-FN-frame special-casing FIRST (grep for `state.fn_frame` in
-core.py/handlers/arith.py), cross-reference against `mov_bp_imm`'s
-documented bp+0/bp+2 special cells, and build a dedicated oracle probe
-for `DEF FN...LOCAL...END DEF` BEFORE touching any handler** -- this is
-not safe to implement via wild-file trial and error alone, unlike the six
-gaps closed earlier in this same investigation.
+left half-correct.
+
+**DEF FN + LOCAL: CLOSED (2026-07-21, later session)**, following exactly
+the plan above (oracle probes first, `state.fn_frame` grep first). Four
+probes (`probe_a`/`c`/`d`, promoted as `t1_fnlocal`/`t1_fnlocalint`, plus
+a since-abandoned zero-param `probe_b` -- see below) pinned the real
+shape:
+
+- The auto-fn_frame-open trigger was gated on `addr < state.main_start`,
+  but `main_start` is ONLY ever set from a single leading skip-jmp over
+  the WHOLE def region (or a chain continuing it, `addr ==
+  state.main_start`). resume.exe's own DEF FN is reached via a
+  PER-DEFINITION trailing skip-jmp right after the PRECEDING SUB's own
+  `proc_ret` (mod `trap_hook` stamps) -- `state.k == 0` is never a `jmp`
+  in this file at all (its first op is a `trap_hook` stamp), so
+  `main_start` stayed `None` forever and the DEF FN was silently never
+  opened. Generalized: a `jmp` immediately following (mod `trap_hook`)
+  either nothing (start of file) or a `proc_ret`/`fn_ret` ALSO
+  sets/extends `main_start`, regardless of `state.k` position.
+- `local_init`'s zero-fill and `loc_local` were hard-gated to
+  `state.proc_frame`; both now also accept an open `state.fn_frame`
+  (new `"locals"` key, populated identically to a SUB's).
+- The bp+2 collision that sank the earlier attempt was a symptom of a
+  BIGGER gap: `loc_local`'s int-register-path handlers (`movax_bp`,
+  `imul_bp`, `movm_ax_bp`, `fild_bp`, ...) had ZERO fn_frame-param
+  awareness at all -- every previously-working DEF FN fixture happened
+  to touch its params exclusively through the FP path (`fld_bp`/
+  `fold_bp`, handled by `fp_bp`), so the int path was simply never
+  exercised for a DEF FN before. `loc_local` now falls back to treating
+  an unrecognized bp-off as an integer-typed param when inside an open
+  `fn_frame` (mirroring `fp_bp`'s existing float-typed-param handling),
+  tracking it in a NEW `fn_frame["int_offs"]` set.
+- The param list itself can't be derived from `max_off // 4` once
+  integer params exist: an all-FP or all-string param list packs 4
+  bytes/param (P04, P08, ...), but an all-integer one packs 2 (P04,
+  P06, ...) -- NO fixed stride works for both. Replaced `max_off` with
+  `fn_frame["param_offs"]`, a SET of every bp offset actually touched as
+  a param; `fn_ret` now emits `sorted(param_offs)` directly as the
+  param list (self-describing, no stride assumption).
+- `loc_local`'s param fallback must return a name with the SAME suffix
+  `fn_ret`'s own `params` tuple will use (`P04%` for int, not `P04`) --
+  otherwise the declared param and its body references are two
+  DIFFERENT strings and `rename.py` treats them as two different
+  variables (caught by round-tripping a probe: the emitted body
+  referenced a variable that was never declared).
+- Caller-side: literal int args stage into `state.fn_args` via
+  `mov_bp_imm` (nonzero immediate only -- a zero literal is
+  byte-identical to the pre-existing "zero-init a staged string-arg
+  descriptor pointer" glue and stays unsupported, unwitnessed, until a
+  fixture disambiguates the two); COMPUTED int args stage the same way
+  via `movm_ax_bp` when neither `proc_frame` nor `fn_frame` is open.
+  The caller-side integer RESULT reload is `movax_bp 0` popping the
+  `ir.FnCall` node straight off `state.stack` (the float path's
+  `fld_bp` reload at the same spot is a true no-op, since the FPU
+  already holds the value; the ax-register convention has no such
+  free ride, so this one is NOT a no-op).
+- Along the way, exposed and fixed a real, general (not DEF-FN-specific)
+  bug: `state.sp_save_cell` (which `mov_mem_sp`/its paired
+  `movm_imm <cell>,0` glue-match use to recognize semantic-free
+  call-staging bookkeeping) was a single scalar with no save/restore. A
+  call used as its OWN outer call's argument opens a NESTED
+  `push_bp`/`mov_mem_sp`/.../`pop_bp` staging region, silently
+  clobbering the outer call's cell number with no restore on return --
+  corrupting the OUTER call's own `movm_imm`-glue match once control
+  came back (`store to unknown system cell` at the outer's cell, only
+  reachable once DEF FN calls could nest as arguments at all). Fixed
+  with a `state.sp_save_stack`, pushed on `push_bp` and popped on
+  `pop_bp`.
+- `probe_b` (a ZERO-param integer FN) surfaced a separate, unrelated,
+  NOT-yet-fixed emit0 gap: a zero-arg `ir.FnCall` always emits `NAME()`,
+  but TB's own niladic-FN call syntax has no parens at all (`PRINT
+  FNY%`, not `PRINT FNY%()`) -- the oracle rejected the round-trip with
+  "Error 475: Parameter mismatch". Left unfixed (out of scope for the
+  LOCAL work; no wild file hit it this session) -- probe_b itself was
+  NOT promoted to the corpus.
+
+All landed in `f199f1b`. Full byte-exact round trip (both dialects) for
+`t1_fnlocal`/`t1_fnlocalint`; zero regressions (2378 passed, up from
+2368, wild tally holds at 23/84 -- this closure alone didn't flip a
+wild file to decode-ok, see the NEW gap immediately below it hit).
+
+**resume.exe: STILL not fully closed -- a NEW, unrelated gap right past
+DEF FN + LOCAL.** After the fix above, resume.exe's decode advances
+completely through the DEF FN and a nested nested-call `far_call`
+target that briefly regressed with `store to unknown system cell 0x66`
+(a `movm_imm` call-arg-count-zero glue op whose paired `mov_mem_sp`
+cell no longer matched once a call nested as its own outer call's
+argument -- this WAS the `sp_save_cell` bug fixed above, and is fully
+resolved: the scan now runs cleanly all the way to the end of the file,
+`_finalize` completes). The scan itself is 100% clean; the ONLY
+remaining blocker is `_resolve_calls` raising `KeyError: 86343` on an
+unresolved forward `CallStmt` placeholder once every SUB/FN in the file
+has been named and it tries to fill in the one remaining `("addr",
+86343)` target.
+
+**The `KeyError: 86343` mystery, UNSOLVED, extensively probed
+(2026-07-21):** a `far_call` at file offset `0xB6CC` (46796) -- the
+FIRST executable op after ALL of resume.exe's definitions, i.e. this
+file's very first real statement, right before an `ON ERROR GOTO` --
+targets file offset 86343. Verified byte-for-byte this is a genuine
+`9A <off:u16> <seg:u16>` far-call encoding (`9a c7 b6 00 00`), and its
+target math (`off=0xB6C7=46791` + `start=0x9A80=39552`, `start` being
+this exact file's `find_prologue`-returned user-code base) is the
+SAME, already-proven-correct formula every OTHER far_call in this file
+uses successfully. So the target, 86343, is definitely, unambiguously
+correct -- and it lands exactly on an ordinary `CLS` statement
+(`INT EC` dispatch) in the middle of the program's main flow, with NO
+`proc_enter` (in EITHER the fused `55 8B EC` or alternate `55 89 E5`
+encoding -- checked the raw bytes directly) anywhere near it. Ruled out
+by building throwaway oracle probes and comparing op shapes: plain
+`ON ERROR GOTO` (no preceding far_call at all, target embedded directly
+in the `on_error` op's own immediate operand), `GOSUB`/`ON...GOSUB`
+(both compile to NEAR `call`/dedicated `on_gosub`, never `far_call`),
+`RESUME <line>` (compiles to `resume_pre` + a plain `jmps`, no call at
+all), and a plain no-param `CALL SUBNAME` where the callee's first
+statement is also `CLS` (compiles completely normally, with a real
+`proc_enter` immediately at the target -- ruling out "TB skips the
+prologue for param-less SUBs"). None of these reproduce a `far_call`
+landing on bare mid-flow statement code. **Whatever source construct
+this is remains unidentified** -- worth trying next: `CALL ABSOLUTE`
+(unlikely, that pops a computed address off `state.stack`, not an
+embedded immediate, so wouldn't scan as `far_call` at all, but worth
+confirming), `ON KEY/TIMER/COM/PEN/STRIG GOSUB` (event-trap
+installation, unwitnessed all session -- see the separate "Gap INT-8c"
+section below for a related, also-undiagnosed event-trap mystery this
+might connect to), and `CHAIN`. A `cfgview`/iced-x86 disassembly of the
+raw bytes around both the call site and the target confirms the
+instruction decode (nothing hidden or misaligned) but adds no semantic
+information beyond what the op-stream trace already showed.
 
 Previously, updated 2026-07-21 (earlier session): 23 of 84 wild EXEs decode-ok, up from 22.
 `90250ca` closes tamstart.exe fully via three gaps found while chasing
