@@ -635,6 +635,50 @@ target confirms the instruction decode (nothing hidden or misaligned,
 manually re-verified byte-by-byte against the op stream) but adds no
 semantic information beyond what the op-stream trace already showed.
 
+**`$SEGMENT` is real, oracle-verified, and produces a matching FAILURE
+MODE -- but is NOT resume.exe's mechanism (ruled out by direct check).**
+Prompted by a user hint, tried the TB metacommand `$SEGMENT` directly:
+it compiles cleanly (confirmed distinct output vs. a no-`$SEGMENT`
+baseline) and, when placed between two `SUB` definitions, produces
+EXACTLY resume.exe's failure shape: a `far_call` whose target
+`_resolve_calls` can't find in `proc_names`, raising the same kind of
+`KeyError`. Reverse-engineered via two probes (`probe_segmid.bas`,
+`probe_seg2.bas`/`probe_seg3.bas`, not promoted to the corpus -- kept
+in the session scratchpad): `$SEGMENT` emits a far JMP (`0xEA off:u16
+seg:u16`) as a boundary marker, ALWAYS with `off=0` and a NON-ZERO
+`seg` (3 for the first `$SEGMENT`, 4 for a second, ...) -- exactly the
+"relocated code segments" case scan.py's OWN existing `jmpf` handling
+already has a comment about (`# Segment-zero calls use the user-code
+origin; relocated code segments use the preceding byte as their
+logical origin`), but `far_call`'s handling right above it in the same
+file NEVER reads the segment field at all, always computing `off +
+start` regardless. Calls into a `$SEGMENT` region carry that SAME
+non-zero `seg`, and their `off` resolves against a per-segment base
+that is NOT `start` -- empirically, the address of a short skip-jmp
+instruction that follows the EA marker after a zero-byte gap of
+VARYING size (5 bytes in one probe, 10 in another, 0 for a
+non-first/last segment in a third -- no clean formula pinned down yet;
+might correlate with the segment's own body size, might be something
+else). **Directly ruled out for resume.exe**: every one of its 14
+mystery `far_call`s carries `seg=0` (checked all, not just the first),
+and there is no non-zero-seg EA marker anywhere in its scanned op
+stream (`state.ops` has exactly one `epilogue`, at true EOF, and zero
+`jmpf`) -- resume.exe genuinely doesn't use `$SEGMENT`. A corpus-wide
+scan for the `EA 00 00 <small nonzero> 00` signature (filtering out
+huge/random `seg` values, almost certainly false-positive data bytes)
+found exactly ONE candidate, `wild/hits/sabpcv3.exe` (`seg=6` at file
+offset 41971) -- but that file currently fails EARLIER and separately
+(`displacement 0xc16 is neither scalar nor array element`, an
+unrelated layout gap), so implementing `$SEGMENT` support wouldn't
+unlock it without also closing that gap first. Given the formula isn't
+fully pinned (the gap-size inconsistency) and there's no fixture it
+would actually close yet, this was NOT implemented -- documented here
+so the reverse-engineering isn't lost. Next steps if picked up: probe
+with 3+ `$SEGMENT`s and varying body sizes per segment to solve the
+gap-size formula properly, then either fix sabpcv3.exe's earlier
+layout gap first, or wait for a wild file where `$SEGMENT` is the
+sole remaining blocker.
+
 Previously, updated 2026-07-21 (earlier session): 23 of 84 wild EXEs decode-ok, up from 22.
 `90250ca` closes tamstart.exe fully via three gaps found while chasing
 the same generic "materialization template mismatch"/KeyError signature
