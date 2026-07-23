@@ -110,7 +110,23 @@ edition/runtime tag, and evidence provenance.
   chains on: it silently reorders to e.g. `C OR (A AND B)` instead of
   `(A AND B) OR C`. Confirmed via a clean oracle probe (`valuebool.bas`,
   scratch) that decodes without crashing but fails byte-exact
-  recompilation. NOT fixed: the correct repair needs a new way to
+  recompilation. FIXED 2026-07-23: `DecodeState.reg_logical_results`
+  now retains the identities of values minted by register-register
+  logical folds, so provenance follows the expression naturally through
+  `movbxax`/`movrr` without a fragile flag lifecycle. `int_bitwise_bx`
+  reverses the next fold only when BX has that provenance AND its prior
+  operator has strictly higher precedence than the incoming operator.
+  The precedence condition is essential: `A AND (B OR C)` puts a
+  prior OR result in BX too, but it is an independently grouped
+  right-hand operand and must retain normal register orientation; equal
+  operators retain TB's byte-faithful reversed nesting. Oracle matrix:
+  the target `(A=1) AND (B=2) OR (C=3)` and grouped-left/two-group
+  siblings recompile byte-exact; existing grouped-right probes retain
+  their separate pre-existing canonicalization mismatch unchanged.
+  Full suite 2453 passed/16 skipped, Ruff clean, and wild scan unchanged
+  at 25/84 with zero new failures.
+
+  The repair required a new way to
   distinguish "bx holds an accumulated chain value" from "bx holds an
   ordinary arithmetic operand" without perturbing `int_bitwise_bx`'s
   other callers (a shared, heavily-exercised function). TWO fix attempts

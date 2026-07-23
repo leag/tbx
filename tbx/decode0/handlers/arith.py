@@ -966,8 +966,29 @@ def int_bitwise_bx(state: DecodeState, op, addr, kind) -> bool:
             # the right group (t1_nestedbool), reversing the usual arithmetic
             # register-evaluation order.
             state.ax = ir.BinOp(comb, state.bx, _rgrp(comb, state.ax))
+        elif (
+            kind in ("andaxbx", "oraxbx", "xoraxbx")
+            and isinstance(state.bx, ir.BinOp)
+            and any(state.bx is value for value in state.reg_logical_results)
+            and _PREC[state.bx.op] > _PREC[comb]
+        ):
+            # A flat logical VALUE chain materializes each new relation in AX
+            # after moving the accumulated result to BX.  That is the reverse
+            # of the ordinary "right operand first" register convention:
+            # `(A=1) AND (B=2) OR (C=3)` reaches the OR with C in AX and
+            # `A AND B` in BX.  Identity provenance distinguishes that BX
+            # value from an independently computed parenthesized group
+            # (zz_x_rrand).  The precedence check preserves a grouped
+            # right-hand chain: `A AND (B OR C)` reaches its outer AND with an
+            # OR result in BX, where the ordinary AX/BX orientation is right.
+            # Equal-precedence chains also retain evaluation order here: TB's
+            # byte-faithful canonical form for `A OR B OR C` is the reversed
+            # nested tree `C OR (A OR B)`.
+            state.ax = ir.BinOp(comb, state.bx, _rgrp(comb, state.ax))
         else:
             state.ax = ir.BinOp(comb, state.ax, _rgrp(comb, state.bx))
+        if kind in ("andaxbx", "oraxbx", "xoraxbx"):
+            state.reg_logical_results.append(state.ax)
         state.bx = None
         state.k += 1
         return True

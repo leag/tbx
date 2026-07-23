@@ -128,6 +128,7 @@ class DecodeState:
     proc_params: Any = None
     proc_int_offs: Any = None
     proc_str_offs: Any = None
+    reg_logical_results: Any = None
     fp64_bridge: Any = None
     r_arrs: Any = None
     si: Any = None
@@ -1945,6 +1946,10 @@ def decode_user_code(exe: bytes) -> list[Any]:
     state.di = None  # 3rd-level spill stash for nested integer expressions
     state.si = None  # element-index register (raw index / idx token)
     state.reg_spills = {}  # scratch-cell saves used beyond the register spill chain
+    # Expression identities produced by register-register logical folds.  The
+    # identity follows a value through movbxax/movrr without making every
+    # generic register assignment maintain a separate provenance flag.
+    state.reg_logical_results = []
     state.bchk_subs = []  # Bounds: pending non-final subscripts (F3.5)
     state.pend_bool = None  # compound-IF first term awaiting its tail
     state.pend_bool_outer = None  # enclosing accumulator awaiting a deferred

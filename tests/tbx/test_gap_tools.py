@@ -168,3 +168,64 @@ def test_non_for_memory_to_ax_integer_compare():
     assert arith.int_alu(state, op, 100, "cmpm_ax")
     assert state.pend_cmp == (lhs, rhs)
     assert state.ax is None and state.k == 1
+
+
+def test_logical_value_chain_uses_combine_provenance_for_operand_order():
+    a, b, c = ir.Var("A%"), ir.Var("B%"), ir.Var("C%")
+    accumulated = ir.BinOp("AND", a, b)
+    state = SimpleNamespace(
+        ax=c,
+        bx=accumulated,
+        direct_bool_gate=False,
+        reg_logical_results=[accumulated],
+        k=0,
+    )
+
+    assert arith.int_bitwise_bx(state, (100, "oraxbx"), 100, "oraxbx")
+    assert state.ax == ir.BinOp("OR", accumulated, c)
+    assert state.bx is None and state.k == 1
+
+
+def test_logical_value_chain_does_not_reverse_independent_group():
+    a, b, c = ir.Var("A%"), ir.Var("B%"), ir.Var("C%")
+    independent = ir.BinOp("AND", a, b)
+    state = SimpleNamespace(
+        ax=c,
+        bx=independent,
+        direct_bool_gate=False,
+        reg_logical_results=[],
+        k=0,
+    )
+
+    assert arith.int_bitwise_bx(state, (100, "andaxbx"), 100, "andaxbx")
+    assert state.ax == ir.BinOp("AND", c, ir.Group(independent))
+
+
+def test_logical_value_chain_preserves_lower_precedence_right_group():
+    a, b, c = ir.Var("A%"), ir.Var("B%"), ir.Var("C%")
+    right_group = ir.BinOp("OR", b, c)
+    state = SimpleNamespace(
+        ax=a,
+        bx=right_group,
+        direct_bool_gate=False,
+        reg_logical_results=[right_group],
+        k=0,
+    )
+
+    assert arith.int_bitwise_bx(state, (100, "andaxbx"), 100, "andaxbx")
+    assert state.ax == ir.BinOp("AND", a, ir.Group(right_group))
+
+
+def test_equal_precedence_logical_value_chain_keeps_evaluation_order():
+    a, b, c = ir.Var("A%"), ir.Var("B%"), ir.Var("C%")
+    accumulated = ir.BinOp("OR", a, b)
+    state = SimpleNamespace(
+        ax=c,
+        bx=accumulated,
+        direct_bool_gate=False,
+        reg_logical_results=[accumulated],
+        k=0,
+    )
+
+    assert arith.int_bitwise_bx(state, (100, "oraxbx"), 100, "oraxbx")
+    assert state.ax == ir.BinOp("OR", c, ir.Group(accumulated))
