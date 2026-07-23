@@ -935,6 +935,19 @@ fixing the intra-inline-IF gap above will also close it.
 
 ## Part III — Investigation history / handoff log
 
+### 2026-07-23 — scalar STRING locals in block DEF FN
+
+Closed the shared `string store to [bp+68] in DEF FN body` gap in
+`cleanup.exe` and `reformat.exe`. `spush_bp` and `strassign_bp` were
+already calibrated for STRING locals in SUB frames and for DEF FN
+parameters/results, but a nonzero DEF FN offset was always classified
+as a parameter or rejected. They now consult the open frame's declared
+LOCAL slots first and apply the same four-byte first-touch STRING
+retyping used by SUBs. The extended TB 1.0/1.1
+`t1_fnlocalarrstr` fixture assigns and reads a scalar STRING local in a
+mixed block DEF FN and round-trips byte-for-byte. Both wild programs
+advance to a later shared `far_ref_bp` pattern.
+
 ### 2026-07-23 — mixed-storage DEF FN FOR/NEXT
 
 Closed the `testw_bp` gap exposed in `cleanup.exe` and `reformat.exe`.

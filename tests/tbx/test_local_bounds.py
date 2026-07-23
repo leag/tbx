@@ -24,9 +24,9 @@ def test_scan_local_bounds_vectors():
 @pytest.mark.parametrize(
     ("stem", "next_gap"),
     [
-        ("cleanup.exe", "string store to \\[bp\\+68\\] in DEF FN body at 0xb348"),
+        ("cleanup.exe", "unhandled op far_ref_bp at 0xb3c7"),
         ("crossref.exe", "unhandled INT EC sub 38 at 0x11a63"),
-        ("reformat.exe", "string store to \\[bp\\+68\\] in DEF FN body at 0xb341"),
+        ("reformat.exe", "unhandled op far_ref_bp at 0xb3c0"),
     ],
 )
 def test_wild_local_bounds_remain_closed(stem, next_gap):

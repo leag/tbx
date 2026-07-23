@@ -248,9 +248,10 @@ class DecodeState:
         access retypes the first two-word pair and removes its phantom high
         word, mirroring fp_bp's first-touch SINGLE refinement.
         """
-        if self.proc_frame is None:
-            raise ValueError(f"string [bp+{bp_off}] outside an open SUB frame")
-        locs = self.proc_frame["locals"]
+        frame = self.proc_frame if self.proc_frame is not None else self.fn_frame
+        if frame is None:
+            raise ValueError(f"string [bp+{bp_off}] outside an open local frame")
+        locs = frame["locals"]
         if locs is None or bp_off not in locs:
             raise ValueError(f"string [bp+{bp_off}] outside the open LOCAL frame")
         name = locs[bp_off]
@@ -3481,7 +3482,16 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 state.k += 2
                 continue
             if nxt == ("spush_bp",):  # push string param [bp+si]: DEF FN body
-                if state.proc_frame is not None:
+                frame = (
+                    state.proc_frame
+                    if state.proc_frame is not None
+                    else state.fn_frame
+                )
+                if (
+                    frame is not None
+                    and frame["locals"] is not None
+                    and d in frame["locals"]
+                ):
                     state.sstack.append(state.loc_local_str(d))
                 elif state.fn_frame is None:
                     raise ValueError(
@@ -3494,7 +3504,16 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 state.k += 2
                 continue
             if nxt == ("strassign_bp",):  # pop-store string to [bp+si]
-                if state.proc_frame is not None:
+                frame = (
+                    state.proc_frame
+                    if state.proc_frame is not None
+                    else state.fn_frame
+                )
+                if (
+                    frame is not None
+                    and frame["locals"] is not None
+                    and d in frame["locals"]
+                ):
                     ref = state.loc_local_str(d)
                     if state.pend_input is not None:
                         state._input_target(ref, is_str=True)

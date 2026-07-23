@@ -30,13 +30,22 @@ def test_string_local_ir_and_emission(stem):
     )
 
 
+@pytest.mark.parametrize("stem", ["t1_fnlocalarrstr", "v10_t1_fnlocalarrstr"])
+def test_string_local_in_block_def_fn(stem):
+    program = decode0.decode_user_code((_CORPUS / f"{stem}.exe").read_bytes())
+    fn = program[0]
+    assert isinstance(fn, ir.DefFn)
+    assert fn.body[0] == ir.Local(("V0$()", "B", "C$"))
+    assert ir.Assign(ir.Var("C$"), ir.Call("UCASE$", (ir.Var("C$"),))) in fn.body
+
+
 @pytest.mark.parametrize(
     ("stem", "next_gap"),
     [
         ("bmaster.exe", "materialization template mismatch at 0x8f0e"),
         ("ifi.exe", "materialization template mismatch at 0x8f0e"),
-        ("cleanup.exe", "string store to \\[bp\\+68\\] in DEF FN body at 0xb348"),
-        ("reformat.exe", "string store to \\[bp\\+68\\] in DEF FN body at 0xb341"),
+        ("cleanup.exe", "unhandled op far_ref_bp at 0xb3c7"),
+        ("reformat.exe", "unhandled op far_ref_bp at 0xb3c0"),
     ],
 )
 def test_string_local_witnesses_advance(stem, next_gap):

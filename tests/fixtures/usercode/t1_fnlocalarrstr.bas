@@ -1,11 +1,13 @@
 10 DEF FNFN1(A)
-  LOCAL V0$(), B
+  LOCAL V0$(), B, C$
   DIM V0$(2)
   V0$(1) = "X"
   B = 1
-  FOR C = 0 TO 2 STEP B
-  V0$(C) = "Y"
-  NEXT C
+  C$ = "Z"
+  C$ = UCASE$(C$)
+  FOR D = 0 TO 2 STEP B
+  V0$(D) = "Y"
+  NEXT D
   FNFN1 = B + A
 END DEF
 20 PRINT FNFN1(3)

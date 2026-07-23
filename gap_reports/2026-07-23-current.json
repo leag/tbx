@@ -198,8 +198,8 @@
     {
       "name": "wild/hits/cleanup.exe",
       "dialect": "1.1",
-      "message": "string store to [bp+68] in DEF FN body at 0xb348",
-      "signature": "string store to [bp+68] in DEF FN body"
+      "message": "unhandled op far_ref_bp at 0xb3c7",
+      "signature": "unhandled op far_ref_bp"
     },
     {
       "name": "wild/hits/crossref.exe",
@@ -408,8 +408,8 @@
     {
       "name": "wild/hits/reformat.exe",
       "dialect": "1.1",
-      "message": "string store to [bp+68] in DEF FN body at 0xb341",
-      "signature": "string store to [bp+68] in DEF FN body"
+      "message": "unhandled op far_ref_bp at 0xb3c0",
+      "signature": "unhandled op far_ref_bp"
     },
     {
       "name": "wild/hits/refund.exe",
@@ -573,19 +573,19 @@
       ]
     },
     {
-      "signature": "string store to [bp+68] in DEF FN body",
-      "count": 2,
-      "files": [
-        "wild/hits/cleanup.exe",
-        "wild/hits/reformat.exe"
-      ]
-    },
-    {
       "signature": "unhandled byte c4",
       "count": 2,
       "files": [
         "wild/hits/CVT2TB.EXE",
         "wild/hits/pw.exe"
+      ]
+    },
+    {
+      "signature": "unhandled op far_ref_bp",
+      "count": 2,
+      "files": [
+        "wild/hits/cleanup.exe",
+        "wild/hits/reformat.exe"
       ]
     },
     {

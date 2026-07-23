@@ -3690,7 +3690,7 @@ Print(items=(FnCall(name='FNFN1', args=(Lit(value=3),)),), newline=True, file=No
 End()
 
 ## t1_fnlocalarrstr
-DefFn(name='FNFN1', params=('A',), body=(Local(names=('V0$()', 'B')), Dim(name='V0$', bounds=(Lit(value=2),), also=()), Assign(target=ArrayRef(name='V0$', indices=(Lit(value=1),)), value=StrLit(value='X')), Assign(target=Var(name='B'), value=Lit(value=1)), For(var=Var(name='C'), init=Lit(value=0), limit=Lit(value=2), step=Var(name='B')), Assign(target=ArrayRef(name='V0$', indices=(Var(name='C'),)), value=StrLit(value='Y')), NextStmt(var=Var(name='C')), FnResult(value=BinOp(op='+', lhs=Var(name='B'), rhs=Var(name='A')))), is_block=True)
+DefFn(name='FNFN1', params=('A',), body=(Local(names=('V0$()', 'B', 'C$')), Dim(name='V0$', bounds=(Lit(value=2),), also=()), Assign(target=ArrayRef(name='V0$', indices=(Lit(value=1),)), value=StrLit(value='X')), Assign(target=Var(name='B'), value=Lit(value=1)), Assign(target=Var(name='C$'), value=StrLit(value='Z')), Assign(target=Var(name='C$'), value=Call(name='UCASE$', args=(Var(name='C$'),))), For(var=Var(name='D'), init=Lit(value=0), limit=Lit(value=2), step=Var(name='B')), Assign(target=ArrayRef(name='V0$', indices=(Var(name='D'),)), value=StrLit(value='Y')), NextStmt(var=Var(name='D')), FnResult(value=BinOp(op='+', lhs=Var(name='B'), rhs=Var(name='A')))), is_block=True)
 Print(items=(FnCall(name='FNFN1', args=(Lit(value=3),)),), newline=True, file=None, commas=None)
 End()
 
@@ -9630,7 +9630,7 @@ Print(items=(FnCall(name='FNFN1', args=(Lit(value=3),)),), newline=True, file=No
 End()
 
 ## v10_t1_fnlocalarrstr
-DefFn(name='FNFN1', params=('A',), body=(Local(names=('V0$()', 'B')), Dim(name='V0$', bounds=(Lit(value=2),), also=()), Assign(target=ArrayRef(name='V0$', indices=(Lit(value=1),)), value=StrLit(value='X')), Assign(target=Var(name='B'), value=Lit(value=1)), For(var=Var(name='C'), init=Lit(value=0), limit=Lit(value=2), step=Var(name='B')), Assign(target=ArrayRef(name='V0$', indices=(Var(name='C'),)), value=StrLit(value='Y')), NextStmt(var=Var(name='C')), FnResult(value=BinOp(op='+', lhs=Var(name='B'), rhs=Var(name='A')))), is_block=True)
+DefFn(name='FNFN1', params=('A',), body=(Local(names=('V0$()', 'B', 'C$')), Dim(name='V0$', bounds=(Lit(value=2),), also=()), Assign(target=ArrayRef(name='V0$', indices=(Lit(value=1),)), value=StrLit(value='X')), Assign(target=Var(name='B'), value=Lit(value=1)), Assign(target=Var(name='C$'), value=StrLit(value='Z')), Assign(target=Var(name='C$'), value=Call(name='UCASE$', args=(Var(name='C$'),))), For(var=Var(name='D'), init=Lit(value=0), limit=Lit(value=2), step=Var(name='B')), Assign(target=ArrayRef(name='V0$', indices=(Var(name='D'),)), value=StrLit(value='Y')), NextStmt(var=Var(name='D')), FnResult(value=BinOp(op='+', lhs=Var(name='B'), rhs=Var(name='A')))), is_block=True)
 Print(items=(FnCall(name='FNFN1', args=(Lit(value=3),)),), newline=True, file=None, commas=None)
 End()
 

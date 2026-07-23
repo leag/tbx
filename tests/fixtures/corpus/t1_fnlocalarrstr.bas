@@ -1,9 +1,11 @@
 10 DEF FNX(A)
-20 LOCAL S$(), B
+20 LOCAL S$(), B, T$
 30 DIM S$(2)
 40 S$(1) = "X"
 50 B = 1
-52 FOR G = 0 TO 2 STEP B
+51 T$ = "Z"
+52 T$ = UCASE$(T$)
+53 FOR G = 0 TO 2 STEP B
 54 S$(G) = "Y"
 56 NEXT G
 60 FNX = B + A
