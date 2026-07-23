@@ -87,10 +87,22 @@ Two-part fix, both in the existing `("addr", n)`-placeholder machinery
 Fixture `t1_fargosub`, byte-exact both dialects. Advanced wild
 resume.exe completely past this — its `_scan` and this fix together now
 decode 100% of the file's control flow, up to a NEW, DIFFERENT error:
-`jump target 0xa3dd is not a statement start`. That's the SAME `map_body`
-line-numbering limitation diagnosed (not fixed, on purpose — see below)
-for `state.exe`/`state87.exe` earlier this session, now confirmed to be a
-second, independent wild file hitting it. No other wild file is currently
+`jump target 0xa3dd is not a statement start`.
+
+**CORRECTION (same day, follow-up): this is NOT the same bug as
+state.exe/state87.exe**, despite sharing the same error message — traced
+separately and they're unrelated. Target `0xa3dd` (41949) is the address
+of a bare `jmp` instruction: specifically the inter-definition
+"skip past the next SUB/DEF FN body" glue TB emits right after a
+`proc_ret` (`(41945,'proc_ret',46), (41949,'jmp',43163),
+(41952,'proc_enter')` in the raw op stream) — not a user statement at
+all, and `stmt_addr` has zero entries for this address (vs.
+state.exe's case, which had a real entry whose object was later lost —
+see the correction on that entry, and `docs/intra-inline-if-goto-spec.md`
+for the full state.exe writeup and why the two are different). Something
+is targeting pure compiler glue as if it were an addressable GOSUB line;
+this needs its own from-scratch trace, not assumed to be fixed by
+whatever closes the intra-inline-IF gap. No other wild file is currently
 affected by the `far_call`/GOSUB fix itself (resume.exe is the only
 corpus file combining event trapping with a `far_call`-compiled GOSUB so
 far), but it is a correctness fix independent of that, not merely a
@@ -331,40 +343,51 @@ combination with correct syntax, and try ON-ERROR-implicit-cleanup paths
 more thoroughly (a GOSUB'd error handler that erases/touches two arrays
 in sequence, rather than a plain top-level `ON ERROR GOTO`).
 
-**DIAGNOSED, NOT ATTEMPTED (same day, later tick): `jump target ... is not
-a statement start` (state.exe/state87.exe, identical target `0x1300d`;
-secure.exe's OWN occurrence at a different target is a separate,
-untraced case — don't assume same root cause).** This is NOT a
-byte-vocabulary gap: `decode0._scan` completes cleanly; the failure is in
-`lift._resolve_targets`, well after scanning. Traced precisely via a
-`core._resolve_targets` monkeypatch (import the function BY NAME into
-`core.py`, so patching `lift._resolve_targets` directly has no effect —
-patch `core._resolve_targets` instead): the unresolved statement is a
-plain `IfGoto(cond=..., target=('addr', 77837))`, and address `77837`
-(=`0x1300d`) genuinely IS a real op boundary (`movsi,1630` starting a new
-statement) AND is present in `stmt_addr` (the id(stmt)->addr map used to
-resolve targets INSIDE a SUB/DEF FN body via `ir.BodyLine`) — so the
-target statement lives inside a SUB or DEF FN, and the jump reaching it
-is presumably from within the SAME procedure (TB forbids jumping into a
-procedure from outside, per the handbook's DEF FN section). The failure
-is that `_resolve_targets`'s `map_body` never adds this address to
-`index` despite having it in `stmt_addr` — `map_body`'s own docstring
-already documents the exact limitation: flat body counting breaks past
-any multi-line statement, and its ONE recursion exception (a nested
-single-arm, no-else `IfBlock`) was witnessed going only ONE level deep
-(gap 51, inv87.exe). state.exe's SUB apparently nests deeper than that,
-or wraps the numbered statement in a construct (a loop, a multi-arm
-`IfBlock`, `SELECT CASE`, ...) `map_body` doesn't walk into at all.
+**DIAGNOSED, NOT ATTEMPTED (same day, later tick; CORRECTED same day,
+still later — the mechanism below was wrong, see the follow-up note):
+`jump target ... is not a statement start` (state.exe/state87.exe,
+identical target `0x1300d`; secure.exe's OWN occurrence at a different
+target is a separate, untraced case — don't assume same root cause).**
+This is NOT a byte-vocabulary gap: `decode0._scan` completes cleanly; the
+failure is in `lift._resolve_targets`, well after scanning. Traced
+precisely via a `core._resolve_targets` monkeypatch (import the function
+BY NAME into `core.py`, so patching `lift._resolve_targets` directly has
+no effect — patch `core._resolve_targets` instead): the unresolved
+statement is a plain `IfGoto(cond=..., target=('addr', 77837))`, and
+address `77837` (=`0x1300d`) genuinely IS a real op boundary
+(`movsi,1630` starting a new statement).
+
+**CORRECTION (same day, follow-up): the "lives inside a SUB or DEF FN"
+framing above is WRONG.** `state.exe` has **zero** `proc_enter`/
+`proc_ret`/`fn_ret` ops anywhere in its file — there is no SUB or DEF FN
+at all. The real mechanism (confirmed by directly searching the live
+`state.stmts` tree, within the same process, for the exact `id()`
+`stmt_addr` recorded for this address — it is nowhere in the tree, not
+even inside an `IfBlock`/`IfInline`/`SelectCase`) matches an EARLIER,
+MORE PRECISE diagnosis already on record further down in this file under
+"Intra-inline-IF-body GOTO targets (2 files: state.exe, state87.exe)": a
+giant `ir.IfInline` (~40 statements, a flattened GOTO-based chain of
+`IF cond THEN <lineY>` with no block `IF`/`END IF` in the source) whose
+own body contains a jump landing on ANOTHER statement inside that SAME
+body. The "second leg" fold in `lift._fold_if` that's supposed to catch
+exactly this (converting such an `IfInline` into an addressable
+`ir.IfBlock` via `_body_has_target`) does not fire for this specific
+shape, for a reason not yet pinned down. A full spec for tackling this
+(confirmed facts, the exact machinery involved, an investigation plan,
+and an explicit note that `resume.exe`'s own DIFFERENT new failure below
+is NOT the same bug despite an earlier commit message here claiming
+otherwise) is at `docs/intra-inline-if-goto-spec.md` — start there, not
+from this entry, before touching `_fold_if`/`_resolve_targets`.
+
 **Deliberately not attempted this session**: unlike every closure above
 (purely additive new vocabulary ops, zero risk to already-passing
-fixtures), a change to `map_body`'s line-numbering recursion is a
-control-flow change that could silently miscompile OTHER SUB/DEF FN
-bodies with numbered interior lines if the physical-line count assumption
-is wrong for the new case. Needs a dedicated session: first hand-trace
-state.exe's actual SUB source shape (what wraps the CHR$(8)-comparison
-statement at 77837 — probably visible via `cfgview`/manual disassembly
-around 77837 and its containing `proc_enter`), THEN build an oracle probe
-reproducing that exact nesting shape BEFORE touching `map_body`.
+fixtures), a change to this fold/resolution machinery is a control-flow
+change that could silently miscompile OTHER already-passing fixtures
+whose shapes are adjacent to whatever the actual fix touches. Needs a
+dedicated session — see the spec doc for the concrete next steps
+(build a minimal oracle probe reproducing the exact intra-inline-body
+jump shape FIRST, trace exactly why `_body_has_target`/`_fold_if` miss
+it, THEN design the fix).
 
 Machine-readable runtime-revision classifications are persisted separately from
 generated scan checkpoints in `gap_reports/runtime-revision-assessments.json`.
@@ -1426,6 +1449,16 @@ writeup there with negative evidence already collected.
    "vhfprop status" above) — the ONLY file left blocked by the line-table
    epic; still open, unchanged.
 2. **Intra-inline-IF-body GOTO targets (2 files: state.exe, state87.exe)**
+   — a full spec for tackling this (confirmed via fresh `id()`-tracing in
+   a 2026-07-22 follow-up session, plus the exact adjacent `_fold_if`/
+   `_body_has_target` machinery and a phased investigation plan) is at
+   `docs/intra-inline-if-goto-spec.md` — start there. `secure.exe` also
+   hits the same error message at a different target, not yet confirmed
+   to be the same shape. `resume.exe` separately hits this SAME error
+   message too (after this session's `far_call`/GOSUB fix advanced it),
+   but at a target that traces to something ELSE entirely (compiler glue,
+   not an intra-inline-body jump) — do not conflate the two, see the spec
+   doc's "Explicitly out of scope" section.
    — CLOSED the mixed-AND/OR-combinator gap that used to sit here (commit
    4c0bde6, `t1_mixedbool`); both files now advance to a DIFFERENT, bigger
    gap still under the same "jump target ... is not a statement start"
