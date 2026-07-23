@@ -113,16 +113,36 @@ edition/runtime tag, and evidence provenance.
   recompilation. NOT fixed: the correct repair needs a new way to
   distinguish "bx holds an accumulated chain value" from "bx holds an
   ordinary arithmetic operand" without perturbing `int_bitwise_bx`'s
-  other callers (a shared, heavily-exercised function) -- `isinstance
-  (state.bx, ir.Group)` looked promising but the accumulated result
-  itself must NOT be Group-wrapped (no extra parens belong in the
-  rendered source for the whole chain, only per-term), so that marker
-  doesn't survive to the next fold. A dedicated state flag (mirroring
-  `direct_bool_gate`) is the likely right shape but needs its OWN
-  probe-verified lifecycle (when to set/clear) before landing --
-  flagged as the concrete next step for this file family, not attempted
-  this round given the risk of touching shared arithmetic-combine code
-  without full verification.
+  other callers (a shared, heavily-exercised function). TWO fix attempts
+  tried live and REVERTED after the full suite caught a real regression
+  each time -- documenting both so a future attempt doesn't retry them:
+  (1) `isinstance(state.bx, ir.Group)` -- fails because the accumulated
+  result must NOT itself be Group-wrapped (no extra parens belong in
+  the rendered source for the whole chain, only per-term), so the
+  marker never survives to the next fold. (2) A dedicated
+  `state.pend_valchain` flag set whenever control.py's "no dispatch
+  pair" branch fires, checked+cleared by `int_bitwise_bx` -- fixed
+  `valuebool.bas` (byte-exact confirmed) but broke `zz_x_rrand`
+  (`(A AND B) AND (C AND D)`, an EXISTING passing fixture): that shape
+  has bx populated by a completely different mechanism (each
+  parenthesized pair folds via memory-direct `andax_m`, never touching
+  bx at all, until the ONE outer `andaxbx` combines the two finished
+  results) that also happens to satisfy "bx is a logical AND/OR/XOR
+  BinOp" -- confirmed via direct trace (only ONE andaxbx call total for
+  that fixture, not two) that STRUCTURE alone (what shape bx has) can't
+  distinguish "chain accumulator" from "independently-computed group,"
+  since both look identical at the point of combining. The real
+  signal has to be PROVENANCE -- was bx's current value produced by a
+  prior `andaxbx`/`oraxbx` specifically (chain continuation) or by
+  something else (an independent parenthesized group) -- which needs
+  tracking across `movbxax`'s generic handler too (mark when ax's
+  source was itself a combine, propagate that mark through the
+  register move, and reliably clear it for every OTHER path that also
+  sets ax) -- a cross-cutting, multi-touchpoint state machine, not a
+  single local check, and too risky to land without extensive
+  additional verification this round. Flagged as the concrete next
+  step for this file family; both attempts fully reverted, working
+  tree clean.
 - Wild tally: still **25/84** (no new full closure this round either --
   `mcmurphy.exe` got past one whole gap family into a fresh one). The
   fix itself is real, oracle-verified, and lands regardless.
