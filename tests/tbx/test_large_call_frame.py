@@ -84,8 +84,8 @@ def test_scan_local_array_index_dx_spill():
 @pytest.mark.parametrize(
     ("stem", "next_gap"),
     [
-        ("cleanup.exe", "DGROUP layout not solvable"),
-        ("reformat.exe", "DGROUP layout not solvable"),
+        ("cleanup.exe", "string BP argument store with empty stack"),
+        ("reformat.exe", "string BP argument store with empty stack"),
     ],
 )
 def test_large_local_family_advances_wild_program(stem, next_gap):

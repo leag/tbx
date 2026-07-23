@@ -174,8 +174,8 @@
     {
       "name": "wild/hits/bmaster.exe",
       "dialect": "1.0",
-      "message": "DGROUP layout not solvable (runtime slot grid anchor)",
-      "signature": "DGROUP layout not solvable (runtime slot grid anchor)"
+      "message": "string BP push outside DEF FN at 0x8a88",
+      "signature": "string BP push outside DEF FN"
     },
     {
       "name": "wild/hits/cal.exe",
@@ -198,8 +198,8 @@
     {
       "name": "wild/hits/cleanup.exe",
       "dialect": "1.1",
-      "message": "DGROUP layout not solvable (runtime slot grid anchor)",
-      "signature": "DGROUP layout not solvable (runtime slot grid anchor)"
+      "message": "string BP argument store with empty stack at 0xa51a",
+      "signature": "string BP argument store with empty stack"
     },
     {
       "name": "wild/hits/crossref.exe",
@@ -270,8 +270,8 @@
     {
       "name": "wild/hits/ifi.exe",
       "dialect": "1.0",
-      "message": "DGROUP layout not solvable (runtime slot grid anchor)",
-      "signature": "DGROUP layout not solvable (runtime slot grid anchor)"
+      "message": "string BP push outside DEF FN at 0x8a88",
+      "signature": "string BP push outside DEF FN"
     },
     {
       "name": "wild/hits/kinder.exe",
@@ -318,8 +318,8 @@
     {
       "name": "wild/hits/mf.exe",
       "dialect": "1.1",
-      "message": "DGROUP layout not solvable (runtime slot grid anchor)",
-      "signature": "DGROUP layout not solvable (runtime slot grid anchor)"
+      "message": "compound-IF tail mismatch at 0xef7f",
+      "signature": "compound-IF tail mismatch"
     },
     {
       "name": "wild/hits/morcalc.exe",
@@ -408,8 +408,8 @@
     {
       "name": "wild/hits/reformat.exe",
       "dialect": "1.1",
-      "message": "DGROUP layout not solvable (runtime slot grid anchor)",
-      "signature": "DGROUP layout not solvable (runtime slot grid anchor)"
+      "message": "string BP argument store with empty stack at 0xa513",
+      "signature": "string BP argument store with empty stack"
     },
     {
       "name": "wild/hits/refund.exe",
@@ -504,17 +504,6 @@
       ]
     },
     {
-      "signature": "DGROUP layout not solvable (runtime slot grid anchor)",
-      "count": 5,
-      "files": [
-        "wild/hits/bmaster.exe",
-        "wild/hits/cleanup.exe",
-        "wild/hits/ifi.exe",
-        "wild/hits/mf.exe",
-        "wild/hits/reformat.exe"
-      ]
-    },
-    {
       "signature": "DGROUP layout not solvable from the calibrated rules",
       "count": 4,
       "files": [
@@ -582,6 +571,22 @@
       ]
     },
     {
+      "signature": "string BP argument store with empty stack",
+      "count": 2,
+      "files": [
+        "wild/hits/cleanup.exe",
+        "wild/hits/reformat.exe"
+      ]
+    },
+    {
+      "signature": "string BP push outside DEF FN",
+      "count": 2,
+      "files": [
+        "wild/hits/bmaster.exe",
+        "wild/hits/ifi.exe"
+      ]
+    },
+    {
       "signature": "unhandled byte c4",
       "count": 2,
       "files": [
@@ -622,6 +627,13 @@
       "count": 1,
       "files": [
         "wild/hits/nvginst.exe"
+      ]
+    },
+    {
+      "signature": "compound-IF tail mismatch",
+      "count": 1,
+      "files": [
+        "wild/hits/mf.exe"
       ]
     },
     {

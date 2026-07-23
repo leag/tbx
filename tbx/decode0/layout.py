@@ -231,15 +231,30 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
     def finish(ds, n_static, statics, sb, run, strs, pool_base, delta):
         # Augment `run` with any evidenced scalar disps in [sb, pool_base-4) that
         # walk_run missed due to a gap (e.g. phantom step/limit slots before I% in
-        # an integer FOR loop, or a double scalar adjacent to I%): int_disps0 ->
-        # width 2, fp64_disps -> width 8. They have no other explanation.
+        # an integer FOR loop, or typed scalars after a wholly unreferenced slot).
+        # The candidate pool boundary separates scalar evidence below it from
+        # numeric/string literals at or above it.
         run = dict(run)
+        strs = set(strs)
         for d in int_disps0:
             if d >= sb and d < pool_base - 4 and d not in run:
                 run[d] = 2
         for d in fp64_disps:
             if d >= sb and d < pool_base - 4 and d not in run:
                 run[d] = 8
+        for d in fp_disps:
+            if d >= sb and d < pool_base - 4 and d not in run:
+                # Same candidate-boundary rule for a SINGLE scalar reached
+                # after a hole; values at/above the boundary remain pool
+                # literals.
+                run[d] = 4
+        for d in movsi_disps:
+            if d >= sb and d < pool_base - 4 and d not in run:
+                # An evidenced string scalar can sit beyond an unreferenced
+                # hole that stopped walk_run.  The candidate pool boundary
+                # distinguishes it from a pooled literal descriptor.
+                run[d] = 4
+                strs.add(d)
         # Validate every code-referenced descriptor under (pool_base, delta): pooled
         # literal descs (movsi targets that aren't slots) and prompt words map to
         # file P + 4 + (d - pool_base) and must read as <len|8000><ptr> records --
@@ -334,7 +349,13 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
             # pool_base >= align16(walk end)+4; trailing unreferenced scalars can
             # push it higher -- the descriptor evidence pins it exactly.
             pb0 = ((dend + 15) & ~15) + 4
-            for pool_base in range(pb0, pb0 + 0x110, 16):
+            # The pool begins no later than the first static array's element
+            # data.  Use that structural bound instead of a fixed-size tail:
+            # large programs can have hundreds of string scalar descriptors
+            # after the last evidence walk reached directly (wild
+            # cleanup.exe/reformat.exe).
+            pool_stop = min((a["base"] for a in statics), default=pb0 + 0x110) + 4
+            for pool_base in range(pb0, pool_stop, 16):
                 delta = ds + pool_base - 4 - P
                 if delta < 0:
                     continue

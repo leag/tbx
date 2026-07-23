@@ -24,9 +24,9 @@ def test_scan_local_bounds_vectors():
 @pytest.mark.parametrize(
     ("stem", "next_gap"),
     [
-        ("cleanup.exe", "DGROUP layout not solvable"),
+        ("cleanup.exe", "string BP argument store with empty stack"),
         ("crossref.exe", "unhandled INT EC sub 38 at 0x11a63"),
-        ("reformat.exe", "DGROUP layout not solvable"),
+        ("reformat.exe", "string BP argument store with empty stack"),
     ],
 )
 def test_wild_local_bounds_remain_closed(stem, next_gap):

@@ -20,9 +20,9 @@ def test_scan_testw_bp_is_exact():
 @pytest.mark.parametrize(
     ("stem", "next_gap"),
     [
-        ("cleanup.exe", "DGROUP layout not solvable"),
+        ("cleanup.exe", "string BP argument store with empty stack"),
         ("crossref.exe", "unhandled INT EC sub 38 at 0x11a63"),
-        ("reformat.exe", "DGROUP layout not solvable"),
+        ("reformat.exe", "string BP argument store with empty stack"),
     ],
 )
 def test_fp_local_for_advances_wild_program(stem, next_gap):

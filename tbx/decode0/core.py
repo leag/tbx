@@ -3424,7 +3424,10 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 state.k += 2
                 continue
             if nxt == ("spush_bp",):  # push string param [bp+si]: DEF FN body
-                assert state.fn_frame is not None  # (witnessed t1_fnstr)
+                if state.fn_frame is None:
+                    raise ValueError(
+                        f"string BP push outside DEF FN at {addr:#x}"
+                    )  # SUB-param shape remains fail-loud (wild bmaster/ifi)
                 state.fn_frame["param_offs"].add(d)
                 state.fn_frame["str_offs"].add(d)
                 state.sstack.append(ir.Var(f"P{d:02X}$"))
@@ -3443,6 +3446,10 @@ def decode_user_code(exe: bytes) -> list[Any]:
                     else:  # single-line body expr
                         state.fn_frame["result"] = state.sstack.pop()
                 else:  # caller: stage a string FN-call arg
+                    if not state.sstack:
+                        raise ValueError(
+                            f"string BP argument store with empty stack at {addr:#x}"
+                        )
                     state.fn_args[d] = state.sstack.pop()
                 state.k += 2
                 continue

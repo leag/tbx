@@ -582,8 +582,14 @@ fixture-backed closures.
   canonicalize accordingly. `pz.exe` now decodes fully.
 - [ ] displacement neither scalar nor array element — revisit DGROUP symbol
   classification with local references.
-- [ ] FP/DGROUP layout not solvable — isolate whether metadata calibration or a
-  preceding scan error caused the bad layout.
+- [~] FP/DGROUP layout not solvable — the runtime-slot-grid-anchor subfamily is
+  closed. The scalar walk can stop at an unreferenced hole; candidate pool
+  boundaries now recover INTEGER, SINGLE, DOUBLE, and STRING evidence beyond
+  that hole, and the first static-array data base supplies a structural search
+  bound instead of the old fixed `+0x110` cap. Wild bmaster/ifi/mf/cleanup/
+  reformat all advance to distinct downstream decoder gaps with zero
+  regressions, removing this signature. Other non-grid layout signatures
+  remain open and must still be isolated from preceding scan errors.
 - [ ] codeless `DO...LOOP` condition — keep fail-loud until a non-DO source shape
   or stronger orphan-line evidence is found.
 
