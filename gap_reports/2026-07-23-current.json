@@ -481,8 +481,8 @@
     {
       "name": "wild/hits/zip.exe",
       "dialect": "1.1",
-      "message": "unhandled INT d4 at 0x8b70",
-      "signature": "unhandled INT d4"
+      "message": "unhandled byte b0 at 0x8dcc",
+      "signature": "unhandled byte b0"
     },
     {
       "name": "wild/hits/ziptest.exe",
@@ -710,13 +710,6 @@
       ]
     },
     {
-      "signature": "unhandled INT d4",
-      "count": 1,
-      "files": [
-        "wild/hits/zip.exe"
-      ]
-    },
-    {
       "signature": "unhandled byte 00",
       "count": 1,
       "files": [
@@ -749,6 +742,13 @@
       "count": 1,
       "files": [
         "wild/hits/nvg.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte b0",
+      "count": 1,
+      "files": [
+        "wild/hits/zip.exe"
       ]
     },
     {

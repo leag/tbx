@@ -3453,6 +3453,16 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 state.cur = None
                 state.k += 2
                 continue
+            if nxt == ("arg_push_array",):
+                a = state.slot_info.get(d)
+                if a is None or a.get("rank", 0) < 1:
+                    raise ValueError(
+                        f"whole-array CALL arg from non-array slot {d:#x} "
+                        f"at {addr:#x}"
+                    )
+                state.pend_args.append(ir.ArrayRef(a["name"], ()))
+                state.k += 2
+                continue
             if (
                 state.k + 3 < len(state.ops)
                 and state.ops[state.k + 1][1] == "movdx"

@@ -1390,6 +1390,11 @@ class _Gen:
         tmps, args = [], []
         for p, a in zip(params, s.args):
             ty = _suffix_ty(p)
+            if isinstance(a, ir.ArrayRef) and not a.indices:
+                # D4 passes a complete TB array descriptor, not an element
+                # address.  c0 cannot lower this until decoded SUB signatures
+                # retain array-parameter rank/type metadata.
+                raise _Unsupported("whole-array SUB argument")
             # a plain variable (or array element) of matching type passes by
             # reference, TB semantics (zz_sub1); anything else by value copy
             if isinstance(a, ir.Var) and _suffix_ty(a.name) == ty:

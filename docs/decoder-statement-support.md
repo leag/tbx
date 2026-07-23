@@ -81,7 +81,7 @@ known source subset does not provide a direct source-level witness for them.
 | `Read` | `READ target[, ...]` | Supported; executable/source witness may be indirect |
 | `Restore` | `RESTORE [line]` | Supported; executable/source witness may be indirect |
 | `SubDef` | `SUB name[(params)] ... END SUB` | Supported; corpus observed |
-| `CallStmt` | `CALL name[(args)]` | Supported; corpus observed |
+| `CallStmt` | `CALL name[(args)]` | Supported, including whole-array `A()` arguments (D4); c0 remains fail-loud for whole-array parameters |
 | `DefFn` | `DEF FN... = expression` or block form | Supported; corpus observed in function fixtures |
 | `FnResult` | assignment to a multi-line `DEF FN` result | Internal procedure-body node; emitted as source |
 | `Inline` | `$INLINE byte, ...` inside a `SUB` | Supported; corpus observed |

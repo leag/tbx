@@ -474,7 +474,12 @@ fixture-backed closures.
   cell `0x60` rather than passed in ax at the call site, and no wild file
   currently blocks on it — leave for a session that wants to chase the
   `0x60` cell convention.
-- [ ] singleton dispatches: `INT d4`.
+- [x] `INT d4` — whole-array descriptor argument to CALL. The array slot
+  address is staged in SI and D4 pushes/copies its descriptor before the far
+  call (`CALL F(A())`; oracle probe arrayparam6 and independent wild zip.exe).
+  It is represented as `ArrayRef(name, ())`; c0 explicitly fails loud until
+  SUB signatures retain array-parameter metadata. Both witnesses advance to
+  distinct subsequent instruction gaps.
 
 #### Wave 2 — repeated instruction and x87 templates
 

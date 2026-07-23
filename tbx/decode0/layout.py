@@ -132,6 +132,14 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
         and ops[i + 2][1] == "movesdx"
         and ops[i + 3][1] == "palette_using"
     }
+    # A whole-array CALL argument passes the array's slot-record address
+    # through SI to runtime vector D4.  The slot is not a string descriptor
+    # (probe arrayparam6; wild zip.exe).
+    whole_array_disps = {
+        ops[i][2]
+        for i in range(len(ops) - 1)
+        if ops[i][1] == "movsi" and ops[i + 1][1] == "arg_push_array"
+    }
     # movsi targets are string descriptors: scalar slots (string vars) or
     # pooled literals -- except constant far-element offsets.
     movsi_disps = (
@@ -150,6 +158,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
         - blit_disps
         - varptr_disps
         - palette_disps
+        - whole_array_disps
     )
     prompt_disps = {o[2] for o in ops if o[1] in ("input", "line_input")}
     addsi_bases = {o[2] for o in ops if o[1] == "addsi"}

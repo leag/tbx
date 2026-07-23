@@ -1080,6 +1080,10 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
         ops.append((p, "str_temp_free"))
         p += 2
         return p
+    if vec == 0xD4:  # push a whole-array descriptor as a CALL argument
+        ops.append((p, "arg_push_array"))
+        p += 2
+        return p
     if vec == 0xA4:  # LSET target$ = source$
         ops.append((p, "lset"))
         p += 2
