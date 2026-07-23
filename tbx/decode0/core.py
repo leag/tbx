@@ -44,6 +44,13 @@ from tbx.decode0.lift import (
 )
 from tbx.decode0.rename import _slot, _str_lit, canonical_rename
 
+# Word count `local_init` reserves for a LOCAL DYNAMIC array's descriptor
+# template -- a fixed size regardless of rank or element type (witnessed
+# identical for rank-1 and rank-2 probes, q_localarr/q_locarr3); only 5 of
+# the 30 words are ever written (handle, type/rank, esize, one bound pair),
+# the rest is dead padding sized for the worst case the runtime supports.
+_LOCAL_ARR_WORDS = 30
+
 
 @dataclass
 class DecodeState:
@@ -86,9 +93,11 @@ class DecodeState:
     ifs: Any = None
     k: Any = None
     lay: Any = None
+    local_dim_frame: dict[str, Any] | None = None
     main_start: Any = None
     metas: Any = None
     nfn: Any = None
+    n_local_arrs: int = 0
     nsub: Any = None
     ops: Any = None
     option_base: Any = None
@@ -1892,6 +1901,8 @@ def decode_user_code(exe: bytes) -> list[Any]:
     state.pend_input = None  # (prompt Expr|None, flags) awaiting its read call
     state.pend_fnum = None  # file number from the [0060] cell
     state.dim_frame = None  # open runtime-DIM bracket
+    state.local_dim_frame = None  # open LOCAL-frame (heap-allocated) DIM bracket
+    state.n_local_arrs = 0  # V# numbering tail for LOCAL DYNAMIC arrays
     state.prev_dim_end = None  # last allocate's addr: comma-chain test
     state.r_arrs = {}  # block disp -> runtime array info
     state.fp64_bridge = {}  # transient sub-VAR_BASE fstp64/fld64 scratch cache
@@ -2240,6 +2251,132 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 # fn_ret closing has no analogous pop-count computation
             state.cur = None
             state.k += 1
+            continue
+        if (
+            kind == "mov_bp_imm"
+            and state.local_dim_frame is None
+            and state.k + 3 < len(state.ops)
+            and state.ops[state.k + 1][1] == "mov_bp_imm"
+            and state.ops[state.k + 2][1] == "far_ref_bp"
+            and state.ops[state.k + 3][1] == "dim_begin"
+            and state.ops[state.k + 2][2] == op[2] - 2
+            and state.ops[state.k + 1][2] == op[2] + 4
+        ):  # LOCAL DYNAMIC array (`LOCAL A()` + runtime `DIM A(n)`): opens
+            # with a duplicate type/rank + element-size write (re-written
+            # again once dim_begin/dim_end brackets the bound cells below),
+            # then the LOCAL-frame sibling of the ordinary movsi/movdx/
+            # movesdx-fronted DGROUP $DYNAMIC bracket, keyed by frame disp
+            # instead of a DGROUP block (probe q_localarr)
+            if state.proc_frame is None:  # DEF FN LOCAL arrays unwitnessed
+                raise ValueError(f"LOCAL DIM bracket outside a SUB body at {addr:#x}")
+            disp = op[2] - 2
+            state.local_dim_frame = {
+                "disp": disp,
+                "cells": {2: ir.Lit(op[3]), 6: ir.Lit(state.ops[state.k + 1][3])},
+                "start": state.cur,
+            }
+            state.cur = None
+            state.k += 4  # type write, esize write, far_ref_bp, dim_begin
+            continue
+        if (
+            kind == "mov_bp_imm"
+            and state.local_dim_frame is not None
+            and state.local_dim_frame["disp"]
+            <= op[2]
+            < state.local_dim_frame["disp"] + ARR_BLOCK
+        ):  # LOCAL DYNAMIC array descriptor field write (type/size/bounds)
+            state.local_dim_frame["cells"][op[2] - state.local_dim_frame["disp"]] = (
+                ir.Lit(op[3])
+            )
+            state.k += 1
+            continue
+        if kind == "far_ref_bp" and state.k + 1 < len(state.ops) and (
+            state.ops[state.k + 1][1] == "dim_end"
+        ):  # dim_end: finalize the LOCAL DYNAMIC array descriptor opened above
+            disp = op[2]
+            if state.local_dim_frame is None or state.local_dim_frame["disp"] != disp:
+                raise ValueError(f"unbalanced LOCAL DIM bracket at {addr:#x}")
+            cells = state.local_dim_frame["cells"]
+            if 2 not in cells or 6 not in cells:
+                raise ValueError(
+                    f"LOCAL DIM descriptor missing type/size fields at {addr:#x}"
+                )
+            type_rank, esize = cells.pop(2), cells.pop(6)
+            if not isinstance(type_rank, ir.Lit) or not isinstance(esize, ir.Lit):
+                raise ValueError(
+                    f"non-literal LOCAL DIM descriptor fields at {addr:#x}"
+                )
+            tb, rank = type_rank.value & 0xFF, type_rank.value >> 8
+            if rank != 1:  # rank > 1 needs the span-based index machine to
+                raise ValueError(  # learn this shape too -- unwitnessed
+                    f"unsupported LOCAL DIM rank {rank} at {addr:#x}"
+                )
+            if tb not in (0x00, 0x04):  # integer / single -- only two
+                raise ValueError(  # element types witnessed so far
+                    f"unsupported LOCAL DIM element type {tb:#x} at {addr:#x}"
+                )
+            expect_esz = 2 if tb == 0x00 else 4
+            if esize.value != expect_esz:
+                raise ValueError(f"LOCAL DIM element size mismatch at {addr:#x}")
+            order = list(cells)
+            lo, hi = cells.get(8), cells.get(0xA)
+            if lo is None or hi is None or len(cells) != 2:
+                raise ValueError(
+                    f"LOCAL DIM bound cells incomplete at {addr:#x}: {cells}"
+                )
+            if not isinstance(lo, ir.Lit) or lo.value not in (0, 1):
+                raise ValueError(
+                    f"unexpected LOCAL DIM lower bound at {addr:#x}: {lo}"
+                )
+            # Explicit `lo:hi` ranges store lo BEFORE hi (textual order); the
+            # default lo under OPTION BASE is patched in AFTER hi (same
+            # convention as the ordinary DGROUP $DYNAMIC bracket).
+            expl = order.index(8) < order.index(0xA)
+            if not expl:
+                if state.option_base not in (None, lo.value):
+                    raise ValueError("inconsistent OPTION BASE across DIMs")
+                state.option_base = lo.value
+            suffix = "%" if tb == 0x00 else ""
+            name = (
+                f"V{state.lay['n_static'] + len(state.lay['rt_blocks']) + state.n_local_arrs}"
+                f"{suffix}"
+            )
+            state.n_local_arrs += 1
+            rec = {
+                "name": name,
+                "rank": 1,
+                "str": False,
+                "esz": expect_esz,
+                "lo": [lo.value],
+            }
+            state.r_arrs[disp] = rec
+            state.slot_info[disp] = rec
+            bounds = (lo.value, hi) if expl else hi
+            state.put(
+                ir.Dim(name, (bounds,), dynamic=False),
+                state.local_dim_frame["start"],
+            )
+            # Fold the whole reserved template out of the SUB's plain scalar
+            # LOCAL slots (private array bookkeeping, not user variables --
+            # only 5 of its 30 reserved words are ever written, the rest is
+            # dead padding in a fixed-size template used regardless of rank/
+            # type, witnessed identical for both rank-1 and rank-2 probes)
+            # and register the array's own name in the handle's place, so
+            # `LOCAL <name>()` renders where `LOCAL A()` appeared in source.
+            assert state.proc_frame is not None
+            if not state.proc_frame["locals"]:
+                raise ValueError(f"LOCAL DIM without a LOCAL declaration at {addr:#x}")
+            if state.proc_frame.get("frame_words") != _LOCAL_ARR_WORDS:
+                raise ValueError(  # a LOCAL array mixed with other LOCALs in
+                    f"unsupported LOCAL frame shape at {addr:#x}"  # the same
+                )  # SUB is unwitnessed -- only a sole array is calibrated
+            state.proc_frame.setdefault("hidden_locals", set()).update(
+                disp + 2 * i for i in range(1, _LOCAL_ARR_WORDS)
+            )
+            state.proc_frame["locals"][disp] = f"{name}()"
+            state.local_dim_frame = None
+            state.cur = None
+            state.k += 2
             continue
         if kind == "proc_ret":
             assert state.proc_frame is not None  # proc_ret only closes an open SUB body
@@ -3091,6 +3228,15 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 continue
             nxt = state.ops[state.k + 1][1:] if state.k + 1 < len(state.ops) else None
             d = cast(int, op[2])
+            if nxt == ("local_arr_free",):  # implicit runtime cleanup of a
+                # LOCAL DYNAMIC array's heap block at SUB exit -- no BASIC
+                # source spelling, so it's silently dropped (q_localarr)
+                if d not in state.r_arrs:
+                    raise ValueError(
+                        f"LOCAL array free of unknown handle {d:#x} at {addr:#x}"
+                    )
+                state.k += 2
+                continue
             if nxt == ("rt", 0x9C):  # push (var desc, static string-array
                 # element at a constant index, or pooled literal)
                 is_local = d in state.lay["strs"] or any(
@@ -3222,6 +3368,15 @@ def decode_user_code(exe: bytes) -> list[Any]:
         if kind == "moves_m":  # mov es,[block]: far access
             if op[2] not in state.r_arrs:
                 raise ValueError(f"mov es from non-array cell {op[2]:#x} at {addr:#x}")
+            state.pend_es = op[2]
+            state.k += 1
+            continue
+        if kind == "moves_bp":  # mov es,[bp+d8]: LOCAL DYNAMIC array's
+            # element segment, the LOCAL-frame sibling of moves_m
+            if op[2] not in state.r_arrs:
+                raise ValueError(
+                    f"mov es from non-array LOCAL cell {op[2]:#x} at {addr:#x}"
+                )
             state.pend_es = op[2]
             state.k += 1
             continue

@@ -323,8 +323,12 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             )
         if isinstance(s, ir.Local):
             # first body statement (Local's placeholder names are never seen
-            # before this point), so declaration order == first-store order
-            return ir.Local(tuple(name(n) for n in s.names))
+            # before this point), so declaration order == first-store order.
+            # LOCAL DYNAMIC array names ('V0()') are already canonical, same
+            # convention as ir.Shared above.
+            return ir.Local(
+                tuple(n if n.endswith("()") else name(n) for n in s.names)
+            )
         if isinstance(s, ir.Common):
             # always the program's first statement, so the COMMON band's
             # slots letter first, in band order

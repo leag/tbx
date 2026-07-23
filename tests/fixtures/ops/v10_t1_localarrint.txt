@@ -1,0 +1,30 @@
+# v10_t1_localarrint dialect=1.0 start=073E0
+073E3:jmp:29779
+073E6:proc_enter
+073E9:local_init:30:6
+073FD:mov_bp_imm:8:256
+07402:mov_bp_imm:12:2
+07407:far_ref_bp:6
+0740E:dim_begin
+07411:mov_bp_imm:8:256
+07416:mov_bp_imm:12:2
+0741B:mov_bp_imm:16:5
+07420:mov_bp_imm:14:0
+07425:far_ref_bp:6
+0742C:dim_end
+0742F:movax:7
+07432:moves_bp:6
+07435:far_movm_ax_disp:4
+0743A:moves_bp:6
+0743D:far_fild:4
+07443:rt:187
+07445:rt:184
+07449:movsi:6
+0744C:local_arr_free
+0744F:proc_ret:60
+07453:sub_sp:60
+07456:far_call:29670
+0745B:end
+0745E:epilogue
+# commits
+07447

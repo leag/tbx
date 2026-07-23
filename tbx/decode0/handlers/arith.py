@@ -573,11 +573,12 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         _skip_into(state.k + ao)
         if state.k + ao + 1 >= len(state.ops) or state.ops[state.k + ao][1] not in (
             "moves_m",
+            "moves_bp",  # LOCAL DYNAMIC array's ES load (probe q_localarr)
             "addsi",
         ):
             raise ValueError(f"shl si outside an element access at {addr:#x}")
         _skip_into(state.k + ao + 1)
-        far = state.ops[state.k + ao][1] == "moves_m"
+        far = state.ops[state.k + ao][1] in ("moves_m", "moves_bp")
         if far:
             blk = state.ops[state.k + ao][2]
         else:  # near static: add si, <base>

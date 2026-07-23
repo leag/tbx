@@ -51,24 +51,93 @@ edition/runtime tag, and evidence provenance.
 
 ### Live checkpoint
 
-- Updated: 2026-07-22
+- Updated: 2026-07-23
 - Branch: `claude/claude-md-docs-mr8ssz`
-- Baseline commit: `25fbe9c` (`Decode INP intrinsic dispatcher`)
+- Baseline commit: `197055a` (`Close dynamic array decoder gaps`)
 - Corpus: `wild/hits/` (93 Turbo Basic executables; gitignored, never commit)
-- Baseline result: 23 decode OK, 62 fail at their first visible gap (including
-  the oracle-derived `arrayparam6.exe` probe added during this session)
-- Current strict result: 26 decode OK, 67 blocked. Several blocked files have
-  advanced through multiple signatures even though the strict count is flat.
-- Current validation: 2430 passed, 14 skipped (2026-07-22); Ruff and
-  `git diff --check` pass. The new 1.0/1.1 oracle fixtures are byte-exact.
-- Immediate target: `unhandled INT 8c` (four files), continuing from Gap 33 in
-  `Part III`; the seven-file `byte ea` group is now advanced and documented
-  as a runtime-revision closure.
-- `INT ED sub 1e` is now identified as the missing three-argument
-  `INSTR(start, haystack$, needle$)` runtime entry. Four independent wild
-  programs establish the same AX-plus-two-string calling convention. The
-  vendored compiler rejects all common three-argument source spellings, so this
-  closure is classified as `runtime-revision`, not `oracle-verified`.
+- Current strict result: 26 decode OK, 67 blocked (unchanged -- this session's
+  closure advanced 4 files through the gap below into 4 distinct new
+  signatures, none of which happened to be that file's LAST gap).
+- Current validation: 2439 passed, 16 skipped (2026-07-23); Ruff passes.
+  `t1_localarr`/`t1_localarrint` (+`v10_`) are byte-exact both dialects.
+- Immediate target: `unhandled INT 8c` (still open, see Gap `RR-INT-8C` in
+  Part III) and the newly-exposed `unhandled INT 94`
+  (cleanup.exe/reformat.exe, brand new, unprobed).
+
+### Gap: LOCAL DYNAMIC arrays (`LOCAL A()` + runtime `DIM A(n)` inside a SUB), CLOSED for rank 1 (2026-07-23)
+
+Previously the single largest wild tally bucket (`unhandled byte 8b`, 4 files:
+cleanup, crossref, filepatc, reformat, plus 2 retained oracle probes
+`probe_localdecl*.exe` from a prior session's Gap 33 investigation). This is a
+genuinely new decoder subsystem, not a small vocabulary addition: `LOCAL A()`
+declares an array that's heap-allocated fresh on every call (unlike a static/
+runtime DGROUP array, which lives in a fixed compile-time-sized region for the
+program's whole lifetime).
+
+Byte shape (probe `q_localarr.bas`: `SUB SUB1: LOCAL A(): DIM A(5): A(2)=7:
+PRINT A(2): END SUB`): `local_init` reserves a fixed **30-word (60-byte)**
+template regardless of rank/type (confirmed identical for rank-1 and rank-2
+probes; only 5 of the 30 words are ever written -- the rest is dead padding
+sized for whatever rank the runtime supports). The template's first word is a
+handle cell (the heap segment, filled by the runtime); DIM's codegen writes
+`(rank<<8)|tb` and the element byte-size into the SAME two words TWICE --
+once before `dim_begin`, once after (as a `mov_bp_imm` pair each time) --
+then the bound cell(s) (`lo`/`hi`) once, all bracketed by a NEW ES:SI setup:
+`mov si,bp; add si,d8; [into;] push ss; pop es` (new op `far_ref_bp`, the
+LOCAL-frame sibling of movsi's DGROUP-disp form that already fronts ordinary
+`dim_begin`/`dim_end`/`erase`; the optional INTO is the Overflow-toggle skip
+from Gap 21, witnessed interposed here in wild cleanup.exe). Element access
+loads the heap segment via a NEW op `moves_bp` (`8E 46 d8` = `mov es,[bp+d8]`,
+the LOCAL-frame sibling of `moves_m`), then falls straight through the
+EXISTING `far_fld`/`far_fstp`/`far_fild`/`far_movm_ax_disp`/shlsi-chain
+consumers unchanged, by registering the array into `state.r_arrs`/
+`state.slot_info` keyed by its LOCAL frame disp (safe: only one SUB's local
+array is ever "open" at decode time, and LOCAL scope means no cross-SUB
+reference is possible). At SUB exit, `movsi <handle disp>; int EC sub 3A`
+implicitly frees the heap block -- no BASIC source spelling, so it's a pure
+compiler-generated marker (new op `local_arr_free`), consumed and dropped
+like `local_init`'s own zero-fill prologue.
+
+`ir.Local`'s declaration list gets the array's canonical `V#`-style name with
+a literal `()` suffix appended (`"V0()"`), mirroring the EXISTING
+`ir.Shared`/`ArrayRef` "array names are already canonical, don't re-letter"
+convention (`rename.py`); the descriptor's other 29 reserved words are folded
+into the SUB's existing `hidden_locals` mechanism so they don't leak as
+phantom scalar declarations. `ir.Dim`'s `dynamic` flag is always `False` here
+even for a constant bound (`dynamic` reconstructs whether the *DYNAMIC*
+keyword was used in source, which this construct never spells -- unrelated
+to whether the array happens to be heap-allocated).
+
+Scope of this closure: **rank 1 only**, element type integer (`tb=0x00`) or
+single (`tb=0x04`) -- the two shapes directly probed and oracle-verified
+byte-exact (`t1_localarr` single, `t1_localarrint` integer, both dialects).
+Rank 2 was probed (`q_locarr3.bas`, unpromoted) and confirmed to reuse the
+SAME 30-word template with additional bound-cell writes at the expected
+`ARR_BLOCK`-relative offsets, but its variable-index element access needs the
+existing computed-index span machinery (`imul_bp`/`movsiax`/`addsiax`) taught
+to recognize a LOCAL array's own span fields instead of treating them as
+ordinary LOCAL scalars (`imul_bp`'s existing consumer calls
+`state.loc_local` unconditionally) -- a real follow-on gap, deliberately left
+fail-loud (`unsupported LOCAL DIM rank ...`) rather than guessed. String/
+double element types are similarly unwitnessed and fail loud
+(`unsupported LOCAL DIM element type ...`); `probe_localdecl.exe` (a
+`LOCAL A$()` retained oracle probe from the prior session) hits exactly this
+guard. A LOCAL array mixed with OTHER real LOCAL scalars in the same SUB
+(changing `frame_words` away from the calibrated 30) is also unwitnessed and
+guarded (`unsupported LOCAL frame shape ...`).
+
+`c0.py` raises `_Unsupported` for this too, same as every other `ir.Local`
+(true per-call locals need real non-static C storage, not modeled yet) --
+waived in `test_c0.py` alongside `t1_local1`/`t1_local2`/etc.
+
+Wild results: cleanup.exe/crossref.exe/filepatc.exe/reformat.exe all advance
+past their `byte 8b` failure into four DIFFERENT new gaps (`INT 94` x2 for
+cleanup/reformat, `INT 8c` for crossref, `byte 23` for filepatc) -- no shared
+follow-on blocker, consistent with the campaign's usual pattern that closing
+one gap exposes the next distinct one per file. `probe_localdeclnum.exe`
+(retained integer-array oracle probe) advances all the way to a `jump target
+... is not a statement start` structural-fold gap. Strict wild count stays
+26/93 this round (no file happened to fully close), but 5 files advanced.
 
 The number 70 is a count of blocked executables, not distinct missing features.
 Every fix can reveal a later failure in the same executable. Completion therefore

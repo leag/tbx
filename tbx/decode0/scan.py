@@ -295,6 +295,24 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         ops.append((p, "arg_push_ref_bp", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 7
         return p
+    if (
+        b == 0x8B
+        and exe[p + 1] == 0xF5
+        and exe[p + 2] == 0x83
+        and exe[p + 3] == 0xC6
+    ):  # mov si,bp; add si,d8; [into;] push ss; pop es: ES:SI = &LOCAL[d8]
+        # -- the LOCAL-frame sibling of movsi's DGROUP-disp form, feeding
+        # dim_begin/dim_end for a heap-allocated LOCAL DYNAMIC array
+        # declared via `LOCAL A()` (probe q_localarr). An Overflow-toggle
+        # INTO can land right after the `add si,d8` arithmetic, same as
+        # elsewhere in this arithmetic-adjacent family (wild cleanup.exe).
+        q = p + 5
+        if exe[q] == 0xCE:
+            q += 1
+        if exe[q] == 0x16 and exe[q + 1] == 0x07:
+            ops.append((p, "far_ref_bp", exe[p + 4]))
+            p = q + 2
+            return p
     # Literal-arg staging glue (positions SI at a stack temp, saves/restores SP).
     if b == 0x89 and exe[p + 1] == 0x26:  # mov [disp],sp (save cleanup SP)
         ops.append((p, "mov_mem_sp", struct.unpack_from("<H", exe, p + 2)[0]))
@@ -410,6 +428,12 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
     if b == 0x8E and exe[p + 1] == 0x06:  # mov es, [disp16] (far array seg)
         ops.append((p, "moves_m", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4
+        return p
+    if b == 0x8E and exe[p + 1] == 0x46:  # mov es, [bp+d8]: the LOCAL-frame
+        # sibling of moves_m -- loads a LOCAL DYNAMIC array's heap segment
+        # from its handle cell (probe q_localarr)
+        ops.append((p, "moves_bp", exe[p + 2]))
+        p += 3
         return p
     if b == 0x8E and exe[p + 1] == 0x1E:  # mov ds, [disp16] (reverse array SWAP)
         ops.append((p, "movds_m", struct.unpack_from("<H", exe, p + 2)[0]))
@@ -1432,6 +1456,12 @@ def _scan_pass(
                 continue
             if sub == 0x36:  # ERASE (DIM-style prefix)
                 ops.append((p, "erase"))
+                p += 3
+                continue
+            if sub == 0x3A:  # implicit free of a LOCAL DYNAMIC array's heap
+                # block at SUB exit (movsi <handle disp> precedes, no BASIC
+                # source spelling -- probe q_localarr)
+                ops.append((p, "local_arr_free"))
                 p += 3
                 continue
             if sub == 0x60:  # KILL file$

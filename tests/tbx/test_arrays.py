@@ -172,6 +172,36 @@ def test_emit_arrays():
     )
 
 
+def test_decode_local_dynamic_array():
+    """LOCAL A() + runtime DIM A(n) inside a SUB: a heap-allocated array
+    scoped to the current call, distinct from both static locals and
+    DGROUP $DYNAMIC arrays (t1_localarr/t1_localarrint, both dialects)."""
+    from tbx import decode0
+
+    A, L = ir.Assign, ir.Lit
+
+    def want(name):
+        return [
+            ir.SubDef(
+                "SUB1",
+                (),
+                (
+                    ir.Local((f"{name}()",)),
+                    ir.Dim(name, (L(5),)),
+                    A(AR(name, L(2)), L(7)),
+                    ir.Print((AR(name, L(2)),), newline=True),
+                ),
+            ),
+            ir.CallStmt("SUB1", ()),
+            ir.End(),
+        ]
+
+    assert decode0.decode_user_code(_exe("t1_localarr.exe")) == want("V0")
+    assert decode0.decode_user_code(_exe("v10_t1_localarr.exe")) == want("V0")
+    assert decode0.decode_user_code(_exe("t1_localarrint.exe")) == want("V0%")
+    assert decode0.decode_user_code(_exe("v10_t1_localarrint.exe")) == want("V0%")
+
+
 if __name__ == "__main__":
     test_dim_node()
     test_decode_t1_arr1()
