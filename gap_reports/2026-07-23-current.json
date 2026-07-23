@@ -198,8 +198,8 @@
     {
       "name": "wild/hits/cleanup.exe",
       "dialect": "1.1",
-      "message": "LOCAL DIM bound cells incomplete at 0xb868: {8: Lit(value=0)}",
-      "signature": "LOCAL DIM bound cells incomplete"
+      "message": "unhandled op testw_bp at 0xbb75",
+      "signature": "unhandled op testw_bp"
     },
     {
       "name": "wild/hits/crossref.exe",
@@ -408,8 +408,8 @@
     {
       "name": "wild/hits/reformat.exe",
       "dialect": "1.1",
-      "message": "LOCAL DIM bound cells incomplete at 0xb861: {8: Lit(value=0)}",
-      "signature": "LOCAL DIM bound cells incomplete"
+      "message": "unhandled op testw_bp at 0xbb6e",
+      "signature": "unhandled op testw_bp"
     },
     {
       "name": "wild/hits/refund.exe",
@@ -541,14 +541,6 @@
       ]
     },
     {
-      "signature": "LOCAL DIM bound cells incomplete",
-      "count": 2,
-      "files": [
-        "wild/hits/cleanup.exe",
-        "wild/hits/reformat.exe"
-      ]
-    },
-    {
       "signature": "ax,bx combine with empty regs",
       "count": 2,
       "files": [
@@ -586,6 +578,14 @@
       "files": [
         "wild/hits/CVT2TB.EXE",
         "wild/hits/pw.exe"
+      ]
+    },
+    {
+      "signature": "unhandled op testw_bp",
+      "count": 2,
+      "files": [
+        "wild/hits/cleanup.exe",
+        "wild/hits/reformat.exe"
       ]
     },
     {

@@ -20,9 +20,9 @@ def test_scan_testw_bp_is_exact():
 @pytest.mark.parametrize(
     ("stem", "next_gap"),
     [
-        ("cleanup.exe", "LOCAL DIM bound cells incomplete at 0xb868"),
+        ("cleanup.exe", "unhandled op testw_bp at 0xbb75"),
         ("crossref.exe", "unhandled INT EC sub 38 at 0x11a63"),
-        ("reformat.exe", "LOCAL DIM bound cells incomplete at 0xb861"),
+        ("reformat.exe", "unhandled op testw_bp at 0xbb6e"),
     ],
 )
 def test_fp_local_for_advances_wild_program(stem, next_gap):
@@ -39,7 +39,7 @@ def test_mixed_def_fn_for_storage(stem):
     fn = program[0]
     assert isinstance(fn, ir.DefFn)
     assert next(stmt for stmt in fn.body if isinstance(stmt, ir.For)) == ir.For(
-        ir.Var("D"), ir.Lit(0), ir.Lit(2), ir.Var("B")
+        ir.Var("E"), ir.Lit(0), ir.Lit(2), ir.Var("B")
     )
 
 

@@ -2452,6 +2452,23 @@ def decode_user_code(exe: bytes) -> list[Any]:
             )
             state.k += 1
             continue
+        if (
+            kind == "movm_ax_bp"
+            and state.local_dim_frame is not None
+            and state.local_dim_frame["disp"]
+            <= op[2]
+            < state.local_dim_frame["disp"] + ARR_BLOCK
+        ):  # computed LOCAL DIM descriptor cell, e.g. an upper bound loaded
+            # from another BP-relative INTEGER local (t1_fnlocalarrstr;
+            # wild cleanup.exe/reformat.exe).
+            if state.ax is None:
+                raise ValueError(f"LOCAL DIM cell store without AX at {addr:#x}")
+            state.local_dim_frame["cells"][
+                op[2] - state.local_dim_frame["disp"]
+            ] = state.ax
+            state.ax = None
+            state.k += 1
+            continue
         if kind == "far_ref_bp" and state.k + 1 < len(state.ops) and (
             state.ops[state.k + 1][1] == "dim_end"
         ):  # dim_end: finalize the LOCAL DYNAMIC array descriptor opened above

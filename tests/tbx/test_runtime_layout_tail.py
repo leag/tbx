@@ -35,8 +35,8 @@ def test_runtime_layout_recovers_scalars_after_hole(stem, string_disp, single_di
 @pytest.mark.parametrize(
     ("stem", "next_gap"),
     [
-        ("cleanup.exe", "LOCAL DIM bound cells incomplete at 0xb868"),
-        ("reformat.exe", "LOCAL DIM bound cells incomplete at 0xb861"),
+        ("cleanup.exe", "unhandled op testw_bp at 0xbb75"),
+        ("reformat.exe", "unhandled op testw_bp at 0xbb6e"),
     ],
 )
 def test_runtime_layout_witnesses_reach_next_gap(stem, next_gap):

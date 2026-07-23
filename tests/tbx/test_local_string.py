@@ -35,7 +35,8 @@ def test_string_local_in_block_def_fn(stem):
     program = decode0.decode_user_code((_CORPUS / f"{stem}.exe").read_bytes())
     fn = program[0]
     assert isinstance(fn, ir.DefFn)
-    assert fn.body[0] == ir.Local(("V0$()", "B", "C$"))
+    assert fn.body[0] == ir.Local(("V0$()", "B", "C$", "D%"))
+    assert ir.Dim("V0$", (ir.Var("D%"),)) in fn.body
     assert ir.Assign(ir.Var("C$"), ir.Call("UCASE$", (ir.Var("C$"),))) in fn.body
     assert ir.Erase("V0$") in fn.body
 
@@ -45,8 +46,8 @@ def test_string_local_in_block_def_fn(stem):
     [
         ("bmaster.exe", "materialization template mismatch at 0x8f0e"),
         ("ifi.exe", "materialization template mismatch at 0x8f0e"),
-        ("cleanup.exe", "LOCAL DIM bound cells incomplete at 0xb868"),
-        ("reformat.exe", "LOCAL DIM bound cells incomplete at 0xb861"),
+        ("cleanup.exe", "unhandled op testw_bp at 0xbb75"),
+        ("reformat.exe", "unhandled op testw_bp at 0xbb6e"),
     ],
 )
 def test_string_local_witnesses_advance(stem, next_gap):

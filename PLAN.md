@@ -935,6 +935,19 @@ fixing the intra-inline-IF gap above will also close it.
 
 ## Part III — Investigation history / handoff log
 
+### 2026-07-23 — computed bounds in LOCAL DIM descriptors
+
+Closed the shared `LOCAL DIM bound cells incomplete` gap in
+`cleanup.exe` and `reformat.exe`. Literal descriptor cells use
+`mov_bp_imm`, which the LOCAL DIM bracket already captured, but a bound
+loaded from another INTEGER local uses `movax_bp; movm_ax_bp` and fell
+through as a user assignment. An open LOCAL DIM frame now captures that
+AX value as the descriptor cell while retaining fail-loud checks for a
+missing AX value and incomplete bounds. Extended TB 1.0/1.1 fixture
+`t1_fnlocalarrstr` dimensions its STRING array with an INTEGER local;
+both emitted programs recompile byte-for-byte. The wild witnesses
+advance to another later `testw_bp` loop template.
+
 ### 2026-07-23 — ERASE of a local dynamic array
 
 Closed the shared `far_ref_bp; erase` gap in `cleanup.exe` and

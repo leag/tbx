@@ -24,9 +24,9 @@ def test_scan_local_bounds_vectors():
 @pytest.mark.parametrize(
     ("stem", "next_gap"),
     [
-        ("cleanup.exe", "LOCAL DIM bound cells incomplete at 0xb868"),
+        ("cleanup.exe", "unhandled op testw_bp at 0xbb75"),
         ("crossref.exe", "unhandled INT EC sub 38 at 0x11a63"),
-        ("reformat.exe", "LOCAL DIM bound cells incomplete at 0xb861"),
+        ("reformat.exe", "unhandled op testw_bp at 0xbb6e"),
     ],
 )
 def test_wild_local_bounds_remain_closed(stem, next_gap):

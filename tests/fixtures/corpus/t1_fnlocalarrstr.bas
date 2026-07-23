@@ -1,6 +1,7 @@
 10 DEF FNX(A)
-20 LOCAL S$(), B, T$
-30 DIM S$(2)
+20 LOCAL S$(), B, T$, N%
+28 N% = 2
+30 DIM S$(N%)
 40 S$(1) = "X"
 50 B = 1
 51 T$ = "Z"
