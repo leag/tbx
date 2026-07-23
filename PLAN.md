@@ -51,18 +51,38 @@ edition/runtime tag, and evidence provenance.
 
 ### Live checkpoint
 
-- Updated: 2026-07-23
+- Updated: 2026-07-23 (later same day)
 - Branch: `claude/claude-md-docs-mr8ssz`
-- Baseline commit: `197055a` (`Close dynamic array decoder gaps`)
-- Corpus: `wild/hits/` (93 Turbo Basic executables; gitignored, never commit)
-- Current strict result: 26 decode OK, 67 blocked (unchanged -- this session's
-  closure advanced 4 files through the gap below into 4 distinct new
-  signatures, none of which happened to be that file's LAST gap).
+- Baseline commit: `b22c0a4` (`Merge AGENTS.md into CLAUDE.md; split
+  wild-probe corpus from wild/hits`)
+- Corpus: `wild/hits/` (84 Turbo Basic executables found in the wild;
+  gitignored, never commit) -- the 9 oracle-authored probes formerly
+  mixed into this directory now live in the separate, git-tracked
+  `wild/probes/`, per the tightened directive in `CLAUDE.md`.
+- Current strict result: **25 decode OK, 59 blocked** (was 23/61) --
+  `state.exe`/`state87.exe` newly close via the intra-inline-IF-body
+  GOTO-target fix (see Part III's 2026-07-23 "RESOLVED" entry). Oracle
+  verification/fixture promotion for that fix is explicitly deferred to
+  a later phase (no `TBX_ORACLE` this session). A second 2026-07-23
+  round (same day, "continue decoding wilds one at a time" directive)
+  landed four more table-completion fixes without moving the strict
+  tally (each advanced a file into its NEXT gap rather than closing it
+  outright) -- see Part III's dated entries: `notax`-negated materialized
+  loop/IF test (kinder.exe), `far_dec_si`/`far_subax_si`/`icomp_bp` (the
+  DEC/SUB/mixed-compare siblings of already-calibrated by-ref-param and
+  LOCAL-int op families, bmaster.exe/ifi.exe). `secure.exe` traced and
+  confirmed a DEEPER, different gap (multi-arm/ELSE block interior GOTO
+  targets, unwitnessed) -- explicitly not attempted. A RESTORE-past-
+  last-DATA-item boundary bug (styled.exe/styllist.exe, `KeyError` on an
+  unguarded dict lookup) was traced to the exact line but NOT fixed --
+  the correct index convention affects the byte-exact RESTORE line
+  number and isn't safely inferable without oracle verification.
 - Current validation: 2439 passed, 16 skipped (2026-07-23); Ruff passes.
   `t1_localarr`/`t1_localarrint` (+`v10_`) are byte-exact both dialects.
 - Immediate target: `unhandled INT 8c` (still open, see Gap `RR-INT-8C` in
-  Part III) and the newly-exposed `unhandled INT 94`
-  (cleanup.exe/reformat.exe, brand new, unprobed).
+  Part III), `unhandled INT 94` (cleanup.exe/reformat.exe), and
+  `unhandled op testw` (elec87/electron/mdb/mdb87, tied at 4, unprobed) --
+  all still open, none require oracle work to triage further via cfgview.
 
 ### Gap: LOCAL DYNAMIC arrays (`LOCAL A()` + runtime `DIM A(n)` inside a SUB), CLOSED for rank 1 (2026-07-23)
 
@@ -506,7 +526,13 @@ Include newly exposed blockers because they are evidence of forward progress.
 ## Part II — Spec: intra-inline-IF-body GOTO targets
 
 
-Status: 2026-07-22, investigation-only — no code changes yet. This
+Status: **RESOLVED 2026-07-23** for `state.exe`/`state87.exe` (see the
+dated writeup in `Part III`); the actual root cause was a FOURTH
+mechanism, none of the three candidates guessed below. `secure.exe`
+still fails on the same error message at a different target and was
+NOT re-traced — do not assume it shares this fix's cause.
+
+Original status: 2026-07-22, investigation-only — no code changes yet. This
 supersedes the "SUB/DEF FN body" framing in `Part III`'s `6f1a9fb`
 diagnosis commit, which was **factually wrong about the mechanism**
 (corrected in `Part III` alongside this spec — see "Correction" below).
@@ -696,6 +722,144 @@ fixing the intra-inline-IF gap above will also close it.
 ---
 
 ## Part III — Investigation history / handoff log
+
+### 2026-07-23 (later same day) — four table-completion fixes, no oracle
+
+Continuation of the "decode a wild" work under an explicit "do not
+advance recompiler" constraint (no `TBX_ORACLE` this session). Strategy
+shift: instead of chasing new byte vocabulary (which the calibration
+rule reserves for oracle-verified fixtures), hunted specifically for
+gaps that are narrow, already-justified SIBLINGS of existing calibrated
+op families -- same risk profile as the state.exe fix above, not new
+semantics.
+
+**`kinder.exe`'s `notax`-negated materialized test.** `_lift_while`
+(`tbx/decode0/lift.py:421`) expects the fixed six-op materialization
+template `movax FFFF; jcc; incax; orax; jcc; jmp`. `kinder.exe` inserts
+a `notax` between `incax` and `orax`: `TIME$`-derived `strcmp` has no
+direct-jcc-flip the way a numeric relop does, so a source-level `NOT`
+wrapping the string comparison takes a real `F7 D0` (bitwise NOT of the
+accumulator) to negate the already-materialized 0/-1 boolean before the
+self-test. `notax`/`ir.Not` are BOTH already calibrated, verified
+elsewhere (arith.py's plain unary-NOT dispatch) -- this only teaches
+`_lift_while` to recognize the same already-verified op appearing in
+one more position, wrapping `cond` in `ir.Not(cond)` when detected.
+Verified: `kinder.exe` advances past this gap (into an unrelated
+`unhandled op testw`, not yet closed). `grdscn.exe` shares the generic
+"materialization template mismatch" message but for an UNRELATED reason
+(a 3+-term OR chain, not a `NOT`) -- confirmed via separate trace before
+touching anything, left alone.
+
+**`bmaster.exe`/`ifi.exe`, three chained sibling completions.** All
+three follow the same shape: an existing op family has a documented
+sibling (INC has a DEC counterpart, ADD has a SUB counterpart, a
+disp16/[si]-indexed compare has a bp-relative LOCAL counterpart
+elsewhere in the SAME family) that was simply never added. Each fix
+advanced both files into the NEXT gap in sequence (never fully closing
+them this round):
+1. `far_dec_si` (`26 FF 0C`, DEC word es:[si]): the STEP -1 sibling of
+   the already-calibrated `far_inc_si` (`26 FF 04`, whose own comment
+   already named bmaster.exe/ifi.exe as INC's wild witnesses). Mirrors
+   `dec_bp`/`dec_m`'s existing NEXT-side step patch-up (rewrite the
+   already-emitted `ir.For`'s step to `Lit(-1)`); outside a FOR context
+   it fails loud, same as `inc_si`, since bare by-ref decrement compiles
+   to the separate, already-handled `far_subm_ax_si`.
+2. `far_subax_si` (`26 2B 04`, SUB ax, es:[si]): the subtractive sibling
+   of `far_addax_si` (`26 03 04`). Orientation follows `subax_m` (mem on
+   the right, `ax - mem`), NOT `addax_si`'s convention, since SUB isn't
+   commutative.
+3. `icomp_bp` ((0xDE,3) at `[bp+disp8]`): the LOCAL-int sibling of the
+   already-calibrated `icomp` (disp16 scalar) and `icomp_si32` ([si],
+   LONG) mixed-type-compare family -- a LOCAL int compared against an
+   FP-stack value. Simply `state.pend_cmp = (state.loc_local(op[2]),
+   state.stack.pop())`, mirroring `icomp`'s body with `loc_local` instead
+   of `loc`.
+
+After all three, both files hit a NEW, more complex gap: `LES di,[bp+N]`
+(`c4 7e ..`) -- a by-ref access using DI as the pointer-index register
+instead of the already-handled SI convention, immediately followed by
+`AND cx, 0x7FFF` in bmaster.exe's case. `pw.exe` shares the generic
+"unhandled byte c4" message but for a DIFFERENT shape (`LES bx,[bp+6]`
+then a double-indirect `mov es, es:[bx]` reload) -- confirmed via direct
+trace, not the same mechanism. This DI/BX-register-choreography family
+is a genuinely new addressing convention, not a one-line sibling
+completion -- left open, flagged for oracle-verified design work.
+
+**`secure.exe` traced, NOT the same bug as state.exe.** Confirmed (per
+Part II's own explicit warning not to assume): the interior GOTO target
+lives inside a single-arm `IF...ELSE...END IF` block, which
+`_resolve_targets`'s `map_body` only walks for single-arm NO-ELSE
+blocks (its own docstring already calls multi-arm/ELSE interiors
+"unwitnessed"). A real, different, deeper gap -- needs new IR/emit
+design for numbering a line inside an ELSE arm, verified by oracle
+before landing. Not attempted.
+
+**`styled.exe`/`styllist.exe` traced, NOT fixed.** `core.py:832`'s
+`item_to_stmt[s.target]` raises `KeyError: 87` -- an unguarded dict
+lookup, not a deliberate fail-loud raise. Root cause: one `RESTORE`
+target resolves to a raw item index (87) that is past the last DATA
+item (86 items, valid indices 0..85) -- `RESTORE` to a line after all
+DATA, a real, previously-unhandled boundary case in otherwise
+well-established DATA/RESTORE splitting machinery
+(`tbx/decode0/core.py:762-837`). NOT fixed: the render side
+(`RESTORE {10 * (s.target + 1)}` in `tbx/ir/render.py:607`) means
+whatever index this resolves to becomes an actual byte-significant LINE
+NUMBER -- getting the boundary convention wrong (87 vs. 86, i.e.
+one-past-end vs. some other offset) wouldn't crash, it would silently
+mis-recompile, and I have no oracle to check which is correct. Needs a
+minimal oracle-verified RESTORE-past-end probe before landing.
+
+Validation for all four landed fixes together: full suite 2439 passed,
+16 skipped, 0 regressions; ruff clean; full `scan_wild.py` re-run: still
+25/84 (unchanged -- every advance landed on a NEW gap, not a closure),
+confirming no regressions elsewhere in the corpus either.
+
+### RESOLVED 2026-07-23 — intra-inline-IF-body GOTO targets (state.exe/state87.exe)
+
+Traced live against `wild/hits/state.exe` directly (no oracle probe --
+this is a control-flow/IR bug in already-scanned, already-verified op
+data, not a byte-vocabulary gap, so the calibration rule's oracle-first
+requirement doesn't gate it the same way; oracle-verified fixture
+promotion is still pending, deferred to a later phase).
+
+None of Part II's three candidate causes were right. The real mechanism:
+`_fold_body` (`tbx/decode0/lift.py:498`) rewraps a nested `ir.IfInline`
+`b` into a NEW `ir.IfBlock` object whenever `b`'s own body needs
+block-folding (`_body_has_target(b.body, ...)`) -- but `b` ITSELF can
+ALSO be a jump target (a GOTO landing on the header of this very nested
+inline-IF, not on anything inside its body). The old code built the
+replacement `ir.IfBlock` without transferring `stmt_addr[id(b)]` to the
+new object's `id()`, so the address stayed keyed to the discarded `b`
+and `_resolve_targets` could never find a live node at that address --
+exactly the "address stays keyed to a discarded object" failure mode
+`_fold_body_ifgotos`'s docstring already names (and already guards
+against, in that other function) as the reason it transfers `stmt_addr`
+on replacement. `_fold_body` was simply missing the same guard.
+
+Fix: mirror `_fold_body_ifgotos`'s existing transfer -- after building
+the replacement `ir.IfBlock`, copy `stmt_addr.get(id(b))` onto its new
+`id()` before appending. `map_body` (`_resolve_targets`) already
+recurses into single-arm no-else `ir.IfBlock`s looking exactly for this
+entry, so no change was needed on the read side, only the write side
+that was losing it.
+
+Verified: `state.exe`/`state87.exe` both decode completely (2226 stmts
+each) with zero other code changes. Full suite: 2439 passed, 16 skipped,
+0 regressions. Ruff clean. Full `scan_wild.py` re-run: 25 decode-ok (was
+23), 59 blocked, no new failures anywhere else in the 84-file corpus.
+`secure.exe` still fails the same error message at a different target
+(`0x82fe`) -- NOT re-traced, per Part II's own warning not to assume it's
+the same shape without checking.
+
+Not yet done (explicitly deferred, not an oversight): oracle-verified
+minimal `.bas` reproducer + fixture promotion (`tests/fixtures/corpus/`),
+per the calibration rule's normal promotion path. This session had no
+`TBX_ORACLE` available and was directed to leave recompilation to a
+later phase. The fix is a pure IR-identity bug (verified by direct
+trace + full regression suite), not a new byte pattern, which is why it
+was safe to land ahead of that verification -- but the gap should still
+not be marked fully "closed" in the calibration sense until a fixture
+exists.
 
 
 Status as of 2026-07-19 (session gaps 46-66: line-table epic, nested

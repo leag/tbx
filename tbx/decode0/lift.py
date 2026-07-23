@@ -426,11 +426,23 @@ def _lift_while(ops, k, pend_cmp, whiles, dos, ifs, stmts, addrs, put, flush, cu
     skip (cc 75 only), OR (if the trailing jmp itself is backward -- see below)
     a TAIL-test `DO...LOOP WHILE/UNTIL` whose body ends in something (e.g. a
     nested FOR...NEXT) that leaves no separate `jmps`-back edge for
-    `_has_jmps_back` to find."""
-    want = ["movax", "jcc", "incax", "orax", "jcc", "jmp"]
+    `_has_jmps_back` to find.
+
+    An explicit source `NOT` wrapping the tested expression (only witnessed on
+    a string comparison, wild kinder.exe: `strcmp` has no direct-jcc-flip like
+    a numeric relop, so negating it takes a real `F7 D0 notax` between the
+    materialization's `inc ax` and the `or ax,ax` self-test) inserts one extra
+    op into the usual six; detected by probing for it before matching `want`."""
+    negate = k + 3 < len(ops) and ops[k + 3][1] == "notax"
+    off = 1 if negate else 0
+    want = ["movax", "jcc", "incax"] + (["notax"] if negate else []) + [
+        "orax",
+        "jcc",
+        "jmp",
+    ]
     if k + len(want) > len(ops) or [o[1] for o in ops[k : k + len(want)]] != want:
         raise ValueError(f"materialization template mismatch at {ops[k][0]:#x}")
-    m_jcc, exit_jcc, exit_jmp = ops[k + 1], ops[k + 4], ops[k + 5]
+    m_jcc, exit_jcc, exit_jmp = ops[k + 1], ops[k + 4 + off], ops[k + 5 + off]
     if m_jcc[3] != ops[k + 3][0]:  # Jcc +1 skips exactly the inc ax
         raise ValueError("materialization: bad Jcc skip")
     if m_jcc[2] not in _JCC_RELOP_TRUE:
@@ -438,6 +450,8 @@ def _lift_while(ops, k, pend_cmp, whiles, dos, ifs, stmts, addrs, put, flush, cu
     if exit_jcc[2] not in (0x74, 0x75) or exit_jcc[3] != exit_jmp[0] + 3:
         raise ValueError("DO/WHILE: bad exit pair")
     cond = ir.RelOp(_JCC_RELOP_TRUE[m_jcc[2]], *pend_cmp)
+    if negate:
+        cond = ir.Not(cond)
     if _has_jmps_back(ops, exit_jmp[2], cur):  # head-test DO loop
         kind = "WHILE" if exit_jcc[2] == 0x75 else "UNTIL"
         put(ir.Do(kind, cond), cur)
@@ -502,15 +516,25 @@ def _fold_body(body, targets=frozenset(), stmt_addr=None):
     target, the same "second leg" `_fold_if` applies at the top level, just
     applied recursively: a numbered nested-IF interior line can sit two (or
     more) block levels deep (wild inv87.exe), not only directly under the
-    outermost IF."""
+    outermost IF.
+
+    `b` itself (not just something inside `b.body`) can ALSO be a jump
+    target -- a GOTO landing on the header of this very nested inline-IF
+    (wild state.exe) -- so the replacement node must inherit `b`'s own
+    `stmt_addr` entry, the same transfer `_fold_body_ifgotos` already does
+    when it discards a node; otherwise the address stays keyed to the
+    discarded `ir.IfInline` and `_resolve_targets` can never find it."""
     out = []
     for b in body:
         if isinstance(b, ir.IfInline) and (
             not _inline_safe(b.body) or _body_has_target(b.body, targets, stmt_addr)
         ):
-            out.append(
-                ir.IfBlock(((b.cond, _fold_body(b.body, targets, stmt_addr)),), None)
-            )
+            new_b = ir.IfBlock(((b.cond, _fold_body(b.body, targets, stmt_addr)),), None)
+            if stmt_addr is not None:
+                a = stmt_addr.get(id(b))
+                if a is not None:
+                    stmt_addr[id(new_b)] = a
+            out.append(new_b)
         else:
             out.append(b)
     return tuple(out)

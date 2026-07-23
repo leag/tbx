@@ -775,6 +775,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "far_addax_si"))  # arithmetic fold of a by-ref int
         p += 3  # param, e.g. `N% + 1` (witnessed t1_local2)
         return p
+    if b == 0x26 and exe[p + 1] == 0x2B and exe[p + 2] == 0x04:  # sub ax, es:[si]:
+        ops.append((p, "far_subax_si"))  # subtractive fold of a by-ref int
+        p += 3  # param, mem on the right like subax_m (wild bmaster.exe/ifi.exe)
+        return p
     if b == 0x03 and exe[p + 1] == 0x04:  # add ax, [si]: arithmetic fold of a
         ops.append((p, "addax_si"))  # computed static int-array element
         p += 2  # e.g. `ARRAY%(i) + 1` (wild number.exe)
@@ -825,6 +829,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "far_inc_si"))  # FOR-NEXT increment of a by-ref int
         p += 3  # param used directly as the loop var (wild bmaster.exe/ifi.exe)
         return p
+    if b == 0x26 and exe[p + 1] == 0xFF and exe[p + 2] == 0x0C:  # dec word es:[si]:
+        ops.append((p, "far_dec_si"))  # descending sibling of far_inc_si, the
+        p += 3  # STEP -1 FOR-NEXT decrement of a by-ref int loop var
+        return p  # (wild bmaster.exe/ifi.exe)
     if b == 0x26 and exe[p + 1] == 0x39 and exe[p + 2] == 0x04:  # cmp es:[si], ax:
         ops.append((p, "far_cmpm_ax_si"))  # the far mem-first sibling of
         p += 3  # cmpm_ax/cmpm_ax_bp -- a by-ref int param's own FOR test with
@@ -1871,6 +1879,9 @@ def _scan_pass(
                     (0xD9, 3): "fstp_bp",
                     (0xD8, 3): "fcomp_bp",
                     (0xDF, 0): "fild_bp",  # LOCAL int read onto the FP stack
+                    (0xDE, 3): "icomp_bp",  # LOCAL int compare (mixed-type
+                    # IF/loop test against an FP-stack value; the bp-relative
+                    # sibling of icomp/icomp_si32, wild bmaster.exe/ifi.exe)
                 }.get((esc, reg))  # (PRINT of a local int, witnessed t1_local1)
                 if kind:
                     ops.append((p, pre + kind, bp_off))

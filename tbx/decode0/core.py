@@ -1299,6 +1299,10 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             state.loc(op[2]) if op[2] in state.lay["scalars"] else state.pool_lit(op[2])
         )
         state.pend_cmp = (mem, state.stack.pop())
+    elif kind == "icomp_bp":  # LOCAL int compare (mixed-type IF/loop test
+        # against an FP-stack value; the bp-relative sibling of icomp, wild
+        # bmaster.exe/ifi.exe)
+        state.pend_cmp = (state.loc_local(op[2]), state.stack.pop())
     elif kind == "icomp32":  # m32 long-int var/pool-literal compare: the
         # LONG (`&`) sibling of icomp (`IF X& > 5.5 THEN`; wild stat.exe)
         mem = (
@@ -2592,6 +2596,10 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 argvar = ir.Var(f"P{state.pend_arg:02X}%")  # by-ref INT param
                 state.proc_int_offs.add(state.pend_arg)  # (t1_local2)
                 state.ax = ir.BinOp("+", argvar, _rgrp("+", state.ax))
+            elif base == "subax_si":  # sub ax, es:[si]: subtractive fold of a
+                argvar = ir.Var(f"P{state.pend_arg:02X}%")  # by-ref INT param,
+                state.proc_int_offs.add(state.pend_arg)  # mem on the right
+                state.ax = ir.BinOp("-", state.ax, _rgrp("-", argvar))  # like subax_m
             elif base == "andax_si":  # and ax, es:[si]: bitwise fold of a
                 argvar = ir.Var(f"P{state.pend_arg:02X}%")  # by-ref INT param
                 state.proc_int_offs.add(state.pend_arg)  # (t1_byref1)
@@ -2645,6 +2653,20 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 # far_addm_ax_si, t1_local2) -- fail loud.
                 if not (state.fors and state.fors[-1]["v"] == state.pend_arg):
                     raise ValueError(f"inc es:[si] outside a FOR at {addr:#x}")
+            elif base == "dec_si":  # dec es:[si]: FOR-NEXT STEP -1 decrement
+                # of a by-ref int param used as the loop var -- the
+                # descending sibling of inc_si, same NEXT-side step patch-up
+                # as dec_m/dec_bp (the header folded a provisional Lit(1)
+                # step before this evidence was available). A bare DEC via
+                # ES:[SI] outside a FOR is unwitnessed (by-ref `X% = X% - 1`
+                # compiles to far_subm_ax_si) -- fail loud (wild
+                # bmaster.exe/ifi.exe).
+                if not (state.fors and state.fors[-1]["v"] == state.pend_arg):
+                    raise ValueError(f"dec es:[si] outside a FOR at {addr:#x}")
+                f = state.fors[-1]
+                old = state.stmts[f["idx"]]
+                state.stmts[f["idx"]] = ir.For(old.var, old.init, old.limit, ir.Lit(-1))
+                f["step"] = -1
             else:
                 raise ValueError(f"unhandled by-ref param op {kind} at {addr:#x}")
             state.pend_arg = None
