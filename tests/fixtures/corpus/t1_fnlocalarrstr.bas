@@ -3,6 +3,9 @@
 30 DIM S$(2)
 40 S$(1) = "X"
 50 B = 1
+52 FOR G = 0 TO 2 STEP B
+54 S$(G) = "Y"
+56 NEXT G
 60 FNX = B + A
 70 END DEF
 80 PRINT FNX(3)

@@ -1543,6 +1543,13 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             a = state.addrs[-3]
             del state.addrs[-3:]
             state.put(ir.For(init_s.target, init_s.value, lim_s.value, stp_s.value), a)
+            if frame is not None and frame["locals"] is not None:
+                # BP-relative limit/step cells are compiler FOR temporaries,
+                # not declarations from the source LOCAL statement. Mixed
+                # block-DEF-FN loops may use those cells while keeping the
+                # loop variable in DGROUP (t1_fnlocalarrstr).
+                hidden = {d for d in (lim, stp) if d in frame["locals"]}
+                frame.setdefault("hidden_locals", set()).update(hidden)
             state.fors.append(
                 {
                     "v": vdisp,

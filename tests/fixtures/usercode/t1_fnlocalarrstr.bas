@@ -3,6 +3,9 @@
   DIM V0$(2)
   V0$(1) = "X"
   B = 1
+  FOR C = 0 TO 2 STEP B
+  V0$(C) = "Y"
+  NEXT C
   FNFN1 = B + A
 END DEF
 20 PRINT FNFN1(3)

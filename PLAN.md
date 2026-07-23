@@ -935,6 +935,23 @@ fixing the intra-inline-IF gap above will also close it.
 
 ## Part III — Investigation history / handoff log
 
+### 2026-07-23 — mixed-storage DEF FN FOR/NEXT
+
+Closed the `testw_bp` gap exposed in `cleanup.exe` and `reformat.exe`.
+Their loop limit and step temporaries live in the block DEF FN's
+BP-relative frame, while the loop variable remains in DGROUP. The
+existing NEXT lifter required the limit load and variable comparison to
+use the same storage mode, so it rejected the otherwise standard
+variable-STEP sign-test template. `_loose_for_header` and `_lift_next`
+now validate the load and comparison modes independently while still
+requiring the complete positive/negative NEXT control-flow shape. The
+two BP FOR temporaries are also hidden from emitted `LOCAL`; emitting
+them changed nine bytes on recompilation. Extended dual-dialect fixture
+`t1_fnlocalarrstr` reproduces the exact `testw_bp` + `fld_bp` +
+DGROUP `fcomp` combination and round-trips byte-for-byte under TB 1.0
+and 1.1. Both wild programs advance to a later shared STRING store to
+`[bp+68]` gap.
+
 ### 2026-07-23 — mixed block-DEF-FN LOCAL frames
 
 Closed the shared `far_ref_bp` / FP-local gap witnessed by

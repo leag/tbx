@@ -49,12 +49,18 @@ def _loose_for_header(ops, k, stmts, vdisp):
         return None
     first_fld, first_cmp, first_sw = ops[k + 3 : k + 6]
     pair = (first_fld[1], first_cmp[1])
-    pairs = (
-        (("fld_bp", "fcomp_bp"),)
-        if test[1] == "testw_bp"
-        else (("fld", "fcomp"), ("fld64", "fcomp64"))
-    )
-    if pair not in pairs or first_sw[1] != "fstsw":
+    single_pairs = {
+        ("fld", "fcomp"),
+        ("fld", "fcomp_bp"),
+        ("fld_bp", "fcomp"),
+        ("fld_bp", "fcomp_bp"),
+    }
+    if pair not in single_pairs | {("fld64", "fcomp64")} or first_sw[1] != "fstsw":
+        return None
+    # TEST names the step cell, independently of where the limit and loop
+    # variable live. Mixed DEF FN frames keep limit/step BP-relative while
+    # the loop variable remains in DGROUP (wild cleanup.exe/reformat.exe).
+    if (test[1] == "testw_bp") != (pair[0] == "fld_bp"):
         return None
     if jcc[3] != first_fld[0]:
         return None
@@ -161,14 +167,16 @@ def _lift_next(ops, k, fors, stmts, addrs, exit_folds) -> int:
             ("jmp", None),
         ],
     )
-    fld_kind = ops[i][1]
-    cmp_kind = {
-        "fld": "fcomp",
-        "fld64": "fcomp64",
-        "fld_bp": "fcomp_bp",
-    }.get(fld_kind)
-    if cmp_kind is None:
-        raise ValueError(f"NEXT template: unexpected limit load {ops[i]}")
+    fld_kind, cmp_kind = ops[i][1], ops[i + 1][1]
+    valid_pairs = {
+        ("fld", "fcomp"),
+        ("fld", "fcomp_bp"),
+        ("fld_bp", "fcomp"),
+        ("fld_bp", "fcomp_bp"),
+        ("fld64", "fcomp64"),
+    }
+    if (fld_kind, cmp_kind) not in valid_pairs:
+        raise ValueError(f"NEXT template: unexpected compare pair {ops[i:i + 2]}")
     i = expect(i, [(fld_kind, lim), (cmp_kind, v), ("fstsw",)])
     i = jcc_body(i, 0x73, 0x72)
     i = expect(i, [("jmp", None)])  # EXIT

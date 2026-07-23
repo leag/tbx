@@ -35,8 +35,8 @@ def test_string_local_ir_and_emission(stem):
     [
         ("bmaster.exe", "materialization template mismatch at 0x8f0e"),
         ("ifi.exe", "materialization template mismatch at 0x8f0e"),
-        ("cleanup.exe", "unhandled op testw_bp at 0xb248"),
-        ("reformat.exe", "unhandled op testw_bp at 0xb241"),
+        ("cleanup.exe", "string store to \\[bp\\+68\\] in DEF FN body at 0xb348"),
+        ("reformat.exe", "string store to \\[bp\\+68\\] in DEF FN body at 0xb341"),
     ],
 )
 def test_string_local_witnesses_advance(stem, next_gap):
