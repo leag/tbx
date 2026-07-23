@@ -1,0 +1,22 @@
+# t1_dynconstnum dialect=1.1 start=088A0
+088A3:movsi:288
+088A6:movdx:152
+088A9:movesdx
+088AB:dim_begin
+088AE:movm_imm:298:20
+088B4:movm_imm:296:0
+088BA:movsi:288
+088BD:movdx:152
+088C0:movesdx
+088C2:dim_end
+088C5:movax:7
+088C8:moves_m:288
+088CC:far_movm_ax_disp:2
+088D1:moves_m:288
+088D5:far_fild:2
+088DB:rt:187
+088DD:rt:184
+088E1:end
+088E4:epilogue
+# commits
+088DF

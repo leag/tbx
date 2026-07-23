@@ -1,0 +1,22 @@
+# v10_dynconstnum dialect=1.0 start=07250
+07253:movsi:288
+07256:movdx:152
+07259:movesdx
+0725B:dim_begin
+0725E:movm_imm:298:20
+07264:movm_imm:296:0
+0726A:movsi:288
+0726D:movdx:152
+07270:movesdx
+07272:dim_end
+07275:movax:7
+07278:moves_m:288
+0727C:far_movm_ax_disp:2
+07281:moves_m:288
+07285:far_fild:2
+0728B:rt:187
+0728D:rt:184
+07291:end
+07294:epilogue
+# commits
+0728F

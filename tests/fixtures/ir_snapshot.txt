@@ -3455,6 +3455,12 @@ Loop(kind=None, cond=None)
 Draw(cmd=StrLit(value='U10R10D10L10'))
 End()
 
+## t1_dynconstnum
+Dim(name='V0%', bounds=(Lit(value=20),), also=())
+Assign(target=ArrayRef(name='V0%', indices=(Lit(value=1),)), value=Lit(value=7))
+Print(items=(ArrayRef(name='V0%', indices=(Lit(value=1),)),), newline=True, file=None, commas=None)
+End()
+
 ## t1_environ
 Environ(s=StrLit(value='PATH=C:\\TB'))
 End()
@@ -5620,6 +5626,30 @@ Assign(target=Var(name='B'), value=Lit(value=2))
 Swap(a=Var(name='A'), b=Var(name='B'))
 End()
 
+## t1_swap_dyndbl
+Dim(name='V1#', bounds=(Lit(value=10),), also=(('V0#', (Lit(value=10),)),))
+Assign(target=ArrayRef(name='V1#', indices=(Lit(value=1),)), value=DblLit(value=1.1))
+Assign(target=ArrayRef(name='V1#', indices=(Lit(value=2),)), value=DblLit(value=2.2))
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B'), value=Lit(value=2))
+Swap(a=ArrayRef(name='V1#', indices=(Var(name='A'),)), b=ArrayRef(name='V0#', indices=(Var(name='B'),)))
+Assign(target=Var(name='C'), value=Lit(value=1))
+Assign(target=Var(name='D'), value=Lit(value=2))
+Print(items=(ArrayRef(name='V1#', indices=(Var(name='C'),)), ArrayRef(name='V1#', indices=(Var(name='D'),))), newline=True, file=None, commas=(0, 1, 0))
+End()
+
+## t1_swap_dynstr
+Dim(name='V1$', bounds=(Lit(value=10),), also=(('V0$', (Lit(value=10),)),))
+Assign(target=ArrayRef(name='V1$', indices=(Lit(value=1),)), value=StrLit(value='AA'))
+Assign(target=ArrayRef(name='V1$', indices=(Lit(value=2),)), value=StrLit(value='BB'))
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B'), value=Lit(value=2))
+Swap(a=ArrayRef(name='V1$', indices=(Var(name='A'),)), b=ArrayRef(name='V0$', indices=(Var(name='B'),)))
+Assign(target=Var(name='C'), value=Lit(value=1))
+Assign(target=Var(name='D'), value=Lit(value=2))
+Print(items=(ArrayRef(name='V1$', indices=(Var(name='C'),)), ArrayRef(name='V1$', indices=(Var(name='D'),))), newline=True, file=None, commas=None)
+End()
+
 ## t1_tab
 Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Print(items=(StrLit(value='A'), Call(name='TAB', args=(Lit(value=7),)), Var(name='A')), newline=True, file=None, commas=None)
@@ -5787,6 +5817,16 @@ Assign(target=Var(name='B%'), value=Call(name='VARPTR', args=(Var(name='A'),)))
 Assign(target=Var(name='C%'), value=VarSeg())
 End()
 
+## t1_varptrs_arr
+Dim(name='V0%', bounds=(20,), also=())
+Assign(target=Var(name='A$'), value=Call(name='VARPTR$', args=(ArrayRef(name='V0%', indices=(Lit(value=0),)),)))
+End()
+
+## t1_varptrs_scalar
+Assign(target=Var(name='A%'), value=Lit(value=1))
+Assign(target=Var(name='B$'), value=Call(name='VARPTR$', args=(Var(name='A%'),)))
+End()
+
 ## t1_view
 View(x1=Lit(value=10), y1=Lit(value=10), x2=Lit(value=100), y2=Lit(value=100), screen=False, color=None, border=None)
 End()
@@ -5883,12 +5923,42 @@ Assign(target=Var(name='G'), value=BinOp(op='+', lhs=Group(inner=BinOp(op='+', l
 Assign(target=Var(name='H'), value=BinOp(op='*', lhs=Var(name='A'), rhs=Lit(value=10)))
 End()
 
+## v10_dynconstnum
+Dim(name='V0%', bounds=(Lit(value=20),), also=())
+Assign(target=ArrayRef(name='V0%', indices=(Lit(value=1),)), value=Lit(value=7))
+Print(items=(ArrayRef(name='V0%', indices=(Lit(value=1),)),), newline=True, file=None, commas=None)
+End()
+
 ## v10_subdef
 SubDef(name='SUB1', params=(), body=(Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1))), Print(items=(StrLit(value='S'), Var(name='A')), newline=True, file=None, commas=None)))
 Assign(target=Var(name='B'), value=Lit(value=5))
 CallStmt(name='SUB1', args=())
 CallStmt(name='SUB1', args=())
 Print(items=(StrLit(value='M'), Var(name='B')), newline=True, file=None, commas=None)
+
+## v10_swap_dyndbl
+Dim(name='V1#', bounds=(Lit(value=10),), also=(('V0#', (Lit(value=10),)),))
+Assign(target=ArrayRef(name='V1#', indices=(Lit(value=1),)), value=DblLit(value=1.1))
+Assign(target=ArrayRef(name='V1#', indices=(Lit(value=2),)), value=DblLit(value=2.2))
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B'), value=Lit(value=2))
+Swap(a=ArrayRef(name='V1#', indices=(Var(name='A'),)), b=ArrayRef(name='V0#', indices=(Var(name='B'),)))
+Assign(target=Var(name='C'), value=Lit(value=1))
+Assign(target=Var(name='D'), value=Lit(value=2))
+Print(items=(ArrayRef(name='V1#', indices=(Var(name='C'),)), ArrayRef(name='V1#', indices=(Var(name='D'),))), newline=True, file=None, commas=(0, 1, 0))
+End()
+
+## v10_swap_dynstr
+Dim(name='V1$', bounds=(Lit(value=10),), also=(('V0$', (Lit(value=10),)),))
+Assign(target=ArrayRef(name='V1$', indices=(Lit(value=1),)), value=StrLit(value='AA'))
+Assign(target=ArrayRef(name='V1$', indices=(Lit(value=2),)), value=StrLit(value='BB'))
+Assign(target=Var(name='A'), value=Lit(value=1))
+Assign(target=Var(name='B'), value=Lit(value=2))
+Swap(a=ArrayRef(name='V1$', indices=(Var(name='A'),)), b=ArrayRef(name='V0$', indices=(Var(name='B'),)))
+Assign(target=Var(name='C'), value=Lit(value=1))
+Assign(target=Var(name='D'), value=Lit(value=2))
+Print(items=(ArrayRef(name='V1$', indices=(Var(name='C'),)), ArrayRef(name='V1$', indices=(Var(name='D'),))), newline=True, file=None, commas=None)
+End()
 
 ## v10_t1_addimm
 Assign(target=Var(name='A%'), value=Lit(value=5))
@@ -11332,6 +11402,16 @@ Assign(target=Var(name='E'), value=BinOp(op='*', lhs=Var(name='A'), rhs=Var(name
 Assign(target=Var(name='F'), value=BinOp(op='/', lhs=Var(name='A'), rhs=Var(name='B')))
 Assign(target=Var(name='G'), value=BinOp(op='+', lhs=BinOp(op='*', lhs=Var(name='B'), rhs=Var(name='C')), rhs=Var(name='A')))
 Assign(target=Var(name='H'), value=BinOp(op='*', lhs=Group(inner=BinOp(op='+', lhs=Var(name='A'), rhs=Var(name='B'))), rhs=Var(name='C')))
+End()
+
+## v10_varptrs_arr
+Dim(name='V0%', bounds=(20,), also=())
+Assign(target=Var(name='A$'), value=Call(name='VARPTR$', args=(ArrayRef(name='V0%', indices=(Lit(value=0),)),)))
+End()
+
+## v10_varptrs_scalar
+Assign(target=Var(name='A%'), value=Lit(value=1))
+Assign(target=Var(name='B$'), value=Call(name='VARPTR$', args=(Var(name='A%'),)))
 End()
 
 ## zz_bif1

@@ -403,8 +403,24 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         ops.append((p, "movesdx"))
         p += 2
         return p
+    if b == 0x8E and exe[p + 1] == 0xDA:  # mov ds, dx (reverse array SWAP restore)
+        ops.append((p, "movdsdx"))
+        p += 2
+        return p
     if b == 0x8E and exe[p + 1] == 0x06:  # mov es, [disp16] (far array seg)
         ops.append((p, "moves_m", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4
+        return p
+    if b == 0x8E and exe[p + 1] == 0x1E:  # mov ds, [disp16] (reverse array SWAP)
+        ops.append((p, "movds_m", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4
+        return p
+    if b == 0x8C and exe[p + 1] == 0x06:  # mov [disp16], es (VARPTR$ pointer temp)
+        ops.append((p, "movm_es", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4
+        return p
+    if b == 0x89 and exe[p + 1] == 0x36:  # mov [disp16], si (VARPTR$ pointer temp)
+        ops.append((p, "movm_si", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4
         return p
     if b == 0x2B and exe[p + 1] == 0x06:  # sub ax, [disp16] (far IDX)
@@ -719,6 +735,14 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "far_cmpax_si"))  # relational against a by-ref param
         p += 3  # (witnessed t1_cmpfar)
         return p
+    if b == 0x26 and exe[p + 1] == 0x89 and exe[p + 2] == 0x06:
+        # mov es:[disp16], ax: direct element store in a runtime array whose
+        # segment is loaded from the allocator's current-array cell.  The
+        # constant-bound `$DYNAMIC` form uses this topology (t1_dynconstnum);
+        # it is deliberately separate from the indexed ES:[SI] family.
+        ops.append((p, "far_movm_ax_disp", struct.unpack_from("<H", exe, p + 3)[0]))
+        p += 5
+        return p
     if b == 0x3B and exe[p + 1] == 0x04:  # cmp ax, [si]: relational against a
         ops.append((p, "cmpax_si"))  # computed static int-array element
         p += 2  # (wild number.exe)
@@ -789,9 +813,57 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "far_movax_bx"))  # SWAP-of-array-elements tail: read the
         p += 3  # first elem via a near-array's ES-aliased address (q_arrswap)
         return p
+    if b == 0x8B and exe[p + 1] == 0x07:  # mov ax, [bx]: reverse SWAP tail
+        ops.append((p, "movax_bx"))
+        p += 2
+        return p
     if b == 0x87 and exe[p + 1] == 0x04:  # xchg ax, [si]: SWAP-of-array-elements
         ops.append((p, "xchgsi"))  # tail, swap ax with the second (near) elem
         p += 2  # (q_arrswap)
+        return p
+    if b == 0x26 and exe[p + 1] == 0x87 and exe[p + 2] == 0x04:
+        ops.append((p, "far_xchgsi"))
+        p += 3
+        return p
+    if b == 0x89 and exe[p + 1] == 0x07:  # mov [bx], ax: reverse SWAP tail
+        ops.append((p, "movm_ax_bx"))
+        p += 2
+        return p
+    if b == 0x8B and exe[p + 1] == 0x47 and exe[p + 2] == 2:
+        ops.append((p, "movax_bx2"))
+        p += 3
+        return p
+    if b == 0x26 and exe[p + 1] == 0x87 and exe[p + 2] == 0x44 and exe[p + 3] == 2:
+        ops.append((p, "far_xchgsi2"))
+        p += 4
+        return p
+    if b == 0x89 and exe[p + 1] == 0x47 and exe[p + 2] == 2:
+        ops.append((p, "movm_ax_bx2"))
+        p += 3
+        return p
+    if b == 0x8B and exe[p + 1] == 0x47 and exe[p + 2] == 4:
+        ops.append((p, "movax_bx4"))
+        p += 3
+        return p
+    if b == 0x26 and exe[p + 1] == 0x87 and exe[p + 2] == 0x44 and exe[p + 3] == 4:
+        ops.append((p, "far_xchgsi4"))
+        p += 4
+        return p
+    if b == 0x89 and exe[p + 1] == 0x47 and exe[p + 2] == 4:
+        ops.append((p, "movm_ax_bx4"))
+        p += 3
+        return p
+    if b == 0x8B and exe[p + 1] == 0x47 and exe[p + 2] == 6:
+        ops.append((p, "movax_bx6"))
+        p += 3
+        return p
+    if b == 0x26 and exe[p + 1] == 0x87 and exe[p + 2] == 0x44 and exe[p + 3] == 6:
+        ops.append((p, "far_xchgsi6"))
+        p += 4
+        return p
+    if b == 0x89 and exe[p + 1] == 0x47 and exe[p + 2] == 6:
+        ops.append((p, "movm_ax_bx6"))
+        p += 3
         return p
     if b == 0x26 and exe[p + 1] == 0x89 and exe[p + 2] == 0x07:  # mov es:[bx], ax:
         ops.append((p, "far_movm_ax_bx"))  # SWAP-of-array-elements tail, store

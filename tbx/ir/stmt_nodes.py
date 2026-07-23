@@ -6,7 +6,7 @@ module. Statement-level blocks (IfBlock/SelectCase/SubDef/DefFn) are emitted by
 """
 
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from tbx.ir.expr_nodes import Expr, Stmt
@@ -173,6 +173,7 @@ class Dim:
     name: str
     bounds: tuple[Any, ...]  # int | Expr (1 or 2 entries)
     also: tuple[Any, ...] = ()  # (name, bounds) comma-list tail
+    dynamic: bool = field(default=False, repr=False)  # preserve explicit runtime allocation
 
 
 @dataclass(frozen=True)

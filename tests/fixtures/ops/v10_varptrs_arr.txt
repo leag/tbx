@@ -1,0 +1,13 @@
+# v10_varptrs_arr dialect=1.0 start=070B0
+070B3:movsi:368
+070B6:movdx:150
+070B9:movesdx
+070BB:movm_imm:46:517
+070C1:movm_es:50
+070C5:movm_si:48
+070C9:shortstr
+070CB:movsi:342
+070CE:strassign
+070D0:end
+070D3:epilogue
+# commits

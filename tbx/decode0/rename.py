@@ -278,6 +278,7 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
                 s.name,
                 tuple(wb(b) for b in s.bounds),
                 tuple((n, tuple(wb(b) for b in bs)) for n, bs in s.also),
+                s.dynamic,
             )
         if isinstance(s, ir.Screen):
             wn = lambda e: None if e is None else walk(e)  # noqa: E731

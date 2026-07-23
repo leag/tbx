@@ -51,16 +51,16 @@ edition/runtime tag, and evidence provenance.
 
 ### Live checkpoint
 
-- Updated: 2026-07-20
+- Updated: 2026-07-22
 - Branch: `claude/claude-md-docs-mr8ssz`
 - Baseline commit: `25fbe9c` (`Decode INP intrinsic dispatcher`)
-- Corpus: `wild/hits/` (84 Turbo Basic executables; gitignored, never commit)
-- Baseline result: 14 decode OK, 70 fail at their first visible gap
-- Current strict result: 16 decode OK, 68 blocked. Several blocked files have
+- Corpus: `wild/hits/` (93 Turbo Basic executables; gitignored, never commit)
+- Baseline result: 23 decode OK, 62 fail at their first visible gap (including
+  the oracle-derived `arrayparam6.exe` probe added during this session)
+- Current strict result: 26 decode OK, 67 blocked. Several blocked files have
   advanced through multiple signatures even though the strict count is flat.
-- Current validation: 2233 passed, 14 skipped (2026-07-20); eight new 1.0/1.1
-  oracle round trips are byte-exact for nested logical short-circuit forms and
-  leading-semicolon `LINE INPUT;`.
+- Current validation: 2430 passed, 14 skipped (2026-07-22); Ruff and
+  `git diff --check` pass. The new 1.0/1.1 oracle fixtures are byte-exact.
 - Immediate target: `unhandled INT 8c` (four files), continuing from Gap 33 in
   `Part III`; the seven-file `byte ea` group is now advanced and documented
   as a runtime-revision closure.
@@ -227,6 +227,19 @@ fixture-backed closures.
   already partly covered by the DI work.
 - [ ] byte `8c`, `8b`, `0b`, `1e`, `f7` — 2 files each. Cluster by the complete
   instruction and nearby ops rather than by first byte alone.
+- [x] `VARPTR$` pointer-string construction — direct `8c 06`/`89 36` stores
+  into the runtime's pointer-string staging cells, calibrated for scalar
+  variables and rank-1 integer array elements. Fixtures `t1_varptrs_scalar`,
+  `t1_varptrs_arr` and their `v10_` pairs are byte-exact; the decoder keeps
+  rank and chain shape checks fail-loud.
+- [x] Reverse dynamic-array `SWAP` segment juggling — `mov es,[block];
+  mov [scratch],es; mov es,[block]; mov ds,[scratch]` followed by the
+  far/near descriptor exchange. Calibrated for STRING and DOUBLE elements;
+  the four `t1_`/`v10_` fixtures are byte-exact.
+- [x] Integer runtime-array direct constant-subscript stores/loads (`26 89 06
+  disp16` and the matching `far_fild`) — `$DYNAMIC` integer arrays. Fixture
+  `t1_dynconstnum`, byte-exact verified; the runtime-slot layout now accepts
+  integer type `0x00` and preserves `DIM DYNAMIC` in emitted source.
 - [~] relational/materialization gaps: the two apparent integer `IF jcc 7f`
   failures were stale `pend_cmp_str` state after a materialized string condition
   and are closed. Nested outer-AND forms now cover the `jcc 75`/`jcc 74`, BX/CX
@@ -627,6 +640,17 @@ ending in a nested `FOR...NEXT`)), branch `claude/claude-md-docs-mr8ssz`.
 Standing instruction: close the most common decoder gap first, in frequency
 order, over the 84 wild PC-SIG Turbo Basic EXEs in `wild/hits/` (untracked,
 gitignored, copyrighted shareware — **never commit them**).
+
+### Session 2026-07-22: compiling array-parameter probe promoted to wild corpus
+
+Per the campaign rule, the documented array-parameter probe
+(`DIM A(3)` / `SUB F(B(1))` / `CALL F(A())`) compiled with the restored
+oracle but failed decoding at an earlier `unhandled INT d4`. It does not
+reproduce Gap 33's `INT EC sub 38`; the handbook's COMMON-array forms and
+automatic local dynamic-array cleanup probes decoded cleanly. The retained
+oracle executable is `wild/hits/arrayparam6.exe` (gitignored). The corpus is
+now 85 executables: 23 decode OK and 62 blocked. This new `INT d4` witness
+is preserved for the later singleton-dispatch work item.
 
 ### Session 2026-07-22 (later same day): the `far_call(mid-flow)` mystery SOLVED
 
@@ -3485,7 +3509,77 @@ Newly exposed blockers:
 The latter two are new gaps, not evidence against the `ED/1e` identification:
 both programs scan and fold beyond every former dispatcher site before failing.
 
+### CLOSED 2026-07-22 — integer runtime-array direct constant-subscript access
+
+The promoted oracle probe `probe_metadynamic_num.exe` exposed a separate
+runtime-array gap: integer arrays use runtime-slot type byte `0x00`, and a
+constant element assignment emits `mov es,[0120]` followed by
+`26 89 06 <disp16>` rather than the indexed `ES:[SI]` store family. The
+matching read uses the existing ES-override FP path as `far_fild`. The scanner
+now records the direct store, the lifter resolves its two-byte integer offset
+through the active runtime-array record, and the layout anchor accepts integer
+runtime slots. `Dim.dynamic` preserves the required `DIM DYNAMIC` spelling for
+constant-bound runtime arrays without changing existing IR snapshots.
+
+Fixture `t1_dynconstnum` is present in both dialect-independent corpus form and
+ops/user-code snapshots. `verify_fixture t1_dynconstnum` is byte-exact; the
+full suite passes at 2410 passed / 14 skipped; Ruff and `git diff --check` pass.
+The fresh wild scan advanced the promoted probe and reports 24 decode OK / 67
+blocked across 91 executables, with zero regressions.
+
+### CLOSED 2026-07-22 — VARPTR$ pointer-string construction
+
+The retained scalar and rank-1 array probes share the exact chain
+`movsi; movdx; movesdx; mov [002e],imm16; mov [0032],ES; mov [0030],SI;
+shortstr; movsi; strassign`. The decoder now recognizes that complete chain,
+resolves either a scalar slot or a constant-bound rank-1 array element, and
+emits `VARPTR$` as an IR call. Partial chains and unsupported array ranks
+remain fail-loud.
+
+Fixtures `t1_varptrs_scalar`, `t1_varptrs_arr`, `v10_varptrs_scalar`, and
+`v10_varptrs_arr` all pass byte-exact oracle verification. The two retained
+wild probes are now decode-OK; the next fresh wild tally should therefore be
+26 decode OK / 67 blocked across 93 executables.
+
+### CLOSED 2026-07-22 — reverse dynamic-array SWAP segment juggling
+
+Oracle probes with two `$DYNAMIC` arrays reproduce the remaining reverse
+segment topology: the first computed element loads ES and saves it with
+`mov [0062],ES`; the second loads its own ES, restores the saved segment into
+DS, and swaps the two element payloads through opposite segment overrides.
+The decoder recognizes the complete reverse tail, including the two-word
+STRING descriptor and the four-word DOUBLE payload, and consumes the explicit
+`mov DS,DX` restoration only as part of that gated chain. Partial tails and
+other element widths remain fail-loud.
+
+Fixtures `t1_swap_dynstr`, `v10_swap_dynstr`, `t1_swap_dyndbl`, and
+`v10_swap_dyndbl` pass byte-exact oracle verification. The runtime-slot layout
+anchor also now admits the already-documented DOUBLE type byte `0x06` when
+finding dynamic-array records. The wild scan remains 26 decode OK / 67 blocked;
+`mdb.exe` and `mdb87.exe` advance from byte `8e` to a later `testw` gap, while
+`stat.exe` advances to a subsequent runtime-layout gap.
+
 ### Gap 33 — INT EC sub 38 (catalog/football/refund/varamort), UNDIAGNOSED
+
+Fresh handbook probes for `PALETTE USING P%(0)` (dynamic, static, and variable
+index forms) all compiled but decoded to the distinct `INT EC sub 8a` gap. Per
+the repository agent rule, their executables are retained as
+`wild/hits/probe_paletteusing*.exe`; they are negative evidence against
+PALETTE USING as the source of canonical `EC/38`. Explicit `LOCAL A$()` / `LOCAL
+A%()` variants were also retained as `wild/hits/probe_localdecl*.exe`; both
+fail earlier at byte `8b`, so they are separate Wave-2 evidence rather than
+Gap 33 matches. The corpus is now 91 executables: 24 decode OK and 67
+blocked.
+
+`VARSEG` and `VARPTR` array-element probes decoded cleanly without `EC/38`.
+The retained `VARPTR$` scalar and array probes now decode cleanly after the
+separate intrinsic closure. The corpus is now 93 executables: 26 decode OK
+and 67 blocked.
+
+`$DYNAMIC` constant-bound DIM probes for string arrays decoded cleanly; the
+numeric form originally failed at byte `26`. That witness is now decode-OK
+after the integer runtime-array closure; it remains in `wild/hits/` as a
+promoted probe and is covered by fixture `t1_dynconstnum`.
 
 Grew from 2 files to 3 in the prior session when varamort.exe joined once its
 unrelated BLOAD-with-no-offset gap closed (see "Recently closed" above)

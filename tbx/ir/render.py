@@ -266,7 +266,8 @@ def _us_decl(s) -> str | None:
         def arr(name, bounds):
             return f"{name}({','.join(bound(b) for b in bounds)})"
 
-        return "DIM " + ", ".join(arr(n, b) for n, b in ((s.name, s.bounds), *s.also))
+        prefix = "DIM DYNAMIC " if s.dynamic else "DIM "
+        return prefix + ", ".join(arr(n, b) for n, b in ((s.name, s.bounds), *s.also))
     if isinstance(s, OptionBase):
         return f"OPTION BASE {s.n}"
     if isinstance(s, DefType):

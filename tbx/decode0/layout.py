@@ -27,6 +27,23 @@ def _blit_at(ops: list[tuple[Any, ...]], i: int):
     return None
 
 
+def _varptr_at(ops: list[tuple[Any, ...]], i: int) -> bool:
+    """Whether ops[i]'s movsi is the address source of a VARPTR$ chain."""
+    return (
+        ops[i][1] == "movsi"
+        and i + 6 < len(ops)
+        and ops[i + 1][1] == "movdx"
+        and ops[i + 2][1] == "movesdx"
+        and ops[i + 3][1] == "movm_imm"
+        and ops[i + 3][2] == 0x2E
+        and ops[i + 4][1] == "movm_es"
+        and ops[i + 4][2] == 0x32
+        and ops[i + 5][1] == "movm_si"
+        and ops[i + 5][2] == 0x30
+        and ops[i + 6][1] == "shortstr"
+    )
+
+
 def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
     """Solve the DGROUP layout under the unified slot model: every array
     owns a 0x36 slot from DS:0120 (statics first in reverse DIM order, then runtime
@@ -103,6 +120,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
     # descriptor -- without this exclusion the walk misreads the slot as a string
     # scalar and the layout solves with the pool 0x30 low.
     blit_disps = {ops[i][2] for i in range(len(ops)) if _blit_at(ops, i) is not None}
+    varptr_disps = {ops[i][2] for i in range(len(ops)) if _varptr_at(ops, i)}
     # movsi targets are string descriptors: scalar slots (string vars) or
     # pooled literals -- except constant far-element offsets.
     movsi_disps = (
@@ -119,6 +137,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
         - set(rt_blocks)
         - argarr_disps
         - blit_disps
+        - varptr_disps
     )
     prompt_disps = {o[2] for o in ops if o[1] in ("input", "line_input")}
     addsi_bases = {o[2] for o in ops if o[1] == "addsi"}
@@ -277,7 +296,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
         pat = tuple(
             struct.pack("<HH", 0, (r << 8) | t)
             for r in (1, 2, 3)
-            for t in (0x04, 0x0A)
+            for t in (0x00, 0x04, 0x06, 0x0A)
         )
         need = rt_blocks[-1] + 18  # last record byte we must read
         for pos in range(0, len(exe) - 18, 2):

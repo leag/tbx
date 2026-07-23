@@ -108,6 +108,7 @@ class DecodeState:
     pend_print: dict[str, Any] | None = None
     pend_shortstr: Any = None
     pend_swap: Any = None
+    pend_swap_rev: Any = None
     pend_using: Any = None
     prev_dim_end: Any = None
     proc_frame: Any = None
@@ -1904,6 +1905,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
     state.pend_shortstr = None  # packed 1-char string awaiting `shortstr`
     state.pend_mode_lit = None  # OPEN's FOR-keyword mode, once materialized
     state.pend_swap = None  # first ArrayRef of an ES-aliased array-element SWAP
+    state.pend_swap_rev = None  # first far ArrayRef of the reverse dynamic SWAP
     state.cx = None  # 2nd-level index stash / WAIT and-mask
     state.di = None  # 3rd-level spill stash for nested integer expressions
     state.si = None  # element-index register (raw index / idx token)
@@ -2774,10 +2776,8 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 # t1_dblarr), so the name is typed from birth.
                 tb = exe[state.ds + block + 2]
                 is_str = tb == 0x0A
-                name = (
-                    f"V{state.lay['n_static'] + state.lay['rt_blocks'].index(block)}"
-                    + ("$" if is_str else "#" if tb == 0x06 else "")
-                )
+                suffix = "$" if is_str else "%" if tb == 0x00 else "#" if tb == 0x06 else "&" if tb == 0x02 else ""
+                name = f"V{state.lay['n_static'] + state.lay['rt_blocks'].index(block)}{suffix}"
                 if not all(isinstance(v, ir.Lit) for v in lows):
                     raise ValueError(
                         f"non-literal DIM lower bound at {addr:#x}: {lows}"
@@ -2786,6 +2786,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
                     "name": name,
                     "rank": rank,
                     "str": is_str,
+                    "esz": 8 if tb == 0x06 else 4 if tb in (0x02, 0x04, 0x0A) else 2,
                     "lo": [v.value for v in lows],
                 }
                 state.slot_info[block] = state.r_arrs[block]
@@ -2803,9 +2804,25 @@ def decode_user_code(exe: bytes) -> list[Any]:
                         prev.name,
                         prev.bounds,  # allocate: same
                         prev.also + ((name, bounds),),
+                        prev.dynamic,
                     )  # comma list
                 else:
-                    state.put(ir.Dim(name, bounds), state.dim_frame["start"])
+                    state.put(
+                        ir.Dim(
+                            name,
+                            bounds,
+                            dynamic=all(
+                                isinstance(v, int)
+                                or isinstance(v, ir.Lit)
+                                or (
+                                    isinstance(v, tuple)
+                                    and isinstance(v[1], (int, ir.Lit))
+                                )
+                                for v in bounds
+                            ),
+                        ),
+                        state.dim_frame["start"],
+                    )
                 state.prev_dim_end = state.ops[state.k + 3][0]
                 state.dim_frame = None
             state.cur = None
@@ -3038,6 +3055,40 @@ def decode_user_code(exe: bytes) -> list[Any]:
             state.k += 1
             continue
         if kind == "movsi":  # string operand by descriptor
+            # VARPTR$(variable) materializes the five-byte pointer string by
+            # staging the current ES:SI address in [0032]:[0030], then using
+            # the packed descriptor in [002E]. Scalar and array-element
+            # forms share this exact chain (probe_varptrs_scalar and
+            # probe_varptrs_arr); only the address source differs.
+            if (
+                state.k + 8 < len(state.ops)
+                and state.ops[state.k + 1][1] == "movdx"
+                and state.ops[state.k + 2][1] == "movesdx"
+                and state.ops[state.k + 3][1] == "movm_imm"
+                and state.ops[state.k + 3][2] == 0x2E
+                and state.ops[state.k + 4] == (state.ops[state.k + 4][0], "movm_es", 0x32)
+                and state.ops[state.k + 5] == (state.ops[state.k + 5][0], "movm_si", 0x30)
+                and state.ops[state.k + 6][1] == "shortstr"
+                and state.ops[state.k + 7][1] == "movsi"
+                and state.ops[state.k + 8][1] == "strassign"
+            ):
+                src = state.slot_info.get(op[2])
+                if src is not None:
+                    if src["rank"] != 1:
+                        raise ValueError(f"VARPTR$ rank-{src['rank']} array at {addr:#x}")
+                    arg = ir.ArrayRef(src["name"], (ir.Lit(src["lo"][0]),))
+                else:
+                    arg = state.loc(op[2])
+                state.put(
+                    ir.Assign(
+                        state.loc(state.ops[state.k + 7][2]),
+                        ir.Call("VARPTR$", (arg,)),
+                    ),
+                    state.cur,
+                )
+                state.cur = None
+                state.k += 9
+                continue
             nxt = state.ops[state.k + 1][1:] if state.k + 1 < len(state.ops) else None
             d = cast(int, op[2])
             if nxt == ("rt", 0x9C):  # push (var desc, static string-array
@@ -3172,6 +3223,28 @@ def decode_user_code(exe: bytes) -> list[Any]:
             if op[2] not in state.r_arrs:
                 raise ValueError(f"mov es from non-array cell {op[2]:#x} at {addr:#x}")
             state.pend_es = op[2]
+            state.k += 1
+            continue
+        if kind == "far_movm_ax_disp":
+            # `$DYNAMIC` constant-bound numeric arrays use a direct ES:[disp]
+            # store for constant subscripts, rather than the usual indexed
+            # ES:[SI] path (witnessed t1_dynconstnum).  The displacement is
+            # the byte offset within a 2-byte integer array element stream.
+            if state.pend_es is None:
+                raise ValueError(f"direct far array store without ES at {addr:#x}")
+            rec = state.r_arrs.get(state.pend_es)
+            if rec is None or rec.get("str"):
+                raise ValueError(f"direct far array store type mismatch at {addr:#x}")
+            if op[2] & 1:
+                raise ValueError(f"unaligned direct far array store at {addr:#x}")
+            idx = op[2] // 2 + rec["lo"][0]
+            state.put(
+                ir.Assign(ir.ArrayRef(rec["name"], (ir.Lit(idx),)), state.ax),
+                state.cur,
+            )
+            state.ax = None
+            state.pend_es = None
+            state.cur = None
             state.k += 1
             continue
         if handlers.far_fp(state, op, addr, kind):

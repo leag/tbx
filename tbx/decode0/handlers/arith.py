@@ -801,6 +801,46 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                     state.k = k2
                     return True
             raise ValueError(f"cmpax_si without an IF jcc consumer at {addr:#x}")
+        elif sik[1] == "movm_es":
+            # Reverse dynamic-array SWAP: the first (far) string descriptor is
+            # saved in a scratch segment cell before the second operand loads
+            # its own segment into ES and aliases the saved segment as DS.
+            # This is the mirror image of the calibrated near->far SWAP path.
+            if not far or not (a.get("str") or a.get("esz") == 8):
+                raise ValueError(f"reverse array SWAP source mismatch at {addr:#x}")
+            state.pend_swap_rev = (ref, sik[2])
+        elif sik[1] == "movds_m" and state.pend_swap_rev is not None:
+            first, scratch = state.pend_swap_rev
+            if sik[2] != scratch or not far or not (a.get("str") or a.get("esz") == 8):
+                raise ValueError(f"reverse array SWAP segment mismatch at {addr:#x}")
+            tail = [t[1] for t in state.ops[state.k + ao + 2 : state.k + ao + 6]]
+            if tail != ["movbxax", "movax_bx", "far_xchgsi", "movm_ax_bx"]:
+                raise ValueError(f"reverse array SWAP tail mismatch at {addr:#x}")
+            tail2 = [
+                t[1] for t in state.ops[state.k + ao + 6 : state.k + ao + 9]
+            ]
+            if tail2 != ["movax_bx2", "far_xchgsi2", "movm_ax_bx2"]:
+                raise ValueError(f"reverse array SWAP high-word tail mismatch at {addr:#x}")
+            words = 2
+            if a.get("esz") == 8:
+                tail3 = [
+                    t[1] for t in state.ops[state.k + ao + 9 : state.k + ao + 12]
+                ]
+                tail4 = [
+                    t[1] for t in state.ops[state.k + ao + 12 : state.k + ao + 15]
+                ]
+                if tail3 != ["movax_bx4", "far_xchgsi4", "movm_ax_bx4"]:
+                    raise ValueError(f"reverse array SWAP word-3 tail mismatch at {addr:#x}")
+                if tail4 != ["movax_bx6", "far_xchgsi6", "movm_ax_bx6"]:
+                    raise ValueError(f"reverse array SWAP word-4 tail mismatch at {addr:#x}")
+                words = 4
+            state.put(ir.Swap(first, ref), state.cur)
+            state.pend_swap_rev = None
+            state.cur = None
+            # Consume the low/high descriptor exchange plus MOV DS,DX, which
+            # restores the caller's data segment after the temporary alias.
+            state.k += ao + (11 if words == 2 else 17)
+            return True
         elif sik[1] == "movm_ds":
             # `mov [disp16], ds`: DS spilled to a scratch slot ahead of an
             # ES-aliased near-array access -- the first operand of `SWAP
@@ -1105,19 +1145,28 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
 
 
 def far_fp(state: DecodeState, op, addr, kind) -> bool:
-    """Dispatch family: far_fld, far_fstp, far_fold."""
-    if kind in ("far_fld", "far_fstp", "far_fold"):  # 1-D const subscript
+    """Dispatch family: far FP loads/stores/folds on constant array elements."""
+    if kind in (
+        "far_fld",
+        "far_fild",
+        "far_fstp",
+        "far_fold",
+        "far_fld64",
+        "far_fstp64",
+        "far_fold64",
+    ):  # 1-D const subscript
         if state.pend_es is None:
             raise ValueError(f"far FP op without ES at {addr:#x}")
         a = state.r_arrs[state.pend_es]
         if a["rank"] != 1:
             raise ValueError(f"direct-disp far access on rank-{a['rank']} array")
-        disp = op[2] if kind != "far_fold" else op[3]
-        ref = ir.ArrayRef(a["name"], (ir.Lit(disp // 4 + a["lo"][0]),))
+        disp = op[2] if kind not in ("far_fold", "far_fold64") else op[3]
+        width = 2 if kind == "far_fild" else 8 if kind.endswith("64") else 4
+        ref = ir.ArrayRef(a["name"], (ir.Lit(disp // width + a["lo"][0]),))
         state.pend_es = None
-        if kind == "far_fld":
+        if kind in ("far_fld", "far_fild"):
             state.stack.append(ref)
-        elif kind == "far_fstp":
+        elif kind in ("far_fstp", "far_fstp64"):
             state.put(ir.Assign(ref, state.stack.pop()), state.cur)
             state.cur = None
         else:
