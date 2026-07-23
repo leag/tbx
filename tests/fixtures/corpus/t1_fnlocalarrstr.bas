@@ -1,5 +1,5 @@
 10 DEF FNX(A)
-20 LOCAL S$(), B, T$, N%
+20 LOCAL S$(), B, T$, N%, I, ST
 28 N% = 2
 30 DIM S$(N%)
 40 S$(1) = "X"
@@ -10,7 +10,11 @@
 54 S$(G) = "Y"
 56 NEXT G
 58 ERASE S$
-60 FNX = B + A
+59 ST = 1
+60 FOR I = 1 TO N% STEP ST
+61 B = B + I
+62 NEXT I
+65 FNX = B + A
 70 END DEF
 80 PRINT FNX(3)
 90 END

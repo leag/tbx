@@ -935,6 +935,21 @@ fixing the intra-inline-IF gap above will also close it.
 
 ## Part III — Investigation history / handoff log
 
+### 2026-07-23 — FWAIT-prefixed local FOR/NEXT tests
+
+Closed the later shared `testw_bp` gap in `cleanup.exe` and
+`reformat.exe`. An all-local SINGLE loop stores its incremented loop
+variable with `fstp_bp` and emits an explicit `fwait` at the FOR
+header's jump target before the ordinary step-sign `testw_bp`. The
+header detector previously inspected the jump target itself and the
+open FOR consequently recorded the FWAIT address, so the later TEST
+could not close it. The jump path now advances across exactly one
+FWAIT only when the following complete LOCAL NEXT template validates,
+and records the TEST address. Extended dual-dialect
+`t1_fnlocalarrstr` reproduces the all-local variable-STEP loop and
+round-trips byte-for-byte. Both wild witnesses advance to a numeric
+INPUT target gap.
+
 ### 2026-07-23 — computed bounds in LOCAL DIM descriptors
 
 Closed the shared `LOCAL DIM bound cells incomplete` gap in

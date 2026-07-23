@@ -35,8 +35,8 @@ def test_runtime_layout_recovers_scalars_after_hole(stem, string_disp, single_di
 @pytest.mark.parametrize(
     ("stem", "next_gap"),
     [
-        ("cleanup.exe", "unhandled op testw_bp at 0xbb75"),
-        ("reformat.exe", "unhandled op testw_bp at 0xbb6e"),
+        ("cleanup.exe", "numeric INPUT read without FSTP at 0xbbf1"),
+        ("reformat.exe", "numeric INPUT read without FSTP at 0xbbea"),
     ],
 )
 def test_runtime_layout_witnesses_reach_next_gap(stem, next_gap):

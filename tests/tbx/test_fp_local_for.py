@@ -20,9 +20,9 @@ def test_scan_testw_bp_is_exact():
 @pytest.mark.parametrize(
     ("stem", "next_gap"),
     [
-        ("cleanup.exe", "unhandled op testw_bp at 0xbb75"),
+        ("cleanup.exe", "numeric INPUT read without FSTP at 0xbbf1"),
         ("crossref.exe", "unhandled INT EC sub 38 at 0x11a63"),
-        ("reformat.exe", "unhandled op testw_bp at 0xbb6e"),
+        ("reformat.exe", "numeric INPUT read without FSTP at 0xbbea"),
     ],
 )
 def test_fp_local_for_advances_wild_program(stem, next_gap):
@@ -38,9 +38,10 @@ def test_mixed_def_fn_for_storage(stem):
     )
     fn = program[0]
     assert isinstance(fn, ir.DefFn)
-    assert next(stmt for stmt in fn.body if isinstance(stmt, ir.For)) == ir.For(
-        ir.Var("E"), ir.Lit(0), ir.Lit(2), ir.Var("B")
-    )
+    assert [stmt for stmt in fn.body if isinstance(stmt, ir.For)] == [
+        ir.For(ir.Var("G"), ir.Lit(0), ir.Lit(2), ir.Var("B")),
+        ir.For(ir.Var("E"), ir.Lit(1), ir.Var("D%"), ir.Var("F")),
+    ]
 
 
 def test_ziptest_advances_to_forward_fn_resolution_gap():

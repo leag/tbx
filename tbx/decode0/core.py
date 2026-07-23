@@ -1532,6 +1532,13 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         frame = state.proc_frame if state.proc_frame is not None else state.fn_frame
         cmp_at_t = next((o for o in state.ops if o[0] == t), None)
         test_k = next((i for i, o in enumerate(state.ops) if o[0] == t), None)
+        if (
+            test_k is not None
+            and state.ops[test_k][1] == "fwait"
+            and test_k + 1 < len(state.ops)
+            and state.ops[test_k + 1][1] == "testw_bp"
+        ):  # all-local SINGLE FOR may jump to an x87 synchronization op
+            test_k += 1  # immediately before the normal sign-word test
         loose = (
             _loose_for_header(state.ops, test_k, state.stmts, state.vdisp)
             if test_k is not None
@@ -1556,7 +1563,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                     "v": vdisp,
                     "lim": lim,
                     "stp": stp,
-                    "test": t,
+                    "test": state.ops[test_k][0],
                     "body": state.ops[state.k + 1][0]
                     if state.k + 1 < len(state.ops)
                     else None,

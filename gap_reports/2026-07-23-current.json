@@ -198,8 +198,8 @@
     {
       "name": "wild/hits/cleanup.exe",
       "dialect": "1.1",
-      "message": "unhandled op testw_bp at 0xbb75",
-      "signature": "unhandled op testw_bp"
+      "message": "numeric INPUT read without FSTP at 0xbbf1",
+      "signature": "numeric INPUT read without FSTP"
     },
     {
       "name": "wild/hits/crossref.exe",
@@ -408,8 +408,8 @@
     {
       "name": "wild/hits/reformat.exe",
       "dialect": "1.1",
-      "message": "unhandled op testw_bp at 0xbb6e",
-      "signature": "unhandled op testw_bp"
+      "message": "numeric INPUT read without FSTP at 0xbbea",
+      "signature": "numeric INPUT read without FSTP"
     },
     {
       "name": "wild/hits/refund.exe",
@@ -525,6 +525,15 @@
       ]
     },
     {
+      "signature": "numeric INPUT read without FSTP",
+      "count": 3,
+      "files": [
+        "wild/hits/cal.exe",
+        "wild/hits/cleanup.exe",
+        "wild/hits/reformat.exe"
+      ]
+    },
+    {
       "signature": "87",
       "count": 2,
       "files": [
@@ -578,14 +587,6 @@
       "files": [
         "wild/hits/CVT2TB.EXE",
         "wild/hits/pw.exe"
-      ]
-    },
-    {
-      "signature": "unhandled op testw_bp",
-      "count": 2,
-      "files": [
-        "wild/hits/cleanup.exe",
-        "wild/hits/reformat.exe"
       ]
     },
     {
@@ -691,13 +692,6 @@
       "count": 1,
       "files": [
         "wild/hits/mcmurphy.exe"
-      ]
-    },
-    {
-      "signature": "numeric INPUT read without FSTP",
-      "count": 1,
-      "files": [
-        "wild/hits/cal.exe"
       ]
     },
     {
