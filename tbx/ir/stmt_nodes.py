@@ -515,6 +515,17 @@ class Palette:
 
 
 @dataclass(frozen=True)
+class PaletteUsing:
+    """PALETTE USING array%(index) (INT ECh sub 8Ah).
+
+    The operand identifies the first INTEGER-array element in the palette
+    table; the runtime consumes the following entries as well.
+    """
+
+    source: object  # ArrayRef
+
+
+@dataclass(frozen=True)
 class View:
     """VIEW [SCREEN] (x1,y1)-(x2,y2)[, color][, border] -- integer coords staged
     through the system cells [0088]=x1 [0094]=y1 [00A0]=x2 [00AC]=y2, committed by

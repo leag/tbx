@@ -3431,6 +3431,38 @@ def decode_user_code(exe: bytes) -> list[Any]:
                     state.cur = None
                 state.k += 2
                 continue
+            if nxt == ("palette_using",):
+                if state.pend_es is None:
+                    raise ValueError(f"PALETTE USING without ES at {addr:#x}")
+                a = state.r_arrs[state.pend_es]
+                if a.get("str") or a.get("esz") != 2 or a["rank"] != 1:
+                    raise ValueError(
+                        f"PALETTE USING non-INTEGER rank-{a['rank']} array at {addr:#x}"
+                    )
+                ref = ir.ArrayRef(
+                    a["name"], (ir.Lit(d // 2 + a["lo"][0]),)
+                )
+                state.pend_es = None
+                state.put(ir.PaletteUsing(ref), state.cur)
+                state.cur = None
+                state.k += 2
+                continue
+            if (
+                state.k + 3 < len(state.ops)
+                and state.ops[state.k + 1][1] == "movdx"
+                and state.ops[state.k + 2][1] == "movesdx"
+                and state.ops[state.k + 3][1] == "palette_using"
+            ):
+                ref = state.loc(d)
+                if not isinstance(ref, ir.ArrayRef):
+                    raise ValueError(f"PALETTE USING non-array operand at {addr:#x}")
+                a = next((a for a in state.arrs if a["name"] == ref.name), None)
+                if a is None or a.get("str") or a.get("esz") != 2 or a["rank"] != 1:
+                    raise ValueError(f"PALETTE USING array mismatch at {addr:#x}")
+                state.put(ir.PaletteUsing(ref), state.cur)
+                state.cur = None
+                state.k += 4
+                continue
             # Far array-element CALL arg: movsi d; movdx blk; movesdx; arg_push_arr
             if (
                 state.k + 3 < len(state.ops)

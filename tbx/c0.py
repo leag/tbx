@@ -1172,6 +1172,21 @@ class _Gen:
                 f"tb_pal[tb_i({self.num(s.attr)}) & 15] = "
                 f"(int)tb_i({self.num(s.color)}) & 15; tb_present();"
             ]
+        if isinstance(s, ir.PaletteUsing):
+            if not isinstance(s.source, ir.ArrayRef) or len(s.source.indices) != 1:
+                raise _Unsupported("PALETTE USING requires a rank-1 array element")
+            pidx = f"tb_palui{self.uid()}"
+            lines = [f"long {pidx} = tb_i({self.num(s.source.indices[0])});"]
+            for i in range(16):
+                ref = ir.ArrayRef(
+                    s.source.name,
+                    (ir.BinOp("+", _Raw(pidx, False), ir.Lit(i)),),
+                )
+                lines.append(
+                    f"tb_pal[{i}] = (int)tb_i({self.num(ref)}) & 15;"
+                )
+            lines.append("tb_present();")
+            return lines
         if isinstance(s, ir.Mtimer):
             return ["tb_mt0 = tb_mono();"]
         if isinstance(s, ir.Lprint):

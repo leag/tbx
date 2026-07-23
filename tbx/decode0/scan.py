@@ -1403,6 +1403,10 @@ def _scan_pass(
                 ops.append((p, "palette"))
                 p += 3
                 continue
+            if sub == 0x8A:  # PALETTE USING integer-array element at ES:SI
+                ops.append((p, "palette_using"))
+                p += 3
+                continue
             if sub == 0xEA:  # VIEW commit (+ flag byte)
                 ops.append((p, "view", exe[p + 3]))
                 p += 4

@@ -121,6 +121,17 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
     # scalar and the layout solves with the pool 0x30 low.
     blit_disps = {ops[i][2] for i in range(len(ops)) if _blit_at(ops, i) is not None}
     varptr_disps = {ops[i][2] for i in range(len(ops)) if _varptr_at(ops, i)}
+    # PALETTE USING on a static array passes a constant element address with
+    # the same movsi/movdx/movesdx shape as other far array consumers.  It is
+    # an INTEGER element, not a string descriptor (probe_paletteusing_static).
+    palette_disps = {
+        ops[i][2]
+        for i in range(len(ops) - 3)
+        if ops[i][1] == "movsi"
+        and ops[i + 1][1] == "movdx"
+        and ops[i + 2][1] == "movesdx"
+        and ops[i + 3][1] == "palette_using"
+    }
     # movsi targets are string descriptors: scalar slots (string vars) or
     # pooled literals -- except constant far-element offsets.
     movsi_disps = (
@@ -138,6 +149,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
         - argarr_disps
         - blit_disps
         - varptr_disps
+        - palette_disps
     )
     prompt_disps = {o[2] for o in ops if o[1] in ("input", "line_input")}
     addsi_bases = {o[2] for o in ops if o[1] == "addsi"}

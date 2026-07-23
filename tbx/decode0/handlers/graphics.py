@@ -20,7 +20,8 @@ if TYPE_CHECKING:
 
 
 def graphics(state: DecodeState, op, addr, kind) -> bool:
-    """Dispatch family: screen, cls, line, pset, circle, paint, draw, palette, color_commit, locate, cursor, width."""
+    """Dispatch family: screen, cls, line, pset, circle, paint, draw, palette,
+    palette_using, color_commit, locate, cursor, width."""
     if kind == "screen":  # SCREEN m[,b][,a][,v]: cells by presence mask
         tag = op[2]
         mode = state.color_cells.pop(0x88, None)
@@ -146,6 +147,30 @@ def graphics(state: DecodeState, op, addr, kind) -> bool:
     if kind == "palette":  # PALETTE attr(bx), color(ax)
         state.put(ir.Palette(state.bx, state.ax), state.cur)
         state.bx = state.ax = None
+        state.cur = None
+        state.k += 1
+        return True
+    if kind == "palette_using":
+        # A constant zero subscript on a dynamic array is emitted as
+        # mov ES,[block]; xor SI,SI; EC/8A.  The variable-index form is
+        # consumed by arith.shlsi, while static constant elements use the
+        # movsi continuation in core.py.
+        if (
+            state.pend_es is None
+            or state.k == 0
+            or state.ops[state.k - 1][1] != "bchk0"
+        ):
+            raise ValueError(f"PALETTE USING without array element at {addr:#x}")
+        a = state.r_arrs[state.pend_es]
+        if a.get("str") or a.get("esz") != 2 or a["rank"] != 1:
+            raise ValueError(
+                f"PALETTE USING non-INTEGER rank-{a['rank']} array at {addr:#x}"
+            )
+        state.put(
+            ir.PaletteUsing(ir.ArrayRef(a["name"], (ir.Lit(a["lo"][0]),))),
+            state.cur,
+        )
+        state.pend_es = None
         state.cur = None
         state.k += 1
         return True

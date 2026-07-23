@@ -724,6 +724,11 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             # movesdx;arg_push_arr handling), just via a computed si
             # instead of a fixed disp16 (wild resume.exe).
             state.pend_args.append(ref)
+        elif sik[1] == "palette_using":
+            if a.get("str") or a.get("esz") != 2:
+                raise ValueError(f"PALETTE USING non-INTEGER array at {addr:#x}")
+            state.put(ir.PaletteUsing(ref), state.cur)
+            state.cur = None
         elif sik[1] == pre + "movm_ax_si":
             # mov [si], ax (near) / mov es:[si], ax (far, by-ref param array
             # arg): the INTEGER write sibling of the rt-0x9C string read

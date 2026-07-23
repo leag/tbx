@@ -104,6 +104,7 @@ from tbx.ir.stmt_nodes import (
     Out,
     Paint,
     Palette,
+    PaletteUsing,
     Play,
     Poke,
     Print,
@@ -380,6 +381,8 @@ def _us_graphics(s) -> str | None:
         return "DEF SEG" if s.seg is None else f"DEF SEG = {unparse(s.seg)}"
     if isinstance(s, Palette):
         return f"PALETTE {unparse(s.attr)}, {unparse(s.color)}"
+    if isinstance(s, PaletteUsing):
+        return f"PALETTE USING {unparse(s.source)}"
     if isinstance(s, View):
         scr = "SCREEN " if s.screen else ""
         txt = (

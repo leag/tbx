@@ -25,7 +25,7 @@ preprocessing.
 | Console/printer | `PRINT`, `PRINT USING`, `LPRINT`, `INPUT`, `LINE INPUT`, `TAB`, `SPC`, `WRITE`, `BEEP`, `CLS`, `LOCATE`, `COLOR`, `KEY` |
 | Files and DOS | `OPEN`, `CLOSE`, `GET`, `PUT`, `KILL`, `BLOAD`, `INPUT #`, `LINE INPUT #`, `DATE$ =`, `TIME$ =` |
 | Error and events | `ON ERROR`, `RESUME`, `ERROR`, `TRON`, `TROFF`, `ON PEN`, `ON KEY`, `ON PLAY`, `ON TIMER`, event `ON`/`OFF`/`STOP` controls |
-| Graphics and hardware | `SCREEN`, `PSET`, `PRESET`, `LINE`, `CIRCLE`, `PAINT`, `DRAW`, `VIEW`, `WINDOW`, `PALETTE`, `POKE`, `OUT`, `WAIT`, `PLAY`, `RANDOMIZE` |
+| Graphics and hardware | `SCREEN`, `PSET`, `PRESET`, `LINE`, `CIRCLE`, `PAINT`, `DRAW`, `VIEW`, `WINDOW`, `PALETTE`, `PALETTE USING`, `POKE`, `OUT`, `WAIT`, `PLAY`, `RANDOMIZE` |
 | Procedures | `SUB`, `END SUB`, `CALL`, `$INLINE` byte lists, `DEF FN`/multi-line function bodies |
 
 ### Supported but not present in the checked-in `.BAS` source scan
@@ -166,6 +166,7 @@ known source subset does not provide a direct source-level witness for them.
 | `Draw` | `DRAW command$` | Supported; corpus observed |
 | `GetGfx` / `PutGfx` | graphics `GET` / `PUT` blits | Supported; corpus observed in graphics fixtures |
 | `Palette` | `PALETTE ...` | Supported; corpus observed |
+| `PaletteUsing` | `PALETTE USING array%(index)` | Supported for witnessed rank-1 INTEGER arrays; static and dynamic constant/variable-index probes |
 | `View` | `VIEW [SCREEN] ...` | Supported; corpus observed |
 | `Window` | `WINDOW [SCREEN] ...` | Supported; corpus observed |
 | `Play` | `PLAY music$` | Supported; corpus observed |

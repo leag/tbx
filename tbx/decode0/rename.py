@@ -236,6 +236,8 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             )
         if isinstance(s, ir.Palette):
             return ir.Palette(walk(s.attr), walk(s.color))
+        if isinstance(s, ir.PaletteUsing):
+            return ir.PaletteUsing(walk(s.source))
         if isinstance(s, ir.View):
             return ir.View(
                 walk(s.x1),

@@ -4264,14 +4264,25 @@ finding dynamic-array records. The wild scan remains 26 decode OK / 67 blocked;
 ### Gap 33 — INT EC sub 38 (catalog/football/refund/varamort), UNDIAGNOSED
 
 Fresh handbook probes for `PALETTE USING P%(0)` (dynamic, static, and variable
-index forms) all compiled but decoded to the distinct `INT EC sub 8a` gap. Per
-the repository agent rule, their executables are retained as
-`wild/hits/probe_paletteusing*.exe`; they are negative evidence against
-PALETTE USING as the source of canonical `EC/38`. Explicit `LOCAL A$()` / `LOCAL
+index forms) all compiled to the distinct `INT EC sub 8a` dispatch. This gap is
+now decoded as `ir.PaletteUsing`, gated to rank-1 INTEGER arrays and the three
+witnessed ES:SI setup shapes: static constant element, dynamic constant zero,
+and dynamic variable index. Their executables are retained as
+`wild/probes/probe_paletteusing*.exe` and pinned by
+`tests/tbx/test_palette_using.py`. They remain negative evidence against
+PALETTE USING as the source of canonical `EC/38`. The original authored BAS
+files and a live oracle are unavailable in this checkout, so these probes have
+not been promoted to the calibrated fixture corpus; byte-exact fixture
+promotion remains pending. Explicit `LOCAL A$()` / `LOCAL
 A%()` variants were also retained as `wild/hits/probe_localdecl*.exe`; both
 fail earlier at byte `8b`, so they are separate Wave-2 evidence rather than
 Gap 33 matches. The corpus is now 91 executables: 24 decode OK and 67
 blocked.
+
+The post-change third-party scan is archived as
+`gap_reports/2026-07-23-current.json`: 26 of 84 `wild/hits` executables decode,
+58 remain fail-loud. The three PALETTE USING witnesses live in `wild/probes`,
+so closing their shared vocabulary gap does not change that 26/84 tally.
 
 `VARSEG` and `VARPTR` array-element probes decoded cleanly without `EC/38`.
 The retained `VARPTR$` scalar and array probes now decode cleanly after the
