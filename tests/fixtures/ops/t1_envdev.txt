@@ -1,0 +1,18 @@
+# t1_envdev dialect=1.1 start=08800
+08803:movsi:308
+08806:rt:156
+08808:strfn:ENVIRON$
+0880B:movsi:292
+0880E:strassign
+08810:strfn:ERDEV$
+08813:movsi:288
+08816:strassign
+08818:movsi:292
+0881B:rt:156
+0881D:rt:190
+0881F:movsi:288
+08822:rt:156
+08824:rt:190
+08826:rt:184
+08828:epilogue
+# commits

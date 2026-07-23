@@ -663,7 +663,9 @@ class _Gen:
             n = self.uid()
             return [f"tb_gstack[tb_gsp++] = &&R{n}; goto L{s.target}; R{n}:;"]
         if isinstance(s, ir.Return):
-            return ["goto *tb_gstack[--tb_gsp];"]
+            if s.target is None:
+                return ["goto *tb_gstack[--tb_gsp];"]
+            return [f"--tb_gsp; goto L{s.target};"]
         if isinstance(s, ir.OnGoto) or isinstance(s, ir.OnGosub):
             n = self.uid()
             lines = [f"switch ((int)tb_cint({self.num(s.selector)})) {{"]

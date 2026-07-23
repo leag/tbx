@@ -57,6 +57,17 @@ def test_decode_wild_banker_nonadjacent_for():
     )
 
 
+def test_decode_long_single_and_double_for():
+    # Long bodies use inverse-Jcc + near-JMP legs in the NEXT template.
+    # DOUBLE steps test their sign word at step+6 rather than SINGLE's +2.
+    from tbx import decode0
+
+    prog = decode0.decode_user_code(_exe("t1_forlongfp.exe"))
+    loops = [s for s in prog if isinstance(s, ir.For)]
+    assert [s.var.name.endswith("#") for s in loops] == [False, True]
+    assert all(s.step == ir.Lit(1) for s in loops)
+
+
 def test_scan_wild_far_jump_group():
     # Seven runtime-revision wild binaries use EA far transfers.  The scanner
     # must preserve their rebased target (or the fixed zero-offset handoff)

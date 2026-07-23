@@ -1,0 +1,45 @@
+10 FOR A = 1 TO 3
+20 B = A
+30 C = A
+40 D = A
+50 E = A
+60 F = A
+70 G = A
+80 H = A
+90 I = A
+100 J = A
+110 K = A
+120 L = A
+130 M = A
+140 N = A
+150 O = A
+160 P = A
+170 Q = A
+180 R = A
+190 S = A
+200 T = A
+210 U = A
+220 NEXT A
+230 FOR V# = 1 TO 3
+240 W# = V#
+250 X# = V#
+260 Y# = V#
+270 Z# = V#
+280 AA# = V#
+290 AB# = V#
+300 AC# = V#
+310 AD# = V#
+320 AE# = V#
+330 AF# = V#
+340 AG# = V#
+350 AH# = V#
+360 AI# = V#
+370 AJ# = V#
+380 AK# = V#
+390 AL# = V#
+400 AM# = V#
+410 AN# = V#
+420 AO# = V#
+430 AP# = V#
+440 NEXT V#
+450 END

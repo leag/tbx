@@ -68,6 +68,14 @@ def test_emit_gosub_while():
     )
 
 
+def test_return_to_line():
+    from tbx import decode0, emit0
+
+    got = decode0.decode_user_code(_exe("t1_returnline.exe"))
+    assert got[-1] == ir.Return(2)
+    assert emit0.emit(got).endswith("40 CLS\n50 RETURN 30\n")
+
+
 if __name__ == "__main__":
     test_ir_nodes()
     test_decode_t1_gosub()

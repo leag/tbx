@@ -71,7 +71,9 @@ class Gosub:
 
 @dataclass(frozen=True)
 class Return:
-    """RETURN (x86 `c3` ret near)."""
+    """RETURN, optionally followed by a line target."""
+
+    target: object = None  # None | statement index | ("addr", a) pre-resolve
 
 
 @dataclass(frozen=True)

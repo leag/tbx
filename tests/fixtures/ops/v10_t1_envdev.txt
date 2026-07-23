@@ -1,0 +1,18 @@
+# v10_t1_envdev dialect=1.0 start=071B0
+071B3:movsi:308
+071B6:rt:156
+071B8:strfn:ENVIRON$
+071BB:movsi:292
+071BE:strassign
+071C0:strfn:ERDEV$
+071C3:movsi:288
+071C6:strassign
+071C8:movsi:292
+071CB:rt:156
+071CD:rt:190
+071CF:movsi:288
+071D2:rt:156
+071D4:rt:190
+071D6:rt:184
+071D8:epilogue
+# commits

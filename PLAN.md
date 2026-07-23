@@ -1206,6 +1206,24 @@ trace, not the same mechanism. This DI/BX-register-choreography family
 is a genuinely new addressing convention, not a one-line sibling
 completion -- left open, flagged for oracle-verified design work.
 
+**Closed 2026-07-23 for bmaster/ifi:** the `LES di,[bp+10]` site is inside
+the first of six consecutive framed graphics helpers skipped by near JMPs,
+not source-level SUB code. Each helper is byte-identical to the already
+fingerprinted `_OPAQUE_HELPER_BODY_3` through `_8` family except that these
+TB 1.0 builds omit the TB 1.1 `INT3` immediately before `RETF`. The rescue
+still requires exact whole-body equality; six explicit v1.0 fingerprints
+were added and pinned in `test_records.py`. Both files advance through all
+six helpers to the unrelated `INT EE sub 08` gap. CVT2TB's `LES di,[bp+6]`
+and pw's `LES bx,[bp+6]` remain distinct and fail loud.
+
+**Closed 2026-07-23: EE sub 08/0A.** The newly shared `EE/08` blocker in
+bmaster/ifi/filepatc is `ENVIRON$(string)`; the immediately adjacent
+successful-but-failing oracle probe established `EE/0A` as zero-argument
+`ERDEV$`. Probes `probe_environ.bas` and `probe_erdev.bas` reproduce the
+vectors directly. Fixtures `t1_envdev`/`v10_t1_envdev` are oracle-verified
+byte-exact. All three wild files advance: bmaster/ifi to a runtime-grid
+DGROUP layout gap and filepatc to an FP LOCAL-frame access gap.
+
 **`secure.exe` traced, NOT the same bug as state.exe.** Confirmed (per
 Part II's own explicit warning not to assume): the interior GOTO target
 lives inside a single-arm `IF...ELSE...END IF` block, which
@@ -2655,7 +2673,7 @@ colliding with orphan evidence, are explicitly rejected (fail loud, no
 witness) rather than guessed — narrow the check if a future wild file
 needs it.
 
-#### vhfprop status: bare-DO un-synthesis CLOSED for unconditional loops; the WHILE/UNTIL case is a genuinely new, still-open puzzle
+#### vhfprop status: bare-DO and WHILE-tail un-synthesis CLOSED; UNTIL remains unwitnessed
 
 `core.py`'s "bare backward jmps = infinite DO" path ALWAYS canonicalized
 a backward jump loop into synthesized `ir.Do(None)` + `ir.Loop(None)`,
@@ -2703,6 +2721,20 @@ oracle round-trip — bisection narrowed it to somewhere in BASIC lines
 yet isolated further) — a DIFFERENT gap, unrelated to the DO work,
 worth investigating once vhfprop reaches full decode again.
 
+**Closed 2026-07-23:** the missing non-DO construct was the simplest source
+shape after all: a single relational `IF condition THEN earlier-line`. Minimal
+probe `probe_iftailerr.bas`, dialect 1.1, compiled successfully and reproduced
+the exact `_lift_do_tail` shape; before the fix its first failure was
+`codeless DO...LOOP WHILE/UNTIL (no orphan evidence) has no witnessed non-DO
+source construct to un-synthesize to`. The error-trap line table supplies the
+disambiguator: unlike a genuine `DO`, the `IF...THEN` source has no orphan
+entry at the body offset. `_finalize` now converts only the witnessed WHILE
+polarity to `IfGoto`; UNTIL remains fail-loud because it requires unwitnessed
+condition negation. Fixtures `t1_iftailerr`/`v10_t1_iftailerr` were
+oracle-verified byte-exact. `vhfprop.exe` now decodes completely (715
+statements), exposing only the separately documented later oracle recompile
+issue.
+
 #### CLOSED: inv87.exe/invoice.exe's nested block-IF GOTO target
 
 inv87's error-trap line table turned out to NOT RESOLVE AT ALL
@@ -2739,9 +2771,9 @@ stale after that session's 9 closures). Cross-check
 of these from scratch — several have an existing candidate/unresolved
 writeup there with negative evidence already collected.
 
-1. **vhfprop's tail-test DO...LOOP WHILE/UNTIL un-synthesis gap** (see
-   "vhfprop status" above) — the ONLY file left blocked by the line-table
-   epic; still open, unchanged.
+1. ~~**vhfprop's tail-test DO...LOOP WHILE/UNTIL un-synthesis gap**~~ —
+   WHILE polarity closed 2026-07-23 with `t1_iftailerr`; UNTIL remains
+   deliberately fail-loud and currently blocks no wild file.
 2. **Intra-inline-IF-body GOTO targets (2 files: state.exe, state87.exe)**
    — a full spec for tackling this (confirmed via fresh `id()`-tracing in
    a 2026-07-22 follow-up session, plus the exact adjacent `_fold_if`/
@@ -2811,10 +2843,14 @@ writeup there with negative evidence already collected.
    rejects that syntax, REDIM — not a TB keyword). Untried: CLEAR
    variants, COMMON-shared dynamic array cleanup, ON-ERROR implicit
    ERASE, GET/PUT #n with an array-backed record buffer.
-6. **`INT 8c` (4 files: baby, help, prtguide, readme)** — see
-   `RR-INT-8C`; all TB 1.0, ON KEY(n) GOSUB is the only shared source
-   feature, several trap-count/toggle hypotheses ruled out. Untried: a
-   follow-on statement INSIDE the trap handler body.
+6. ~~**`INT 8c` (5 files: baby, crossref, help, prtguide, readme)**~~ —
+   closed 2026-07-23: canonical `INT 8C` plus a short/near JMP is
+   `RETURN <line>`, not an event poll. The runtime vector unwinds the
+   GOSUB/event frame and the JMP selects the requested line. Minimal probe
+   `probe_eventgoto.bas` (TB 1.0) compiled successfully and, before the fix,
+   failed first at `unhandled INT 8c`; changing its handler exit from GOTO to
+   `RETURN 30` introduced raw `CD 86` exactly. Fixtures
+   `t1_returnline`/`v10_t1_returnline` are oracle-verified byte-exact.
 7. **`INT EC sub ee` (3 files: cal, cal87, kinetics)** — see
    `RR-LINEINPUT`/HANDOFF's "EC sub EE remains unresolved" entry: a wide
    oracle probe matrix (PRINT/LPRINT/SHELL/RUN/CHAIN/NAME/OPEN/DATE$, plus
@@ -3318,6 +3354,18 @@ writeup there with negative evidence already collected.
   statements; `tests/tbx/test_wild_batch3.py` keeps it as a regression witness.
   The fresh 84-file scan is 16 OK / 68 blocked, with no regressions; the next
   first blocker is the seven-file `unhandled byte ea` group.
+
+- **Long-distance and DOUBLE x87 FOR/NEXT tests** (2026-07-23): the five-file
+  `unhandled op testw` group (electron/elec87/kinder/mdb/mdb87) shared the
+  same calibrated FP FOR/NEXT template, but `_loose_for_header` recognized
+  only short-body SINGLE loops. Long bodies encode each body edge as
+  inverse-Jcc plus near JMP and include a separate EXIT JMP before the
+  negative-step leg; DOUBLE tests its high sign word at step+6 rather than
+  SINGLE's step+2 and uses `fld64`/`fcomp64`. Probe
+  `probe_forlongfp.bas` (dialect 1.1) compiled successfully and reproduced
+  both variants; before the fix it failed first at `unhandled op testw`.
+  Fixtures `t1_forlongfp`/`v10_t1_forlongfp` are oracle-verified byte-exact.
+  All five wild files advance to unrelated structural/materialization gaps.
 
 - **Far `JMP` (`EA`) runtime-revision group** (2026-07-20): seven wild files
   stopped on the raw 16-bit `EA off:seg` transfer. The existing far-call

@@ -88,6 +88,8 @@ def emit(stmts) -> str:
             return f"IF {ir.unparse_cond(s.cond)} THEN {L(s.target)}"
         if isinstance(s, ir.Gosub):
             return f"GOSUB {L(s.target)}"
+        if isinstance(s, ir.Return) and s.target is not None:
+            return f"RETURN {L(s.target)}"
         if isinstance(s, (ir.OnGoto, ir.OnGosub)):
             kw = "GOTO" if isinstance(s, ir.OnGoto) else "GOSUB"
             lines = ", ".join(str(L(t)) for t in s.targets)

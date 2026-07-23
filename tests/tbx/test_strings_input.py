@@ -20,6 +20,7 @@ PAIRS = [
     "t1_inpdbl",
     "t1_readsarr",
     "t1_inpsarr",
+    "t1_envdev",
 ]
 
 
@@ -204,6 +205,14 @@ def test_emit_strings_input():
     assert emit0.emit(decode0.decode_user_code(_exe("t1_inp3.exe"))) == (
         '10 LINE INPUT A$\n20 LINE INPUT "X"; B$\n30 END\n'
     )
+
+
+def test_decode_envdev():
+    from tbx import decode0
+
+    prog = decode0.decode_user_code(_exe("t1_envdev.exe"))
+    assert prog[0].value == ir.Call("ENVIRON$", (ir.StrLit("PATH"),))
+    assert prog[1].value == ir.Nullary("ERDEV$")
 
 
 if __name__ == "__main__":

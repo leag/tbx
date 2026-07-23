@@ -3032,7 +3032,7 @@ Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(valu
 Print(items=(StrLit(value='OK'),), newline=True, file=None, commas=None)
 End()
 Print(items=(StrLit(value='S'),), newline=True, file=None, commas=None)
-Return()
+Return(target=None)
 
 ## t1_blkgoto
 Assign(target=Var(name='A$'), value=StrLit(value='X'))
@@ -3461,6 +3461,11 @@ Assign(target=ArrayRef(name='V0%', indices=(Lit(value=1),)), value=Lit(value=7))
 Print(items=(ArrayRef(name='V0%', indices=(Lit(value=1),)),), newline=True, file=None, commas=None)
 End()
 
+## t1_envdev
+Assign(target=Var(name='A$'), value=Call(name='ENVIRON$', args=(StrLit(value='PATH'),)))
+Assign(target=Var(name='B$'), value=Nullary(name='ERDEV$'))
+Print(items=(Var(name='A$'), Var(name='B$')), newline=True, file=None, commas=None)
+
 ## t1_environ
 Environ(s=StrLit(value='PATH=C:\\TB'))
 End()
@@ -3504,7 +3509,7 @@ End()
 OnTrap(event='TIMER', n=Lit(value=5), target=3)
 TrapCtl(event='TIMER', n=None, mode='ON')
 End()
-Return()
+Return(target=None)
 
 ## t1_evreg
 OnTrap(event='TIMER', n=Lit(value=5), target=5)
@@ -3512,7 +3517,7 @@ TrapCtl(event='TIMER', n=None, mode='ON')
 Assign(target=Var(name='A%'), value=Lit(value=1))
 Assign(target=Var(name='B%'), value=Lit(value=2))
 End()
-Return()
+Return(target=None)
 
 ## t1_evtron
 OnTrap(event='TIMER', n=Lit(value=1), target=6)
@@ -3521,7 +3526,7 @@ Tron()
 Assign(target=Var(name='A'), value=Lit(value=1))
 Troff()
 End()
-Return()
+Return(target=None)
 
 ## t1_explog
 Assign(target=Var(name='A'), value=Call(name='EXP', args=(DblLit(value=0.5),)))
@@ -3536,9 +3541,9 @@ Gosub(target=7)
 Print(items=(StrLit(value='done'),), newline=True, file=None, commas=None)
 End()
 Print(items=(StrLit(value='trapped'),), newline=True, file=None, commas=None)
-Return()
+Return(target=None)
 Print(items=(StrLit(value='plain'),), newline=True, file=None, commas=None)
-Return()
+Return(target=None)
 
 ## t1_fcmp
 Assign(target=Var(name='A'), value=Lit(value=2))
@@ -3816,6 +3821,53 @@ Assign(target=Var(name='B%'), value=Lit(value=49))
 NextStmt(var=Var(name='A%'))
 End()
 
+## t1_forlongfp
+For(var=Var(name='A'), init=Lit(value=1), limit=Lit(value=3), step=Lit(value=1))
+Assign(target=Var(name='B'), value=Var(name='A'))
+Assign(target=Var(name='C'), value=Var(name='A'))
+Assign(target=Var(name='D'), value=Var(name='A'))
+Assign(target=Var(name='E'), value=Var(name='A'))
+Assign(target=Var(name='F'), value=Var(name='A'))
+Assign(target=Var(name='G'), value=Var(name='A'))
+Assign(target=Var(name='H'), value=Var(name='A'))
+Assign(target=Var(name='I'), value=Var(name='A'))
+Assign(target=Var(name='J'), value=Var(name='A'))
+Assign(target=Var(name='K'), value=Var(name='A'))
+Assign(target=Var(name='L'), value=Var(name='A'))
+Assign(target=Var(name='M'), value=Var(name='A'))
+Assign(target=Var(name='N'), value=Var(name='A'))
+Assign(target=Var(name='O'), value=Var(name='A'))
+Assign(target=Var(name='P'), value=Var(name='A'))
+Assign(target=Var(name='Q'), value=Var(name='A'))
+Assign(target=Var(name='R'), value=Var(name='A'))
+Assign(target=Var(name='S'), value=Var(name='A'))
+Assign(target=Var(name='T'), value=Var(name='A'))
+Assign(target=Var(name='U'), value=Var(name='A'))
+NextStmt(var=Var(name='A'))
+For(var=Var(name='V#'), init=Lit(value=1), limit=Lit(value=3), step=Lit(value=1))
+Assign(target=Var(name='W#'), value=Var(name='V#'))
+Assign(target=Var(name='X#'), value=Var(name='V#'))
+Assign(target=Var(name='Y#'), value=Var(name='V#'))
+Assign(target=Var(name='Z#'), value=Var(name='V#'))
+Assign(target=Var(name='AA#'), value=Var(name='V#'))
+Assign(target=Var(name='AB#'), value=Var(name='V#'))
+Assign(target=Var(name='AC#'), value=Var(name='V#'))
+Assign(target=Var(name='AD#'), value=Var(name='V#'))
+Assign(target=Var(name='AE#'), value=Var(name='V#'))
+Assign(target=Var(name='AF#'), value=Var(name='V#'))
+Assign(target=Var(name='AG#'), value=Var(name='V#'))
+Assign(target=Var(name='AH#'), value=Var(name='V#'))
+Assign(target=Var(name='AI#'), value=Var(name='V#'))
+Assign(target=Var(name='AJ#'), value=Var(name='V#'))
+Assign(target=Var(name='AK#'), value=Var(name='V#'))
+Assign(target=Var(name='AL#'), value=Var(name='V#'))
+Assign(target=Var(name='AM#'), value=Var(name='V#'))
+Assign(target=Var(name='AN#'), value=Var(name='V#'))
+Assign(target=Var(name='AO#'), value=Var(name='V#'))
+Assign(target=Var(name='AP#'), value=Var(name='V#'))
+NextStmt(var=Var(name='V#'))
+End()
+
 ## t1_forstep
 For(var=Var(name='A%'), init=Lit(value=1), limit=Lit(value=100), step=Lit(value=10))
 Print(items=(Var(name='A%'),), newline=True, file=None, commas=None)
@@ -3969,7 +4021,7 @@ Gosub(target=4)
 Assign(target=Var(name='A'), value=Lit(value=3))
 End()
 Assign(target=Var(name='B'), value=Lit(value=2))
-Return()
+Return(target=None)
 
 ## t1_goto
 Assign(target=Var(name='A'), value=Lit(value=1))
@@ -4031,6 +4083,13 @@ Input(prompt=None, var=Var(name='B'), comma=False, semi=False)
 IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), body=(Assign(target=Var(name='C'), value=Lit(value=1)), Assign(target=Var(name='D'), value=Lit(value=2))))
 Print(items=(Var(name='C'), Var(name='D')), newline=True, file=None, commas=None)
 End()
+
+## t1_iftailerr
+Assign(target=Var(name='A%'), value=Err())
+Assign(target=Var(name='B%'), value=Erl())
+Assign(target=Var(name='C%'), value=Lit(value=0))
+Assign(target=Var(name='C%'), value=BinOp(op='+', lhs=Var(name='C%'), rhs=Lit(value=1)))
+IfGoto(cond=RelOp(op='<', lhs=Var(name='C%'), rhs=Lit(value=10)), target=3)
 
 ## t1_imulpool
 Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
@@ -4209,7 +4268,7 @@ OnTrap(event='KEY', n=Lit(value=1), target=4)
 TrapCtl(event='KEY', n=Lit(value=1), mode='OFF')
 TrapCtl(event='KEY', n=Lit(value=1), mode='STOP')
 End()
-Return()
+Return(target=None)
 
 ## t1_kill
 Kill(file=StrLit(value='X.DAT'))
@@ -4549,7 +4608,7 @@ Assign(target=Var(name='C'), value=Var(name='B'))
 NextStmt(var=Var(name='B'))
 Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
 Loop(kind='WHILE', cond=RelOp(op='<>', lhs=Var(name='A'), rhs=Lit(value=23)))
-Return()
+Return(target=None)
 
 ## t1_nestfor2
 Gosub(target=3)
@@ -4562,7 +4621,7 @@ Assign(target=Var(name='C'), value=Var(name='B'))
 NextStmt(var=Var(name='B'))
 Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
 Loop(kind='UNTIL', cond=RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=23)))
-Return()
+Return(target=None)
 
 ## t1_nestif2
 Assign(target=Var(name='A$'), value=StrLit(value='X'))
@@ -4606,7 +4665,7 @@ TrapCtl(event='COM', n=Lit(value=1), mode='ON')
 TrapCtl(event='COM', n=Lit(value=1), mode='OFF')
 TrapCtl(event='COM', n=Lit(value=1), mode='STOP')
 End()
-Return()
+Return(target=None)
 
 ## t1_one3
 Data(items=(DataItem(text='123', is_str=False),))
@@ -4627,8 +4686,8 @@ End()
 Assign(target=Var(name='A'), value=Lit(value=1))
 OnGosub(selector=Var(name='A'), targets=(3, 4))
 End()
-Return()
-Return()
+Return(target=None)
+Return(target=None)
 
 ## t1_ongoto
 Assign(target=Var(name='A'), value=Lit(value=1))
@@ -4641,7 +4700,7 @@ End()
 OnTrap(event='KEY', n=Lit(value=1), target=3)
 TrapCtl(event='KEY', n=Lit(value=1), mode='ON')
 End()
-Return()
+Return(target=None)
 
 ## t1_onpen
 OnTrap(event='PEN', n=None, target=5)
@@ -4649,7 +4708,7 @@ TrapCtl(event='PEN', n=None, mode='ON')
 TrapCtl(event='PEN', n=None, mode='OFF')
 TrapCtl(event='PEN', n=None, mode='STOP')
 End()
-Return()
+Return(target=None)
 
 ## t1_onplay
 OnTrap(event='PLAY', n=Lit(value=4), target=5)
@@ -4657,13 +4716,13 @@ TrapCtl(event='PLAY', n=None, mode='ON')
 TrapCtl(event='PLAY', n=None, mode='OFF')
 TrapCtl(event='PLAY', n=None, mode='STOP')
 End()
-Return()
+Return(target=None)
 
 ## t1_ontimer
 OnTrap(event='TIMER', n=Lit(value=5), target=3)
 TrapCtl(event='TIMER', n=None, mode='ON')
 End()
-Return()
+Return(target=None)
 
 ## t1_open2
 Open(mode=StrLit(value='O'), num=1, file=StrLit(value='A.TXT'), reclen=None, for_as=False)
@@ -5093,6 +5152,13 @@ Assign(target=Var(name='B'), value=Lit(value=870))
 Assign(target=Var(name='B'), value=Lit(value=880))
 Assign(target=Var(name='B'), value=Lit(value=890))
 Resume(next_=False, target=0)
+
+## t1_returnline
+OnTrap(event='KEY', n=Lit(value=1), target=3)
+TrapCtl(event='KEY', n=Lit(value=1), mode='ON')
+End()
+Cls()
+Return(target=2)
 
 ## t1_rmdir
 Rmdir(path=StrLit(value='SUB'))
@@ -5624,7 +5690,7 @@ Print(items=(StrLit(value='AT100'),), newline=True, file=None, commas=None)
 End()
 
 ## t1_subgsb
-SubDef(name='SUB1', params=(), body=(Gosub(target=BodyLine(stmt=0, phys=3)), ExitSub(), Print(items=(StrLit(value='IN'),), newline=True, file=None, commas=None), Return()))
+SubDef(name='SUB1', params=(), body=(Gosub(target=BodyLine(stmt=0, phys=3)), ExitSub(), Print(items=(StrLit(value='IN'),), newline=True, file=None, commas=None), Return(target=None)))
 CallStmt(name='SUB1', args=())
 End()
 
@@ -5702,7 +5768,7 @@ OnTrap(event='TIMER', n=Lit(value=5), target=4)
 TrapCtl(event='TIMER', n=None, mode='OFF')
 TrapCtl(event='TIMER', n=None, mode='STOP')
 End()
-Return()
+Return(target=None)
 
 ## t1_times
 DateTimeSet(name='TIME$', value=StrLit(value='12:00:00'))
@@ -9027,7 +9093,7 @@ Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(valu
 Print(items=(StrLit(value='OK'),), newline=True, file=None, commas=None)
 End()
 Print(items=(StrLit(value='S'),), newline=True, file=None, commas=None)
-Return()
+Return(target=None)
 
 ## v10_t1_blkgoto
 Assign(target=Var(name='A$'), value=StrLit(value='X'))
@@ -9330,6 +9396,11 @@ Loop(kind=None, cond=None)
 Draw(cmd=StrLit(value='U10R10D10L10'))
 End()
 
+## v10_t1_envdev
+Assign(target=Var(name='A$'), value=Call(name='ENVIRON$', args=(StrLit(value='PATH'),)))
+Assign(target=Var(name='B$'), value=Nullary(name='ERDEV$'))
+Print(items=(Var(name='A$'), Var(name='B$')), newline=True, file=None, commas=None)
+
 ## v10_t1_environ
 Environ(s=StrLit(value='PATH=C:\\TB'))
 End()
@@ -9373,7 +9444,7 @@ End()
 OnTrap(event='TIMER', n=Lit(value=5), target=3)
 TrapCtl(event='TIMER', n=None, mode='ON')
 End()
-Return()
+Return(target=None)
 
 ## v10_t1_evreg
 OnTrap(event='TIMER', n=Lit(value=5), target=5)
@@ -9381,7 +9452,7 @@ TrapCtl(event='TIMER', n=None, mode='ON')
 Assign(target=Var(name='A%'), value=Lit(value=1))
 Assign(target=Var(name='B%'), value=Lit(value=2))
 End()
-Return()
+Return(target=None)
 
 ## v10_t1_evtron
 OnTrap(event='TIMER', n=Lit(value=1), target=6)
@@ -9390,7 +9461,7 @@ Tron()
 Assign(target=Var(name='A'), value=Lit(value=1))
 Troff()
 End()
-Return()
+Return(target=None)
 
 ## v10_t1_explog
 Assign(target=Var(name='A'), value=Call(name='EXP', args=(DblLit(value=0.5),)))
@@ -9405,9 +9476,9 @@ Gosub(target=7)
 Print(items=(StrLit(value='done'),), newline=True, file=None, commas=None)
 End()
 Print(items=(StrLit(value='trapped'),), newline=True, file=None, commas=None)
-Return()
+Return(target=None)
 Print(items=(StrLit(value='plain'),), newline=True, file=None, commas=None)
-Return()
+Return(target=None)
 
 ## v10_t1_field
 Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'), reclen=None, for_as=False)
@@ -9658,6 +9729,53 @@ Assign(target=Var(name='B%'), value=Lit(value=49))
 NextStmt(var=Var(name='A%'))
 End()
 
+## v10_t1_forlongfp
+For(var=Var(name='A'), init=Lit(value=1), limit=Lit(value=3), step=Lit(value=1))
+Assign(target=Var(name='B'), value=Var(name='A'))
+Assign(target=Var(name='C'), value=Var(name='A'))
+Assign(target=Var(name='D'), value=Var(name='A'))
+Assign(target=Var(name='E'), value=Var(name='A'))
+Assign(target=Var(name='F'), value=Var(name='A'))
+Assign(target=Var(name='G'), value=Var(name='A'))
+Assign(target=Var(name='H'), value=Var(name='A'))
+Assign(target=Var(name='I'), value=Var(name='A'))
+Assign(target=Var(name='J'), value=Var(name='A'))
+Assign(target=Var(name='K'), value=Var(name='A'))
+Assign(target=Var(name='L'), value=Var(name='A'))
+Assign(target=Var(name='M'), value=Var(name='A'))
+Assign(target=Var(name='N'), value=Var(name='A'))
+Assign(target=Var(name='O'), value=Var(name='A'))
+Assign(target=Var(name='P'), value=Var(name='A'))
+Assign(target=Var(name='Q'), value=Var(name='A'))
+Assign(target=Var(name='R'), value=Var(name='A'))
+Assign(target=Var(name='S'), value=Var(name='A'))
+Assign(target=Var(name='T'), value=Var(name='A'))
+Assign(target=Var(name='U'), value=Var(name='A'))
+NextStmt(var=Var(name='A'))
+For(var=Var(name='V#'), init=Lit(value=1), limit=Lit(value=3), step=Lit(value=1))
+Assign(target=Var(name='W#'), value=Var(name='V#'))
+Assign(target=Var(name='X#'), value=Var(name='V#'))
+Assign(target=Var(name='Y#'), value=Var(name='V#'))
+Assign(target=Var(name='Z#'), value=Var(name='V#'))
+Assign(target=Var(name='AA#'), value=Var(name='V#'))
+Assign(target=Var(name='AB#'), value=Var(name='V#'))
+Assign(target=Var(name='AC#'), value=Var(name='V#'))
+Assign(target=Var(name='AD#'), value=Var(name='V#'))
+Assign(target=Var(name='AE#'), value=Var(name='V#'))
+Assign(target=Var(name='AF#'), value=Var(name='V#'))
+Assign(target=Var(name='AG#'), value=Var(name='V#'))
+Assign(target=Var(name='AH#'), value=Var(name='V#'))
+Assign(target=Var(name='AI#'), value=Var(name='V#'))
+Assign(target=Var(name='AJ#'), value=Var(name='V#'))
+Assign(target=Var(name='AK#'), value=Var(name='V#'))
+Assign(target=Var(name='AL#'), value=Var(name='V#'))
+Assign(target=Var(name='AM#'), value=Var(name='V#'))
+Assign(target=Var(name='AN#'), value=Var(name='V#'))
+Assign(target=Var(name='AO#'), value=Var(name='V#'))
+Assign(target=Var(name='AP#'), value=Var(name='V#'))
+NextStmt(var=Var(name='V#'))
+End()
+
 ## v10_t1_forstep
 For(var=Var(name='A%'), init=Lit(value=1), limit=Lit(value=100), step=Lit(value=10))
 Print(items=(Var(name='A%'),), newline=True, file=None, commas=None)
@@ -9805,7 +9923,7 @@ Gosub(target=4)
 Assign(target=Var(name='A'), value=Lit(value=3))
 End()
 Assign(target=Var(name='B'), value=Lit(value=2))
-Return()
+Return(target=None)
 
 ## v10_t1_goto
 Assign(target=Var(name='A'), value=Lit(value=1))
@@ -9867,6 +9985,13 @@ Input(prompt=None, var=Var(name='B'), comma=False, semi=False)
 IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), body=(Assign(target=Var(name='C'), value=Lit(value=1)), Assign(target=Var(name='D'), value=Lit(value=2))))
 Print(items=(Var(name='C'), Var(name='D')), newline=True, file=None, commas=None)
 End()
+
+## v10_t1_iftailerr
+Assign(target=Var(name='A%'), value=Err())
+Assign(target=Var(name='B%'), value=Erl())
+Assign(target=Var(name='C%'), value=Lit(value=0))
+Assign(target=Var(name='C%'), value=BinOp(op='+', lhs=Var(name='C%'), rhs=Lit(value=1)))
+IfGoto(cond=RelOp(op='<', lhs=Var(name='C%'), rhs=Lit(value=10)), target=3)
 
 ## v10_t1_imulpool
 Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
@@ -10011,7 +10136,7 @@ OnTrap(event='KEY', n=Lit(value=1), target=4)
 TrapCtl(event='KEY', n=Lit(value=1), mode='OFF')
 TrapCtl(event='KEY', n=Lit(value=1), mode='STOP')
 End()
-Return()
+Return(target=None)
 
 ## v10_t1_kill
 Kill(file=StrLit(value='X.DAT'))
@@ -10315,7 +10440,7 @@ Assign(target=Var(name='C'), value=Var(name='B'))
 NextStmt(var=Var(name='B'))
 Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
 Loop(kind='WHILE', cond=RelOp(op='<>', lhs=Var(name='A'), rhs=Lit(value=23)))
-Return()
+Return(target=None)
 
 ## v10_t1_nestfor2
 Gosub(target=3)
@@ -10328,7 +10453,7 @@ Assign(target=Var(name='C'), value=Var(name='B'))
 NextStmt(var=Var(name='B'))
 Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
 Loop(kind='UNTIL', cond=RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=23)))
-Return()
+Return(target=None)
 
 ## v10_t1_nestif2
 Assign(target=Var(name='A$'), value=StrLit(value='X'))
@@ -10372,7 +10497,7 @@ TrapCtl(event='COM', n=Lit(value=1), mode='ON')
 TrapCtl(event='COM', n=Lit(value=1), mode='OFF')
 TrapCtl(event='COM', n=Lit(value=1), mode='STOP')
 End()
-Return()
+Return(target=None)
 
 ## v10_t1_one3
 Data(items=(DataItem(text='123', is_str=False),))
@@ -10393,8 +10518,8 @@ End()
 Assign(target=Var(name='A'), value=Lit(value=1))
 OnGosub(selector=Var(name='A'), targets=(3, 4))
 End()
-Return()
-Return()
+Return(target=None)
+Return(target=None)
 
 ## v10_t1_ongoto
 Assign(target=Var(name='A'), value=Lit(value=1))
@@ -10407,7 +10532,7 @@ End()
 OnTrap(event='KEY', n=Lit(value=1), target=3)
 TrapCtl(event='KEY', n=Lit(value=1), mode='ON')
 End()
-Return()
+Return(target=None)
 
 ## v10_t1_onpen
 OnTrap(event='PEN', n=None, target=5)
@@ -10415,7 +10540,7 @@ TrapCtl(event='PEN', n=None, mode='ON')
 TrapCtl(event='PEN', n=None, mode='OFF')
 TrapCtl(event='PEN', n=None, mode='STOP')
 End()
-Return()
+Return(target=None)
 
 ## v10_t1_onplay
 OnTrap(event='PLAY', n=Lit(value=4), target=5)
@@ -10423,13 +10548,13 @@ TrapCtl(event='PLAY', n=None, mode='ON')
 TrapCtl(event='PLAY', n=None, mode='OFF')
 TrapCtl(event='PLAY', n=None, mode='STOP')
 End()
-Return()
+Return(target=None)
 
 ## v10_t1_ontimer
 OnTrap(event='TIMER', n=Lit(value=5), target=3)
 TrapCtl(event='TIMER', n=None, mode='ON')
 End()
-Return()
+Return(target=None)
 
 ## v10_t1_openfor
 Open(mode=StrLit(value='O'), num=1, file=StrLit(value='A.TXT'), reclen=None, for_as=True)
@@ -10803,6 +10928,13 @@ Assign(target=Var(name='B'), value=Lit(value=870))
 Assign(target=Var(name='B'), value=Lit(value=880))
 Assign(target=Var(name='B'), value=Lit(value=890))
 Resume(next_=False, target=0)
+
+## v10_t1_returnline
+OnTrap(event='KEY', n=Lit(value=1), target=3)
+TrapCtl(event='KEY', n=Lit(value=1), mode='ON')
+End()
+Cls()
+Return(target=2)
 
 ## v10_t1_rmdir
 Rmdir(path=StrLit(value='SUB'))
@@ -11254,7 +11386,7 @@ OnTrap(event='TIMER', n=Lit(value=5), target=4)
 TrapCtl(event='TIMER', n=None, mode='OFF')
 TrapCtl(event='TIMER', n=None, mode='STOP')
 End()
-Return()
+Return(target=None)
 
 ## v10_t1_times
 DateTimeSet(name='TIME$', value=StrLit(value='12:00:00'))

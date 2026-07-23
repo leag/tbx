@@ -5,7 +5,6 @@ from typing import Any
 
 from tbx import ir
 from tbx.decode0.const import _JCC_RELOP_TRUE, _NEGATE_REL
-from tbx.decode0.rename import _slot
 
 
 def _is_for_header(stmts, vdisp) -> bool:
@@ -49,22 +48,58 @@ def _loose_for_header(ops, k, stmts, vdisp):
     if k + 6 >= len(ops):
         return None
     first_fld, first_cmp, first_sw = ops[k + 3 : k + 6]
-    if (first_fld[1], first_cmp[1], first_sw[1]) != ("fld", "fcomp", "fstsw"):
+    pair = (first_fld[1], first_cmp[1])
+    if pair not in (("fld", "fcomp"), ("fld64", "fcomp64")) or first_sw[1] != "fstsw":
         return None
     if jcc[3] != first_fld[0]:
         return None
-    if k + 10 >= len(ops):
+
+    # Positive-path body branch: direct JAE BODY, or its long-distance form
+    # JB +3; JMP BODY. It is followed by the unconditional EXIT jump.
+    i = k + 6
+    if ops[i][1] == "jcc" and ops[i][2] == 0x73:
+        body = ops[i][3]
+        i += 1
+    elif (
+        i + 1 < len(ops)
+        and ops[i][1] == "jcc"
+        and ops[i][2] == 0x72
+        and ops[i][3] == ops[i][0] + 5
+        and ops[i + 1][1] == "jmp"
+    ):
+        body = ops[i + 1][2]
+        i += 2
+    else:
         return None
-    body_jcc, body_skip = ops[k + 6 : k + 8]
-    second_fld, second_cmp, second_sw = ops[k + 8 : k + 11]
-    if body_jcc[1] != "jcc" or body_skip[1] != "jmp":
+    if i >= len(ops) or ops[i][1] != "jmp":
         return None
-    if (second_fld[1], second_cmp[1], second_sw[1]) != ("fld", "fcomp", "fstsw"):
+    i += 1
+    if i + 2 >= len(ops):
+        return None
+    second_fld, second_cmp, second_sw = ops[i : i + 3]
+    if (second_fld[1], second_cmp[1]) != pair or second_sw[1] != "fstsw":
+        return None
+    i += 3
+    if i < len(ops) and ops[i][1] == "jcc" and ops[i][2] == 0x76:
+        if ops[i][3] != body:
+            return None
+    elif (
+        i + 1 < len(ops)
+        and ops[i][1] == "jcc"
+        and ops[i][2] == 0x77
+        and ops[i][3] == ops[i][0] + 5
+        and ops[i + 1][1] == "jmp"
+        and ops[i + 1][2] == body
+    ):
+        pass
+    else:
         return None
     if skip[2] != second_fld[0]:
         return None
     lim, var = first_fld[2], first_cmp[2]
-    stp = test[2] - 2
+    # The sign bit lives in the high word of the step cell: +2 for SINGLE,
+    # +6 for DOUBLE (wild electron/elec87).
+    stp = test[2] - (6 if pair[0] == "fld64" else 2)
     if (second_fld[2], second_cmp[2]) != (lim, var):
         return None
     if (vdisp(lim_s.target), vdisp(stp_s.target), vdisp(init_s.target)) != (
@@ -111,26 +146,47 @@ def _lift_next(ops, k, fors, stmts, addrs, exit_folds) -> int:
             f"NEXT template mismatch at {o[0]:#x}: {o} != jcc {cc:#x} BODY"
         )
 
-    i = expect(k, [("testw", stp + 2, 0x8000), ("jcc", 0x74, None), ("jmp", None)])
-    i = expect(i, [("fld", lim), ("fcomp", v), ("fstsw",)])
+    wide = ops[k + 3][1] == "fld64"
+    i = expect(
+        k,
+        [
+            ("testw", stp + (6 if wide else 2), 0x8000),
+            ("jcc", 0x74, None),
+            ("jmp", None),
+        ],
+    )
+    fld_kind = ops[i][1]
+    cmp_kind = "fcomp64" if fld_kind == "fld64" else "fcomp"
+    if fld_kind not in ("fld", "fld64"):
+        raise ValueError(f"NEXT template: unexpected limit load {ops[i]}")
+    i = expect(i, [(fld_kind, lim), (cmp_kind, v), ("fstsw",)])
     i = jcc_body(i, 0x73, 0x72)
     i = expect(i, [("jmp", None)])  # EXIT
     neg_start = i
-    i = expect(i, [("fld", lim), ("fcomp", v), ("fstsw",)])
+    i = expect(i, [(fld_kind, lim), (cmp_kind, v), ("fstsw",)])
     i = jcc_body(i, 0x76, 0x77)
     if ops[k + 2][2] != ops[neg_start][0]:  # e9 NEG must land on the second FLD
         raise ValueError("NEXT template: bad negative-path target")
     # the increment `v = v + step` was lifted as the preceding Assign -- fold it in
     inc = stmts[-1]
-    slot_v, slot_s = _slot(v), _slot(stp)
-    if inc not in (
-        ir.Assign(ir.Var(slot_v), ir.BinOp("+", ir.Var(slot_v), ir.Var(slot_s))),
-        ir.Assign(ir.Var(slot_v), ir.BinOp("+", ir.Var(slot_s), ir.Var(slot_v))),
+
+    def disp(x):
+        return int(x.name[1:5], 16)
+
+    if not (
+        isinstance(inc, ir.Assign)
+        and isinstance(inc.target, ir.Var)
+        and disp(inc.target) == v
+        and isinstance(inc.value, ir.BinOp)
+        and inc.value.op == "+"
+        and isinstance(inc.value.lhs, ir.Var)
+        and isinstance(inc.value.rhs, ir.Var)
+        and {disp(inc.value.lhs), disp(inc.value.rhs)} == {v, stp}
     ):
         raise ValueError(f"NEXT increment mismatch: {inc}")
     a = addrs[-1]
     del stmts[-1], addrs[-1]
-    stmts.append(ir.NextStmt(ir.Var(slot_v)))
+    stmts.append(ir.NextStmt(inc.target))
     addrs.append(a)
     fors.pop()
     # EXIT FOR: a GOTO to the post-NEXT address (the op after this template) is an exit;
@@ -906,7 +962,9 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
             map_body(i, body, 1)
 
     def fix(s):
-        if isinstance(s, (ir.Goto, ir.IfGoto, ir.Gosub)):
+        if isinstance(s, (ir.Goto, ir.IfGoto, ir.Gosub)) or (
+            isinstance(s, ir.Return) and s.target is not None
+        ):
             tag, a = s.target
             assert tag == "addr"
             if a not in index:
@@ -915,6 +973,8 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
                 return ir.Goto(index[a])
             if isinstance(s, ir.Gosub):
                 return ir.Gosub(index[a])
+            if isinstance(s, ir.Return):
+                return ir.Return(index[a])
             return ir.IfGoto(s.cond, index[a])
         if isinstance(s, (ir.OnGoto, ir.OnGosub)):
             new = []

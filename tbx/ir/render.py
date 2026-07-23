@@ -238,7 +238,7 @@ def _us_decl(s) -> str | None:
     if isinstance(s, NextStmt):
         return f"NEXT {s.var.name}"
     if isinstance(s, Return):
-        return "RETURN"
+        return "RETURN" if s.target is None else f"RETURN {s.target}"
     if isinstance(s, Wend):
         return "WEND"
     if isinstance(s, Do):

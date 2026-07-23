@@ -148,6 +148,24 @@ def test_try_inline_rescue():
     assert decode0._try_inline_rescue(bytes(exe4), ops4) == 10 + len(helper2)
     assert ops4[1][1] == "opaque_helper" and ops4[1][2] == helper2
 
+    # Turbo Basic 1.0 omits the INT3 immediately before RETF in graphics
+    # helper variants 3-8 (wild bmaster/ifi). Each exact v1.0 body remains
+    # eligible for the same full-fingerprint rescue.
+    from tbx.decode0 import scan
+
+    for helper10 in (
+        scan._OPAQUE_HELPER_BODY_3_V10,
+        scan._OPAQUE_HELPER_BODY_4_V10,
+        scan._OPAQUE_HELPER_BODY_5_V10,
+        scan._OPAQUE_HELPER_BODY_6_V10,
+        scan._OPAQUE_HELPER_BODY_7_V10,
+        scan._OPAQUE_HELPER_BODY_8_V10,
+    ):
+        image = b"\x00" * 10 + helper10 + b"\x00"
+        helper_ops = [(7, "jmp", 10 + len(helper10)), (10, "proc_enter")]
+        assert decode0._try_inline_rescue(image, helper_ops) == 10 + len(helper10)
+        assert helper_ops[1][1:3] == ("opaque_helper", helper10)
+
 
 def test_scan_nop_padding():
     from tbx.decode0.scan import _scan_direct

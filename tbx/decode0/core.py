@@ -601,7 +601,7 @@ def _finalize(state: DecodeState, addr) -> Program:
     # paired Loop as a Goto (bare) or IfGoto (WHILE, same polarity as the
     # tail test -- "continue if cond true" is exactly `IF cond THEN GOTO`;
     # UNTIL would need De Morgan negation of a possibly-compound LogOp,
-    # unwitnessed, so it's left to raise below rather than guessed), all
+    # unwitnessed, so it is left to raise below rather than guessed), all
     # matched by nesting order (DO/LOOP pairs cannot cross in a
     # well-formed program, so a stack pairs them correctly same as the
     # loop's own runtime `state.dos` nesting would).
@@ -635,24 +635,22 @@ def _finalize(state: DecodeState, addr) -> Program:
                 continue
             loop_s = state.stmts[loop_idx]
             assert isinstance(loop_s, ir.Loop)
-            if loop_s.kind is not None:
-                # A tail-test DO...LOOP WHILE/UNTIL's materialize-then-
-                # backward-jcc template (`_lift_do_tail`) is, empirically,
-                # ALSO used with no orphan evidence in wild vhfprop.exe --
-                # but every constructed probe that reaches this same byte
-                # shape (plain `IF compound THEN GOTO earlier`, integer or
-                # float, single or compound-OR condition) instead resolves
-                # through the short-circuit compound-IF machinery (gap 47),
-                # never through `_lift_do_tail`. No witnessed source
-                # construct produces this exact shape without a genuine DO,
-                # so un-synthesizing it (WHILE: plain IfGoto; UNTIL: needs
-                # De Morgan negation, harder still) would be a guess against
-                # the calibration rule despite the suggestive line-table
-                # evidence. Fail loud instead of risk a silent byte mismatch.
+            if loop_s.kind == "UNTIL":
+                # A LOOP UNTIL conversion needs De Morgan negation of a
+                # possibly-compound LogOp. No fixture witnesses that source
+                # shape, so fail loud rather than guess its canonical form.
                 raise ValueError(
-                    "codeless DO...LOOP WHILE/UNTIL (no orphan evidence) has "
-                    "no witnessed non-DO source construct to un-synthesize to"
+                    "codeless DO...LOOP UNTIL (no orphan evidence) has no "
+                    "witnessed non-DO source construct to un-synthesize to"
                 )
+            if loop_s.kind == "WHILE":
+                # `IF cond THEN <body-line>` compiles to exactly the same
+                # materialize-and-back-jcc shape as `LOOP WHILE cond`, but
+                # has no codeless DO line-table entry (t1_iftailerr; wild
+                # vhfprop.exe). The condition polarity is already identical.
+                state.stmts[loop_idx] = ir.IfGoto(loop_s.cond, ("addr", host))
+                drop.add(do_idx)
+                continue
             state.stmts[loop_idx] = ir.Goto(("addr", host))
             drop.add(do_idx)
         if drop:
@@ -1155,11 +1153,17 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             n = state.bx
             state.bx = None
             args = (n, ch)
-        elif name in ("INKEY$", "DATE$", "TIME$", "COMMAND$"):  # zero-arg: bare keyword
+        elif name in (
+            "INKEY$",
+            "DATE$",
+            "TIME$",
+            "COMMAND$",
+            "ERDEV$",
+        ):  # zero-arg: bare keyword
             state.sstack.append(ir.Nullary(name))
             state.k += 1
             return
-        elif name in ("UCASE$", "LCASE$"):  # string arg via sstack
+        elif name in ("UCASE$", "LCASE$", "ENVIRON$"):  # string arg via sstack
             args = (state.sstack.pop(),)
         else:  # STR$/HEX$/OCT$/BIN$/MKL$/MKS$/MKD$:
             args = (state.stack.pop(),)  # numeric arg via the FP stack
@@ -1789,6 +1793,9 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         state.cur = None
     elif kind in ("ret", "retf"):  # retf = RETURN under event trapping
         state.put(ir.Return(), state.cur)
+        state.cur = None
+    elif kind == "return_to":
+        state.put(ir.Return(("addr", op[2])), state.cur)
         state.cur = None
     elif kind == "run":
         state.put(ir.Run(), state.cur)

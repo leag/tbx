@@ -166,6 +166,8 @@ _EE_STRFN_SUBS = {
     0x28: "UCASE$",
     0x0E: "INKEY$",
     0x04: "DATE$",
+    0x08: "ENVIRON$",  # string arg via sstack (t1_envdev)
+    0x0A: "ERDEV$",  # zero-arg device-error detail string (t1_envdev)
     0x26: "TIME$",
     0x14: "IOCTL$",  # IOCTL$(n): filenum in ax (t1_ioctlfn); sits alphabetically
     # between INPUT$F (0x12) and LCASE$ (0x16), the gap gap-17 flagged as

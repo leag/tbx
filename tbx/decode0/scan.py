@@ -77,6 +77,10 @@ _OPAQUE_HELPER_BODY_3 = bytes.fromhex(
     cb
     """
 )
+# TB 1.0 build of BODY_3: byte-identical except that the procedure epilogue
+# ends directly in RETF rather than INT3; RETF (wild bmaster/ifi). Keep this
+# as a full-body fingerprint, not a permissive suffix variant.
+_OPAQUE_HELPER_BODY_3_V10 = _OPAQUE_HELPER_BODY_3[:-2] + b"\xcb"
 _OPAQUE_HELPER_BODY_4 = bytes.fromhex(
     """
     55 8b ec 1e 06 c4 7e 0a 26 8b 0d 81 e1 ff 7f e3
@@ -89,6 +93,7 @@ _OPAQUE_HELPER_BODY_4 = bytes.fromhex(
     01 74 fb a4 26 88 1d 47 e2 ef fb 07 1f 5d cc cb
     """
 )
+_OPAQUE_HELPER_BODY_4_V10 = _OPAQUE_HELPER_BODY_4[:-2] + b"\xcb"
 _OPAQUE_HELPER_BODY_5 = bytes.fromhex(
     """
     55 8b ec 1e 06 b4 0f cd 10 3c 07 75 08 bb 00 b0
@@ -101,6 +106,7 @@ _OPAQUE_HELPER_BODY_5 = bytes.fromhex(
     00 eb e0 07 1f 5d cc cb
     """
 )
+_OPAQUE_HELPER_BODY_5_V10 = _OPAQUE_HELPER_BODY_5[:-2] + b"\xcb"
 _OPAQUE_HELPER_BODY_6 = bytes.fromhex(
     """
     55 8b ec 1e 06 b4 0f cd 10 3c 07 75 08 bb 00 b0
@@ -112,6 +118,7 @@ _OPAQUE_HELPER_BODY_6 = bytes.fromhex(
     59 49 e3 07 51 81 c7 a0 00 eb df 07 1f 5d cc cb
     """
 )
+_OPAQUE_HELPER_BODY_6_V10 = _OPAQUE_HELPER_BODY_6[:-2] + b"\xcb"
 _OPAQUE_HELPER_BODY_7 = bytes.fromhex(
     """
     55 8b ec 1e 06 b4 0f cd 10 3c 07 75 08 bb 00 b0
@@ -123,6 +130,7 @@ _OPAQUE_HELPER_BODY_7 = bytes.fromhex(
     49 e3 07 51 81 c6 a0 00 eb e2 07 1f 5d cc cb
     """
 )
+_OPAQUE_HELPER_BODY_7_V10 = _OPAQUE_HELPER_BODY_7[:-2] + b"\xcb"
 _OPAQUE_HELPER_BODY_8 = bytes.fromhex(
     """
     55 8b ec 1e 06 b4 0f cd 10 3c 07 75 08 bb 00 b0
@@ -134,15 +142,22 @@ _OPAQUE_HELPER_BODY_8 = bytes.fromhex(
     81 c7 a0 00 eb e2 07 1f 5d cc cb
     """
 )
+_OPAQUE_HELPER_BODY_8_V10 = _OPAQUE_HELPER_BODY_8[:-2] + b"\xcb"
 _OPAQUE_HELPER_BODIES = (
     _OPAQUE_HELPER_BODY,
     _OPAQUE_HELPER_BODY_2,
     _OPAQUE_HELPER_BODY_3,
+    _OPAQUE_HELPER_BODY_3_V10,
     _OPAQUE_HELPER_BODY_4,
+    _OPAQUE_HELPER_BODY_4_V10,
     _OPAQUE_HELPER_BODY_5,
+    _OPAQUE_HELPER_BODY_5_V10,
     _OPAQUE_HELPER_BODY_6,
+    _OPAQUE_HELPER_BODY_6_V10,
     _OPAQUE_HELPER_BODY_7,
+    _OPAQUE_HELPER_BODY_7_V10,
     _OPAQUE_HELPER_BODY_8,
+    _OPAQUE_HELPER_BODY_8_V10,
 )
 _OPAQUE_HELPER_PARAM_OFFSETS = (0x1E, 0x1A, 0x16, 0x12, 0x0E, 0x0A, 0x06)
 
@@ -976,6 +991,19 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
     if vec == 0x99:  # FPU status -> CPU flags helper
         ops.append((p, "fstsw"))
         p += 2
+        return p
+    if vec == 0x8C and exe[p + 2] in (0xE9, 0xEB):
+        # RETURN <line>: the runtime vector unwinds the active GOSUB/event
+        # frame, then a near jump selects the requested line
+        # (t1_returnline; wild baby/crossref/help/prtguide/readme).
+        if exe[p + 2] == 0xE9:
+            target = p + 5 + struct.unpack_from("<h", exe, p + 3)[0]
+            size = 5
+        else:
+            target = p + 4 + struct.unpack_from("<b", exe, p + 3)[0]
+            size = 4
+        ops.append((p, "return_to", target))
+        p += size
         return p
     if vec == 0xCD:  # short-string constructor: builds a 1-char string desc
         ops.append((p, "shortstr"))  # from the packed (char<<8 | len=1) word

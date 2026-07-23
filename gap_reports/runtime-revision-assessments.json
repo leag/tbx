@@ -37,25 +37,26 @@
     },
     {
       "id": "RR-INT-8C",
-      "title": "TB 1.0 event-handler runtime vector",
+      "title": "RETURN line-target runtime unwind vector",
       "signatures": [
         "unhandled INT 8c"
       ],
-      "disposition": "candidate",
-      "evidence_class": "candidate-runtime-revision",
-      "confidence": "medium-high",
+      "disposition": "closed",
+      "evidence_class": "oracle-verified",
+      "confidence": "high",
       "files": [
         "wild/hits/baby.exe",
+        "wild/hits/crossref.exe",
         "wild/hits/help.exe",
         "wild/hits/prtguide.exe",
         "wild/hits/readme.exe"
       ],
-      "assessment": "All current hits are TB 1.0. The strongest common source evidence is ON KEY(n) GOSUB and code inside event-handler bodies, suggesting a missing event-runtime poll/check entry rather than arbitrary inline x86.",
+      "assessment": "Canonical INT 8C followed by a near or short JMP is RETURN <line>: the vector unwinds the active GOSUB/event frame and the jump selects the requested line. Oracle fixture t1_returnline/v10_t1_returnline verifies the source and byte-exact round trip in both dialects.",
       "negative_evidence": [
         "One, two, and eight ON KEY declarations did not reproduce the vector.",
         "TB 1.0 keyboard-break toggles, dense KEY ON/OFF control, and simple CLS-plus-assignment handler bodies did not reproduce it."
       ],
-      "promotion_criteria": "Recover a source listing, find a differently revised compiler/runtime that emits the vector, or establish one invariant register/control-flow contract across every hit and a neighboring known event-runtime entry.",
+      "promotion_criteria": "Satisfied 2026-07-23 by the RETURN <line> oracle fixture and the invariant INT-vector-plus-JMP shape across all five wild hits.",
       "source": "HANDOFF.md: Gap INT-8c — likely ON KEY GOSUB related"
     },
     {

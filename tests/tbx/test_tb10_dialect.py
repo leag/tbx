@@ -94,6 +94,9 @@ PAIRS = [
     "t1_resumestart",
     "t1_fnlocal",
     "t1_fnlocalint",
+    "t1_returnline",
+    "t1_forlongfp",
+    "t1_envdev",
 ]
 
 
