@@ -1072,6 +1072,11 @@ class _Gen:
                 f"{hc}, {c}, {int(s.preset)});"
             ]
         if isinstance(s, ir.LineStmt):
+            if s.x1 is None:
+                raise _Unsupported(
+                    "LINE with an omitted first point (uses the last "
+                    "graphics position, not modeled)"
+                )
             hc, c = self.opt(s.color)
             style = (
                 f"(unsigned)tb_i({self.num(s.style)})" if s.style is not None else "0xFFFFu"

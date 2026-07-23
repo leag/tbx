@@ -25,13 +25,13 @@ def fileio(state: DecodeState, op, addr, kind) -> bool:
     if kind == "open":  # OPEN "m",#n,file[,reclen] -- ax = reclen, 0x80 default
         for_as = state.pend_mode_lit is not None  # `OPEN f$ FOR mode AS #n`:
         need = 1 if for_as else 2  # the keyword desugars to a shortstr-
-        if state.pend_fnum is None or len(state.sstack) < need or not isinstance(
-            state.ax, ir.Lit
-        ):
+        if state.pend_fnum is None or len(state.sstack) < need or state.ax is None:
             raise ValueError(
                 f"OPEN state mismatch at {addr:#x} "
                 f"(fnum={state.pend_fnum}, sstack={len(state.sstack)}, ax={state.ax})"
             )
+        # reclen is usually a bare literal, but can be any numeric expression
+        # (`OPEN f$ FOR RANDOM AS #1 LEN = 18 - 50 * X%`, wild hebrew.exe).
         reclen = None if state.ax == ir.Lit(0x80) else state.ax
         if for_as:
             mode, file = state.pend_mode_lit, state.sstack.pop()

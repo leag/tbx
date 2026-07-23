@@ -113,6 +113,7 @@ class DecodeState:
     pend_fnum: Any = None
     pend_icmp: Any = None
     pend_input: Any = None
+    pend_line_input: Any = None
     pend_mode_lit: Any = None
     pend_print: dict[str, Any] | None = None
     pend_shortstr: Any = None
@@ -325,6 +326,16 @@ class DecodeState:
                 pi["start"],
             )
             self.pend_input = None
+
+    def _lineinput_target(self, ref: object) -> None:
+        """Resolve a LINE INPUT whose target is a computed string-array
+        element (the `_LINEINPUTREAD` sibling of `_input_target`'s array
+        case, wild cal87.exe): the index computation runs between the read
+        and the element store, so the store names the target."""
+        pi = self.pend_line_input
+        assert pi is not None
+        self.put(ir.LineInput(pi["prompt"], ref, semi=pi["semi"]), pi["start"])
+        self.pend_line_input = None
 
     # decode a pooled string literal at descriptor `desc`; desc and ss_base are ints
     # wherever a string literal is present (else this is unreached)
@@ -1903,6 +1914,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
     state.color_cells = {}  # pending COLOR stores: cell disp -> Lit
     state.sstack = []  # the string operand stack
     state.pend_input = None  # (prompt Expr|None, flags) awaiting its read call
+    state.pend_line_input = None  # (prompt, semi) awaiting a LINE INPUT read
     state.pend_fnum = None  # file number from the [0060] cell
     state.dim_frame = None  # open runtime-DIM bracket
     state.local_dim_frame = None  # open LOCAL-frame (heap-allocated) DIM bracket

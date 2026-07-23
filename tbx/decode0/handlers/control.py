@@ -584,6 +584,27 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             state.pend_cmp = None
             state.k += 3
             return True
+        if (
+            state.pend_cmp_str
+            and state.k + 3 < len(state.ops)
+            and state.ops[state.k + 1][1] == "jcc"
+            and state.ops[state.k + 2][1] == "incax"
+            and state.ops[state.k + 1][3] == state.ops[state.k + 3][0]
+            and state.ops[state.k + 1][2] in _JCC_RELOP_TRUE
+            and state.ops[state.k + 3][1] == "movm_ax"
+        ):
+            # String relational-as-VALUE assigned directly to a scalar
+            # (`V% = A$ = B$`, wild hebrew.exe): materializes -1/0 into ax
+            # with no dispatch pair, the next op stores ax straight into a
+            # DS scalar via movm_ax. Unlike the FP case above, the whole
+            # RHS IS the relational expression (there's no enclosing
+            # arithmetic to disambiguate), so no Group wrapper is needed --
+            # `V% = A$ = B$` parses the same with or without parens.
+            lhs, rhs = state.pend_cmp
+            state.ax = ir.RelOp(_JCC_RELOP_TRUE[state.ops[state.k + 1][2]], lhs, rhs)
+            state.pend_cmp = None
+            state.k += 3
+            return True
         state.k = _lift_while(
             state.ops,
             state.k,

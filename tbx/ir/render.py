@@ -332,10 +332,8 @@ def _us_graphics(s) -> str | None:
     if isinstance(s, LineStmt):
         st1 = "STEP " if s.step1 else ""
         st2 = "STEP " if s.step2 else ""
-        txt = (
-            f"LINE {st1}({unparse(s.x1)},{unparse(s.y1)})"
-            f"-{st2}({unparse(s.x2)},{unparse(s.y2)})"
-        )
+        p1 = f"{st1}({unparse(s.x1)},{unparse(s.y1)})" if s.x1 is not None else ""
+        txt = f"LINE {p1}-{st2}({unparse(s.x2)},{unparse(s.y2)})"
         # Trailing arg slots: color, box, style -- absent slots before a present
         # one render as bare `, ` (e.g. `LINE (..)-(..), 2, , &HAAAA`).
         slots = [

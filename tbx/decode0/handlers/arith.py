@@ -15,6 +15,7 @@ from tbx.decode0.const import (
     _FREAD,
     _INPUTREAD,
     _JCC_RELOP_VALUE,
+    _LINEINPUTREAD,
     _PREC,
     _READDATA,
 )
@@ -430,6 +431,11 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             state.ax = ir.BinOp("+", state.loc_local(op[2]), _rgrp("+", state.ax))
         state.k += 1
         return True
+    if kind == "andax_bp":  # and ax,[bp+d8]: bitwise fold of a LOCAL int,
+        # the bp-relative sibling of andax_m (wild filepatc.exe)
+        state.ax = ir.BinOp("AND", state.loc_local(op[2]), _rgrp("AND", state.ax))
+        state.k += 1
+        return True
     if kind == "cmpax_bx":  # integer IF compare, both sides ax-computed: the
         # source RHS evaluates first and shuttles to bx, LHS lands in ax, and
         # the signed Jcc rides _JCC_RELOP's 7C-7F rows (witnessed t1_cmpax)
@@ -657,6 +663,9 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                 elif v is _INPUTREAD:  # invent.exe); console INPUT target:
                     state._input_target(ref, is_str=True)  # computed
                     # string-array element (wild invent.exe)
+                elif v is _LINEINPUTREAD:  # LINE INPUT target: computed
+                    state._lineinput_target(ref)  # string-array element
+                    # (wild cal87.exe)
                 else:
                     state.put(ir.Assign(ref, v), state.cur)
                 state.cur = None
@@ -677,11 +686,24 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             state.stack.append(_orient(sik[2], ref, state.stack.pop()))
         elif sik[1] == pre + "fold_n_si":  # mem = RIGHT operand
             state.stack.append(ir.BinOp(sik[2], state.stack.pop(), ref))
+        elif sik[1] == pre + "ifold_si":  # int array element, LEFT operand
+            # (the DE-escape sibling of fold_si's D8/FP form, wild filepatc.exe)
+            state.stack.append(_orient(sik[2], ref, state.stack.pop()))
+        elif sik[1] == pre + "ifold_n_si":  # int array element, RIGHT operand
+            top = state.stack.pop()
+            if isinstance(top, ir.BinOp) and _PREC[top.op] < _PREC[sik[2]]:
+                top = ir.Group(top)
+            state.stack.append(ir.BinOp(sik[2], top, ref))
         elif sik[1] == pre + "fold64_si":
             state.stack.append(_orient(sik[2], ref, state.stack.pop()))
         elif sik[1] == pre + "fold_n64_si":
             state.stack.append(ir.BinOp(sik[2], state.stack.pop(), ref))
-        elif sik[1] in (pre + "fcomp_si", pre + "fcomp_si64", pre + "icomp_si32"):
+        elif sik[1] in (
+            pre + "fcomp_si",
+            pre + "fcomp_si64",
+            pre + "icomp_si32",
+            pre + "icomp_si",
+        ):
             # IF on an array element (m64 witnessed t1_dblar2; LONG mixed-type
             # compare witnessed wild bmaster.exe/ifi.exe, probe q_licomp)
             state.pend_cmp = (ref, state.stack.pop())
@@ -720,6 +742,12 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             # of a computed array element (`ARRAY%(i) + <expr>`, wild
             # number.exe), mem = the array ref (left operand).
             state.ax = ir.BinOp("+", ref, _rgrp("+", state.ax))
+        elif sik[1] == pre + "subax_si":
+            # sub ax, [si] (near) / sub ax, es:[si] (far): subtractive fold
+            # of a computed array element (`<expr> - ARRAY%(i)`, wild
+            # hebrew.exe), mem on the right like subax_m/far_subax_si
+            # (SUB isn't commutative, unlike addax_si's mem-left form).
+            state.ax = ir.BinOp("-", state.ax, _rgrp("-", ref))
         elif sik[1] == "imul_si":
             # imul word [si]: multiplicative fold of a computed array
             # element (`ARRAY1%(k) * ARRAY2%(i,j)`, wild grdscn.exe) --

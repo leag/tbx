@@ -77,6 +77,25 @@ edition/runtime tag, and evidence provenance.
   unguarded dict lookup) was traced to the exact line but NOT fixed --
   the correct index convention affects the byte-exact RESTORE line
   number and isn't safely inferable without oracle verification.
+  A THIRD 2026-07-23 round ("fully decode a wild" directive, still no
+  oracle) landed seven more sibling-completion/relaxation fixes -- see
+  Part III's newest dated entry. Still 25/84 strict (every advance again
+  landed on a NEW gap): LINE's omitted-first-point form (`LINE
+  -(x2,y2)`, cal87.exe) and LINE INPUT into a computed string-array
+  element (cal87.exe, mirrors the already-calibrated INPUT/_INPUTREAD
+  mechanism); `andax_bp`/`subax_si` (array-element)/`icomp_si`/
+  `ifold_si`/`ifold_n_si` (filepatc.exe/hebrew.exe, more missing
+  siblings in the same op-table families as the second round); a string
+  relational-as-value assigned directly to a scalar (`V% = A$ = B$`,
+  hebrew.exe); OPEN's reclen argument accepting any numeric expression,
+  not just a literal (hebrew.exe). Each landed file advanced into a
+  distinct next gap (`unhandled op testw`, `unhandled byte c4` x2,
+  `unhandled materialized test`, `FIELD with no AS-entries`, `unhandled
+  INT EE sub 08`) -- none fully closed this round. FIELD's width being a
+  computed expression (hebrew.exe's newest blocker) needs a real
+  redesign (the current parser assumes a fixed 5-op window per field
+  entry; a computed width needs incremental expression evaluation
+  instead) -- flagged, not attempted.
 - Current validation: 2439 passed, 16 skipped (2026-07-23); Ruff passes.
   `t1_localarr`/`t1_localarrint` (+`v10_`) are byte-exact both dialects.
 - Immediate target: `unhandled INT 8c` (still open, see Gap `RR-INT-8C` in
@@ -722,6 +741,88 @@ fixing the intra-inline-IF gap above will also close it.
 ---
 
 ## Part III — Investigation history / handoff log
+
+### 2026-07-23 (third round same day) — seven more fixes chasing a full close, no oracle
+
+Continuation under "fully decode a wild" -- tried to push `cal87.exe`/
+`hebrew.exe`/`filepatc.exe` all the way through, chaining fix after fix
+as each one landed on the next gap. None fully closed, but the corpus
+is measurably closer and the remaining blockers are now well-understood
+enough to resume directly.
+
+**`cal87.exe`, two real gaps.** (1) `LINE` flag byte 0x00: the decoder's
+`fl & 0x40` check treated that bit as an always-set base flag (per the
+original docstring), but it actually means "first point given
+explicitly" -- when clear, the source omitted the first point entirely
+(`LINE -(x2,y2)`, using the last graphics position). Confirmed by
+instrumenting every OTHER `line` call in the file: all had `0x40` set
+and non-None `color_cells[0x88]/[0x94]`; the one that failed had flags
+0x00 and BOTH cells empty -- clean, unambiguous evidence. `ir.LineStmt.x1/y1`
+now accept `None`; render.py omits the `(x1,y1)` group entirely when
+so (`unparse` naturally produces `LINE -(x2,y2)`, matching universal
+GW-BASIC-family syntax); c0.py raises `_Unsupported` for it (no
+last-graphics-position surrogate modeled). Also gated the untested
+STEP-with-omitted-first-point combination (bit 0x20 with 0x40 clear) to
+stay fail-loud rather than guess a meaning for it.
+(2) `LINE INPUT` into a computed string-array element: `line_input`
+required the fixed `movsi; strassign` template; a computed index runs
+an index-computation chain first. Mirrors `read_str`'s already-
+calibrated `_INPUTREAD` mechanism exactly -- new `_LINEINPUTREAD`
+sentinel, `state.pend_line_input` dict, `_lineinput_target` method.
+After both, `cal87.exe` now fails on `unhandled materialized test`
+(traced: a `jcc` code 0x76/JBE reaching `_lift_while`'s catch-all in a
+shape involving two chained computed-array-element comparisons whose
+second operand's provenance isn't yet clear -- genuinely unrelated to
+LINE/LINE INPUT, needs its own fresh trace).
+
+**`bmaster.exe`/`ifi.exe`/`filepatc.exe`/`hebrew.exe`, five more
+sibling-table completions** (same risk profile as the second round's
+three -- each is a documented, already-calibrated op family missing one
+row):
+- `andax_bp` ((0x23,0x46), AND ax,[bp+d8]): LOCAL-int sibling of
+  `andax_m`, mirrors `addax_bp`'s existing bp-relative pattern
+  (filepatc.exe).
+- `subax_si` ((0x2B,0x04), SUB ax,[si], no ES prefix): the computed-
+  array-element sibling of `far_subax_si` (added this session's second
+  round) and of the plain `addax_si` -- mem on the right per
+  `subax_m`'s convention, unlike `addax_si`'s mem-left (hebrew.exe).
+- `icomp_si` ((0xDE,3) at `[si]`): the 16-bit-int sibling of `icomp`
+  (disp16) and `icomp_si32` (LONG at `[si]`) -- the SAME missing-table-row
+  pattern as this session's earlier `icomp_bp` find, just the `[si]`
+  addressing mode instead of `[bp+d8]` (hebrew.exe).
+- `ifold_si`/`ifold_n_si` ((0xDE,reg) at `[si]`, reg in `_FOLD_OPS`/
+  `_FOLD_OPS_N`): the integer-array-element sibling of the disp16
+  `ifold`/`ifold_n` pair that already existed -- the `[si]` FP dispatch
+  table had `_FOLD_OPS`/`_FOLD_OPS_N` wired for D8 (float) and DC
+  (double) but not DE (int), an oversight relative to the disp16 table
+  which already had all three (filepatc.exe, reg=7=FIDIVR).
+
+**`hebrew.exe`, two non-table-row fixes.** (1) A string relational used
+directly as an assignable VALUE (`V% = A$ = B$`): materializes -1/0 into
+ax with no dispatch pair (no `orax`/jcc/jmp), the next op stores ax
+straight into a scalar via `movm_ax`. The existing FP-relational-as-value
+branch in `control.py`'s `movax_family` explicitly excludes strings
+("Strings stay fail-loud") because its shape needs an explicit `Group`
+wrapper for byte-exactness in an ARITHMETIC context (`(A>0)*3` needs the
+parens); this is a plain assignment where the whole RHS IS the
+relational expression, so no Group is needed (`V% = A$ = B$` parses the
+same either way) -- added as a narrowly-scoped SEPARATE branch, the
+existing FP branch untouched. (2) `OPEN`'s reclen argument required a
+bare `ir.Lit`; hebrew.exe computes it (`OPEN ... LEN = 18 - 50 * X%`) --
+relaxed the check to accept any expression (the `== ir.Lit(0x80)`
+default-detection already worked generically via `__eq__`, no change
+needed there). After both, `hebrew.exe` now fails on `FIELD with no
+AS-entries`: FIELD's width is ALSO a computed expression here, but
+fixing that is a bigger lift than a guard relaxation -- FIELD's parser
+assumes a fixed 5-op window (`movax; movsi; movdx; movesdx; field_as`)
+per field entry and would need restructuring into incremental
+expression evaluation to handle a variable-length width computation.
+Flagged, not attempted this round.
+
+Validation for all seven: full suite 2439 passed, 16 skipped, 0
+regressions; ruff clean; full `scan_wild.py` re-run: still 25/84 (every
+advance landed on a new gap, none closed outright), no new failures
+elsewhere in the corpus.
 
 ### 2026-07-23 (later same day) — four table-completion fixes, no oracle
 

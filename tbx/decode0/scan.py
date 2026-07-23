@@ -739,6 +739,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "addax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
         p += 3  # into ax (witnessed q_loccmp)
         return p
+    if b == 0x23 and exe[p + 1] == 0x46:  # and ax, [bp+d8]: bitwise fold of a
+        ops.append((p, "andax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # LOCAL int, the bp-relative sibling of andax_m (wild filepatc.exe)
+        return p
     if b == 0x3B and exe[p + 1] == 0x46:  # cmp ax, [bp+d8]: relational value
         ops.append((p, "cmpax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
         p += 3  # against a LOCAL int (witnessed q_loccmp)
@@ -782,6 +786,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
     if b == 0x03 and exe[p + 1] == 0x04:  # add ax, [si]: arithmetic fold of a
         ops.append((p, "addax_si"))  # computed static int-array element
         p += 2  # e.g. `ARRAY%(i) + 1` (wild number.exe)
+        return p
+    if b == 0x2B and exe[p + 1] == 0x04:  # sub ax, [si]: subtractive fold of
+        ops.append((p, "subax_si"))  # a computed static int-array element,
+        p += 2  # mem on the right like subax_m (wild hebrew.exe)
         return p
     if b == 0x26 and exe[p + 1] == 0xF7 and exe[p + 2] == 0x2C:  # imul word es:[si]:
         ops.append((p, "far_imulax_si"))  # multiplicative fold of a by-ref
@@ -1790,6 +1798,10 @@ def _scan_pass(
                     (0xDB, 3): "fstp_si32",
                     (0xDF, 0): "fild_si",  # m16 int onto the FP stack, e.g. a
                     (0xDE, 1): "imulax_si",  # FIMUL m16 by-ref integer
+                    (0xDE, 3): "icomp_si",  # m16 int compare: a computed
+                    # int-array element vs. an FP-stack value (mixed-type
+                    # IF/loop test; the [si] sibling of icomp's disp16 form
+                    # and icomp_si32's LONG form, wild hebrew.exe)
                 }.get((esc, reg))  # by-ref int param for PRINT (t1_byref1)
                 if kind:
                     ops.append((p, pre + kind))
@@ -1809,6 +1821,14 @@ def _scan_pass(
                     continue
                 if esc == 0xD8 and reg in _FOLD_OPS_N:
                     ops.append((p, pre + "fold_n_si", _FOLD_OPS_N[reg]))
+                    p = mo + 1
+                    continue
+                if esc == 0xDE and reg in _FOLD_OPS:  # int var/pool-literal
+                    ops.append((p, pre + "ifold_si", _FOLD_OPS[reg]))  # fold
+                    p = mo + 1  # LEFT via a computed index (wild filepatc.exe)
+                    continue
+                if esc == 0xDE and reg in _FOLD_OPS_N:
+                    ops.append((p, pre + "ifold_n_si", _FOLD_OPS_N[reg]))
                     p = mo + 1
                     continue
             if mod == 0 and rm == 6:  # [disp16] operand

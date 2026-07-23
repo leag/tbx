@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from tbx import ir
 from tbx.decode0.const import (
+    _LINEINPUTREAD,
     _TABSPC_VECS,
 )
 
@@ -41,9 +42,13 @@ def graphics(state: DecodeState, op, addr, kind) -> bool:
         state.cur = None
         state.k += 1
         return True
-    if kind == "line":  # LINE [STEP](..)-[STEP](..)[,c][,B|BF][,style]
+    if kind == "line":  # LINE [[STEP](..)]-[STEP](..)[,c][,B|BF][,style]
         fl = op[2]
-        if fl & ~0x7F or not fl & 0x40 or (fl & 0x02 and not fl & 0x04):
+        if fl & ~0x7F or (fl & 0x02 and not fl & 0x04):
+            raise ValueError(f"LINE flag {fl:02x} at {addr:#x} (unsupported)")
+        if not fl & 0x40 and fl & 0x20:
+            # STEP on an omitted first point is unwitnessed -- stay fail-loud
+            # rather than guess what it would even mean.
             raise ValueError(f"LINE flag {fl:02x} at {addr:#x} (unsupported)")
         color = state.color_cells.pop(0xA0) if fl & 0x08 else None
         style = state.color_cells.pop(0xAC) if fl & 0x01 else None
@@ -52,8 +57,11 @@ def graphics(state: DecodeState, op, addr, kind) -> bool:
         box = ("BF" if fl & 0x02 else "B") if fl & 0x04 else ""
         y2 = state.stack.pop()
         x2 = state.stack.pop()
-        x1 = state.color_cells.pop(0x88)
-        y1 = state.color_cells.pop(0x94)
+        if fl & 0x40:
+            x1 = state.color_cells.pop(0x88)
+            y1 = state.color_cells.pop(0x94)
+        else:  # first point omitted entirely: `LINE -(x2,y2)` from the last
+            x1 = y1 = None  # graphics position (wild cal87.exe)
         state.put(
             ir.LineStmt(
                 x1,
@@ -275,14 +283,22 @@ def console(state: DecodeState, op, addr, kind) -> bool:
         state.k += 1
         return True
     if kind == "line_input":  # LINE INPUT
-        nxt = [o[1] for o in state.ops[state.k + 1 : state.k + 3]]
-        if nxt != ["movsi", "strassign"]:
-            raise ValueError(f"LINE INPUT template mismatch at {addr:#x}")
         prompt = None if op[2] == state.lay["pool_base"] - 4 else state._pool_str(op[2])
+        nxt = state.ops[state.k + 1] if state.k + 1 < len(state.ops) else None
+        if nxt is not None and nxt[1] != "movsi":
+            # Computed string-array-element target (wild cal87.exe), the
+            # LINE INPUT sibling of read_str's _INPUTREAD case: the index
+            # computation runs between the read and the element store, so
+            # the store (the shlsi element-access handler's strassign
+            # branch) names the target.
+            state.pend_line_input = {"prompt": prompt, "semi": op[3], "start": state.cur}
+            state.sstack.append(_LINEINPUTREAD)
+            state.k += 1
+            return True
+        if nxt is None or state.ops[state.k + 2][1] != "strassign":
+            raise ValueError(f"LINE INPUT template mismatch at {addr:#x}")
         state.put(
-            ir.LineInput(
-                prompt, state.loc(state.ops[state.k + 1][2]), semi=op[3]
-            ),
+            ir.LineInput(prompt, state.loc(nxt[2]), semi=op[3]),
             state.cur,
         )
         state.cur = None

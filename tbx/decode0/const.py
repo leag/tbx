@@ -207,6 +207,8 @@ _READDATA = ("readdata",)  # sentinel: a DATA item awaiting its READ store;
 _INPUTREAD = ("inputread",)  # sentinel: a console-INPUT-parsed value whose
 # target is an array element -- the index computation runs between the
 # read and the element store, so the store names the target (t1_inparr).
+_LINEINPUTREAD = ("lineinputread",)  # sentinel: LINE INPUT's string sibling
+# of _INPUTREAD -- a computed string-array-element target (wild cal87.exe).
 
 
 _PREC = ir._PREC

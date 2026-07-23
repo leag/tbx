@@ -557,13 +557,16 @@ class Pset:
 
 @dataclass(frozen=True)
 class LineStmt:
-    """LINE [STEP] (x1,y1)-[STEP] (x2,y2)[, color][, B|BF][, style] (INT ECh sub
-    62h + flag: 40 base | 20 STEP on first point | 10 STEP on second | 08 color
-    in [00A0] | 04 B | 02 F | 01 style word in [00AC]). First pair FSTP'd into
-    [0088]/[0094], second pair left on the FP stack."""
+    """LINE [[STEP] (x1,y1)]-[STEP] (x2,y2)[, color][, B|BF][, style] (INT ECh
+    sub 62h + flag: 40 first point given explicitly | 20 STEP on first point |
+    10 STEP on second | 08 color in [00A0] | 04 B | 02 F | 01 style word in
+    [00AC]). When 40 is clear the first point is omitted entirely (`LINE
+    -(x2,y2)`, using the last graphics position) and x1/y1 are None -- wild
+    cal87.exe. When 40 is set, the first pair is FSTP'd into [0088]/[0094];
+    the second pair is always left on the FP stack."""
 
-    x1: object
-    y1: object
+    x1: object  # Expr | None (None = first point omitted)
+    y1: object  # Expr | None (None = first point omitted)
     x2: object
     y2: object
     color: object = None  # Expr | None
