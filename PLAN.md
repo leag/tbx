@@ -1,4 +1,620 @@
-# Wild-corpus gap campaign — handoff
+# tbx wild-corpus gap campaign — combined plan & handoff
+
+This file merges what used to be three separate documents into one:
+`REMAINING_GAPS_PLAN.md` (the forward-looking work queue), `HANDOFF.md`
+(the chronological investigation log), and
+`docs/intra-inline-if-goto-spec.md` (a deep-dive spec for one specific
+open gap). They're combined here so a session picking up this work has
+one file to read instead of three. The original three-way split was
+intentional (see Part I's own note below on why the plan and the handoff
+were kept apart) — this merge is a readability/discoverability call, not
+a reversal of that reasoning; the sections below still play the same
+roles they did as separate files.
+
+## Table of contents
+
+- **Part I — Execution plan** (formerly `REMAINING_GAPS_PLAN.md`): what
+  to do next, in what order, and how a session proves it made progress.
+  Start here.
+- **Part II — Spec: intra-inline-IF-body GOTO targets** (formerly
+  `docs/intra-inline-if-goto-spec.md`): a focused investigation spec for
+  one specific open gap (state.exe/state87.exe), referenced from Part I's
+  work queue and from Part III's investigation log.
+- **Part III — Investigation history / handoff log** (formerly
+  `HANDOFF.md`): the full chronological record of discoveries, closures,
+  and dead ends across the campaign. Newest entries are at the top.
+
+---
+
+## Part I — Execution plan
+
+
+This is the resumable work plan for finishing the Turbo Basic decoder campaign.
+It plays a deliberately different role from Part III below: Part III preserves
+discoveries and historical evidence; this part says what to do next, in what
+order, and how a future session proves that it made progress. (The two used to
+be separate files for exactly this reason — see the top of this document for
+why they're now merged into one.)
+
+### Project scope
+
+The project target is **all Turbo Basic syntax**, across documented language
+editions, compiler dialects, and compatible runtime revisions—not merely the
+constructs currently listed in the Borland handbook. The handbook is a reference
+and source of semantics, not a whitelist or completion boundary.
+
+Track support in three dimensions: source syntax recognition, bytecode decoding,
+and semantic/runtime fidelity. A construct may be source-known but bytecode-
+unwitnessed, or bytecode-known but absent from the handbook; neither case is
+silently discarded. Every new fixture and gap-ledger entry records its dialect,
+edition/runtime tag, and evidence provenance.
+
+### Live checkpoint
+
+- Updated: 2026-07-20
+- Branch: `claude/claude-md-docs-mr8ssz`
+- Baseline commit: `25fbe9c` (`Decode INP intrinsic dispatcher`)
+- Corpus: `wild/hits/` (84 Turbo Basic executables; gitignored, never commit)
+- Baseline result: 14 decode OK, 70 fail at their first visible gap
+- Current strict result: 16 decode OK, 68 blocked. Several blocked files have
+  advanced through multiple signatures even though the strict count is flat.
+- Current validation: 2233 passed, 14 skipped (2026-07-20); eight new 1.0/1.1
+  oracle round trips are byte-exact for nested logical short-circuit forms and
+  leading-semicolon `LINE INPUT;`.
+- Immediate target: `unhandled INT 8c` (four files), continuing from Gap 33 in
+  `Part III`; the seven-file `byte ea` group is now advanced and documented
+  as a runtime-revision closure.
+- `INT ED sub 1e` is now identified as the missing three-argument
+  `INSTR(start, haystack$, needle$)` runtime entry. Four independent wild
+  programs establish the same AX-plus-two-string calling convention. The
+  vendored compiler rejects all common three-argument source spellings, so this
+  closure is classified as `runtime-revision`, not `oracle-verified`.
+
+The number 70 is a count of blocked executables, not distinct missing features.
+Every fix can reveal a later failure in the same executable. Completion therefore
+means 84/84 decode OK (or an explicitly documented, policy-approved exclusion),
+not merely exhausting the current first-failure list. Report two metrics:
+
+- **Strict:** executables that decode completely. The final target is 84/84.
+- **Calibrated:** strict successes plus patterns formally classified as runtime
+  revision skew after exhaustive probes. This communicates useful coverage but
+  never permits the decoder to accept unwitnessed bytecode.
+
+Report regressions separately so calibrated exclusions cannot hide a previously
+decoding file that has started failing.
+
+### Resume procedure
+
+At the start of every session:
+
+1. Read this file's live checkpoint and latest entries in the progress log.
+2. Check `git status --short --branch`; preserve unrelated user changes.
+3. Generate a fresh machine-readable working report:
+
+   ```bash
+   UV_CACHE_DIR=/tmp/tbx-uv-cache uv run python tbx/tools/scan_wild.py \
+     wild/hits --report /tmp/tbx-gap-report.json
+   ```
+
+4. Compare it with the latest tracked sanitized checkpoint under `gap_reports/`.
+   The JSON `groups` array is sorted by descending affected-file count. Update
+   the tracked checkpoint only after validation and include it in the closure
+   commit. Reports contain names and diagnostics only, never executable bytes.
+5. Continue the first unchecked work item whose prerequisites are satisfied.
+6. Before ending, update the live checkpoint and progress log. Commit only a
+   coherent, verified closure; never commit wild binaries or oracle executables.
+
+### Definition of a closed gap
+
+A gap is closed only when all applicable gates pass:
+
+- The source construct is identified from compiler-oracle evidence, dialect
+  documentation, surviving compiler/runtime artifacts, or an equally strong
+  byte-level proof. Similar-looking opcodes are not sufficient.
+- A minimal fixture is added under `tests/fixtures/corpus/` when the oracle can
+  reproduce the byte pattern, with matching ops/user-code snapshots.
+- Decoder and IR/render/C changes preserve fail-loud behavior for shapes that are
+  still unknown.
+- Focused tests cover the new construct and any dialect or arity variation.
+- `ruff`, `git diff --check`, focused tests, and the full test suite pass.
+- A fresh wild report demonstrates the expected files advanced or completed and
+  shows no reduction in the decode-OK count.
+- The change is committed independently with the progress log updated.
+
+If the installed compiler cannot reproduce a wild pattern, classify it by the
+strongest available evidence: `oracle-verified`, `dialect-verified`,
+`documentation-backed`, `runtime-revision`, or `unresolved`. Runtime-revision and
+documentation-backed constructs remain in scope; a missing local oracle is an
+evidence limitation, not a scope exclusion. Preserve fail-loud behavior only for
+genuinely unclassified bytes.
+
+### Standard gap workflow
+
+For each target signature:
+
+1. **Reproduce:** list every currently blocked file and capture 64–128 bytes plus
+   decoded ops before the failure. Determine whether all files share one shape.
+2. **Form hypotheses:** use register/FP/string-stack state, adjacent runtime calls,
+   dialect canonicalization, and likely source families to make a bounded probe
+   matrix. Record ruled-out hypotheses, not just the winner.
+3. **Probe:** batch-compile minimal `.bas` candidates with
+   `tbx/tools/batch_probe.py`. Probe both 1.0 and 1.1 when the wild files span
+   dialects. A scanner `clean` result only means the candidate did not reproduce
+   the target.
+4. **Confirm:** retain the winning executable long enough to compare exact bytes,
+   decode it, and verify canonical source with the oracle. Copy only the minimal
+   redistributable fixture into the test corpus.
+5. **Implement:** add the narrow scanner op first, then explicit decoder state and
+   IR/render/C support where required. Avoid catch-all acceptance of raw x86.
+6. **Validate:** run the gates above, regenerate `/tmp/tbx-gap-report.json`, and
+   compare affected files. Newly exposed failures enter the queue immediately.
+7. **Commit and log:** one semantic closure per commit whenever practical.
+
+### Work queue
+
+Priority balances affected-file count, likelihood of oracle reproduction, risk,
+and **unlock value**. Counts below are only the first-failure snapshot from
+2026-07-19. When a fix advances a file, log both its old and new signature. Prefer
+a lower-frequency gap when prior results show that it exposes shared downstream
+work in several files. This blocker history is the campaign's unlock graph; do
+not overwrite it with only the latest state.
+
+#### Wave 0 — restore the validation baseline
+
+- [x] Regenerate `tests/fixtures/ir_snapshot.txt` and confirm the only addition is
+  the already-committed `t1_getstr` section.
+- [x] Rerun the full suite and establish the first tracked sanitized corpus report
+  at `gap_reports/2026-07-19-baseline.json`.
+
+#### Wave 1 — bounded runtime dispatches
+
+These have explicit opcode boundaries and are the best candidates for safe,
+fixture-backed closures.
+
+- [x] `INT ED sub 1e` — missing runtime-revision entry for
+  `INSTR(start, haystack$, needle$)`. Four files (`be.exe`, `crossref.exe`,
+  `hebrew.exe`, `invent.exe`) independently preserve the start position in AX,
+  push haystack then needle, and consume the AX result. The adjacent `ED/1c`
+  entry is the already-verified two-argument `INSTR`. See the full evidence and
+  oracle limitation in `Part III`.
+- [ ] `INT EC sub 38` — 3 files. Re-open Gap 33 evidence in `Part III`, build a
+  statement-family probe matrix, and test both dialects.
+- [x] `INT EC sub 42` — bare `FILES`; the adjacent sub 44 is `FILES spec$`.
+  Oracle fixtures cover both 1.0 and 1.1. `styled.exe` and `styllist.exe`
+  advance to the same later cursor/LOCATE fold gap.
+- [x] `INT EC sub ac` — `PUT$ #n, s$` (binary-mode string write, the
+  complement of the already-implemented `GetString`/`GET$`). Same
+  filenum+pushed-string calling convention as `IOCTL`, which is what made
+  it look like IOCTL at first (it's not — `IOCTL #n,s$` is `EC sub 50`,
+  confirmed separately). Found via the handbook's own GET$ function entry
+  cross-referencing "GET$, PUT$, and SEEK provide a low-level alternative
+  ... byte-by-byte". Fixtures `t1_putstr`/`v10_t1_putstr`
+  (`OPEN...FOR BINARY` + `SEEK` + `PUT$`), byte-exact both dialects.
+  Closed the LAST occurrence of this signature: advanced all 3 wild files
+  (nvginst, pwinst, secure) into 3 distinct new gaps (`byte f7`; `byte 36`;
+  a jump-target error), 0 regressions.
+- [x] `IOCTL #n, s$` / `IOCTL$(n)` — not in the original work-queue (found
+  while chasing `EC sub ac` above), but a real Wave-5 gap: neither
+  statement was implemented at all. `EC sub 50` (statement) / `EE sub 14`
+  (function, alphabetically between `INPUT$F` and `LCASE$`). Fixtures
+  `t1_ioctl`/`t1_ioctlfn` (+v10), byte-exact both dialects. Touches no wild
+  file.
+- [ ] raw `INT af` — 2 files; determine whether it is a string/array runtime vector
+  by tracking stack and descriptor setup.
+- [ ] raw `INT c2` — 2 files.
+- [x] `INT EC sub ee` — `WIDTH device$, cols` (device string pushed, cols in
+  ax; the handbook's own example literal, `WIDTH "LPT1:",130`, reproduced it
+  on the first oracle probe). New `ir.Width.device` field (default `None`
+  keeps the existing `WIDTH cols` form unchanged). Fixtures
+  `t1_widthdev`/`v10_t1_widthdev`, byte-exact both dialects. Advanced wild
+  `cal.exe`/`cal87.exe`/`kinetics.exe` past this signature into distinct
+  later gaps (numeric INPUT without FSTP; LINE flag 00; a new raw-byte
+  signature) — none fully closed by this fix alone. A sibling form, `WIDTH
+  #filenum, cols` (canonical `EC sub f0`), was also identified via the same
+  probe batch but not implemented: its filenum is read back from system
+  cell `0x60` rather than passed in ax at the call site, and no wild file
+  currently blocks on it — leave for a session that wants to chase the
+  `0x60` cell convention.
+- [ ] singleton dispatches: `INT d4`.
+
+#### Wave 2 — repeated instruction and x87 templates
+
+- [ ] FP `dc/04` — 2 files; compare memory operand addressing with supported x87
+  arithmetic forms and add a fixture for the exact data type.
+- [ ] FP `da/1c` — 2 files; determine whether it is integer multiply/compare or a
+  compiler spill form before generalizing ModR/M handling.
+- [ ] byte `89` — 3 files; verify these are not another register-spill topology
+  already partly covered by the DI work.
+- [ ] byte `8c`, `8b`, `0b`, `1e`, `f7` — 2 files each. Cluster by the complete
+  instruction and nearby ops rather than by first byte alone.
+- [~] relational/materialization gaps: the two apparent integer `IF jcc 7f`
+  failures were stale `pend_cmp_str` state after a materialized string condition
+  and are closed. Nested outer-AND forms now cover the `jcc 75`/`jcc 74`, BX/CX
+  spill, direct-GOTO, and single-relation-right shapes witnessed by
+  `styled`/`hfprop`; other materialization topologies remain fail-loud.
+- [x] byte `36` — `mov ss:[si],imm16` (new op `movm_imm_temp`), the
+  literal-argument sibling of the already-handled `movm_ax_temp`. Found via
+  a DEF FN call nested as another DEF FN call's own argument
+  (`FNFOO("text", FNBAR(3))`). Landing it exposed a REAL pre-existing bug,
+  not just a missing op: `state.fn_args` had no nesting protection (unlike
+  `sp_save_cell`, which already got `sp_save_stack` for exactly this
+  reason) — a nested call's own `fn_call` was draining/clearing the OUTER
+  call's partially-staged args, silently dropping an argument. Fixed with
+  a parallel `fn_args_stack`, save/restored in `push_bp`/`pop_bp` alongside
+  `sp_save_cell`. `movm_ax_temp`/`movm_imm_temp` now peek at the next op to
+  route to `pend_args` (plain SUB CALL, `arg_push_temp` follows) or
+  `fn_args[si]` (nested DEF FN call, `mov_bp_sp`/`fn_call` follows instead
+  — SUB CALL structurally can't nest as an argument, so the split is
+  exhaustive). Fixture `t1_fnargcall`, byte-exact both dialects (had to
+  match the exact bare-identifier DEF FN convention the handbook documents
+  and `t1_fnlocalint` already uses — an `FN name = expr` form with the `FN`
+  kept as a literal token compiles to a materially different, ALSO-valid
+  shape that isn't what canonical emission produces). Advanced wild
+  `hebrew.exe`/`pwinst.exe` past this signature.
+- [ ] singleton instruction bytes `ff`, `21`, `18`, `16`.
+
+#### Wave 3 — decoder state and structural recovery
+
+- [x] Recognize the exact 116-byte and 125-byte framed helpers shared by
+  `catalog.exe`, `filepatc.exe`, `morcalc.exe`, `process.exe`, and `pw.exe` as
+  explicit coverage-only `OpaqueHelper` IR. Both matches are full pinned bodies
+  (`28bc583a260b9ef7...` and `77dcc7f864dcd116...`), not a generic
+  framed-procedure fallback; source output carries a visible marker and the C
+  backend rejects it.
+- [ ] Identify the source/runtime semantics of that opaque helper if stronger
+  evidence appears. Opaque coverage advances scanning but does not count as
+  semantic closure or byte-exact source recovery.
+- [ ] Decode the next signature now exposed immediately after these helpers in
+  those same five files.
+- [ ] unknown system cell `0x8a` — 2 files; correlate reads/writes and runtime
+  consumers before assigning semantics.
+- [ ] unknown system cell `0x110` — 1 file.
+- [x] numeric `INPUT` read without `FSTP` — `INPUT A#` stores through the
+  existing `fstp64` double-variable terminal; verified in both dialects by
+  `t1_inpdbl`/`v10_t1_inpdbl`. `banker.exe` advances to a later USING fold.
+- [x] `LINE INPUT` trailing byte `c0` — leading-semicolon `LINE INPUT;`, with
+  or without a prompt; dual-dialect oracle fixtures are byte-exact.
+- [ ] `LINE INPUT #` template mismatch.
+- [x] cursor call without open `LOCATE` — cursor-only `LOCATE ,,cursor` and
+  shape-only `LOCATE ,,,start,stop` emit independent runtime legs. Adjacent
+  cursor/shape statements are byte-identical to one combined LOCATE and
+  canonicalize accordingly. `pz.exe` now decodes fully.
+- [ ] displacement neither scalar nor array element — revisit DGROUP symbol
+  classification with local references.
+- [ ] FP/DGROUP layout not solvable — isolate whether metadata calibration or a
+  preceding scan error caused the bad layout.
+- [ ] codeless `DO...LOOP` condition — keep fail-loud until a non-DO source shape
+  or stronger orphan-line evidence is found.
+
+#### Wave 4 — ambiguous control/data and runtime-revision patterns
+
+- [ ] byte `ea` — 6 files. Separate genuine far jumps from inline data records;
+  require control-flow reachability evidence before accepting either shape.
+- [ ] byte `90` — 6 files. Existing evidence suggests an unwitnessable runtime
+  revision pattern; repeat only probes that add a genuinely new source topology.
+- [ ] byte `06` — 3 files and raw `INT 8c` — 3 files. Continue from the extensive
+  negative probes in `Part III`; do not repeat the same ON KEY variants.
+
+Wave 4 is intentionally last: permissive handling here could hide corrupt control
+flow and produce plausible but wrong BASIC.
+
+#### Wave 5 — syntax inventory beyond the handbook
+
+- [ ] Build a versioned syntax inventory from all available Turbo Basic manuals,
+  compiler media, sample programs, and existing IR nodes. Record aliases,
+  edition/dialect tags, argument grammar, and runtime behavior.
+- [ ] Add parser/IR coverage for inventory entries that are absent, even when no
+  wild executable exercises them yet.
+- [ ] Add dialect-specific fixtures or golden source cases for constructs the
+  local oracle cannot emit, with explicit provenance.
+- [ ] Maintain a compatibility matrix separating syntax, decoder, renderer, and
+  generated-C/runtime support. A missing C primitive must produce a diagnostic,
+  not erase syntax coverage.
+
+### Tooling work
+
+- [x] Add `scan_wild.py --report FILE`: JSON totals, per-file results, and stable
+  address-normalized failure groups for cross-session comparison.
+- [x] Commit-ready sanitized baseline under `gap_reports/`; `/tmp` is working storage,
+  not a resumable checkpoint.
+- [x] Add `compare_gap_reports.py` before the next decoder closure. It shows
+  files newly decoded, regressed, advanced to a different signature, unchanged,
+  signatures removed, and newly exposed signatures. Its advanced-file output is
+  the input to the unlock graph.
+- [x] Extend `batch_probe.py` with optional retained artifacts (`--keep DIR`) so a
+  winning oracle executable can be inspected without recompiling. It now also
+  preflights dependencies, flushes results immediately, and supports isolated
+  concurrent oracle workers through `--jobs N`.
+- [ ] Add a context dumper accepting `EXE OFFSET` that prints raw bytes, nearby
+  scanned ops, dialect-canonical interrupt numbers, and decoder register/stack
+  state where available. Reuse `insns.py`/`dump_ops.py` rather than duplicating
+  disassembly logic.
+- [x] Add report schema version, generator identity, and content-based corpus
+  fingerprint so comparisons can reject incompatible formats or different corpora.
+- [~] Assign stable IDs to active gaps and keep hypothesis, evidence, confidence,
+  and disposition in a compact ledger. Runtime-revision candidates now live in
+  `gap_reports/runtime-revision-assessments.json` with stable `RR-*` IDs and
+  promotion criteria; extend the same model to every non-runtime gap. Error text
+  remains a symptom and may change without creating a new logical gap.
+- [ ] Extend gap records and fixtures with `edition`, `dialect`, `runtime_revision`,
+  and `evidence_class` fields so non-handbook syntax remains traceable.
+- [ ] Add stable syntax-inventory IDs alongside gap IDs, so source coverage can
+  be tracked even before a bytecode gap appears.
+- [ ] Make scanner runs re-entrant by clearing module-level counters at `main()`;
+  this matters for tests and future programmatic use.
+- [ ] Add tests for report normalization, deterministic group ordering, schema
+  compatibility, and report comparison (especially regression versus advancement).
+
+Tooling is subordinate to closures: implement an item when it saves repeated
+manual work on at least two gaps, not as a prerequisite to investigating one.
+
+### Validation commands
+
+Use these after each implementation:
+
+```bash
+UV_CACHE_DIR=/tmp/tbx-uv-cache uv run ruff check tbx tests
+git diff --check
+UV_CACHE_DIR=/tmp/tbx-uv-cache uv run pytest -q <focused tests>
+UV_CACHE_DIR=/tmp/tbx-uv-cache uv run pytest -q
+UV_CACHE_DIR=/tmp/tbx-uv-cache uv run python tbx/tools/scan_wild.py \
+  wild/hits --report /tmp/tbx-gap-report.json
+```
+
+For every new oracle fixture, also run:
+
+```bash
+UV_CACHE_DIR=/tmp/tbx-uv-cache uv run python -m tbx.tools.verify_fixture <name>
+```
+
+### Progress log
+
+Append one concise row per committed closure or material tooling checkpoint.
+Include newly exposed blockers because they are evidence of forward progress.
+
+| Date | Commit | Closure/checkpoint | Corpus result | Next blocker |
+|---|---|---|---|---|
+| 2026-07-19 | `25fbe9c` | Decode `INP(port)` / ED sub 24 | 14 OK / 70 blocked; `be.exe` advanced | ED sub 1e |
+| 2026-07-19 | pending | Add JSON scanner report, durable checkpoint design, resumable plan, and `t1_getstr` snapshot repair | 14 OK / 70 blocked | Green full suite, then ED sub 1e |
+| 2026-07-19 | `796c9c0` | Preserve one fully fingerprinted framed helper as explicit coverage-only opaque IR | 14 OK / 70 blocked; 5 files advanced from byte `C5` to byte `8E` | Decode the shared `8E` continuation |
+| 2026-07-19 | `01f8943` | Recognize the second 125-byte opaque helper variant and the emulated far `FIMUL` alias (`INT 3C DE 0C`) | 14 OK / 70 blocked; 5 files advanced beyond `DE/0C` to distinct next signatures | Triage the five newly exposed signatures |
+| 2026-07-19 | `4e9769c` | Accept the exact selector-temp cleanup shape's `INT CC` runtime-revision alias | 14 OK / 70 blocked; `catalog.exe` advanced from byte `31` to `INT EC sub 38` | Re-open shared `INT EC sub 38` evidence |
+| 2026-07-19 | `ecbb40f` | Decode signed integer division by a memory cell (`CWD; F7 3E disp16`) | 14 OK / 70 blocked; `filepatc.exe` advanced beyond byte `F7` | Triage its next exposed gap |
+| 2026-07-19 | pending | Canonicalize TB 1.0 raw `CD A9` to the existing `CVL` string-to-number vector | 14 OK / 70 blocked; `morcalc.exe` and `pwinst.exe` advanced beyond `INT AF` | Triage their newly exposed gaps |
+| 2026-07-19 | `fc24e04` | Decode near-array double FP folds (`INT 38 DC /r [SI]`) through the existing FP array fold path | 14 OK / 70 blocked; `morcalc.exe` advanced beyond `DC/0C` | Triage its next exposed gap |
+| 2026-07-19 | `cb65dc2` | Decode far string assignment through a by-reference SUB parameter | 14 OK / 70 blocked; `morcalc.exe` advanced beyond `far_strassign` | Triage its next exposed gap |
+| 2026-07-20 | pending | Identify missing runtime-revision `INSTR(start, haystack$, needle$)` entry at `INT ED sub 1e` | 14 OK / 70 blocked; four files advanced and the signature disappeared with no regression | `EC sub 38`; separately triage the later structural errors in `be`/`invent` |
+| 2026-07-20 | pending | Decode bare `FILES` / canonical `EC sub 42` | 14 OK / 70 blocked; `styled` and `styllist` advanced to cursor-without-LOCATE | Triage their shared cursor fold; continue `EC sub 38` separately |
+| 2026-07-20 | pending | Replace fixed oracle sleeps with readiness polling and isolate each compile workspace; add parallel/retained probe batches | Byte-exact checks pass for both dialects and a larger fixture; small compile ~25s → 8.8s, two concurrent in 8.9s | Consider warm snapshot workers only if probe throughput remains limiting |
+| 2026-07-20 | pending | Decode cursor-only and shape-only optional `LOCATE` runtime legs | 15 OK / 69 blocked; `pz` fully decoded, `styled` → jcc 75, `styllist` → IF jcc 7f | Re-tally relational JCC gaps |
+| 2026-07-20 | pending | Clear stale string-compare orientation when `cmpax_bx` starts a numeric relation | 15 OK / 69 blocked; `photo` → movsi continuation, `styllist` → later stack fold | Triage exposed blockers; investigate `styled`/`hfprop` jcc 75 separately |
+| 2026-07-20 | pending | Lift direct JNZ dispatch of a fully parenthesized logical value as an inline `IF` | 15 OK / 69 blocked; both installed runtimes verify byte-exact; nested short-circuit targets remain fail-loud | Reproduce the nested spill topology independently before extending this rule |
+| 2026-07-20 | pending | Decode nested logical outer-AND spill gates, including inline and direct-GOTO dispatch | 15 OK / 69 blocked; `hfprop` → displacement `0x2b2`, `styled` → RESTORE target 87 | Triage exposed structural gaps; retain fail-loud behavior for other nesting topologies |
+| 2026-07-20 | `0ea9d98` | Preserve leading-semicolon `LINE INPUT;` flag C0 and close nested logical spill topologies | 15 OK / 69 blocked; `cal`/`cal87` → shared `EC sub ee`; no regressions | Probe `EC/ee` only if installed runtimes reproduce it |
+| 2026-07-20 | working tree | Archive the current sanitized scan and verify report comparison | 15 OK / 69 blocked; 1 newly decoded, 26 advanced, 0 regressed versus baseline | Continue evidence-led triage; keep `EC/38` and `EC/ee` fail-loud |
+| 2026-07-20 | working tree | Decode numeric console `INPUT` into a DOUBLE variable (`fstp64`) | 15 OK / 69 blocked; `banker.exe` advanced from numeric INPUT to stray USING emit; 0 regressions | Investigate the exposed USING-chain shape |
+| 2026-07-20 | working tree | Preserve TAB/SPC as inter-item expressions inside PRINT/LPRINT USING | 15 OK / 69 blocked; `banker.exe` advanced to `unhandled op testw`; 0 regressions | Identify the next `testw` control-flow template |
+| 2026-07-20 | working tree | Lift x87 FOR/NEXT sign tests with non-adjacent limit/step slots | 16 OK / 68 blocked; `banker.exe` newly decodes completely, 0 regressions, `testw` signature removed | Triage the seven-file `unhandled byte ea` group |
+| 2026-07-20 | working tree | Decode runtime-revision far `JMP` (`EA`) transfers and fixed zero-offset handoffs | 16 OK / 68 blocked; all seven `byte ea` files advanced, 0 regressions, signature removed | Triage the newly exposed file-specific gaps |
+| 2026-07-22 | pending | Decode `WIDTH device$, cols` (`EC sub ee`), found via the newly-added handbook's own worked example | 23 OK / 61 blocked; `cal`/`cal87`/`kinetics` advanced past this signature into 3 distinct later gaps, 0 regressions; `EC sub ee` signature removed | Triage the 3 newly exposed signatures |
+| 2026-07-22 | pending | Decode `IOCTL #n,s$` / `IOCTL$(n)` (`EC sub 50` / `EE sub 14`), a Wave-5 syntax-inventory gap found while chasing `EC sub ac` | 23 OK / 61 blocked; 0 regressions; touches no wild file | `EC sub ac` is confirmed NOT `IOCTL` despite the identical filenum+string calling convention — still unidentified, see `Part III` |
+| 2026-07-22 | pending | Decode `PUT$ #n,s$` (`EC sub ac`) — binary-mode string write, GetString's complement | 23 OK / 61 blocked; `nvginst`/`pwinst`/`secure` all advanced past this signature into 3 distinct new gaps, 0 regressions; `EC sub ac` signature removed | Triage the 3 newly exposed signatures (`byte f7`, `byte 36`, a jump-target error) |
+| 2026-07-22 | pending | Decode `mov ss:[si],imm16` (byte `36`, new op `movm_imm_temp`) + fix a real pre-existing bug: `fn_args` had no nesting protection around a DEF FN call used as another call's own argument | 23 OK / 61 blocked; `hebrew`/`pwinst` advanced past this signature, 0 regressions; byte `36` signature removed | Triage `byte 2b` (hebrew) and `byte 26` (pwinst) separately |
+| 2026-07-22 | pending | Decode `or ax,es:[si]` (new op `far_orax_si`), the OR sibling of the already-handled `far_andax_si` in the by-ref-int-param family | 23 OK / 61 blocked; `pwinst.exe` advanced past this signature, 0 regressions | `pwinst.exe`'s own `byte 26` occurrence is now closed; the SAME signature at `bmaster.exe`/`ifi.exe` is a DIFFERENT, harder shape (`26 ff 0c` = far DEC, needs `local_init` base-disp threading, see HANDOFF's "Investigated at length but NOT landed" writeup) — do not assume this closure fixes those two |
+| 2026-07-22 | pending | SOLVE the multi-session `far_call(mid-flow)`/`KeyError: 86343` mystery: under active event trapping, `GOSUB` compiles to a far call/retf pair, not near — `_resolve_calls` now falls back to `ir.Gosub` when a far_call target isn't a known proc; also fixed an independent latent bug (`far_call` used the wrong statement address, silently corrupting `$EVENT ON/OFF` metadata recovery under trapping) | 23 OK / 61 blocked; `resume.exe` advances completely past this into a DIFFERENT jump-target-resolution error, 0 regressions | `resume.exe`'s new failure is NOT the same bug as state.exe/state87.exe's (corrected after further tracing — see `Part II`'s "out of scope" section); it targets compiler glue and needs its own trace. Target `86343`'s own large-near-call-displacement mechanism is also untested separately |
+| 2026-07-22 | pending | Write `Part II`: a full investigation spec for the intra-inline-IF-body GOTO gap (state.exe/state87.exe), correcting an earlier same-day misdiagnosis ("SUB/DEF FN body" — state.exe has none) by cross-referencing an existing, more precise prior-session diagnosis and confirming it via fresh `id()`-tracing | No code change; 23 OK / 61 blocked unchanged | Follow the spec's phased plan (minimal probe first, trace `_fold_if`/`_body_has_target`, then fix) in a dedicated session |
+
+### Completion checklist
+
+- [ ] Wild corpus reaches 84/84 decode OK, or each remaining executable is
+  explicitly classified with a byte-exact reason and concrete follow-up.
+- [ ] No fixture, regression, lint, or formatting failures.
+- [ ] The syntax inventory has no unclassified Turbo Basic language entry.
+- [ ] The compatibility matrix shows source, decoder, renderer, and C-runtime
+  status for every inventory entry.
+- [ ] Every new IR node and intrinsic has render, rename, and C behavior (or an
+  explicit unsupported-C diagnostic) as applicable.
+- [ ] The final JSON report is archived in a tracked, copyright-safe summary that
+  contains paths/signatures only, never wild executable bytes.
+- [ ] `Part III` contains durable reverse-engineering findings; this plan records
+  all work items complete and points to the final commits.
+
+---
+
+## Part II — Spec: intra-inline-IF-body GOTO targets
+
+
+Status: 2026-07-22, investigation-only — no code changes yet. This
+supersedes the "SUB/DEF FN body" framing in `Part III`'s `6f1a9fb`
+diagnosis commit, which was **factually wrong about the mechanism**
+(corrected in `Part III` alongside this spec — see "Correction" below).
+
+### Problem statement
+
+Two wild files fail with `jump target 0x... is not a statement start`,
+raised by `lift._resolve_targets`'s `fix()` (`tbx/decode0/lift.py:806-816`)
+well after `decode0._scan` completes cleanly — this is not a
+byte-vocabulary gap, it's a control-flow reconstruction gap:
+
+- `state.exe` / `state87.exe`: target `0x1300d`. **Confirmed root cause**
+  (see "Confirmed facts" below): a `Goto`/`IfGoto` lands on a statement
+  that lives inside a large, still-inline (`ir.IfInline`) `IF` body — the
+  compiled shape of a chain of `IF cond THEN <lineY>` statements with no
+  `END IF`/block markers in the source — and the fold machinery that's
+  supposed to convert such a body into an addressable `ir.IfBlock` does
+  not fire for it.
+- `secure.exe` also hits this exact message, at a different target,
+  advanced into it by this session's `far_call`/GOSUB fix. **Not traced
+  yet** — do not assume it's the same shape without checking; see
+  "Open items" below.
+
+`resume.exe`'s own newest failure (`jump target 0xa3dd ...`, exposed by
+the same `far_call`/GOSUB fix) is a **different, unrelated root cause** —
+see "Explicitly out of scope" below. An earlier commit message this
+session incorrectly called it the same bug; it isn't.
+
+### Confirmed facts (traced this session, `state.exe`)
+
+1. `state.exe` has **zero** `proc_enter`/`proc_ret`/`fn_ret` ops in its
+   entire op stream — there are no `SUB`s or `DEF FN`s in this file at
+   all. The target is not inside a procedure body.
+2. The target address (`0x1300d` = 77837) **is** a real statement
+   boundary in the raw op stream (`decode0._scan`'s output has an op
+   starting exactly there) and **is** present in `state.stmt_addr` (the
+   `id(stmt) -> addr` map lift.py populates during folding,
+   `tbx/decode0/lift.py:570` and `tbx/decode0/core.py:2099,2252,2350`).
+3. But the specific object `id()` that `stmt_addr` recorded for that
+   address is **not present anywhere** in the final `state.stmts` tree at
+   the time `_resolve_targets` runs — not at top level, not inside any
+   `IfBlock` arm/else, not inside any `IfInline` body, not inside any
+   `SelectCase` arm. (Verified by monkeypatching `core._resolve_targets`
+   to search the live tree for that exact `id()` in the same process —
+   see the shell history in this session's transcript, or rerun: patch
+   `core._resolve_targets`, collect `[k for k,v in stmt_addr.items() if
+   v==target]`, then walk `state.stmts` recursing through
+   `SubDef`/`DefFn`/`IfBlock`/`IfInline`/`SelectCase` looking for that
+   `id()`.)
+4. This matches an **existing, more precise diagnosis already in
+   `Part III`** from an earlier session (search for "Intra-inline-IF-body
+   GOTO targets" — currently around line 1428): a giant `ir.IfInline`
+   (~40 statements, the compiled shape of an unbroken chain of
+   `IF cond THEN <lineY>` lines with no block `IF`/`END IF` in the
+   source — a flattened keyboard-input state machine) whose body contains
+   a `Goto`/`IfGoto` targeting **another statement inside that same
+   body**. `_resolve_targets`'s `index` only maps top-level `state.addrs`
+   entries plus whatever the existing `ir.BodyLine` mechanism (gap 51,
+   built for block-IF interiors jumped into **from outside** the block)
+   adds — and this is a jump **within** the same already-flattened inline
+   body, a case that mechanism was never built to cover.
+5. `ir.For`/`ir.NextStmt`/`ir.While`/`ir.Wend`/`ir.Do`/`ir.Loop` are flat
+   marker statements with no `body` field — a statement inside a loop is
+   just an ordinary sibling in the same flat statement list. **Loops are
+   not part of this gap.** Only `IfBlock` (multi-arm/`ELSE`),
+   `SelectCase`, `SubDef`, and block `DefFn` are "opaque, unwalked"
+   containers as far as `map_body` is concerned today
+   (`tbx/decode0/lift.py:778`, confirmed by an Explore-agent read of the
+   full function).
+
+### The machinery that *should* already handle this, and doesn't (yet)
+
+There's already a "second leg" in `_fold_if`
+(`tbx/decode0/lift.py:653-660`) specifically for this: if a top-level
+`ir.IfInline`'s own body contains an address in the program-wide jump-
+target set (checked via `_body_has_target`,
+`tbx/decode0/lift.py:481-495`), the whole `IfInline` gets converted to a
+single-arm `ir.IfBlock` — which then goes through `_fold_body`, and (per
+`_fold_body`'s own logic, `tbx/decode0/lift.py:498-516`) any *plain*
+statement inside is carried over with its **original `id()` intact**
+(only nested `IfInline`s needing further conversion get wrapped in a new
+object). If that path fired correctly, the target statement would
+survive with its address still traceable through the resulting
+`IfBlock`'s arm — and `map_body`'s already-working single-arm-IfBlock
+recursion (`tbx/decode0/lift.py`, the `map_body` function, confirmed to
+recurse genuinely unboundedly, not capped at "one level" as the old gap-51
+docstring note implied) would find it.
+
+Since the object is missing entirely from the final tree, this path did
+**not** fire for state.exe's giant IfInline. The precise reason is the
+open question — plausible candidates, none confirmed:
+
+- `_body_has_target`'s `targets` set (built once, up front, by
+  `_jump_targets(stmts)`) might not include this specific target address
+  at the time `_fold_if` runs, for some ordering or construction reason.
+- The 40-statement chain might not be reachable as ONE `ir.IfInline` at
+  the point `_fold_if`'s top-level loop visits it — e.g. it might already
+  be nested inside something else that the top-level scan doesn't
+  descend into before folding.
+- Something about the specific `Goto`/`IfGoto` shape (backward vs.
+  forward, or a computed `ON...GOTO` target instead of a plain `Goto`)
+  might not be captured by `_jump_targets`'s walk in the first place.
+
+**Do not guess at which of these it is — trace it.** This is exactly the
+kind of thing a wrong guess makes worse: `_fold_if`/`_body_has_target`
+are shared, heavily-exercised machinery (gap 51 and the "nested block-IF
+GOTO targets" follow-on both live here), and any change risks silently
+breaking an already-passing fixture whose shape happens to be adjacent.
+
+### Recommended investigation plan
+
+Follow the calibration rule's spirit even though this is control flow,
+not byte vocabulary: understand the exact shape with a real, minimal,
+oracle-verified reproduction before touching `_fold_if`/`_resolve_targets`.
+
+1. **Reproduce the shape directly, minimally.** Build a `.bas` probe: a
+   chain of several `IF cond THEN <lineY>` statements (no block `IF`,
+   spelled as bare inline forms, ideally on distinct numbered lines so
+   the compiled shape stays one flat `IfInline`-style chain rather than
+   folding into something else), where a LATER one in the chain jumps
+   BACKWARD to a line that is itself in the MIDDLE of an EARLIER
+   statement's own body (i.e., the target is not the chain's first
+   line). Model it on `t1_blkgoto.bas`/`t1_nestif2.bas`
+   (`tests/fixtures/corpus/`) but keep everything inline — no `END IF`
+   anywhere — since state.exe's shape has none. Compile with the oracle
+   and confirm it reproduces `jump target ... is not a statement start`
+   before touching any decoder code.
+2. **Trace exactly where `_fold_if`'s second leg fails to fire** for the
+   probe: instrument `_body_has_target`/`_fold_if` (temporarily, revert
+   before committing — same throwaway-print-then-`git checkout --`
+   technique already used elsewhere this session) to print whether the
+   target address ends up in `targets`, and whether `_body_has_target`
+   is even called with the right body/stmt_addr for this IfInline.
+   Compare against `state.exe`'s own real trace (reuse the
+   `core._resolve_targets` monkeypatch approach from "Confirmed facts"
+   above, applied to the probe first, then cross-checked against
+   `wild/hits/state.exe` once the probe reproduces the mechanism).
+3. **Only once the exact failing condition is understood**, design the
+   fix. It is very likely a small, targeted correction to `_body_has_target`
+   or to how/when `targets`/`stmt_addr` reach `_fold_if` — NOT a rewrite
+   of the fold algorithm — but don't commit to that shape until step 2
+   confirms it.
+4. **Validate broadly, not just the new fixture**: full test suite,
+   `ruff`, byte-exact `verify_fixture` for the new probe fixture AND a
+   handful of existing fixtures that exercise `_fold_if`'s other paths
+   (`t1_blkgoto`, `t1_nestif2`, `t1_ifgoto2` if present, plus anything
+   under `tests/tbx/test_cfg.py`/control-flow-focused tests), THEN a full
+   `scan_wild.py` re-run (not just the affected files) to catch any
+   regression the corpus test suite doesn't happen to exercise — this
+   project's own established lesson (Part III, the `796c9c0`-era
+   "re-run the FULL WILD SCAN before declaring done" note) applies
+   directly here.
+5. Once `state.exe`/`state87.exe` close, re-check `secure.exe`'s own
+   occurrence of the same error message — confirm (don't assume) it's
+   actually the same shape before declaring it closed too.
+
+### Explicitly out of scope for this spec
+
+**`resume.exe`'s `jump target 0xa3dd ...` failure is a different bug.**
+Traced this session: target `0xa3dd` (41949) is the address of a bare
+`jmp` instruction — specifically the inter-definition "skip past the next
+SUB/DEF FN body" glue jump that TB emits right after a `proc_ret`
+(`(41945, 'proc_ret', 46), (41949, 'jmp', 43163), (41952, 'proc_enter')`
+in the raw op stream). It is not a user statement and was never given an
+`stmt_addr`/`state.addrs` entry at all (confirmed: `stmt_addr` has zero
+matching entries for this address, vs. `state.exe`'s case which had one
+whose object was later lost). Something — likely another far_call/GOSUB
+case related to this session's event-trapping fix, or a genuinely
+different mechanism — is targeting pure compiler glue as if it were an
+addressable line. This needs its own from-scratch trace; do not assume
+fixing the intra-inline-IF gap above will also close it.
+
+### Why this matters / acceptance criteria
+
+- `state.exe`/`state87.exe` (and possibly `secure.exe`) decode completely.
+- No regression anywhere in the existing 2407-test suite or the 84-file
+  wild scan.
+- The fix is provably narrow: it should be possible to point at the exact
+  condition in `_body_has_target`/`_fold_if` that was wrong, with a
+  before/after trace on the new minimal probe, not just "the crash went
+  away."
+- `Part III` gets a real, dated closure writeup (matching this
+  project's own convention) once landed, including which of the three
+  candidate causes above (or a fourth, if the trace finds something
+  different) was the actual one.
+
+---
+
+## Part III — Investigation history / handoff log
+
 
 Status as of 2026-07-19 (session gaps 46-66: line-table epic, nested
 block-IF, DO un-synthesis, computed-int-array element family, array-element
@@ -12,7 +628,7 @@ Standing instruction: close the most common decoder gap first, in frequency
 order, over the 84 wild PC-SIG Turbo Basic EXEs in `wild/hits/` (untracked,
 gitignored, copyrighted shareware — **never commit them**).
 
-## Session 2026-07-22 (later same day): the `far_call(mid-flow)` mystery SOLVED
+### Session 2026-07-22 (later same day): the `far_call(mid-flow)` mystery SOLVED
 
 The multi-session mystery from the entries below ("`KeyError: 86343`",
 deepened to "a family of 6 targets, not 1", `$SEGMENT` ruled out) is
@@ -98,7 +714,7 @@ of a bare `jmp` instruction: specifically the inter-definition
 (41952,'proc_enter')` in the raw op stream) — not a user statement at
 all, and `stmt_addr` has zero entries for this address (vs.
 state.exe's case, which had a real entry whose object was later lost —
-see the correction on that entry, and `docs/intra-inline-if-goto-spec.md`
+see the correction on that entry, and `Part II`
 for the full state.exe writeup and why the two are different). Something
 is targeting pure compiler glue as if it were an addressable GOSUB line;
 this needs its own from-scratch trace, not assumed to be fixed by
@@ -121,7 +737,7 @@ limitation two wild files (`state.exe`/`state87.exe`, now also
 why a speculative fix there is deliberately being deferred to a dedicated
 session.
 
-## Session 2026-07-22: four closures from the official handbook + three negative results
+### Session 2026-07-22: four closures from the official handbook + three negative results
 
 Prompted by the user adding a scanned/OCR'd copy of the 1987 Turbo Basic
 Owner's Handbook to `docs/`, this session cross-referenced its Chapter 5
@@ -334,7 +950,7 @@ the already-ruled-out same-type/same-rank case from a prior session).
 session's probes (syntax needs revisiting, not oracle-confirmed clean —
 don't count this as ruled out). Genuinely still unidentified; the
 "GET/PUT #n with an array-backed record buffer" candidate from
-`REMAINING_GAPS_PLAN.md` was NOT tried (the handbook's own GET/PUT (files)
+`Part I` was NOT tried (the handbook's own GET/PUT (files)
 section only documents a FIELD-string-variable record buffer, no
 array-typed one, casting doubt on this candidate specifically — but not
 conclusively, since the handbook isn't a completeness guarantee per this
@@ -376,7 +992,7 @@ shape, for a reason not yet pinned down. A full spec for tackling this
 (confirmed facts, the exact machinery involved, an investigation plan,
 and an explicit note that `resume.exe`'s own DIFFERENT new failure below
 is NOT the same bug despite an earlier commit message here claiming
-otherwise) is at `docs/intra-inline-if-goto-spec.md` — start there, not
+otherwise) is at `Part II` — start there, not
 from this entry, before touching `_fold_if`/`_resolve_targets`.
 
 **Deliberately not attempted this session**: unlike every closure above
@@ -434,7 +1050,7 @@ vendored copy's `tb_v86.js` properly honors `--workspace` where
 `<oracle_dir>/SOLVER_v86.EXE`); `frame/oracle` is still needed for the
 toggle-compile script (`tb_v86_compile.js`), which isn't vendored.
 
-## Where things stand
+### Where things stand
 
 **Updated 2026-07-21 (latest session): 23 of 84 wild EXEs decode-ok** (unchanged
 count, but bmaster.exe/ifi.exe both advanced three gaps deeper without yet
@@ -661,7 +1277,7 @@ fixes elsewhere in the tally:
   before extending `dec_bp`'s outside-FOR case; do not guess it in per
   the calibration rule.
 
-## Gap: segment-register juggling around a far array access (stat.exe/mdb.exe/mdb87.exe), INVESTIGATED, NOT LANDED (2026-07-21)
+### Gap: segment-register juggling around a far array access (stat.exe/mdb.exe/mdb87.exe), INVESTIGATED, NOT LANDED (2026-07-21)
 
 Shared root cause behind stat.exe's "byte 8c" (surfaced by this session's
 `icomp32` fix) and mdb.exe/mdb87.exe's OWN independent "byte 8c" hits
@@ -713,7 +1329,7 @@ buffer segment might need exactly this kind of juggling); or bisect
 stat.exe's own source-adjacent statements directly if a source listing for
 this specific shareware title is ever found.
 
-## Gap: resume.exe's CGA-blitter helper family (CLOSED) + a new sub-VAR_BASE FP64 scalar (OPEN)
+### Gap: resume.exe's CGA-blitter helper family (CLOSED) + a new sub-VAR_BASE FP64 scalar (OPEN)
 
 resume.exe's `unhandled byte c4`/`byte b4` sequence turned out to be gap
 19's already-recognized-but-only-partially-fingerprinted opaque-helper
@@ -1186,7 +1802,7 @@ via `uv run python tbx/tools/scan_wild.py wild/hits`, still 72 TB-but-fail):
 | 1 | "codeless DO...LOOP WHILE/UNTIL ... unwitnessed" (vhfprop) | unchanged, see "vhfprop status" below |
 | singles | see scan output | untouched; freshest one is metric.exe's new stop, "error-trap line table has a codeless-statement entry but no DATA pool was found (unsupported zero-length-statement shape)", surfaced immediately by this session's nested-FOR-loop fix, not yet investigated |
 
-## Gap: FP-typed LOCAL variables are unsupported in SUB bodies at all (ziptest.exe), INVESTIGATED, NOT LANDED (2026-07-21)
+### Gap: FP-typed LOCAL variables are unsupported in SUB bodies at all (ziptest.exe), INVESTIGATED, NOT LANDED (2026-07-21)
 
 ziptest.exe fails with `unhandled byte f7 at 0xa5c6`, byte pattern `f7 46
 0e 00 80` = `TEST word [bp+0Eh], 8000h`. At first glance this looks like
@@ -1275,7 +1891,7 @@ dynamically-sized array gap. Left undiagnosed further; the probes
 (`q_localfpvarstep.bas`) are reproducible and byte-matching, so the next
 session can pick this up directly without re-deriving the shape.
 
-## Gap: grdscn.exe's 3-term mixed short-circuit/combinator string-compare chain, NEW (2026-07-21)
+### Gap: grdscn.exe's 3-term mixed short-circuit/combinator string-compare chain, NEW (2026-07-21)
 
 Surfaced by this session's `imul_si` fix (`bab24ce`), which advanced
 grdscn.exe past its old blocker into new territory: `materialization
@@ -1305,7 +1921,7 @@ attempted further this session given the scope. `state.exe`/
 `state87.exe`'s own next blocker (the intra-inline-IF-body GOTO gap,
 already documented above) remains separately unresolved too.
 
-## THE LINE-TABLE EPIC (read this first)
+### THE LINE-TABLE EPIC (read this first)
 
 Real wild programs have **multi-statement lines**, original line numbers
 that are BYTE-SIGNIFICANT (error-trap line table present: ON ERROR/
@@ -1315,7 +1931,7 @@ bare `::` are NOT codeless, confirmed NOT to produce a table entry), and
 closed the single-level case; inv87's remaining stop needs the nested
 case, still open).
 
-### CLOSED this session: DATA and static-DIM orphan recovery
+#### CLOSED this session: DATA and static-DIM orphan recovery
 
 `_line_table` (layout.py) now returns `(ent, orphans)` instead of a bare
 dict: a codeless statement borrows the code offset of whatever REAL
@@ -1361,7 +1977,7 @@ colliding with orphan evidence, are explicitly rejected (fail loud, no
 witness) rather than guessed — narrow the check if a future wild file
 needs it.
 
-### vhfprop status: bare-DO un-synthesis CLOSED for unconditional loops; the WHILE/UNTIL case is a genuinely new, still-open puzzle
+#### vhfprop status: bare-DO un-synthesis CLOSED for unconditional loops; the WHILE/UNTIL case is a genuinely new, still-open puzzle
 
 `core.py`'s "bare backward jmps = infinite DO" path ALWAYS canonicalized
 a backward jump loop into synthesized `ir.Do(None)` + `ir.Loop(None)`,
@@ -1409,7 +2025,7 @@ oracle round-trip — bisection narrowed it to somewhere in BASIC lines
 yet isolated further) — a DIFFERENT gap, unrelated to the DO work,
 worth investigating once vhfprop reaches full decode again.
 
-### CLOSED: inv87.exe/invoice.exe's nested block-IF GOTO target
+#### CLOSED: inv87.exe/invoice.exe's nested block-IF GOTO target
 
 inv87's error-trap line table turned out to NOT RESOLVE AT ALL
 (`_line_table` returns `None` for it — confirmed via the debug-patch
@@ -1422,7 +2038,7 @@ blocks instead — see "Nested block-IF GOTO targets" in Recently Closed
 below for the full four-part fix. inv87.exe and invoice.exe both decode
 completely and byte-exact-verify now (fixture `t1_nestif2`).
 
-### Reproducing the investigation
+#### Reproducing the investigation
 
 The probe technique that worked all session: monkeypatch
 `tbx.decode0.core._finalize` (or just temporarily edit the `except
@@ -1436,7 +2052,7 @@ hand-written hypotheses. Revert any temporary debug prints before
 committing — `git diff tbx/decode0/core.py` should show only the
 intended, permanent change.
 
-## Ongoing plan (priority order — pick up at the first incomplete step)
+### Ongoing plan (priority order — pick up at the first incomplete step)
 
 **Refreshed again 2026-07-20, end of the later session** (65 TB-but-fail /
 20 decode-ok; the immediately-preceding version of this list was already
@@ -1452,7 +2068,7 @@ writeup there with negative evidence already collected.
    — a full spec for tackling this (confirmed via fresh `id()`-tracing in
    a 2026-07-22 follow-up session, plus the exact adjacent `_fold_if`/
    `_body_has_target` machinery and a phased investigation plan) is at
-   `docs/intra-inline-if-goto-spec.md` — start there. `secure.exe` also
+   `Part II` — start there. `secure.exe` also
    hits the same error message at a different target, not yet confirmed
    to be the same shape. `resume.exe` separately hits this SAME error
    message too (after this session's `far_call`/GOSUB fix advanced it),
@@ -1539,7 +2155,7 @@ writeup there with negative evidence already collected.
     and byte ea (see `RR-BYTE-EA`) are both fully CLOSED — don't reopen
     them if they resurface in a tally, they're a scanner-level decode now.
 
-## Recently closed (this campaign, newest first)
+### Recently closed (this campaign, newest first)
 
 - **Session summary, 8 more closures after the FOR-STEP/nop-fwait entry
   below** (2026-07-20, commits 8336d0f..f2ae494, wild 16->20 decode-ok):
@@ -2313,7 +2929,7 @@ writeup there with negative evidence already collected.
 - Gap 12 INCR/DECR (`0e4f0f7`), gap 11 by-ref int param family (`3f1e23d`),
   gap 10 LOCAL (`2ef2b6d`), gap 9 double arrays — see git log.
 
-## Reference: `$INLINE` / `SUB ... INLINE`, confirmed via the real handbook + oracle (2026-07-19)
+### Reference: `$INLINE` / `SUB ... INLINE`, confirmed via the real handbook + oracle (2026-07-19)
 
 Not a gap -- a piece of ground truth worth keeping, since it came up while
 investigating whether any of this session's stuck gaps (byte 89, byte 06,
@@ -2415,7 +3031,7 @@ still fail exactly where they did before this whole feature landed) --
 consistent with the earlier reasoning that those are shared compiler
 templates, not hand-authored assembly.
 
-## Gap byte 89 / the missing `di` spill register, DI LEVEL CLOSED; MEMORY-SPILL LEVEL OPEN (2026-07-19)
+### Gap byte 89 / the missing `di` spill register, DI LEVEL CLOSED; MEMORY-SPILL LEVEL OPEN (2026-07-19)
 
 **Current status:** the DI-register fix described below is now landed and
 oracle-witnessed by `t1_dispill` (nested SCREEN arguments reproduce it).
@@ -2624,7 +3240,7 @@ general registers at all, consistent with this session's earlier finding
 that plain arithmetic nesting doesn't pressure the register file the
 way comparisons/function-call argument evaluation does.)
 
-## Gap INT EC sub 4c (be.exe/pwinst.exe/strpfind.exe), UNDIAGNOSED (2026-07-19)
+### Gap INT EC sub 4c (be.exe/pwinst.exe/strpfind.exe), UNDIAGNOSED (2026-07-19)
 
 Surfaced fresh this session once the OPEN/LOF/LINE INPUT# gaps ahead of it
 closed. All three hits are TB 1.0 (raw sub 0x4A, canon_sub +2 -> canonical
@@ -2667,7 +3283,7 @@ family -- narrows the search but doesn't pin it down. Next step:
 compile candidate one-liners after `OPEN ... AS #1` and diff the exact
 `[0060]=n; ax=<expr>; cd ec 4a` shape.
 
-## Gap INT ce (billadd.exe/file.exe), UNDIAGNOSED (2026-07-19)
+### Gap INT ce (billadd.exe/file.exe), UNDIAGNOSED (2026-07-19)
 
 Also surfaced fresh once LINE INPUT# unblocked these two files further.
 A genuine 2-byte `INT CEh` (`cd ce`, canonical -- do not confuse with the
@@ -2699,7 +3315,7 @@ happens to follow a LOCATE call textually but isn't actually screen-
 related -- the LOCATE/CURSOR proximity could be coincidental source
 adjacency rather than a causal link).
 
-## Gap "unhandled materialized test" (metric.exe) — CLOSED (2026-07-19)
+### Gap "unhandled materialized test" (metric.exe) — CLOSED (2026-07-19)
 
 Was UNDIAGNOSED earlier in this same session (several SUB/DEF FN/GOSUB
 probes tried and ruled out) -- the actual trigger turned out to be a
@@ -2712,7 +3328,7 @@ test's own trailing jmp rather than a separate `jmps` found by
 `_has_jmps_back`. Kept as a heading here (rather than deleted) so a
 future `grep` for this error string still finds where it was solved.
 
-## Gap "codeless-statement entry but no DATA pool" (metric.exe), SOLVED (2026-07-19)
+### Gap "codeless-statement entry but no DATA pool" (metric.exe), SOLVED (2026-07-19)
 
 Surfaced immediately by the nested-FOR-loop fix directly above, in the
 SAME wild file. `core.py` `_finalize`'s DATA-pool fallback (~line 582):
@@ -2794,7 +3410,7 @@ variations in one pass once there's a concrete list of candidates --
 this investigation mostly predates the tool's construction and was done
 one probe at a time; a future pickup should batch it.
 
-## CLOSED 2026-07-20 — missing runtime-revision three-argument INSTR (`INT ED sub 1e`)
+### CLOSED 2026-07-20 — missing runtime-revision three-argument INSTR (`INT ED sub 1e`)
 
 `INT ED sub 1e` is the runtime entry for the three-argument form
 `INSTR(start, haystack$, needle$)`. This is a missing Turbo Basic runtime
@@ -2803,7 +3419,7 @@ args)` already supports both arities, the renderer preserves the argument list,
 and the C backend already maps arity three to `tb_instr(start, haystack,
 needle)`.
 
-### Byte-level calling convention
+#### Byte-level calling convention
 
 Four independent executables hit the same canonical dispatcher sub across both
 compiler dialects: `be.exe` (1.0), `crossref.exe` (1.1), `hebrew.exe` (1.0),
@@ -2834,7 +3450,7 @@ being AX. It also explains why the existing C runtime had an unused `start`
 parameter and why `c0.py` already contained separate arity-two and arity-three
 mappings.
 
-### Negative evidence and evidence classification
+#### Negative evidence and evidence classification
 
 The earlier `CINT` hypothesis is ruled out: literal and variable `CINT` probes,
 plus general numeric-conversion probes, compile to inline x87 `FISTP/FILD`
@@ -2850,7 +3466,7 @@ C runtime. The scanner accepts only canonical `ED/1e`; the fold requires the
 existing AX value and exactly consumes haystack then needle from the string
 stack. No generic unknown-dispatch fallback was added.
 
-### Validation and unlock result
+#### Validation and unlock result
 
 Focused scanner/fold coverage pins `CD ED 1E` to an `ir.Call("INSTR",
 (start, haystack, needle))`. The full suite passes at **2188 passed, 14 skipped**;
@@ -2869,7 +3485,7 @@ Newly exposed blockers:
 The latter two are new gaps, not evidence against the `ED/1e` identification:
 both programs scan and fold beyond every former dispatcher site before failing.
 
-## Gap 33 — INT EC sub 38 (catalog/football/refund/varamort), UNDIAGNOSED
+### Gap 33 — INT EC sub 38 (catalog/football/refund/varamort), UNDIAGNOSED
 
 Grew from 2 files to 3 in the prior session when varamort.exe joined once its
 unrelated BLOAD-with-no-offset gap closed (see "Recently closed" above)
@@ -3016,7 +3632,7 @@ side fix without an oracle-confirmed probe reproducing `cd ec 38`
 exactly -- per the calibration rule, a byte pattern only joins the
 vocabulary once witnessed.
 
-## Gap INT-8c — likely ON KEY GOSUB related, UNDIAGNOSED
+### Gap INT-8c — likely ON KEY GOSUB related, UNDIAGNOSED
 
 3 wild files (baby.exe, help.exe, prtguide.exe, all TB 1.0): raw byte
 `CD 86` (canonicalizes to vector 0x8C via TB 1.0's +6 vec_shift — see
@@ -3088,7 +3704,7 @@ undiagnosed; a genuinely different follow-on statement inside the
 handler (e.g. an INKEY$ read, a LOCATE, a nested IF) is the next
 category worth trying, not more ON KEY variations.
 
-## Gap byte ea (elec87/mcmurphy/mf/swbb), UNDIAGNOSED — ">64K" theory REFUTED
+### Gap byte ea (elec87/mcmurphy/mf/swbb), UNDIAGNOSED — ">64K" theory REFUTED
 
 The prior assumption ("likely multi-segment-code JMP FAR, >64K code, big
 lift") does NOT survive scrutiny this session. `0xEA` is the raw x86 `JMP
@@ -3158,7 +3774,7 @@ chain (the one immediately before `END IF`/`CASE ELSE`/`SELECT
 END`) compile differently from earlier arms — the failure might be
 specific to how the FINAL fallthrough is encoded, not to arm count.
 
-## Gap 19 — byte 06 (filepatc/morcalc/pw, all TB 1.0), UNDIAGNOSED
+### Gap 19 — byte 06 (filepatc/morcalc/pw, all TB 1.0), UNDIAGNOSED
 
 Surfaced by gap 18's closure (these 3 files previously failed on byte 26).
 Failure: `unhandled byte 06` right after a fresh `proc_enter` (SUB/DEF FN
@@ -3312,7 +3928,7 @@ push-bp/mov-bp-sp/push-es/push-ds/les template), check which encoding
 IT produces and land that one first; the other encoding will still need
 its own separate witness if it doesn't naturally appear too.
 
-## The workflow (each gap, see gap 9–14 commits for examples)
+### The workflow (each gap, see gap 9–14 commits for examples)
 
 1. `uv run python -m tbx.tools.scan_wild wild/hits` — pick the top
    actionable error.

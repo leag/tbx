@@ -911,7 +911,7 @@ def _sync_len(ops, j) -> int | None:
     identical 2-byte span -- a runtime-revision-skewed alias (wild
     electron.exe/rstprint.exe): neither the 1.0 nor 1.1 oracle compiler ever
     emits the raw NOP pair here (same category as the documented byte-90/
-    INT-CD/far-JMP gaps in HANDOFF.md), so it can't be fixture-witnessed,
+    INT-CD/far-JMP gaps in PLAN.md), so it can't be fixture-witnessed,
     but a NOP is already a fully generic, zero-effect op elsewhere in the
     scanner, and this position is otherwise byte-identical either way.
     Returns None if neither shape matches."""

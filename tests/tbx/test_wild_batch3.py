@@ -1918,7 +1918,7 @@ def test_decode_t1_byrefsub():
     # ("+", ...) (wild bmaster.exe, surfaced chasing the byte-16 gap chain
     # further; a separate, still-open FOR-loop shape -- a by-ref param used
     # directly as a STEP -1 loop var -- was found in the same file but not
-    # landed this session, see HANDOFF.md).
+    # landed this session, see PLAN.md).
     from tbx import decode0, emit0, ir
 
     prog = decode0.decode_user_code(_exe("t1_byrefsub.exe"))

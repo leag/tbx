@@ -16,7 +16,7 @@ scanned. Per file, prints one of:
     ERR   name: <first line of failure> -- oracle itself rejected the source
 
 This is the same write-probe / compile / scan loop used throughout gap
-investigations (see HANDOFF.md), just batched -- N variants compiled and
+investigations (see PLAN.md), just batched -- N variants compiled and
 scanned in one run instead of one Bash call at a time. Like cfgview, this
 is triage-only, never part of the decompile pipeline: a HIT here is a lead
 to go implement and byte-exact-verify by hand, not itself a fix, and it
