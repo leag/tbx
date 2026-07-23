@@ -198,8 +198,8 @@
     {
       "name": "wild/hits/cleanup.exe",
       "dialect": "1.1",
-      "message": "unhandled INT EC sub f0 at 0xbcb2",
-      "signature": "unhandled INT EC sub f0"
+      "message": "DGROUP layout not solvable (runtime slot grid anchor)",
+      "signature": "DGROUP layout not solvable (runtime slot grid anchor)"
     },
     {
       "name": "wild/hits/crossref.exe",
@@ -408,8 +408,8 @@
     {
       "name": "wild/hits/reformat.exe",
       "dialect": "1.1",
-      "message": "unhandled INT EC sub f0 at 0xbcab",
-      "signature": "unhandled INT EC sub f0"
+      "message": "DGROUP layout not solvable (runtime slot grid anchor)",
+      "signature": "DGROUP layout not solvable (runtime slot grid anchor)"
     },
     {
       "name": "wild/hits/refund.exe",
@@ -504,6 +504,17 @@
       ]
     },
     {
+      "signature": "DGROUP layout not solvable (runtime slot grid anchor)",
+      "count": 5,
+      "files": [
+        "wild/hits/bmaster.exe",
+        "wild/hits/cleanup.exe",
+        "wild/hits/ifi.exe",
+        "wild/hits/mf.exe",
+        "wild/hits/reformat.exe"
+      ]
+    },
+    {
       "signature": "DGROUP layout not solvable from the calibrated rules",
       "count": 4,
       "files": [
@@ -511,15 +522,6 @@
         "wild/hits/night.exe",
         "wild/hits/sprogh.exe",
         "wild/hits/swbb.exe"
-      ]
-    },
-    {
-      "signature": "DGROUP layout not solvable (runtime slot grid anchor)",
-      "count": 3,
-      "files": [
-        "wild/hits/bmaster.exe",
-        "wild/hits/ifi.exe",
-        "wild/hits/mf.exe"
       ]
     },
     {
@@ -577,14 +579,6 @@
       "files": [
         "wild/hits/elec87.exe",
         "wild/hits/electron.exe"
-      ]
-    },
-    {
-      "signature": "unhandled INT EC sub f0",
-      "count": 2,
-      "files": [
-        "wild/hits/cleanup.exe",
-        "wild/hits/reformat.exe"
       ]
     },
     {

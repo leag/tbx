@@ -636,10 +636,13 @@ class Swap:
 class Width:
     """WIDTH cols (INT ECh sub ECh) -- cols in ax (mov ax,imm).
     WIDTH device$, cols (INT ECh sub EEh) -- device string pushed first,
-    cols in ax (device is not None; witnessed t1_widthdev)."""
+    cols in ax (device is not None; witnessed t1_widthdev).
+    WIDTH #filenum, cols (INT ECh sub F0h) -- filenum staged in [0060],
+    cols in ax (file is not None; witnessed t1_widthfile)."""
 
     cols: object  # Expr
     device: object = None  # Expr | None -- device$ in `WIDTH device$, cols`
+    file: int | None = None  # literal channel in `WIDTH #filenum, cols`
 
 
 @dataclass(frozen=True)

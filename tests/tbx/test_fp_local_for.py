@@ -20,9 +20,9 @@ def test_scan_testw_bp_is_exact():
 @pytest.mark.parametrize(
     ("stem", "next_gap"),
     [
-        ("cleanup.exe", "unhandled INT EC sub f0 at 0xbcb2"),
+        ("cleanup.exe", "DGROUP layout not solvable"),
         ("crossref.exe", "unhandled INT EC sub 38 at 0x11a63"),
-        ("reformat.exe", "unhandled INT EC sub f0 at 0xbcab"),
+        ("reformat.exe", "DGROUP layout not solvable"),
     ],
 )
 def test_fp_local_for_advances_wild_program(stem, next_gap):

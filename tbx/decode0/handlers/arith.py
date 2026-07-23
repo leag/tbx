@@ -54,14 +54,16 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             "ax": state.ax,
             "bx": state.bx,
             "cx": state.cx,
+            "dx": state.dx,
             "di": state.di,
             "si": state.si,
         }
         regs[op[2]], regs[op[3]] = regs[op[3]], None
-        state.ax, state.bx, state.cx, state.di, state.si = (
+        state.ax, state.bx, state.cx, state.dx, state.di, state.si = (
             regs["ax"],
             regs["bx"],
             regs["cx"],
+            regs["dx"],
             regs["di"],
             regs["si"],
         )

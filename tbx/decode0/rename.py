@@ -255,7 +255,11 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
         if isinstance(s, ir.Window):
             return ir.Window(walk(s.x1), walk(s.y1), walk(s.x2), walk(s.y2), s.screen)
         if isinstance(s, ir.Width):
-            return ir.Width(walk(s.cols), walk(s.device) if s.device is not None else None)
+            return ir.Width(
+                walk(s.cols),
+                walk(s.device) if s.device is not None else None,
+                s.file,
+            )
         if isinstance(s, ir.Write):
             return ir.Write(tuple(walk(i) for i in s.items), file=s.file)
         if isinstance(s, ir.Lprint):

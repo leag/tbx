@@ -405,6 +405,8 @@ def _us_graphics(s) -> str | None:
     if isinstance(s, Width):
         if s.device is not None:
             return f"WIDTH {unparse(s.device)},{unparse(s.cols)}"
+        if s.file is not None:
+            return f"WIDTH #{s.file},{unparse(s.cols)}"
         return f"WIDTH {unparse(s.cols)}"
     if isinstance(s, Key):
         return "KEY ON" if s.on else "KEY OFF"

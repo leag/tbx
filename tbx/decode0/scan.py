@@ -338,6 +338,19 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
             ops.append((p, "far_ref_bp", exe[p + 4]))
             p = q + 2
             return p
+    if (
+        b == 0x8B
+        and exe[p + 1] == 0xF5
+        and exe[p + 2] == 0x81
+        and exe[p + 3] == 0xC6
+    ):  # mov si,bp; add si,d16; [into;] push ss; pop es: the same LOCAL
+        q = p + 6  # dynamic-array descriptor when its offset exceeds 127
+        if exe[q] == 0xCE:
+            q += 1
+        if exe[q] == 0x16 and exe[q + 1] == 0x07:
+            ops.append((p, "far_ref_bp", struct.unpack_from("<H", exe, p + 4)[0]))
+            p = q + 2  # (wild cleanup.exe/reformat.exe)
+            return p
     # Literal-arg staging glue (positions SI at a stack temp, saves/restores SP).
     if b == 0x89 and exe[p + 1] == 0x26:  # mov [disp],sp (save cleanup SP)
         ops.append((p, "mov_mem_sp", struct.unpack_from("<H", exe, p + 2)[0]))
@@ -346,6 +359,14 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
     if b == 0x89 and exe[p + 1] == 0xE6:  # mov si,sp
         ops.append((p, "mov_si_sp"))
         p += 2
+        return p
+    if b == 0x89 and exe[p + 1] == 0xF2:  # mov dx,si: preserve a LOCAL-array
+        ops.append((p, "movrr", "dx", "si"))
+        p += 2  # index across string-param staging (cleanup/reformat)
+        return p
+    if b == 0x89 and exe[p + 1] == 0xD6:  # mov si,dx: restore that index
+        ops.append((p, "movrr", "si", "dx"))
+        p += 2  # (cleanup/reformat)
         return p
     if b == 0x01 and exe[p + 1] == 0xE6:  # add si,sp
         ops.append((p, "add_si_sp"))
@@ -463,6 +484,10 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         # from its handle cell (probe q_localarr)
         ops.append((p, "moves_bp", exe[p + 2]))
         p += 3
+        return p
+    if b == 0x8E and exe[p + 1] == 0x86:  # mov es,[bp+disp16]: the same
+        ops.append((p, "moves_bp", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # LOCAL DYNAMIC array beyond disp8 range (cleanup/reformat)
         return p
     if b == 0x8E and exe[p + 1] == 0x1E:  # mov ds, [disp16] (reverse array SWAP)
         ops.append((p, "movds_m", struct.unpack_from("<H", exe, p + 2)[0]))
@@ -1663,6 +1688,10 @@ def _scan_pass(
                 # (t1_widthdev; wild cal.exe/cal87.exe/kinetics.exe)
                 ops.append((p, "width_dev"))
                 p += 3
+                continue
+            if sub == 0xF0:  # WIDTH #filenum,n: [0060] channel, n in ax
+                ops.append((p, "width_file"))  # (t1_widthfile; wild
+                p += 3  # cleanup.exe/reformat.exe)
                 continue
             if sub == 0x54:  # KEY ON
                 ops.append((p, "key_on"))

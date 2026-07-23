@@ -468,12 +468,11 @@ fixture-backed closures.
   `t1_widthdev`/`v10_t1_widthdev`, byte-exact both dialects. Advanced wild
   `cal.exe`/`cal87.exe`/`kinetics.exe` past this signature into distinct
   later gaps (numeric INPUT without FSTP; LINE flag 00; a new raw-byte
-  signature) — none fully closed by this fix alone. A sibling form, `WIDTH
-  #filenum, cols` (canonical `EC sub f0`), was also identified via the same
-  probe batch but not implemented: its filenum is read back from system
-  cell `0x60` rather than passed in ax at the call site, and no wild file
-  currently blocks on it — leave for a session that wants to chase the
-  `0x60` cell convention.
+  signature) — none fully closed by this fix alone. The sibling `WIDTH
+  #filenum, cols` form (canonical `EC sub f0`) uses the existing system-cell
+  `0x60` file-number convention and is now implemented too. New
+  `t1_widthfile`/`v10_t1_widthfile` fixtures round-trip byte-exact; wild
+  cleanup/reformat advance past the dispatch.
 - [x] `INT d4` — whole-array descriptor argument to CALL. The array slot
   address is staged in SI and D4 pushes/copies its descriptor before the far
   call (`CALL F(A())`; oracle probe arrayparam6 and independent wild zip.exe).
@@ -503,8 +502,10 @@ fixture-backed closures.
   add/compare, and variable-step sign tests use BP+disp16 ModR/M forms once
   offsets exceed 127. SINGLE LOCAL `FLD`/`FSTP`/`FADD`/`FCOMP` use the same
   wide displacement and feed the existing typed-local and FOR lifters.
-  Both programs advance together past the entire family to a new, distinct
-  runtime gap: `INT EC sub F0`.
+  Wide dynamic-array address/segment forms (`ADD SI,imm16`,
+  `MOV ES,[BP+disp16]`) and the exact DX/SI index spill around a string
+  comparison are covered as well. Both programs advance together past this
+  entire family and `WIDTH #` to the DGROUP layout solver.
 
 - [ ] FP `dc/04` — 2 files; compare memory operand addressing with supported x87
   arithmetic forms and add a fixture for the exact data type.
@@ -1478,7 +1479,8 @@ tick the same day: a fourth closure, `byte 36`, is appended near the end
 of this section — it surfaced a real pre-existing bug, not just a missing
 op.)
 
-**CLOSED: `WIDTH device$, cols` (canonical `EC sub EE`).** The handbook's
+**CLOSED: `WIDTH device$, cols` / `WIDTH #filenum, cols` (canonical
+`EC sub EE` / `EC sub F0`).** The handbook's
 own WIDTH entry documents `WIDTH device$, size` / `WIDTH #filenum, size`
 (device options `SCRN:`/`LPT1:`-`LPT3:`/`COM1:`-`COM2:`) alongside the
 already-implemented bare `WIDTH n`. Its own worked example is literally
@@ -1493,12 +1495,11 @@ when `device is not None`. Fixtures `t1_widthdev`/`v10_t1_widthdev`
 `cal.exe`/`cal87.exe`/`kinetics.exe` (all three independently hit this
 exact signature) into three DIFFERENT later gaps (numeric INPUT without
 FSTP; `LINE flag 00`; a new raw-byte signature) — none fully closes yet.
-A sibling form surfaced in the same probe batch, `WIDTH #filenum, cols`
-(canonical `EC sub f0`) — NOT implemented: unlike the device-string form,
-its filenum is read back from system cell `0x60` (the same cell
-`pend_fnum`/OPEN/SEEK already use) rather than passed through ax at the
-call site, and no wild file currently blocks on it. Pick this up alongside
-the `IOCTL`/`0x60`-cell material below if revisited.
+The sibling form from the same probe batch, `WIDTH #filenum, cols`
+(canonical `EC sub f0`), was implemented on 2026-07-23 after wild
+cleanup/reformat reached it. Its filenum is read from system cell `0x60`
+(the same `pend_fnum` convention used by OPEN/SEEK), with columns in AX.
+Fixtures `t1_widthfile`/`v10_t1_widthfile` are byte-exact in both dialects.
 
 **CLOSED: `IOCTL #n, s$` (canonical `EC sub 50`) and `IOCTL$(n)` (canonical
 `EE sub 14`).** Neither statement was in `tbx`'s vocabulary at all before

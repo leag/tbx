@@ -57,11 +57,35 @@ def test_scan_large_local_compare():
     assert ops == [(0, "cmpax_bp", 0x84)]
 
 
+def test_scan_large_local_far_reference():
+    ops = []
+    data = bytes.fromhex("8b f5 81 c6 8a 00 ce 16 07")
+    assert scan._scan_direct(data, 0, data[0], decode0.TB11, ops, 0) == 9
+    assert ops == [(0, "far_ref_bp", 0x8A)]
+
+
+def test_scan_large_local_array_segment_load():
+    ops = []
+    data = bytes.fromhex("8e 86 8a 00")
+    assert scan._scan_direct(data, 0, data[0], decode0.TB11, ops, 0) == 4
+    assert ops == [(0, "moves_bp", 0x8A)]
+
+
+def test_scan_local_array_index_dx_spill():
+    ops = []
+    save_restore = bytes.fromhex("89 f2 89 d6")
+    p = scan._scan_direct(save_restore, 0, save_restore[0], decode0.TB11, ops, 0)
+    assert p == 2
+    p = scan._scan_direct(save_restore, p, save_restore[p], decode0.TB11, ops, 0)
+    assert p == 4
+    assert ops == [(0, "movrr", "dx", "si"), (2, "movrr", "si", "dx")]
+
+
 @pytest.mark.parametrize(
     ("stem", "next_gap"),
     [
-        ("cleanup.exe", "unhandled INT EC sub f0 at 0xbcb2"),
-        ("reformat.exe", "unhandled INT EC sub f0 at 0xbcab"),
+        ("cleanup.exe", "DGROUP layout not solvable"),
+        ("reformat.exe", "DGROUP layout not solvable"),
     ],
 )
 def test_large_local_family_advances_wild_program(stem, next_gap):

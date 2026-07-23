@@ -105,7 +105,7 @@ known source subset does not provide a direct source-level witness for them.
 | `Cls` | `CLS` | Supported; corpus observed |
 | `Locate` | `LOCATE ...` | Supported; corpus observed |
 | `Color` | `COLOR ...` | Supported; corpus observed |
-| `Width` | `WIDTH cols` / `WIDTH device$, cols` | Supported; `device$` form oracle-verified, no wild witness |
+| `Width` | `WIDTH cols` / `WIDTH device$, cols` / `WIDTH #filenum, cols` | Supported; both extended forms oracle-verified, file form also wild-observed |
 | `Key` | `KEY ON|OFF` | Supported; corpus observed |
 | `KeyDef` | `KEY n, string$` | Supported; corpus observed in key fixtures |
 | `KeyList` | `KEY LIST` | Supported; no direct source witness |

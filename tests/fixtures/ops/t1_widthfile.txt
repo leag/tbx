@@ -1,0 +1,8 @@
+# t1_widthfile dialect=1.1 start=08790
+08793:movax:1
+08796:movm_ax:96
+0879A:movax:80
+0879D:width_file
+087A0:end
+087A3:epilogue
+# commits

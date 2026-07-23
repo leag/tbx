@@ -5962,11 +5962,15 @@ Loop(kind=None, cond=None)
 End()
 
 ## t1_width
-Width(cols=Lit(value=80), device=None)
+Width(cols=Lit(value=80), device=None, file=None)
 End()
 
 ## t1_widthdev
-Width(cols=Lit(value=130), device=StrLit(value='LPT1:'))
+Width(cols=Lit(value=130), device=StrLit(value='LPT1:'), file=None)
+End()
+
+## t1_widthfile
+Width(cols=Lit(value=80), device=None, file=1)
 End()
 
 ## t1_window
@@ -11562,11 +11566,15 @@ Loop(kind=None, cond=None)
 End()
 
 ## v10_t1_width
-Width(cols=Lit(value=80), device=None)
+Width(cols=Lit(value=80), device=None, file=None)
 End()
 
 ## v10_t1_widthdev
-Width(cols=Lit(value=130), device=StrLit(value='LPT1:'))
+Width(cols=Lit(value=130), device=StrLit(value='LPT1:'), file=None)
+End()
+
+## v10_t1_widthfile
+Width(cols=Lit(value=80), device=None, file=1)
 End()
 
 ## v10_t1_window

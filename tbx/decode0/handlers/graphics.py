@@ -245,6 +245,17 @@ def graphics(state: DecodeState, op, addr, kind) -> bool:
         state.cur = None
         state.k += 1
         return True
+    if kind == "width_file":  # WIDTH #filenum,cols ([0060] channel, ax=cols)
+        if state.pend_fnum is None or state.ax is None or isinstance(state.ax, tuple):
+            raise ValueError(
+                f"WIDTH # without file/ax arguments at {addr:#x} "
+                f"(fnum={state.pend_fnum}, ax={state.ax})"
+            )
+        state.put(ir.Width(state.ax, file=state.pend_fnum), state.cur)
+        state.pend_fnum = state.ax = None
+        state.cur = None
+        state.k += 1
+        return True
     return False
 
 
