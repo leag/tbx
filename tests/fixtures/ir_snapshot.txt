@@ -3523,6 +3523,17 @@ Assign(target=Var(name='B'), value=Call(name='LOG', args=(DblLit(value=2.5),)))
 Assign(target=Var(name='C'), value=Call(name='LOG10', args=(DblLit(value=2.5),)))
 End()
 
+## t1_fargosub
+OnTrap(event='KEY', n=Lit(value=1), target=5)
+TrapCtl(event='KEY', n=Lit(value=1), mode='ON')
+Gosub(target=7)
+Print(items=(StrLit(value='done'),), newline=True, file=None, commas=None)
+End()
+Print(items=(StrLit(value='trapped'),), newline=True, file=None, commas=None)
+Return()
+Print(items=(StrLit(value='plain'),), newline=True, file=None, commas=None)
+Return()
+
 ## t1_fcmp
 Assign(target=Var(name='A'), value=Lit(value=2))
 Assign(target=Var(name='B'), value=Lit(value=3))
@@ -9283,6 +9294,17 @@ Assign(target=Var(name='A'), value=Call(name='EXP', args=(DblLit(value=0.5),)))
 Assign(target=Var(name='B'), value=Call(name='LOG', args=(DblLit(value=2.5),)))
 Assign(target=Var(name='C'), value=Call(name='LOG10', args=(DblLit(value=2.5),)))
 End()
+
+## v10_t1_fargosub
+OnTrap(event='KEY', n=Lit(value=1), target=5)
+TrapCtl(event='KEY', n=Lit(value=1), mode='ON')
+Gosub(target=7)
+Print(items=(StrLit(value='done'),), newline=True, file=None, commas=None)
+End()
+Print(items=(StrLit(value='trapped'),), newline=True, file=None, commas=None)
+Return()
+Print(items=(StrLit(value='plain'),), newline=True, file=None, commas=None)
+Return()
 
 ## v10_t1_field
 Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'), reclen=None, for_as=False)

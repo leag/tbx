@@ -446,7 +446,25 @@ def _resolve_calls(stmts, proc_names, proc_params, proc_int_offs, proc_str_offs)
         if isinstance(s, ir.CallStmt):
             new_args, args_changed = fix_args(s.args)
             if isinstance(s.name, tuple):
-                return ir.CallStmt(proc_names[s.name[1]], new_args)
+                target = s.name[1]
+                if target in proc_names:
+                    return ir.CallStmt(proc_names[target], new_args)
+                # Not a proc: once event trapping is active ANYWHERE in the
+                # program, the compiler emits a far call/retf pair for a
+                # PLAIN GOSUB too (RETURN -> retf under trapping, already
+                # handled above; the far_call is its matching counterpart --
+                # a near call/far ret would corrupt the stack). The target
+                # is an ordinary statement, never a proc_enter, so it can
+                # only resolve as a GOSUB line -- _resolve_targets's own
+                # existing fix() picks up this ("addr", ...) sentinel the
+                # same way it already does for the near "call" op's ir.Gosub
+                # (t1_fargosub; wild resume.exe's 14-call "mid-flow far_call"
+                # mystery).
+                if new_args:
+                    raise ValueError(
+                        f"far_call to non-proc {target:#x} carries arguments"
+                    )
+                return ir.Gosub(("addr", target))
             if args_changed:
                 return ir.CallStmt(s.name, new_args)
         if isinstance(s, ir.SubDef):

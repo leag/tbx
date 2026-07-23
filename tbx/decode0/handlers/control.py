@@ -82,7 +82,15 @@ def calls(state: DecodeState, op, addr, kind) -> bool:
         # the CallStmt sibling of ir.Restore's block-index epilogue
         # resolution).
         name = state.proc_names.get(op[2], ("addr", op[2]))
-        state.put(ir.CallStmt(name, tuple(args)), addr)
+        # state.cur, not addr: under active event trapping a CC poll hook
+        # precedes this op and claims state.cur as the statement's own
+        # address (trap_hook's handler, above) -- addr is the far_call
+        # instruction's OWN position, one hook-op later, which silently
+        # mismatched state.cc_hooks and corrupted $EVENT ON/OFF metadata
+        # recovery (t1_fargosub). Without a preceding hook the two already
+        # coincide, so this is a pure correctness fix, not a behavior change
+        # for any already-passing fixture.
+        state.put(ir.CallStmt(name, tuple(args)), state.cur if state.cur is not None else addr)
         state.cur = None
         state.k += 1
         return True

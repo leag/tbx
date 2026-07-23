@@ -1,0 +1,32 @@
+# v10_t1_fargosub dialect=1.0 start=071F0
+071F3:trap_hook
+071F4:movax:1
+071F7:on_trap:120:29209
+071FE:trap_hook
+071FF:movax:1
+07202:trap_ctl:94
+07205:trap_hook
+07206:far_call:29221
+0720B:trap_hook
+0720C:movsi:300
+0720F:rt:156
+07211:rt:190
+07213:rt:184
+07215:trap_hook
+07216:end
+07219:trap_hook
+0721A:movsi:296
+0721D:rt:156
+0721F:rt:190
+07221:rt:184
+07223:trap_hook
+07224:retf
+07225:trap_hook
+07226:movsi:292
+07229:rt:156
+0722B:rt:190
+0722D:rt:184
+0722F:trap_hook
+07230:retf
+07231:epilogue
+# commits

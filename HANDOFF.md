@@ -12,6 +12,103 @@ Standing instruction: close the most common decoder gap first, in frequency
 order, over the 84 wild PC-SIG Turbo Basic EXEs in `wild/hits/` (untracked,
 gitignored, copyrighted shareware — **never commit them**).
 
+## Session 2026-07-22 (later same day): the `far_call(mid-flow)` mystery SOLVED
+
+The multi-session mystery from the entries below ("`KeyError: 86343`",
+deepened to "a family of 6 targets, not 1", `$SEGMENT` ruled out) is
+RESOLVED. Prompted by the user asking "does any wild file with an opaque
+helper decode?" (no — checked directly, none of the wild files that hit
+`OpaqueHelper` currently reach decode-ok) and then "maybe it's related?",
+re-examined the actual bytes at all 6 mystery targets instead of reasoning
+from old notes. One (`86343`) is genuinely a large-displacement outlier
+(distance from its only caller is 39547 bytes, past a near call's signed
+16-bit range) and is set aside separately below. The other five all land
+on an IDENTICAL, fully-decodable shape: stage several literal arguments
+into an unrolled `movm_ax_temp`-family temp frame (no `push_bp` needed
+since the arguments are literals, not locals), open a nested `push_bp`
+frame, do an `fn_call`, then keep staging more args (one of them the
+`fn_call`'s own return value) before the REAL call fires. Nothing exotic
+— just an ordinary multi-argument `CALL`/`GOSUB` with a nested `FN` call
+as one argument, buried inside a big menu-dispatch routine.
+
+The actual root cause, found by cross-checking the file's own event-trap
+usage (`on_trap`: 3, `trap_ctl`: 3 in resume.exe's ops — this file
+genuinely uses `ON KEY(n) GOSUB`) against `const.py`'s own pre-existing
+comment: *"Any trap statement also makes the compiler emit a CC (INT 3)
+event-poll hook before EVERY statement, and RETURN compiles as CB
+(retf)."* Once ANY event trap is active ANYWHERE in a program, `RETURN`
+compiles to a **far** `retf` (already correctly handled — `core.py`'s
+`elif kind in ("ret", "retf"): state.put(ir.Return(), ...)` predates this
+session). But its matching `GOSUB` must then ALSO compile to a **far**
+`call` (a near call pushes only IP; a far `retf` expects `CS:IP` on the
+stack — a mismatched pair would corrupt the stack), which was NOT
+handled: `handlers/control.py`'s `far_call` case unconditionally treated
+the target as a `SUB` name, raising `KeyError` in `_resolve_calls` when
+the target was actually an ordinary GOSUB line. Reproduced cleanly with a
+minimal, oracle-verified, non-shareware probe (`q_fargosub.bas`: an
+`ON KEY(1) GOSUB` trap installed, PLUS one unrelated plain `GOSUB`
+elsewhere in the same program) — the plain `GOSUB` alone reproduced the
+identical `KeyError` shape.
+
+Two-part fix, both in the existing `("addr", n)`-placeholder machinery
+`CallStmt`s already use for forward SUB references:
+
+1. `_resolve_calls` (`core.py`): when a far_call's target isn't in
+   `proc_names`, don't raise — it's a GOSUB. Convert to
+   `ir.Gosub(("addr", target))`, the exact sentinel the near `call` op
+   already produces (`core.py`'s `elif kind == "call":
+   state.put(ir.Gosub(("addr", op[2])), state.cur)`), so
+   `_resolve_targets`'s ALREADY-WORKING `fix()` resolves the target with
+   no further change needed. Raises if the "CallStmt" carries any
+   arguments (a real GOSUB never does; this stays a loud contradiction if
+   ever seen, not a silent misdecode).
+2. A real, independent latent bug this surfaced: `handlers/control.py`'s
+   `far_call` case called `state.put(ir.CallStmt(...), addr)` using the
+   far_call INSTRUCTION's own address, not `state.cur` (the convention
+   every other statement handler uses). Under active event trapping, a
+   preceding `trap_hook` op claims `state.cur` as the STATEMENT's address
+   (one position earlier than the far_call instruction itself) — the
+   mismatch didn't crash, it silently fed the WRONG address into
+   `state.addrs`, corrupting the `$EVENT ON/OFF` metadata-recovery pass
+   (`state.cc_hooks` lookup) into inserting a spurious, byte-INEXACT
+   `$EVENT OFF`/`$EVENT ON` pair around the statement. Caught only by the
+   fixture's own byte-exact verification step, not by the scan succeeding
+   — this bug has presumably always been latent for any trapping program
+   with a `far_call`-compiled SUB call (not just the new GOSUB case), just
+   never observed since no such fixture was ever byte-exact tested before
+   (the `if state.cc_hooks or ...` $EVENT-recovery guard is a no-op for
+   any non-trapping program, i.e. nearly the whole existing corpus).
+   Confirmed the fix is exactly the needed correction, not overreach: an
+   `assert state.cur is not None` in its place fails on ~100 existing
+   fixtures (the ordinary, non-hooked case genuinely has `state.cur ==
+   None` at this point, by design), so the fallback `state.cur if
+   state.cur is not None else addr` is required, not decorative.
+
+Fixture `t1_fargosub`, byte-exact both dialects. Advanced wild
+resume.exe completely past this — its `_scan` and this fix together now
+decode 100% of the file's control flow, up to a NEW, DIFFERENT error:
+`jump target 0xa3dd is not a statement start`. That's the SAME `map_body`
+line-numbering limitation diagnosed (not fixed, on purpose — see below)
+for `state.exe`/`state87.exe` earlier this session, now confirmed to be a
+second, independent wild file hitting it. No other wild file is currently
+affected by the `far_call`/GOSUB fix itself (resume.exe is the only
+corpus file combining event trapping with a `far_call`-compiled GOSUB so
+far), but it is a correctness fix independent of that, not merely a
+resume.exe-specific patch — it would trigger for ANY program mixing
+event trapping with GOSUB, VERIFIED via the standalone, non-shareware
+`t1_fargosub` fixture.
+
+**Not yet resolved**: target `86343`'s own large-displacement mechanism
+(does TB actually switch to far-call encoding for a near-call-range-
+exceeding GOSUB target with NO `$SEGMENT` involved, purely as a
+byte-savings/addressing-range fallback? Only one data point so far,
+untested against a fresh oracle probe with a deliberately huge
+displacement). And the `map_body` numbered-line-inside-a-SUB/DEF-FN-body
+limitation two wild files (`state.exe`/`state87.exe`, now also
+`resume.exe`) are blocked on — see the earlier diagnosis in this file for
+why a speculative fix there is deliberately being deferred to a dedicated
+session.
+
 ## Session 2026-07-22: four closures from the official handbook + three negative results
 
 Prompted by the user adding a scanned/OCR'd copy of the 1987 Turbo Basic
