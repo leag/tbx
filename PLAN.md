@@ -95,9 +95,34 @@ edition/runtime tag, and evidence provenance.
   `probe6`/`mixchain6.bas` in scratch, which decodes but visibly
   mis-orders terms -- a separate, pre-existing bug, untouched).
   `number.exe`/`hfprop.exe` ("ax,bx combine with empty regs") and
-  `process.exe` ("empty di spill") are unaffected -- confirmed a
-  DIFFERENT register-choreography family, not yet investigated with
-  oracle probes.
+  `process.exe` ("empty di spill") DIAGNOSED PRECISELY this round (a
+  SIXTH round, same day): a compound boolean used as an assignable
+  VALUE, not a branch condition (`V% = (A%=1) AND (B%=2) OR (C%=3)`),
+  compiles with NO dispatch-pair template at all for 3+ terms -- each
+  term materializes straight into ax with no self-test, gets combined
+  via `andaxbx`/`oraxbx` directly, and the FINAL combine's result stores
+  straight to the target (`movm_ax`). control.py's existing "no dispatch
+  pair" handler (already witnessed for a 2-term case, `wild process.exe/
+  tamstart.exe`) sets `state.ax = Group(BinOp(term))` and defers the
+  ACTUAL combine to `int_bitwise_bx`'s generic `andaxbx`/`oraxbx`
+  handler -- which orders operands `ax op bx` (current term op
+  accumulator), correct for a 2-term case but WRONG once a 3rd term
+  chains on: it silently reorders to e.g. `C OR (A AND B)` instead of
+  `(A AND B) OR C`. Confirmed via a clean oracle probe (`valuebool.bas`,
+  scratch) that decodes without crashing but fails byte-exact
+  recompilation. NOT fixed: the correct repair needs a new way to
+  distinguish "bx holds an accumulated chain value" from "bx holds an
+  ordinary arithmetic operand" without perturbing `int_bitwise_bx`'s
+  other callers (a shared, heavily-exercised function) -- `isinstance
+  (state.bx, ir.Group)` looked promising but the accumulated result
+  itself must NOT be Group-wrapped (no extra parens belong in the
+  rendered source for the whole chain, only per-term), so that marker
+  doesn't survive to the next fold. A dedicated state flag (mirroring
+  `direct_bool_gate`) is the likely right shape but needs its OWN
+  probe-verified lifecycle (when to set/clear) before landing --
+  flagged as the concrete next step for this file family, not attempted
+  this round given the risk of touching shared arithmetic-combine code
+  without full verification.
 - Wild tally: still **25/84** (no new full closure this round either --
   `mcmurphy.exe` got past one whole gap family into a fresh one). The
   fix itself is real, oracle-verified, and lands regardless.
