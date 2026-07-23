@@ -1313,6 +1313,8 @@ class _Gen:
     def gen_subdef(self, s, idx) -> None:
         if self.in_sub:
             raise _Unsupported("nested SUB")
+        if any(p.endswith(")") for p in s.params):
+            raise _Unsupported("whole-array SUB parameter")
         self.subs[s.name] = s.params
         old = self.params
         self.params = {p: f"(*p_{_base(p)})" for p in s.params}

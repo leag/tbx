@@ -487,6 +487,14 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "str_free_temp"))
         p += 14
         return p
+    if b == 0xB0 and exe[p + 2] == 0xE6:
+        # OUT with both operands in the byte range: Turbo Basic folds the
+        # general mov-AX/mov-DX/OUT-DX sequence into MOV AL,value;
+        # OUT port,AL. Keep the complete pair atomic so a stray MOV AL or
+        # immediate-port OUT remains fail-loud (wild zip.exe's tone SUBs).
+        ops.append((p, "out_imm", exe[p + 3], exe[p + 1]))
+        p += 4
+        return p
     if b == 0x31 and exe[p + 1] == 0xC0:  # xor ax, ax (zero literal)
         ops.append((p, "xorax"))
         p += 2
@@ -754,6 +762,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "addax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
         p += 3  # into ax (witnessed q_loccmp)
         return p
+    if b == 0x2B and exe[p + 1] == 0x46:  # sub ax,[bp+d8]: normalize a
+        ops.append((p, "subax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # rank-1 whole-array SUB parameter by its lower-bound cell
+        return p  # (probe arrayparam6; wild zip.exe)
     if b == 0x23 and exe[p + 1] == 0x46:  # and ax, [bp+d8]: bitwise fold of a
         ops.append((p, "andax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
         p += 3  # LOCAL int, the bp-relative sibling of andax_m (wild filepatc.exe)

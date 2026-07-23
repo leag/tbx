@@ -431,6 +431,33 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             state.ax = ir.BinOp("+", state.loc_local(op[2]), _rgrp("+", state.ax))
         state.k += 1
         return True
+    if kind == "subax_bp":
+        # Whole-array SUB parameters carry their declared lower bound at
+        # descriptor offset +8. The machine subtraction normalizes the
+        # address, but IR keeps the original source subscript.
+        if state.proc_frame is None or state.k + 3 >= len(state.ops):
+            raise ValueError(f"subax_bp outside array parameter at {addr:#x}")
+        j = state.k + 1
+        if state.ops[j][1] != "movsiax":
+            raise ValueError(f"subax_bp without movsiax at {addr:#x}")
+        while j + 1 < len(state.ops) and state.ops[j + 1][1] == "movrr":
+            j += 1  # preserve a staged boolean/arithmetic accumulator in AX
+            # while SI keeps this array subscript (wild zip.exe)
+        while j + 1 < len(state.ops) and state.ops[j + 1][1] == "shlsi":
+            j += 1
+        if (
+            j == state.k + 1
+            or j + 1 >= len(state.ops)
+            or state.ops[j + 1][1] != "moves_bp"
+            or state.ops[j + 1][2] + 8 != op[2]
+        ):
+            raise ValueError(f"subax_bp array-parameter shape mismatch at {addr:#x}")
+        state.proc_frame["array_params"].setdefault(
+            state.ops[j + 1][2],
+            {"rank": 1, "lo_off": op[2]},
+        )
+        state.k += 1
+        return True
     if kind == "andax_bp":  # and ax,[bp+d8]: bitwise fold of a LOCAL int,
         # the bp-relative sibling of andax_m (wild filepatc.exe)
         state.ax = ir.BinOp("AND", state.loc_local(op[2]), _rgrp("AND", state.ax))
@@ -601,12 +628,20 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                     f"add si,{state.ops[state.k + ao][2]:#x} matches no static "
                     f"base at {addr:#x}"
                 )
+        param_rec = (
+            state.proc_frame["array_params"].get(blk)
+            if state.proc_frame is not None
+            and state.ops[state.k + ao][1] == "moves_bp"
+            else None
+        )
         if not isinstance(state.si, tuple) and state.si is not None:
             # raw index in si: a plain subscript. 1-D, or a
             # Bounds checked access where the earlier dims were stashed in
             # bchk_subs (F3.5): si is the final (first-source) subscript, the
             # stash the rest in reverse (column-major collects dim-N..dim-1).
-            if state.bchk_subs:
+            if param_rec is not None:
+                state.si = ("idx", blk, (state.si,))
+            elif state.bchk_subs:
                 subs = tuple(reversed(state.bchk_subs + [state.si]))
                 state.bchk_subs = []
                 if blk not in state.slot_info or state.slot_info[blk]["rank"] != len(
@@ -627,12 +662,39 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             or state.si[1] != blk
         ):
             raise ValueError(f"shl si outside an element access at {addr:#x}")
-        a = state.slot_info[blk]
+        sik = state.ops[state.k + ao + 1]
+        if param_rec is not None:
+            esz = 1 << ao
+            suffix = (
+                "$"
+                if sik[1] in ("far_spush", "far_strassign")
+                else "%"
+                if sik[1] in ("far_fild_si", "far_fstp_si")
+                else "&"
+                if sik[1] in ("far_fild_si32", "far_fstp_si32")
+                else "#"
+                if esz == 8
+                else ""
+            )
+            inferred = {
+                "name": f"P{blk:02X}{suffix}",
+                "rank": 1,
+                "str": suffix == "$",
+                "esz": esz,
+                "lo_off": param_rec["lo_off"],
+            }
+            if "name" in param_rec and any(
+                param_rec.get(k) != v for k, v in inferred.items()
+            ):
+                raise ValueError(f"inconsistent array-parameter type at {addr:#x}")
+            param_rec.update(inferred)
+            a = param_rec
+        else:
+            a = state.slot_info[blk]
         if any(not isinstance(e, ir.Lit) for e in state.si[2]):
             a["varacc"] = True  # variable-subscript witness
         ref = ir.ArrayRef(a["name"], state.si[2])
         state.si = None
-        sik = state.ops[state.k + ao + 1]
         # A NEG AX interposed right after the index resolves negates
         # whatever the CALLER already staged in ax (unrelated to this
         # element itself, e.g. `ARRAY(i) + (-2)`) before the real terminal

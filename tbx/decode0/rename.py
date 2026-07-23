@@ -64,8 +64,12 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.Not(walk(e.operand))
         if isinstance(e, ir.Group):
             return ir.Group(walk(e.inner))
-        if isinstance(e, ir.ArrayRef):  # array names are already canonical
-            return ir.ArrayRef(e.name, tuple(walk(i) for i in e.indices))
+        if isinstance(e, ir.ArrayRef):  # ordinary array names are already
+            # canonical; whole-array SUB params are Pxx placeholders entered
+            # into `names` while their header is renamed.
+            return ir.ArrayRef(
+                names.get(e.name, e.name), tuple(walk(i) for i in e.indices)
+            )
         if isinstance(e, ir.Call):
             return ir.Call(e.name, tuple(walk(a) for a in e.args))
         if isinstance(e, ir.FnCall):
@@ -341,7 +345,8 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.Common(tuple(name(n) for n in s.names))
         if isinstance(s, ir.SubDef):
             params = tuple(
-                name(p) for p in s.params
+                name(p[:-3]) + "(1)" if p.endswith("(1)") else name(p)
+                for p in s.params
             )  # params first: A, B... in decl order
             return ir.SubDef(s.name, params, tuple(rn(b) for b in s.body))
         if isinstance(s, ir.CallStmt):

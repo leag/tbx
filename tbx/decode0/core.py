@@ -2190,6 +2190,34 @@ def decode_user_code(exe: bytes) -> list[Any]:
         if (
             state.has_procs
             and kind == "jmp"
+            and state.fn_frame is None
+            and state.proc_frame is None
+            and state.k > 0
+            and state.ops[state.k - 1][1] == "end"
+            and (
+                any(
+                    o[0] == op[2] and o[1] == "epilogue"
+                    for o in state.ops[state.k + 1 :]
+                )
+                or any(
+                    state.ops[i][0] == op[2]
+                    and state.ops[i][1] == "jmp"
+                    and i + 1 < len(state.ops)
+                    and state.ops[i + 1][1] == "proc_enter"
+                    for i in range(state.k + 1, len(state.ops))
+                )
+            )
+        ):
+            # Main code can precede a trailing SUB definition. END is followed
+            # by compiler skip-jump glue over that body, either directly to
+            # the epilogue or to the next chained definition's skip-jump; it
+            # has no source GOTO spelling (probe arrayparam6; wild zip.exe).
+            state.main_start = op[2]
+            state.k += 1
+            continue
+        if (
+            state.has_procs
+            and kind == "jmp"
             and addr == state.main_start
             and state.k + 1 < len(state.ops)
             and state.ops[state.k + 1][1]
@@ -2290,6 +2318,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 "idx": len(state.stmts),
                 "exit": next(o[0] for o in state.ops[state.k :] if o[1] == "proc_ret"),
                 "locals": None,
+                "array_params": {},
             }
             state.proc_str_offs = set()
             state.proc_int_offs = set()
@@ -2473,15 +2502,33 @@ def decode_user_code(exe: bytes) -> list[Any]:
             # retf pop bytes = 4 x nargs, PLUS the LOCAL frame's own span: the
             # locals' stack space is caller-allocated too, so retf pops it
             # right along with the params (witnessed t1_local2)
-            nparams = (
-                op[2] - 2 * state.proc_frame.get("frame_words", len(locs or ()))
-            ) // 4
-            params = tuple(
-                f"P{off:02X}$"
-                if off in state.proc_str_offs
-                else (f"P{off:02X}%" if off in state.proc_int_offs else f"P{off:02X}")
-                for off in (6 + 4 * (nparams - 1 - i) for i in range(nparams))
-            )
+            array_params = state.proc_frame["array_params"]
+            if array_params:
+                # D4 copies one rank-1 descriptor (0x3C bytes), rather than
+                # passing fifteen ordinary four-byte by-ref parameters.
+                # Mixed scalar/array signatures remain unwitnessed.
+                if (
+                    len(array_params) != 1
+                    or op[2]
+                    != 0x3C + 2 * state.proc_frame.get("frame_words", 0)
+                ):
+                    raise ValueError(
+                        f"unsupported array-parameter frame at {addr:#x}"
+                    )
+                rec = next(iter(array_params.values()))
+                params = (f"{rec['name']}(1)",)
+            else:
+                nparams = (
+                    op[2] - 2 * state.proc_frame.get("frame_words", len(locs or ()))
+                ) // 4
+                params = tuple(
+                    f"P{off:02X}$"
+                    if off in state.proc_str_offs
+                    else (
+                        f"P{off:02X}%" if off in state.proc_int_offs else f"P{off:02X}"
+                    )
+                    for off in (6 + 4 * (nparams - 1 - i) for i in range(nparams))
+                )
             state.proc_params[state.proc_frame["entry"]] = params
             state.stmts.append(ir.SubDef(name, params, body))
             state.addrs.append(None)  # a SUB definition is never a jump target

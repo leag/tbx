@@ -5,8 +5,8 @@
   "corpus_fingerprint": "2043f80bf6bf929b0a8058ebb0b83e3ec6b63664855e4428b4781db63c4924a3",
   "totals": {
     "executables": 84,
-    "decode_ok": 26,
-    "decode_failed": 58,
+    "decode_ok": 27,
+    "decode_failed": 57,
     "not_turbo_basic": 0
   },
   "hits": [
@@ -139,6 +139,11 @@
       "name": "wild/hits/vhfprop.exe",
       "dialect": "1.1",
       "statements": 715
+    },
+    {
+      "name": "wild/hits/zip.exe",
+      "dialect": "1.1",
+      "statements": 96
     }
   ],
   "failures": [
@@ -479,12 +484,6 @@
       "signature": "materialization template mismatch"
     },
     {
-      "name": "wild/hits/zip.exe",
-      "dialect": "1.1",
-      "message": "unhandled byte b0 at 0x8dcc",
-      "signature": "unhandled byte b0"
-    },
-    {
       "name": "wild/hits/ziptest.exe",
       "dialect": "1.1",
       "message": "unhandled byte f7 at 0xa5c6",
@@ -742,13 +741,6 @@
       "count": 1,
       "files": [
         "wild/hits/nvg.exe"
-      ]
-    },
-    {
-      "signature": "unhandled byte b0",
-      "count": 1,
-      "files": [
-        "wild/hits/zip.exe"
       ]
     },
     {

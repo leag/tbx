@@ -80,7 +80,7 @@ known source subset does not provide a direct source-level witness for them.
 | `Data` | `DATA item[, ...]` | Supported; corpus observed |
 | `Read` | `READ target[, ...]` | Supported; executable/source witness may be indirect |
 | `Restore` | `RESTORE [line]` | Supported; executable/source witness may be indirect |
-| `SubDef` | `SUB name[(params)] ... END SUB` | Supported; corpus observed |
+| `SubDef` | `SUB name[(params)] ... END SUB` | Supported, including witnessed rank-1 array parameters declared as `A(1)`; c0 is fail-loud for array parameters |
 | `CallStmt` | `CALL name[(args)]` | Supported, including whole-array `A()` arguments (D4); c0 remains fail-loud for whole-array parameters |
 | `DefFn` | `DEF FN... = expression` or block form | Supported; corpus observed in function fixtures |
 | `FnResult` | assignment to a multi-line `DEF FN` result | Internal procedure-body node; emitted as source |
@@ -173,7 +173,7 @@ known source subset does not provide a direct source-level witness for them.
 | `Mtimer` | `MTIMER` | Supported; no direct source witness |
 | `Sound` | `SOUND frequency, duration` | Supported; executable/source witness is sparse |
 | `Delay` | `DELAY seconds` | Supported; no direct source witness |
-| `Out` | `OUT port, value` | Supported; corpus observed |
+| `Out` | `OUT port, value` | Supported, including byte-constant `B0 vv E6 pp` optimization |
 | `Wait` | `WAIT port, mask[, xor]` | Supported; corpus observed |
 | `Poke` | `POKE address, value` | Supported; corpus observed |
 | `Clear` | `CLEAR` | Supported; no direct source witness |

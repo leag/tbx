@@ -102,7 +102,12 @@ def os_system(state: DecodeState, op, addr, kind) -> bool:
 
 
 def device_io(state: DecodeState, op, addr, kind) -> bool:
-    """Dispatch family: out, in_al, poke."""
+    """Dispatch family: out, out_imm, in_al, poke."""
+    if kind == "out_imm":
+        state.put(ir.Out(ir.Lit(op[2]), ir.Lit(op[3])), state.cur)
+        state.cur = None
+        state.k += 1
+        return True
     if kind == "out":  # OUT port(dx), value(ax)
         state.put(ir.Out(state.dx, state.ax), state.cur)
         state.dx = state.ax = None

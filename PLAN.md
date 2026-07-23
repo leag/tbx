@@ -478,8 +478,16 @@ fixture-backed closures.
   address is staged in SI and D4 pushes/copies its descriptor before the far
   call (`CALL F(A())`; oracle probe arrayparam6 and independent wild zip.exe).
   It is represented as `ArrayRef(name, ())`; c0 explicitly fails loud until
-  SUB signatures retain array-parameter metadata. Both witnesses advance to
-  distinct subsequent instruction gaps.
+  its back end supports array descriptors. The follow-on `SUB AX,[BP+0E]`
+  shape recovers the rank-1 declaration (`SUB F(B(1))`) and element access;
+  both the numeric probe and wild zip.exe now decode completely.
+- [x] `byte b0` follow-on in wild `zip.exe` — byte-sized constant `OUT`
+  optimization, encoded atomically as `MOV AL,value; OUT port,AL`
+  (`B0 vv E6 pp`). The decoder admits only the complete four-byte pair and
+  emits the existing `ir.Out(Lit(port), Lit(value))`; generic MOV-AL and
+  immediate-port OUT shapes remain fail-loud. `zip.exe` advances through all
+  26 repeated tone SUBs; closing its shared array-parameter follow-on makes
+  the whole program decode successfully.
 
 #### Wave 2 — repeated instruction and x87 templates
 
@@ -4288,10 +4296,11 @@ fail earlier at byte `8b`, so they are separate Wave-2 evidence rather than
 Gap 33 matches. The corpus is now 91 executables: 24 decode OK and 67
 blocked.
 
-The post-change third-party scan is archived as
-`gap_reports/2026-07-23-current.json`: 26 of 84 `wild/hits` executables decode,
-58 remain fail-loud. The three PALETTE USING witnesses live in `wild/probes`,
-so closing their shared vocabulary gap does not change that 26/84 tally.
+The current third-party scan is archived as
+`gap_reports/2026-07-23-current.json`: 27 of 84 `wild/hits` executables decode,
+57 remain fail-loud. The three PALETTE USING witnesses live in `wild/probes`,
+so that closure itself did not change the tally; the later D4/immediate-OUT/
+array-parameter chain moved `zip.exe` into the decode-OK set.
 
 `VARSEG` and `VARPTR` array-element probes decoded cleanly without `EC/38`.
 The retained `VARPTR$` scalar and array probes now decode cleanly after the
