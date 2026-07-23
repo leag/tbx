@@ -2439,6 +2439,10 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 argvar = ir.Var(f"P{state.pend_arg:02X}%")  # by-ref INT param
                 state.proc_int_offs.add(state.pend_arg)  # (t1_byref1)
                 state.ax = ir.BinOp("AND", argvar, _rgrp("AND", state.ax))
+            elif base == "orax_si":  # or ax, es:[si]: bitwise OR fold of a
+                argvar = ir.Var(f"P{state.pend_arg:02X}%")  # by-ref INT param
+                state.proc_int_offs.add(state.pend_arg)  # (wild pwinst.exe)
+                state.ax = ir.BinOp("OR", argvar, _rgrp("OR", state.ax))
             elif base == "imulax_si":  # imul word es:[si]: multiplicative
                 argvar = ir.Var(f"P{state.pend_arg:02X}%")  # fold of a by-ref
                 state.proc_int_offs.add(state.pend_arg)  # INT param (q_byref_imul)

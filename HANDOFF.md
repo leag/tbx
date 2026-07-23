@@ -161,6 +161,24 @@ updated for the new lookahead signature. Advanced wild
 hebrew.exe/pwinst.exe past this signature into 2 distinct new gaps (`byte
 2b`; `byte 26`).
 
+**CLOSED (same day, immediate follow-up): pwinst.exe's own new `byte 26`
+was `or ax,es:[si]` — a mechanical, missing-vocabulary-table closure, NOT
+the same hard problem as bmaster.exe/ifi.exe's pre-existing `byte 26`
+(`26 ff 0c` = far DEC, needs `local_init` base-disp threading before it
+can be implemented correctly — see the "Investigated at length but NOT
+landed" writeup elsewhere in this file; don't assume this closure touches
+that one).** Raw shape `26 0B 04` = `OR AX, ES:[SI]`, the OR sibling of
+the already-calibrated `far_andax_si`/`far_addax_si`/`far_cmpax_si`
+family (by-ref-int-param arithmetic/bitwise folds, gap-11's original
+family plus gap-18's multiplicative addition) — checking that dispatch
+table for a missing operator is still the first thing to try whenever a
+new "byte 26 ..." gap shows up, per gap-18's own note. New op
+`far_orax_si`, consumed identically to `far_andax_si` via the generic
+`kind.endswith("_si")` table in core.py. Fixture `t1_byrefor`
+(`SUB SUB1(N%): LOCAL Y%: Y% = N% OR 5`), byte-exact both dialects.
+Closed pwinst.exe's `byte 26` failure entirely; advanced it to "DGROUP
+layout not solvable (runtime slot grid anchor)".
+
 **INVESTIGATED, NOT CLOSED (via a NEW, now-ruled-out angle): `INT 8c` (4
 files: baby, help, prtguide, readme, all TB 1.0).** Previous sessions'
 negative probes all varied the ON KEY(n) GOSUB shape itself (still

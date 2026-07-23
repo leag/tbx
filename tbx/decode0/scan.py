@@ -751,6 +751,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "far_andax_si"))  # bitwise fold of a by-ref int param
         p += 3  # (t1_byref1)
         return p
+    if b == 0x26 and exe[p + 1] == 0x0B and exe[p + 2] == 0x04:  # or ax, es:[si]
+        ops.append((p, "far_orax_si"))  # bitwise OR fold of a by-ref int
+        p += 3  # param, the OR sibling of far_andax_si (wild pwinst.exe)
+        return p
     if b == 0x26 and exe[p + 1] == 0x01 and exe[p + 2] == 0x04:  # add es:[si], ax:
         ops.append((p, "far_addm_ax_si"))  # compound-store add into a by-ref
         p += 3  # int param, e.g. `A% = A% + 1` in the callee (witnessed q_fwd)

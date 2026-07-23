@@ -1,0 +1,9 @@
+10 SUB SUB1(A%)
+  LOCAL B%
+  B% = A% OR 5
+  PRINT B%
+END SUB
+20 C% = 7
+30 CALL SUB1(C%)
+40 PRINT C%
+50 END
