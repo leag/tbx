@@ -935,6 +935,18 @@ fixing the intra-inline-IF gap above will also close it.
 
 ## Part III — Investigation history / handoff log
 
+### 2026-07-23 — ERASE of a local dynamic array
+
+Closed the shared `far_ref_bp; erase` gap in `cleanup.exe` and
+`reformat.exe`. It is the BP-relative sibling of the existing DGROUP
+runtime-array ERASE bracket: the displacement identifies an already
+calibrated LOCAL dynamic-array descriptor and emits the same `Erase`
+IR, while the compiler's later `local_arr_free` remains implicit
+cleanup. Extended dual-dialect fixture `t1_fnlocalarrstr` witnesses
+`ERASE` of its local STRING array and recompiles byte-for-byte under TB
+1.0 and 1.1. Both wild programs advance to a later shared LOCAL DIM
+bounds shape.
+
 ### 2026-07-23 — scalar STRING locals in block DEF FN
 
 Closed the shared `string store to [bp+68] in DEF FN body` gap in

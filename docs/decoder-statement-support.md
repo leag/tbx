@@ -74,7 +74,7 @@ known source subset does not provide a direct source-level witness for them.
 | IR node | Turbo BASIC form | Status |
 |---|---|---|
 | `Dim` | `DIM name(bounds)[, ...]` | Supported; corpus observed |
-| `Erase` | `ERASE name[, ...]` | Supported; corpus observed |
+| `Erase` | `ERASE name[, ...]` | Supported for DGROUP and BP-relative LOCAL dynamic arrays; corpus observed |
 | `OptionBase` | `OPTION BASE 0|1` | Supported; corpus observed |
 | `DefType` | `DEFINT`, `DEFSTR`, `DEFSNG`, `DEFDBL` | Recovered/rendered canonically; weak source provenance |
 | `Data` | `DATA item[, ...]` | Supported; corpus observed |

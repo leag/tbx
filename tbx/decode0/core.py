@@ -2428,6 +2428,19 @@ def decode_user_code(exe: bytes) -> list[Any]:
             state.k += 2
             continue
         if (
+            kind == "far_ref_bp"
+            and state.k + 1 < len(state.ops)
+            and state.ops[state.k + 1][1] == "erase"
+        ):  # ERASE of a BP-relative LOCAL DYNAMIC array (block DEF FN:
+            # t1_fnlocalarrstr; wild cleanup.exe/reformat.exe).
+            disp = op[2]
+            if disp not in state.r_arrs:
+                raise ValueError(f"ERASE of undimensioned LOCAL block at {addr:#x}")
+            state.put(ir.Erase(state.r_arrs[disp]["name"]), state.cur)
+            state.cur = None
+            state.k += 2
+            continue
+        if (
             kind == "mov_bp_imm"
             and state.local_dim_frame is not None
             and state.local_dim_frame["disp"]

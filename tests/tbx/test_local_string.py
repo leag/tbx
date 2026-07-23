@@ -37,6 +37,7 @@ def test_string_local_in_block_def_fn(stem):
     assert isinstance(fn, ir.DefFn)
     assert fn.body[0] == ir.Local(("V0$()", "B", "C$"))
     assert ir.Assign(ir.Var("C$"), ir.Call("UCASE$", (ir.Var("C$"),))) in fn.body
+    assert ir.Erase("V0$") in fn.body
 
 
 @pytest.mark.parametrize(
@@ -44,8 +45,8 @@ def test_string_local_in_block_def_fn(stem):
     [
         ("bmaster.exe", "materialization template mismatch at 0x8f0e"),
         ("ifi.exe", "materialization template mismatch at 0x8f0e"),
-        ("cleanup.exe", "unhandled op far_ref_bp at 0xb3c7"),
-        ("reformat.exe", "unhandled op far_ref_bp at 0xb3c0"),
+        ("cleanup.exe", "LOCAL DIM bound cells incomplete at 0xb868"),
+        ("reformat.exe", "LOCAL DIM bound cells incomplete at 0xb861"),
     ],
 )
 def test_string_local_witnesses_advance(stem, next_gap):

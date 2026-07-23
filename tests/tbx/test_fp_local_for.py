@@ -20,9 +20,9 @@ def test_scan_testw_bp_is_exact():
 @pytest.mark.parametrize(
     ("stem", "next_gap"),
     [
-        ("cleanup.exe", "unhandled op far_ref_bp at 0xb3c7"),
+        ("cleanup.exe", "LOCAL DIM bound cells incomplete at 0xb868"),
         ("crossref.exe", "unhandled INT EC sub 38 at 0x11a63"),
-        ("reformat.exe", "unhandled op far_ref_bp at 0xb3c0"),
+        ("reformat.exe", "LOCAL DIM bound cells incomplete at 0xb861"),
     ],
 )
 def test_fp_local_for_advances_wild_program(stem, next_gap):
