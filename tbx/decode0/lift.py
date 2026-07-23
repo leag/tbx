@@ -242,8 +242,24 @@ def _match_bool_term1(ops, k):
     """ops[k] = movax FFFF with a pending compare. Detect a compound-IF first
     term: the materialization header whose closing jmp short-circuits INTO the
     second term's tail -- AND (jnz dispatch) jumps to the commit after `and ax,bx`,
-    OR (jz) jumps to the tail's `or ax,ax` with ax still 0FFFFh. Returns "AND"/"OR"
-    or None (then it's a WHILE header; the address equality dishambiguates exactly)."""
+    OR (jz) jumps to the tail's `or ax,ax` with ax still 0FFFFh.
+
+    Returns `(op, deferred)` -- `op` is "AND"/"OR", the combinator that will
+    fold this term with whatever comes next; `deferred` is True when the
+    matched term is NOT the very next one to materialize but a multi-term
+    inner GROUP further ahead (a differently-precedenced sub-expression,
+    e.g. `A OR B AND C` = `A OR (B AND C)`: A's own short-circuit lands on
+    the (B AND C) group's OWN convergence point, not on B directly -- wild
+    wb.exe/grdscn.exe/mcmurphy.exe, probes q_mixedbool5/q_mixedbool6).
+    Detected by another `movax 0FFFFh` materialization sitting strictly
+    between here and the match (register-shuffle ops before a DIRECT
+    combine never include one, since only a genuine extra TERM's own
+    self-test does -- t1_and3/wild number.exe's shuffle dance around
+    cmpax_m proves the shuffle alone is not a signal). The caller must
+    defer folding until that inner group resolves on its own (see
+    `_lift_bool_tail`'s `pend_outer`). Returns None if ops[k] isn't a
+    compound-IF first term at all (then it's a WHILE header; the address
+    equality disambiguates exactly)."""
     if [o[1] for o in ops[k : k + 6]] != [
         "movax",
         "jcc",
@@ -263,15 +279,26 @@ def _match_bool_term1(ops, k):
     comb = {0x75: ("andaxbx", "AND"), 0x74: ("orax", "OR")}.get(pol)
     if comb is None:
         return None
-    for j in range(k + 6, min(k + 30, len(ops) - 3)):
-        if (
-            ops[j][1] == "movax"
-            and ops[j][2] == 0xFFFF
-            and [o[1] for o in ops[j + 1 : j + 4]] == ["jcc", "incax", comb[0]]
+    other_comb = ("orax", "OR") if comb[0] == "andaxbx" else ("andaxbx", "AND")
+    seen_materialize = False
+    for j in range(k + 6, min(k + 36, len(ops) - 3)):
+        if ops[j][1] != "movax" or ops[j][2] != 0xFFFF:
+            continue
+        nxt3 = [o[1] for o in ops[j + 1 : j + 4]]
+        for candidate, cdelta in (
+            (comb, 2 if comb[1] == "AND" else 0),
+            (other_comb, 2 if other_comb[1] == "AND" else 0),
         ):
-            tail_comb = ops[j + 3]
-            if sc == tail_comb[0] + (2 if comb[1] == "AND" else 0):
-                return comb[1]
+            if nxt3 == ["jcc", "incax", candidate[0]]:
+                tail_comb = ops[j + 3]
+                if sc == tail_comb[0] + cdelta:
+                    # term1's OWN polarity (comb[1]) is always how it joins
+                    # whatever was found -- candidate only describes the
+                    # SHAPE of that thing (a same-op cascade continuation,
+                    # comb, or a differently-precedenced inner GROUP,
+                    # other_comb), never the join operator itself.
+                    return comb[1], seen_materialize
+        seen_materialize = True
     return None
 
 
@@ -288,14 +315,32 @@ def _has_jmps_back(ops, exit_addr, test_addr) -> bool:
     return False
 
 
-def _lift_bool_tail(ops, k, pend_cmp, pb, put, whiles, ifs, stmts, flush):
+def _lift_bool_tail(ops, k, pend_cmp, pb, put, whiles, ifs, stmts, flush, pend_outer):
     """Consume the compound-IF second term at ops[k] (movax FFFF): dispatch 74 =
     THEN-line IfGoto; dispatch 75 = compound WHILE (jmps-back present)
     or inline-IF body. A 3+-term chain (witnessed t1_and3) cascades: each MID
     segment's dispatch jmp short-circuits into the NEXT segment's fold template
     (comb addr + the same +2/+0 AND/OR delta the first-term match uses) instead
-    of exiting -- fold the condition and keep the compound open. Returns
-    (next op index, still-open pend_bool or None)."""
+    of exiting -- fold the condition and keep the compound open.
+
+    A combinator SWITCH (`A AND B OR C` = `(A AND B) OR C`, precedence-correct
+    left grouping since AND/OR chain byte-identically either way for a single
+    trailing term: wild state.exe/state87.exe, probe q_mixedbool2) also
+    continues the SAME flat fold when the switch target is the immediately
+    NEXT term (`ops[k+6]`). When it is NOT (`A OR B AND C` = `A OR (B AND
+    C)`: B and C bind tighter and must resolve as their OWN group before
+    joining A -- wild wb.exe/grdscn.exe/mcmurphy.exe, probes q_mixedbool5/
+    q_mixedbool6), folding is DEFERRED: this call returns with `pend_bool =
+    None` and a fresh `pend_outer` frame; the ordinary dispatch loop then
+    re-enters `_match_bool_term1` at `ops[k+6]` as if it were a brand new
+    top-level compound-IF, and THAT group's own eventual close (in a later
+    call here, `pend_outer` threaded through unchanged) folds
+    `LogOp(pend_outer["op"], pend_outer["r1"], <inner group's cond>)` instead
+    of emitting directly, using `pend_outer["start"]` as the statement's
+    address. Only one level of deferral is verified; a second one raises.
+
+    Returns (next op index, still-open pend_bool or None, pend_outer or
+    None)."""
     comb = "andaxbx" if pb["op"] == "AND" else "orax"
     if [o[1] for o in ops[k : k + 6]] != [
         "movax",
@@ -318,50 +363,83 @@ def _lift_bool_tail(ops, k, pend_cmp, pb, put, whiles, ifs, stmts, flush):
         )
     r2 = ir.RelOp(_JCC_RELOP_TRUE[m_jcc[2]], *pend_cmp)
     cond = ir.LogOp(pb["op"], pb["r1"], r2)
-    # Same-combinator continuation (t1_and3: A AND B AND C) as well as a
-    # combinator SWITCH (`A AND B OR C` -- TB gives AND/OR equal precedence,
-    # left-associative, so this parses (A AND B) OR C exactly like the
-    # same-combinator case, just with the OTHER fold template at the next
-    # segment: wild state.exe/state87.exe, probe q_mixedbool2). Try both;
-    # whichever matches becomes the accumulator's combinator for the NEXT
-    # step (the just-finished term's own combinator, pb["op"], is already
-    # folded into `cond` above and is not needed again).
-    other_op = "OR" if pb["op"] == "AND" else "AND"
-    other_comb = "orax" if comb == "andaxbx" else "andaxbx"
-    other_delta = 0 if delta == 2 else 2
+    # own_op -- how `cond` (just folded) joins whatever comes next -- is
+    # this segment's OWN dispatch polarity (f_jcc), a fact independent of
+    # pb["op"] (the operator that folded r1 with r2 to make `cond`): e.g.
+    # wild state.exe's (A AND B) joins C via OR even though A folded with B
+    # via AND. The candidate search below only LOCATES and shape-checks
+    # whatever sits at the short-circuit target -- own_comb for a same-op
+    # cascade continuation, alt_comb for a differently-operated segment/
+    # GROUP -- it never changes the join operator itself (a bug found via
+    # oracle probe q_mixedbool6: returning the ALT candidate's own label
+    # for a multi-term GROUP silently swapped AND/OR in the outer join).
+    own_op = {0x75: "AND", 0x74: "OR"}[f_jcc[2]]
+    own_comb = "andaxbx" if own_op == "AND" else "orax"
+    own_delta = 2 if own_op == "AND" else 0
+    alt_comb = "orax" if own_comb == "andaxbx" else "andaxbx"
+    alt_delta = 0 if own_delta == 2 else 2
+    seen_materialize = False
     for j in range(k + 6, min(k + 36, len(ops) - 3)):
         if ops[j][1] != "movax" or ops[j][2] != 0xFFFF:
             continue
         nxt3 = [o[1] for o in ops[j + 1 : j + 4]]
-        if nxt3 == ["jcc", "incax", comb] and f_jmp[2] == ops[j + 3][0] + delta:
-            # mid segment: chain continues at ops[j]'s fold, same combinator
-            return k + 6, {
-                "r1": cond,
-                "op": pb["op"],
-                "sc": f_jmp[2],
-                "start": pb["start"],
-            }
-        if (
-            nxt3 == ["jcc", "incax", other_comb]
-            and f_jmp[2] == ops[j + 3][0] + other_delta
-        ):  # mid segment: chain continues, combinator switches
-            return k + 6, {
-                "r1": cond,
-                "op": other_op,
-                "sc": f_jmp[2],
-                "start": pb["start"],
-            }
+        for candidate_comb, candidate_delta in (
+            (own_comb, own_delta),
+            (alt_comb, alt_delta),
+        ):
+            if (
+                nxt3 == ["jcc", "incax", candidate_comb]
+                and f_jmp[2] == ops[j + 3][0] + candidate_delta
+            ):
+                if not seen_materialize:  # immediately-next term: flat fold
+                    return (
+                        k + 6,
+                        {
+                            "r1": cond,
+                            "op": own_op,
+                            "sc": f_jmp[2],
+                            "start": pb["start"],
+                        },
+                        pend_outer,
+                    )
+                # a multi-term inner GROUP starts at k+6 instead -- defer
+                if pend_outer is not None:
+                    # Left-associative cascade of GROUPS (`(A AND B) OR
+                    # (C AND D) OR (E AND F)`, wild mcmurphy.exe, probe
+                    # q_mixedbool7): fold the prior deferred group into
+                    # `cond` now, the same left-fold every other cascade
+                    # here uses, then keep waiting -- own_op governs how
+                    # this new combined accumulator joins the NEXT group.
+                    cond = ir.LogOp(pend_outer["op"], pend_outer["r1"], cond)
+                    outer_start = pend_outer["start"]
+                else:
+                    outer_start = pb["start"]
+                return (
+                    k + 6,
+                    None,
+                    {"r1": cond, "op": own_op, "start": outer_start},
+                )
+        seen_materialize = True
+    final_cond, final_start = cond, pb["start"]
+    if pend_outer is not None:
+        final_cond = ir.LogOp(pend_outer["op"], pend_outer["r1"], cond)
+        final_start = pend_outer["start"]
     if f_jcc[2] == 0x74:
-        put(ir.IfGoto(cond, ("addr", f_jmp[2])), pb["start"])
-    elif _has_jmps_back(ops, f_jmp[2], pb["start"]):
-        put(ir.While(cond), pb["start"])
-        whiles.append({"test": pb["start"], "exit": f_jmp[2]})
+        put(ir.IfGoto(final_cond, ("addr", f_jmp[2])), final_start)
+    elif _has_jmps_back(ops, f_jmp[2], final_start):
+        put(ir.While(final_cond), final_start)
+        whiles.append({"test": final_start, "exit": f_jmp[2]})
     else:
         flush()
         ifs.append(
-            {"target": f_jmp[2], "cond": cond, "start": pb["start"], "idx": len(stmts)}
+            {
+                "target": f_jmp[2],
+                "cond": final_cond,
+                "start": final_start,
+                "idx": len(stmts),
+            }
         )
-    return k + 6, None
+    return k + 6, None, None
 
 
 def _lift_do_tail(ops, k, pend_cmp, stmts, addrs, put, cur):

@@ -104,6 +104,7 @@ class DecodeState:
     pend_arg: Any = None
     pend_args: Any = None
     pend_bool: Any = None
+    pend_bool_outer: Any = None
     pend_cmp: Any = None
     pend_cmp_str: bool = False  # pend_cmp came from strcmp: forward flags
     pend_dataread: Any = None
@@ -1946,6 +1947,8 @@ def decode_user_code(exe: bytes) -> list[Any]:
     state.reg_spills = {}  # scratch-cell saves used beyond the register spill chain
     state.bchk_subs = []  # Bounds: pending non-final subscripts (F3.5)
     state.pend_bool = None  # compound-IF first term awaiting its tail
+    state.pend_bool_outer = None  # enclosing accumulator awaiting a deferred
+    # inner mixed-precedence group's own close (A OR B AND C's "A OR")
     state.pend_print = None  # open PRINT item chain
     state.pend_using = None  # open PRINT USING value chain
     state.pend_filein = None  # open INPUT# target chain

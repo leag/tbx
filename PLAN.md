@@ -51,7 +51,44 @@ edition/runtime tag, and evidence provenance.
 
 ### Live checkpoint
 
-- Updated: 2026-07-23 (later same day)
+- Updated: 2026-07-23 (fifth round, same day)
+- **Oracle correction**: earlier rounds this session incorrectly believed
+  no `TBX_ORACLE` was available -- a stale relative-path `ls` check gave a
+  false negative. The vendored oracle at `tbx/vendor/turbo_basic_oracle`
+  works fine (`oracle.preflight()` passes, `oracle.compile_bas` compiles
+  real programs). This unblocked a proper, byte-exact-verified fix -- see
+  Part III's newest entry ("mixed-precedence compound-IF chains").
+  Summary: `_match_bool_term1`/`_lift_bool_tail` (the AND/OR compound-IF
+  folder) had TWO real bugs, found via 7 oracle-compiled probes
+  (byte-exact round-trip confirmed for all): (1) it only ever recognized
+  a mixed-precedence switch when the differently-combined continuation
+  was the SINGLE immediately-next term, not a multi-term inner GROUP
+  (`A OR B AND C` = `A OR (B AND C)`, wild wb.exe/grdscn.exe/mcmurphy.exe
+  shape) -- fixed via a new `pend_bool_outer` deferred-fold mechanism
+  (control.py + lift.py); (2) the join operator was being derived from
+  WHICH candidate matched during the lookahead search instead of the
+  term's own fixed dispatch polarity, silently swapping AND/OR in the
+  outer join for exactly the multi-term-group case. Two of the 7 probes
+  promoted to fixtures (`t1_mixedbool2`, `t1_mixedbool3` + `v10_`),
+  pinned in `test_compound_if.py`. `mcmurphy.exe` advanced fully past
+  this family into a SEPARATE, newly-exposed bug (a corrupted `Gosub`
+  target, `jump target 0xe989b00 ...` -- an obviously-wrong huge address,
+  unrelated to compound-booleans, not yet diagnosed). `wb.exe`/
+  `grdscn.exe` still fail on "materialization template mismatch" at the
+  SAME addresses as before -- their actual shapes aren't among the 7
+  verified probes (possibly the explicitly-parenthesized-group case,
+  `probe6`/`mixchain6.bas` in scratch, which decodes but visibly
+  mis-orders terms -- a separate, pre-existing bug, untouched).
+  `number.exe`/`hfprop.exe` ("ax,bx combine with empty regs") and
+  `process.exe` ("empty di spill") are unaffected -- confirmed a
+  DIFFERENT register-choreography family, not yet investigated with
+  oracle probes.
+- Wild tally: still **25/84** (no new full closure this round either --
+  `mcmurphy.exe` got past one whole gap family into a fresh one). The
+  fix itself is real, oracle-verified, and lands regardless.
+- Current validation: 2449 passed, 16 skipped; Ruff clean.
+
+### Historical checkpoint (fourth round, same day, believed no-oracle)
 - Branch: `claude/claude-md-docs-mr8ssz`
 - Baseline commit: `b22c0a4` (`Merge AGENTS.md into CLAUDE.md; split
   wild-probe corpus from wild/hits`)
@@ -775,6 +812,104 @@ fixing the intra-inline-IF gap above will also close it.
 ---
 
 ## Part III — Investigation history / handoff log
+
+### 2026-07-23 (fifth round, same day) — mixed-precedence compound-IF chains, WITH oracle
+
+Discovered the oracle (`tbx/vendor/turbo_basic_oracle`) was actually
+available and working all along this session -- `oracle.preflight()`
+passes, `oracle.compile_bas` compiles real programs -- the "no oracle"
+belief in earlier rounds today came from a stale relative-path `ls`
+check giving a false negative. This unlocked proper, verified work on
+the single most-repeated remaining blocker: the "3+-term compound-
+boolean register choreography" family (number.exe/hfprop.exe/
+process.exe/grdscn.exe/wb.exe/mcmurphy.exe).
+
+**Method**: built and byte-exact verified 7 oracle probes
+(`mixchain.bas` through `mixchain7.bas`, later promoted as
+`t1_mixedbool2`/`t1_mixedbool3`) covering every combination of
+AND/OR cascade-then-switch shape: `A AND B OR C`, `A OR B AND C`,
+`A AND B AND C OR D`, `(A AND B) OR (C AND D)`, `A OR B OR C AND D`,
+`(A OR B OR C) AND D` (explicit parens), and `(A AND B) OR (C AND D)
+OR (E AND F)`. Each was decoded, re-emitted, and RECOMPILED through the
+oracle to confirm byte-for-byte identity with the original -- the full
+calibration-rule workflow, not a guess.
+
+**Bug 1 -- single-term-switch tunnel vision.** `_match_bool_term1`
+(lift.py, term1's own detection) and `_lift_bool_tail`'s existing
+"combinator switch" lookahead (added in an earlier session for `A AND B
+OR C`) only ever matched when the differently-combined continuation was
+the term IMMEDIATELY after the just-processed one (`ops[k+6]`). For `A
+OR B AND C` = `A OR (B AND C)`, B and C must resolve as their OWN
+2-term chain FIRST (a fresh `_match_bool_term1` entry point at B) before
+folding with A -- A's own short-circuit lands on (B AND C)'s
+convergence point, not on B directly, so there's a genuine extra
+materialization (B's own self-test) sitting between the switch point
+and the match. Fixed by detecting this ("`seen_materialize`": any
+`movax 0FFFFh` strictly between `ops[k+6]` and the matched position) and
+DEFERRING the fold instead of raising: a new `state.pend_bool_outer`
+frame holds the enclosing accumulator; `state.pend_bool` is cleared so
+the ordinary dispatch loop naturally re-enters `_match_bool_term1` fresh
+at `ops[k+6]`; that inner group's own eventual close folds
+`LogOp(pend_outer["op"], pend_outer["r1"], inner_cond)` instead of
+emitting directly.
+
+**Bug 2 -- join operator derived from the wrong thing.** Once the
+lookahead finds a match via `comb` (same as the incoming fold) or
+`other_comb` (a switch), the ORIGINAL code returned the MATCHED
+candidate's own operator as the new fold operator. This is only
+correct by coincidence: for a SINGLE trailing term (t1_mixedbool's
+witnessed shape), "the operator of the thing found" and "how the
+accumulator joins it" happen to be the same value. For a multi-term
+GROUP, they are NOT: the group's OWN internal operator (e.g. AND,
+joining C and D inside the group) has nothing to do with HOW the outer
+accumulator joins that whole group (e.g. OR). The join operator is
+always this segment's OWN dispatch polarity (`f_jcc[2]`, independent of
+`pb["op"]` or which candidate matched) -- computing it directly and
+using it uniformly (for the immediate-continuation, single-switch, AND
+deferred-group returns) fixed silently-swapped AND/OR in the outer join.
+Symmetric fix applied to `_match_bool_term1` (always return the term's
+own fixed `comb[1]`, never the matched candidate's label).
+
+**Bug 3 -- cascades of GROUPS.** `(A AND B) OR (C AND D) OR (E AND F)`
+(wild mcmurphy.exe's actual shape) needs a SECOND deferred group while
+the first is still pending. Rather than a stack (unverified, would need
+its own probe), the fix folds left-associatively: when a second defer
+is needed while `pend_outer` is already set, fold it into `cond` right
+away (`LogOp(pend_outer["op"], pend_outer["r1"], cond)`) and keep
+waiting with the COMBINED result as the new accumulator -- the same
+left-fold every other cascade in this file already uses, just one level
+up. Verified via `mixchain7.bas`/`t1_mixedbool3`, byte-exact both
+dialects.
+
+**Fixtures**: `t1_mixedbool2` (`A$="L" OR B=15 AND C=1`) and
+`t1_mixedbool3` (3-group OR-cascade of AND-pairs) promoted to
+`tests/fixtures/corpus/` (+ `v10_`), pinned in
+`test_compound_if.py::test_decode_t1_mixedbool2/3`, added to the
+`PAIRS` dialect-invariance list. `t1_mixedbool`'s own comment (which
+claimed "AND/OR equal precedence, left-associative") corrected -- that
+framing only coincidentally matched its own single-trailing-term shape;
+the real rule is standard AND-binds-tighter precedence, confirmed by
+the mirror shape (t1_mixedbool2) producing a genuinely different tree.
+
+**Wild corpus impact**: `mcmurphy.exe` now decodes fully PAST the
+compound-boolean family into an unrelated, freshly-exposed bug: a
+`Gosub` target of `244894073` (`0xe989b00`) -- an obviously-corrupted
+huge address, nothing like a real 16-bit file offset. Not yet traced;
+flagged as the new next step for this file specifically. `wb.exe`/
+`grdscn.exe` are UNCHANGED (same "materialization template mismatch" at
+the same addresses) -- their real compiled shape isn't among the 7
+verified probes; the explicit-parens case (`(A OR B OR C) AND D`,
+scratch `mixchain6.bas`) decodes without crashing but visibly
+mis-orders terms in the output, a separate, pre-existing, untouched bug
+that may be relevant if wb.exe's source uses explicit parens.
+`number.exe`/`hfprop.exe` ("ax,bx combine with empty regs") and
+`process.exe` ("empty di spill") are confirmed a DIFFERENT
+register-choreography family (not this one) -- still unprobed.
+
+Validation: full suite 2449 passed (10 new), 16 skipped, ruff clean,
+full `scan_wild.py` re-run: still 25/84 (mcmurphy.exe traded one gap for
+a different one, no file fully closed this round), no regressions
+elsewhere.
 
 ### 2026-07-23 (fourth round same day) — FIELD redesign, shared far-string read, ON ERROR/main_start fix
 

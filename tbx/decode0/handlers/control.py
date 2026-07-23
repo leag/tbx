@@ -470,7 +470,7 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
                 state.k = nk
                 state.pend_bool = None
             else:
-                state.k, state.pend_bool = _lift_bool_tail(
+                state.k, state.pend_bool, state.pend_bool_outer = _lift_bool_tail(
                     state.ops,
                     state.k,
                     state.pend_cmp,
@@ -480,20 +480,37 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
                     state.ifs,
                     state.stmts,
                     state.flush_pending,
+                    state.pend_bool_outer,
                 )  # a mid-chain segment keeps pend_bool open (t1_and3)
             state.pend_cmp = None
             state.cur = None
             return True
         comb = _match_bool_term1(state.ops, state.k)  # compound-IF first term?
         if comb is not None:
-            state.pend_bool = {
-                "r1": ir.RelOp(
-                    _JCC_RELOP_TRUE[state.ops[state.k + 1][2]], *state.pend_cmp
-                ),
-                "op": comb,
-                "sc": state.ops[state.k + 5][2],
-                "start": state.cur,
-            }
+            op, deferred = comb
+            r1 = ir.RelOp(_JCC_RELOP_TRUE[state.ops[state.k + 1][2]], *state.pend_cmp)
+            if deferred:
+                # `A OR B AND C`-shaped (wild wb.exe/grdscn.exe/mcmurphy.exe):
+                # B and C form their OWN group first; hold this term as the
+                # enclosing accumulator and let the ordinary dispatch loop
+                # re-enter _match_bool_term1 fresh at ops[k+6]. If an outer
+                # accumulator is already waiting (a left-associative cascade
+                # of GROUPS, `(A AND B) OR C AND D OR ...`, wild
+                # mcmurphy.exe, probe q_mixedbool7), fold it in now rather
+                # than stacking a second level.
+                if state.pend_bool_outer is not None:
+                    r1 = ir.LogOp(state.pend_bool_outer["op"], state.pend_bool_outer["r1"], r1)
+                    start = state.pend_bool_outer["start"]
+                else:
+                    start = state.cur
+                state.pend_bool_outer = {"r1": r1, "op": op, "start": start}
+            else:
+                state.pend_bool = {
+                    "r1": r1,
+                    "op": op,
+                    "sc": state.ops[state.k + 5][2],
+                    "start": state.cur,
+                }
             state.pend_cmp = None
             state.k += 6
             return True

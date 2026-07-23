@@ -14,6 +14,8 @@ PAIRS = [
     "t1_booluntil",
     "t1_and3",
     "t1_mixedbool",
+    "t1_mixedbool2",
+    "t1_mixedbool3",
 ]
 
 
@@ -115,10 +117,15 @@ def test_decode_t1_and3():
 
 
 def test_decode_t1_mixedbool():
-    # Combinator SWITCH mid-chain: `A AND B OR C` (wild state.exe/
-    # state87.exe). TB gives AND/OR equal precedence, left-associative,
-    # so this parses (A AND B) OR C, same as t1_and3's shape but the
-    # THIRD term's fold uses the OTHER combinator (orax instead of
+    # Combinator SWITCH mid-chain: `A AND B OR C` = `(A AND B) OR C` (wild
+    # state.exe/state87.exe): AND binds tighter than OR (standard
+    # precedence, confirmed by probing the OR-then-AND mirror shape --
+    # see t1_mixedbool2 -- which produces a genuinely different tree, NOT
+    # "equal precedence, left-associative" as this comment once claimed).
+    # This fixture's own shape happens to coincide with a flat left-fold
+    # regardless, since AND already appears leftmost with nothing after
+    # the trailing OR to compete with it. Same byte shape as t1_and3 but
+    # the THIRD term's fold uses the OTHER combinator (orax instead of
     # andaxbx) -- _lift_bool_tail's mid-segment lookahead now tries both
     # combinators, since the same-comb-only check silently finalized as
     # a 2-term chain and orphaned the third term's bytes, producing an
@@ -138,6 +145,71 @@ def test_decode_t1_mixedbool():
             ir.RelOp("=", V("C"), L(1)),
         ),
         6,
+    )
+
+
+def test_decode_t1_mixedbool2():
+    # Combinator SWITCH where the FIRST term defers to a multi-term inner
+    # GROUP: `A OR B AND C` = `A OR (B AND C)` (wild wb.exe/grdscn.exe/
+    # mcmurphy.exe). Unlike t1_mixedbool's single-trailing-term switch, B
+    # and C must resolve as their OWN 2-term chain (a fresh
+    # _match_bool_term1 entry point at B) before folding with A -- A's own
+    # short-circuit lands on (B AND C)'s convergence point, not on B
+    # directly. Distinguishing signal: another `movax 0FFFFh`
+    # materialization sits strictly between A's fold and the match (B's own
+    # self-test), unlike a direct single-term combine.
+    from tbx import decode0
+
+    L, V = ir.Lit, ir.Var
+    prog = decode0.decode_user_code(_exe("t1_mixedbool2.exe"))
+    assert prog[3] == ir.IfGoto(
+        ir.LogOp(
+            "OR",
+            ir.RelOp("=", V("A$"), ir.StrLit("L")),
+            ir.LogOp(
+                "AND",
+                ir.RelOp("=", V("B"), L(15)),
+                ir.RelOp("=", V("C"), L(1)),
+            ),
+        ),
+        6,
+    )
+
+
+def test_decode_t1_mixedbool3():
+    # Left-associative CASCADE of GROUPS: `A AND B OR C AND D OR E AND F`
+    # = `((A AND B) OR (C AND D)) OR (E AND F)` (wild mcmurphy.exe). Each
+    # deferred group folds into the enclosing accumulator as soon as it
+    # resolves (rather than stacking nested defers), exactly like every
+    # other left-fold in this file, just one level up: a cascade of
+    # 2-term GROUPS instead of a cascade of plain terms.
+    from tbx import decode0
+
+    L, V = ir.Lit, ir.Var
+    prog = decode0.decode_user_code(_exe("t1_mixedbool3.exe"))
+    assert prog[6] == ir.IfGoto(
+        ir.LogOp(
+            "OR",
+            ir.LogOp(
+                "OR",
+                ir.LogOp(
+                    "AND",
+                    ir.RelOp("=", V("A"), L(1)),
+                    ir.RelOp("=", V("B"), L(2)),
+                ),
+                ir.LogOp(
+                    "AND",
+                    ir.RelOp("=", V("C"), L(3)),
+                    ir.RelOp("=", V("D"), L(4)),
+                ),
+            ),
+            ir.LogOp(
+                "AND",
+                ir.RelOp("=", V("E"), L(5)),
+                ir.RelOp("=", V("F"), L(6)),
+            ),
+        ),
+        9,
     )
 
 
