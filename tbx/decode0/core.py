@@ -77,6 +77,7 @@ class DecodeState:
     exe: Any = None
     exit_folds: Any = None
     fn_args: Any = None
+    fn_args_stack: Any = None
     fn_frame: dict[str, Any] | None = None
     fors: Any = None
     has_procs: Any = None
@@ -1908,6 +1909,12 @@ def decode_user_code(exe: bytes) -> list[Any]:
     state.proc_frame = None
     state.fn_frame = None
     state.fn_args = {}  # staged FN-call args: bp_off -> Expr (offset-ordered)
+    state.fn_args_stack = []  # nested-call-as-argument scoping for fn_args,
+    # the DEF FN sibling of sp_save_stack below: a DEF FN call used as its OWN
+    # outer DEF FN call's argument must not drain/clear the outer's
+    # partially-staged fn_args when the inner call's own fn_call runs
+    # (t1_fnargcall; unlike SUB CALL, which is a statement and structurally
+    # can't nest as an argument, DEF FN calls are expressions and can)
     state.main_start = None  # def-region end = entry-jmp target
     state.nsub = 0  # SUB counter (entry-offset order)
     state.nfn = 0  # DEF FN counter (entry-offset order)

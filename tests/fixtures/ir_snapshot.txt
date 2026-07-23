@@ -3649,6 +3649,12 @@ End()
 Print(items=(Call(name='VAL', args=(StrLit(value='42'),)),), newline=True, file=None, commas=None)
 End()
 
+## t1_fnargcall
+DefFn(name='FNFN1', params=('A%',), body=(Local(names=('B%',)), Assign(target=Var(name='B%'), value=BinOp(op='*', lhs=Var(name='A%'), rhs=Lit(value=2))), FnResult(value=Var(name='B%'))), is_block=True)
+DefFn(name='FNFN2', params=('C$', 'D%'), body=(Local(names=('E%',)), Assign(target=Var(name='E%'), value=BinOp(op='+', lhs=Call(name='LEN', args=(Var(name='C$'),)), rhs=Var(name='D%'))), FnResult(value=Var(name='E%'))), is_block=True)
+Print(items=(FnCall(name='FNFN2', args=(StrLit(value='text'), FnCall(name='FNFN1', args=(Lit(value=3),)))),), newline=True, file=None, commas=None)
+End()
+
 ## t1_fnlocal
 DefFn(name='FNFN1', params=('A',), body=(Local(names=('B%',)), Assign(target=Var(name='B%'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1))), FnResult(value=BinOp(op='+', lhs=Var(name='B%'), rhs=Lit(value=2)))), is_block=True)
 Print(items=(FnCall(name='FNFN1', args=(Lit(value=3),)),), newline=True, file=None, commas=None)
@@ -9386,6 +9392,12 @@ End()
 
 ## v10_t1_fn_val
 Print(items=(Call(name='VAL', args=(StrLit(value='42'),)),), newline=True, file=None, commas=None)
+End()
+
+## v10_t1_fnargcall
+DefFn(name='FNFN1', params=('A%',), body=(Local(names=('B%',)), Assign(target=Var(name='B%'), value=BinOp(op='*', lhs=Var(name='A%'), rhs=Lit(value=2))), FnResult(value=Var(name='B%'))), is_block=True)
+DefFn(name='FNFN2', params=('C$', 'D%'), body=(Local(names=('E%',)), Assign(target=Var(name='E%'), value=BinOp(op='+', lhs=Call(name='LEN', args=(Var(name='C$'),)), rhs=Var(name='D%'))), FnResult(value=Var(name='E%'))), is_block=True)
+Print(items=(FnCall(name='FNFN2', args=(StrLit(value='text'), FnCall(name='FNFN1', args=(Lit(value=3),)))),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_fnlocal

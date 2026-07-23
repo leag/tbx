@@ -201,7 +201,26 @@ fixture-backed closures.
   and are closed. Nested outer-AND forms now cover the `jcc 75`/`jcc 74`, BX/CX
   spill, direct-GOTO, and single-relation-right shapes witnessed by
   `styled`/`hfprop`; other materialization topologies remain fail-loud.
-- [ ] singleton instruction bytes `ff`, `38`, `36`, `21`, `18`, `16`.
+- [x] byte `36` — `mov ss:[si],imm16` (new op `movm_imm_temp`), the
+  literal-argument sibling of the already-handled `movm_ax_temp`. Found via
+  a DEF FN call nested as another DEF FN call's own argument
+  (`FNFOO("text", FNBAR(3))`). Landing it exposed a REAL pre-existing bug,
+  not just a missing op: `state.fn_args` had no nesting protection (unlike
+  `sp_save_cell`, which already got `sp_save_stack` for exactly this
+  reason) — a nested call's own `fn_call` was draining/clearing the OUTER
+  call's partially-staged args, silently dropping an argument. Fixed with
+  a parallel `fn_args_stack`, save/restored in `push_bp`/`pop_bp` alongside
+  `sp_save_cell`. `movm_ax_temp`/`movm_imm_temp` now peek at the next op to
+  route to `pend_args` (plain SUB CALL, `arg_push_temp` follows) or
+  `fn_args[si]` (nested DEF FN call, `mov_bp_sp`/`fn_call` follows instead
+  — SUB CALL structurally can't nest as an argument, so the split is
+  exhaustive). Fixture `t1_fnargcall`, byte-exact both dialects (had to
+  match the exact bare-identifier DEF FN convention the handbook documents
+  and `t1_fnlocalint` already uses — an `FN name = expr` form with the `FN`
+  kept as a literal token compiles to a materially different, ALSO-valid
+  shape that isn't what canonical emission produces). Advanced wild
+  `hebrew.exe`/`pwinst.exe` past this signature.
+- [ ] singleton instruction bytes `ff`, `21`, `18`, `16`.
 
 ### Wave 3 — decoder state and structural recovery
 
@@ -349,6 +368,7 @@ Include newly exposed blockers because they are evidence of forward progress.
 | 2026-07-22 | pending | Decode `WIDTH device$, cols` (`EC sub ee`), found via the newly-added handbook's own worked example | 23 OK / 61 blocked; `cal`/`cal87`/`kinetics` advanced past this signature into 3 distinct later gaps, 0 regressions; `EC sub ee` signature removed | Triage the 3 newly exposed signatures |
 | 2026-07-22 | pending | Decode `IOCTL #n,s$` / `IOCTL$(n)` (`EC sub 50` / `EE sub 14`), a Wave-5 syntax-inventory gap found while chasing `EC sub ac` | 23 OK / 61 blocked; 0 regressions; touches no wild file | `EC sub ac` is confirmed NOT `IOCTL` despite the identical filenum+string calling convention — still unidentified, see `HANDOFF.md` |
 | 2026-07-22 | pending | Decode `PUT$ #n,s$` (`EC sub ac`) — binary-mode string write, GetString's complement | 23 OK / 61 blocked; `nvginst`/`pwinst`/`secure` all advanced past this signature into 3 distinct new gaps, 0 regressions; `EC sub ac` signature removed | Triage the 3 newly exposed signatures (`byte f7`, `byte 36`, a jump-target error) |
+| 2026-07-22 | pending | Decode `mov ss:[si],imm16` (byte `36`, new op `movm_imm_temp`) + fix a real pre-existing bug: `fn_args` had no nesting protection around a DEF FN call used as another call's own argument | 23 OK / 61 blocked; `hebrew`/`pwinst` advanced past this signature, 0 regressions; byte `36` signature removed | Triage `byte 2b` (hebrew) and `byte 26` (pwinst) separately |
 
 ## Completion checklist
 

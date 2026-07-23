@@ -108,12 +108,36 @@ def test_integer_call_argument_temp_staging():
     code = bytes.fromhex("36 89 04")
     assert _scan_direct2(code, 0, code[0], ops) == 3
     assert ops == [(0, "movm_ax_temp")]
+    ops.append((3, "arg_push_temp"))  # a plain SUB CALL argument frame
 
     value = ir.Lit(9)
-    state = SimpleNamespace(ax=value, pend_args=[], cur=123, k=0)
+    state = SimpleNamespace(
+        ax=value, pend_args=[], fn_args={}, si=None, cur=123, k=0, ops=ops
+    )
     assert arith.int_alu(state, ops[0], 0, "movm_ax_temp")
     assert state.pend_args == [value]
+    assert state.fn_args == {}
     assert state.ax is None and state.cur is None and state.k == 1
+
+
+def test_nested_fn_call_argument_temp_staging():
+    # A DEF FN call used as another call's own argument stages its OWN
+    # literal argument via SI+SP addressing (no arg_push_temp follows --
+    # the frame closes straight into mov_bp_sp; fn_call), so it must land in
+    # fn_args (keyed by the si offset), not pend_args (t1_fnargcall).
+    ops = []
+    code = bytes.fromhex("36 c7 04 03 00")
+    assert _scan_direct2(code, 0, code[0], ops) == 5
+    assert ops == [(0, "movm_imm_temp", 3)]
+    ops.append((5, "mov_bp_sp"))  # a nested DEF FN call's own frame
+
+    state = SimpleNamespace(
+        ax=None, pend_args=[], fn_args={}, si=2, cur=123, k=0, ops=ops
+    )
+    assert arith.int_alu(state, ops[0], 0, "movm_imm_temp")
+    assert state.pend_args == []
+    assert state.fn_args == {2: ir.Lit(3)}
+    assert state.cur is None and state.k == 1
 
 
 def test_non_for_integer_add_immediate():

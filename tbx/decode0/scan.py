@@ -508,6 +508,15 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "movm_ax_temp"))  # mov ss:[si],ax: staged by-ref CALL arg
         p += 3
         return p
+    if b == 0x36 and exe[p + 1 : p + 3] == b"\xc7\x04":
+        # mov ss:[si],imm16: the literal-argument sibling of movm_ax_temp --
+        # a nested DEF FN call used as another call's own argument stages
+        # ITS OWN literal argument via SI+SP addressing (bp doesn't point at
+        # this temp frame yet), instead of going through ax first (witnessed
+        # t1_fnargcall: `FN Foo(A$, FN Bar(3))`).
+        ops.append((p, "movm_imm_temp", struct.unpack_from("<H", exe, p + 3)[0]))
+        p += 5
+        return p
     if b == 0x01 and exe[p + 1] == 0x06:  # add [disp16], ax: int combine-store,
         ops.append((p, "addm_ax", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4  # e.g. `X% = X% + <expr>` (disp16 sibling of addm_ax_bp,

@@ -12,15 +12,18 @@ Standing instruction: close the most common decoder gap first, in frequency
 order, over the 84 wild PC-SIG Turbo Basic EXEs in `wild/hits/` (untracked,
 gitignored, copyrighted shareware — **never commit them**).
 
-## Session 2026-07-22: two closures from the official handbook + three negative results
+## Session 2026-07-22: four closures from the official handbook + three negative results
 
 Prompted by the user adding a scanned/OCR'd copy of the 1987 Turbo Basic
 Owner's Handbook to `docs/`, this session cross-referenced its Chapter 5
 reference directory and appendices against the open-gap list above instead
-of guessing blind. Two real, oracle-verified closures landed (23/84 wild
-count unchanged — neither happens to unlock a full wild file, see below),
-plus three investigations that came up empty but are worth recording so a
-future session doesn't repeat them.
+of guessing blind. Four real, oracle-verified closures landed (23/84 wild
+count unchanged — none happens to fully unlock a wild file on its own, see
+below), plus three investigations that came up empty but are worth
+recording so a future session doesn't repeat them. (Continued in a later
+tick the same day: a fourth closure, `byte 36`, is appended near the end
+of this section — it surfaced a real pre-existing bug, not just a missing
+op.)
 
 **CLOSED: `WIDTH device$, cols` (canonical `EC sub EE`).** The handbook's
 own WIDTH entry documents `WIDTH device$, size` / `WIDTH #filenum, size`
@@ -88,6 +91,75 @@ generic `_Unsupported("statement ...")`). Fixtures
 wild files (nvginst/pwinst/secure) into 3 DIFFERENT new gaps (`byte f7`;
 `byte 36`; a jump-target error) — none fully closes on its own, each
 needs its own triage.
+
+**CLOSED (same day, autonomous-loop follow-up): `byte 36` (2 files:
+hebrew.exe, pwinst.exe — the latter its OWN follow-on from the PUT$
+closure above) turned out to be a real pre-existing bug, not just a
+missing scan-level op.** Raw shape: `36 c7 04 <imm16>` = `mov
+ss:[si],imm16` — visibly the literal-argument sibling of the
+already-calibrated `movm_ax_temp` (`36 89 04` = `mov ss:[si],ax`, "staged
+by-ref CALL arg"). First hypothesis (a literal by-ref `CALL SUB1(5)`
+argument) was WRONG — that compiles through `ax` first
+(`movax,5;movm_ax_temp`), never a direct immediate store. The real
+trigger, found by widening the probe to "what ELSE uses this ss:[si]
+store idiom": a DEF FN call used as ANOTHER DEF FN call's own argument,
+where the inner call's OWN literal argument is staged via SI+SP
+addressing (bp doesn't point at the inner frame yet) instead of going
+through ax — `PRINT FNFOO("text", FNBAR(3))`.
+
+Naively adding the new op (`movm_imm_temp`, appending to `state.pend_args`
+like its sibling) made the crash go away but produced a SILENTLY WRONG
+decode — `FNFOO("text", FNBAR(3))` decoded as `FNFN2(FNFN1("text"))`,
+dropping an argument and misattributing "text" to the wrong function
+entirely. Caught only because the recompiled source failed to compile at
+all (`Error 454: Undefined function reference`) during the byte-exact
+verification step — a reminder that "the scan no longer raises" is not
+sufficient to ship without checking the round trip on a case with real
+nested control flow. Root cause: `state.fn_args` (the DEF FN call argument dict,
+keyed by bp offset, drained and CLEARED by `fn_call`) had no nesting
+protection at all — unlike `sp_save_cell`, which already got a
+`sp_save_stack` fix for the EXACT same class of problem (resume.exe,
+documented earlier in this file: "a call used as its OWN outer call's
+argument opens a NESTED push_bp/mov_mem_sp/.../pop_bp staging region").
+When the inner DEF FN call's own `fn_call` drains+clears `fn_args`, it was
+silently wiping out the OUTER call's own partially-staged arguments
+too. Fixed with a parallel `fn_args_stack`, saved in `push_bp` and
+restored in `pop_bp` right alongside `sp_save_cell`/`sp_save_stack`.
+Separately, `movm_ax_temp`/`movm_imm_temp` needed to learn to ROUTE
+correctly: a one-op lookahead (`state.ops[state.k+1]`) checks whether
+`arg_push_temp` follows (plain SUB CALL — ordered `pend_args` list) or
+not (nested DEF FN call closing straight into `mov_bp_sp;fn_call` —
+offset-keyed `fn_args[state.si]`, using whatever the `si` offset was
+computed as by the preceding `movsi`/`add_si_sp` pair, since that's what
+becomes the new frame's own bp offset once `mov_bp_sp` repoints bp). SUB
+CALL is a statement, not an expression, so it structurally can't nest as
+an argument — making this two-way split exhaustive, not a heuristic.
+
+Getting a byte-exact fixture took several tries and surfaced an
+UNRELATED, separate, pre-existing gap in emit0's DEF FN canonicalization:
+a "non-block" DEF FN body (a single assignment statement, even when
+written across multiple physical lines with `END DEF`) does NOT round-trip
+byte-exact through decode→emit→recompile AT ALL, regardless of nesting —
+confirmed with the simplest possible 2-int-param, no-nesting case. Also,
+per the handbook's own DEF FN syntax (`DEF FNidentifier` is one FUSED
+token, not `FN` + space + name as a separate keyword), writing the
+in-body result assignment as `FN Name = expr` (keeping the literal `FN`
+prefix, space tolerated by the lexer) compiles to a materially DIFFERENT,
+ALSO-valid shape than the bare `Name = expr` convention `emit0` always
+canonicalizes to (extra `mov_bp_imm 2,0`, FP round-trip return via
+`fild_bp`/`fstp_bp` instead of a direct `movax_bp`/`movm_ax_bp` int
+return) — and if you decode+re-emit+recompile a `FN Name = expr`-sourced
+EXE, you get the bare-convention bytes back, which legitimately differ
+from the original. Neither of these is the nesting bug; both are
+pre-existing, out of scope, and were avoided by building the final
+fixture in the SAME bare, block-form (`LOCAL` + `Name = expr`) convention
+`t1_fnlocalint` already uses and is proven to round-trip. Fixture
+`t1_fnargcall`, byte-exact both dialects. New unit test
+`test_nested_fn_call_argument_temp_staging` pins the `fn_args[si]` routing
+directly; the existing `test_integer_call_argument_temp_staging` was
+updated for the new lookahead signature. Advanced wild
+hebrew.exe/pwinst.exe past this signature into 2 distinct new gaps (`byte
+2b`; `byte 26`).
 
 **INVESTIGATED, NOT CLOSED (via a NEW, now-ruled-out angle): `INT 8c` (4
 files: baby, help, prtguide, readme, all TB 1.0).** Previous sessions'

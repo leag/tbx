@@ -87,10 +87,25 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             raise ValueError(f"unsupported spill target {op[2]} at {addr:#x}")
         state.k += 1
         return True
-    if kind == "movm_ax_temp":
-        if state.ax is None:
+    if kind in ("movm_ax_temp", "movm_imm_temp"):
+        # mov ss:[si],ax / mov ss:[si],imm16: a temp-frame argument store.
+        # Two different callers drain this frame: a plain SUB CALL (an
+        # `arg_push_temp` follows immediately, ordered list -> pend_args) or
+        # a DEF FN call used AS another call's own argument (no
+        # arg_push_temp -- the frame closes straight into `mov_bp_sp;
+        # fn_call`, offset-keyed dict -> fn_args, keyed by the `si` offset
+        # this store's own address computed, i.e. the future bp offset once
+        # mov_bp_sp repoints bp here; t1_fnargcall). SUB CALL can't nest as
+        # an argument (CALL is a statement, not an expression), so this
+        # ordering split is exhaustive.
+        value = ir.Lit(op[2]) if kind == "movm_imm_temp" else state.ax
+        if kind == "movm_ax_temp" and state.ax is None:
             raise ValueError(f"empty integer temp argument at {addr:#x}")
-        state.pend_args.append(state.ax)
+        nxt = state.ops[state.k + 1] if state.k + 1 < len(state.ops) else None
+        if nxt is not None and nxt[1] == "arg_push_temp":
+            state.pend_args.append(value)
+        else:
+            state.fn_args[state.si] = value
         state.ax = None
         state.cur = None
         state.k += 1
@@ -1120,11 +1135,17 @@ def stack_ops(state: DecodeState, op, addr, kind) -> bool:
         # mov_mem_sp without corrupting the outer movm_imm-glue match once
         # control returns here (wild resume.exe)
         state.sp_save_stack.append(state.sp_save_cell)
+        # Same nesting problem for a nested DEF FN call's own fn_args: its
+        # fn_call will drain+clear fn_args, which would otherwise wipe out
+        # the OUTER DEF FN call's own partially-staged args (t1_fnargcall).
+        state.fn_args_stack.append(state.fn_args)
+        state.fn_args = {}
         state.k += 1
         return True
     if kind == "pop_bp":  # closes a call-staging temp frame: restore
         state.sp_save_cell = state.sp_save_stack.pop()  # the enclosing SP-
-        state.k += 1  # save cell (wild resume.exe)
+        state.fn_args = state.fn_args_stack.pop()  # save cell + fn_args
+        state.k += 1  # (wild resume.exe; t1_fnargcall)
         return True
     if kind in (
         "mov_si_sp",
