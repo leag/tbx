@@ -73,7 +73,22 @@ edition/runtime tag, and evidence provenance.
   pinned in `test_compound_if.py`. `mcmurphy.exe` advanced fully past
   this family into a SEPARATE, newly-exposed bug (a corrupted `Gosub`
   target, `jump target 0xe989b00 ...` -- an obviously-wrong huge address,
-  unrelated to compound-booleans, not yet diagnosed). `wb.exe`/
+  unrelated to compound-booleans). DIAGNOSED (not fixed): the raw op is
+  `('call', 244882176)` from scan.py's stack-test-GOSUB path (`vec==0x8A`,
+  reads a 4-byte i32 start-relative offset, `+= 6` per site --
+  `fst_t1_gosub` witnesses this cleanly with the 'S' toggle ALONE). But
+  mcmurphy.exe's toggles are `'KBOS'` (Keyboard break + Bounds + Overflow
+  + Stack test ALL active) -- a combination no existing fixture
+  witnesses. The i32 read at this exact site (`00 00 98 0e`) produces
+  garbage, meaning either another toggle inserts extra bytes before this
+  callsite that the scan doesn't account for (a drift, not a parsing
+  bug in this function itself), or the multi-toggle interaction changes
+  the encoding directly. Needs its own oracle probe compiled with ALL
+  FOUR toggles together (`node tb_v86_compile.js probe.bas --compile-exe
+  --toggles KBOS --tb <floppy>`, per this repo's memory notes -- the
+  `oracle.compile_bas` wrapper has no toggle parameter) before touching
+  anything -- flagged as the concrete next step for mcmurphy.exe
+  specifically, separate from the compound-IF fix above. `wb.exe`/
   `grdscn.exe` still fail on "materialization template mismatch" at the
   SAME addresses as before -- their actual shapes aren't among the 7
   verified probes (possibly the explicitly-parenthesized-group case,
