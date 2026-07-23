@@ -273,7 +273,13 @@ class DecodeState:
             elif pp.get("mode") == "lprint":  # trailing-';' LPRINT: closed by
                 # the next completed statement, like console PRINT (witnessed
                 # t1_lpusing -- an LPRINT USING follows with no B9 between)
-                self.stmts.append(ir.Lprint(tuple(pp["items"]), newline=False))
+                self.stmts.append(
+                    ir.Lprint(
+                        tuple(pp["items"]),
+                        newline=False,
+                        commas=_pp_commas(pp),
+                    )
+                )
             else:
                 self.stmts.append(
                     ir.Print(

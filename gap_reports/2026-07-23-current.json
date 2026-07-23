@@ -157,8 +157,8 @@
     {
       "name": "wild/hits/billadd.exe",
       "dialect": "1.1",
-      "message": "unhandled INT c2 at 0x111b1",
-      "signature": "unhandled INT c2"
+      "message": "displacement 0x76 is neither scalar nor array element",
+      "signature": "displacement 0x76 is neither scalar nor array element"
     },
     {
       "name": "wild/hits/bm1_dsk2.exe",
@@ -379,8 +379,8 @@
     {
       "name": "wild/hits/prtguide.exe",
       "dialect": "1.0",
-      "message": "unhandled INT c2 at 0x81ed",
-      "signature": "unhandled INT c2"
+      "message": "DELAY without poll op at 0x7732",
+      "signature": "DELAY without poll op"
     },
     {
       "name": "wild/hits/pw.exe",
@@ -421,8 +421,8 @@
     {
       "name": "wild/hits/rs.exe",
       "dialect": "1.0",
-      "message": "unhandled INT c2 at 0xa1e0",
-      "signature": "unhandled INT c2"
+      "message": "unhandled INT EC sub 38 at 0xa487",
+      "signature": "unhandled INT EC sub 38"
     },
     {
       "name": "wild/hits/sabpcv3.exe",
@@ -493,6 +493,17 @@
   ],
   "groups": [
     {
+      "signature": "unhandled INT EC sub 38",
+      "count": 5,
+      "files": [
+        "wild/hits/catalog.exe",
+        "wild/hits/football.exe",
+        "wild/hits/refund.exe",
+        "wild/hits/rs.exe",
+        "wild/hits/varamort.exe"
+      ]
+    },
+    {
       "signature": "DGROUP layout not solvable from the calibrated rules",
       "count": 4,
       "files": [
@@ -500,16 +511,6 @@
         "wild/hits/night.exe",
         "wild/hits/sprogh.exe",
         "wild/hits/swbb.exe"
-      ]
-    },
-    {
-      "signature": "unhandled INT EC sub 38",
-      "count": 4,
-      "files": [
-        "wild/hits/catalog.exe",
-        "wild/hits/football.exe",
-        "wild/hits/refund.exe",
-        "wild/hits/varamort.exe"
       ]
     },
     {
@@ -540,20 +541,19 @@
       ]
     },
     {
-      "signature": "unhandled INT c2",
-      "count": 3,
-      "files": [
-        "wild/hits/billadd.exe",
-        "wild/hits/prtguide.exe",
-        "wild/hits/rs.exe"
-      ]
-    },
-    {
       "signature": "87",
       "count": 2,
       "files": [
         "wild/hits/styled.exe",
         "wild/hits/styllist.exe"
+      ]
+    },
+    {
+      "signature": "DELAY without poll op",
+      "count": 2,
+      "files": [
+        "wild/hits/prtguide.exe",
+        "wild/hits/readme.exe"
       ]
     },
     {
@@ -619,13 +619,6 @@
       ]
     },
     {
-      "signature": "DELAY without poll op",
-      "count": 1,
-      "files": [
-        "wild/hits/readme.exe"
-      ]
-    },
-    {
       "signature": "LINE INPUT # template mismatch",
       "count": 1,
       "files": [
@@ -637,6 +630,13 @@
       "count": 1,
       "files": [
         "wild/hits/horses.exe"
+      ]
+    },
+    {
+      "signature": "displacement 0x76 is neither scalar nor array element",
+      "count": 1,
+      "files": [
+        "wild/hits/billadd.exe"
       ]
     },
     {

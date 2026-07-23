@@ -95,7 +95,7 @@ known source subset does not provide a direct source-level witness for them.
 |---|---|---|
 | `Print` | `PRINT [#n,] ...` | Supported; corpus observed |
 | `PrintUsing` | `PRINT [#n,] USING format; ...` | Supported; corpus observed |
-| `Lprint` | `LPRINT ...` | Supported; corpus observed |
+| `Lprint` | `LPRINT ...` | Supported, including comma-zone separators (C2) |
 | `Write` | `WRITE [#n,] ...` | Supported; corpus observed in executable fixtures |
 | `Input` | console `INPUT ...` | Supported; corpus observed |
 | `LineInput` | `LINE INPUT ...` | Supported; corpus observed |

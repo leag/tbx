@@ -1195,7 +1195,13 @@ class _Gen:
             # Channel 15 keeps its own TAB/SPC column like a real LPT.
             return [
                 "tb_out = tb_lpt(); tb_ch = 15;",
-                *self.gen_print(ir.Print(items=s.items, newline=s.newline)),
+                *self.gen_print(
+                    ir.Print(
+                        items=s.items,
+                        newline=s.newline,
+                        commas=s.commas,
+                    )
+                ),
                 "tb_out = stdout; tb_ch = 0;",
             ]
         if isinstance(s, ir.PrintUsing):

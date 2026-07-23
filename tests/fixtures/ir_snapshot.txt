@@ -4427,22 +4427,22 @@ Close(num=1)
 End()
 
 ## t1_lprint
-Lprint(items=(Lit(value=5),), newline=True)
+Lprint(items=(Lit(value=5),), newline=True, commas=None)
 End()
 
 ## t1_lpstr
-Lprint(items=(StrLit(value='HELLO'),), newline=True)
+Lprint(items=(StrLit(value='HELLO'),), newline=True, commas=None)
 Assign(target=Var(name='A$'), value=StrLit(value='X'))
-Lprint(items=(Var(name='A$'), StrLit(value='Y')), newline=True)
-Lprint(items=(), newline=True)
+Lprint(items=(Var(name='A$'), StrLit(value='Y')), newline=True, commas=None)
+Lprint(items=(), newline=True, commas=None)
 End()
 
 ## t1_lpusing
 Assign(target=Var(name='A$'), value=StrLit(value='AB'))
 Assign(target=Var(name='B'), value=SingleLit(value=1.5))
-Lprint(items=(Var(name='A$'),), newline=False)
+Lprint(items=(Var(name='A$'),), newline=False, commas=None)
 PrintUsing(fmt=StrLit(value='##.##'), values=(Var(name='B'),), file=None, newline=False, lprint=True)
-Lprint(items=(Var(name='A$'),), newline=True)
+Lprint(items=(Var(name='A$'),), newline=True, commas=None)
 End()
 
 ## t1_lset
@@ -4451,8 +4451,8 @@ Lset(target=Var(name='A$'), source=StrLit(value='HI'))
 End()
 
 ## t1_ltab
-Lprint(items=(Call(name='TAB', args=(Lit(value=5),)), StrLit(value='X')), newline=True)
-Lprint(items=(Call(name='SPC', args=(Lit(value=3),)), StrLit(value='Y')), newline=True)
+Lprint(items=(Call(name='TAB', args=(Lit(value=5),)), StrLit(value='X')), newline=True, commas=None)
+Lprint(items=(Call(name='SPC', args=(Lit(value=3),)), StrLit(value='Y')), newline=True, commas=None)
 End()
 
 ## t1_meta0
@@ -10279,15 +10279,15 @@ Close(num=1)
 End()
 
 ## v10_t1_lprint
-Lprint(items=(Lit(value=5),), newline=True)
+Lprint(items=(Lit(value=5),), newline=True, commas=None)
 End()
 
 ## v10_t1_lpusing
 Assign(target=Var(name='A$'), value=StrLit(value='AB'))
 Assign(target=Var(name='B'), value=SingleLit(value=1.5))
-Lprint(items=(Var(name='A$'),), newline=False)
+Lprint(items=(Var(name='A$'),), newline=False, commas=None)
 PrintUsing(fmt=StrLit(value='##.##'), values=(Var(name='B'),), file=None, newline=False, lprint=True)
-Lprint(items=(Var(name='A$'),), newline=True)
+Lprint(items=(Var(name='A$'),), newline=True, commas=None)
 End()
 
 ## v10_t1_lset

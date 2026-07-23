@@ -682,11 +682,15 @@ class Write:
 
 @dataclass(frozen=True)
 class Lprint:
-    """LPRINT [item[; item...]][;] (item vector BCh, flush B9h) -- printer output;
-    semicolon-separated item vector like PRINT."""
+    """LPRINT [item[;|, item...]][;|,] -- printer output.
+
+    Item vectors are BCh/BFh, flush is B9h, and C2h advances to the next
+    print zone. ``commas`` has the same gap-aligned representation as Print.
+    """
 
     items: tuple[Expr, ...]
     newline: bool = True
+    commas: Any = None
 
 
 @dataclass(frozen=True)

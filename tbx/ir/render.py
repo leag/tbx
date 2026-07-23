@@ -426,9 +426,19 @@ def _us_console(s) -> str | None:
         return "WRITE" + pre + " " + ", ".join(unparse(i) for i in s.items)
     if isinstance(s, Lprint):
         txt = "LPRINT"
+        cs = s.commas or (0,) * (len(s.items) + 1)
         if s.items:
-            txt += " " + "; ".join(unparse(i) for i in s.items)
-        return txt + ("" if s.newline else ";")
+            parts = []
+            if cs[0]:
+                parts.append("," * cs[0] + " ")
+            for i, item in enumerate(s.items):
+                parts.append(unparse(item))
+                if i < len(s.items) - 1:
+                    parts.append("," * cs[i + 1] + " " if cs[i + 1] else "; ")
+            txt += " " + "".join(parts)
+        if s.newline:
+            return txt
+        return txt + ("," * cs[-1] if s.items and cs[-1] else ";")
     if isinstance(s, Cls):
         return "CLS"
     if isinstance(s, Locate):

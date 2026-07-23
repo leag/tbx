@@ -255,7 +255,11 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
         if isinstance(s, ir.Write):
             return ir.Write(tuple(walk(i) for i in s.items), file=s.file)
         if isinstance(s, ir.Lprint):
-            return ir.Lprint(tuple(walk(i) for i in s.items), newline=s.newline)
+            return ir.Lprint(
+                tuple(walk(i) for i in s.items),
+                newline=s.newline,
+                commas=s.commas,
+            )
         if isinstance(s, ir.Input):
             var = (
                 tuple(walk(v) for v in s.var)

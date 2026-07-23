@@ -456,7 +456,11 @@ fixture-backed closures.
   file.
 - [ ] raw `INT af` — 2 files; determine whether it is a string/array runtime vector
   by tracking stack and descriptor setup.
-- [ ] raw `INT c2` — 2 files.
+- [x] raw `INT c2` — LPRINT comma-zone advance. Canonical vector C2
+  (raw BC in TB 1.0) occurs between printer item vectors and is the exact
+  LPRINT sibling of console C1 / file C3. Wild billadd/prtguide/rs advance
+  to three distinct later gaps; `ir.Lprint` now preserves gap-aligned comma
+  counts like `ir.Print`.
 - [x] `INT EC sub ee` — `WIDTH device$, cols` (device string pushed, cols in
   ax; the handbook's own example literal, `WIDTH "LPT1:",130`, reproduced it
   on the first oracle probe). New `ir.Width.device` field (default `None`
