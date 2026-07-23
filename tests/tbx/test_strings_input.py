@@ -1,6 +1,7 @@
 """String variables + INPUT / LINE INPUT (including `INPUT "prompt", X$`, flags 0x0040)."""
 
 import os
+import pytest
 from tbx import ir
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -26,6 +27,14 @@ PAIRS = [
 
 def _exe(name):
     return open(os.path.join(_ROOT, "fixtures", "corpus", name), "rb").read()
+
+
+def test_integer_input_nop_sync_advances_cal():
+    from tbx import decode0
+
+    path = os.path.join(os.path.dirname(_ROOT), "wild", "hits", "cal.exe")
+    with pytest.raises(ValueError, match="unhandled materialized test at 0x15eed"):
+        decode0.decode_user_code(open(path, "rb").read())
 
 
 def test_decode_t1_str():

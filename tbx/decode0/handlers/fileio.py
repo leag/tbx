@@ -162,16 +162,34 @@ def data_read(state: DecodeState, op, addr, kind) -> bool:
             raise ValueError(f"numeric INPUT read without target at {addr:#x}")
         if nxt[1] in ("fstp", "fstp64"):  # SINGLE/DOUBLE variable target
             var, used = state.loc(nxt[2]), 2
-        elif (
-            nxt[1] == "fistp"
-            and nxt[2] == 0x2C
-            and [o[1] for o in state.ops[state.k + 2 : state.k + 5]]
-            == ["fwait", "movaxmem", "movm_ax"]
-        ):
-            var, used = (
-                state.loc(state.ops[state.k + 4][2]),
-                5,
-            )  # int target via bridge
+        elif nxt[1] == "fistp" and nxt[2] == 0x2C:
+            # INTEGER target via the x87-to-AX bridge. FWAIT has a calibrated
+            # two-NOP spelling in this runtime family; the terminal store may
+            # name a DGROUP scalar or a BP-relative LOCAL.
+            j = state.k + 2
+            if j < len(state.ops) and state.ops[j][1] == "fwait":
+                j += 1
+            elif (
+                j + 1 < len(state.ops)
+                and state.ops[j][1] == "nop"
+                and state.ops[j + 1][1] == "nop"
+            ):
+                j += 2
+            else:
+                raise ValueError(f"numeric INPUT integer bridge mismatch at {addr:#x}")
+            if (
+                j + 1 >= len(state.ops)
+                or state.ops[j][1:] != ("movaxmem", 0x2C)
+                or state.ops[j + 1][1] not in ("movm_ax", "movm_ax_bp")
+            ):
+                raise ValueError(f"numeric INPUT integer bridge mismatch at {addr:#x}")
+            store = state.ops[j + 1]
+            var = (
+                state.loc(store[2])
+                if store[1] == "movm_ax"
+                else state.loc_local(store[2])
+            )
+            used = j + 2 - state.k
         elif nxt[1] in ("fld", "fild"):
             # Array-element target (t1_inparr, wild schart.exe): the index
             # computation runs between the read and the element store, so the

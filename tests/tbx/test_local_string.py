@@ -36,6 +36,7 @@ def test_string_local_in_block_def_fn(stem):
     fn = program[0]
     assert isinstance(fn, ir.DefFn)
     assert fn.body[0] == ir.Local(("V0$()", "B", "C$", "D%", "E", "F"))
+    assert ir.Input(None, ir.Var("D%")) in fn.body
     assert ir.Dim("V0$", (ir.Var("D%"),)) in fn.body
     assert ir.Assign(ir.Var("C$"), ir.Call("UCASE$", (ir.Var("C$"),))) in fn.body
     assert ir.Erase("V0$") in fn.body
@@ -46,8 +47,8 @@ def test_string_local_in_block_def_fn(stem):
     [
         ("bmaster.exe", "materialization template mismatch at 0x8f0e"),
         ("ifi.exe", "materialization template mismatch at 0x8f0e"),
-        ("cleanup.exe", "numeric INPUT read without FSTP at 0xbbf1"),
-        ("reformat.exe", "numeric INPUT read without FSTP at 0xbbea"),
+        ("cleanup.exe", "LOCAL array free of unknown handle 0x42 at 0xbea7"),
+        ("reformat.exe", "LOCAL array free of unknown handle 0x42 at 0xbea0"),
     ],
 )
 def test_string_local_witnesses_advance(stem, next_gap):

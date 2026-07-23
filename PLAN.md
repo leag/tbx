@@ -935,6 +935,21 @@ fixing the intra-inline-IF gap above will also close it.
 
 ## Part III — Investigation history / handoff log
 
+### 2026-07-23 — INTEGER INPUT bridge variants
+
+Closed `numeric INPUT read without FSTP` in `cal.exe`,
+`cleanup.exe`, and `reformat.exe`. INTEGER console INPUT converts the
+runtime FP value through the same `fistp 2Ch` / `movaxmem 2Ch` bridge
+already used for DGROUP targets, but two calibrated variations were
+missing from this handler: the runtime's existing `nop; nop` alias for
+`fwait` (`cal.exe`), and a terminal `movm_ax_bp` store into an INTEGER
+LOCAL (the other two). The handler now accepts either synchronization
+spelling and resolves only the two scalar store forms, failing loudly
+on any other chain. Extended TB 1.0/1.1 `t1_fnlocalarrstr` witnesses
+INPUT into a block-local INTEGER and round-trips byte-for-byte.
+`cal.exe` advances to its existing materialized-test gap; the other two
+advance to a shared local-cleanup slot classification gap.
+
 ### 2026-07-23 — FWAIT-prefixed local FOR/NEXT tests
 
 Closed the later shared `testw_bp` gap in `cleanup.exe` and

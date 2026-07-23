@@ -20,9 +20,9 @@ def test_scan_testw_bp_is_exact():
 @pytest.mark.parametrize(
     ("stem", "next_gap"),
     [
-        ("cleanup.exe", "numeric INPUT read without FSTP at 0xbbf1"),
+        ("cleanup.exe", "LOCAL array free of unknown handle 0x42 at 0xbea7"),
         ("crossref.exe", "unhandled INT EC sub 38 at 0x11a63"),
-        ("reformat.exe", "numeric INPUT read without FSTP at 0xbbea"),
+        ("reformat.exe", "LOCAL array free of unknown handle 0x42 at 0xbea0"),
     ],
 )
 def test_fp_local_for_advances_wild_program(stem, next_gap):

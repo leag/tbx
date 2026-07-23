@@ -1,5 +1,6 @@
 10 DEF FNX(A)
 20 LOCAL S$(), B, T$, N%, I, ST
+27 INPUT N%
 28 N% = 2
 30 DIM S$(N%)
 40 S$(1) = "X"

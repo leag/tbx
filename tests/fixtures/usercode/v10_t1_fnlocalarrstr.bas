@@ -1,5 +1,6 @@
 10 DEF FNFN1(A)
   LOCAL V0$(), B, C$, D%, E, F
+  INPUT D%
   D% = 2
   DIM V0$(D%)
   V0$(1) = "X"
