@@ -174,8 +174,8 @@
     {
       "name": "wild/hits/bmaster.exe",
       "dialect": "1.0",
-      "message": "string BP push outside DEF FN at 0x8a88",
-      "signature": "string BP push outside DEF FN"
+      "message": "FSTP [bp+12] in DEF FN body at 0x8ad9",
+      "signature": "FSTP [bp+12] in DEF FN body"
     },
     {
       "name": "wild/hits/cal.exe",
@@ -198,8 +198,8 @@
     {
       "name": "wild/hits/cleanup.exe",
       "dialect": "1.1",
-      "message": "string BP argument store with empty stack at 0xa51a",
-      "signature": "string BP argument store with empty stack"
+      "message": "unhandled op far_ref_bp at 0xa55c",
+      "signature": "unhandled op far_ref_bp"
     },
     {
       "name": "wild/hits/crossref.exe",
@@ -270,8 +270,8 @@
     {
       "name": "wild/hits/ifi.exe",
       "dialect": "1.0",
-      "message": "string BP push outside DEF FN at 0x8a88",
-      "signature": "string BP push outside DEF FN"
+      "message": "FSTP [bp+12] in DEF FN body at 0x8ad9",
+      "signature": "FSTP [bp+12] in DEF FN body"
     },
     {
       "name": "wild/hits/kinder.exe",
@@ -408,8 +408,8 @@
     {
       "name": "wild/hits/reformat.exe",
       "dialect": "1.1",
-      "message": "string BP argument store with empty stack at 0xa513",
-      "signature": "string BP argument store with empty stack"
+      "message": "unhandled op far_ref_bp at 0xa555",
+      "signature": "unhandled op far_ref_bp"
     },
     {
       "name": "wild/hits/refund.exe",
@@ -539,6 +539,14 @@
       ]
     },
     {
+      "signature": "FSTP [bp+12] in DEF FN body",
+      "count": 2,
+      "files": [
+        "wild/hits/bmaster.exe",
+        "wild/hits/ifi.exe"
+      ]
+    },
+    {
       "signature": "ax,bx combine with empty regs",
       "count": 2,
       "files": [
@@ -571,27 +579,19 @@
       ]
     },
     {
-      "signature": "string BP argument store with empty stack",
-      "count": 2,
-      "files": [
-        "wild/hits/cleanup.exe",
-        "wild/hits/reformat.exe"
-      ]
-    },
-    {
-      "signature": "string BP push outside DEF FN",
-      "count": 2,
-      "files": [
-        "wild/hits/bmaster.exe",
-        "wild/hits/ifi.exe"
-      ]
-    },
-    {
       "signature": "unhandled byte c4",
       "count": 2,
       "files": [
         "wild/hits/CVT2TB.EXE",
         "wild/hits/pw.exe"
+      ]
+    },
+    {
+      "signature": "unhandled op far_ref_bp",
+      "count": 2,
+      "files": [
+        "wild/hits/cleanup.exe",
+        "wild/hits/reformat.exe"
       ]
     },
     {

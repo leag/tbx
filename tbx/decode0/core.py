@@ -241,6 +241,27 @@ class DecodeState:
             # name and every body reference to agree)
         raise ValueError(f"[bp+{bp_off}] outside the open LOCAL frame")
 
+    def loc_local_str(self, bp_off):
+        """Resolve a four-byte STRING LOCAL first exposed by INT 9E/A2.
+
+        LOCAL initialization zero-fills an untyped word range.  A string
+        access retypes the first two-word pair and removes its phantom high
+        word, mirroring fp_bp's first-touch SINGLE refinement.
+        """
+        if self.proc_frame is None:
+            raise ValueError(f"string [bp+{bp_off}] outside an open SUB frame")
+        locs = self.proc_frame["locals"]
+        if locs is None or bp_off not in locs:
+            raise ValueError(f"string [bp+{bp_off}] outside the open LOCAL frame")
+        name = locs[bp_off]
+        if name.endswith("%"):
+            name = name[:-1] + "$"
+            locs[bp_off] = name
+            locs.pop(bp_off + 2, None)
+        elif not name.endswith("$"):
+            raise ValueError(f"[bp+{bp_off}] already has non-string LOCAL type")
+        return ir.Var(name)
+
     def flush_pending(self):
         """A trailing-';' print has no flush vector: the chain is proven
         closed only when the next statement completes, so finalize lazily with
@@ -3424,17 +3445,41 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 state.k += 2
                 continue
             if nxt == ("spush_bp",):  # push string param [bp+si]: DEF FN body
-                if state.fn_frame is None:
+                if state.proc_frame is not None:
+                    state.sstack.append(state.loc_local_str(d))
+                elif state.fn_frame is None:
                     raise ValueError(
                         f"string BP push outside DEF FN at {addr:#x}"
-                    )  # SUB-param shape remains fail-loud (wild bmaster/ifi)
-                state.fn_frame["param_offs"].add(d)
-                state.fn_frame["str_offs"].add(d)
-                state.sstack.append(ir.Var(f"P{d:02X}$"))
+                    )
+                else:
+                    state.fn_frame["param_offs"].add(d)
+                    state.fn_frame["str_offs"].add(d)
+                    state.sstack.append(ir.Var(f"P{d:02X}$"))
                 state.k += 2
                 continue
             if nxt == ("strassign_bp",):  # pop-store string to [bp+si]
-                if state.fn_frame is not None:  # FN result desc at [bp+0]
+                if state.proc_frame is not None:
+                    ref = state.loc_local_str(d)
+                    if state.pend_input is not None:
+                        state._input_target(ref, is_str=True)
+                    elif state.sstack and state.sstack[-1] is _FREAD:
+                        state.sstack.pop()
+                        state._fread_target(ref)
+                    elif state.pend_getstr is not None:
+                        num, count = state.pend_getstr
+                        state.pend_getstr = None
+                        state.put(ir.GetString(num, count, ref), state.cur)
+                    elif state.sstack and state.sstack[-1] is _READDATA:
+                        state.sstack.pop()
+                        state._readdata_target(ref)
+                    elif not state.sstack:
+                        raise ValueError(
+                            f"string LOCAL store with empty stack at {addr:#x}"
+                        )
+                    else:
+                        state.put(ir.Assign(ref, state.sstack.pop()), state.cur)
+                    state.cur = None
+                elif state.fn_frame is not None:  # FN result desc at [bp+0]
                     if d != 0:
                         raise ValueError(
                             f"string store to [bp+{d}] in DEF FN body at {addr:#x}"

@@ -1,0 +1,20 @@
+# t1_localstr dialect=1.1 start=08700
+08703:sub_sp:4
+08706:far_call:34577
+0870B:end
+0870E:jmp:34629
+08711:proc_enter
+08714:local_init:2:6
+08728:movsi:292
+0872B:rt:156
+0872D:movsi:6
+08730:strassign_bp
+08732:movsi:6
+08735:spush_bp
+08737:rt:190
+08739:rt:184
+0873B:arg_ref:6
+0873F:str_temp_free
+08741:proc_ret:4
+08745:epilogue
+# commits

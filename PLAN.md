@@ -506,6 +506,13 @@ fixture-backed closures.
   `MOV ES,[BP+disp16]`) and the exact DX/SI index spill around a string
   comparison are covered as well. Both programs advance together past this
   entire family and `WIDTH #` to the DGROUP layout solver.
+- [x] STRING `LOCAL` variables inside a SUB. The LOCAL prologue initially
+  zero-fills an untyped word range; first BP-relative string store/push
+  (`INT A2`/`INT 9E`) retypes the two-word descriptor as `$` and removes its
+  phantom high word, parallel to SINGLE-local first-touch inference. Console
+  INPUT, INPUT#, GET$, READ, expression assignment, and reads share the
+  existing string-target machinery. `t1_localstr`/`v10_t1_localstr` are
+  byte-exact; wild bmaster/ifi/cleanup/reformat all advance to later gaps.
 
 - [ ] FP `dc/04` — 2 files; compare memory operand addressing with supported x87
   arithmetic forms and add a fixture for the exact data type.
