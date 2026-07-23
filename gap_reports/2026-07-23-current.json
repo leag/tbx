@@ -198,14 +198,14 @@
     {
       "name": "wild/hits/cleanup.exe",
       "dialect": "1.1",
-      "message": "unhandled INT 94 at 0xa5bd",
-      "signature": "unhandled INT 94"
+      "message": "unhandled INT EC sub f0 at 0xbcb2",
+      "signature": "unhandled INT EC sub f0"
     },
     {
       "name": "wild/hits/crossref.exe",
       "dialect": "1.1",
-      "message": "unhandled INT 94 at 0xe0df",
-      "signature": "unhandled INT 94"
+      "message": "unhandled INT EC sub 38 at 0x11a63",
+      "signature": "unhandled INT EC sub 38"
     },
     {
       "name": "wild/hits/elec87.exe",
@@ -348,8 +348,8 @@
     {
       "name": "wild/hits/nvginst.exe",
       "dialect": "1.1",
-      "message": "unhandled byte f7 at 0xbef6",
-      "signature": "unhandled byte f7"
+      "message": "bad string descriptor at [0x005c]: 0x1c94",
+      "signature": "bad string descriptor at [0x005c]: 0x1c94"
     },
     {
       "name": "wild/hits/pcdcfile.exe",
@@ -408,8 +408,8 @@
     {
       "name": "wild/hits/reformat.exe",
       "dialect": "1.1",
-      "message": "unhandled INT 94 at 0xa5b6",
-      "signature": "unhandled INT 94"
+      "message": "unhandled INT EC sub f0 at 0xbcab",
+      "signature": "unhandled INT EC sub f0"
     },
     {
       "name": "wild/hits/refund.exe",
@@ -486,16 +486,17 @@
     {
       "name": "wild/hits/ziptest.exe",
       "dialect": "1.1",
-      "message": "unhandled byte f7 at 0xa5c6",
-      "signature": "unhandled byte f7"
+      "message": "42193",
+      "signature": "42193"
     }
   ],
   "groups": [
     {
       "signature": "unhandled INT EC sub 38",
-      "count": 5,
+      "count": 6,
       "files": [
         "wild/hits/catalog.exe",
+        "wild/hits/crossref.exe",
         "wild/hits/football.exe",
         "wild/hits/refund.exe",
         "wild/hits/rs.exe",
@@ -528,15 +529,6 @@
         "wild/hits/grdscn.exe",
         "wild/hits/kinder.exe",
         "wild/hits/wb.exe"
-      ]
-    },
-    {
-      "signature": "unhandled INT 94",
-      "count": 3,
-      "files": [
-        "wild/hits/cleanup.exe",
-        "wild/hits/crossref.exe",
-        "wild/hits/reformat.exe"
       ]
     },
     {
@@ -588,6 +580,14 @@
       ]
     },
     {
+      "signature": "unhandled INT EC sub f0",
+      "count": 2,
+      "files": [
+        "wild/hits/cleanup.exe",
+        "wild/hits/reformat.exe"
+      ]
+    },
+    {
       "signature": "unhandled byte c4",
       "count": 2,
       "files": [
@@ -596,18 +596,17 @@
       ]
     },
     {
-      "signature": "unhandled byte f7",
-      "count": 2,
-      "files": [
-        "wild/hits/nvginst.exe",
-        "wild/hits/ziptest.exe"
-      ]
-    },
-    {
       "signature": "'idx'",
       "count": 1,
       "files": [
         "wild/hits/morcalc.exe"
+      ]
+    },
+    {
+      "signature": "42193",
+      "count": 1,
+      "files": [
+        "wild/hits/ziptest.exe"
       ]
     },
     {
@@ -622,6 +621,13 @@
       "count": 1,
       "files": [
         "wild/hits/file.exe"
+      ]
+    },
+    {
+      "signature": "bad string descriptor at [0x005c]: 0x1c94",
+      "count": 1,
+      "files": [
+        "wild/hits/nvginst.exe"
       ]
     },
     {

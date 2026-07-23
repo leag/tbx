@@ -491,6 +491,21 @@ fixture-backed closures.
 
 #### Wave 2 — repeated instruction and x87 templates
 
+- [x] `INT 94` / `INT 96` — Bounds-toggle checks for rank-1 SUB-local
+  dynamic arrays. Vector 94 selects the BP-relative descriptor; vector 96's
+  operand must be exactly descriptor base + 6 and transfers the checked index
+  into SI. The pair is semantic-free at source level, like DGROUP vectors
+  91/93. Wild cleanup/crossref/reformat all advance to the same independently
+  documented FP-LOCAL/testw_bp gap (`F7 46 ... 00 80`).
+- [x] Large SUB-local frame encodings shared by wild `cleanup.exe` and
+  `reformat.exe`. `SUB SP,imm16` (`81 EC`) is the wide sibling of the existing
+  call/local-frame allocation; INTEGER loads, stores, literal initialization,
+  add/compare, and variable-step sign tests use BP+disp16 ModR/M forms once
+  offsets exceed 127. SINGLE LOCAL `FLD`/`FSTP`/`FADD`/`FCOMP` use the same
+  wide displacement and feed the existing typed-local and FOR lifters.
+  Both programs advance together past the entire family to a new, distinct
+  runtime gap: `INT EC sub F0`.
+
 - [ ] FP `dc/04` — 2 files; compare memory operand addressing with supported x87
   arithmetic forms and add a fixture for the exact data type.
 - [ ] FP `da/1c` — 2 files; determine whether it is integer multiply/compare or a
@@ -2515,7 +2530,21 @@ via `uv run python tbx/tools/scan_wild.py wild/hits`, still 72 TB-but-fail):
 | 1 | "codeless DO...LOOP WHILE/UNTIL ... unwitnessed" (vhfprop) | unchanged, see "vhfprop status" below |
 | singles | see scan output | untouched; freshest one is metric.exe's new stop, "error-trap line table has a codeless-statement entry but no DATA pool was found (unsupported zero-length-statement shape)", surfaced immediately by this session's nested-FOR-loop fix, not yet investigated |
 
-### Gap: FP-typed LOCAL variables are unsupported in SUB bodies at all (ziptest.exe), INVESTIGATED, NOT LANDED (2026-07-21)
+### Gap: FP-typed LOCAL variables in SUB bodies (ziptest.exe), CLOSED 2026-07-23
+
+The historical investigation below was completed: `fp_bp` now infers a
+SINGLE LOCAL from its first m32 access, removes the second zero-fill word,
+and supports loads/stores/folds/comparisons inside SUBs. New `testw_bp`
+mirrors the DGROUP sign-word test, and `_loose_for_header` / `_lift_next`
+accept the BP-relative `fld_bp`/`fcomp_bp` pair. The NEXT increment check
+parses both `Vxxxx` and `Lxx` placeholder names. Wild ziptest plus the three
+programs newly advanced by the 94/96 closure all pass this template:
+cleanup/reformat reach a shared later SCREEN-tag gap, crossref reaches EC/38,
+and ziptest reaches a separate forward-DEF-FN call-resolution gap.
+
+The text below is retained as the evidence and design history that led to the
+closure; statements saying the work was not landed describe the 2026-07-21
+state and are superseded by the paragraph above.
 
 ziptest.exe fails with `unhandled byte f7 at 0xa5c6`, byte pattern `f7 46
 0e 00 80` = `TEST word [bp+0Eh], 8000h`. At first glance this looks like

@@ -195,6 +195,16 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         ops.append((p, "testw", disp, imm))
         p += 6
         return p
+    if b == 0xF7 and exe[p + 1] == 0x46:  # BP-relative SINGLE LOCAL
+        disp, imm = struct.unpack_from("<bH", exe, p + 2)
+        ops.append((p, "testw_bp", disp, imm))  # variable-STEP sign word
+        p += 5  # (ziptest/cleanup/crossref/reformat)
+        return p
+    if b == 0xF7 and exe[p + 1] == 0x86:  # same sign-word test for a LOCAL
+        disp, imm = struct.unpack_from("<HH", exe, p + 2)
+        ops.append((p, "testw_bp", disp, imm))
+        p += 6  # beyond disp8 range (wild cleanup/reformat)
+        return p
     if b == 0xE8:  # call near rel16 (GOSUB); same 64KB wrap as jmp (t1_bigjmp)
         rel = struct.unpack_from("<h", exe, p + 1)[0]
         ops.append((p, "call", start + ((p + 3 + rel - start) % 0x10000)))
@@ -344,6 +354,10 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
     if b == 0x83 and exe[p + 1] == 0xEC:  # sub sp,imm8 (allocate temps)
         ops.append((p, "sub_sp", exe[p + 2]))
         p += 3
+        return p
+    if b == 0x81 and exe[p + 1] == 0xEC:  # sub sp,imm16: the same call-temp
+        ops.append((p, "sub_sp", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # allocation when its size exceeds 127 (wild cleanup/reformat)
         return p
     if b == 0x83 and exe[p + 1] == 0xC4:  # add sp,imm8 (free temps)
         ops.append((p, "add_sp", exe[p + 2]))
@@ -523,6 +537,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "addax_m", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4
         return p
+    if b == 0x03 and exe[p + 1] == 0x86:  # add ax,[bp+disp16]: large LOCAL
+        ops.append((p, "addax_bp", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # integer left-fold (wild cleanup/reformat)
+        return p
     if b == 0xF7 and exe[p + 1] == 0xD8:  # neg ax (int subtraction)
         ops.append((p, "negax"))
         p += 2
@@ -546,6 +564,11 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         bp_off, v16 = struct.unpack_from("<bh", exe, p + 2)
         ops.append((p, "mov_bp_imm", bp_off, v16))
         p += 5
+        return p
+    if b == 0xC7 and exe[p + 1] == 0x86:  # mov word [bp+disp16], imm16:
+        bp_off, v16 = struct.unpack_from("<Hh", exe, p + 2)
+        ops.append((p, "mov_bp_imm", bp_off, v16))
+        p += 6  # LOCAL beyond disp8 range (wild cleanup/reformat)
         return p
     if b == 0x89 and exe[p + 1] == 0x06:  # mov [disp16], ax (int store)
         ops.append((p, "movm_ax", struct.unpack_from("<H", exe, p + 2)[0]))
@@ -591,6 +614,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
     if b == 0x89 and exe[p + 1] == 0x46:  # mov [bp+disp8], ax: LOCAL int store
         ops.append((p, "movm_ax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
         p += 3  # (witnessed t1_local2)
+        return p
+    if b == 0x89 and exe[p + 1] == 0x86:  # mov [bp+disp16],ax: large LOCAL
+        ops.append((p, "movm_ax_bp", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # store (wild cleanup/reformat)
         return p
     if b == 0x01 and exe[p + 1] == 0x46:  # add [bp+disp8], ax: LOCAL int
         ops.append((p, "addm_ax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
@@ -774,6 +801,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "cmpax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
         p += 3  # against a LOCAL int (witnessed q_loccmp)
         return p
+    if b == 0x3B and exe[p + 1] == 0x86:  # cmp ax,[bp+disp16]: large LOCAL
+        ops.append((p, "cmpax_bp", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # relational operand (wild cleanup/reformat)
+        return p
     if b == 0x3B and exe[p + 1] == 0xC3:  # cmp ax, bx: integer relational where
         ops.append((p, "cmpax_bx"))  # both sides are ax-computed -- source RHS
         p += 2  # evaluates first and shuttles to bx (witnessed t1_cmpax)
@@ -875,6 +906,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
     if b == 0x8B and exe[p + 1] == 0x46:  # mov ax, [bp+disp8]: LOCAL int read
         ops.append((p, "movax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
         p += 3  # (t1_byref1)
+        return p
+    if b == 0x8B and exe[p + 1] == 0x86:  # mov ax,[bp+disp16]: large LOCAL
+        ops.append((p, "movax_bp", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # read (wild cleanup/reformat)
         return p
     if b == 0x26 and exe[p + 1] == 0x8B and exe[p + 2] == 0x07:  # mov ax, es:[bx]:
         ops.append((p, "far_movax_bx"))  # SWAP-of-array-elements tail: read the
@@ -989,6 +1024,14 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
         # replacement for `mov si,ax`, so it lifts exactly like movsiax (F3.4).
         ops.append((p, "bchk_idx", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4
+        return p
+    if vec == 0x94:  # Bounds descriptor setup for a SUB-local dynamic array:
+        ops.append((p, "bchk_base_bp", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # BP-relative sibling of DGROUP vector 91
+        return p
+    if vec == 0x96:  # checked index + SI transfer for that LOCAL descriptor
+        ops.append((p, "bchk_idx_bp", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # operand is descriptor base + 6 (cleanup/crossref/reformat)
         return p
     if vec == 0x97:  # TRON trace hook: CD 97 <lineno u16>,
         ops.append(
@@ -1635,7 +1678,13 @@ def _scan_pass(
                 continue
             if sub == 0xC6:  # SCREEN m[,b][,a][,v]: trailing presence mask
                 # 08 mode / 04 burst / 02 apage / 01 vpage (t1_screenb/p)
-                if p + 3 >= len(exe) or exe[p + 3] not in (0x08, 0x0C, 0x0E, 0x0F):
+                if p + 3 >= len(exe) or exe[p + 3] not in (
+                    0x03,  # SCREEN ,,apage,vpage (cleanup/reformat)
+                    0x08,
+                    0x0C,
+                    0x0E,
+                    0x0F,
+                ):
                     raise ValueError(f"SCREEN bad tag at {p:#x}")
                 ops.append((p, "screen", exe[p + 3]))
                 p += 4
@@ -1964,6 +2013,28 @@ def _scan_pass(
                     ops.append((p, pre + "fold_n_bp", _FOLD_OPS_N[reg], bp_off))
                     p = mo + 2
                     continue
+            if mod == 2 and rm == 6 and (esc, reg) in ((0xD9, 0), (0xD9, 3)):
+                # fld/fstp dword [bp+disp16]: SINGLE LOCAL beyond the signed
+                # disp8 range (both forms witnessed by cleanup.exe/reformat.exe).
+                bp_off = struct.unpack_from("<H", exe, mo + 1)[0]
+                kind = "fld_bp" if reg == 0 else "fstp_bp"
+                ops.append((p, pre + kind, bp_off))
+                p = mo + 3
+                continue
+            if mod == 2 and rm == 6 and (esc, reg) == (0xD8, 0):
+                # fadd dword [bp+disp16]: large SINGLE LOCAL as the left
+                # operand (wild cleanup.exe/reformat.exe).
+                bp_off = struct.unpack_from("<H", exe, mo + 1)[0]
+                ops.append((p, pre + "fold_bp", "+", bp_off))
+                p = mo + 3
+                continue
+            if mod == 2 and rm == 6 and (esc, reg) == (0xD8, 3):
+                # fcomp dword [bp+disp16]: compare against a large SINGLE
+                # LOCAL (wild cleanup.exe/reformat.exe variable-step FOR).
+                bp_off = struct.unpack_from("<H", exe, mo + 1)[0]
+                ops.append((p, pre + "fcomp_bp", bp_off))
+                p = mo + 3
+                continue
             raise ValueError(
                 f"unhandled FP op esc={esc:02x} modrm={modrm:02x} at {p:#x}"
             )

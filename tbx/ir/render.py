@@ -414,9 +414,7 @@ def _us_graphics(s) -> str | None:
         args = [s.mode, s.burst, s.apage, s.vpage]
         while args and args[-1] is None:
             args.pop()
-        if any(a is None for a in args):
-            raise ValueError("SCREEN argument gap (no witnessed spelling)")
-        return "SCREEN " + ",".join(unparse(a) for a in args)
+        return "SCREEN " + ",".join("" if a is None else unparse(a) for a in args)
 
 
 def _us_console(s) -> str | None:

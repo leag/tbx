@@ -222,9 +222,28 @@ def segments(state: DecodeState, op, addr, kind) -> bool:
 
 
 def bounds(state: DecodeState, op, addr, kind) -> bool:
-    """Dispatch family: bchk0, bchk_span."""
+    """Dispatch family: bchk0, bchk_span, bchk_base_bp, bchk_idx_bp."""
     if kind == "bchk0":  # Bounds: xor si,si starts a checked index; reset the
         state.bchk_subs = []  # pending non-final subscripts (F3.4/F3.5)
+        state.bchk_bp = None
+        state.k += 1
+        return True
+    if kind == "bchk_base_bp":
+        if (
+            state.proc_frame is None
+            or op[2] not in state.r_arrs
+            or state.r_arrs[op[2]]["rank"] != 1
+        ):
+            raise ValueError(f"LOCAL bounds base mismatch at {addr:#x}")
+        state.bchk_bp = op[2]
+        state.k += 1
+        return True
+    if kind == "bchk_idx_bp":
+        if state.bchk_bp is None or op[2] != state.bchk_bp + 6:
+            raise ValueError(f"LOCAL bounds index mismatch at {addr:#x}")
+        state.si = state.ax
+        state.ax = None
+        state.bchk_bp = None
         state.k += 1
         return True
     if kind == "bchk_span":  # Bounds 2-D: a range-checked non-final subscript

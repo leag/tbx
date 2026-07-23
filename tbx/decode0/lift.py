@@ -40,7 +40,7 @@ def _loose_for_header(ops, k, stmts, vdisp):
         return None
     if any(s.target.name.endswith("$") for s in (lim_s, stp_s, init_s)):
         return None
-    if k >= len(ops) or ops[k][1] != "testw":
+    if k >= len(ops) or ops[k][1] not in ("testw", "testw_bp"):
         return None
     test, jcc, skip = ops[k : k + 3]
     if jcc[1] != "jcc" or jcc[2] != 0x74 or skip[1] != "jmp":
@@ -49,7 +49,12 @@ def _loose_for_header(ops, k, stmts, vdisp):
         return None
     first_fld, first_cmp, first_sw = ops[k + 3 : k + 6]
     pair = (first_fld[1], first_cmp[1])
-    if pair not in (("fld", "fcomp"), ("fld64", "fcomp64")) or first_sw[1] != "fstsw":
+    pairs = (
+        (("fld_bp", "fcomp_bp"),)
+        if test[1] == "testw_bp"
+        else (("fld", "fcomp"), ("fld64", "fcomp64"))
+    )
+    if pair not in pairs or first_sw[1] != "fstsw":
         return None
     if jcc[3] != first_fld[0]:
         return None
@@ -146,18 +151,23 @@ def _lift_next(ops, k, fors, stmts, addrs, exit_folds) -> int:
             f"NEXT template mismatch at {o[0]:#x}: {o} != jcc {cc:#x} BODY"
         )
 
+    test_kind = ops[k][1]
     wide = ops[k + 3][1] == "fld64"
     i = expect(
         k,
         [
-            ("testw", stp + (6 if wide else 2), 0x8000),
+            (test_kind, stp + (6 if wide else 2), 0x8000),
             ("jcc", 0x74, None),
             ("jmp", None),
         ],
     )
     fld_kind = ops[i][1]
-    cmp_kind = "fcomp64" if fld_kind == "fld64" else "fcomp"
-    if fld_kind not in ("fld", "fld64"):
+    cmp_kind = {
+        "fld": "fcomp",
+        "fld64": "fcomp64",
+        "fld_bp": "fcomp_bp",
+    }.get(fld_kind)
+    if cmp_kind is None:
         raise ValueError(f"NEXT template: unexpected limit load {ops[i]}")
     i = expect(i, [(fld_kind, lim), (cmp_kind, v), ("fstsw",)])
     i = jcc_body(i, 0x73, 0x72)
@@ -171,7 +181,7 @@ def _lift_next(ops, k, fors, stmts, addrs, exit_folds) -> int:
     inc = stmts[-1]
 
     def disp(x):
-        return int(x.name[1:5], 16)
+        return int(x.name[1:].rstrip("%!#&"), 16)
 
     if not (
         isinstance(inc, ir.Assign)

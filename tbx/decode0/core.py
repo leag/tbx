@@ -62,6 +62,7 @@ class DecodeState:
     arrs: Any = None
     ax: Any = None
     bchk_subs: Any = None
+    bchk_bp: Any = None
     bx: Any = None
     cases: Any = None
     cc_hooks: Any = None
@@ -1964,6 +1965,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
     # generic register assignment maintain a separate provenance flag.
     state.reg_logical_results = []
     state.bchk_subs = []  # Bounds: pending non-final subscripts (F3.5)
+    state.bchk_bp = None  # Bounds: open BP-relative LOCAL-array descriptor
     state.pend_bool = None  # compound-IF first term awaiting its tail
     state.pend_bool_outer = None  # enclosing accumulator awaiting a deferred
     # inner mixed-precedence group's own close (A OR B AND C's "A OR")
@@ -2779,7 +2781,11 @@ def decode_user_code(exe: bytes) -> list[Any]:
             state.pend_arg = None
             state.k += 1
             continue
-        if kind == "testw" and state.fors and addr == state.fors[-1]["test"]:
+        if (
+            kind in ("testw", "testw_bp")
+            and state.fors
+            and addr == state.fors[-1]["test"]
+        ):
             state.k = _lift_next(
                 state.ops,
                 state.k,

@@ -1,6 +1,6 @@
 # Turbo BASIC decoder statement support
 
-Status: 2026-07-20
+Status: 2026-07-23
 
 This is the statement-level support matrix for `tbx.decode0`. “Supported” means
 that the decoder has a typed IR representation and an emitter form for the
@@ -56,7 +56,7 @@ known source subset does not provide a direct source-level witness for them.
 | `IfGoto` | `IF condition THEN line` | Supported; corpus observed |
 | `IfInline` | `IF condition THEN statement[:statement...]` | Supported; corpus observed |
 | `IfBlock` | `IF ... THEN` / `ELSEIF` / `ELSE` / `END IF` | Supported; corpus observed |
-| `For` | `FOR v = init TO limit [STEP step]` | Supported; corpus observed |
+| `For` | `FOR v = init TO limit [STEP step]` | Supported; corpus observed, including variable-step SINGLE locals in large SUB frames |
 | `NextStmt` | `NEXT [v]` | Supported; corpus observed |
 | `Gosub` | `GOSUB line` | Supported; corpus observed |
 | `Return` | `RETURN` | Supported; corpus observed |
@@ -86,7 +86,7 @@ known source subset does not provide a direct source-level witness for them.
 | `FnResult` | assignment to a multi-line `DEF FN` result | Internal procedure-body node; emitted as source |
 | `Inline` | `$INLINE byte, ...` inside a `SUB` | Supported; corpus observed |
 | `Shared` | `SHARED ...` inside a procedure | Supported; corpus observed |
-| `Local` | `LOCAL ...` inside a `SUB` | Supported; corpus observed |
+| `Local` | `LOCAL ...` inside a `SUB` | Supported for INTEGER, SINGLE, large BP+disp16 frames, and witnessed local dynamic arrays; c0 remains fail-loud |
 | `Common` | `COMMON ...` | Supported; corpus observed |
 
 ### Console, printer, and formatting
@@ -158,7 +158,7 @@ known source subset does not provide a direct source-level witness for them.
 
 | IR node | Turbo BASIC form | Status |
 |---|---|---|
-| `Screen` | `SCREEN mode[, ...]` | Supported; corpus observed |
+| `Screen` | `SCREEN mode[, ...]` | Supported; corpus observed, including omitted mode/page arguments (`SCREEN ,,0,0`) |
 | `Pset` | `PSET` / `PRESET` | Supported; corpus observed |
 | `LineStmt` | `LINE ...` | Supported; corpus observed |
 | `Circle` | `CIRCLE ...` | Supported; corpus observed |

@@ -1066,6 +1066,8 @@ class _Gen:
             for pg in (s.apage, s.vpage):
                 if pg is not None and pg != ir.Lit(0):
                     raise _Unsupported("SCREEN page argument (single-page surrogate)")
+            if s.mode is None:
+                return []  # SCREEN ,,0,0 only selects the already-active page
             return [f"tb_screen({self.num(s.mode)});"]
         if isinstance(s, ir.Pset):
             hc, c = self.opt(s.color)

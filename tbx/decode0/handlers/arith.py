@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 
 def int_alu(state: DecodeState, op, addr, kind) -> bool:
-    """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addsiax, subax_m, imul_m, imul_bp, movax_bp, idivbx, cmpax_m, inc_m, dec_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
+    """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addax_bp, addsiax, subax_m, imul_m, imul_bp, movax_bp, idivbx, cmpax_m, inc_m, dec_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
     if kind == "movdx_m":  # IMP left operand -> dx
         state.dx = state.loc(op[2])
         state.k += 1
@@ -132,6 +132,14 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             # const pool (witnessed t1_addpool) -- same fallback fpval/ifold
             # already have.
             mem = state.pool_lit(op[2])
+        if isinstance(state.ax, ir.Neg):
+            state.ax = ir.BinOp("-", mem, _rgrp("-", state.ax.operand))
+        else:
+            state.ax = ir.BinOp("+", mem, _rgrp("+", state.ax))
+        state.k += 1
+        return True
+    if kind == "addax_bp":  # large-LOCAL sibling of addax_m
+        mem = state.loc_local(op[2])
         if isinstance(state.ax, ir.Neg):
             state.ax = ir.BinOp("-", mem, _rgrp("-", state.ax.operand))
         else:
