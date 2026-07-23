@@ -234,6 +234,41 @@ combination with correct syntax, and try ON-ERROR-implicit-cleanup paths
 more thoroughly (a GOSUB'd error handler that erases/touches two arrays
 in sequence, rather than a plain top-level `ON ERROR GOTO`).
 
+**DIAGNOSED, NOT ATTEMPTED (same day, later tick): `jump target ... is not
+a statement start` (state.exe/state87.exe, identical target `0x1300d`;
+secure.exe's OWN occurrence at a different target is a separate,
+untraced case — don't assume same root cause).** This is NOT a
+byte-vocabulary gap: `decode0._scan` completes cleanly; the failure is in
+`lift._resolve_targets`, well after scanning. Traced precisely via a
+`core._resolve_targets` monkeypatch (import the function BY NAME into
+`core.py`, so patching `lift._resolve_targets` directly has no effect —
+patch `core._resolve_targets` instead): the unresolved statement is a
+plain `IfGoto(cond=..., target=('addr', 77837))`, and address `77837`
+(=`0x1300d`) genuinely IS a real op boundary (`movsi,1630` starting a new
+statement) AND is present in `stmt_addr` (the id(stmt)->addr map used to
+resolve targets INSIDE a SUB/DEF FN body via `ir.BodyLine`) — so the
+target statement lives inside a SUB or DEF FN, and the jump reaching it
+is presumably from within the SAME procedure (TB forbids jumping into a
+procedure from outside, per the handbook's DEF FN section). The failure
+is that `_resolve_targets`'s `map_body` never adds this address to
+`index` despite having it in `stmt_addr` — `map_body`'s own docstring
+already documents the exact limitation: flat body counting breaks past
+any multi-line statement, and its ONE recursion exception (a nested
+single-arm, no-else `IfBlock`) was witnessed going only ONE level deep
+(gap 51, inv87.exe). state.exe's SUB apparently nests deeper than that,
+or wraps the numbered statement in a construct (a loop, a multi-arm
+`IfBlock`, `SELECT CASE`, ...) `map_body` doesn't walk into at all.
+**Deliberately not attempted this session**: unlike every closure above
+(purely additive new vocabulary ops, zero risk to already-passing
+fixtures), a change to `map_body`'s line-numbering recursion is a
+control-flow change that could silently miscompile OTHER SUB/DEF FN
+bodies with numbered interior lines if the physical-line count assumption
+is wrong for the new case. Needs a dedicated session: first hand-trace
+state.exe's actual SUB source shape (what wraps the CHR$(8)-comparison
+statement at 77837 — probably visible via `cfgview`/manual disassembly
+around 77837 and its containing `proc_enter`), THEN build an oracle probe
+reproducing that exact nesting shape BEFORE touching `map_body`.
+
 Machine-readable runtime-revision classifications are persisted separately from
 generated scan checkpoints in `gap_reports/runtime-revision-assessments.json`.
 Candidate status is not decoder authorization; each entry records its promotion
