@@ -84,3 +84,35 @@ Corpus naming (`tests/fixtures/corpus/`): `.exe` files are compiled fixtures, `.
 
 - Ruff ignores E701/E702 (one-line compound statements are used) and E741; `ty` runs in strict-ish mode (`missing-type-argument` and `possibly-unresolved-reference` are errors). Both must pass clean.
 - Module and function docstrings carry the byte-level rationale (encodings, layout rules, which fixture witnessed a behavior) — keep that habit when touching decoder code; cite the witnessing fixture by stem.
+
+## Oracle probes that compile but do not decode
+
+`wild/hits/` and `wild/probes/` are both gap-tally corpora consumed by
+`tbx/tools/scan_wild.py`-style tooling, but they hold different things and
+must not be mixed:
+
+- `wild/hits/` is programs *found in the wild* (currently the PC-SIG 8th-edition
+  scan) — third-party shareware, copyrighted, gitignored, **never committed**.
+- `wild/probes/` is programs *you authored and had the oracle compile* while
+  investigating a gap. These are your own source, not copyrighted, and are
+  **tracked in git** — commit them like any other fixture.
+
+When investigating a decoder gap with the Turbo Basic oracle, any probe that:
+
+1. compiles successfully, and
+2. fails during TBX scanning, decoding, lifting, or rendering
+
+must be promoted to `wild/probes/` immediately, under a unique, descriptive
+stem (e.g. `probe_paletteusing_var.exe`). Compilation failure is not
+sufficient for promotion: leave rejected probes in temporary working storage
+and record them only as negative evidence when they materially narrow the
+investigation.
+
+Record the probe's source shape, dialect, and exact first failure in `PLAN.md`
+or the relevant investigation log. Keep the `.bas` source alongside the
+compiled `.exe` in `wild/probes/` (or in temporary working storage if not yet
+promoted) so the probe is reproducible without re-deriving it from prose.
+
+Promotion to `tests/fixtures/corpus/` still requires the normal calibration
+rule: identify the construct, preserve fail-loud behavior for unknown shapes,
+and verify the fixture's byte-exact round trip with the oracle.
