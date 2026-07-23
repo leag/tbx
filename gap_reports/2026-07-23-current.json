@@ -198,8 +198,8 @@
     {
       "name": "wild/hits/cleanup.exe",
       "dialect": "1.1",
-      "message": "LOCAL array free of unknown handle 0x42 at 0xbea7",
-      "signature": "LOCAL array free of unknown handle 0x42"
+      "message": "used LOCAL array descriptor cells at 0xbf77",
+      "signature": "used LOCAL array descriptor cells"
     },
     {
       "name": "wild/hits/crossref.exe",
@@ -408,8 +408,8 @@
     {
       "name": "wild/hits/reformat.exe",
       "dialect": "1.1",
-      "message": "LOCAL array free of unknown handle 0x42 at 0xbea0",
-      "signature": "LOCAL array free of unknown handle 0x42"
+      "message": "used LOCAL array descriptor cells at 0xbf6f",
+      "signature": "used LOCAL array descriptor cells"
     },
     {
       "name": "wild/hits/refund.exe",
@@ -541,14 +541,6 @@
       ]
     },
     {
-      "signature": "LOCAL array free of unknown handle 0x42",
-      "count": 2,
-      "files": [
-        "wild/hits/cleanup.exe",
-        "wild/hits/reformat.exe"
-      ]
-    },
-    {
       "signature": "ax,bx combine with empty regs",
       "count": 2,
       "files": [
@@ -594,6 +586,14 @@
       "files": [
         "wild/hits/cal.exe",
         "wild/hits/cal87.exe"
+      ]
+    },
+    {
+      "signature": "used LOCAL array descriptor cells",
+      "count": 2,
+      "files": [
+        "wild/hits/cleanup.exe",
+        "wild/hits/reformat.exe"
       ]
     },
     {

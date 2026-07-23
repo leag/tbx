@@ -935,6 +935,35 @@ fixing the intra-inline-IF gap above will also close it.
 
 ## Part III — Investigation history / handoff log
 
+### 2026-07-23 — declared but undimensioned LOCAL arrays
+
+Closed the first `LOCAL array free of unknown handle 0x42` cleanup in
+`cleanup.exe` and `reformat.exe`. A LOCAL dynamic array that is declared
+but never DIMensioned reserves the normal 30-word descriptor and emits
+implicit cleanup, but never populates `r_arrs`; the cleanup is therefore
+the first definitive type evidence. The decoder now recognizes only a
+complete in-frame descriptor span at that cleanup, removes literal
+compiler metadata initializers, hides its storage, and emits a
+canonical default-typed unused `LOCAL name()`. Any nonliteral or
+external use of those cells remains fail-loud. The same metadata
+removal now applies when a delayed DIM eventually registers a local
+array, preventing fake scalar assignments from leaking into source.
+New dual-dialect fixture `t1_localarrunused` round-trips byte-for-byte.
+The two wild files advance to a later, genuinely referenced descriptor
+shape.
+
+### 2026-07-23 — promoted failed probe: large dormant LOCAL array frame
+
+While calibrating cleanup of a declared-but-undimensioned LOCAL array,
+adding a second 30-word descriptor to the already-large mixed DEF FN
+fixture compiled successfully but failed scanning at `DF /6`:
+`unhandled FP op esc=df modrm=86` (`0x8da1` in TB 1.1, `0x76c1` in TB
+1.0). This is the 16-bit-displacement BP sibling of an x87 local
+operation and is unrelated to the cleanup semantic under investigation.
+The exact source and both compiled binaries were promoted immediately
+as `wild/probes/probe_undim_local_array_large*`; a smaller dedicated SUB
+fixture is used for cleanup calibration.
+
 ### 2026-07-23 — INTEGER INPUT bridge variants
 
 Closed `numeric INPUT read without FSTP` in `cal.exe`,

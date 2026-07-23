@@ -421,6 +421,28 @@ def _region_refs(node) -> tuple[list[str], list[str]]:
     return list(vs), list(ars)
 
 
+def _drop_local_descriptor_initializers(state, frame, span, addr) -> None:
+    """Remove compiler metadata writes that preceded a LOCAL DIM bracket."""
+    locs = frame["locals"]
+    assert locs is not None
+    cell_names = {locs[x] for x in span}
+    kept = []
+    for stmt, stmt_addr in zip(state.stmts, state.addrs):
+        refs, _ = _region_refs(stmt)
+        if not cell_names.intersection(refs):
+            kept.append((stmt, stmt_addr))
+            continue
+        if not (
+            isinstance(stmt, ir.Assign)
+            and isinstance(stmt.target, ir.Var)
+            and stmt.target.name in cell_names
+            and isinstance(stmt.value, ir.Lit)
+        ):
+            raise ValueError(f"used LOCAL array descriptor cells at {addr:#x}")
+    state.stmts[:] = [stmt for stmt, _ in kept]
+    state.addrs[:] = [stmt_addr for _, stmt_addr in kept]
+
+
 def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, int]]:
     """Slot-scope attribution for SUB bodies (witnessed t1_subsh/t1_subarr/
     t1_subad): TB gives every non-SHARED SUB variable/array its own local
@@ -2557,6 +2579,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
             span = {disp + 2 * i for i in range(_LOCAL_ARR_WORDS)}
             if not span <= set(frame["locals"]):
                 raise ValueError(f"LOCAL DIM descriptor exceeds frame at {addr:#x}")
+            _drop_local_descriptor_initializers(state, frame, span, addr)
             frame.setdefault("hidden_locals", set()).update(
                 disp + 2 * i for i in range(1, _LOCAL_ARR_WORDS)
             )
@@ -3502,9 +3525,30 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 # LOCAL DYNAMIC array's heap block at SUB exit -- no BASIC
                 # source spelling, so it's silently dropped (q_localarr)
                 if d not in state.r_arrs:
-                    raise ValueError(
-                        f"LOCAL array free of unknown handle {d:#x} at {addr:#x}"
+                    frame = (
+                        state.proc_frame
+                        if state.proc_frame is not None
+                        else state.fn_frame
                     )
+                    locs = frame["locals"] if frame is not None else None
+                    span = {d + 2 * i for i in range(_LOCAL_ARR_WORDS)}
+                    if locs is None or not span <= set(locs):
+                        raise ValueError(
+                            f"LOCAL array free of unknown handle {d:#x} at {addr:#x}"
+                        )
+                    # A declared-but-never-DIMensioned LOCAL array has no
+                    # populated runtime record; its exit cleanup is the first
+                    # definitive evidence that this otherwise zero-filled
+                    # 30-word span is an array descriptor (wild cleanup.exe /
+                    # reformat.exe). Its element type is bytecode-lossy while
+                    # unused, so the default SINGLE spelling is canonical.
+                    _drop_local_descriptor_initializers(state, frame, span, addr)
+                    name = (
+                        f"V{state.lay['n_static'] + len(state.lay['rt_blocks']) + state.n_local_arrs}"
+                    )
+                    state.n_local_arrs += 1
+                    frame.setdefault("hidden_locals", set()).update(span - {d})
+                    locs[d] = f"{name}()"
                 state.k += 2
                 continue
             if nxt == ("rt", 0x9C):  # push (var desc, static string-array

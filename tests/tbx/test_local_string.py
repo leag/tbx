@@ -47,8 +47,8 @@ def test_string_local_in_block_def_fn(stem):
     [
         ("bmaster.exe", "materialization template mismatch at 0x8f0e"),
         ("ifi.exe", "materialization template mismatch at 0x8f0e"),
-        ("cleanup.exe", "LOCAL array free of unknown handle 0x42 at 0xbea7"),
-        ("reformat.exe", "LOCAL array free of unknown handle 0x42 at 0xbea0"),
+        ("cleanup.exe", "used LOCAL array descriptor cells at 0xbf77"),
+        ("reformat.exe", "used LOCAL array descriptor cells at 0xbf6f"),
     ],
 )
 def test_string_local_witnesses_advance(stem, next_gap):

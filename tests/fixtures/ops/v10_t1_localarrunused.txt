@@ -1,0 +1,26 @@
+# v10_t1_localarrunused dialect=1.0 start=073E0
+073E3:jmp:29769
+073E6:proc_enter
+073E9:local_init:60:6
+073FD:mov_bp_imm:8:260
+07402:mov_bp_imm:12:4
+07407:mov_bp_imm:68:0
+0740C:mov_bp_imm:72:0
+07411:far_ref_bp:6
+07418:dim_begin
+0741B:mov_bp_imm:8:260
+07420:mov_bp_imm:12:4
+07425:mov_bp_imm:16:2
+0742A:mov_bp_imm:14:0
+0742F:far_ref_bp:6
+07436:dim_end
+07439:movsi:6
+0743C:local_arr_free
+0743F:movsi:66
+07442:local_arr_free
+07445:proc_ret:120
+07449:sub_sp:120
+0744C:far_call:29670
+07451:end
+07454:epilogue
+# commits

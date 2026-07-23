@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from tbx import decode0
+from tbx import decode0, emit0
 from tbx.decode0 import scan
 from tbx.decode0.dialect import TB11
 
@@ -21,12 +21,20 @@ def test_scan_local_bounds_vectors():
     assert ops == [(0, "bchk_idx_bp", 14)]
 
 
+@pytest.mark.parametrize("stem", ["t1_localarrunused", "v10_t1_localarrunused"])
+def test_undimensioned_local_array_cleanup(stem):
+    program = decode0.decode_user_code(
+        (_ROOT / "tests" / "fixtures" / "corpus" / f"{stem}.exe").read_bytes()
+    )
+    assert "  LOCAL V0(), V1()\n  DIM V0(2)\n" in emit0.emit(program)
+
+
 @pytest.mark.parametrize(
     ("stem", "next_gap"),
     [
-        ("cleanup.exe", "LOCAL array free of unknown handle 0x42 at 0xbea7"),
+        ("cleanup.exe", "used LOCAL array descriptor cells at 0xbf77"),
         ("crossref.exe", "unhandled INT EC sub 38 at 0x11a63"),
-        ("reformat.exe", "LOCAL array free of unknown handle 0x42 at 0xbea0"),
+        ("reformat.exe", "used LOCAL array descriptor cells at 0xbf6f"),
     ],
 )
 def test_wild_local_bounds_remain_closed(stem, next_gap):

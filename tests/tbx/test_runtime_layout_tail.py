@@ -35,8 +35,8 @@ def test_runtime_layout_recovers_scalars_after_hole(stem, string_disp, single_di
 @pytest.mark.parametrize(
     ("stem", "next_gap"),
     [
-        ("cleanup.exe", "LOCAL array free of unknown handle 0x42 at 0xbea7"),
-        ("reformat.exe", "LOCAL array free of unknown handle 0x42 at 0xbea0"),
+        ("cleanup.exe", "used LOCAL array descriptor cells at 0xbf77"),
+        ("reformat.exe", "used LOCAL array descriptor cells at 0xbf6f"),
     ],
 )
 def test_runtime_layout_witnesses_reach_next_gap(stem, next_gap):
