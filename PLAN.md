@@ -96,12 +96,46 @@ edition/runtime tag, and evidence provenance.
   redesign (the current parser assumes a fixed 5-op window per field
   entry; a computed width needs incremental expression evaluation
   instead) -- flagged, not attempted.
+  A FOURTH 2026-07-23 round (still "fully decode a wild", still no
+  oracle) DID implement the FIELD redesign (the third round's flagged
+  next step) plus two more fixes -- see Part III's newest entry. Still
+  25/84 strict. FIELD is now parsed incrementally (`state.pend_field`,
+  closed lazily via `flush_pending` like READ/INPUT#/PRINT), so its
+  width -- literal or computed -- accumulates through the ordinary
+  per-op dispatch with no bespoke evaluator; this closed hebrew.exe's
+  FIELD gap outright (advanced to a new, unrelated one) and is a strict
+  generalization validated against the existing multi-entry `t1_field`
+  fixture. A shared "far string variable read" gap (`movsi;movdx;
+  movesdx;str2num`, reading a FIELD-buffer string variable as a CVL
+  argument) turned out to hit THREE files identically (hebrew.exe,
+  morcalc.exe, photo.exe) -- confirmed the movsi disp is always an
+  already-tracked string scalar in all three before pushing `state.loc
+  (disp)` onto sstack, advancing all three past a shared blocker at
+  once. A structural bug in DEF-FN-region detection: `ON ERROR GOTO` as
+  the program's literal first statement (before the entry skip-jmp)
+  left `state.main_start` permanently unset, since the existing
+  detection only recognized the skip-jmp AS op 0 or immediately after a
+  closed proc/fn's ret -- added a third, narrowly-scoped case (exactly
+  one prior statement, and it's `ir.OnError`) fixing wb.exe's `fold_bp`
+  gap (advanced further). Three of the four newly-exposed follow-on gaps
+  are in the SAME risky "3+-term compound-boolean register choreography"
+  family already set aside earlier (grdscn.exe/wb.exe/mcmurphy.exe's
+  `andaxbx`-combine shapes) -- confirmed via trace, not reattempted.
+  photo.exe's new gap (`jump target ... not a statement start`) is
+  freshly-exposed territory (only reachable after this session's OWN
+  CVL fix) with a DIFFERENT signature than both state.exe's (fixed) and
+  secure.exe's (deeper, unfixed) cases -- traced enough to rule out both
+  known shapes but not fully diagnosed.
 - Current validation: 2439 passed, 16 skipped (2026-07-23); Ruff passes.
   `t1_localarr`/`t1_localarrint` (+`v10_`) are byte-exact both dialects.
-- Immediate target: `unhandled INT 8c` (still open, see Gap `RR-INT-8C` in
-  Part III), `unhandled INT 94` (cleanup.exe/reformat.exe), and
-  `unhandled op testw` (elec87/electron/mdb/mdb87, tied at 4, unprobed) --
-  all still open, none require oracle work to triage further via cfgview.
+- Immediate target: the "3+-term compound-boolean register choreography"
+  family (grdscn.exe/wb.exe/mcmurphy.exe/number.exe/hfprop.exe/
+  process.exe) is now the single most-repeated blocker across the
+  corpus -- worth a dedicated, carefully-evidenced investigation (oracle
+  probes to pin down exact AND/OR/mixed-precedence register
+  choreography) before the next attempt, rather than another one-off
+  guess. `unhandled INT 8c` and `unhandled op testw` (both tied at 5)
+  remain the next-largest untouched buckets.
 
 ### Gap: LOCAL DYNAMIC arrays (`LOCAL A()` + runtime `DIM A(n)` inside a SUB), CLOSED for rank 1 (2026-07-23)
 
@@ -741,6 +775,81 @@ fixing the intra-inline-IF gap above will also close it.
 ---
 
 ## Part III — Investigation history / handoff log
+
+### 2026-07-23 (fourth round same day) — FIELD redesign, shared far-string read, ON ERROR/main_start fix
+
+Continuation of "fully decode a wild", no oracle. Picked up the third
+round's own flagged next step (FIELD's computed width) and followed the
+chain wherever it led.
+
+**FIELD redesign (hebrew.exe).** Replaced the fixed 5-op-per-entry
+lookahead loop (`movax;movsi;movdx;movesdx;field_as`, which only ever
+matched a bare literal width) with the SAME lazy-close pattern already
+used for READ/INPUT#/PRINT chains: `field` now just opens
+`state.pend_field = {"fnum", "fields": [], "start"}` and returns. The
+width -- whether a bare literal (`movax`) or a computed expression
+(`movax_m;imul_m;negax;addax_m`, witnessed hebrew.exe) -- accumulates
+into `state.ax` through the ordinary per-op dispatch with NO new code,
+since every op in a width expression is already a fully generic,
+context-free handler. A new check in `core.py`'s main loop (mirroring
+the existing `movsi;movdx;movesdx;{dim_begin,dim_end,erase}` pattern)
+recognizes `movsi;movdx;movesdx;field_as` as closing one AS-entry using
+whatever's currently in `state.ax`. `flush_pending` emits the `ir.Field`
+once the chain is proven closed by the next real statement (or EOF) --
+this is a strict generalization, validated against the existing
+multi-entry literal-width fixture `t1_field.bas` (`FIELD #1, 10 AS A$,
+20 AS B$`) which still passes byte-for-byte through `test_goldens.py`.
+
+**Shared far-string-variable-read gap (hebrew.exe/morcalc.exe/
+photo.exe).** All three hit the identical `movsi <disp>; movdx <reloc>;
+movesdx; str2num:CVL` shape at their "unhandled movsi continuation"
+gap. Confirmed via direct inspection of `state.lay["scalars"]` in all
+three that the movsi disp is ALWAYS an already-tracked, width-4 string
+scalar (778/2070 in hebrew.exe -- the EXACT same disp as that file's own
+FIELD statement's AS-target, strongly suggesting this is reading a
+FIELD-buffer variable back as a value). Added a new check (same
+location as FIELD's own terminal) recognizing this shape and pushing
+`state.loc(op[2])` onto `sstack` -- the movdx/movesdx pair is the
+compiler's segment-reload convention for FIELD-buffer variables, but
+doesn't change WHICH variable is referenced (already proven correct
+since FIELD's own write side uses the identical `state.loc(op[2])`).
+Scoped narrowly to the witnessed `str2num` consumer only, not any
+`movsi;movdx;movesdx` pattern in general.
+
+**ON ERROR / main_start structural fix (wb.exe).** `state.main_start`
+(marking the def-region/main-code boundary, gating whether a `fn_ret`-
+terminated body auto-opens a `state.fn_frame`) was only ever set in two
+cases: the entry skip-jmp IS op 0, or a skip-jmp immediately follows a
+closed proc/fn's `ret`. wb.exe opens with `ON ERROR GOTO` as a genuine
+first statement BEFORE the skip-jmp, which neither case covers, so
+`main_start` stayed `None` forever and a DEF FN body's `fold_bp` fell
+through to the "unexpected ... in main body" fail-loud raise. Added a
+third, deliberately narrow case: exactly one prior statement, and it's
+`ir.OnError` (not "any leading statement", to avoid ever swallowing a
+genuine early GOTO as glue).
+
+**Explicitly not reattempted, confirmed via trace.** `hebrew.exe` (now
+`unhandled jcc 74`), `morcalc.exe` (`KeyError: 'idx'`, a `dec_m` FOR-step
+patch hitting a FOR frame created by a DIFFERENT header path that never
+sets `"idx"` -- a real bug in shared FOR-tracking machinery, not a
+simple guess), `grdscn.exe`/`wb.exe`/`mcmurphy.exe`'s renewed
+"materialization template mismatch" (confirmed via trace to be the same
+"3+-term compound-boolean register choreography" family already set
+aside this session for number.exe/hfprop.exe/process.exe -- `wb.exe`'s
+specific case: `_match_bool_term1` requires the chain's OWN first
+segment to end in a bare `orax` self-test, but wb.exe's first segment
+ends in `oraxbx` (already a combine), meaning it's itself a cascaded
+mid-segment of a 3+-term chain that gap 36's existing machinery doesn't
+recognize as a valid entry point). `photo.exe`'s new "jump target ...
+not a statement start" (exposed ONLY by this session's own CVL fix):
+traced enough to confirm it's NEITHER state.exe's shape (no nested
+IfInline containing the target) NOR resume.exe's shape (the target,
+`fld:408`, is a real op with real semantics, not bare compiler glue) --
+genuinely a third, undiagnosed variant.
+
+Validation: full suite 2439 passed, 16 skipped, 0 regressions
+(including the pre-existing multi-entry FIELD fixture); ruff clean;
+full `scan_wild.py` re-run: still 25/84, no new failures elsewhere.
 
 ### 2026-07-23 (third round same day) — seven more fixes chasing a full close, no oracle
 

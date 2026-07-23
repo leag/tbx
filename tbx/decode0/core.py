@@ -108,6 +108,7 @@ class DecodeState:
     pend_cmp_str: bool = False  # pend_cmp came from strcmp: forward flags
     pend_dataread: Any = None
     pend_es: Any = None
+    pend_field: Any = None
     pend_filein: Any = None
     pend_getstr: Any = None
     pend_fnum: Any = None
@@ -257,6 +258,12 @@ class DecodeState:
             self.stmts.append(ir.InputFile(pf["num"], tuple(pf["targets"])))
             self.addrs.append(pf["start"])
             self.pend_fnum = None
+        if self.pend_field is not None:
+            pfd, self.pend_field = self.pend_field, None
+            if not pfd["fields"]:
+                raise ValueError("FIELD chain closed without any AS-entry")
+            self.stmts.append(ir.Field(pfd["fnum"], tuple(pfd["fields"])))
+            self.addrs.append(pfd["start"])
         if self.pend_print is not None:
             pp, self.pend_print = self.pend_print, None
             if pp.get("mode") == "write":  # WRITE / WRITE# has no trailing-';' form:
@@ -1944,6 +1951,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
     state.pend_filein = None  # open INPUT# target chain
     state.pend_getstr = None
     state.pend_dataread = None  # open READ target chain
+    state.pend_field = None  # open FIELD AS-entry chain
     state.ifs = []  # open inline-IF bodies
     state.has_procs = any(
         o[1] in ("proc_enter", "fn_ret", "inline_sub", "opaque_helper")
@@ -2137,6 +2145,25 @@ def decode_user_code(exe: bytes) -> list[Any]:
             state.main_start = op[
                 2
             ]  # entry jmp over the def region: target = main start
+            state.k += 1  # glue, not a GOTO
+            continue
+        if (
+            state.has_procs
+            and kind == "jmp"
+            and state.main_start is None
+            and state.fn_frame is None
+            and state.proc_frame is None
+            and len(state.stmts) == 1
+            and isinstance(state.stmts[0], ir.OnError)
+        ):
+            # `ON ERROR GOTO` as the program's very first statement, ahead
+            # of the entry skip-jmp (wild wb.exe): the k==0 case above
+            # assumes the skip-jmp IS op 0, but a real leading statement can
+            # precede it. Recognized narrowly (exactly one prior statement,
+            # and it's ON ERROR) rather than generically allowing any
+            # leading statement, since a real early GOTO must not be
+            # swallowed as glue.
+            state.main_start = op[2]
             state.k += 1  # glue, not a GOTO
             continue
         if (
@@ -2998,6 +3025,46 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 state.dim_frame = None
             state.cur = None
             state.k += 4
+            continue
+        if (
+            kind == "movsi"
+            and state.pend_field is not None
+            and state.k + 3 < len(state.ops)
+            and state.ops[state.k + 1][1] == "movdx"
+            and state.ops[state.k + 2][1] == "movesdx"
+            and state.ops[state.k + 3][1] == "field_as"
+        ):
+            # FIELD's AS-target: the width expression (a bare literal or a
+            # computed one, wild hebrew.exe) already accumulated generically
+            # into state.ax via the ordinary per-op dispatch above -- this
+            # just closes out one FIELD entry and leaves pend_field open for
+            # a possible next entry; flush_pending emits the ir.Field once
+            # the next real statement starts (or EOF), same lazy-close
+            # convention as the other open chains (READ/INPUT#/PRINT).
+            if state.ax is None:
+                raise ValueError(f"FIELD width missing at {addr:#x}")
+            state.pend_field["fields"].append((state.ax, state.loc(op[2])))
+            state.ax = None
+            state.k += 4
+            continue
+        if (
+            kind == "movsi"
+            and op[2] in state.lay["scalars"]
+            and state.k + 3 < len(state.ops)
+            and state.ops[state.k + 1][1] == "movdx"
+            and state.ops[state.k + 2][1] == "movesdx"
+            and state.ops[state.k + 3][1] == "str2num"
+        ):
+            # Reading a FIELD-buffer string variable as a value (e.g.
+            # `X& = CVL(V$)` where V$ was FIELD'd): the same movsi/movdx/
+            # movesdx far-pointer reconstruction as FIELD's own AS-target
+            # (same disp witnessed in all three wild hits), just used to
+            # PUSH the variable instead of naming an assignment target.
+            # Confirmed the disp is an ordinary already-tracked string
+            # scalar in all three (hebrew.exe/morcalc.exe/photo.exe) --
+            # movdx/movesdx don't change WHICH variable this is.
+            state.sstack.append(state.loc(op[2]))
+            state.k += 3
             continue
         if (
             kind in ("movm_imm", "movm_ax")

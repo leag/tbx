@@ -61,24 +61,16 @@ def fileio(state: DecodeState, op, addr, kind) -> bool:
     if kind == "field":  # FIELD #n, w AS v$[, ...]
         if state.pend_fnum is None:
             raise ValueError(f"FIELD without file number at {addr:#x}")
-        fields = []
-        j = state.k + 1
-        while (
-            j + 4 < len(state.ops)
-            and state.ops[j][1] == "movax"
-            and state.ops[j + 1][1] == "movsi"
-            and state.ops[j + 2][1] == "movdx"
-            and state.ops[j + 3][1] == "movesdx"
-            and state.ops[j + 4][1] == "field_as"
-        ):
-            fields.append((ir.Lit(state.ops[j][2]), state.loc(state.ops[j + 1][2])))
-            j += 5
-        if not fields:
-            raise ValueError(f"FIELD with no AS-entries at {addr:#x}")
-        state.put(ir.Field(state.pend_fnum, tuple(fields)), state.cur)
+        # Each width (a bare literal or a computed expression, wild
+        # hebrew.exe) accumulates into state.ax through the ordinary per-op
+        # dispatch like any other expression; the movsi/movdx/movesdx/
+        # field_as terminal (core.py's main loop) closes out one AS-entry at
+        # a time and flush_pending emits the ir.Field once the FIELD chain
+        # is proven closed by the next statement, same lazy-close
+        # convention as READ/INPUT#/PRINT chains.
+        state.pend_field = {"fnum": state.pend_fnum, "fields": [], "start": state.cur}
         state.pend_fnum = None
-        state.cur = None
-        state.k = j
+        state.k += 1
         return True
     if kind == "ioctl":  # IOCTL #n, s$ -- filenum via [0060], string pushed
         if state.pend_fnum is None:
