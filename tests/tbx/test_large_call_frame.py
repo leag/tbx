@@ -84,8 +84,8 @@ def test_scan_local_array_index_dx_spill():
 @pytest.mark.parametrize(
     ("stem", "next_gap"),
     [
-        ("cleanup.exe", "unhandled op far_ref_bp at 0xa55c"),
-        ("reformat.exe", "unhandled op far_ref_bp at 0xa555"),
+        ("cleanup.exe", "unhandled op testw_bp at 0xb248"),
+        ("reformat.exe", "unhandled op testw_bp at 0xb241"),
     ],
 )
 def test_large_local_family_advances_wild_program(stem, next_gap):

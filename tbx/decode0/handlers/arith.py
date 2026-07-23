@@ -1210,6 +1210,41 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
         return True
     if kind in ("fld_bp", "fstp_bp", "fold_bp", "fold_n_bp", "fcomp_bp"):
         bp_off = op[2] if kind in ("fld_bp", "fstp_bp", "fcomp_bp") else op[3]
+        local_frame = None
+        for frame in (state.proc_frame, state.fn_frame):
+            if (
+                frame is not None
+                and frame["locals"] is not None
+                and bp_off in frame["locals"]
+            ):
+                local_frame = frame
+                break
+        if local_frame is not None:
+            # SINGLE-precision LOCAL variable (fld_bp/fstp_bp are the m32/
+            # SINGLE FP ops). Spans TWO consecutive zero-filled words;
+            # first touch retypes the first and removes the phantom second
+            # word (SUB: wild resume.exe; DEF FN: cleanup/reformat/bmaster/ifi).
+            locs = local_frame["locals"] or {}
+            if bp_off in locs and locs[bp_off].endswith("%"):
+                locs[bp_off] = locs[bp_off][:-1] + "!"
+                locs.pop(bp_off + 2, None)
+            pvar = ir.Var(locs[bp_off])
+            if kind == "fld_bp":
+                state.stack.append(pvar)
+            elif kind == "fstp_bp":
+                state.put(ir.Assign(pvar, state.stack.pop()), state.cur)
+                state.cur = None
+            elif kind == "fold_bp":
+                state.stack.append(_orient(op[2], pvar, state.stack.pop()))
+            elif kind == "fold_n_bp":
+                top = state.stack.pop()
+                if isinstance(top, ir.BinOp) and _PREC[top.op] < _PREC[op[2]]:
+                    top = ir.Group(top)
+                state.stack.append(ir.BinOp(op[2], top, pvar))
+            else:  # fcomp_bp
+                state.pend_cmp = (pvar, state.stack.pop())
+            state.k += 1
+            return True
         if state.fn_frame is not None:  # DEF FN body: param read / result / fold
             if bp_off != 0:  # bp+0 is the result cell, not a param
                 state.fn_frame["param_offs"].add(bp_off)
@@ -1232,32 +1267,6 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
                     top = ir.Group(top)
                 state.stack.append(ir.BinOp(op[2], top, pvar))
             else:  # fcomp_bp (EXIT DEF tests)
-                state.pend_cmp = (pvar, state.stack.pop())
-        elif state.proc_frame is not None:
-            # SINGLE-precision LOCAL variable (fld_bp/fstp_bp are the m32/
-            # SINGLE FP ops -- a DOUBLE LOCAL would need fld64_bp/fstp64_bp,
-            # unwitnessed). Spans TWO consecutive 2-byte words of the
-            # zero-filled LOCAL range; rename the first word's phantom int
-            # name to a '!' suffix on first touch and drop the second word
-            # entirely -- one FP variable, not two ints (wild resume.exe).
-            locs = state.proc_frame["locals"] or {}
-            if bp_off in locs and locs[bp_off].endswith("%"):
-                locs[bp_off] = locs[bp_off][:-1] + "!"
-                locs.pop(bp_off + 2, None)
-            pvar = ir.Var(locs[bp_off])
-            if kind == "fld_bp":
-                state.stack.append(pvar)
-            elif kind == "fstp_bp":
-                state.put(ir.Assign(pvar, state.stack.pop()), state.cur)
-                state.cur = None
-            elif kind == "fold_bp":
-                state.stack.append(_orient(op[2], pvar, state.stack.pop()))
-            elif kind == "fold_n_bp":
-                top = state.stack.pop()
-                if isinstance(top, ir.BinOp) and _PREC[top.op] < _PREC[op[2]]:
-                    top = ir.Group(top)
-                state.stack.append(ir.BinOp(op[2], top, pvar))
-            else:  # fcomp_bp
                 state.pend_cmp = (pvar, state.stack.pop())
         else:  # main frame: FN-call staging
             if kind == "fstp_bp":  # stage a literal/computed call arg

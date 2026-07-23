@@ -3689,6 +3689,11 @@ DefFn(name='FNFN1', params=('A',), body=(Local(names=('B%',)), Assign(target=Var
 Print(items=(FnCall(name='FNFN1', args=(Lit(value=3),)),), newline=True, file=None, commas=None)
 End()
 
+## t1_fnlocalarrstr
+DefFn(name='FNFN1', params=('A',), body=(Local(names=('V0$()', 'B')), Dim(name='V0$', bounds=(Lit(value=2),), also=()), Assign(target=ArrayRef(name='V0$', indices=(Lit(value=1),)), value=StrLit(value='X')), Assign(target=Var(name='B'), value=Lit(value=1)), FnResult(value=BinOp(op='+', lhs=Var(name='B'), rhs=Var(name='A')))), is_block=True)
+Print(items=(FnCall(name='FNFN1', args=(Lit(value=3),)),), newline=True, file=None, commas=None)
+End()
+
 ## t1_fnlocalint
 DefFn(name='FNFN1', params=('A%', 'B%'), body=(Local(names=('C%',)), Assign(target=Var(name='C%'), value=BinOp(op='*', lhs=Var(name='A%'), rhs=Var(name='B%'))), IfGoto(cond=RelOp(op='<=', lhs=Var(name='C%'), rhs=Lit(value=100)), target=BodyLine(stmt=0, phys=5)), Assign(target=Var(name='C%'), value=BinOp(op='+', lhs=Var(name='C%'), rhs=Lit(value=1))), FnResult(value=Var(name='C%'))), is_block=True)
 Print(items=(FnCall(name='FNFN1', args=(Lit(value=3), Lit(value=4))),), newline=True, file=None, commas=None)
@@ -9621,6 +9626,11 @@ End()
 
 ## v10_t1_fnlocal
 DefFn(name='FNFN1', params=('A',), body=(Local(names=('B%',)), Assign(target=Var(name='B%'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1))), FnResult(value=BinOp(op='+', lhs=Var(name='B%'), rhs=Lit(value=2)))), is_block=True)
+Print(items=(FnCall(name='FNFN1', args=(Lit(value=3),)),), newline=True, file=None, commas=None)
+End()
+
+## v10_t1_fnlocalarrstr
+DefFn(name='FNFN1', params=('A',), body=(Local(names=('V0$()', 'B')), Dim(name='V0$', bounds=(Lit(value=2),), also=()), Assign(target=ArrayRef(name='V0$', indices=(Lit(value=1),)), value=StrLit(value='X')), Assign(target=Var(name='B'), value=Lit(value=1)), FnResult(value=BinOp(op='+', lhs=Var(name='B'), rhs=Var(name='A')))), is_block=True)
 Print(items=(FnCall(name='FNFN1', args=(Lit(value=3),)),), newline=True, file=None, commas=None)
 End()
 

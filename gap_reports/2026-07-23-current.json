@@ -174,8 +174,8 @@
     {
       "name": "wild/hits/bmaster.exe",
       "dialect": "1.0",
-      "message": "FSTP [bp+12] in DEF FN body at 0x8ad9",
-      "signature": "FSTP [bp+12] in DEF FN body"
+      "message": "materialization template mismatch at 0x8f0e",
+      "signature": "materialization template mismatch"
     },
     {
       "name": "wild/hits/cal.exe",
@@ -198,8 +198,8 @@
     {
       "name": "wild/hits/cleanup.exe",
       "dialect": "1.1",
-      "message": "unhandled op far_ref_bp at 0xa55c",
-      "signature": "unhandled op far_ref_bp"
+      "message": "unhandled op testw_bp at 0xb248",
+      "signature": "unhandled op testw_bp"
     },
     {
       "name": "wild/hits/crossref.exe",
@@ -270,8 +270,8 @@
     {
       "name": "wild/hits/ifi.exe",
       "dialect": "1.0",
-      "message": "FSTP [bp+12] in DEF FN body at 0x8ad9",
-      "signature": "FSTP [bp+12] in DEF FN body"
+      "message": "materialization template mismatch at 0x8f0e",
+      "signature": "materialization template mismatch"
     },
     {
       "name": "wild/hits/kinder.exe",
@@ -408,8 +408,8 @@
     {
       "name": "wild/hits/reformat.exe",
       "dialect": "1.1",
-      "message": "unhandled op far_ref_bp at 0xa555",
-      "signature": "unhandled op far_ref_bp"
+      "message": "unhandled op testw_bp at 0xb241",
+      "signature": "unhandled op testw_bp"
     },
     {
       "name": "wild/hits/refund.exe",
@@ -504,6 +504,17 @@
       ]
     },
     {
+      "signature": "materialization template mismatch",
+      "count": 5,
+      "files": [
+        "wild/hits/bmaster.exe",
+        "wild/hits/grdscn.exe",
+        "wild/hits/ifi.exe",
+        "wild/hits/kinder.exe",
+        "wild/hits/wb.exe"
+      ]
+    },
+    {
       "signature": "DGROUP layout not solvable from the calibrated rules",
       "count": 4,
       "files": [
@@ -511,15 +522,6 @@
         "wild/hits/night.exe",
         "wild/hits/sprogh.exe",
         "wild/hits/swbb.exe"
-      ]
-    },
-    {
-      "signature": "materialization template mismatch",
-      "count": 3,
-      "files": [
-        "wild/hits/grdscn.exe",
-        "wild/hits/kinder.exe",
-        "wild/hits/wb.exe"
       ]
     },
     {
@@ -536,14 +538,6 @@
       "files": [
         "wild/hits/prtguide.exe",
         "wild/hits/readme.exe"
-      ]
-    },
-    {
-      "signature": "FSTP [bp+12] in DEF FN body",
-      "count": 2,
-      "files": [
-        "wild/hits/bmaster.exe",
-        "wild/hits/ifi.exe"
       ]
     },
     {
@@ -587,7 +581,7 @@
       ]
     },
     {
-      "signature": "unhandled op far_ref_bp",
+      "signature": "unhandled op testw_bp",
       "count": 2,
       "files": [
         "wild/hits/cleanup.exe",

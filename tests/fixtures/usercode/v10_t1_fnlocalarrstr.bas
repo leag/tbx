@@ -1,0 +1,9 @@
+10 DEF FNFN1(A)
+  LOCAL V0$(), B
+  DIM V0$(2)
+  V0$(1) = "X"
+  B = 1
+  FNFN1 = B + A
+END DEF
+20 PRINT FNFN1(3)
+30 END

@@ -86,7 +86,7 @@ known source subset does not provide a direct source-level witness for them.
 | `FnResult` | assignment to a multi-line `DEF FN` result | Internal procedure-body node; emitted as source |
 | `Inline` | `$INLINE byte, ...` inside a `SUB` | Supported; corpus observed |
 | `Shared` | `SHARED ...` inside a procedure | Supported; corpus observed |
-| `Local` | `LOCAL ...` inside a `SUB` | Supported for INTEGER, SINGLE, STRING, large BP+disp16 frames, and witnessed local dynamic arrays; c0 remains fail-loud |
+| `Local` | `LOCAL ...` inside a `SUB` or block `DEF FN` | Supported for INTEGER, SINGLE, STRING, large BP+disp16 frames, and witnessed local dynamic arrays including STRING arrays in mixed DEF FN frames; c0 remains fail-loud |
 | `Common` | `COMMON ...` | Supported; corpus observed |
 
 ### Console, printer, and formatting

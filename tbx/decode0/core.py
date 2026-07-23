@@ -380,7 +380,7 @@ class DecodeState:
         return _str_lit(self.exe, self.dsd, cast(int, desc), cast(int, self.ss_base))
 
     def vdisp(self, node):  # placeholder Var -> DS displacement
-        return int(node.name[1:].rstrip("%&#"), 16)
+        return int(node.name[1:].rstrip("%&#!"), 16)
 
 
 def _region_refs(node) -> tuple[list[str], list[str]]:
@@ -2395,6 +2395,31 @@ def decode_user_code(exe: bytes) -> list[Any]:
             state.k += 4  # type write, esize write, far_ref_bp, dim_begin
             continue
         if (
+            kind == "far_ref_bp"
+            and state.local_dim_frame is None
+            and state.k + 1 < len(state.ops)
+            and state.ops[state.k + 1][1] == "dim_begin"
+        ):  # Mixed LOCAL frame: the runtime array's bracket opens directly;
+            # unlike the sole-array shape above, no duplicate type/size writes
+            # precede it (wild cleanup.exe/reformat.exe).
+            frame = (
+                state.proc_frame if state.proc_frame is not None else state.fn_frame
+            )
+            if frame is None or frame["locals"] is None:
+                raise ValueError(f"LOCAL DIM bracket outside a LOCAL frame at {addr:#x}")
+            disp = op[2]
+            span = {disp + 2 * i for i in range(_LOCAL_ARR_WORDS)}
+            if not span <= set(frame["locals"]):
+                raise ValueError(f"LOCAL DIM descriptor exceeds frame at {addr:#x}")
+            state.local_dim_frame = {
+                "disp": disp,
+                "cells": {},
+                "start": state.cur,
+            }
+            state.cur = None
+            state.k += 2
+            continue
+        if (
             kind == "mov_bp_imm"
             and state.local_dim_frame is not None
             and state.local_dim_frame["disp"]
@@ -2427,8 +2452,8 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 raise ValueError(  # learn this shape too -- unwitnessed
                     f"unsupported LOCAL DIM rank {rank} at {addr:#x}"
                 )
-            if tb not in (0x00, 0x04):  # integer / single -- only two
-                raise ValueError(  # element types witnessed so far
+            if tb not in (0x00, 0x04, 0x0A):  # INTEGER / SINGLE / STRING
+                raise ValueError(
                     f"unsupported LOCAL DIM element type {tb:#x} at {addr:#x}"
                 )
             expect_esz = 2 if tb == 0x00 else 4
@@ -2452,7 +2477,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 if state.option_base not in (None, lo.value):
                     raise ValueError("inconsistent OPTION BASE across DIMs")
                 state.option_base = lo.value
-            suffix = "%" if tb == 0x00 else ""
+            suffix = "%" if tb == 0x00 else ("$" if tb == 0x0A else "")
             name = (
                 f"V{state.lay['n_static'] + len(state.lay['rt_blocks']) + state.n_local_arrs}"
                 f"{suffix}"
@@ -2461,7 +2486,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
             rec = {
                 "name": name,
                 "rank": 1,
-                "str": False,
+                "str": tb == 0x0A,
                 "esz": expect_esz,
                 "lo": [lo.value],
             }
@@ -2479,17 +2504,18 @@ def decode_user_code(exe: bytes) -> list[Any]:
             # type, witnessed identical for both rank-1 and rank-2 probes)
             # and register the array's own name in the handle's place, so
             # `LOCAL <name>()` renders where `LOCAL A()` appeared in source.
-            assert state.proc_frame is not None
-            if not state.proc_frame["locals"]:
+            frame = (
+                state.proc_frame if state.proc_frame is not None else state.fn_frame
+            )
+            if frame is None or not frame["locals"]:
                 raise ValueError(f"LOCAL DIM without a LOCAL declaration at {addr:#x}")
-            if state.proc_frame.get("frame_words") != _LOCAL_ARR_WORDS:
-                raise ValueError(  # a LOCAL array mixed with other LOCALs in
-                    f"unsupported LOCAL frame shape at {addr:#x}"  # the same
-                )  # SUB is unwitnessed -- only a sole array is calibrated
-            state.proc_frame.setdefault("hidden_locals", set()).update(
+            span = {disp + 2 * i for i in range(_LOCAL_ARR_WORDS)}
+            if not span <= set(frame["locals"]):
+                raise ValueError(f"LOCAL DIM descriptor exceeds frame at {addr:#x}")
+            frame.setdefault("hidden_locals", set()).update(
                 disp + 2 * i for i in range(1, _LOCAL_ARR_WORDS)
             )
-            state.proc_frame["locals"][disp] = f"{name}()"
+            frame["locals"][disp] = f"{name}()"
             state.local_dim_frame = None
             state.cur = None
             state.k += 2
@@ -2626,6 +2652,9 @@ def decode_user_code(exe: bytes) -> list[Any]:
                     state.addrs[state.fn_frame["idx"] :],
                 )
                 locs = state.fn_frame["locals"]
+                for d in state.fn_frame.get("hidden_locals") or ():
+                    if locs is not None:
+                        locs.pop(d, None)
                 if locs:  # declared LOCALs (wild resume.exe), mirroring
                     body = (ir.Local(tuple(locs.values())),) + body  # proc_ret
                 state.stmts.append(ir.DefFn(name, params, body, True))

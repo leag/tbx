@@ -935,6 +935,23 @@ fixing the intra-inline-IF gap above will also close it.
 
 ## Part III — Investigation history / handoff log
 
+### 2026-07-23 — mixed block-DEF-FN LOCAL frames
+
+Closed the shared `far_ref_bp` / FP-local gap witnessed by
+`cleanup.exe`, `reformat.exe`, `bmaster.exe`, and `ifi.exe`. A dynamic
+STRING array inside a block `DEF FN` uses the same 30-word BP-relative
+descriptor as a SUB local array, but a mixed frame opens its DIM bracket
+directly rather than repeating the sole-array type/size writes. Block
+DEF FN SINGLE locals also use the SUB `fld_bp`/`fstp_bp` family and
+occupy two initially INTEGER-looking words. The decoder now recognizes
+both shapes, hides descriptor storage from emitted `LOCAL`, and permits
+BP-relative bounds checks in either procedure frame. New dual-dialect
+fixture `t1_fnlocalarrstr` witnesses a parameter, STRING local array,
+and SINGLE local together; both TB 1.0 and 1.1 emitted source
+recompile byte-for-byte. The four wild programs now advance to later,
+unrelated gaps: materialization mismatch (`bmaster`/`ifi`) and
+`testw_bp` (`cleanup`/`reformat`).
+
 ### 2026-07-23 (fifth round, same day) — mixed-precedence compound-IF chains, WITH oracle
 
 Discovered the oracle (`tbx/vendor/turbo_basic_oracle`) was actually

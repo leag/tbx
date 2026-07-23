@@ -1,0 +1,9 @@
+10 DEF FNX(A)
+20 LOCAL S$(), B
+30 DIM S$(2)
+40 S$(1) = "X"
+50 B = 1
+60 FNX = B + A
+70 END DEF
+80 PRINT FNX(3)
+90 END

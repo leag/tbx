@@ -33,10 +33,10 @@ def test_string_local_ir_and_emission(stem):
 @pytest.mark.parametrize(
     ("stem", "next_gap"),
     [
-        ("bmaster.exe", "FSTP \\[bp\\+12\\] in DEF FN body at 0x8ad9"),
-        ("ifi.exe", "FSTP \\[bp\\+12\\] in DEF FN body at 0x8ad9"),
-        ("cleanup.exe", "unhandled op far_ref_bp at 0xa55c"),
-        ("reformat.exe", "unhandled op far_ref_bp at 0xa555"),
+        ("bmaster.exe", "materialization template mismatch at 0x8f0e"),
+        ("ifi.exe", "materialization template mismatch at 0x8f0e"),
+        ("cleanup.exe", "unhandled op testw_bp at 0xb248"),
+        ("reformat.exe", "unhandled op testw_bp at 0xb241"),
     ],
 )
 def test_string_local_witnesses_advance(stem, next_gap):

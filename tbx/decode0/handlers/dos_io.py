@@ -230,7 +230,7 @@ def bounds(state: DecodeState, op, addr, kind) -> bool:
         return True
     if kind == "bchk_base_bp":
         if (
-            state.proc_frame is None
+            (state.proc_frame is None and state.fn_frame is None)
             or op[2] not in state.r_arrs
             or state.r_arrs[op[2]]["rank"] != 1
         ):
