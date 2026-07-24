@@ -3098,6 +3098,13 @@ SubDef(name='SUB1', params=('A%', 'B%'), body=(For(var=Var(name='A%'), init=Lit(
 CallStmt(name='SUB1', args=(Lit(value=1), Lit(value=5)))
 End()
 
+## t1_byreflong
+SubDef(name='SUB1', params=('A&',), body=(Print(items=(Var(name='A&'),), newline=True, file=None, commas=None), Assign(target=Var(name='A&'), value=Lit(value=999)), IfGoto(cond=RelOp(op='<>', lhs=Var(name='A&'), rhs=Lit(value=999)), target=BodyLine(stmt=0, phys=5)), Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='DONE'),), newline=True, file=None, commas=None)))
+Assign(target=Var(name='B&'), value=Lit(value=123456))
+CallStmt(name='SUB1', args=(Var(name='B&'),))
+Print(items=(Var(name='B&'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_byrefor
 SubDef(name='SUB1', params=('A%',), body=(Local(names=('B%',)), Assign(target=Var(name='B%'), value=BinOp(op='OR', lhs=Var(name='A%'), rhs=Lit(value=5))), Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)))
 Assign(target=Var(name='C%'), value=Lit(value=7))
@@ -9180,6 +9187,13 @@ End()
 ## v10_t1_byrefforvar
 SubDef(name='SUB1', params=('A%', 'B%'), body=(For(var=Var(name='A%'), init=Lit(value=1), limit=Var(name='B%'), step=Lit(value=1)), Print(items=(Var(name='A%'),), newline=True, file=None, commas=None), NextStmt(var=Var(name='A%'))))
 CallStmt(name='SUB1', args=(Lit(value=1), Lit(value=5)))
+End()
+
+## v10_t1_byreflong
+SubDef(name='SUB1', params=('A&',), body=(Print(items=(Var(name='A&'),), newline=True, file=None, commas=None), Assign(target=Var(name='A&'), value=Lit(value=999)), IfGoto(cond=RelOp(op='<>', lhs=Var(name='A&'), rhs=Lit(value=999)), target=BodyLine(stmt=0, phys=5)), Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='DONE'),), newline=True, file=None, commas=None)))
+Assign(target=Var(name='B&'), value=Lit(value=123456))
+CallStmt(name='SUB1', args=(Var(name='B&'),))
+Print(items=(Var(name='B&'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_byrefor

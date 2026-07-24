@@ -237,6 +237,27 @@ def test_decode_t1_byref1():
     )
 
 
+def test_decode_t1_byreflong():
+    # By-ref LONG (`&`) SUB param, the m32 sibling of t1_byref1's INTEGER
+    # family: FILD onto the FP stack for PRINT/read (far_fild_si32), FSTP
+    # writing the FP-stack top back into the param (far_fstp_si32), and a
+    # mixed-type IF compare against the param (far_icomp_si32, the far/
+    # by-ref sibling of the computed-array-element icomp_si32) -- all via
+    # the same `les si,[bp+N]` by-ref addressing as t1_byref1, just the
+    # ESC DB/DF x87 opcodes instead of a plain register op. Wild bmaster.exe/
+    # ifi.exe.
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_byreflong.exe")))
+    assert src == (
+        "10 SUB SUB1(A&)\n"
+        "  PRINT A&\n  A& = 999\n"
+        '  IF A& <> 999 THEN 15\n  PRINT "YES"\n15 PRINT "DONE"\n'
+        "END SUB\n"
+        "20 B& = 123456\n30 CALL SUB1(B&)\n40 PRINT B&\n50 END\n"
+    )
+
+
 def test_decode_t1_incr1():
     # Bare INC [disp16] (FF /0) outside a FOR context is the INCR
     # normalization: `X% = X% + 1`, distinct from the FOR-NEXT step use of
@@ -2023,6 +2044,7 @@ if __name__ == "__main__":
     test_decode_t1_local1()
     test_decode_t1_local2()
     test_decode_t1_byref1()
+    test_decode_t1_byreflong()
     test_decode_t1_incr1()
     test_decode_t1_poolrun()
     test_decode_t1_decr1()

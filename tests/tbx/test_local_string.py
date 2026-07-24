@@ -45,8 +45,8 @@ def test_string_local_in_block_def_fn(stem):
 @pytest.mark.parametrize(
     ("stem", "exc", "next_gap"),
     [
-        ("bmaster.exe", ValueError, "unhandled op far_icomp_si32 at 0x8f21"),
-        ("ifi.exe", ValueError, "unhandled op far_icomp_si32 at 0x8f21"),
+        ("bmaster.exe", ValueError, r"inc \[bp\+54\] outside a FOR at 0x9071"),
+        ("ifi.exe", ValueError, r"inc \[bp\+54\] outside a FOR at 0x9071"),
         ("cleanup.exe", ValueError, "unhandled jmp short at 0xcc87"),
         ("reformat.exe", ValueError, "unhandled jmp short at 0xccc3"),
     ],

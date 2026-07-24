@@ -935,6 +935,58 @@ fixing the intra-inline-IF gap above will also close it.
 
 ## Part III — Investigation history / handoff log
 
+### 2026-07-23 — by-ref LONG (`&`) SUB parameters
+
+Closed `unhandled op far_icomp_si32`, the gap the previous entry's fix
+advanced `bmaster.exe`/`ifi.exe` into. By-ref LONG parameters had NO
+support at all -- only the computed-array-element form of the m32 x87
+ops (`fild_si32`/`fstp_si32`/`icomp_si32`, keyed off `state.si`) existed;
+the by-ref `pend_arg` convention's dispatch in `core.py` only matched
+`kind.endswith("_si")`, which excludes the `_si32` suffix entirely.
+Confirmed via three oracle probes (`q_longread`/`q_longwrite`/
+`q_longcmp2.bas`, a SUB with a LONG by-ref param read via PRINT, written
+via assignment, and compared in an IF) that TB emits the identical
+`arg_ref` + `far_fild_si32`/`far_fstp_si32`/`far_icomp_si32` shapes
+`core.py`'s existing INTEGER by-ref family already anticipates, just
+under the m32 x87 opcodes -- added three new branches to the same
+`pend_arg`-dispatch block (read pushes `PXX&` onto the FP stack, write
+pops FP-stack-top into it via `ir.Assign`, compare sets `state.pend_cmp`
+directly like the sibling `icomp_bp`/`icomp32`), plus a new
+`state.proc_long_offs` tracking set (mirroring `proc_int_offs`/
+`proc_str_offs`) so the SUB signature renders `A&` instead of the
+untyped `PXX` fallback. `_resolve_calls`'s forwarded-by-ref-arg path
+(`fwdpending`) picked up the `&` suffix too, for symmetry with `%`/`$`.
+
+This exposed a second, adjacent bug while re-testing the previous
+session's `(A AND B) OR (C AND D)` fix against `bmaster.exe` end to end:
+its SECOND group's own first term is itself a LONG `icomp` compare, and
+`state.pend_cmp_str` (set True by GROUP1's string term) was never reset
+before GROUP2's icomp ran, since the icomp family sets `pend_cmp`
+directly rather than through the string-clearing `cmpax_bx` path --
+`state.bx` ended up `None` when the new OR-of-groups gate checked it,
+falling through to a `_lift_while` raise at the WRONG address (the
+group's own first term, not its second). Fixed by resetting
+`pend_cmp_str = False` in the new `icomp_si32` branch, matching
+`cmpax_bx`'s existing "replace any materialized string flags" comment.
+Also generalized the OR-of-groups gate itself (previous entry) to
+unwrap `ir.Group`-wrapped BX values, since an icomp-origin term1 goes
+through the "FP relational-as-VALUE" fallback (which wraps in `Group`)
+rather than the plain-`BinOp` `pend_icmp` path a `far_cmpax_si` term1
+uses -- both now normalize to the same `ir.RelOp` before folding.
+
+New fixture `t1_byreflong`/`v10_t1_byreflong` (read + write + compare in
+one SUB, mirroring `t1_byref1`'s INTEGER coverage), byte-exact both
+dialects. `bmaster.exe`/`ifi.exe` advance to yet another distinct gap:
+`inc [bp+54] outside a FOR` (a LOCAL-frame integer incremented outside a
+FOR context -- `X% = X% + 1` on a LOCAL apparently doesn't compile to
+the already-calibrated `far_addm_ax_si`/compound-store form; unwitnessed
+in this fail-loud guard). Not attempted this round.
+`test_local_string.py`'s pinned next-gap expectation updated again for
+both files (note: the message contains literal `[`/`]`/`+`, which needed
+`re.escape`-equivalent manual escaping for `pytest.raises(match=...)`).
+Wild tally still 27/84, zero regressions; full suite 2558 passed/16
+skipped, Ruff clean.
+
 ### 2026-07-23 — explicitly-parenthesized `(A AND B) OR (C AND D)` groups
 
 Closed the "materialization template mismatch" signature shared by

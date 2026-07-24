@@ -638,10 +638,14 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             state.pend_cmp = None
             state.k += 3
             return True
+        _bx_term1 = state.bx.inner if isinstance(state.bx, ir.Group) else state.bx
         if (
             state.pend_cmp_str
-            and isinstance(state.bx, (ir.RelOp, ir.BinOp))
-            and (isinstance(state.bx, ir.RelOp) or state.bx.op in _JCC_RELOP_TRUE.values())
+            and isinstance(_bx_term1, (ir.RelOp, ir.BinOp))
+            and (
+                isinstance(_bx_term1, ir.RelOp)
+                or _bx_term1.op in _JCC_RELOP_TRUE.values()
+            )
             and state.k + 5 < len(state.ops)
             and state.ops[state.k + 3][1] == "andaxbx"
             and state.ops[state.k + 4][1] == "jcc"
@@ -657,19 +661,23 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             # jumping either into the next group (continue) or straight
             # into ITS closing jcc/jmp with ax already holding this group's
             # true short-circuit value (probe q_orofands). `state.bx` here
-            # already holds term1's raw relation (via the SAME no-dispatch-
-            # pair value path used for a lone term, e.g. t1_cmpfar/hebrew.exe)
-            # -- feed it to `_lift_bool_tail` exactly as if `_match_bool_term1`
-            # had matched it, with a synthetic short-circuit target (there is
-            # no real one to cross-check: this group's first term never had
-            # its own dispatch). `_lift_bool_tail`'s existing scan-ahead loop
+            # already holds term1's raw relation (via one of the SAME
+            # no-dispatch-pair value paths used for a lone term -- a plain
+            # BinOp for an integer/by-ref compare, e.g. t1_cmpfar, or a
+            # Group-wrapped BinOp for the generic FP/LONG-icomp value
+            # fallback above, e.g. wild bmaster.exe's SECOND group, a
+            # `far_icomp_si32` term -- both unwrapped to `_bx_term1`) -- feed
+            # it to `_lift_bool_tail` exactly as if `_match_bool_term1` had
+            # matched it, with a synthetic short-circuit target (there is no
+            # real one to cross-check: this group's first term never had its
+            # own dispatch). `_lift_bool_tail`'s existing scan-ahead loop
             # already recognizes the jmp landing on a SECOND group's own
             # andaxbx as a multi-term deferral, so the AND/OR/AND fold and
             # the outer OR join both fall out of the unmodified mechanism.
             r1 = (
-                state.bx
-                if isinstance(state.bx, ir.RelOp)
-                else ir.RelOp(state.bx.op, state.bx.lhs, state.bx.rhs)
+                _bx_term1
+                if isinstance(_bx_term1, ir.RelOp)
+                else ir.RelOp(_bx_term1.op, _bx_term1.lhs, _bx_term1.rhs)
             )
             pb = {
                 "r1": r1,
