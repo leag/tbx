@@ -1188,6 +1188,56 @@ constructs specific to their by-ref/LOCAL-heavy coding style.
 
 ## Part III — Investigation history / handoff log
 
+### 2026-07-24 — `rsltest.exe` full-decode goal: milestone and next step (GOTO target past a SELECT CASE)
+
+Milestone: after the seven closures below (bare `PALETTE`, deferred
+`arg_push_ref` typing, near-array-element by-ref CALL args, head-test
+bare-value `WHILE`, SELECT CASE string arms, bare-value compound-AND,
+`movax_m`'s pool-literal fallback), `rsltest.exe`'s ENTIRE op stream now
+decodes successfully -- the remaining failure is in `_finalize`'s
+target-resolution pass (`lift.py::_resolve_targets`), not mid-decode:
+
+```
+ValueError: jump target 0xc599: body line not addressable past a multi-line statement
+```
+
+`0xc599` is the address of `TBMENU.INC`'s `if curntpos% > itemcount%
+then curntpos% = 1` -- the first statement right after `select case
+ans$ ... end select` inside (still dead-code) `MAKEMENU` -- and it's a
+genuine jump target (something elsewhere in the sub GOTOs to it). Per
+`_resolve_targets`' own docstring, computing a GOTO target's physical
+line number *within* a SUB body (`ir.BodyLine(top_idx, phys)`) is only
+implemented for a flat run of one-physical-line statements, plus one
+specific recursive exception (a single-arm, ELSE-less `IfBlock`, "fully
+accounted": header + recursed body + END IF). Anything else multi-line
+(a multi-arm/ELSE `IfBlock`, a `SelectCase`, a nested `SubDef`/`DefFn`)
+sets a `multi` flag and keeps a placeholder `phys` count that's
+correctness-blind past that point -- deliberately: `map_body` only
+*raises* if a LATER target actually needs to resolve past the
+untrustworthy count, exactly our case (the preceding statement is the
+5-arm `SELECT CASE ans$` this session's earlier closure just unblocked).
+
+This is a real, tractable-*looking* feature gap, not a bug: `emit0.py`'s
+own `SelectCase` rendering (`emit0.py:121-131`) is fully deterministic
+(`1 + Σ_arms(1 + block_lines(arm.body)) + [1 + block_lines(case_else)]
++ 1`), so recursively extending `map_body` the same way it already
+special-cases single-arm `IfBlock` looks feasible on paper. Deliberately
+NOT attempted this round: this is the SAME mechanism that fixes a
+BYTE-SIGNIFICANT property (a GOTO's numbered-line target must resolve
+to the EXACT correct physical line for recompilation, unlike the
+free-renumbering that applies almost everywhere else) -- getting the
+line count subtly wrong (e.g. `block_lines`' exact colon-joining/
+grouping behavior for a CASE arm's body wasn't independently re-verified
+here) would silently mis-target the GOTO with no internal consistency
+check to catch it, only a full oracle round-trip failure, which this
+session didn't have time to set up and iterate on carefully. Left as
+the precise next step for a dedicated follow-up: extend `map_body` in
+`_resolve_targets` (`lift.py` ~989-1057) to recurse into `ir.SelectCase`
+bodies (mirroring the existing single-arm-`IfBlock` case) using
+`emit0.py`'s own line-count formula, verified with an oracle probe
+whose GOTO target specifically lands PAST a multi-arm SELECT CASE
+inside a SUB body (not yet witnessed by any existing fixture).
+
 ### 2026-07-24 — `movax_m` missing the pool-literal fallback its siblings already have
 
 Seventh closure in the `rsltest.exe` full-decode goal (continuing from
