@@ -1186,6 +1186,61 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 9: `SUB ... INLINE` whose byte list opens `55 8B EC`
+
+Third closure from `tbd73.exe`'s real source, and it narrows the wall both
+`tbd73.exe` and `sabpcv3.exe` hit once round 8 let the scan reach it.
+
+`_try_inline_rescue` refuses any body starting `55 8B EC` (push bp; mov
+bp,sp), a guard added for wild `CVT2TB.EXE`, whose real framed procedure
+ends in a legitimate `pop bp; retf` and so satisfied the
+`exe[target-1] == 0xCB` terminator check. But TBWINDOW's `Getftblptr`
+INLINE list opens with exactly that prologue, so a genuine inline SUB was
+being rejected.
+
+Discriminator, confirmed against the oracle: **TB always APPENDS a bare far
+RET to an inline body**, so a `$INLINE` list that already ends in its own
+`retf` yields the doubled `CB CB` — which no framed epilogue can produce
+(`pop bp; retf` ends `5D CB`; `pop bp; retf N` ends with the immediate).
+The rescue now accepts a proc-shaped body on that signal alone, leaving the
+CVT2TB guard otherwise intact. Witness `t1_inlinebp`, byte-exact both
+dialects.
+
+**`tbd73.exe` is NOT closed by this, for a reason worth recording**, since
+it is a genuine byte-level ambiguity rather than a missing template.
+`TBW73.INC` puts seventeen BARE `$INLINE` lines — the frame table — in the
+module body directly after `SUB Getftblptr INLINE`'s own `END SUB`:
+
+```
+SUB Getftblptr INLINE
+$INLINE &H55,&H8B,&HEC,...,&H5D,&HCB
+ ' ...comment block...
+$INLINE &H20,&H20,&H20,&H20,&H20,&H20 ' 0: NO BORDER
+$INLINE &HDA,&HBF,&HC0,&HD9,&HB3,&HC4 ' 1: SINGLE
+... 15 more ...
+```
+
+The compiler emits all of it as one uninterrupted byte run behind a single
+skip-jmp, appending its bare `CB` only at the very end (`0x97C0: e9 81 00`
+spans `0x97C3..0x9843`). So the SUB body and the bare `$INLINE` data are
+one blob and **the boundary between them is not present in the bytes** —
+`Getftblptr`'s own trailing `5D CB` is indistinguishable from frame-table
+data. Recovering this needs bare-`$INLINE`-outside-a-SUB support plus some
+non-byte evidence for the split (the far_call target gives the SUB's START,
+which may be enough: everything from the call target to the blob end that
+is not reachable as a procedure is the trailing data). Not attempted
+without a way to verify the split, so `tbd73.exe` stays loud at
+`unhandled byte c4 at 0x97c6`.
+
+**Second half also left open, with a promoted probe.** The same construct
+WITHOUT unscannable bytes never reaches the rescue at all: `probe_inline_
+bp_scannable` (`$INLINE &H55,&H8B,&HEC,&H5D,&HCB`) scans clean, because
+those bytes happen to decode as `proc_enter`/`proc_ret`/`retf`, and then
+`decode_user_code` dies with a raw `StopIteration` out of the DEF FN
+`exit` lookup — not even a clean `ValueError`. The rescue is by design a
+post-failure path, so an inline body that is entirely valid TB codegen
+cannot be recognized by it; that needs a different mechanism.
+
 ### 2026-07-24 — Round 8: `$SEGMENT` — and the long-open "byte ea" gap explained
 
 Second closure driven by `tbd73.exe`'s real source, and it retires a gap

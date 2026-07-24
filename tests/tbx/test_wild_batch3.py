@@ -407,6 +407,31 @@ def test_decode_t1_declnoend():
         ), stem
 
 
+def test_decode_t1_inlinebp():
+    # A SUB ... INLINE whose $INLINE list opens with `push bp; mov bp,sp` was
+    # refused by the rescue's proc-shape guard (added for wild CVT2TB.EXE,
+    # whose real framed procedure ends in a legitimate `pop bp; retf` and so
+    # satisfied the bare-CB terminator check). TB always APPENDS a bare far
+    # RET to an inline body, so a list that already ends in its own retf
+    # yields the doubled `CB CB` -- which no framed epilogue can produce
+    # (`pop bp; retf` ends 5D CB) -- and that makes the proc-shaped body safe
+    # to accept. Found via wild tbd73.exe/sabpcv3.exe. Byte-exact, both
+    # dialects.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_inlinebp", "v10_t1_inlinebp"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        sub = next(s for s in prog if isinstance(s, ir.SubDef))
+        assert len(sub.body) == 1 and isinstance(sub.body[0], ir.Inline), stem
+        assert sub.body[0].data == bytes(
+            (0x55, 0x8B, 0xEC, 0xC4, 0x7E, 0x0A, 0x5D, 0xCB)
+        ), stem
+        assert emit0.emit(prog) == (
+            "10 A% = 1\n20 CALL SUB1\n30 END\n$SEGMENT\n40 SUB SUB1 INLINE\n"
+            "  $INLINE &H55, &H8B, &HEC, &HC4, &H7E, &H0A, &H5D, &HCB\nEND SUB\n"
+        ), stem
+
+
 def test_decode_t1_segment():
     # $SEGMENT closes the current code segment and continues the program in
     # the next one, which the compiler reaches with a far jump to that
@@ -2697,6 +2722,7 @@ if __name__ == "__main__":
     test_decode_t1_declnoend()
     test_decode_t1_dblhook()
     test_decode_t1_fwdcalltgt()
+    test_decode_t1_inlinebp()
     test_decode_t1_segment()
     test_decode_t1_commonarr()
     test_decode_t1_commonarrmix()

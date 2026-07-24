@@ -4299,6 +4299,12 @@ SubDef(name='SUB1', params=(), body=(Inline(data=b'\xba\x00\x07\xe4a$\xfc4\x02\x
 CallStmt(name='SUB1', args=())
 End()
 
+## t1_inlinebp
+Assign(target=Var(name='A%'), value=Lit(value=1))
+CallStmt(name='SUB1', args=())
+End()
+SubDef(name='SUB1', params=(), body=(Inline(data=b'U\x8b\xec\xc4~\n]\xcb'),))
+
 ## t1_inp
 Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Input(prompt=None, var=Var(name='B$'), comma=False, semi=False)
@@ -10469,6 +10475,12 @@ End()
 SubDef(name='SUB1', params=(), body=(Inline(data=b'\xba\x00\x07\xe4a$\xfc4\x02\xe6a\xb9@\x01\xe2\xfeJt\x02\xeb\xf2'),))
 CallStmt(name='SUB1', args=())
 End()
+
+## v10_t1_inlinebp
+Assign(target=Var(name='A%'), value=Lit(value=1))
+CallStmt(name='SUB1', args=())
+End()
+SubDef(name='SUB1', params=(), body=(Inline(data=b'U\x8b\xec\xc4~\n]\xcb'),))
 
 ## v10_t1_inp
 Input(prompt=None, var=Var(name='A'), comma=False, semi=False)

@@ -1572,6 +1572,18 @@ def _try_inline_rescue(exe: bytes, ops: list[tuple[Any, ...]]) -> int | None:
                     )
                 )
                 return target
+            if exe[target - 2] == 0xCB:
+                # ...unless the byte BEFORE the terminating CB is itself a CB.
+                # TB always appends a bare far RET to a SUB ... INLINE body, so
+                # a $INLINE list that already ends in its own `retf` produces
+                # the doubled `CB CB` -- which no framed procedure epilogue can
+                # (`pop bp; retf` ends 5D CB, `pop bp; retf N` ends with the
+                # immediate). That makes it safe to accept a proc-shaped body
+                # here (probe t1_inlinebp, whose list is the `push bp; mov
+                # bp,sp; les di,[bp+N]; pop bp; retf` shape TBWINDOW uses).
+                del ops[i + 1 :]
+                ops.append((body_start, "inline_sub", exe[body_start : target - 1]))
+                return target
             return None  # shape, not $INLINE -- false positive witnessed
             # in wild CVT2TB.EXE, whose OWN (unrelated, gap-19) construct
             # ends in a legitimate `pop bp; retf` (5D CB) that coincidentally
