@@ -1330,6 +1330,56 @@ the next distinct gap; (4) only land it once `verify_fixture` passes
 clean, the same discipline this whole investigation has followed
 throughout.
 
+**Round 3 (same day): a third, unrelated pre-existing bug found; still
+no code changes landed.** Followed step (2) above precisely: built
+`10 GOTO 100 / 20 SUB Foo STATIC / ... / 50 DEF FNBar / ... / 100 PRINT
+"MAIN"` with the declarations genuinely first (no leading statement at
+all), confirming a clean `state.ops[0] = jmp` entry. Compiled WITHOUT
+event trapping first, as planned, on the completely UNMODIFIED
+codebase (no `glue_alias`/site-4 changes applied) -- and it STILL
+fails: `LOCAL zero-fill outside a fresh SUB/DEF FN body`. Root cause,
+traced precisely: the `k==0` entry jmp doesn't chain hop-by-hop through
+each declaration's own skip-jmp here -- it jumps in ONE hop straight
+past BOTH `Foo` and `FNBar` directly to `100 PRINT "MAIN"` (`main_start`
+= that final address immediately). `Foo`'s OWN skip-jmp (a second,
+apparently-redundant skip immediately after the entry jmp, landing on
+`FNBar`'s own start) then has NO way to match site 4's `addr ==
+state.main_start` (its own address isn't `main_start`, which already
+points past everything) NOR site 5 (nothing precedes it but the k==0
+entry jmp itself, not a `proc_ret`/`fn_ret`) -- so it's swallowed as an
+ordinary, spurious `Goto`, and everything downstream (the `DEF FN`'s
+own `local_init`) inherits a corrupted `len(state.stmts)` count. This
+is a THIRD distinct, genuinely pre-existing bug, completely independent
+of trap_hook interposition or my own `glue_alias` design -- confirmed
+on a clean, unmodified checkout, so none of this session's reverted
+attempts caused or relate to it directly (though a real fix will very
+likely need to extend the SAME "chained skip-jmp" family of sites once
+more).
+
+This confirms `rsltest.exe`'s actual GOTO (at `0xa720`) can't be
+reproduced by a probe this simple: real TBWINDOW-scale files clearly
+DO chain hop-by-hop through each declaration (that's the whole `0xae40
+-> 0xb2fe -> ... -> 0xbe1e` chain this investigation has been tracing),
+while a minimal 2-declaration probe's `k==0` entry short-circuits
+straight to the end instead. The precise reason for that difference
+(declaration count? total byte size? some other structural trigger?)
+is not yet known and would need a few more iterations -- e.g. a THIRD
+declaration, or declarations large enough that the compiler can't fold
+the entry jmp into one hop -- to pin down empirically. No code was
+touched this round (investigation only); working tree confirmed clean.
+
+Given three independent pre-existing bugs are now implicated in one
+single gap, and the fourth (chasing the entry-jmp-shortcut trigger)
+still needs its own dedicated probe iteration, this is a genuinely
+substantial piece of follow-up work -- likely deserving its own
+focused session rather than continued incremental attempts appended to
+an already-long investigation log. The three fixes sketched across
+these rounds (trap_hook-transparent aliasing at site 5; trap_hook-
+tolerant `hook_start == main_start` at site 4; and whatever handles
+this newest "entry jmp shortcuts past a whole chain" case) are likely
+ALL genuinely correct and independently valuable, but none has been
+verified byte-exact yet, so none should be implemented speculatively.
+
 ### 2026-07-24 — GOTO target past a multi-arm SELECT CASE inside a SUB body
 
 Eighth closure in the `rsltest.exe` full-decode goal (continuing from
