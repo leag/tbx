@@ -2628,6 +2628,11 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 "exit": next(o[0] for o in state.ops[state.k :] if o[1] == "fn_ret"),
                 "block": False,
                 "str": False,  # string-valued FN (result stored via INT A2)
+                "int": False,  # INTEGER-valued FN (result stored via the
+                # ax path, movm_ax_bp at bp+0). An unsuffixed FN name is
+                # SINGLE to TB, so the `%` has to be recovered or the
+                # recompile widens the result and every reference to it
+                # (probe t1_fnintcall: 32 bytes larger without it).
                 "str_offs": set(),  # bp offsets of string params (INT 9E)
                 "int_offs": set(),  # bp offsets of INTEGER params (ax-path
                 # reads, e.g. movax_bp/imul_bp/fild_bp -- the source needs
@@ -2993,7 +2998,11 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 for off in sorted(state.fn_frame["param_offs"])
             )
             state.nfn += 1
-            name = f"FNFN{state.nfn}" + ("$" if state.fn_frame["str"] else "")
+            name = f"FNFN{state.nfn}" + (
+                "$" if state.fn_frame["str"]
+                else "%" if state.fn_frame["int"]
+                else ""
+            )
             state.proc_names[state.fn_frame["entry"]] = name
             if state.fn_frame["block"]:  # multi-line DEF FN ... END DEF
                 _apply_exit_folds(
@@ -3822,6 +3831,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
             # case (bp+0 is the frame-link word in a SUB, never a real LOCAL,
             # so this can only mean the FN result there; wild resume.exe).
             if state.fn_frame is not None and op[2] == 0:
+                state.fn_frame["int"] = True  # integer-typed result
                 if state.fn_frame["block"]:
                     state.put(ir.FnResult(state.ax), state.cur)
                     state.cur = None

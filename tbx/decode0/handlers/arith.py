@@ -287,12 +287,17 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         state.k += 1
         return True
     if kind == "movax_bp":  # mov ax, [bp+d8]: LOCAL int read, e.g. as an
-        # expression's first term (t1_byref1) -- OR, at bp+0 outside any open
-        # SUB/DEF FN body, the caller reading back a just-called integer FN's
-        # result from the shared staged frame (fn_call always stages the
-        # FnCall node onto the float-oriented `state.stack`; this is that
-        # value's ax-register sibling -- wild resume.exe).
-        if op[2] == 0 and state.proc_frame is None and state.fn_frame is None:
+        # expression's first term (t1_byref1) -- OR, at bp+0 right after a
+        # fn_call, the caller reading back a just-called integer FN's result
+        # from the shared staged frame (fn_call always stages the FnCall node
+        # onto the float-oriented `state.stack`; this is that value's
+        # ax-register sibling -- wild resume.exe). `mov_bp_sp` has repointed BP
+        # at the staging frame by then, so the enclosing SUB's own LOCAL frame
+        # is NOT what bp+0 means here: keying on the preceding fn_call rather
+        # than on "no frame is open" is what lets an integer FN be called from
+        # inside a SUB body at all (probe t1_fnintcall; wild tbd73.exe, whose
+        # TBWINDOW SUBs call FNAttr() -- integer-typed under its DEFINT a-z).
+        if op[2] == 0 and state.k and state.ops[state.k - 1][1] == "fn_call":
             state.ax = state.stack.pop()
         else:
             state.ax = state.loc_local(op[2])

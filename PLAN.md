@@ -1186,6 +1186,31 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 14: an INTEGER-valued DEF FN called from a SUB body
+
+Two gaps in one shape, both from `tbd73.exe` (TBWINDOW's SUBs call
+`FNAttr()`, integer-typed under `TBW73.INC`'s `DEFINT a-z`):
+
+1. **Reading the result.** Every existing DEF FN fixture returns SINGLE, so
+   the caller reads the result with `fld_bp 0`; an integer FN uses
+   `mov ax,[bp+0]` instead. That was handled only when NO frame was open --
+   but `mov_bp_sp` has already repointed BP at the call-staging frame by
+   then, so "am I inside a SUB" says nothing about what `bp+0` means. Keying
+   on the immediately preceding `fn_call` instead is what lets an integer FN
+   be called from inside a SUB body at all.
+2. **Naming it.** The FN's `%` was dropped. An unsuffixed name is SINGLE to
+   TB, so the recompile widened the result and every reference to it -- 32
+   bytes, caught by the probe's round trip rather than by its decode, which
+   looked perfectly reasonable. `fn_frame` now carries an `int` flag set by
+   the bp+0 integer result store, alongside the existing `str` one.
+
+Witness `t1_fnintcall`, byte-exact both dialects. Worth noting the first
+probe attempt used `DEFINT A-Z` and could not round-trip: the decoder emits
+explicit suffixes rather than recovering `DEFINT`, which is a normalization
+that only holds if every name carries its suffix -- exactly what gap 2 broke.
+
+`tbd73.exe` advances to `forwarded arg to unknown callee params at 0xa813`.
+
 ### 2026-07-24 — Round 13: a chained skip-jmp landing on a block DEF FN
 
 `tbd73.exe`'s declaration region is a clean chain of skip-jmps through its

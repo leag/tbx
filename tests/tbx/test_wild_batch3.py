@@ -452,6 +452,29 @@ def test_decode_t1_erasestatic():
         ), stem
 
 
+def test_decode_t1_fnintcall():
+    # An INTEGER-valued DEF FN called from inside a SUB body. Two gaps in one
+    # shape: the caller reads the result with `mov ax,[bp+0]` (the integer
+    # sibling of every existing fixture's `fld_bp 0`), which was only accepted
+    # when no frame was open -- but mov_bp_sp has repointed BP at the staging
+    # frame, so keying on the preceding fn_call is what lets the call happen
+    # inside a SUB at all. And the FN's own `%` was dropped: an unsuffixed
+    # name is SINGLE to TB, so the recompile widened the result and every
+    # reference to it (32 bytes). Found via wild tbd73.exe, whose TBWINDOW
+    # SUBs call FNAttr() under DEFINT a-z. Byte-exact, both dialects.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_fnintcall", "v10_t1_fnintcall"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        fn = next(s for s in prog if isinstance(s, ir.DefFn))
+        assert fn.name == "FNFN1%", stem
+        assert emit0.emit(prog) == (
+            "10 DEF FNFN1%(A%)\n  FNFN1% = A% + 1\nEND DEF\n"
+            "20 SUB SUB1\n  B% = FNFN1%(2)\n  PRINT B%\nEND SUB\n"
+            "30 CALL SUB1\n40 END\n"
+        ), stem
+
+
 def test_decode_t1_inlinethendef():
     # A chained declaration skip-jmp landing on a block DEF FN: a DEF FN has
     # no proc_enter of its own, so the chain's next-op test (proc_enter /
@@ -2877,6 +2900,7 @@ if __name__ == "__main__":
     test_decode_t1_fwdcalltgt()
     test_decode_t1_inlinebp()
     test_decode_t1_erasestatic()
+    test_decode_t1_fnintcall()
     test_decode_t1_inlinethendef()
     test_decode_t1_commonarrstatic()
     test_decode_t1_erasepre()
