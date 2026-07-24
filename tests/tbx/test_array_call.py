@@ -51,11 +51,15 @@ def test_zip_string_array_parameter_decodes_completely():
     assert isinstance(sub, ir.SubDef)
     assert sub.name == "SUB30"
     assert sub.params == ("M$(1)",)
+    # A block IF/ELSE, not an IfInline + trailing GOTO: SUB bodies now get the
+    # same _fold_if pass the top level has always run (t1_dblhooksub), and both
+    # spellings compile identically, so the block form is the canonical one.
     assert any(
-        isinstance(s, ir.IfInline)
-        and isinstance(s.cond, ir.LogOp)
-        and isinstance(s.cond.lhs, ir.RelOp)
-        and s.cond.lhs.lhs == ir.ArrayRef("M$", (ir.Lit(1),))
+        isinstance(s, ir.IfBlock)
+        and isinstance(s.arms[0][0], ir.LogOp)
+        and isinstance(s.arms[0][0].lhs, ir.RelOp)
+        and s.arms[0][0].lhs.lhs == ir.ArrayRef("M$", (ir.Lit(1),))
+        and s.else_body is not None
         for s in sub.body
     )
 

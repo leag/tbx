@@ -32,9 +32,9 @@ def test_undimensioned_local_array_cleanup(stem):
 @pytest.mark.parametrize(
     ("stem", "exc", "next_gap"),
     [
-        ("cleanup.exe", ValueError, "unhandled jmp short at 0xcc87"),
+        ("cleanup.exe", ValueError, "LOCAL zero-fill outside a fresh SUB/DEF FN body at 0xd0ca"),
         ("crossref.exe", ValueError, "unhandled INT EC sub 38 at 0x11a63"),
-        ("reformat.exe", ValueError, "unhandled jmp short at 0xccc3"),
+        ("reformat.exe", ValueError, "LOCAL zero-fill outside a fresh SUB/DEF FN body at 0xd455"),
     ],
 )
 def test_wild_local_bounds_remain_closed(stem, exc, next_gap):

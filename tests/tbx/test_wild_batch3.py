@@ -357,7 +357,7 @@ def test_wild_rsltest_argref_advances():
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(ValueError, match=r"jump target 0xa7e2 is not a statement start"):
+    with pytest.raises(ValueError, match=r"jump target 0xab35 is not a statement start"):
         decode0.decode_user_code(wild_hits_bytes("rsltest.exe"))
 
 
@@ -380,6 +380,43 @@ def test_decode_t1_declnoend():
         assert [type(s).__name__ for s in prog] == ["Assign", "SubDef", "Print"], stem
         assert emit0.emit(prog) == (
             '10 A% = 1\n20 SUB SUB1\n  PRINT "F"\nEND SUB\n30 PRINT A%\n'
+        ), stem
+
+
+def test_decode_t1_dblhook():
+    # A code-less source line (END IF) under event trapping still gets its own
+    # per-statement CC hook, so two trap_hooks pile up ahead of the next real
+    # statement. The decoder stamps that statement with the FIRST hook, but the
+    # compiler's block-IF arm tails jump to the LAST -- which matched no
+    # statement, so the fold never happened and the else-skip Goto survived
+    # into _resolve_targets. Jump targets landing inside a hook run are now
+    # normalized onto the run's first hook (every hook in a run precedes the
+    # same statement). The SUB variant additionally needed the body to get the
+    # _fold_if pass the top level always ran, and map_body to account ELSEIF/
+    # ELSE arms exactly. Found via wild rsltest.exe. Byte-exact, both dialects.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_dblhook", "v10_t1_dblhook"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        blk = next(s for s in prog if isinstance(s, ir.IfBlock))
+        assert len(blk.arms) == 2 and blk.else_body is not None, stem
+        assert emit0.emit(prog) == (
+            "10 ON TIMER(1) GOSUB 70\n20 TIMER ON\n30 A = 1\n"
+            "40 IF A > 1 THEN\n  B% = 1\nELSEIF A > 0 THEN\n  B% = 2\n"
+            "ELSE\n  B% = 3\nEND IF\n50 PRINT B%\n60 END\n70 RETURN\n"
+        ), stem
+
+    for stem in ("t1_dblhooksub", "v10_t1_dblhooksub"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        sub = next(s for s in prog if isinstance(s, ir.SubDef))
+        blk = next(s for s in sub.body if isinstance(s, ir.IfBlock))
+        assert len(blk.arms) == 2 and blk.else_body is not None, stem
+        assert not any(isinstance(s, ir.Goto) for s in sub.body), stem
+        assert emit0.emit(prog) == (
+            "10 ON TIMER(1) GOSUB 50\n20 TIMER ON\n30 CALL SUB1\n40 END\n"
+            "50 RETURN\n60 SUB SUB1\n  A = 1\n  IF A > 1 THEN\n    B% = 1\n"
+            "  ELSEIF A > 0 THEN\n    B% = 2\n  ELSE\n    B% = 3\n  END IF\n"
+            "  PRINT B%\nEND SUB\n"
         ), stem
 
 
@@ -2540,6 +2577,7 @@ if __name__ == "__main__":
     test_decode_t1_argrefonly()
     test_wild_rsltest_argref_advances()
     test_decode_t1_declnoend()
+    test_decode_t1_dblhook()
     test_decode_t1_scgoto()
     test_decode_t1_scgotone()
     test_decode_t1_movaxmpool()

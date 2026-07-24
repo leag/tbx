@@ -3345,6 +3345,23 @@ Print(items=(StrLit(value='G'),), newline=True, file=None, commas=None)
 Print(items=(ArrayRef(name='V0#', indices=(Lit(value=2),)),), newline=True, file=None, commas=None)
 End()
 
+## t1_dblhook
+OnTrap(event='TIMER', n=Lit(value=1), target=6)
+TrapCtl(event='TIMER', n=None, mode='ON')
+Assign(target=Var(name='A'), value=Lit(value=1))
+IfBlock(arms=((RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), (Assign(target=Var(name='B%'), value=Lit(value=1)),)), (RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=0)), (Assign(target=Var(name='B%'), value=Lit(value=2)),))), else_body=(Assign(target=Var(name='B%'), value=Lit(value=3)),))
+Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)
+End()
+Return(target=None)
+
+## t1_dblhooksub
+OnTrap(event='TIMER', n=Lit(value=1), target=4)
+TrapCtl(event='TIMER', n=None, mode='ON')
+CallStmt(name='SUB1', args=())
+End()
+Return(target=None)
+SubDef(name='SUB1', params=(), body=(Assign(target=Var(name='A'), value=Lit(value=1)), IfBlock(arms=((RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), (Assign(target=Var(name='B%'), value=Lit(value=1)),)), (RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=0)), (Assign(target=Var(name='B%'), value=Lit(value=2)),))), else_body=(Assign(target=Var(name='B%'), value=Lit(value=3)),)), Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)))
+
 ## t1_declnoend
 Assign(target=Var(name='A%'), value=Lit(value=1))
 SubDef(name='SUB1', params=(), body=(Print(items=(StrLit(value='F'),), newline=True, file=None, commas=None),))
@@ -9548,6 +9565,23 @@ End()
 ## v10_t1_dates
 DateTimeSet(name='DATE$', value=StrLit(value='07-02-2026'))
 End()
+
+## v10_t1_dblhook
+OnTrap(event='TIMER', n=Lit(value=1), target=6)
+TrapCtl(event='TIMER', n=None, mode='ON')
+Assign(target=Var(name='A'), value=Lit(value=1))
+IfBlock(arms=((RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), (Assign(target=Var(name='B%'), value=Lit(value=1)),)), (RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=0)), (Assign(target=Var(name='B%'), value=Lit(value=2)),))), else_body=(Assign(target=Var(name='B%'), value=Lit(value=3)),))
+Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)
+End()
+Return(target=None)
+
+## v10_t1_dblhooksub
+OnTrap(event='TIMER', n=Lit(value=1), target=4)
+TrapCtl(event='TIMER', n=None, mode='ON')
+CallStmt(name='SUB1', args=())
+End()
+Return(target=None)
+SubDef(name='SUB1', params=(), body=(Assign(target=Var(name='A'), value=Lit(value=1)), IfBlock(arms=((RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), (Assign(target=Var(name='B%'), value=Lit(value=1)),)), (RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=0)), (Assign(target=Var(name='B%'), value=Lit(value=2)),))), else_body=(Assign(target=Var(name='B%'), value=Lit(value=3)),)), Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)))
 
 ## v10_t1_declnoend
 Assign(target=Var(name='A%'), value=Lit(value=1))

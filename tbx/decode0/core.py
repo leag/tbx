@@ -2064,6 +2064,33 @@ def decode_user_code(exe: bytes) -> list[Any]:
             elif o[1] in ("jcc", "on_trap"):
                 o = o[:3] + (alias.get(o[3], o[3]),)
             state.ops.append(o)
+    # The same hook-blindness for EVENT-trap hooks, which (unlike trace hooks)
+    # stay in the stream: a code-less source line (END IF) still gets its own
+    # per-statement CC hook, so hooks pile up back-to-back ahead of the next
+    # real statement. `state.cur` takes the FIRST hook of such a run and keeps
+    # it, so that is the statement's address -- but the compiler's own block-IF
+    # arm tails jump to the LAST one, which then matches no statement and left
+    # the fold undone (a bare Goto surviving into _resolve_targets). Normalize
+    # those targets onto the run's first hook: every hook in a run precedes the
+    # same statement, so they resolve identically (probe t1_dblhook; wild
+    # rsltest.exe's TBWINDOW IF/ELSEIF/ELSE chain).
+    hook_alias, run_first = {}, None
+    for o in state.ops:
+        if o[1] != "trap_hook":
+            run_first = None
+        elif run_first is None:
+            run_first = o[0]
+        else:
+            hook_alias[o[0]] = run_first
+    if hook_alias:
+        ops3 = []
+        for o in state.ops:
+            if o[1] in ("jmp", "jmps") or (o[1] == "on_error" and o[2] is not None):
+                o = (o[0], o[1], hook_alias.get(o[2], o[2]))
+            elif o[1] in ("jcc", "on_trap"):
+                o = o[:3] + (hook_alias.get(o[3], o[3]),) + o[4:]
+            ops3.append(o)
+        state.ops = ops3
     state.lay = _layout(exe, state.ops)
     state.ds = state.lay["ds"]
     state.dsd = (
@@ -2733,6 +2760,18 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 state.stmts, state.addrs, state.exit_folds
             )  # EXIT SUB fold (Task 3.5), body-local
             state.exit_folds.clear()
+            # Multi-line IF blocks inside the body, the same fold the top level
+            # runs once every statement is in (see `_fold_if` below): a SUB body
+            # is snapshotted here and never revisited by that pass, so it has to
+            # happen now or its IfInlines stay inline and the else-skip Goto
+            # survives as a spurious statement (probe t1_dblhooksub).
+            i0 = state.proc_frame["idx"]
+            state.stmts[i0:], state.addrs[i0:] = _fold_if(
+                state.stmts[i0:],
+                state.addrs[i0:],
+                targets=_jump_targets(state.stmts),
+                stmt_addr=state.stmt_addr,
+            )
             body = tuple(state.stmts[state.proc_frame["idx"] :])
             for st, ad in zip(body, state.addrs[state.proc_frame["idx"] :]):
                 if ad is not None:  # keep body addrs: GOSUB targets a body

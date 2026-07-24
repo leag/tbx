@@ -47,8 +47,8 @@ def test_string_local_in_block_def_fn(stem):
     [
         ("bmaster.exe", ValueError, "string BP push outside DEF FN at 0x9279"),
         ("ifi.exe", ValueError, "string BP push outside DEF FN at 0x9279"),
-        ("cleanup.exe", ValueError, "unhandled jmp short at 0xcc87"),
-        ("reformat.exe", ValueError, "unhandled jmp short at 0xccc3"),
+        ("cleanup.exe", ValueError, "LOCAL zero-fill outside a fresh SUB/DEF FN body at 0xd0ca"),
+        ("reformat.exe", ValueError, "LOCAL zero-fill outside a fresh SUB/DEF FN body at 0xd455"),
     ],
 )
 def test_string_local_witnesses_advance(stem, exc, next_gap):

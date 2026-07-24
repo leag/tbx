@@ -80,8 +80,8 @@ def test_scan_local_array_index_dx_spill():
 @pytest.mark.parametrize(
     ("stem", "exc", "next_gap"),
     [
-        ("cleanup.exe", ValueError, "unhandled jmp short at 0xcc87"),
-        ("reformat.exe", ValueError, "unhandled jmp short at 0xccc3"),
+        ("cleanup.exe", ValueError, "LOCAL zero-fill outside a fresh SUB/DEF FN body at 0xd0ca"),
+        ("reformat.exe", ValueError, "LOCAL zero-fill outside a fresh SUB/DEF FN body at 0xd455"),
     ],
 )
 def test_large_local_family_advances_wild_program(stem, exc, next_gap):

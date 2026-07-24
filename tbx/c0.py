@@ -1463,6 +1463,15 @@ class _Gen:
 
         for st in self.stmts:
             walk(st)
+        # SUB signatures ahead of generation: a SUB may be CALLed before its
+        # own definition appears in statement order (TB places definitions
+        # wherever the source did -- t1_dblhooksub calls SUB1 at line 30 and
+        # defines it at line 60), and gen_call needs the params to type the
+        # by-ref argument temporaries. gen_subdef re-records the same entry
+        # when it reaches the definition.
+        for st in self.stmts:
+            if isinstance(st, ir.SubDef):
+                self.subs[st.name] = st.params
 
         body: list[str] = []
         loops: list[tuple[str, int, str | None]] = []

@@ -1017,17 +1017,21 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
                             "a multi-line statement"
                         )
                     index[a] = ir.BodyLine(top_idx, phys)
-                if (
-                    isinstance(b, ir.IfBlock)
-                    and len(b.arms) == 1
-                    and b.else_body is None
-                ):
+                if isinstance(b, ir.IfBlock):
                     # Header (already counted as `phys` above) + body
-                    # (recursed, exact) + END IF -- a fully-accounted
-                    # single-arm block, so flat counting can safely continue
-                    # past it (unlike the generic multi-line cases below,
-                    # whose width isn't known).
-                    phys = map_body(top_idx, b.arms[0][1], phys + 1) + 1
+                    # (recursed, exact) + END IF -- a fully-accounted block, so
+                    # flat counting can safely continue past it (unlike the
+                    # generic multi-line cases below, whose width isn't known).
+                    # ELSEIF/ELSE arms extend the same accounting: emit0.py
+                    # renders one header line per arm, then that arm's body,
+                    # then an optional "ELSE" line + body, then "END IF"
+                    # (probe t1_dblhooksub, a block IF/ELSEIF/ELSE inside a SUB
+                    # body whose first post-block statement is a jump target).
+                    for _cond, arm_body in b.arms:
+                        phys = map_body(top_idx, arm_body, phys + 1)
+                    if b.else_body is not None:
+                        phys = map_body(top_idx, b.else_body, phys + 1)
+                    phys += 1  # "END IF"
                 elif isinstance(b, ir.SelectCase):
                     # Fully accounted like the single-arm IfBlock above:
                     # emit0.py's own SelectCase rendering is a deterministic

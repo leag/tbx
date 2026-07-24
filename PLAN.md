@@ -1186,6 +1186,79 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 5: consecutive event-trap hooks (`END IF`) as jump targets
+
+Tenth closure in the `rsltest.exe` full-decode goal, picking up the gap
+round 4 diagnosed and deferred (`jump target 0xa7e2 is not a statement
+start`). Three linked fixes, all byte-exact verified in both dialects.
+
+**1. Hook-run target normalization (`core.py`, right after the TRON
+`trace_hook` pass, which had already solved the identical problem for its
+own hooks).** Under event trapping every statement gets a CC (`INT 3`)
+poll hook -- including code-less source lines, so an `END IF` contributes
+a hook with no code behind it and hooks pile up back-to-back ahead of the
+next real statement:
+
+```
+088AF: trap_hook      <- END IF's own hook; state.cur takes THIS one
+088B0: trap_hook      <- the next statement's hook
+088B1: fild:288       <- PRINT B%
+```
+
+`state.cur` is assigned only `if state.cur is None`, so the statement's
+recorded address is the FIRST hook -- but the compiler's block-IF arm
+tails (`08881`, `088A5`) jump to the LAST. That address matched no
+statement, so `_fold_if` could not find the merge point, the fold never
+happened, and the else-skip `Goto` survived into `_resolve_targets`.
+Jump targets landing inside a hook run are now aliased onto the run's
+first hook (`jmp`/`jmps`/`jcc`/`on_error`/`on_trap`, the same op set the
+trace-hook pass rewrites). Exact, not approximate: every hook in a run
+precedes the same statement, so they resolve identically.
+
+**2. SUB bodies now get the `_fold_if` pass (`core.py`, at `proc_ret`).**
+Fixing (1) alone turned the loud failure into a SILENT WRONG DECODE for
+the SUB-body variant -- it emitted `IF A > 1 THEN B% = 1: GOTO 65` plus a
+numbered line instead of the block IF. Root cause was pre-existing and
+unrelated to hooks: a SUB body is snapshotted at `proc_ret` and never
+revisited by the top-level fold, so multi-line IF blocks inside a SUB were
+simply never folded. No corpus fixture had a block IF with `ELSE`/`END IF`
+inside a SUB, which is why it stood this long. The body-local
+`_apply_exit_folds` call already sat at that exact spot; `_fold_if` now
+runs beside it.
+
+**3. `map_body` accounts ELSEIF/ELSE arms exactly (`lift.py`).** With (2)
+in place the probe failed again, loudly, at `body line not addressable
+past a multi-line statement`: `map_body` only knew the physical-line width
+of a SINGLE-arm, ELSE-less `IfBlock`. `emit0.py`'s `IfBlock` rendering is
+just as deterministic as the `SelectCase` case closed earlier the same day
+(one header line per arm + that arm's body + optional `ELSE` line + body +
+`END IF`), so the single-arm special case is now the general one.
+
+Witnesses (both promoted, both byte-exact via `verify_fixture` in 1.1 AND
+1.0): `t1_dblhook` (`ON TIMER` + `IF/ELSEIF/ELSE/END IF` in main code)
+and `t1_dblhooksub` (the same block inside a `SUB` reached by a forward
+`CALL`). Golden regeneration was again PURELY ADDITIVE (`ir_snapshot.txt`:
+34 insertions, 0 deletions) -- notable given (2) touches every SUB body in
+the corpus. Full suite 2664 -> 2675 passed/16 skipped, Ruff clean.
+
+**Side effects, all verified as advances rather than regressions:**
+- `zip.exe`'s `SUB30` now recovers a block `IF/ELSE` where it previously
+  produced `IfInline` + trailing `GOTO` + a numbered line. Both spellings
+  compile to the same code -- this is the "genuinely lossy, normalize to
+  one canonical form" case, and the top level had always normalized to the
+  block form; SUB bodies now agree. Pin test updated deliberately.
+- `cleanup.exe` / `reformat.exe` advance from `unhandled jmp short at
+  0xcc87`/`0xccc3` to `LOCAL zero-fill outside a fresh SUB/DEF FN body at
+  0xd0ca`/`0xd455` (target rewriting changes which fold consumes a `jmps`).
+  Five progress-marker tests updated.
+- `c0.py` needed a SUB-signature pre-pass in `build()`: `t1_dblhooksub` is
+  the first fixture to `CALL` a `SUB` defined LATER in statement order, and
+  `gen_call` looked up `self.subs` as it went. `test_dos_golden` for it now
+  passes, so the generated C is correct end to end.
+
+`rsltest.exe` advances to `jump target 0xab35 is not a statement start` --
+a further address inside the same TBWINDOW region, not yet investigated.
+
 ### 2026-07-24 — Round 4: the `0xae40` gap CLOSED; rounds 1-3's diagnosis was WRONG
 
 Ninth closure in the `rsltest.exe` full-decode goal. **Rounds 1-3 below
