@@ -97,7 +97,11 @@ def calls(state: DecodeState, op, addr, kind) -> bool:
     if kind == "fn_call":  # drain staged args (offset order) -> FnCall
         args = tuple(state.fn_args[o] for o in sorted(state.fn_args))
         state.fn_args.clear()
-        call = ir.FnCall(state.proc_names[op[2]], args)
+        # A DEF FN body may appear later in the op stream. Mirror forward
+        # CallStmt staging and resolve the immutable expression during final
+        # program resolution once every definition has been named.
+        name = state.proc_names.get(op[2], ("addr", op[2]))
+        call = ir.FnCall(name, args)
         nxt = state.ops[state.k + 1] if state.k + 1 < len(state.ops) else None
         if nxt is not None and nxt[1] == "fnres_spush":
             # string FN: INT 9F pushes the result descriptor (t1_fnstr)

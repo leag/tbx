@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 import struct
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, is_dataclass, replace
 from typing import Any, cast
 
 from tbx import ir
@@ -524,6 +524,33 @@ def _resolve_calls(stmts, proc_names, proc_params, proc_int_offs, proc_str_offs)
         new = [fix(s) for s in body]
         return body if all(a is b for a, b in zip(body, new)) else new
 
+    def fix_value(v):
+        if isinstance(v, ir.FnCall):
+            new_args = tuple(fix_value(a) for a in v.args)
+            name = v.name
+            if isinstance(name, tuple) and name and name[0] == "addr":
+                target = name[1]
+                if target not in proc_names:
+                    raise ValueError(f"unresolved forward FN target {target:#x}")
+                name = proc_names[target]
+            return (
+                v
+                if name == v.name and all(a is b for a, b in zip(v.args, new_args))
+                else ir.FnCall(name, new_args)
+            )
+        if isinstance(v, tuple):
+            new = tuple(fix_value(x) for x in v)
+            return v if all(a is b for a, b in zip(v, new)) else new
+        if is_dataclass(v):
+            changes = {}
+            for f in fields(v):
+                old = getattr(v, f.name)
+                new = fix_value(old)
+                if new is not old:
+                    changes[f.name] = new
+            return v if not changes else replace(v, **changes)
+        return v
+
     def fix(s):
         if isinstance(s, ir.CallStmt):
             new_args, args_changed = fix_args(s.args)
@@ -590,7 +617,7 @@ def _resolve_calls(stmts, proc_names, proc_params, proc_int_offs, proc_str_offs)
                     changed = True
                     case_else = tuple(nce)
             return s if not changed else ir.SelectCase(s.selector, tuple(arms), case_else)
-        return s
+        return fix_value(s)
 
     return walk(stmts)
 

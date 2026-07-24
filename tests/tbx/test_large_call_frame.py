@@ -84,8 +84,8 @@ def test_scan_local_array_index_dx_spill():
 @pytest.mark.parametrize(
     ("stem", "exc", "next_gap"),
     [
-        ("cleanup.exe", KeyError, "59709"),
-        ("reformat.exe", KeyError, "60616"),
+        ("cleanup.exe", ValueError, "unhandled jmp short at 0xcc87"),
+        ("reformat.exe", ValueError, "unhandled jmp short at 0xccc3"),
     ],
 )
 def test_large_local_family_advances_wild_program(stem, exc, next_gap):

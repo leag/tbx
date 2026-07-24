@@ -20,9 +20,9 @@ def test_scan_testw_bp_is_exact():
 @pytest.mark.parametrize(
     ("stem", "exc", "next_gap"),
     [
-        ("cleanup.exe", KeyError, "59709"),
+        ("cleanup.exe", ValueError, "unhandled jmp short at 0xcc87"),
         ("crossref.exe", ValueError, "unhandled INT EC sub 38 at 0x11a63"),
-        ("reformat.exe", KeyError, "60616"),
+        ("reformat.exe", ValueError, "unhandled jmp short at 0xccc3"),
     ],
 )
 def test_fp_local_for_advances_wild_program(stem, exc, next_gap):
@@ -46,5 +46,15 @@ def test_mixed_def_fn_for_storage(stem):
 
 def test_ziptest_advances_to_forward_fn_resolution_gap():
     data = (_ROOT / "wild" / "hits" / "ziptest.exe").read_bytes()
-    with pytest.raises(KeyError, match="42193"):
+    with pytest.raises(ValueError, match="jump target 0x9ff7 is not a statement start"):
         decode0.decode_user_code(data)
+
+
+@pytest.mark.parametrize("stem", ["t1_fnforward", "v10_t1_fnforward"])
+def test_forward_block_fn_call(stem):
+    program = decode0.decode_user_code(
+        (_ROOT / "tests" / "fixtures" / "corpus" / f"{stem}.exe").read_bytes()
+    )
+    assert program[0] == ir.Print(
+        (ir.FnCall("FNFN1", (ir.Lit(3),)),), newline=True
+    )

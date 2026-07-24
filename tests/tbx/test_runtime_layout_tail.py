@@ -35,8 +35,8 @@ def test_runtime_layout_recovers_scalars_after_hole(stem, string_disp, single_di
 @pytest.mark.parametrize(
     ("stem", "exc", "next_gap"),
     [
-        ("cleanup.exe", KeyError, "59709"),
-        ("reformat.exe", KeyError, "60616"),
+        ("cleanup.exe", ValueError, "unhandled jmp short at 0xcc87"),
+        ("reformat.exe", ValueError, "unhandled jmp short at 0xccc3"),
     ],
 )
 def test_runtime_layout_witnesses_reach_next_gap(stem, exc, next_gap):

@@ -935,6 +935,22 @@ fixing the intra-inline-IF gap above will also close it.
 
 ## Part III — Investigation history / handoff log
 
+### 2026-07-23 — forward DEF FN expression calls
+
+Closed forward-FN resolution in `ziptest.exe`, `kinetics.exe`,
+`cleanup.exe`, and `reformat.exe`. Forward `CallStmt` nodes already staged `("addr",
+target)` until every procedure was named, but `fn_call` indexed
+`proc_names` immediately and raised a bare KeyError when the DEF FN
+body appeared later in the op stream. `FnCall` now stages the same
+placeholder. `_resolve_calls` recursively rewrites immutable expression
+dataclasses, preserving object identity for unchanged nodes so the
+following target-resolution pass keeps its `id(stmt)` address mapping;
+an address still absent after all definitions raises an explicit
+fail-loud error. New dual-dialect fixture `t1_fnforward` calls a later
+block DEF FN and round-trips byte-for-byte. `ziptest` advances to a
+jump-target shape, `kinetics` to a materialization mismatch, and the
+two large siblings to short-JMP shapes.
+
 ### 2026-07-23 — two-NOP-prefixed local FOR/NEXT tests
 
 Closed the later `testw_bp` stop in `reformat.exe`. Its runtime revision

@@ -198,8 +198,8 @@
     {
       "name": "wild/hits/cleanup.exe",
       "dialect": "1.1",
-      "message": "59709",
-      "signature": "59709"
+      "message": "unhandled jmp short at 0xcc87",
+      "signature": "unhandled jmp short"
     },
     {
       "name": "wild/hits/crossref.exe",
@@ -282,8 +282,8 @@
     {
       "name": "wild/hits/kinetics.exe",
       "dialect": "1.0",
-      "message": "54565",
-      "signature": "54565"
+      "message": "materialization template mismatch at 0xc3d2",
+      "signature": "materialization template mismatch"
     },
     {
       "name": "wild/hits/lmaster.exe",
@@ -408,8 +408,8 @@
     {
       "name": "wild/hits/reformat.exe",
       "dialect": "1.1",
-      "message": "60616",
-      "signature": "60616"
+      "message": "unhandled jmp short at 0xccc3",
+      "signature": "unhandled jmp short"
     },
     {
       "name": "wild/hits/refund.exe",
@@ -486,11 +486,23 @@
     {
       "name": "wild/hits/ziptest.exe",
       "dialect": "1.1",
-      "message": "42193",
-      "signature": "42193"
+      "message": "jump target 0x9ff7 is not a statement start",
+      "signature": "jump target 0x9ff7 is not a statement start"
     }
   ],
   "groups": [
+    {
+      "signature": "materialization template mismatch",
+      "count": 6,
+      "files": [
+        "wild/hits/bmaster.exe",
+        "wild/hits/grdscn.exe",
+        "wild/hits/ifi.exe",
+        "wild/hits/kinder.exe",
+        "wild/hits/kinetics.exe",
+        "wild/hits/wb.exe"
+      ]
+    },
     {
       "signature": "unhandled INT EC sub 38",
       "count": 6,
@@ -504,17 +516,6 @@
       ]
     },
     {
-      "signature": "materialization template mismatch",
-      "count": 5,
-      "files": [
-        "wild/hits/bmaster.exe",
-        "wild/hits/grdscn.exe",
-        "wild/hits/ifi.exe",
-        "wild/hits/kinder.exe",
-        "wild/hits/wb.exe"
-      ]
-    },
-    {
       "signature": "DGROUP layout not solvable from the calibrated rules",
       "count": 4,
       "files": [
@@ -522,6 +523,15 @@
         "wild/hits/night.exe",
         "wild/hits/sprogh.exe",
         "wild/hits/swbb.exe"
+      ]
+    },
+    {
+      "signature": "unhandled jmp short",
+      "count": 3,
+      "files": [
+        "wild/hits/baby.exe",
+        "wild/hits/cleanup.exe",
+        "wild/hits/reformat.exe"
       ]
     },
     {
@@ -596,34 +606,6 @@
       ]
     },
     {
-      "signature": "42193",
-      "count": 1,
-      "files": [
-        "wild/hits/ziptest.exe"
-      ]
-    },
-    {
-      "signature": "54565",
-      "count": 1,
-      "files": [
-        "wild/hits/kinetics.exe"
-      ]
-    },
-    {
-      "signature": "59709",
-      "count": 1,
-      "files": [
-        "wild/hits/cleanup.exe"
-      ]
-    },
-    {
-      "signature": "60616",
-      "count": 1,
-      "files": [
-        "wild/hits/reformat.exe"
-      ]
-    },
-    {
       "signature": "LINE INPUT # template mismatch",
       "count": 1,
       "files": [
@@ -684,6 +666,13 @@
       "count": 1,
       "files": [
         "wild/hits/secure.exe"
+      ]
+    },
+    {
+      "signature": "jump target 0x9ff7 is not a statement start",
+      "count": 1,
+      "files": [
+        "wild/hits/ziptest.exe"
       ]
     },
     {
@@ -761,13 +750,6 @@
       "count": 1,
       "files": [
         "wild/hits/hebrew.exe"
-      ]
-    },
-    {
-      "signature": "unhandled jmp short",
-      "count": 1,
-      "files": [
-        "wild/hits/baby.exe"
       ]
     }
   ]
