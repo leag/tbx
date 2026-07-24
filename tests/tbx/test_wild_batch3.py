@@ -262,6 +262,19 @@ def test_decode_t1_byreflong():
     )
 
 
+def test_decode_t1_forvarlimfar():
+    # Variable-limit integer FOR/NEXT whose body is beyond short-jump
+    # range: the NEXT test uses the inverse signed condition + JMP instead
+    # of a direct JLE to body (the same indirect form the literal-limit
+    # cmp_mi8 case already handles). Wild pwinst.exe.
+    from tbx import decode0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_forvarlimfar.exe"))
+    loops = [s for s in prog if isinstance(s, ir.For)]
+    assert loops == [ir.For(ir.Var("B%"), ir.Lit(1), ir.Var("A%"), ir.Lit(1))]
+    assert any(isinstance(s, ir.NextStmt) and s.var == ir.Var("B%") for s in prog)
+
+
 def test_decode_t1_midvarstart():
     # `MID$(A$, N%) = B$` -- the start position is a variable expression,
     # not just a literal: state.ax already holds whatever computed it
@@ -2143,6 +2156,7 @@ if __name__ == "__main__":
     test_decode_t1_local2()
     test_decode_t1_byref1()
     test_decode_t1_byreflong()
+    test_decode_t1_forvarlimfar()
     test_decode_t1_midvarstart()
     test_decode_t1_inpfilearr()
     test_decode_t1_byrefdbl()

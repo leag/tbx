@@ -3048,15 +3048,27 @@ def decode_user_code(exe: bytes) -> list[Any]:
             and state.ops[state.k + 1][2] == state.fors[-1]["v"]
         ):
             # Variable-limit integer NEXT: `mov ax,[limit]; cmp [I%],ax; jle body`
-            # (t1_fori; inc_m was consumed, step is always 1)
+            # (t1_fori; inc_m was consumed, step is always 1). A body beyond
+            # short-jump range uses the inverse condition + JMP instead
+            # (same indirect form the literal-limit cmp_mi8 case already
+            # handles, wild pwinst.exe).
             f = state.fors[-1]
             jcc = state.ops[state.k + 2]
-            if jcc[1] != "jcc" or jcc[2] not in (0x7E, 0x76) or jcc[3] != f["body"]:
+            direct = jcc[1] == "jcc" and jcc[2] in (0x7E, 0x76) and jcc[3] == f["body"]
+            indirect = (
+                state.k + 3 < len(state.ops)
+                and jcc[1] == "jcc"
+                and jcc[2] in (0x7F, 0x77)
+                and state.ops[state.k + 3][1] == "jmp"
+                and state.ops[state.k + 3][2] == f["body"]
+                and jcc[3] == state.ops[state.k + 3][0] + 3
+            )
+            if not (direct or indirect):
                 raise ValueError(f"int NEXT (var limit): expected JLE to body at {addr:#x}")
             state.put(ir.NextStmt(state.loc(f["v"])), state.cur)
             state.fors.pop()
             state.cur = None
-            state.k += 3
+            state.k += 4 if indirect else 3
             continue
         if (
             kind == "movax_bp"
