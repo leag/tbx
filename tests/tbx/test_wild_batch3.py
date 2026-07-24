@@ -262,6 +262,18 @@ def test_decode_t1_byreflong():
     )
 
 
+def test_decode_t1_midvarstart():
+    # `MID$(A$, N%) = B$` -- the start position is a variable expression,
+    # not just a literal: state.ax already holds whatever computed it
+    # (movax_m etc.) by the time the midassign op fires. Wild pwinst.exe.
+    from tbx import decode0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_midvarstart.exe"))
+    assert (
+        ir.MidAssign(ir.Var("A$"), ir.Var("C%"), ir.Var("B$")) in prog
+    )
+
+
 def test_decode_t1_inpfilearr():
     # `INPUT #n, A$(i,j), B%(i,j)` -- a computed-index numeric array element
     # as a LATER INPUT# target: the generic FP->int scratch bridge
@@ -2131,6 +2143,7 @@ if __name__ == "__main__":
     test_decode_t1_local2()
     test_decode_t1_byref1()
     test_decode_t1_byreflong()
+    test_decode_t1_midvarstart()
     test_decode_t1_inpfilearr()
     test_decode_t1_byrefdbl()
     test_decode_t1_localincr()

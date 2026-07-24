@@ -3860,8 +3860,11 @@ def decode_user_code(exe: bytes) -> list[Any]:
                     state.put(ir.Lset(target, source), state.cur)
                 elif op3 == "rset":
                     state.put(ir.Rset(target, source), state.cur)
-                else:  # MID$(target$, start) = source$
-                    if not isinstance(state.ax, ir.Lit):
+                else:  # MID$(target$, start) = source$: start is any
+                    # expression, not just a literal (`MID$(A$, N%) = B$`,
+                    # wild pwinst.exe) -- movax_m/whatever computed it
+                    # already left the value in ax.
+                    if state.ax is None:
                         raise ValueError(f"MID$= without start in ax at {addr:#x}")
                     state.put(ir.MidAssign(target, state.ax, source), state.cur)
                     state.ax = None

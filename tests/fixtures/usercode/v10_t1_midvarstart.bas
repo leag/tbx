@@ -1,0 +1,6 @@
+10 A$ = "HELLO WORLD"
+20 B$ = "XY"
+30 C% = 3
+40 MID$(A$, C%) = B$
+50 PRINT A$
+60 END
