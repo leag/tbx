@@ -15,7 +15,7 @@ from tbx.ir import unparse_stmt
             r"SUB-local array record after a main array record \(allocation "
             r"order would flip; no witness\)",
         ),
-        ("rs.exe", "ERASE of undimensioned block at 0x8fc4"),
+        ("rs.exe", "numeric INPUT read without FSTP at 0xbb1a"),
     ],
 )
 def test_wild_lprint_comma_advances_to_later_gap(stem, next_gap):

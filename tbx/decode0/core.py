@@ -3482,9 +3482,29 @@ def decode_user_code(exe: bytes) -> list[Any]:
             if state.ops[state.k + 3][1] == "dim_begin":
                 state.dim_frame = {"block": block, "cells": {}, "start": state.cur}
             elif state.ops[state.k + 3][1] == "erase":  # ERASE
-                if block not in state.r_arrs:
+                rec = state.r_arrs.get(block)
+                if rec is not None:
+                    state.put(ir.Erase(rec["name"]), state.cur)
+                elif block in state.lay["rt_blocks"]:
+                    # ERASE reached BEFORE the array's own DIM in address order
+                    # -- ordinary in a re-DIM loop whose ERASE sits on an
+                    # earlier line, and in SUB bodies, which the compiler emits
+                    # ahead of the main code that DIMs (probe t1_erasepre; wild
+                    # rs.exe). The slot is a known runtime block either way, so
+                    # name it off the grid exactly as the DIM handler below
+                    # does, rather than demand the DIM have been seen first.
+                    tb = exe[state.ds + block + 2]
+                    suffix = (
+                        "$" if tb == 0x0A
+                        else "%" if tb == 0x00
+                        else "#" if tb == 0x06
+                        else "&" if tb == 0x02
+                        else ""
+                    )
+                    idx = state.lay["n_static"] + state.lay["rt_blocks"].index(block)
+                    state.put(ir.Erase(f"V{idx}{suffix}"), state.cur)
+                else:
                     raise ValueError(f"ERASE of undimensioned block at {addr:#x}")
-                state.put(ir.Erase(state.r_arrs[block]["name"]), state.cur)
             elif state.ops[state.k + 3][1] == "erase_static":
                 # ERASE of a STATIC array: the runtime routine differs (it
                 # re-initializes in place rather than freeing a heap block) but

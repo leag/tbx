@@ -3569,6 +3569,17 @@ Erase(name='V0')
 Dim(name='V0', bounds=(Var(name='A'),), also=())
 End()
 
+## t1_erasepre
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
+Goto(target=5)
+Do(kind=None, cond=None)
+Erase(name='V0')
+ExitLoop()
+Dim(name='V0', bounds=(Var(name='A'),), also=())
+Loop(kind=None, cond=None)
+Print(items=(StrLit(value='DONE'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_erasestatic
 Dim(name='V0$', bounds=(10,), also=())
 Assign(target=ArrayRef(name='V0$', indices=(Lit(value=1),)), value=StrLit(value='X'))
@@ -9803,6 +9814,17 @@ Dim(name='V0', bounds=(Var(name='A'),), also=())
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=2))
 Erase(name='V0')
 Dim(name='V0', bounds=(Var(name='A'),), also=())
+End()
+
+## v10_t1_erasepre
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
+Goto(target=5)
+Do(kind=None, cond=None)
+Erase(name='V0')
+ExitLoop()
+Dim(name='V0', bounds=(Var(name='A'),), also=())
+Loop(kind=None, cond=None)
+Print(items=(StrLit(value='DONE'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_erasestatic

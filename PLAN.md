@@ -6008,7 +6008,26 @@ finding dynamic-array records. The wild scan remains 26 decode OK / 67 blocked;
 `mdb.exe` and `mdb87.exe` advance from byte `8e` to a later `testw` gap, while
 `stat.exe` advances to a subsequent runtime-layout gap.
 
-### Gap 33 — INT EC sub 38 (catalog/football/refund/varamort), UNDIAGNOSED
+### Gap 33 — INT EC sub 38, CLOSED 2026-07-24 (= ERASE of a STATIC array)
+
+**Resolved**: sub 38 is `ERASE` on a STATIC (literal-bound) array, the
+sibling of sub 36's dynamic form. Diagnosed from TBD73.BAS's real source
+(`SUB Showfile` ends `ERASE recarr$` after `DIM recarr$(5000)`), witnessed
+by `t1_erasestatic`, byte-exact both dialects. All four files below now
+advance past the vector: `catalog.exe` -> `unhandled INT EC sub a6 at
+0xc35d`, `football.exe` -> `ax,bx combine with empty regs at 0xa0a5`,
+`refund.exe` -> `SCREEN bad tag at 0x91e2`, `varamort.exe` -> `unhandled
+materialized test at 0xa4f9` -- four separate, unrelated gaps. A follow-on
+in the same area: `rs.exe` then hit `ERASE of undimensioned block`, an
+ERASE reached before its own DIM in address order (ordinary when the ERASE
+sits on an earlier line, or in a SUB body, which the compiler emits ahead
+of the main code that DIMs); the slot is a known runtime block regardless,
+so it is now named off the grid instead of requiring the DIM first
+(`t1_erasepre`). `rs.exe` advances to `numeric INPUT read without FSTP at
+0xbb1a`.
+
+The original (now superseded) notes follow.
+
 
 Fresh handbook probes for `PALETTE USING P%(0)` (dynamic, static, and variable
 index forms) all compiled to the distinct `INT EC sub 8a` dispatch. This gap is

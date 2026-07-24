@@ -452,6 +452,35 @@ def test_decode_t1_erasestatic():
         ), stem
 
 
+def test_decode_t1_erasepre():
+    # ERASE reached BEFORE the array's own DIM in address order -- ordinary
+    # when the ERASE sits on an earlier line, and in SUB bodies, which the
+    # compiler emits ahead of the main code that DIMs. The slot is a known
+    # runtime block either way, so it is named off the grid rather than
+    # requiring r_arrs to have seen the DIM. Wild rs.exe. Byte-exact, both
+    # dialects.
+    from tbx import decode0, ir
+
+    for stem in ("t1_erasepre", "v10_t1_erasepre"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        assert any(s == ir.Erase("V0") for s in _flat(prog)), stem
+
+
+def _flat(stmts):
+    for s in stmts:
+        yield s
+        for f in ("body", "arms", "else_body"):
+            v = getattr(s, f, None)
+            if isinstance(v, tuple):
+                for x in v:
+                    if isinstance(x, tuple):
+                        for y in x:
+                            if isinstance(y, tuple):
+                                yield from _flat(y)
+                    elif hasattr(x, "__dataclass_fields__"):
+                        yield from _flat((x,))
+
+
 def test_decode_t1_arrfwd():
     # Forwarding a whole-array PARAMETER onward as a whole-array CALL argument
     # (`mov ax,ss; mov ds,ax; mov si,bp; add si,d8; INT D4`): the descriptor
@@ -2804,6 +2833,7 @@ if __name__ == "__main__":
     test_decode_t1_fwdcalltgt()
     test_decode_t1_inlinebp()
     test_decode_t1_erasestatic()
+    test_decode_t1_erasepre()
     test_decode_t1_arrfwd()
     test_relayed_string_array_param_stays_loud()
     test_decode_t1_inlinedata()
