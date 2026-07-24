@@ -1,0 +1,15 @@
+# v10_t1_declnoend dialect=1.0 start=070B0
+070B3:movm_imm:288:1
+070B9:jmp:28874
+070BC:proc_enter
+070BF:movsi:308
+070C2:rt:156
+070C4:rt:190
+070C6:rt:184
+070C8:proc_ret:0
+070CA:fild:288
+070CF:rt:187
+070D1:rt:184
+070D5:epilogue
+# commits
+070D3

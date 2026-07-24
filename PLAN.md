@@ -1186,7 +1186,116 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
-### 2026-07-24 — GOTO landing on a compiler skip-jmp's own position: DIAGNOSED, REVERTED
+### 2026-07-24 — Round 4: the `0xae40` gap CLOSED; rounds 1-3's diagnosis was WRONG
+
+Ninth closure in the `rsltest.exe` full-decode goal. **Rounds 1-3 below
+(the three entries immediately following) chased the wrong thing and are
+superseded by this entry; they are kept only as the historical record.**
+
+Rounds 1-3 assumed `0xa720: jmp 0xae40` was "a plain top-level `GOTO` in
+main code" whose target happened to land on compiler glue, and built a
+`state.glue_alias` transitive chase in `_resolve_targets` around that
+assumption. Re-traced from the op stream this round, it is nothing of the
+kind:
+
+```
+0A71B: dim_end            <- last main-code statement before the region
+0A720: jmp 0xAE40         <- decoded as a spurious ir.Goto: THE BUG
+0A723: proc_enter         <- the first definition starts immediately after
+...
+0AE3C: proc_ret 46        <- that same definition's closer
+0AE40: jmp 0xB2FE         <- one byte past it: the next glue hop
+```
+
+`0xa720`'s jmp skips EXACTLY the first definition (`0xa723`'s
+`proc_enter` through `0xae3f`), landing on the byte right after its own
+`proc_ret`. It is the definition-region **entry skip-jmp**, not a user
+`GOTO` -- `rsltest.exe`'s `DIM` block simply falls into a `$INCLUDE`d
+TBWINDOW definition run with no `END` closing it. None of the five
+existing "glue, not a GOTO" sites in `core.py` matched, because every one
+of them requires the jmp to be at `state.k == 0`, or to be preceded by
+`ON ERROR`/`end`/`proc_ret`/`fn_ret`, or to sit exactly at `main_start`.
+Confirmed uncovered by the corpus: all six fixtures with a mid-file
+definition (`t1_argrefonly`, `t1_arrbyrefidx`, `t1_fnforward`,
+`t1_localstr`, `t1_scgoto`, `t1_scgotone`) carry an explicit `END` line
+before it -- which is precisely what site 3 keys off.
+
+Fix: a SIXTH site in `core.py` (placed right after site 3, the sibling it
+most resembles), gated on `main_start is None` + no open frame + `k > 0` +
+the IMMEDIATELY following op being `proc_enter`/`inline_sub`/
+`opaque_helper`. That last test is what separates it from a real `GOTO`
+written just before a `SUB`: there the user's jmp and the compiler's skip
+are two SEPARATE ops (see `probe_k0goto_decl` below). Deliberately no
+forward `trap_hook` tolerance -- no witness shows a hook between the skip
+and the definition's entry op, so adding one would be speculative; site 4
+has the same shape and the same (absent) tolerance.
+
+Witness `t1_declnoend.bas` (`10 A% = 1 / 20 SUB FOO STATIC / 30 PRINT "F"
+/ 40 END SUB / 50 PRINT A%`), promoted to the corpus, byte-exact via
+`verify_fixture` in BOTH dialects. Worth noting how bad the pre-fix
+behavior was: this shape did NOT raise, it silently decoded to
+`10 A% = 1 / 20 GOTO 40 / 30 SUB SUB1 ... / 40 PRINT A%` -- inventing a
+`GOTO` the source never had. Byte-significant, confirmed by round-tripping
+the probe on the unmodified tree: ~33 bytes differ in both dialects (the
+recompile emits both the invented `GOTO` and a fresh skip-jmp).
+`rsltest.exe` only raised because ITS target was another glue jmp rather
+than a real statement.
+
+The `glue_alias` design is therefore **dropped as unnecessary** and should
+not be revived without a genuine witness: no chase is needed at all. For
+the record, the chain rounds 1-2 traced does terminate cleanly on its own
+(`0xae40 -> 0xb2fe -> 0xb5f8 -> 0xbbc3 -> 0xbcbb -> 0xbd56 -> 0xbe1e(hook)
+-> 0xbe1f -> 0xbe69 -> 0xbedd -> 0xbf60 -> 0xbfdb -> 0xc04e -> 0xc0c0 ->
+0xc12e -> 0xc5cd`, a real `trap_hook`+`movsi`/`strassign` statement), each
+hop already handled by existing sites 4 and 5. Also correcting round 2's
+transcription: `0xbe1f`'s target is `0xBE69` (48745), NOT `0xbe29` -- it
+skips the `DEF FN` body and the chain then continues through the
+`opaque_helper` run, which is why round 2's "terminates at a trap_hook"
+picture looked stuck.
+
+Zero regressions: full suite 2658 -> 2663 passed/16 skipped, Ruff clean,
+and the golden regeneration was PURELY ADDITIVE (`ir_snapshot.txt`: 10
+insertions, 0 deletions) -- no existing fixture's decode moved, which is
+the check that the new site's gating is tight enough.
+
+**`rsltest.exe` now advances to a new, distinct gap**: `jump target
+0xa7e2 is not a statement start`. Diagnosed but NOT fixed (needs its own
+probe): `0xa7e1` and `0xa7e2` are TWO CONSECUTIVE `trap_hook`s ahead of
+the statement at `0xa7e3`, and an IF/ELSEIF chain's arm-tail jmps
+(`0xa785`, `0xa7c0`) target the SECOND one. `state.cur` is assigned only
+`if state.cur is None` (`core.py` ~2931), so the statement's recorded
+address is the FIRST hook (`0xa7e1`) and the second is unaddressable. A
+fix presumably registers every consecutive hook address for the
+statement; it is byte-significant (a GOTO target line number), so it
+needs an oracle probe reproducing a double hook before anything lands.
+
+**Separately promoted, NOT fixed** (`wild/probes/probe_k0goto_decl.*`,
+per AGENTS.md): round 3's finding, now reproduced cleanly and confirmed
+independent of everything above. Source `10 GOTO 100 / 20 SUB FOO STATIC
+/ ... / 50 DEF FNBAR / ... / 100 PRINT "MAIN"`, TB 1.1, compiles fine,
+fails with `jump target 0x8717: body line not addressable past a
+multi-line statement`. Ops show why: `0x8703` is the USER's `GOTO 100`
+jmp, and site 1 swallows ANY `k == 0` jmp as the entry skip, so the real
+`GOTO` vanishes and `main_start` is set from it; the compiler's actual
+skip at `0x8706` then matches no site and becomes a spurious `Goto`. Site
+1 needs the same "next op begins a definition" evidence the new site 6
+uses, plus its own byte-exact probe. Round 3 reported a different first
+error (`LOCAL zero-fill outside a fresh SUB/DEF FN body`) only because its
+probe used `LOCAL`; same underlying bug.
+
+**Also staged this round**: `wild/hits/tbd73.exe` (+ `TBD73.BAS` /
+`TBW73.INC` alongside, all gitignored) -- TBWINDOW 7.3 compiled from its
+REAL SOURCE by our own oracle. Uniquely valuable as a witness: it has the
+same "main code, no `END`, then a definition run" shape as
+`rsltest.exe`, we can diff any decode against the actual source, and
+because WE compiled it there is no runtime-revision skew, so a byte-exact
+round trip is genuinely meaningful for it (unlike every other
+`wild/hits/` file). It does not exercise this round's fix yet: it fails
+EARLIER, at layout time, with `runtime blocks are not 0x36-contiguous
+after statics` (`layout.py:326`) -- a separate, unrelated gap, logged
+here as the next thing to look at for that file.
+
+### 2026-07-24 — GOTO landing on a compiler skip-jmp's own position: DIAGNOSED, REVERTED (SUPERSEDED, see round 4 above)
 
 Investigated the next `rsltest.exe` gap (continuing from the SELECT
 CASE line-counting closure below): `jump target 0xae40 is not a

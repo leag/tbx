@@ -2391,6 +2391,29 @@ def decode_user_code(exe: bytes) -> list[Any]:
         if (
             state.has_procs
             and kind == "jmp"
+            and state.main_start is None
+            and state.fn_frame is None
+            and state.proc_frame is None
+            and state.k > 0
+            and state.k + 1 < len(state.ops)
+            and state.ops[state.k + 1][1]
+            in ("proc_enter", "inline_sub", "opaque_helper")
+        ):
+            # Same entry skip-jmp as the k==0 case above, but the definitions
+            # do not open the program: ordinary main code runs first and simply
+            # FALLS INTO the def region with no END to close it, so neither the
+            # k==0 case (op 0 is that main code) nor the END case just above
+            # fires. The jmp sits immediately before the first definition's own
+            # entry op, which is what distinguishes it from a real GOTO written
+            # right before a SUB -- there the user's jmp and the compiler's skip
+            # are two separate ops (probe t1_declnoend; wild rsltest.exe, whose
+            # DIM block precedes a $INCLUDE'd TBWINDOW definition run).
+            state.main_start = op[2]
+            state.k += 1  # glue, not a GOTO
+            continue
+        if (
+            state.has_procs
+            and kind == "jmp"
             and addr == state.main_start
             and state.k + 1 < len(state.ops)
             and state.ops[state.k + 1][1]

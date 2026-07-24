@@ -357,8 +357,30 @@ def test_wild_rsltest_argref_advances():
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(ValueError, match=r"jump target 0xae40 is not a statement start"):
+    with pytest.raises(ValueError, match=r"jump target 0xa7e2 is not a statement start"):
         decode0.decode_user_code(wild_hits_bytes("rsltest.exe"))
+
+
+def test_decode_t1_declnoend():
+    # Main code that FALLS INTO the definition region -- no END closing it,
+    # so the compiler's entry skip-jmp over the first SUB is preceded by an
+    # ordinary statement instead of by END/proc_ret/fn_ret and is not at op
+    # 0 either. None of the five older "glue, not a GOTO" sites matched it,
+    # so the skip was decoded as a real user `GOTO`, silently inventing a
+    # statement the source never had (byte-significant: the round trip
+    # emitted both the invented GOTO and a fresh skip-jmp, ~33 bytes off in
+    # both dialects). Found via wild rsltest.exe, whose DIM block precedes
+    # a $INCLUDE'd TBWINDOW definition run. Both dialects verified
+    # byte-exact.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_declnoend", "v10_t1_declnoend"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        assert not any(isinstance(s, ir.Goto) for s in prog), stem
+        assert [type(s).__name__ for s in prog] == ["Assign", "SubDef", "Print"], stem
+        assert emit0.emit(prog) == (
+            '10 A% = 1\n20 SUB SUB1\n  PRINT "F"\nEND SUB\n30 PRINT A%\n'
+        ), stem
 
 
 def test_decode_t1_scgoto():
@@ -2517,6 +2539,7 @@ if __name__ == "__main__":
     test_decode_t1_palettereset()
     test_decode_t1_argrefonly()
     test_wild_rsltest_argref_advances()
+    test_decode_t1_declnoend()
     test_decode_t1_scgoto()
     test_decode_t1_scgotone()
     test_decode_t1_movaxmpool()
