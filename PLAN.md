@@ -1188,6 +1188,52 @@ constructs specific to their by-ref/LOCAL-heavy coding style.
 
 ## Part III — Investigation history / handoff log
 
+### 2026-07-24 — bare `PALETTE` (INT ECh sub 86h) + a real TBWINDOW-family identification
+
+New wild find, contributed by the user: `wild/hits/rsltest.exe` (RSLTEST /
+"R.S.L. Test" v4.17, a Spanish hardware-benchmark shareware tool), found
+alongside its own bundled early TBWINDOW distribution
+(`TBWINDO.INC` + six named `$INLINE` primitives `QPRINT.BIN`/
+`QPRINTC.BIN`/`QFILL.BIN`/`QATTR.BIN`/`QSAVE.BIN`/`QREST.BIN`, all dated
+Nov 1987). Comparing those six actual `.BIN` files byte-for-byte against
+the existing opaque-helper fingerprints in `scan.py` showed
+`_OPAQUE_HELPER_BODY_3`..`_OPAQUE_HELPER_BODY_8` (including each's
+compiler-appended `int3; retf` tail, confirmed by extracting the two
+bytes immediately following each raw `.BIN`'s bytes inside
+`rsltest.exe`) are byte-identical to QPRINT/QPRINTC/QFILL/QATTR/QSAVE/
+QREST respectively, in that order. This corrects the previous session's
+placeholder guess for that family ("almost certainly per-video-mode/
+per-pixel-depth variants of one graphics primitive", from the resume.exe
+witness) — they're six distinct, now-precisely-identified TBWINDOW
+primitives, not variants of one routine. `scan.py`'s comment block for
+BODY_3..BODY_8 rewritten with the real identities and calling
+conventions from `TBWINDO.INC`. No new fingerprints needed; this was a
+documentation-only correction with real evidentiary backing (an actual
+shareware distribution's raw `.BIN` files, not inference).
+
+`rsltest.exe` itself then failed one gap further in, at a genuinely new
+construct: `unhandled INT EC sub 86 at 0xf588`. Cross-referencing against
+the RSLTEST source (`TEST.BAS`, bundled in the same find) showed both
+`PALETTE F%,0` (the already-calibrated two-arg form, sub 88h) and a bare
+`PALETTE` statement (line 7020, and again at 60000) — sub 86h sits
+exactly between PAINT (84h) and the already-known PALETTE forms (88h/
+8Ah), and the raw bytes at the failure site are `CD EC 86` followed
+immediately by a trap_hook with zero operand bytes, matching a
+no-argument statement. Added a dedicated probe
+(`t1_palettereset.bas`: `PALETTE 1,2` then bare `PALETTE`), oracle-
+compiled both dialects, confirmed byte-exact round trip via
+`verify_fixture` and TB 1.0/1.1 IR identity. `ir.Palette`'s `attr`/`color`
+fields now accept `None` for the bare form (mirroring `ir.DefSeg`'s
+bare-vs-set duality); `render.py` emits `PALETTE` alone when `attr is
+None`. New op name `"palette_reset"` in `scan.py`, new branch in
+`handlers/graphics.py`. `rename.py`'s generic `walk()` fallback already
+returns `None` unchanged, so no rename.py change was needed. Fixtures
+`t1_palettereset`/`v10_t1_palettereset`, pinned unit test plus a
+wild-witness "advances" test for `rsltest.exe` (now failing at
+`displacement 0x472 is neither scalar nor array element` — a different,
+not-yet-investigated gap; not attempted this round). Zero regressions,
+full suite 2612 → 2618 passed/16 skipped, Ruff clean.
+
 ### 2026-07-23 — by-ref DOUBLE (`#`) params + LOCAL/by-ref `INCR`
 
 Two more closures continuing to advance `bmaster.exe`/`ifi.exe` one gap

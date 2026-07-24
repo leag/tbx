@@ -61,10 +61,28 @@ _OPAQUE_HELPER_BODY_2 = bytes.fromhex(
 # "push bp; mov bp,sp; push ds; push es; ...; pop es; pop ds; pop bp;
 # int3; retf" (55 8b ec 1e 06 ... 07 1f 5d cc cb) framing and CGA
 # snow-avoidance retrace-wait idiom, witnessed together in wild
-# resume.exe (all seven placed back-to-back, each skipped by its own
-# JMP -- almost certainly per-video-mode/per-pixel-depth variants of one
-# graphics primitive, matching this file's BODY/BODY_2's own established
-# "source-level meaning impossible to infer safely" precedent).
+# resume.exe (placed back-to-back, each skipped by its own JMP).
+# Identified exactly: these are six named $INLINE primitives from an
+# early (Nov 1987-dated) TBWINDOW distribution -- QPRINT.BIN, QPRINTC.BIN,
+# QFILL.BIN, QATTR.BIN, QSAVE.BIN, QREST.BIN respectively (BODY_3..BODY_8
+# in that order), matched byte-for-byte (including the compiler-appended
+# "int3; retf" tail) against the real .BIN files bundled with the wild
+# find TEST420/RSLTEST 4.17 (wild/hits/rsltest.exe), whose TBWINDO.INC
+# documents each routine's SUB and calling convention:
+#   QPRINT(ROW%,COL%,STR$,ATTR%)                    -- BODY_3
+#   QPRINTC(ROW%,COLL%,COLR%,STRDAT$,ATTR%)         -- BODY_4
+#   QFILL(ROW%,COL%,ROWS%,COLS%,CHAR%,ATTR%)        -- BODY_5
+#   QATTR(ROW%,COL%,ROWS%,COLS%,ATTR%)              -- BODY_6
+#   QSAVE(ROW%,COL%,ROWS%,COLS%,SCRN%(??))          -- BODY_7
+#   QREST(ROW%,COL%,ROWS%,COLS%,SCRN%(??))          -- BODY_8
+# This is an earlier/simpler TBWINDOW packaging than BODY_11's monolithic
+# TBWINDOW 5.0 (1988) blob -- six separate SUB...INLINE stubs rather than
+# one big helper -- but the known calling convention still can't be
+# recovered as literal source: $INLINE embeds the named .BIN file's bytes
+# verbatim at compile time, so byte-exact recompilation would require that
+# external file to exist alongside the recovered .bas, which tbx's
+# decompiled text alone cannot reproduce. Coverage-only, same as the rest
+# of this family.
 _OPAQUE_HELPER_BODY_3 = bytes.fromhex(
     """
     55 8b ec 1e 06 c4 7e 0a 26 8b 0d 81 e1 ff 7f e3
@@ -1661,6 +1679,10 @@ def _scan_pass(
             if sub == 0x26:  # DEF SEG = <fp>
                 ops.append((p, "defseg_set"))
                 p += 3
+                continue
+            if sub == 0x86:  # PALETTE (bare form: reset to default palette,
+                ops.append((p, "palette_reset"))  # zero operands; wild
+                p += 3  # rsltest.exe `7020 PALETTE`)
                 continue
             if sub == 0x88:  # PALETTE attr(bx), color(ax)
                 ops.append((p, "palette"))

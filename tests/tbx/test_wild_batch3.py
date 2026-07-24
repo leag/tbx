@@ -306,6 +306,34 @@ def test_decode_t1_forvarlimneg():
     assert loops == [ir.For(ir.Var("B%"), ir.Lit(5), ir.Var("A%"), ir.Lit(-1))]
 
 
+def test_decode_t1_palettereset():
+    # Bare PALETTE (INT ECh sub 86h, zero operands: reset to default
+    # palette) -- distinct from PALETTE attr,color (sub 88h). Identified
+    # from wild rsltest.exe (`7020 PALETTE`), oracle-verified byte-exact
+    # via a dedicated probe.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_palettereset.exe"))
+    assert prog[0] == ir.Palette(ir.Lit(1), ir.Lit(2))
+    assert prog[1] == ir.Palette(None, None)
+    assert emit0.emit(prog) == "10 PALETTE 1, 2\n20 PALETTE\n30 END\n"
+
+
+def test_wild_rsltest_palette_reset_advances():
+    # rsltest.exe (RSLTEST/R.S.L. Test 4.17, a Spanish hardware-benchmark
+    # shareware tool bundling an early TBWINDOW distribution) used to fail
+    # at the bare PALETTE statement; confirms the wild file now advances
+    # past it into its next (unrelated) gap.
+    import pytest
+
+    from tbx import decode0
+
+    from conftest import wild_hits_bytes
+
+    with pytest.raises(ValueError, match=r"displacement 0x472 is neither"):
+        decode0.decode_user_code(wild_hits_bytes("rsltest.exe"))
+
+
 def test_wild_cvt2tb_opaque_helper_advances():
     # A twelfth framed helper (BODY_12, wild CVT2TB.EXE): a small,
     # program-specific directory-search primitive (AH=4Eh DOS Find
@@ -2286,6 +2314,8 @@ if __name__ == "__main__":
     test_decode_t1_localdbl()
     test_decode_t1_localdblcmp()
     test_decode_t1_forvarlimneg()
+    test_decode_t1_palettereset()
+    test_wild_rsltest_palette_reset_advances()
     test_wild_cvt2tb_opaque_helper_advances()
     test_wild_phone_opaque_helper_advances()
     test_wild_filepatc_opaque_helpers_advance()

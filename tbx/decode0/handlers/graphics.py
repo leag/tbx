@@ -147,6 +147,11 @@ def graphics(state: DecodeState, op, addr, kind) -> bool:
         state.cur = None
         state.k += 1
         return True
+    if kind == "palette_reset":  # bare PALETTE: reset to default, no operands
+        state.put(ir.Palette(None, None), state.cur)
+        state.cur = None
+        state.k += 1
+        return True
     if kind == "palette":  # PALETTE attr(bx), color(ax)
         state.put(ir.Palette(state.bx, state.ax), state.cur)
         state.bx = state.ax = None

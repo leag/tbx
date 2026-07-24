@@ -529,10 +529,14 @@ class DefSeg:
 
 @dataclass(frozen=True)
 class Palette:
-    """PALETTE attr, color (INT ECh sub 88h) -- attr in bx, color in ax."""
+    """PALETTE attr, color (INT ECh sub 88h) -- attr in bx, color in ax.
 
-    attr: object  # Expr
-    color: object  # Expr
+    Bare PALETTE (reset to default, INT ECh sub 86h, zero operands) is
+    `Palette(None, None)`.
+    """
+
+    attr: object  # Expr | None
+    color: object  # Expr | None
 
 
 @dataclass(frozen=True)

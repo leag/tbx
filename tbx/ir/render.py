@@ -394,6 +394,8 @@ def _us_graphics(s) -> str | None:
     if isinstance(s, DefSeg):
         return "DEF SEG" if s.seg is None else f"DEF SEG = {unparse(s.seg)}"
     if isinstance(s, Palette):
+        if s.attr is None:
+            return "PALETTE"
         return f"PALETTE {unparse(s.attr)}, {unparse(s.color)}"
     if isinstance(s, PaletteUsing):
         return f"PALETTE USING {unparse(s.source)}"
