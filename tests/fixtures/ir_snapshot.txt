@@ -37,6 +37,12 @@ Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None)
 IfInline(cond=LogOp(op='AND', lhs=LogOp(op='AND', lhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=25)), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=27))), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=57))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='Z'),), newline=True, file=None, commas=None)))
 Resume(next_=False, target=3)
 
+## t1_argrefonly
+CallStmt(name='SUB1', args=())
+End()
+SubDef(name='SUB1', params=(), body=(CallStmt(name='SUB2', args=(Var(name='A%'),)),))
+SubDef(name='SUB2', params=('B%',), body=(Assign(target=Var(name='B%'), value=BinOp(op='+', lhs=Var(name='B%'), rhs=Lit(value=1))), Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)))
+
 ## t1_arr1
 Dim(name='V0', bounds=(10,), also=())
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=5))
@@ -6263,6 +6269,12 @@ End()
 Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None)
 IfInline(cond=LogOp(op='AND', lhs=LogOp(op='AND', lhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=25)), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=27))), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=57))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='Z'),), newline=True, file=None, commas=None)))
 Resume(next_=False, target=3)
+
+## v10_t1_argrefonly
+CallStmt(name='SUB1', args=())
+End()
+SubDef(name='SUB1', params=(), body=(CallStmt(name='SUB2', args=(Var(name='A%'),)),))
+SubDef(name='SUB2', params=('B%',), body=(Assign(target=Var(name='B%'), value=BinOp(op='+', lhs=Var(name='B%'), rhs=Lit(value=1))), Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)))
 
 ## v10_t1_arr1
 Dim(name='V0', bounds=(10,), also=())

@@ -71,6 +71,33 @@ def calls(state: DecodeState, op, addr, kind) -> bool:
                 elif sfx == "$":
                     state.proc_str_offs.add(off)
                 args.append(ir.Var(f"P{off:02X}{sfx}"))
+            elif isinstance(a, tuple) and a[0] == "argref":
+                # A caller-side scalar only ever touched via this by-ref
+                # push (arg_push_ref's own ValueError deferral, above):
+                # take its type from the callee's param in the same
+                # position, same deferred-resolution shape as "fwd".
+                params = state.proc_params.get(op[2])
+                off = a[1]
+                if params is None:
+                    args.append(("argrefpending", op[2], i, off))
+                    continue
+                if i >= len(params):
+                    raise ValueError(
+                        f"by-ref arg to unknown callee params at {addr:#x}"
+                    )
+                sfx = params[i][-1] if params[i][-1] in "%$&#" else ""
+                if sfx == "%":
+                    state.lay["scalars"][off] = 2
+                elif sfx == "&":
+                    state.lay["scalars"][off] = 4
+                    state.lay["long_slots"].add(off)
+                elif sfx == "#":
+                    state.lay["scalars"][off] = 8
+                elif sfx == "$":
+                    state.lay["strs"].add(off)
+                else:  # no suffix: TB's default (SINGLE) type
+                    state.lay["scalars"][off] = 4
+                args.append(state.loc(off))
             else:
                 args.append(a)
         state.pend_args.clear()
@@ -121,7 +148,19 @@ def cargs(state: DecodeState, op, addr, kind) -> bool:
         state.k += 1
         return True
     if kind == "arg_push_ref":  # push a by-ref CALL arg (caller's var)
-        state.pend_args.append(state.loc(op[2]))
+        try:
+            state.pend_args.append(state.loc(op[2]))
+        except ValueError:
+            # The disp is never accessed any other way in this program --
+            # only ever forwarded by address to a callee -- so layout's
+            # evidence-gathering pass (which infers scalar/array shape from
+            # direct read/write op patterns) has no type signal for it.
+            # Defer, mirroring arg_push_fwd's own "fwd" placeholder: the
+            # callee's own param list (known once its SUB has been decoded)
+            # supplies the type (wild rsltest.exe: TBMENU.INC's MAKEMENU is
+            # dead code, so its SHARED globals are only ever touched via
+            # exactly this by-ref relay into MakeWindow).
+            state.pend_args.append(("argref", op[2]))
         state.k += 1
         return True
     if kind == "arg_push_ref_bp":  # push a by-ref CALL arg, LOCAL-frame

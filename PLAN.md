@@ -1188,6 +1188,69 @@ constructs specific to their by-ref/LOCAL-heavy coding style.
 
 ## Part III — Investigation history / handoff log
 
+### 2026-07-24 — deferred by-ref CALL-argument typing (`arg_push_ref` with no other evidence)
+
+Goal set for this session: decode `wild/hits/rsltest.exe` fully, using its
+bundled source (`TEST.BAS`/`TBWINDO.INC`/`TBMENU.INC`) as reference.
+Continuing from the bare-`PALETTE` closure below, `rsltest.exe` next
+failed with `displacement 0x472 is neither scalar nor array element` --
+a genuinely new gap class, not a wild-only curiosity: `arg_push_ref`'s
+handler (`cargs`, `handlers/control.py`) calls `state.loc(op[2])`
+eagerly, which requires `layout.py`'s pre-decode evidence-gathering pass
+to have already classified that DGROUP displacement as a scalar or array
+element from a *direct* read/write op pattern. `TBMENU.INC`'s `MAKEMENU`
+sub is dead code (never called from `TEST.BAS`, confirmed by grepping for
+call sites) -- its own `SHARED` globals (`mrow%`, `mcol%`, `mwidth%`,
+`mattr%`, `mhiattr%`, `mbrdrsel%`, `mshadow%`, `mzoom%`) are therefore
+*only* ever touched as by-ref arguments relayed straight into
+`MAKEWINDOW`, never read or written directly anywhere in the compiled
+program -- so layout's evidence gathering has no signal for them at all,
+and `loc()`'s fail-loud raise fires unconditionally. Confirmed by
+decoding `MAKEMENU`'s call to `MAKEWINDOW` byte-by-byte and cross-
+checking against `TBMENU.INC` line 6
+(`call makewindow(mrow%,mcol%,itemcount%+2,mwidth%,mattr%,mbrdrsel%,
+mshadow%,mzoom%)`) and `MAKEWINDOW`'s own all-INTEGER signature in
+`TBWINDO.INC`.
+
+Rather than teaching the pre-decode layout solver to trace callee
+parameter types (a much larger, riskier change), extended the *existing*
+deferred-resolution pattern already used for `arg_push_fwd`/`"fwd"`
+(forwarding the enclosing SUB's own by-ref param onward to another
+callee): `arg_push_ref`'s handler now catches `state.loc()`'s
+`ValueError` and stages a `("argref", disp)` placeholder instead of
+raising immediately. `far_call`'s handler (`calls`, same file) resolves
+it exactly like `"fwd"`: if the callee's `proc_params` are already known
+(the common case here -- `MAKEWINDOW` decodes before `MAKEMENU` is
+reached), take the type from the callee's parameter at the same
+position, register it into `state.lay["scalars"]`/`"strs"`/
+`"long_slots"` for consistency, and resolve via the ordinary `state.loc()`
+path; if the callee is defined *later* in the file (forward reference,
+`proc_params` not yet known), stage a second placeholder
+(`"argrefpending"`, mirroring `"fwdpending"`), resolved by
+`_resolve_calls`'s `fix_args` once every SUB has been decoded -- but
+unlike `"fwdpending"` (which builds a `PXX` by-ref-param `Var`), this
+constructs an ordinary DGROUP-scalar `Var` (`V####` -> `canonical_rename`)
+via the same `_slot()` helper `loc()` itself uses, since the variable in
+question is a plain global, not the callee's own local parameter.
+
+Oracle-verified with a dedicated minimal probe (`t1_argrefonly.bas`: a
+DGROUP `B%` used *only* as a by-ref argument from `SUB1` to `SUB2`,
+whose own body gives it INTEGER evidence) exercising the forward-
+reference path (`SUB2` is defined *after* `SUB1` in source order);
+`rsltest.exe` itself exercises the immediate-resolution path (`MAKEWINDOW`
+already decoded). Byte-exact round trip confirmed via `verify_fixture`,
+TB 1.0/1.1 IR identity confirmed. `rsltest.exe` now advances to
+`element access: unexpected op movdx at 0xc260` -- a `movdx <literal
+segment>; movesdx; arg_push_arr` shape passing a *computed dynamic-array
+element* (`Scrn%(Wptr(LI))` in `RemoveWindow`'s `CALL QREST(...)`, where
+both `scrn%()` and `wptr()` are runtime-DIM'd arrays per this file's
+`rt_blocks` layout, and `Wptr(LI)` needs an FP->int index bridge since
+`wptr()` is untyped/SINGLE) by reference as a CALL argument -- not
+attempted this round; a substantially bigger construct (nested dynamic-
+array addressing + by-ref array-element CALL args) than today's other
+two closures. Zero regressions, full suite 2618 -> 2623 passed/16
+skipped, Ruff clean.
+
 ### 2026-07-24 — bare `PALETTE` (INT ECh sub 86h) + a real TBWINDOW-family identification
 
 New wild find, contributed by the user: `wild/hits/rsltest.exe` (RSLTEST /

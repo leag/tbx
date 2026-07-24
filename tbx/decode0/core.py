@@ -532,6 +532,18 @@ def _resolve_calls(
                     proc_dbl_offs.add(off)
                 new_args[i] = ir.Var(f"P{off:02X}{sfx}")
                 changed = True
+            elif isinstance(a, tuple) and a and a[0] == "argrefpending":
+                # Caller-side scalar forwarded by address to a callee defined
+                # LATER in the file (handlers.control.calls's own "argref"
+                # deferral, for a callee known at scan time -- this is the
+                # forward-reference sibling): same type source, but this is
+                # an ordinary DGROUP scalar (V#### -> canonical_rename),
+                # not the callee's own PXX by-ref param.
+                _, target, _idx, off = a
+                params = proc_params[target]
+                sfx = params[_idx][-1] if params[_idx][-1] in "%$&#" else ""
+                new_args[i] = ir.Var(_slot(off) + sfx)
+                changed = True
         return (tuple(new_args) if changed else args), changed
 
     def walk(body):

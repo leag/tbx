@@ -319,18 +319,45 @@ def test_decode_t1_palettereset():
     assert emit0.emit(prog) == "10 PALETTE 1, 2\n20 PALETTE\n30 END\n"
 
 
-def test_wild_rsltest_palette_reset_advances():
-    # rsltest.exe (RSLTEST/R.S.L. Test 4.17, a Spanish hardware-benchmark
-    # shareware tool bundling an early TBWINDOW distribution) used to fail
-    # at the bare PALETTE statement; confirms the wild file now advances
-    # past it into its next (unrelated) gap.
+def test_decode_t1_argrefonly():
+    # A DGROUP scalar only ever touched via a by-ref CALL argument
+    # (arg_push_ref), never a direct read/write anywhere in the program --
+    # layout's evidence-gathering pass has no type signal for it at all,
+    # so `state.loc()` used to raise unconditionally. Deferred, mirroring
+    # arg_push_fwd's own "fwd"/"fwdpending" placeholder: the callee's own
+    # param list supplies the type once known. This probe's callee (SUB2)
+    # is defined AFTER the caller (SUB1) in source order, exercising the
+    # forward-reference "argrefpending" path (_resolve_calls); wild
+    # rsltest.exe (below) exercises the immediate-resolution path, where
+    # the callee is already known.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_argrefonly.exe"))
+    subs = {s.name: s for s in prog if isinstance(s, ir.SubDef)}
+    assert subs["SUB1"].body == (ir.CallStmt("SUB2", (ir.Var("A%"),)),)
+    assert emit0.emit(prog) == (
+        "10 CALL SUB1\n20 END\n30 SUB SUB1\n  CALL SUB2(A%)\nEND SUB\n"
+        "40 SUB SUB2(B%)\n  B% = B% + 1\n  PRINT B%\nEND SUB\n"
+    )
+
+
+def test_wild_rsltest_argref_advances():
+    # rsltest.exe used to fail with "displacement 0x472 is neither scalar
+    # nor array element" -- TBMENU.INC's MAKEMENU sub (dead code, never
+    # called from TEST.BAS) relays its own SHARED globals (mrow%, mcol%,
+    # mwidth%, mattr%, mhiattr%, mbrdrsel%, mshadow%, mzoom%) into
+    # MAKEWINDOW purely by reference, so they have no other evidence
+    # anywhere in the program. Confirms the wild file now advances past
+    # that gap (MakeWindow, the callee, is already decoded by the time
+    # this call is reached, so this exercises the immediate-resolution
+    # path rather than test_decode_t1_argrefonly's forward-reference one).
     import pytest
 
     from tbx import decode0
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(ValueError, match=r"displacement 0x472 is neither"):
+    with pytest.raises(ValueError, match=r"unexpected op movdx at 0xc260"):
         decode0.decode_user_code(wild_hits_bytes("rsltest.exe"))
 
 
@@ -2315,7 +2342,8 @@ if __name__ == "__main__":
     test_decode_t1_localdblcmp()
     test_decode_t1_forvarlimneg()
     test_decode_t1_palettereset()
-    test_wild_rsltest_palette_reset_advances()
+    test_decode_t1_argrefonly()
+    test_wild_rsltest_argref_advances()
     test_wild_cvt2tb_opaque_helper_advances()
     test_wild_phone_opaque_helper_advances()
     test_wild_filepatc_opaque_helpers_advance()
