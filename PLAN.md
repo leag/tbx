@@ -1186,6 +1186,29 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 15: forwarding a by-ref param into a `SUB ... INLINE`
+
+A `SUB ... INLINE` declares **no parameter list at all**, yet TB happily
+passes it arguments -- the `$INLINE` bytes read them off the stack
+themselves. TBWINDOW's `SUB Openbox INLINE` takes FIFTEEN
+(`CALL Openbox(winspeed, ftblseg, ftbloff, 1, col, row, ...)`). The
+forwarded-by-ref-arg path (`arg_push_fwd`) types each argument from the
+callee's parameter in the same position, so an inline callee -- whose
+`proc_params` entry is the empty tuple -- raised `forwarded arg to unknown
+callee params`.
+
+There is no callee signature to consult, so the type comes from the
+ENCLOSING SUB's own parameter instead. The wrinkle that made the first
+attempt decode wrong: the call can precede every other use of that
+parameter, so its suffix is not knowable at the call site (the probe's
+`CALL Blit(A%)` comes before its `PRINT A%`), and an eagerly-spelled `P06`
+then disagrees with the header's `P06%` -- rename.py letters them apart and
+the body references a variable that does not exist. The placeholder is now
+reconciled at `proc_ret`, once the frame's param types are settled.
+
+Witness `t1_fwdinline`, byte-exact both dialects. `tbd73.exe` advances to
+`unhandled jcc 7f at 0xa876`.
+
 ### 2026-07-24 — Round 14: an INTEGER-valued DEF FN called from a SUB body
 
 Two gaps in one shape, both from `tbd73.exe` (TBWINDOW's SUBs call

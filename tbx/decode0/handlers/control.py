@@ -60,6 +60,21 @@ def calls(state: DecodeState, op, addr, kind) -> bool:
                     # existing forward-CALL machinery to forwarded args).
                     args.append(("fwdpending", op[2], i, a[1]))
                     continue
+                if op[2] in state.inline_procs:
+                    # A SUB ... INLINE declares no parameter list at all, yet
+                    # TB happily passes it arguments -- the $INLINE bytes read
+                    # them off the stack themselves (TBWINDOW's `SUB Openbox
+                    # INLINE` takes fifteen). So there is no callee signature to
+                    # take the type from; fall back to what the ENCLOSING SUB
+                    # already knows about this very parameter (probe
+                    # t1_fwdinline; wild tbd73.exe).
+                    off = a[1]
+                    state.fwd_inline_offs.add(off)  # reconciled at proc_ret,
+                    # once the enclosing SUB's own param types are settled --
+                    # the call can precede every other use of the parameter,
+                    # so its suffix is not knowable yet
+                    args.append(ir.Var(f"P{off:02X}"))
+                    continue
                 if i >= len(params):
                     raise ValueError(
                         f"forwarded arg to unknown callee params at {addr:#x}"

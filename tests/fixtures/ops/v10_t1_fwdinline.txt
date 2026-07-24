@@ -1,0 +1,20 @@
+# v10_t1_fwdinline dialect=1.0 start=070B0
+070B3:jmp:28863
+070B6:inline_sub:b'U\x8b\xec\xc4~\x06]\xcb'
+070BF:jmp:28900
+070C2:proc_enter
+070C5:arg_push_fwd:6
+070CB:far_call:28854
+070D0:add_sp:4
+070D3:arg_ref:6
+070D6:far_fild_si
+070DA:rt:187
+070DC:rt:184
+070E0:proc_ret:4
+070E4:movm_imm:288:3
+070EA:arg_push_ref:288
+070EF:far_call:28866
+070F4:end
+070F7:epilogue
+# commits
+070DE

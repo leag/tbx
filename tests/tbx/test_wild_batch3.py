@@ -452,6 +452,29 @@ def test_decode_t1_erasestatic():
         ), stem
 
 
+def test_decode_t1_fwdinline():
+    # Forwarding a by-ref parameter into a SUB ... INLINE. An inline SUB
+    # declares no parameter list at all, yet TB passes it arguments -- the
+    # $INLINE bytes read them off the stack themselves (TBWINDOW's Openbox
+    # takes fifteen) -- so there is no callee signature to take the arg's type
+    # from, and the enclosing SUB's own typing supplies it instead. The call
+    # can precede every other use of that parameter, so the spelling is
+    # reconciled at proc_ret once the frame's param types settle; otherwise
+    # the header and the body name two different variables. Found via wild
+    # tbd73.exe. Byte-exact, both dialects.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_fwdinline", "v10_t1_fwdinline"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        wrap = next(s for s in prog if isinstance(s, ir.SubDef) and s.params)
+        assert wrap.params == ("A%",), stem
+        assert wrap.body[0] == ir.CallStmt("SUB1", (ir.Var("A%"),)), stem
+        assert emit0.emit(prog).endswith(
+            "20 SUB SUB2(A%)\n  CALL SUB1(A%)\n  PRINT A%\nEND SUB\n"
+            "30 B% = 3\n40 CALL SUB2(B%)\n50 END\n"
+        ), stem
+
+
 def test_decode_t1_fnintcall():
     # An INTEGER-valued DEF FN called from inside a SUB body. Two gaps in one
     # shape: the caller reads the result with `mov ax,[bp+0]` (the integer
@@ -2900,6 +2923,7 @@ if __name__ == "__main__":
     test_decode_t1_fwdcalltgt()
     test_decode_t1_inlinebp()
     test_decode_t1_erasestatic()
+    test_decode_t1_fwdinline()
     test_decode_t1_fnintcall()
     test_decode_t1_inlinethendef()
     test_decode_t1_commonarrstatic()

@@ -101,6 +101,8 @@ class DecodeState:
     metas: Any = None
     nfn: Any = None
     n_local_arrs: int = 0
+    fwd_inline_offs: Any = None
+    inline_procs: Any = None
     nsub: Any = None
     seg_metas: Any = None
     ops: Any = None
@@ -491,6 +493,24 @@ def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, in
         if names:
             shared_subs[i] = ir.Shared(tuple(names))
     return shared_subs, sub_local_arrays
+
+
+def _respell_params(node, spell):
+    """Rewrite `ir.Var("Pxx")` placeholders to the declared param spelling."""
+    if isinstance(node, ir.Var) and node.name in spell:
+        return ir.Var(spell[node.name])
+    if not is_dataclass(node):
+        return node
+    changes = {}
+    for f in fields(node):
+        old = getattr(node, f.name)
+        if isinstance(old, tuple):
+            new = tuple(_respell_params(x, spell) for x in old)
+        else:
+            new = _respell_params(old, spell)
+        if new is not old:
+            changes[f.name] = new
+    return replace(node, **changes) if changes else node
 
 
 def _resolve_calls(
@@ -2278,6 +2298,8 @@ def decode_user_code(exe: bytes) -> list[Any]:
     # can't nest as an argument, DEF FN calls are expressions and can)
     state.main_start = None  # def-region end = entry-jmp target
     state.seg_metas = []  # stmt indices where a $SEGMENT transition landed
+    state.inline_procs = set()  # entry addrs of SUB ... INLINE definitions
+    state.fwd_inline_offs = set()  # bp offsets forwarded to one of them
     state.nsub = 0  # SUB counter (entry-offset order)
     state.nfn = 0  # DEF FN counter (entry-offset order)
     state.pend_arg = None  # by-ref param bp_off from arg_ref (les si,[bp+N])
@@ -2587,6 +2609,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
             name = f"SUB{state.nsub}"
             state.proc_names[addr] = name
             state.proc_params[addr] = ()
+            state.inline_procs.add(addr)  # declares no parameter list at all
             state.stmts.append(ir.SubDef(name, (), (ir.Inline(op[2]),)))
             state.addrs.append(None)  # a SUB definition is never a jump target
             state.cur = None
@@ -2941,6 +2964,15 @@ def decode_user_code(exe: bytes) -> list[Any]:
                     for off in (6 + 4 * (nparams - 1 - i) for i in range(nparams))
                 )
             state.proc_params[state.proc_frame["entry"]] = params
+            if state.fwd_inline_offs:
+                # An argument forwarded to a SUB ... INLINE was spelled before
+                # this frame's param types were settled (see handlers.control).
+                # Re-point those unsuffixed placeholders at the declared
+                # spelling, or the header and the body name two different
+                # variables and rename.py letters them apart (t1_fwdinline).
+                spell = {p.rstrip("%$&#"): p for p in params if p.startswith("P")}
+                body = tuple(_respell_params(b, spell) for b in body)
+                state.fwd_inline_offs.clear()
             state.stmts.append(ir.SubDef(name, params, body))
             state.addrs.append(None)  # a SUB definition is never a jump target
             state.proc_frame = None
