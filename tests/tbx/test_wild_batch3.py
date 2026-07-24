@@ -408,21 +408,23 @@ def test_decode_t1_commonarr():
     assert prog[1] == ir.Common(("V0(1)", "V1(1)"))
 
 
-def test_common_scalars_beside_common_arrays_stay_loud():
-    # The band runs on past the blocks into the COMMON SCALARS
-    # (probe_commonarrmix: `COMMON A(1), C%` puts C% at 0x146, right after the
-    # single block). Recovering those as COMMON is unwitnessed, and emitting
-    # them as ordinary variables recompiles differently, so the solver must
-    # refuse rather than decode wrong.
-    import pytest
+def test_decode_t1_commonarrmix():
+    # The COMMON band runs on past the descriptor blocks into the COMMON
+    # SCALARS, then aligns to 16 and carries a 16-byte stamp before the
+    # ORDINARY band begins at stamp+0x10 (`COMMON A(1), C%` puts C% at 0x146,
+    # right after the single block, stamp at 0x150, ordinary band empty at
+    # 0x160). Those band scalars ARE the COMMON declarations -- emitting them
+    # as ordinary variables recompiles ~16 bytes differently. Byte-exact, both
+    # dialects.
+    from tbx import decode0, emit0, ir
 
-    from tbx import decode0
-
-    exe = open(
-        os.path.join(_ROOT, "..", "wild", "probes", "probe_commonarrmix.exe"), "rb"
-    ).read()
-    with pytest.raises(ValueError, match="COMMON scalars alongside COMMON arrays"):
-        decode0.decode_user_code(exe)
+    for stem in ("t1_commonarrmix", "v10_t1_commonarrmix"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        assert prog[1] == ir.Common(("V0(1)", "A%")), stem
+        assert emit0.emit(prog) == (
+            "10 DIM V0(10)\n20 COMMON V0(1), A%\n30 V0(1) = 5\n40 A% = 7\n"
+            "50 PRINT V0(1); A%\n60 END\n"
+        ), stem
 
 
 def test_decode_t1_fwdcalltgt():
@@ -2643,7 +2645,7 @@ if __name__ == "__main__":
     test_decode_t1_dblhook()
     test_decode_t1_fwdcalltgt()
     test_decode_t1_commonarr()
-    test_common_scalars_beside_common_arrays_stay_loud()
+    test_decode_t1_commonarrmix()
     test_decode_t1_scgoto()
     test_decode_t1_scgotone()
     test_decode_t1_movaxmpool()

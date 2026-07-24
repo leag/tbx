@@ -1227,19 +1227,24 @@ Witnesses `t1_commonarr` / `t1_commonarr2`, byte-exact both dialects;
 goldens purely additive (`ir_snapshot.txt`: +30, -0). Full suite 2681 ->
 2693 passed/16 skipped, Ruff clean.
 
-**Deliberately left loud**: the band continues past the blocks into the
-COMMON SCALARS (`probe_commonarrmix`: `COMMON A(1), C%` puts C% at 0x146,
-right after the single block, with the ordinary band left empty at 0x160).
-Recovering those as COMMON is unwitnessed and emitting them as ordinary
-variables recompiles differently (~16 bytes), so the solver raises `COMMON
-scalars alongside COMMON arrays` rather than decode wrong — pinned by
-`test_common_scalars_beside_common_arrays_stay_loud`. `tbd73.exe` now
-stops exactly there, which is the honest position: its `COMMON wrow(1),
-... , idx, cy` lines mix both kinds. That is the next thing to close for
-that file, and the band model above (blocks, then numeric scalars, then
-strings, align16, a 16-byte stamp, then the ordinary band at stamp+0x10 --
-all confirmed against the three probes' init images) is the map for doing
-it.
+**Round 7b, same day — the boundary this round left loud is now closed
+too.** The band continues past the blocks into the COMMON SCALARS, aligns
+to 16, carries a 16-byte band stamp, and only then does the ORDINARY band
+begin at stamp+0x10 (`t1_commonarrmix`: `COMMON A(1), C%` puts C% at
+0x146 right after the single block, stamp at 0x150, ordinary band empty at
+0x160 — all three probes' init images agree). So the existing walk from
+the blocks' end was already covering the band's own scalars: those ARE the
+COMMON declarations, and the ordinary scalars just need a SECOND walk
+starting past the stamp. `layout` reports the first walk's slots as
+`common_slots` (the same key the scalar-only `_bands_layout` path already
+fed `core`, so the synthesis side needed no change at all) and merges the
+second walk's into the ordinary run. `t1_commonarrmix` promoted from
+`wild/probes/` and byte-exact in both dialects; the fail-loud pin it had
+became a decode pin. Suite 2693 -> 2698 passed/16 skipped.
+
+`tbd73.exe` now clears layout entirely and fails much later, in decode:
+`far_call to non-proc 0x95e3 carries arguments` — an unrelated gap, next
+up for that file.
 
 ### 2026-07-24 — Round 6: `_resolve_calls` orphaned the addresses it rebuilt
 

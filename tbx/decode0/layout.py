@@ -228,6 +228,10 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
                 pos += 2
         return out if len(out) == n_want else None
 
+    # Scalars found inside the COMMON band (see the rt_blocks branch below);
+    # empty on every other path. Captured here so `finish` can report them.
+    band_slots: list[int] = []
+
     def finish(ds, n_static, statics, sb, run, strs, pool_base, delta):
         # Augment `run` with any evidenced scalar disps in [sb, pool_base-4) that
         # walk_run missed due to a gap (e.g. phantom step/limit slots before I% in
@@ -321,6 +325,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
             # the band position is the ONLY evidence of the declaration and
             # core.py has to synthesize it back (probe t1_commonarr).
             "common_arrs": rt_blocks if rt_blocks and rt_blocks[0] == COMMON_BASE < vb else [],
+            "common_slots": sorted(band_slots),
         }
 
     if rt_blocks:
@@ -331,21 +336,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
             # the same walk-from-sb solve applies -- only the anchor moves
             # (probe t1_commonarr; wild tbd73.exe, whose TBW73.INC COMMONs
             # eleven DIMmed arrays).
-            #
-            # The band continues past the blocks into the COMMON SCALARS, then
-            # aligns to 16 and carries a 16-byte stamp before the ordinary band
-            # begins (probe probe_commonarrmix: `COMMON A(1), C%` puts C% at
-            # 0x146, right after the single 0x36 block, with the ordinary band
-            # empty at 0x160). Recovering those scalars as COMMON is unwitnessed
-            # -- emitting them as ordinary variables recompiles differently --
-            # so refuse loudly rather than solve a layout that decodes wrong.
             n_static, base0 = 0, COMMON_BASE
-            band_end = ((COMMON_BASE + ARR_BLOCK * len(rt_blocks) + 15) & ~15) + 0x10
-            if any(
-                COMMON_BASE + ARR_BLOCK * len(rt_blocks) <= d < band_end
-                for d in int_disps0 | fild_disps0 | fp_disps | fp64_disps | movsi_disps
-            ):
-                raise ValueError("COMMON scalars alongside COMMON arrays")
         else:
             n_static, rem = divmod(rt_blocks[0] - vb, ARR_BLOCK)
             base0 = vb
@@ -356,6 +347,22 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
         n = n_static + len(rt_blocks)
         sb = base0 + ARR_BLOCK * n
         run, strs, dend = walk_run(sb)
+        if base0 == COMMON_BASE:
+            # Past the blocks the band runs on into the COMMON SCALARS, then
+            # aligns to 16 and carries a 16-byte band stamp; the ORDINARY band
+            # starts at stamp+0x10 (probe t1_commonarrmix: `COMMON A(1), C%`
+            # puts C% at 0x146 right after the single block, stamp at 0x150,
+            # ordinary band empty at 0x160). So the walk above covered the
+            # band's own scalars -- those are the COMMON declarations, which
+            # compile to no ops and are recoverable from nothing else -- and
+            # the ordinary scalars need a second walk past the stamp.
+            band_slots[:] = sorted(run)
+            ord_base = ((dend + 15) & ~15) + 0x10
+            run2, strs2, dend = walk_run(ord_base)
+            if not run2:
+                dend = ord_base
+            run.update(run2)
+            strs |= strs2
         # Anchor ds on the slot grid itself: every runtime block must
         # show the bare rank+type record, every static slot a populated record.
         pat = tuple(
