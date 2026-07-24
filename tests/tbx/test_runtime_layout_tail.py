@@ -36,7 +36,7 @@ def test_runtime_layout_recovers_scalars_after_hole(stem, string_disp, single_di
     ("stem", "exc", "next_gap"),
     [
         ("cleanup.exe", KeyError, "59709"),
-        ("reformat.exe", ValueError, "unhandled op testw_bp at 0xc86c"),
+        ("reformat.exe", KeyError, "60616"),
     ],
 )
 def test_runtime_layout_witnesses_reach_next_gap(stem, exc, next_gap):

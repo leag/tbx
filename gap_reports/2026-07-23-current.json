@@ -408,8 +408,8 @@
     {
       "name": "wild/hits/reformat.exe",
       "dialect": "1.1",
-      "message": "unhandled op testw_bp at 0xc86c",
-      "signature": "unhandled op testw_bp"
+      "message": "60616",
+      "signature": "60616"
     },
     {
       "name": "wild/hits/refund.exe",
@@ -617,6 +617,13 @@
       ]
     },
     {
+      "signature": "60616",
+      "count": 1,
+      "files": [
+        "wild/hits/reformat.exe"
+      ]
+    },
+    {
       "signature": "LINE INPUT # template mismatch",
       "count": 1,
       "files": [
@@ -761,13 +768,6 @@
       "count": 1,
       "files": [
         "wild/hits/baby.exe"
-      ]
-    },
-    {
-      "signature": "unhandled op testw_bp",
-      "count": 1,
-      "files": [
-        "wild/hits/reformat.exe"
       ]
     }
   ]

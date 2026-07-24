@@ -22,7 +22,7 @@ def test_scan_testw_bp_is_exact():
     [
         ("cleanup.exe", KeyError, "59709"),
         ("crossref.exe", ValueError, "unhandled INT EC sub 38 at 0x11a63"),
-        ("reformat.exe", ValueError, "unhandled op testw_bp at 0xc86c"),
+        ("reformat.exe", KeyError, "60616"),
     ],
 )
 def test_fp_local_for_advances_wild_program(stem, exc, next_gap):

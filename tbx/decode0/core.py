@@ -1562,6 +1562,14 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             and state.ops[test_k + 1][1] == "testw_bp"
         ):  # all-local SINGLE FOR may jump to an x87 synchronization op
             test_k += 1  # immediately before the normal sign-word test
+        elif (
+            test_k is not None
+            and test_k + 2 < len(state.ops)
+            and state.ops[test_k][1] == "nop"
+            and state.ops[test_k + 1][1] == "nop"
+            and state.ops[test_k + 2][1] == "testw_bp"
+        ):  # runtime-revision alias of FWAIT, already calibrated for the
+            test_k += 2  # integer/FP conversion bridges (wild reformat.exe)
         loose = (
             _loose_for_header(state.ops, test_k, state.stmts, state.vdisp)
             if test_k is not None

@@ -56,7 +56,7 @@ known source subset does not provide a direct source-level witness for them.
 | `IfGoto` | `IF condition THEN line` | Supported; corpus observed |
 | `IfInline` | `IF condition THEN statement[:statement...]` | Supported; corpus observed |
 | `IfBlock` | `IF ... THEN` / `ELSEIF` / `ELSE` / `END IF` | Supported; corpus observed |
-| `For` | `FOR v = init TO limit [STEP step]` | Supported; corpus observed, including variable-step SINGLE locals, FWAIT-prefixed all-local NEXT tests, and mixed DEF FN frames whose limit/step are BP-relative while the loop variable is global |
+| `For` | `FOR v = init TO limit [STEP step]` | Supported; corpus observed, including variable-step SINGLE locals, FWAIT/two-NOP-prefixed all-local NEXT tests, and mixed DEF FN frames whose limit/step are BP-relative while the loop variable is global |
 | `NextStmt` | `NEXT [v]` | Supported; corpus observed |
 | `Gosub` | `GOSUB line` | Supported; corpus observed |
 | `Return` | `RETURN` | Supported; corpus observed |

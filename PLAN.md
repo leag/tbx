@@ -935,6 +935,18 @@ fixing the intra-inline-IF gap above will also close it.
 
 ## Part III — Investigation history / handoff log
 
+### 2026-07-23 — two-NOP-prefixed local FOR/NEXT tests
+
+Closed the later `testw_bp` stop in `reformat.exe`. Its runtime revision
+spells the x87 synchronization at the loop test target as `nop; nop`,
+the alias already calibrated for the IDX% and INTEGER INPUT bridges,
+rather than `fwait`. The FOR jump normalization now accepts that exact
+two-op prefix as the sibling of the previously added FWAIT prefix, but
+only when `testw_bp` follows and `_loose_for_header` validates the
+complete positive/negative NEXT template. `reformat.exe` advances to a
+forward FN-resolution KeyError (`60616`), matching the same broader gap
+family now reached by `cleanup.exe` (`59709`).
+
 ### 2026-07-23 — descriptor metadata filtering is procedure-scoped
 
 Corrected a false fail-loud stop exposed after the undimensioned-array

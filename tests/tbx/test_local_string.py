@@ -48,7 +48,7 @@ def test_string_local_in_block_def_fn(stem):
         ("bmaster.exe", ValueError, "materialization template mismatch at 0x8f0e"),
         ("ifi.exe", ValueError, "materialization template mismatch at 0x8f0e"),
         ("cleanup.exe", KeyError, "59709"),
-        ("reformat.exe", ValueError, "unhandled op testw_bp at 0xc86c"),
+        ("reformat.exe", KeyError, "60616"),
     ],
 )
 def test_string_local_witnesses_advance(stem, exc, next_gap):

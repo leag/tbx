@@ -85,7 +85,7 @@ def test_scan_local_array_index_dx_spill():
     ("stem", "exc", "next_gap"),
     [
         ("cleanup.exe", KeyError, "59709"),
-        ("reformat.exe", ValueError, "unhandled op testw_bp at 0xc86c"),
+        ("reformat.exe", KeyError, "60616"),
     ],
 )
 def test_large_local_family_advances_wild_program(stem, exc, next_gap):

@@ -34,7 +34,7 @@ def test_undimensioned_local_array_cleanup(stem):
     [
         ("cleanup.exe", KeyError, "59709"),
         ("crossref.exe", ValueError, "unhandled INT EC sub 38 at 0x11a63"),
-        ("reformat.exe", ValueError, "unhandled op testw_bp at 0xc86c"),
+        ("reformat.exe", KeyError, "60616"),
     ],
 )
 def test_wild_local_bounds_remain_closed(stem, exc, next_gap):
