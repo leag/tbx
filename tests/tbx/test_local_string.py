@@ -52,5 +52,7 @@ def test_string_local_in_block_def_fn(stem):
     ],
 )
 def test_string_local_witnesses_advance(stem, exc, next_gap):
+    from conftest import wild_hits_bytes
+
     with pytest.raises(exc, match=next_gap):
-        decode0.decode_user_code((_ROOT / "wild" / "hits" / stem).read_bytes())
+        decode0.decode_user_code(wild_hits_bytes(stem))

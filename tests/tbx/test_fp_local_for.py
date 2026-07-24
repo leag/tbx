@@ -26,7 +26,9 @@ def test_scan_testw_bp_is_exact():
     ],
 )
 def test_fp_local_for_advances_wild_program(stem, exc, next_gap):
-    data = (_ROOT / "wild" / "hits" / stem).read_bytes()
+    from conftest import wild_hits_bytes
+
+    data = wild_hits_bytes(stem)
     with pytest.raises(exc, match=next_gap):
         decode0.decode_user_code(data)
 
@@ -45,7 +47,9 @@ def test_mixed_def_fn_for_storage(stem):
 
 
 def test_ziptest_advances_to_forward_fn_resolution_gap():
-    data = (_ROOT / "wild" / "hits" / "ziptest.exe").read_bytes()
+    from conftest import wild_hits_bytes
+
+    data = wild_hits_bytes("ziptest.exe")
     with pytest.raises(ValueError, match="jump target 0x9ff7 is not a statement start"):
         decode0.decode_user_code(data)
 

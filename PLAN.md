@@ -933,6 +933,41 @@ fixing the intra-inline-IF gap above will also close it.
 
 ---
 
+### 2026-07-23 — DELAY under active event trapping; wild/hits CI safety net
+
+Closed `DELAY without poll op` (`prtguide.exe`/`readme.exe`, both under
+`ON TIMER`/`ON KEY` event trapping): `delay_init`'s handler peeked
+exactly one/two ops ahead for `delay_poll`/its back-jump, but a
+per-statement CC poll hook (the same `trap_hook` op `ON TIMER`/`ON KEY`
+inserts before every ordinary statement) can land between them too --
+unlike the generic per-statement dispatch, this lookahead bypasses the
+normal trap_hook consumption path and needs to skip it explicitly
+(recording the addr into `state.cc_hooks`, matching what the generic
+path does). Also hit the SAME trace-hook back-jump re-stamping
+`_has_jmps_back` already documents for WHILE loops: when a hook
+precedes `delay_poll`, the loop's own back-jump target lands on the
+HOOK's address, not `delay_poll`'s -- tracked as a separate `loop_back`
+address rather than assuming they're always equal. `readme.exe` now
+decodes completely (28/84); `prtguide.exe` advances to a distinct,
+unrelated gap (`SUB-local array record after a main array record`).
+No new fixture needed (both witnesses are wild files, no oracle-probe
+construction required since the shape was already fully legible from
+the existing corpus).
+
+Separately, the user flagged that `wild/hits/`-referencing tests would
+fail (not just be skipped) on a fresh GitHub CI checkout, since that
+directory is gitignored and CI never populates it -- confirmed by
+temporarily moving `wild/hits/` aside locally and re-running the suite
+(went from a pass to `FileNotFoundError`s before this fix). Added
+`tests/tbx/conftest.py`'s `wild_hits_bytes(name)` helper (resolve +
+`pytest.skip` if absent, rather than raising) and updated the nine test
+files that read `wild/hits/*` directly to use it. Verified both ways:
+full suite green with the corpus present (2573 passed), and cleanly
+skips (2547 passed, 42 skipped, zero failures) with `wild/hits/` moved
+aside to simulate a bare CI checkout. `wild/probes/` (tracked in git,
+always present) is unaffected -- only genuine `wild/hits/` reads needed
+the guard.
+
 ### Gap: OR-flavored value-folded groups (`(A AND B) OR (C OR D)`), DIAGNOSED, REVERTED (grdscn.exe/kinder.exe/kinetics.exe/wb.exe)
 
 Tried this session, reverted before commit (no fixture/test landed, tree

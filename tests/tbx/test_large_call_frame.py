@@ -1,13 +1,9 @@
 """Large stack-temporary allocation used while staging CALL arguments."""
 
-from pathlib import Path
-
 import pytest
 
 from tbx import decode0
 from tbx.decode0 import scan
-
-_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_scan_large_call_frame_allocation():
@@ -89,6 +85,8 @@ def test_scan_local_array_index_dx_spill():
     ],
 )
 def test_large_local_family_advances_wild_program(stem, exc, next_gap):
-    data = (_ROOT / "wild" / "hits" / stem).read_bytes()
+    from conftest import wild_hits_bytes
+
+    data = wild_hits_bytes(stem)
     with pytest.raises(exc, match=next_gap):
         decode0.decode_user_code(data)

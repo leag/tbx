@@ -32,9 +32,10 @@ def _exe(name):
 def test_integer_input_nop_sync_advances_cal():
     from tbx import decode0
 
-    path = os.path.join(os.path.dirname(_ROOT), "wild", "hits", "cal.exe")
+    from conftest import wild_hits_bytes
+
     with pytest.raises(ValueError, match="unhandled materialized test at 0x15eed"):
-        decode0.decode_user_code(open(path, "rb").read())
+        decode0.decode_user_code(wild_hits_bytes("cal.exe"))
 
 
 def test_decode_t1_str():

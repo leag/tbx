@@ -38,6 +38,8 @@ def test_undimensioned_local_array_cleanup(stem):
     ],
 )
 def test_wild_local_bounds_remain_closed(stem, exc, next_gap):
-    data = (_ROOT / "wild" / "hits" / stem).read_bytes()
+    from conftest import wild_hits_bytes
+
+    data = wild_hits_bytes(stem)
     with pytest.raises(exc, match=next_gap):
         decode0.decode_user_code(data)

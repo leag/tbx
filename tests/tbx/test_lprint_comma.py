@@ -1,27 +1,28 @@
 """LPRINT comma-zone vector C2 and its gap-aligned IR representation."""
 
-from pathlib import Path
-
 import pytest
 
 from tbx import c0, decode0, ir
 from tbx.ir import unparse_stmt
-
-_ROOT = Path(__file__).resolve().parents[2]
-_HITS = _ROOT / "wild" / "hits"
 
 
 @pytest.mark.parametrize(
     ("stem", "next_gap"),
     [
         ("billadd.exe", "displacement 0x76 is neither scalar nor array element"),
-        ("prtguide.exe", "DELAY without poll op"),
+        (
+            "prtguide.exe",
+            r"SUB-local array record after a main array record \(allocation "
+            r"order would flip; no witness\)",
+        ),
         ("rs.exe", "unhandled INT EC sub 38"),
     ],
 )
 def test_wild_lprint_comma_advances_to_later_gap(stem, next_gap):
     """All three independent C2 witnesses scan and lift beyond that vector."""
-    data = (_HITS / stem).read_bytes()
+    from conftest import wild_hits_bytes
+
+    data = wild_hits_bytes(stem)
     start, dialect = decode0.find_prologue(data)
     try:
         ops = decode0._scan(data, start, dialect, set())

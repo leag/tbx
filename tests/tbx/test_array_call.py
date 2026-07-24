@@ -17,7 +17,10 @@ _ROOT = Path(__file__).resolve().parents[2]
     ],
 )
 def test_d4_whole_array_argument_shape(path):
-    data = (_ROOT / path).read_bytes()
+    p = _ROOT / path
+    if not p.is_file():
+        pytest.skip(f"{path} not present (gitignored, local-only corpus)")
+    data = p.read_bytes()
     _, dialect = decode0.find_prologue(data)
     i = next(
         i
@@ -41,7 +44,9 @@ def test_numeric_array_parameter_decodes_completely():
 
 
 def test_zip_string_array_parameter_decodes_completely():
-    prog = decode0.decode_user_code((_ROOT / "wild/hits/zip.exe").read_bytes())
+    from conftest import wild_hits_bytes
+
+    prog = decode0.decode_user_code(wild_hits_bytes("zip.exe"))
     sub = prog[-1]
     assert isinstance(sub, ir.SubDef)
     assert sub.name == "SUB30"

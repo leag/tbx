@@ -46,7 +46,9 @@ def test_decode_wild_banker_nonadjacent_for():
     # drift back to an unhandled opcode.
     from tbx import decode0
 
-    exe = open(os.path.join(_ROOT, "..", "wild", "hits", "banker.exe"), "rb").read()
+    from conftest import wild_hits_bytes
+
+    exe = wild_hits_bytes("banker.exe")
     prog = decode0.decode_user_code(exe)
     loops = [s for s in prog if isinstance(s, ir.For)]
     assert any(
@@ -75,6 +77,8 @@ def test_scan_wild_far_jump_group():
     # separate, file-specific gaps.
     from tbx import decode0
 
+    from conftest import wild_hits_bytes
+
     cases = (
         ("elec87.exe", 5),
         ("electron.exe", 5),
@@ -85,7 +89,7 @@ def test_scan_wild_far_jump_group():
         ("wb.exe", 3),
     )
     for name, count in cases:
-        exe = open(os.path.join(_ROOT, "..", "wild", "hits", name), "rb").read()
+        exe = wild_hits_bytes(name)
         start, dialect = decode0.find_prologue(exe)
         ops = decode0._scan(exe, start, dialect, set())
         assert sum(op[1] == "jmpf" for op in ops) == count

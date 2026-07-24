@@ -1,11 +1,7 @@
 """Byte-constant OUT optimization in wild zip.exe's tone procedures."""
 
-from pathlib import Path
-
 from tbx import decode0, ir
 from tbx.decode0 import scan
-
-_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_scan_out_immediate_is_atomic():
@@ -19,7 +15,9 @@ def test_scan_out_immediate_is_atomic():
 
 
 def test_zip_decodes_all_immediate_out_procedures():
-    data = (_ROOT / "wild" / "hits" / "zip.exe").read_bytes()
+    from conftest import wild_hits_bytes
+
+    data = wild_hits_bytes("zip.exe")
     prog = decode0.decode_user_code(data)
     outs = [
         s
