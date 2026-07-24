@@ -521,6 +521,26 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         p += 7
         return p
     if (
+        b == 0x8C
+        and exe[p + 1] == 0xD0
+        and exe[p + 2 : p + 4] == b"\x8e\xd8"
+        and exe[p + 4 : p + 6] == b"\x8b\xf5"
+        and exe[p + 6] == 0x83
+        and exe[p + 7] == 0xC6
+        and exe[p + 9] == 0xCD
+        and exe[p + 10] in (0xD4, 0xCE)  # 1.1 vector / TB 1.0's shifted one
+    ):  # mov ax,ss; mov ds,ax; mov si,bp; add si,d8; INT D4 -- forward a
+        # whole-array PARAMETER as a whole-array CALL argument. The plain
+        # `movsi <disp>; INT D4` form pushes a DGROUP array descriptor; a
+        # received array param's descriptor lives in the caller's frame
+        # instead, so DS has to point at the stack segment for the push (and
+        # is restored right after by the `mov dx,imm; mov ds,dx` pair, which
+        # already scans). Witnessed probe t1_arrfwd; wild tbd73.exe, whose
+        # TBW73.INC relays `item$(1)` on through Makehmenu.
+        ops.append((p, "arg_push_array_bp", exe[p + 8]))
+        p += 11
+        return p
+    if (
         b == 0x8B
         and exe[p + 1] == 0xF5
         and exe[p + 2] == 0x83

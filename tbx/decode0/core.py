@@ -467,6 +467,12 @@ def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, in
             # bp offset get the same P-name, which must not read as a cross-
             # region (SHARED) reference (q_fwd).
             vs = [v for v in vs if v not in s.params]
+            # ...and the same for its ARRAY formals, spelled `NAME(1)` in the
+            # signature but referenced bare: two SUBs relaying the same array
+            # parameter share a bp offset and so the same P-name, which must
+            # not read as a cross-region SHARED reference (probe t1_arrfwd).
+            own = {p[: p.index("(")] for p in s.params if p.endswith("(1)")}
+            ars = [a for a in ars if a not in own]
             regions.append((i, vs, ars))
     main_stmts = [s for s in state.stmts if not isinstance(s, ir.SubDef)]
     mvs, mars = _region_refs(tuple(main_stmts))
@@ -581,6 +587,37 @@ def _resolve_calls(
             return v if not changes else replace(v, **changes)
         return v
 
+    params_by_name = {
+        proc_names[a]: proc_params[a] for a in proc_names if a in proc_params
+    }
+
+    def _check_relayed_arrays(name, args):
+        """A relayed whole-array parameter (handlers.control's
+        arg_push_array_bp) carries no element-type evidence: the SUB doing the
+        relay never touches an element. Its unsuffixed P-name is only correct
+        when the callee's own parameter is untyped too -- otherwise the header
+        we would emit contradicts the callee's and TB rejects the source
+        outright (probe probe_arrfwd, whose emitted form fails to recompile).
+        Take the type from the callee here, the way `fwd` does for scalars,
+        rather than emit something that cannot compile."""
+        params = params_by_name.get(name)
+        if params is None:
+            return
+        for i, a in enumerate(args):
+            if not (
+                isinstance(a, ir.ArrayRef)
+                and not a.indices
+                and a.name.startswith("P")
+                and i < len(params)
+            ):
+                continue
+            want = params[i][: params[i].index("(")] if "(" in params[i] else params[i]
+            if want[-1:] in "%$&#" and not a.name.endswith(want[-1]):
+                raise ValueError(
+                    f"relayed array parameter {a.name} has no element-type "
+                    f"evidence but callee {name} declares {params[i]}"
+                )
+
     def fix(s):
         # Preserving the `is` identity of unchanged statements (see above) is
         # only half of it: a statement this pass DOES rebuild carries its
@@ -603,6 +640,7 @@ def _resolve_calls(
             if isinstance(s.name, tuple):
                 target = s.name[1]
                 if target in proc_names:
+                    _check_relayed_arrays(proc_names[target], new_args)
                     return ir.CallStmt(proc_names[target], new_args)
                 # Not a proc: once event trapping is active ANYWHERE in the
                 # program, the compiler emits a far call/retf pair for a
@@ -620,6 +658,10 @@ def _resolve_calls(
                         f"far_call to non-proc {target:#x} carries arguments"
                     )
                 return ir.Gosub(("addr", target))
+            _check_relayed_arrays(
+                proc_names[s.name[1]] if isinstance(s.name, tuple) else s.name,
+                new_args,
+            )
             if args_changed:
                 return ir.CallStmt(s.name, new_args)
         if isinstance(s, ir.SubDef):

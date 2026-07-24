@@ -163,6 +163,30 @@ def cargs(state: DecodeState, op, addr, kind) -> bool:
             state.pend_args.append(("argref", op[2]))
         state.k += 1
         return True
+    if kind == "arg_push_array_bp":  # forward a whole-array PARAMETER onward
+        # as a whole-array CALL argument. The relaying SUB never touches an
+        # element, so the ordinary element-access path that registers (and
+        # types) an array parameter never runs -- register it here from the
+        # descriptor's own frame offset, the same `blk` that path keys on.
+        # A pure relay carries no element-type evidence at all, so the name
+        # stays unsuffixed; the callee's own signature is where the type
+        # lives (probe t1_arrfwd, verified byte-exact either way).
+        if state.proc_frame is None:
+            raise ValueError(f"whole-array parameter push outside a SUB at {addr:#x}")
+        rec = state.proc_frame["array_params"].setdefault(op[2], {"rank": 1})
+        rec.setdefault("name", f"P{op[2]:02X}")
+        state.pend_args.append(ir.ArrayRef(rec["name"], ()))
+        state.k += 1
+        return True
+    if (
+        kind == "movdx"
+        and state.k + 1 < len(state.ops)
+        and state.ops[state.k + 1][1] == "movdsdx"
+        and state.k
+        and state.ops[state.k - 1][1] == "arg_push_array_bp"
+    ):  # mov dx,<DGROUP>; mov ds,dx -- restores DS after the push above
+        state.k += 2  # pointed it at the stack segment. Semantic-free glue.
+        return True
     if kind == "arg_push_ref_bp":  # push a by-ref CALL arg, LOCAL-frame
         state.pend_args.append(state.loc_local(op[2]))  # caller's var
         state.k += 1

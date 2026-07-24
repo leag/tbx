@@ -1186,7 +1186,7 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
-### 2026-07-24 — Round 10 (INVESTIGATED, REVERTED): forwarding an array param
+### 2026-07-24 — Round 10: forwarding a whole-array parameter (LANDED)
 
 The `unhandled byte 8c` template `tbd73.exe` and `sabpcv3.exe` now stop on
 is **forwarding a whole-array PARAMETER onward as a whole-array CALL
@@ -1207,26 +1207,36 @@ ba 9a 00     mov dx,<DGROUP>
 8e da        mov ds,dx        <- restore
 ```
 
-Implemented far enough to decode both probes end to end (a fused
-`arg_push_array_bp` scan op + a `cargs` handler registering the param in
-`proc_frame["array_params"]`, plus the DS-restore pair as glue) — then
-**reverted**, because the recovered source is not yet right and landing it
-would trade a loud failure for a wrong decode:
+Landed as a fused `arg_push_array_bp` scan op (accepting TB 1.0's shifted
+`INT CE` alongside 1.1's `INT D4`) plus a `cargs` handler that registers
+the parameter from the descriptor's own frame offset and a rule treating
+the DS-restore pair as glue. Two supporting fixes fell out:
 
-- the relaying SUB never touches an element, so the ordinary element-access
-  path that TYPES an array parameter never runs; the header came out as
-  `SUB SUB1(A(1))` where the callee says `B$(1)`, and
-- registering a name eagerly leaked a spurious `SHARED P06()` into both
-  SUBs.
+- **SHARED scoping**: `_shared_regions` already excluded a SUB's SCALAR
+  formals from cross-region analysis ("two SUBs whose params share a bp
+  offset get the same P-name"), but not its ARRAY formals — spelled
+  `NAME(1)` in the signature and referenced bare — so two SUBs relaying the
+  same array both grew a spurious `SHARED P06()`. Same exclusion now
+  applies to arrays.
+- **Relayed type, left loud**: a relay carries NO element-type evidence
+  (the SUB never touches an element), so the P-name is unsuffixed. That is
+  correct only when the callee's parameter is untyped too. For a STRING
+  array the header contradicts the callee's and **TB rejects the emitted
+  source outright** — caught because `probe_arrfwd`'s round trip failed to
+  COMPILE, not merely to match. `_resolve_calls` now raises `relayed array
+  parameter ... has no element-type evidence` rather than emit something
+  uncompilable; `probe_arrfwd` stays promoted as its witness. Closing that
+  half needs the array analogue of the `fwd`/`fwdpending` machinery: take
+  the element type from the callee's parameter in the same position and
+  mark the enclosing SUB's parameter to match, which also has to rewrite
+  the already-built `SubDef` signature since the callee is typically
+  decoded later.
 
-The fix is an array analogue of the existing `fwd`/`fwdpending` machinery
-in `handlers/control.py::calls` — stage the pushed array as a placeholder
-and take its element type from the callee's own parameter in the same
-position (with the deferred variant for a callee defined later), marking
-the enclosing SUB's parameter to match so both headers agree, exactly as
-`q_fwd` does for scalars. That is the next step; the two probes are the
-ready-made witnesses and must round-trip byte-exact in both dialects
-before it lands.
+`t1_arrfwd` (numeric) byte-exact both dialects; goldens purely additive.
+`tbd73.exe` now reaches `unhandled INT EC sub 38 at 0x1338c` — about 93% of
+the way through its image, and that vector is the already-catalogued gap 33
+(catalog/football/refund/varamort). `sabpcv3.exe` advances to `unhandled
+byte 51 at 0xd30b`.
 
 ### 2026-07-24 — Round 9: `SUB ... INLINE` whose byte list opens `55 8B EC`
 

@@ -107,8 +107,8 @@ def test_scan_wild_sabpcv3_clears_its_inline_subs():
     # stopped at its $SEGMENT transition. Following that, and then reading the
     # inline SUBs the metacommand moved (whose $INLINE lists open with a proc
     # prologue), carries it all the way into ordinary compiled SUB bodies --
-    # where it now stops on a segment-register reload, the same `8c` template
-    # wild tbd73.exe reaches.
+    # and then relaying an array parameter onward carries it further still, to
+    # an unrelated template.
     import pytest
 
     from tbx import decode0
@@ -117,7 +117,7 @@ def test_scan_wild_sabpcv3_clears_its_inline_subs():
 
     exe = wild_hits_bytes("sabpcv3.exe")
     start, dialect = decode0.find_prologue(exe)
-    with pytest.raises(ValueError, match=r"unhandled byte 8c at 0xcb3e"):
+    with pytest.raises(ValueError, match=r"unhandled byte 51 at 0xd30b"):
         decode0._scan(exe, start, dialect, set())
 
 
@@ -431,6 +431,44 @@ def test_decode_t1_inlinebp():
             "10 A% = 1\n20 CALL SUB1\n30 END\n$SEGMENT\n40 SUB SUB1 INLINE\n"
             "  $INLINE &H55, &H8B, &HEC, &HC4, &H7E, &H0A, &H5D, &HCB\nEND SUB\n"
         ), stem
+
+
+def test_decode_t1_arrfwd():
+    # Forwarding a whole-array PARAMETER onward as a whole-array CALL argument
+    # (`mov ax,ss; mov ds,ax; mov si,bp; add si,d8; INT D4`): the descriptor
+    # lives in the caller's frame, not DGROUP, so DS points at the stack
+    # segment for the push and is restored right after. Found via wild
+    # tbd73.exe, whose TBW73.INC relays item$(1) through Makehmenu.
+    # Byte-exact, both dialects.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_arrfwd", "v10_t1_arrfwd"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        one = next(s for s in prog if isinstance(s, ir.SubDef) and s.name == "SUB1")
+        assert one.params == ("A(1)",), stem
+        assert one.body == (ir.CallStmt("SUB2", (ir.ArrayRef("A", ()),)),), stem
+        assert emit0.emit(prog).endswith(
+            "50 SUB SUB1(A(1))\n  CALL SUB2(A())\nEND SUB\n"
+            "60 SUB SUB2(A(1))\n  PRINT A(1)\nEND SUB\n"
+        ), stem
+
+
+def test_relayed_string_array_param_stays_loud():
+    # A relay carries no element-type evidence -- the SUB never touches an
+    # element -- so its P-name is unsuffixed. That is right only when the
+    # callee's parameter is untyped too; for a STRING array the header we
+    # would emit contradicts the callee's and TB rejects the source outright
+    # (probe_arrfwd's emitted form does not recompile). Refuse rather than
+    # emit something that cannot compile.
+    import pytest
+
+    from tbx import decode0
+
+    exe = open(
+        os.path.join(_ROOT, "..", "wild", "probes", "probe_arrfwd.exe"), "rb"
+    ).read()
+    with pytest.raises(ValueError, match=r"relayed array parameter P06"):
+        decode0.decode_user_code(exe)
 
 
 def test_decode_t1_inlinedata():
@@ -2746,6 +2784,8 @@ if __name__ == "__main__":
     test_decode_t1_dblhook()
     test_decode_t1_fwdcalltgt()
     test_decode_t1_inlinebp()
+    test_decode_t1_arrfwd()
+    test_relayed_string_array_param_stays_loud()
     test_decode_t1_inlinedata()
     test_decode_t1_segment()
     test_decode_t1_commonarr()

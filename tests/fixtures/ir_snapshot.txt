@@ -91,6 +91,14 @@ Goto(target=8)
 Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None)
 End()
 
+## t1_arrfwd
+Dim(name='V0', bounds=(10,), also=())
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=5))
+CallStmt(name='SUB1', args=(ArrayRef(name='V0', indices=()),))
+End()
+SubDef(name='SUB1', params=('A(1)',), body=(CallStmt(name='SUB2', args=(ArrayRef(name='A', indices=()),)),))
+SubDef(name='SUB2', params=('A(1)',), body=(Print(items=(ArrayRef(name='A', indices=(Lit(value=1),)),), newline=True, file=None, commas=None),))
+
 ## t1_arrread
 Dim(name='V0%', bounds=(10,), also=())
 Assign(target=Var(name='A'), value=Lit(value=3))
@@ -6438,6 +6446,14 @@ Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None)
 Goto(target=8)
 Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None)
 End()
+
+## v10_t1_arrfwd
+Dim(name='V0', bounds=(10,), also=())
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=5))
+CallStmt(name='SUB1', args=(ArrayRef(name='V0', indices=()),))
+End()
+SubDef(name='SUB1', params=('A(1)',), body=(CallStmt(name='SUB2', args=(ArrayRef(name='A', indices=()),)),))
+SubDef(name='SUB2', params=('A(1)',), body=(Print(items=(ArrayRef(name='A', indices=(Lit(value=1),)),), newline=True, file=None, commas=None),))
 
 ## v10_t1_arrread
 Dim(name='V0%', bounds=(10,), also=())
