@@ -357,7 +357,7 @@ def test_wild_rsltest_argref_advances():
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(ValueError, match=r"jump target 0xab35 is not a statement start"):
+    with pytest.raises(ValueError, match=r"jump target 0xac2e is not a statement start"):
         decode0.decode_user_code(wild_hits_bytes("rsltest.exe"))
 
 
@@ -380,6 +380,27 @@ def test_decode_t1_declnoend():
         assert [type(s).__name__ for s in prog] == ["Assign", "SubDef", "Print"], stem
         assert emit0.emit(prog) == (
             '10 A% = 1\n20 SUB SUB1\n  PRINT "F"\nEND SUB\n30 PRINT A%\n'
+        ), stem
+
+
+def test_decode_t1_fwdcalltgt():
+    # _resolve_calls preserves the `is` identity of every UNCHANGED statement
+    # so nested jump targets survive -- but a statement it DOES rebuild (here
+    # the forward CALL whose ("addr", n) placeholder becomes a real SUB name)
+    # left its stmt_addr entry keyed to the discarded object, orphaning the
+    # address as surely as a fold would. A body line that both CALLs a
+    # later-defined SUB and is itself a jump target could therefore never
+    # resolve. Found via wild rsltest.exe. Byte-exact, both dialects.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_fwdcalltgt", "v10_t1_fwdcalltgt"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        one = next(s for s in prog if isinstance(s, ir.SubDef) and s.name == "SUB1")
+        jump = next(s for s in one.body if isinstance(s, ir.IfGoto))
+        assert isinstance(jump.target, ir.BodyLine), stem
+        assert emit0.emit(prog) == (
+            "10 CALL SUB1\n20 END\n30 SUB SUB1\n  A% = 1\n  IF A% = 1 THEN 34\n"
+            '  A% = 2\n34 CALL SUB2\nEND SUB\n40 SUB SUB2\n  PRINT "T"\nEND SUB\n'
         ), stem
 
 
@@ -2578,6 +2599,7 @@ if __name__ == "__main__":
     test_wild_rsltest_argref_advances()
     test_decode_t1_declnoend()
     test_decode_t1_dblhook()
+    test_decode_t1_fwdcalltgt()
     test_decode_t1_scgoto()
     test_decode_t1_scgotone()
     test_decode_t1_movaxmpool()

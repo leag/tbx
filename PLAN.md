@@ -1186,6 +1186,43 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 6: `_resolve_calls` orphaned the addresses it rebuilt
+
+Eleventh closure in the `rsltest.exe` full-decode goal (`jump target
+0xab35 is not a statement start`, the gap round 5 left).
+
+`_resolve_calls` already went out of its way to preserve the `is` identity
+of every statement it does NOT change -- its own docstring explains why
+(`_resolve_targets` keys `stmt_addr` off `id(stmt)` to place `BodyLine`
+targets inside SUB/IF bodies, so rebuilding an unchanged container would
+orphan any target landing inside it). But the statements it DOES rebuild
+had the same problem from the other side: the resolved forward `CALL`'s
+new `ir.CallStmt` is a different object, so its `stmt_addr` entry stayed
+keyed to the discarded one and the address vanished exactly as if a fold
+had eaten it. A SUB body line that both CALLs a later-defined SUB and is
+itself a jump target could therefore never resolve. Fixed by splitting
+`fix` into a thin wrapper over `_fix` that moves the `stmt_addr` entry
+whenever the result is a new object -- one place, covering every rebuild
+shape (CallStmt, Gosub, SubDef, DefFn, IfInline, IfBlock, SelectCase).
+
+Diagnosis note worth keeping: the tell was that `0xab35` was present in
+`stmt_addr` but a full recursive walk of the finished IR tree found NO
+object carrying it -- i.e. a dead key, not a missing one. That distinction
+(dead key vs never recorded) points straight at a rebuild/fold identity
+bug rather than at the decode loop, and is much faster than tracing
+`state.cur` through the op stream, which is where this investigation
+started.
+
+Witness `t1_fwdcalltgt` (`SUB ONE` contains `IF A% = 1 THEN 70` skipping
+to `70 CALL TWO`, with `SUB TWO` defined after `ONE`), byte-exact both
+dialects; golden regeneration purely additive again. `c0.py` needed a
+matching follow-up: with the SUB-signature pre-pass from round 5 the
+forward CALL now generates, but the emitted C used `sub_SUB2` before its
+`static` definition, so `build()` now emits prototypes for every SUB ahead
+of the definitions. Full suite 2675 -> 2681 passed/16 skipped, Ruff clean.
+
+`rsltest.exe` advances to `jump target 0xac2e is not a statement start`.
+
 ### 2026-07-24 — Round 5: consecutive event-trap hooks (`END IF`) as jump targets
 
 Tenth closure in the `rsltest.exe` full-decode goal, picking up the gap

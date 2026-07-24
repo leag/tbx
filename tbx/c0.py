@@ -1532,6 +1532,15 @@ class _Gen:
             parts.append("static void *tb_xgoto;")
         if self.uses_clear:
             parts.append("static void tb_clear_all(void);")
+        # Prototypes ahead of the definitions: a SUB body may CALL a SUB whose
+        # own definition comes later in statement order, so its function would
+        # otherwise be used before it is declared (t1_fwdcalltgt).
+        for name, params in sorted(self.subs.items()):
+            sig = []
+            for p in params:
+                cty, _, _ = _VTYPES[_suffix_ty(p)]
+                sig.append(f"{cty}{'' if cty.endswith('*') else ' '}*p_{_base(p)}")
+            parts.append(f"static void sub_{_base(name)}({', '.join(sig) or 'void'});")
         parts.extend(self.fns)
         parts.append("int main(int argc, char **argv) {")
         parts.append("    tb_argc = argc; tb_argv = argv;")

@@ -494,6 +494,7 @@ def _resolve_calls(
     proc_long_offs,
     proc_dbl_offs,
     proc_str_offs,
+    stmt_addr=None,
 ):
     """A CALL to a SUB defined later in the file staged a ("addr", n)
     placeholder (see handlers.control.calls) since proc_names had no entry
@@ -580,6 +581,22 @@ def _resolve_calls(
         return v
 
     def fix(s):
+        # Preserving the `is` identity of unchanged statements (see above) is
+        # only half of it: a statement this pass DOES rebuild carries its
+        # `stmt_addr` entry on the OLD object's id, so without moving it the
+        # address is orphaned exactly as if the statement had been folded away
+        # -- and a jump landing on it can never resolve. Bites the resolved
+        # forward CALL itself: a SUB body whose CALL to a later-defined SUB is
+        # a jump target (probe t1_fwdcalltgt; wild rsltest.exe's TBWINDOW
+        # SUB1, an `IF c THEN <line>` skipping to a line that CALLs SUB4).
+        new = _fix(s)
+        if stmt_addr is not None and new is not s:
+            a = stmt_addr.pop(id(s), None)
+            if a is not None:
+                stmt_addr[id(new)] = a
+        return new
+
+    def _fix(s):
         if isinstance(s, ir.CallStmt):
             new_args, args_changed = fix_args(s.args)
             if isinstance(s.name, tuple):
@@ -661,6 +678,7 @@ def _finalize(state: DecodeState, addr) -> Program:
         state.proc_long_offs,
         state.proc_dbl_offs,
         state.proc_str_offs,
+        state.stmt_addr,
     )
     # Error-trap line table, probed early -- before DATA/dims/COMMON/TRON
     # synthesis below mutates state.addrs -- so a codeless DATA statement

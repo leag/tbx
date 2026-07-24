@@ -4136,6 +4136,12 @@ Assign(target=Var(name='B%'), value=Lit(value=5))
 CallStmt(name='SUB1', args=(Var(name='B%'),))
 End()
 
+## t1_fwdcalltgt
+CallStmt(name='SUB1', args=())
+End()
+SubDef(name='SUB1', params=(), body=(Assign(target=Var(name='A%'), value=Lit(value=1)), IfGoto(cond=RelOp(op='=', lhs=Var(name='A%'), rhs=Lit(value=1)), target=BodyLine(stmt=2, phys=4)), Assign(target=Var(name='A%'), value=Lit(value=2)), CallStmt(name='SUB2', args=())))
+SubDef(name='SUB2', params=(), body=(Print(items=(StrLit(value='T'),), newline=True, file=None, commas=None),))
+
 ## t1_getfile
 Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'), reclen=None, for_as=False)
 Get(num=1, pos=Lit(value=1))
@@ -10283,6 +10289,12 @@ SubDef(name='SUB2', params=(), body=(Print(items=(StrLit(value='IN SUB2'),), new
 Assign(target=Var(name='B%'), value=Lit(value=5))
 CallStmt(name='SUB1', args=(Var(name='B%'),))
 End()
+
+## v10_t1_fwdcalltgt
+CallStmt(name='SUB1', args=())
+End()
+SubDef(name='SUB1', params=(), body=(Assign(target=Var(name='A%'), value=Lit(value=1)), IfGoto(cond=RelOp(op='=', lhs=Var(name='A%'), rhs=Lit(value=1)), target=BodyLine(stmt=2, phys=4)), Assign(target=Var(name='A%'), value=Lit(value=2)), CallStmt(name='SUB2', args=())))
+SubDef(name='SUB2', params=(), body=(Print(items=(StrLit(value='T'),), newline=True, file=None, commas=None),))
 
 ## v10_t1_getfile
 Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'), reclen=None, for_as=False)
