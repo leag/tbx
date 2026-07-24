@@ -2181,8 +2181,13 @@ def decode_user_code(exe: bytes) -> list[Any]:
     state.arrs = state.lay["arrs"]  # static arrays (unified slot records)
     # Unified slot registry for the far/near index machine: static slots prefilled
     # from their records; runtime blocks register at their DIM bracket.
+    # ...keyed at the grid's REAL start: `var_base` normally, but under COMMON
+    # the band pushes the statics out past it, and keying them at var_base put
+    # phantom slots on top of the COMMON blocks' own addresses -- a phantom's
+    # 0x36 window then shadowed a real block in the far-IDX lookups (wild
+    # tbd73.exe: slot 0x1c2 swallowed block 0x1e8's `lo1` cell).
     state.slot_info = {
-        state.lay["var_base"] + ARR_BLOCK * i: a for i, a in enumerate(state.arrs)
+        state.lay["static_base"] + ARR_BLOCK * i: a for i, a in enumerate(state.arrs)
     }
     for a in state.arrs:
         if a["str"] and not a["name"].endswith("$"):

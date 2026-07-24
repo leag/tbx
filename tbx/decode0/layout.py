@@ -243,6 +243,9 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
     # Scalars found inside the COMMON band (see the rt_blocks branch below);
     # empty on every other path. Captured here so `finish` can report them.
     band_slots: list[int] = []
+    # Where the STATIC slot grid actually starts. `vb` everywhere except under
+    # COMMON, where the band pushes the statics out past it (see that branch).
+    static_base: list[int] = [vb]
 
     def finish(ds, n_static, statics, sb, run, strs, pool_base, delta):
         # Augment `run` with any evidenced scalar disps in [sb, pool_base-4) that
@@ -324,6 +327,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
             "ds": ds,
             "delta": delta,
             "var_base": vb,
+            "static_base": static_base[0],
             "scalar_base": sb,
             "scalars": run,
             "strs": strs,
@@ -404,6 +408,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
                         break
                     statics.append(rec)
                     q += ARR_BLOCK
+                static_base[0] = ord_base
                 sb = ord_base + ARR_BLOCK * len(statics)
                 run, strs, dend = walk_run(sb)
                 if not run:

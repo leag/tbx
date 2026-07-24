@@ -1227,8 +1227,19 @@ Witnesses `t1_commonarrstatic` (a second main-code static array) and
 SUB), both byte-exact in BOTH dialects; goldens purely additive (+34, -0)
 even though this touches the layout anchor search. Suite 2305 -> 2314.
 
-`tbd73.exe` now clears layout entirely and fails in decode at `sub ax from
-unexpected cell offset 0x2e at 0x979a`.
+**Follow-on, same round**: `slot_info` keyed the static slots at
+`var_base + 0x36*i`, which is only where they live when the COMMON band
+isn't pushing them out. Under COMMON that planted PHANTOM slots on top of
+the band's own block addresses, and a phantom's 0x36 window then shadowed a
+real block in the far-IDX lookups -- `tbd73.exe`'s `wattr(0) = SCREEN(...)`
+resolved `sub ax,[0x1f0]` against phantom slot 0x1c2 (offset 0x2e) instead
+of block 0x1e8 (offset 0x08, the ordinary `i - lo1`). `_layout` now reports
+`static_base` and `core` keys off that. All four COMMON fixtures re-verified
+byte-exact after the change.
+
+`tbd73.exe` now reaches `LOCAL zero-fill outside a fresh SUB/DEF FN body at
+0xa370` -- the same template `probe_k0goto_decl` and
+`cleanup.exe`/`reformat.exe` stand on.
 
 ### 2026-07-24 — Round 11: gap 33 (INT EC sub 38) DIAGNOSED from source = static ERASE
 
