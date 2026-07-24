@@ -306,6 +306,26 @@ def test_decode_t1_forvarlimneg():
     assert loops == [ir.For(ir.Var("B%"), ir.Lit(5), ir.Var("A%"), ir.Lit(-1))]
 
 
+def test_wild_phone_opaque_helper_advances():
+    # An eleventh framed helper (BODY_11, wild phone.exe): same overall
+    # framing/epilogue as the BODY..BODY_10 family, but much larger
+    # (1740 bytes) -- its own CALL leads into an embedded box-drawing
+    # character DATA table before real code resumes near the end. Exact
+    # byte-fingerprint match; size doesn't change the recognition
+    # mechanism. phone.exe's NEXT blocker (right after this helper) is a
+    # chain of jmp-to-jmp thunks landing on further helper-shaped code --
+    # a genuinely different, unfamiliar trampoline/overlay structure not
+    # attempted here; only this one confirmed closure is tested.
+    import pytest
+
+    from tbx import decode0
+
+    from conftest import wild_hits_bytes
+
+    with pytest.raises(ValueError, match=r"unhandled byte 33 at 0xa9ae"):
+        decode0.decode_user_code(wild_hits_bytes("phone.exe"))
+
+
 def test_wild_filepatc_opaque_helpers_advance():
     # Two more framed far-procedure helpers (BODY_9/BODY_10, wild
     # filepatc.exe), sitting back-to-back right after the already-
@@ -2249,6 +2269,7 @@ if __name__ == "__main__":
     test_decode_t1_localdbl()
     test_decode_t1_localdblcmp()
     test_decode_t1_forvarlimneg()
+    test_wild_phone_opaque_helper_advances()
     test_wild_filepatc_opaque_helpers_advance()
     test_wild_mf_compound_if_far_exit_advances()
     test_decode_t1_forvarlimfar()

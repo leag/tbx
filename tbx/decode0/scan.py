@@ -179,6 +179,127 @@ _OPAQUE_HELPER_BODY_10 = bytes.fromhex(
     89 04 5d cb
     """
 )
+# An eleventh, much larger framed helper (wild phone.exe): same overall
+# push-bp/push-ds/push-es framing and "pop es; pop ds; pop bp; int3;
+# retf" TB 1.1 epilogue as the BODY..BODY_8/BODY_9/BODY_10 family, but
+# a genuinely different, much bigger routine -- its own CALL immediately
+# leads into an embedded DATA table (box-drawing/CGA character codes,
+# not instructions) before the real code resumes near the end. Exact
+# byte-fingerprint match, same as every other opaque helper; size alone
+# doesn't change the recognition mechanism.
+_OPAQUE_HELPER_BODY_11 = bytes.fromhex(
+    """
+    55 8b ec 1e 06 e8 4e 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    da bf c0 d9 b3 c4 c9 bb c8 bc ba cd d5 b8 d4 be
+    b3 cd d6 b7 d3 bd ba c4 db db db db db db b0 b0
+    b0 b0 b0 b0 b1 b1 b1 b1 b1 b1 b2 b2 b2 b2 b2 b2
+    00 00 00 00 00 00 5b 0e 1f 33 c0 c4 7e 12 26 8b
+    05 fe c8 e8 9e 04 8e c3 06 c4 7e 2a 26 8b 05 88
+    07 c4 7e 26 26 8b 05 88 47 01 c4 7e 22 26 8b 05
+    88 47 02 c4 7e 1e 26 8b 05 88 47 03 c4 7e 1a 26
+    8b 05 b1 08 d3 e0 89 47 14 c4 7e 16 26 8b 05 d3
+    e0 89 47 10 07 e8 e5 03 06 c4 7e 0e 26 8b 05 3d
+    01 00 07 74 06 e8 46 01 e9 09 06 e8 03 00 e9 03
+    06 8a 47 02 8a 4f 02 2a 0f d0 e9 2a c1 88 47 04
+    88 47 06 8a 47 03 8a 4f 03 2a 4f 01 d0 e9 2a c1
+    88 47 05 88 47 07 8a 47 07 fe c0 88 47 07 8a 47
+    06 fe c0 88 47 06 8a 47 04 fe c8 88 47 04 8a 47
+    05 fe c8 88 47 05 8a 27 8a 47 01 8a 6f 02 8a 4f
+    03 8a 77 04 88 37 8a 77 06 88 77 02 8a 77 07 88
+    77 03 8a 77 05 88 77 01 88 67 04 88 6f 06 88 47
+    05 88 4f 07 b0 01 b4 01 b1 01 b5 01 b2 00 8a 37
+    3a 77 04 75 03 e9 86 00 50 8a 07 fe c8 88 07 58
+    8a 37 3a 77 04 74 77 50 8a 07 fe c8 88 07 58 8a
+    37 3a 77 04 74 68 50 8a 07 fe c8 88 07 58 8a 77
+    02 3a 77 06 74 63 50 8a 47 02 fe c0 88 47 02 58
+    8a 77 02 3a 77 06 74 51 50 8a 47 02 fe c0 88 47
+    02 58 8a 77 02 3a 77 06 74 3f 50 8a 47 02 fe c0
+    88 47 02 58 8a 77 01 3a 77 05 74 38 50 8a 47 01
+    fe c8 88 47 01 58 8a 77 03 3a 77 07 74 31 50 8a
+    47 03 fe c0 88 47 03 58 e8 33 00 e9 70 ff 80 fa
+    04 74 27 02 d4 b4 00 eb 95 80 fa 04 74 1c 02 d0
+    b0 00 eb c0 80 fa 04 74 11 02 d5 b5 00 eb c7 80
+    fa 04 74 06 02 d1 b1 00 eb ce e8 01 00 c3 50 53
+    51 52 57 06 56 06 5f e8 21 03 8b ce 33 c0 8a 47
+    01 f7 e1 51 32 ed 8a 0f d1 e1 03 c1 89 47 08 33
+    c0 8a 47 01 59 f7 e1 51 8a 4f 02 d1 e1 03 c1 89
+    47 0a 33 c0 8a 47 03 59 f7 e1 51 8a 0f d1 e1 03
+    c1 89 47 0c 33 c0 8a 47 03 59 f7 e1 8a 4f 02 d1
+    e1 03 c1 89 47 0e 53 ff 77 08 ff 77 0a ff 77 0c
+    ff 77 0e ff 77 10 58 5b 53 8b df 8a 47 4b 5b e8
+    35 04 53 8b df 8a 47 4a 5b 5b e8 2a 04 53 8b df
+    8a 47 49 5b 5b e8 1f 04 53 8b df 8a 47 48 5b 5b
+    e8 14 04 5b 33 c9 8a 4f 02 49 33 c0 8a 07 40 2b
+    c8 41 53 8b 47 08 ff 77 10 8b d8 83 c3 02 58 53
+    8b df 8a 47 4d 5b e8 ee 03 83 c3 02 e2 f8 5b 33
+    c9 8a 4f 02 49 33 c0 8a 07 40 2b c8 41 53 8b 47
+    0c ff 77 10 8b d8 83 c3 02 58 53 8b df 8a 47 4d
+    5b e8 c3 03 83 c3 02 e2 f8 5b 33 c9 8a 4f 03 fe
+    c9 33 c0 8a 47 01 fe c0 2b c8 53 8b 47 08 ff 77
+    10 8b d8 58 53 8b df 8a 47 4c 5b 41 03 de e8 96
+    03 e2 f9 5b 33 c9 8a 4f 03 fe c9 33 c0 8a 47 01
+    fe c0 2b c8 53 8b 47 0a ff 77 10 8b d8 58 53 8b
+    df 8a 47 4c 5b 41 03 de e8 6c 03 e2 f9 5b e8 08
+    00 5e 07 5f 5a 59 5b 58 c3 53 89 6f 08 33 c9 33
+    d2 8a 4f 01 83 c1 02 51 8a 0f 83 c1 02 51 8a 4f
+    01 8a 57 03 2a d1 4a 52 8a 0f 8a 57 02 2a d1 4a
+    52 b2 20 52 8b 47 14 8a d4 52 e8 d8 01 5b 8b 6f
+    08 c3 56 57 50 53 51 52 06 c4 7e 0a 26 8b 05 3d
+    01 00 73 03 e9 ed 00 3d 04 00 7e 03 e9 e5 00 53
+    89 6f 08 33 d2 33 c9 8a 57 01 83 c2 02 52 a9 01
+    00 74 66 8a 17 4a 52 8a 57 03 8a 4f 01 2b d1 42
+    52 ba 02 00 52 3d 01 00 74 08 b2 08 52 e8 d8 01
+    eb 09 b2 20 52 b2 00 52 e8 7a 01 5b 53 33 d2 33
+    c9 8a 57 03 83 c2 02 52 8a 17 4a 52 ba 01 00 52
+    8a 57 02 8a 0f 2b d1 42 52 c4 7e 0a 26 8b 05 3d
+    01 00 74 0a ba 08 00 52 e8 9d 01 eb 73 90 b2 20
+    52 b2 00 52 e8 3e 01 eb 67 8a 57 02 83 c2 02 52
+    8a 57 03 8a 4f 01 2b d1 52 ba 02 00 52 3d 02 00
+    74 08 b2 08 52 e8 70 01 eb 09 b2 20 52 b2 00 52
+    e8 12 01 5b 53 33 d2 33 c9 8a 57 03 83 c2 02 52
+    8a 17 83 c2 03 52 ba 01 00 52 8a 57 02 8a 0f 2b
+    d1 42 52 c4 7e 0a 26 8b 05 3d 02 00 74 09 ba 08
+    00 52 e8 33 01 eb 09 b2 20 52 b2 00 52 e8 d5 00
+    5b 8b 6f 08 07 5a 59 5b 58 5f 5e c3 c3 56 57 50
+    53 51 52 06 c4 7e 2e 26 8b 05 3d 00 00 74 5d 33
+    d2 33 c9 8a 57 01 42 52 c4 7e 0a 26 8b 05 3d 00
+    00 75 1b 8a 17 42 52 8a 57 03 8a 4f 01 2a d1 83
+    c2 02 52 8a 57 02 8a 0f 2a d1 42 52 eb 26 a9 01
+    00 74 06 8a 17 4a 52 eb 04 8a 17 42 52 8a 57 03
+    8a 4f 01 2a d1 83 c2 03 52 8a 57 02 8a 0f 2a d1
+    83 c2 03 52 c4 7e 06 06 57 e8 33 01 07 5a 59 5b
+    58 5f 5e c3 56 57 50 53 51 52 06 b1 06 f6 e1 05
+    18 00 03 c3 1e 07 8b f0 83 c3 48 8b fb fc b9 06
+    00 f3 a4 07 5a 59 5b 58 5f 5e c3 50 53 51 1e b8
+    40 00 50 1f 33 c0 a0 4a 00 d1 e0 8b f0 8a 16 49
+    00 80 fa 07 75 05 b8 00 b0 eb 03 b8 00 b8 8e c0
+    1f 59 5b 58 c3 55 8b ec 1e 06 e8 1e 01 53 07 8b
+    4e 0a 51 52 33 db 8a dc 53 8b 46 0e 48 f7 e3 d1
+    e0 8b 5e 0c 4b d1 e3 03 d8 8b fb 8b 46 06 8a d8
+    8b 46 04 8a e0 8a c3 fc 8b 76 08 5b d1 e3 5a 57
+    8b ce e8 05 01 ab e2 fa 5f 59 49 e3 05 51 03 fb
+    eb ed 07 1f 5d c2 0c 00 55 8b ec 1e 06 e8 cb 00
+    53 07 8b 4e 08 51 52 33 db 8a dc 53 8b 46 0c 48
+    f7 e3 d1 e0 8b 5e 0a 4b d1 e3 03 d8 8b fb 8b 46
+    04 fc 8b 76 06 5b d1 e3 5a 57 fa 8b ce e8 ba 00
+    47 aa e2 f9 fb 5f 59 49 e3 05 51 03 fb eb ea 07
+    1f 5d c2 0a 00 54 42 57 49 4e 44 4f 53 20 35 2e
+    30 20 2f 20 43 6f 70 79 72 69 67 68 74 20 28 63
+    29 20 31 39 38 38 20 62 79 20 52 69 63 68 61 72
+    64 20 44 2e 20 46 6f 74 68 65 72 67 69 6c 6c 55
+    8b ec 1e 06 e8 44 00 53 1f 8b 4e 0a 51 52 33 db
+    8a dc 53 8b 46 0e 48 f7 e3 d1 e0 8b 5e 0c 4b d1
+    e3 03 d8 8b f3 8b 46 08 c4 7e 04 fc 5b d1 e3 5a
+    56 fa 8b c8 e8 33 00 a5 e2 fa fb 5e 59 49 e3 05
+    51 03 f3 eb eb 07 1f 5d c2 0c 00 b8 40 00 50 1f
+    8a 26 4a 00 a0 49 00 3c 07 75 08 bb 00 b0 ba ba
+    03 eb 06 bb 00 b8 ba da 03 c3 50 ec d0 d8 72 fb
+    ec d0 d8 73 fb 58 c3 06 5a 81 fa 00 b8 75 10 ba
+    da 03 50 ec d0 d8 72 fb fa ec d0 d8 73 fb 58 26
+    89 07 fb c3 e8 bb fc 07 1f 5d cc cb
+    """
+)
 _OPAQUE_HELPER_BODIES = (
     _OPAQUE_HELPER_BODY,
     _OPAQUE_HELPER_BODY_2,
@@ -196,6 +317,7 @@ _OPAQUE_HELPER_BODIES = (
     _OPAQUE_HELPER_BODY_8_V10,
     _OPAQUE_HELPER_BODY_9,
     _OPAQUE_HELPER_BODY_10,
+    _OPAQUE_HELPER_BODY_11,
 )
 _OPAQUE_HELPER_PARAM_OFFSETS = (0x1E, 0x1A, 0x16, 0x12, 0x0E, 0x0A, 0x06)
 
