@@ -56,6 +56,50 @@ def _is_str_arm_header_at(state, i, temp):
     )
 
 
+def _is_str_arm_header_chr_at(state, i, temp):
+    # A CHR$(n) guard (wild rsltest.exe: `case chr$(72),chr$(75),"-",...`,
+    # mixing computed and bare-literal guards in one arm list) computes the
+    # value at the guard site instead of loading an existing descriptor --
+    # movax n; strfn CHR$ where the bare form's leading movsi/rt pair sits.
+    return (
+        _kind_at(state, i) == "movax"
+        and _kind_at(state, i + 1) == "strfn"
+        and state.ops[i + 1][2] == "CHR$"
+        and _kind_at(state, i + 2) == "movsi"
+        and state.ops[i + 2][2] == temp
+        and _kind_at(state, i + 3) == "rt"
+        and state.ops[i + 3][2] == 0x9C
+        and _kind_at(state, i + 4) == "strcmp"
+    )
+
+
+def _str_guard_arm(state, k, guard):
+    """Shared tail for a matched string-arm guard header (movsi/movax..
+    strcmp at k..k+4, jcc at k+5, jmp at k+6). Mirrors the numeric arm's
+    own cc==0x75(JNE, value-list non-final)/cc==0x74(JE, final/only) split
+    exactly -- structural position alone can't distinguish them (a
+    non-final guard's mismatch branch and a final guard's match branch
+    both land on the immediately-following op when the compiler lays
+    guards out contiguously, witnessed on both cc's in wild zz_sc5/
+    rsltest.exe), so the cc value is the only reliable signal, same as
+    the numeric arm (wild rsltest.exe: `case chr$(72),chr$(75),"-","8",
+    "4"` needs the non-final path; every single-guard CASE calibrated
+    before this only ever exercised the final path)."""
+    jcc = state.ops[k + 5]
+    state.cases[-1]["cur_guards"].append(ir.CaseValue(guard))
+    if jcc[2] == 0x75:  # JNE: value-list non-final guard -- keep testing
+        state.k = k + 7
+        state.cur = None
+        return True
+    if jcc[2] == 0x74:  # JE: literal final/only guard -> begin body
+        next_test = state.ops[k + 6][2]
+        _begin_body(state, k + 7, next_test)
+        return True
+    raise ValueError(
+        f"SELECT CASE string arm: unexpected jcc {jcc[2]:02x} at {state.ops[k][0]:#x}"
+    )
+
+
 def _op_index_at(state, a):
     for i, o in enumerate(state.ops):
         if o[0] == a:
@@ -160,12 +204,21 @@ def step(state):
         return True
     # (3a) String entry: movsi [temp]; strassign to a scratch, string arm following.
     # The selector string was pushed to sstack by the preceding `movsi sel; rt`.
+    # An event-trapping poll hook can land right at this exact join point
+    # (wild rsltest.exe, under an active ON TIMER trap); tolerate it in the
+    # lookahead sanity check -- the main dispatch loop consumes it normally
+    # on its own turn regardless, so `state.k` below still only needs to
+    # skip `movsi [temp]; strassign` itself.
+    _hdr = state.k + 3 if _kind_at(state, state.k + 2) == "trap_hook" else state.k + 2
     if (
         not in_body
         and kind == "movsi"
         and op[2] < VAR_BASE
         and _kind_at(state, state.k + 1) == "strassign"
-        and _is_str_arm_header_at(state, state.k + 2, op[2])
+        and (
+            _is_str_arm_header_at(state, _hdr, op[2])
+            or _is_str_arm_header_chr_at(state, _hdr, op[2])
+        )
     ):
         state.cases.append(
             {
@@ -193,11 +246,17 @@ def step(state):
         and state.cases[-1]["body_jmp"] is None
         and _is_str_arm_header_at(state, state.k, state.cases[-1]["temp"])
     ):
-        guard = state._pool_str(op[2])
-        next_test = state.ops[state.k + 6][2]
-        state.cases[-1]["cur_guards"].append(ir.CaseValue(guard))
-        _begin_body(state, state.k + 7, next_test)
-        return True
+        return _str_guard_arm(state, state.k, state._pool_str(op[2]))
+    # (3b-chr) String arm, computed CHR$(n) guard: movax n; strfn CHR$; movsi
+    # temp; rt; strcmp; je body; jmp next; body -- same tail/positions as
+    # (3b), just a computed value instead of a pooled literal/variable.
+    if (
+        state.cases
+        and state.cases[-1]["is_string"]
+        and state.cases[-1]["body_jmp"] is None
+        and _is_str_arm_header_chr_at(state, state.k, state.cases[-1]["temp"])
+    ):
+        return _str_guard_arm(state, state.k, ir.Call("CHR$", (ir.Lit(op[2]),)))
     # (3.5) IS-relational arm: materialized-boolean compare idiom.
     if (
         state.cases

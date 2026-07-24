@@ -1188,6 +1188,63 @@ constructs specific to their by-ref/LOCAL-heavy coding style.
 
 ## Part III — Investigation history / handoff log
 
+### 2026-07-24 — SELECT CASE on a string selector: event-trap hooks, computed CHR$ guards, multi-guard lists
+
+Fifth closure in the `rsltest.exe` full-decode goal (continuing from the
+entry directly below): after the head-test WHILE fix, decode advanced to
+`displacement 0x5c is neither scalar nor array element` at `select case
+ans$` in `TBMENU.INC`'s (still dead-code) `MAKEMENU`. This turned out to
+be three compounding, previously-uncalibrated gaps in `select_case.py`'s
+string-arm state machine, all traced by instrumenting `DecodeState.loc`/
+`_pool_str` to print the failing op window:
+
+1. **Event-trap hook at the entry gate.** The string-SELECT-CASE entry
+   recognizer's lookahead sanity check (`movsi [temp]; strassign` then
+   `_is_str_arm_header_at` at a FIXED `state.k+2`) assumed nothing sits
+   between the scratch-copy and the first arm header. Under this file's
+   active `ON TIMER` trap, a per-statement poll hook lands exactly there.
+   Fixed by tolerating an optional `trap_hook` in the lookahead offset
+   (the main dispatch loop still consumes it normally afterward on its
+   own turn -- no change needed to how many ops the entry itself eats).
+2. **Computed `CHR$(n)` guards.** `case chr$(72),chr$(75),"-","8","4"`
+   mixes computed (`CHR$`) and bare-literal guards in one list; only the
+   bare-variable/pooled-literal shape (`movsi val; rt; movsi temp; rt;
+   strcmp`) was recognized. Added `_is_str_arm_header_chr_at` for the
+   `movax n; strfn CHR$; movsi temp; rt; strcmp` sibling, building
+   `ir.Call("CHR$", (ir.Lit(n),))` instead of a pool-string lookup.
+3. **Multi-guard comma lists, full stop.** Even setting (2) aside, the
+   *existing* bare-form arm case had apparently never been exercised by a
+   multi-value STRING `CASE` list before: it unconditionally called
+   `_begin_body`, whose walk-forward-to-`next_test` mechanism silently
+   *skipped over* (not accumulated) every guard after the first,
+   discarding real guards with no error. Root cause: unlike the sibling
+   *numeric* arm case, which already branches on `cc==0x75` (JNE,
+   value-list non-final) vs `cc==0x74` (JE, final/only), the string
+   arm's own cc value was never inspected. A position-based first
+   attempt ("does the jcc's mismatch target land on the very next op?")
+   looked promising but was **wrong and caused a real regression** in
+   the existing `zz_sc5` fixture (single-guard `CASE "Y"`/`CASE "N"`):
+   both a non-final guard's mismatch-taken branch AND a final guard's
+   match-taken branch structurally land on the immediately-following op
+   when the compiler lays guards out contiguously -- position alone
+   can't distinguish them. The cc value is the only reliable signal,
+   confirmed against both wild files' raw bytes directly (zz_sc5's own
+   single guard already compiles cc=0x74/JE). Extracted the shared
+   post-match logic into `_str_guard_arm(state, k, guard)`, called from
+   both the bare and CHR$ arm cases, mirroring the numeric arm's split
+   exactly.
+
+Oracle-verified with `t1_selcasechr.bas` (`ON TIMER` trap active,
+`SELECT CASE A$` / `CASE CHR$(88), CHR$(89), "Z"`) -- deliberately
+combines all three pieces in one probe rather than testing them in
+isolation, since that's the actual compound shape the wild file exercises
+and isolated probes wouldn't have caught the zz_sc5 regression. Byte-
+exact both dialects; full suite re-verified against every existing
+SELECT CASE fixture (zz_sc5 among them) after the cc-based fix, zero
+regressions surviving. `rsltest.exe` now advances to `materialization
+template mismatch at 0xc76a` -- a new, not-yet-investigated gap. Full
+suite 2633 -> 2638 passed/16 skipped, Ruff clean.
+
 ### 2026-07-24 — head-test `WHILE <bare boolean>` loop under active event trapping
 
 Fourth closure in the `rsltest.exe` full-decode goal (continuing from

@@ -5461,6 +5461,14 @@ Seek(num=1, pos=Lit(value=1))
 Close(num=1)
 End()
 
+## t1_selcasechr
+OnTrap(event='TIMER', n=Lit(value=1), target=5)
+TrapCtl(event='TIMER', n=None, mode='ON')
+Assign(target=Var(name='A$'), value=StrLit(value='Y'))
+SelectCase(selector=Var(name='A$'), arms=(CaseArm(guards=(CaseValue(value=Call(name='CHR$', args=(Lit(value=88),))), CaseValue(value=Call(name='CHR$', args=(Lit(value=89),))), CaseValue(value=StrLit(value='Z'))), body=(Print(items=(StrLit(value='MATCH'),), newline=True, file=None, commas=None),)),), case_else=(Print(items=(StrLit(value='NOMATCH'),), newline=True, file=None, commas=None),))
+End()
+Return(target=None)
+
 ## t1_shell
 Shell(cmd=StrLit(value='DIR'))
 End()
@@ -11369,6 +11377,14 @@ Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'), reclen=None, for
 Seek(num=1, pos=Lit(value=1))
 Close(num=1)
 End()
+
+## v10_t1_selcasechr
+OnTrap(event='TIMER', n=Lit(value=1), target=5)
+TrapCtl(event='TIMER', n=None, mode='ON')
+Assign(target=Var(name='A$'), value=StrLit(value='Y'))
+SelectCase(selector=Var(name='A$'), arms=(CaseArm(guards=(CaseValue(value=Call(name='CHR$', args=(Lit(value=88),))), CaseValue(value=Call(name='CHR$', args=(Lit(value=89),))), CaseValue(value=StrLit(value='Z'))), body=(Print(items=(StrLit(value='MATCH'),), newline=True, file=None, commas=None),)),), case_else=(Print(items=(StrLit(value='NOMATCH'),), newline=True, file=None, commas=None),))
+End()
+Return(target=None)
 
 ## v10_t1_shell
 Shell(cmd=StrLit(value='DIR'))

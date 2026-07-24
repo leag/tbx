@@ -357,8 +357,45 @@ def test_wild_rsltest_argref_advances():
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(ValueError, match=r"displacement 0x5c is neither"):
+    with pytest.raises(ValueError, match=r"materialization template mismatch at 0xc76a"):
         decode0.decode_user_code(wild_hits_bytes("rsltest.exe"))
+
+
+def test_decode_t1_selcasechr():
+    # SELECT CASE on a STRING selector under active event trapping, with a
+    # multi-guard arm mixing computed CHR$(n) guards and a bare string
+    # literal: `CASE CHR$(88), CHR$(89), "Z"`. Three compounding gaps, all
+    # found via wild rsltest.exe (TBMENU.INC's `select case ans$ / case
+    # chr$(72),chr$(75),"-","8","4" / ...`):
+    #   (1) the string-entry gate's lookahead sanity check didn't tolerate
+    #       an event-trapping poll hook landing between `movsi [temp];
+    #       strassign` and the first arm header;
+    #   (2) no shape at all recognized a COMPUTED (CHR$) guard, only a
+    #       bare variable/pooled-literal one (movsi val;rt...);
+    #   (3) the bare form's own arm-continuation logic unconditionally
+    #       called _begin_body, silently discarding every guard after the
+    #       first in a comma list instead of continuing to test them --
+    #       fixed by mirroring the numeric arm's own cc==0x75(JNE, non-
+    #       final)/cc==0x74(JE, final) split, the only reliable signal
+    #       (structural position alone can't tell them apart: both land
+    #       on the very next op when the compiler lays guards out
+    #       contiguously).
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_selcasechr.exe"))
+    sc = next(s for s in prog if isinstance(s, ir.SelectCase))
+    assert sc.arms[0].guards == (
+        ir.CaseValue(ir.Call("CHR$", (ir.Lit(88),))),
+        ir.CaseValue(ir.Call("CHR$", (ir.Lit(89),))),
+        ir.CaseValue(ir.StrLit("Z")),
+    )
+    assert emit0.emit(prog) == (
+        "10 ON TIMER(1) GOSUB 60\n20 TIMER ON\n30 A$ = \"Y\"\n"
+        "40 SELECT CASE A$\n"
+        'CASE CHR$(88), CHR$(89), "Z"\n  PRINT "MATCH"\n'
+        'CASE ELSE\n  PRINT "NOMATCH"\nEND SELECT\n'
+        "50 END\n60 RETURN\n"
+    )
 
 
 def test_decode_t1_whileinstat():
@@ -2394,6 +2431,7 @@ if __name__ == "__main__":
     test_decode_t1_palettereset()
     test_decode_t1_argrefonly()
     test_wild_rsltest_argref_advances()
+    test_decode_t1_selcasechr()
     test_decode_t1_whileinstat()
     test_decode_t1_arrbyrefidx()
     test_wild_cvt2tb_opaque_helper_advances()
