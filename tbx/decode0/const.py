@@ -7,6 +7,7 @@ from tbx import ir
 
 PROLOGUE = b"\xcd\xec\xba"  # INT ECh, sub BAh: TB 1.1 program-start framework
 VAR_BASE = 0x120  # first scalar slot (DS offset); slots ascend by 4
+COMMON_BASE = 0x110  # CHAIN-persistent COMMON band, ahead of the slot grid
 POOL_EOF_GAP = 0x2C  # const-pool window starts at file EOF - 0x2C
 
 # x87 reg-field -> source operator, for the memory-fold and stack-pop families. TB only

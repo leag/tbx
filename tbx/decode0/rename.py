@@ -356,8 +356,11 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             )
         if isinstance(s, ir.Common):
             # always the program's first statement, so the COMMON band's
-            # slots letter first, in band order
-            return ir.Common(tuple(name(n) for n in s.names))
+            # slots letter first, in band order. A COMMON'd ARRAY carries its
+            # rank in parens (`V0(1)`, see core.py's synthesis) and keeps its
+            # canonical V-name -- runtime array names are never lettered, same
+            # convention as ir.Shared/ir.Local above (probe t1_commonarr).
+            return ir.Common(tuple(n if "(" in n else name(n) for n in s.names))
         if isinstance(s, ir.SubDef):
             params = tuple(
                 name(p[:-3]) + "(1)" if p.endswith("(1)") else name(p)

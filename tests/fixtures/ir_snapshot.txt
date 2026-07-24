@@ -3274,6 +3274,21 @@ Assign(target=Var(name='J$'), value=StrLit(value='HI'))
 Print(items=(Var(name='J$'),), newline=True, file=None, commas=None)
 End()
 
+## t1_commonarr
+Dim(name='V0', bounds=(Lit(value=10),), also=())
+Common(names=('V0(1)',))
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=5))
+Print(items=(ArrayRef(name='V0', indices=(Lit(value=1),)),), newline=True, file=None, commas=None)
+End()
+
+## t1_commonarr2
+Dim(name='V0', bounds=(Lit(value=10),), also=(('V1', (Lit(value=10),)),))
+Common(names=('V0(1)', 'V1(1)'))
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=5))
+Assign(target=ArrayRef(name='V1', indices=(Lit(value=1),)), value=Lit(value=6))
+Print(items=(ArrayRef(name='V0', indices=(Lit(value=1),)), ArrayRef(name='V1', indices=(Lit(value=1),))), newline=True, file=None, commas=None)
+End()
+
 ## t1_convf
 Assign(target=Var(name='A#'), value=DblLit(value=1.5))
 Assign(target=Var(name='B'), value=SingleLit(value=2.5))
@@ -9533,6 +9548,21 @@ Common(names=('A$', 'B$', 'C$'))
 Assign(target=Var(name='D$'), value=StrLit(value='HI'))
 Assign(target=Var(name='E$'), value=StrLit(value='YO'))
 Print(items=(Var(name='D$'), Var(name='E$')), newline=True, file=None, commas=None)
+End()
+
+## v10_t1_commonarr
+Dim(name='V0', bounds=(Lit(value=10),), also=())
+Common(names=('V0(1)',))
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=5))
+Print(items=(ArrayRef(name='V0', indices=(Lit(value=1),)),), newline=True, file=None, commas=None)
+End()
+
+## v10_t1_commonarr2
+Dim(name='V0', bounds=(Lit(value=10),), also=(('V1', (Lit(value=10),)),))
+Common(names=('V0(1)', 'V1(1)'))
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=5))
+Assign(target=ArrayRef(name='V1', indices=(Lit(value=1),)), value=Lit(value=6))
+Print(items=(ArrayRef(name='V0', indices=(Lit(value=1),)), ArrayRef(name='V1', indices=(Lit(value=1),))), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_convf

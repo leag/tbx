@@ -1186,6 +1186,61 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 7: COMMON'd arrays (first gap worked from REAL source)
+
+First closure driven by `wild/hits/tbd73.exe` — TBWINDOW 7.3 compiled from
+its own readable source by our oracle (see round 4's staging note), which
+makes it the only wild file where the authored `.bas` is available to check
+a hypothesis against instead of inferring shape from compiled bytes.
+
+`tbd73.exe` failed at LAYOUT time with `runtime blocks are not
+0x36-contiguous after statics`. `TBW73.INC` explains it immediately: it
+`DIM`s eleven arrays and then `COMMON`s all of them, and a COMMON'd
+array's 0x36 descriptor block lives in the CHAIN-persistent COMMON band at
+**DS:0110**, BELOW `var_base` (0x120). The solver's
+`divmod(rt_blocks[0] - vb, ARR_BLOCK)` therefore went negative
+(`n_static = -1`, `rem = 0x26`) and it refused the image. Eleven blocks at
+0x110 + 0x36*i, exactly matching the eleven COMMON'd DIMs — the source
+confirmed the reading rather than leaving it a guess.
+
+Three authored probes reproduced it on the first try (`probe_commonarr1`,
+`probe_commonarr2`, `probe_commonarrmix`) — a `DIM` + `COMMON` of the same
+array is the whole trigger, no TBWINDOW scale needed.
+
+Fixed by anchoring the block grid at `COMMON_BASE` (new `const.py` name)
+when the blocks start there, which needed three follow-ons to actually
+round-trip, each found by byte-diffing against the oracle:
+
+1. **`COMMON` compiles to NO ops at all**, so the band position is the only
+   evidence the declaration existed. `layout` now reports `common_arrs` and
+   `core` synthesizes `COMMON V0(1)` back, with the rank read from the
+   descriptor's own rank byte. `rename.py` keeps such a name canonical
+   (runtime array names are never lettered, same as `ir.Shared`/`ir.Local`).
+2. **Order is byte-significant**: `DIM` must precede `COMMON`. Emitting
+   `COMMON` first (as scalar COMMON does, t1_common1) differs by 2 bytes, so
+   the array form is inserted after the leading `Dim` run instead.
+3. **A COMMON'd array declares with a plain `DIM`, not `DIM DYNAMIC`** — it
+   is in the band because COMMON put it there, not because DYNAMIC did, and
+   spelling DYNAMIC differs by those same 2 bytes.
+
+Witnesses `t1_commonarr` / `t1_commonarr2`, byte-exact both dialects;
+goldens purely additive (`ir_snapshot.txt`: +30, -0). Full suite 2681 ->
+2693 passed/16 skipped, Ruff clean.
+
+**Deliberately left loud**: the band continues past the blocks into the
+COMMON SCALARS (`probe_commonarrmix`: `COMMON A(1), C%` puts C% at 0x146,
+right after the single block, with the ordinary band left empty at 0x160).
+Recovering those as COMMON is unwitnessed and emitting them as ordinary
+variables recompiles differently (~16 bytes), so the solver raises `COMMON
+scalars alongside COMMON arrays` rather than decode wrong — pinned by
+`test_common_scalars_beside_common_arrays_stay_loud`. `tbd73.exe` now
+stops exactly there, which is the honest position: its `COMMON wrow(1),
+... , idx, cy` lines mix both kinds. That is the next thing to close for
+that file, and the band model above (blocks, then numeric scalars, then
+strings, align16, a 16-byte stamp, then the ordinary band at stamp+0x10 --
+all confirmed against the three probes' init images) is the map for doing
+it.
+
 ### 2026-07-24 — Round 6: `_resolve_calls` orphaned the addresses it rebuilt
 
 Eleventh closure in the `rsltest.exe` full-decode goal (`jump target

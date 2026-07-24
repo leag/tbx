@@ -383,6 +383,48 @@ def test_decode_t1_declnoend():
         ), stem
 
 
+def test_decode_t1_commonarr():
+    # A COMMON'd array's 0x36 descriptor block sits in the CHAIN-persistent
+    # COMMON band at DS:0110, BELOW var_base, so the layout solver's "runtime
+    # blocks follow the statics at var_base" arithmetic went negative and it
+    # refused the whole image. COMMON itself compiles to no ops at all, so the
+    # band position is the only evidence the declaration existed: it is
+    # synthesized back with the array's rank, after the DIM (TB compiles
+    # DIM-then-COMMON and COMMON-then-DIM two bytes apart), and the array
+    # declares with a plain DIM rather than DIM DYNAMIC. Found via wild
+    # tbd73.exe (TBWINDOW 7.3 COMMONs eleven DIMmed arrays). Byte-exact, both
+    # dialects.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_commonarr", "v10_t1_commonarr"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        assert isinstance(prog[0], ir.Dim) and not prog[0].dynamic, stem
+        assert prog[1] == ir.Common(("V0(1)",)), stem
+        assert emit0.emit(prog) == (
+            "10 DIM V0(10)\n20 COMMON V0(1)\n30 V0(1) = 5\n40 PRINT V0(1)\n50 END\n"
+        ), stem
+
+    prog = decode0.decode_user_code(_exe("t1_commonarr2.exe"))
+    assert prog[1] == ir.Common(("V0(1)", "V1(1)"))
+
+
+def test_common_scalars_beside_common_arrays_stay_loud():
+    # The band runs on past the blocks into the COMMON SCALARS
+    # (probe_commonarrmix: `COMMON A(1), C%` puts C% at 0x146, right after the
+    # single block). Recovering those as COMMON is unwitnessed, and emitting
+    # them as ordinary variables recompiles differently, so the solver must
+    # refuse rather than decode wrong.
+    import pytest
+
+    from tbx import decode0
+
+    exe = open(
+        os.path.join(_ROOT, "..", "wild", "probes", "probe_commonarrmix.exe"), "rb"
+    ).read()
+    with pytest.raises(ValueError, match="COMMON scalars alongside COMMON arrays"):
+        decode0.decode_user_code(exe)
+
+
 def test_decode_t1_fwdcalltgt():
     # _resolve_calls preserves the `is` identity of every UNCHANGED statement
     # so nested jump targets survive -- but a statement it DOES rebuild (here
@@ -2600,6 +2642,8 @@ if __name__ == "__main__":
     test_decode_t1_declnoend()
     test_decode_t1_dblhook()
     test_decode_t1_fwdcalltgt()
+    test_decode_t1_commonarr()
+    test_common_scalars_beside_common_arrays_stay_loud()
     test_decode_t1_scgoto()
     test_decode_t1_scgotone()
     test_decode_t1_movaxmpool()

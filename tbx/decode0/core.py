@@ -1054,13 +1054,30 @@ def _finalize(state: DecodeState, addr) -> Program:
     # solver recovered (see layout._bands_layout). Synthesize the canonical
     # declaration as the first statement, named/typed via loc() like any
     # other slot (witnessed t1_common1).
-    if state.lay.get("common_slots"):
+    # A COMMON'd ARRAY leaves no scalar slot at all -- its 0x36 descriptor block
+    # simply sits in the band instead of the ordinary grid -- so its declaration
+    # is recovered from the block position and spelled with its rank, the way
+    # TB requires (`COMMON A(1)`, probe t1_commonarr; wild tbd73.exe).
+    common_arrs = [
+        state.r_arrs[b]["name"] + f"({state.exe[state.ds + b + 3]})"
+        for b in state.lay.get("common_arrs", ())
+        if b in state.r_arrs
+    ]
+    if state.lay.get("common_slots") or common_arrs:
         if fixed_lines is not None:
             raise ValueError("COMMON alongside TRON trace hooks is unsupported")
-        state.stmts.insert(
-            0, ir.Common(tuple(state.loc(d).name for d in state.lay["common_slots"]))
+        names = tuple(common_arrs) + tuple(
+            state.loc(d).name for d in state.lay.get("common_slots") or ()
         )
-        state.addrs.insert(0, None)
+        # Scalar COMMON goes first (t1_common1), but a COMMON'd array has to be
+        # DIMmed before it is named -- TB compiles the two orders two bytes
+        # apart, and only DIM-then-COMMON reproduces the input.
+        at = 0
+        if common_arrs:
+            while at < len(state.stmts) and isinstance(state.stmts[at], ir.Dim):
+                at += 1
+        state.stmts.insert(at, ir.Common(names))
+        state.addrs.insert(at, None)
     # $EVENT regions: when trapping is in play the compiler emits a CC
     # poll hook before EVERY statement; $EVENT OFF..ON suppresses them
     # for a run of statements (witnessed t1_evreg), or everywhere when OFF
@@ -3487,7 +3504,13 @@ def decode_user_code(exe: bytes) -> list[Any]:
                         ir.Dim(
                             name,
                             bounds,
-                            dynamic=all(
+                            # A COMMON'd array is in the band because COMMON put
+                            # it there, not because DIM DYNAMIC did: it declares
+                            # with a plain DIM, and spelling DYNAMIC instead
+                            # compiles two bytes differently (probe
+                            # t1_commonarr, verified against the oracle).
+                            dynamic=block not in state.lay.get("common_arrs", ())
+                            and all(
                                 isinstance(v, int)
                                 or isinstance(v, ir.Lit)
                                 or (

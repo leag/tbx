@@ -4,7 +4,7 @@ from __future__ import annotations
 import struct
 from typing import Any
 
-from tbx.decode0.const import ARR_BLOCK, MARKER, VAR_BASE
+from tbx.decode0.const import ARR_BLOCK, COMMON_BASE, MARKER, VAR_BASE
 from tbx.decode0.datapool import _is_rt_slot, _parse_static_slot
 
 
@@ -316,16 +316,45 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
             "arrs": statics,
             "rt_blocks": rt_blocks,
             "n_static": n_static,
+            # Non-empty only when the blocks sit in the COMMON band: those
+            # arrays were declared COMMON, which compiles to no ops at all, so
+            # the band position is the ONLY evidence of the declaration and
+            # core.py has to synthesize it back (probe t1_commonarr).
+            "common_arrs": rt_blocks if rt_blocks and rt_blocks[0] == COMMON_BASE < vb else [],
         }
 
     if rt_blocks:
-        n_static, rem = divmod(rt_blocks[0] - vb, ARR_BLOCK)
-        if rem or rt_blocks != [
-            rt_blocks[0] + ARR_BLOCK * i for i in range(len(rt_blocks))
-        ]:
+        if rt_blocks[0] == COMMON_BASE < vb:
+            # A COMMON'd array's descriptor block lives in the CHAIN-persistent
+            # COMMON band at DS:0110, ahead of the ordinary slot grid, so the
+            # blocks start BELOW var_base and no static slots precede them, so
+            # the same walk-from-sb solve applies -- only the anchor moves
+            # (probe t1_commonarr; wild tbd73.exe, whose TBW73.INC COMMONs
+            # eleven DIMmed arrays).
+            #
+            # The band continues past the blocks into the COMMON SCALARS, then
+            # aligns to 16 and carries a 16-byte stamp before the ordinary band
+            # begins (probe probe_commonarrmix: `COMMON A(1), C%` puts C% at
+            # 0x146, right after the single 0x36 block, with the ordinary band
+            # empty at 0x160). Recovering those scalars as COMMON is unwitnessed
+            # -- emitting them as ordinary variables recompiles differently --
+            # so refuse loudly rather than solve a layout that decodes wrong.
+            n_static, base0 = 0, COMMON_BASE
+            band_end = ((COMMON_BASE + ARR_BLOCK * len(rt_blocks) + 15) & ~15) + 0x10
+            if any(
+                COMMON_BASE + ARR_BLOCK * len(rt_blocks) <= d < band_end
+                for d in int_disps0 | fild_disps0 | fp_disps | fp64_disps | movsi_disps
+            ):
+                raise ValueError("COMMON scalars alongside COMMON arrays")
+        else:
+            n_static, rem = divmod(rt_blocks[0] - vb, ARR_BLOCK)
+            base0 = vb
+            if rem:
+                raise ValueError("runtime blocks are not 0x36-contiguous after statics")
+        if rt_blocks != [rt_blocks[0] + ARR_BLOCK * i for i in range(len(rt_blocks))]:
             raise ValueError("runtime blocks are not 0x36-contiguous after statics")
         n = n_static + len(rt_blocks)
-        sb = vb + ARR_BLOCK * n
+        sb = base0 + ARR_BLOCK * n
         run, strs, dend = walk_run(sb)
         # Anchor ds on the slot grid itself: every runtime block must
         # show the bare rank+type record, every static slot a populated record.

@@ -1,0 +1,5 @@
+10 DIM A(10)
+20 COMMON A(1)
+30 A(1) = 5
+40 PRINT A(1)
+50 END
