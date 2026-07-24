@@ -376,6 +376,46 @@ def _match_bool_term1(ops, k):
     return None
 
 
+def _match_bool_bare_term1(ops, k) -> bool:
+    """Sibling of `_match_bool_term1` for a BARE-VALUE (uncompared)
+    compound-AND first term: ops[k] = `orax` self-testing a just-computed
+    value (e.g. a function call's raw result), immediately followed by
+    the same jcc+jmp short-circuit-skip idiom (jcc target == jmp addr +
+    3). TB's AND/OR operate on the raw integer value, not a coerced 0/-1
+    boolean, so a bare-value term is never materialized via `movax FFFF`
+    the way a comparison is (wild rsltest.exe: `PEEK(&H410) AND &H40 =
+    48` -- PEEK's raw byte combined via bitwise AND with a materialized
+    comparison; TEST.BAS line 159, `IF PEEK(&H410) AND &H40=48 THEN...`,
+    where BASIC's own relational-over-AND precedence makes this parse as
+    `PEEK(&H410) AND (&H40=48)`, confirmed byte-exact via a dedicated
+    oracle probe). AND only -- OR's own short-circuit landing offset for
+    a bare-value term1 is unwitnessed (only the comparison-based
+    `_match_bool_term1` has confirmed OR evidence); a bare-value OR term
+    is left to the caller's existing fallback (fail loud, not guessed)."""
+    if (
+        ops[k][1] != "orax"
+        or k + 2 >= len(ops)
+        or ops[k + 1][1] != "jcc"
+        or ops[k + 1][2] != 0x75
+        or ops[k + 2][1] != "jmp"
+        or ops[k + 1][3] != ops[k + 2][0] + 3
+    ):
+        return False
+    sc = ops[k + 2][2]
+    for j in range(k + 3, min(k + 36, len(ops) - 3)):
+        if ops[j][1] != "movax" or ops[j][2] != 0xFFFF:
+            continue
+        if (
+            ops[j + 1][1] == "jcc"
+            and ops[j + 2][1] == "incax"
+            and ops[j + 3][1] == "andaxbx"
+            and sc == ops[j + 3][0] + 2
+        ):
+            return True
+        return False
+    return False
+
+
 def _has_jmps_back(ops, exit_addr, test_addr) -> bool:
     """True iff a short `jmp test` sits immediately before the exit address -- the
     WHILE loop-back; its absence marks an inline-IF body skip. Checked

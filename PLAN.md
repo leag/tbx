@@ -1188,6 +1188,68 @@ constructs specific to their by-ref/LOCAL-heavy coding style.
 
 ## Part III — Investigation history / handoff log
 
+### 2026-07-24 — bare-value compound-AND first term (`PEEK(x) AND cond`)
+
+Sixth closure in the `rsltest.exe` full-decode goal (continuing from the
+entry directly below): after the SELECT CASE fix, decode advanced to
+`materialization template mismatch at 0xc76a`, inside `TEST.BAS`'s main
+program (past `TBMENU.INC` entirely now), line 159:
+`MPROGRAMAS%=MLIBRE%-MPILA%-MMATRICES%:IF PEEK(&H410) AND &H40=48 THEN
+COLO$="B & N" ELSE COLO$="COLOR"` -- BIOS-equipment-byte video-adapter
+detection.
+
+This construct sits squarely in the class this campaign has explicitly
+flagged as high-risk (register-provenance term ordering in
+`int_bitwise_bx`/compound-boolean folds, with two prior REVERTED
+regressions) -- treated with corresponding extra care: confirmed the
+exact semantics with an isolated oracle probe and a full raw-x86
+disassembly comparison BEFORE writing any decoder code, not derived from
+guessing at op mnemonics. Turbo Basic's precedence table puts relational
+operators ABOVE `AND`/`OR` (unlike C), so `PEEK(&H410) AND &H40=48`
+parses as `PEEK(&H410) AND (&H40=48)` -- a genuine bitwise `AND` of
+PEEK's raw byte with a materialized comparison, not two chained
+comparisons. Confirmed byte-identical against a dedicated probe
+(`t1_peekand.bas`) compiled independently through the oracle: same
+`mov bx,ax / mov ax,30h / cmp ax,[pool] / mov ax,bx / mov bx,ax / mov
+ax,0FFFFh / je / inc ax / and ax,bx / jne / jmp` shape exactly.
+
+Root cause: TB's `AND`/`OR` operate on the RAW integer value, not a
+coerced 0/-1 boolean -- unlike a *comparison* first term (already
+handled by `_match_bool_term1`, gated on the `movax FFFF;jcc;incax;orax;
+jcc;jmp` 6-op materialization template), a bare VALUE first term (here,
+`PEEK(&H410)`'s own call result) is never materialized that way; it's
+just self-tested directly (`orax`) with the same short-circuit-skip
+idiom (`jcc` whose target equals the following `jmp`'s address + 3, a
+structural signature reused throughout this decoder). `_lift_while`
+naturally rejected this shape (the WHOLE POINT of the `orax`-with-no-
+`pend_cmp` dispatch I added two closures ago in this same investigation
+-- it's the generic fallback when nothing more specific claims the op),
+but nothing recognized it as a compound-AND's own first term either.
+Added `_match_bool_bare_term1` (`lift.py`), a scan-ahead sibling of
+`_match_bool_term1` restricted to the witnessed shape only (`cc==0x75`/
+AND; a bare-value OR term's short-circuit landing offset is unwitnessed,
+left fail-loud rather than guessed), wired into `core.py`'s existing
+`orax` dispatch (right before its final bare-value fallback): on match,
+stages `state.pend_bool = {"r1": <bare value>, "op": "AND", "sc": ...,
+"start": state.cur}` -- exactly the same shape `_match_bool_term1`'s own
+caller already stages for a comparison-based term1, so the existing,
+unmodified `movax_family`/`_lift_bool_tail` machinery picks up term2's
+materialization and folds them via the ordinary, already-calibrated
+`andaxbx` path. No changes to `int_bitwise_bx` or any other high-risk
+provenance code were needed -- the fix is entirely in TERM1
+*recognition*, not in how terms combine once recognized.
+
+First implementation attempt checked for term2's materialization at a
+FIXED offset (`k+3`) and failed on the real probe (intervening register-
+shuffle ops -- `movbxax; movax 48; cmpax_m; movrr; movbxax` -- sit
+between the short-circuit and the real materialization); fixed by
+scanning ahead the same way `_match_bool_term1` already does. Oracle-
+verified byte-exact both dialects; decodes to `LogOp("AND",
+Call("PEEK", (Lit(1040),)), RelOp("=", Lit(64), Lit(48)))`, confirming
+the precedence read. `rsltest.exe` now advances to `displacement 0xe8c
+is neither scalar nor array element` -- a new, not-yet-investigated gap.
+Zero regressions, full suite 2638 -> 2643 passed/16 skipped, Ruff clean.
+
 ### 2026-07-24 — SELECT CASE on a string selector: event-trap hooks, computed CHR$ guards, multi-guard lists
 
 Fifth closure in the `rsltest.exe` full-decode goal (continuing from the

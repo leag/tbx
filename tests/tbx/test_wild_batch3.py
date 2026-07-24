@@ -357,8 +357,37 @@ def test_wild_rsltest_argref_advances():
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(ValueError, match=r"materialization template mismatch at 0xc76a"):
+    with pytest.raises(ValueError, match=r"displacement 0xe8c is neither"):
         decode0.decode_user_code(wild_hits_bytes("rsltest.exe"))
+
+
+def test_decode_t1_peekand():
+    # A bare-value (uncompared) compound-AND first term: `PEEK(&H410) AND
+    # &H40 = 48` -- Turbo Basic's relational-over-AND precedence parses
+    # this as `PEEK(&H410) AND (&H40 = 48)`, a genuine bitwise AND (not a
+    # short-circuit LOGICAL and) of PEEK's raw byte with a materialized
+    # comparison. TB's AND/OR operate on raw integer values, so a bare
+    # value never gets the usual movax-FFFF materialization a comparison
+    # does; only the SECOND term (the comparison) does, and PEEK's own
+    # short-circuit ("if 0, the AND result is already known, skip
+    # evaluating the comparison entirely") reaches straight past it.
+    # Found via wild rsltest.exe (TEST.BAS line 159, video-adapter
+    # detection via the BIOS equipment byte).
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_peekand.exe"))
+    blk = next(s for s in prog if isinstance(s, ir.IfBlock))
+    cond, _ = blk.arms[0]
+    assert cond == ir.LogOp(
+        "AND",
+        ir.Call("PEEK", (ir.Lit(1040),)),
+        ir.RelOp("=", ir.Lit(64), ir.Lit(48)),
+    )
+    assert emit0.emit(prog) == (
+        "10 IF PEEK(1040) AND 64 = 48 THEN\n"
+        '  A$ = "B & N"\nELSE\n  A$ = "COLOR"\nEND IF\n'
+        "20 PRINT A$\n30 END\n"
+    )
 
 
 def test_decode_t1_selcasechr():
@@ -2431,6 +2460,7 @@ if __name__ == "__main__":
     test_decode_t1_palettereset()
     test_decode_t1_argrefonly()
     test_wild_rsltest_argref_advances()
+    test_decode_t1_peekand()
     test_decode_t1_selcasechr()
     test_decode_t1_whileinstat()
     test_decode_t1_arrbyrefidx()

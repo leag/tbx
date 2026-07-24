@@ -35,6 +35,7 @@ from tbx.decode0.lift import (
     _find_jmps_back,
     _fold_body_ifgotos,
     _fold_if,
+    _match_bool_bare_term1,
     _is_for_header,
     _loose_for_header,
     _jump_targets,
@@ -1507,6 +1508,22 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 state.dos.append(
                     {"test": test_addr, "exit": state.ops[state.k + 2][2]}
                 )
+                state.ax = None
+                state.k += 3
+                return
+            if _match_bool_bare_term1(state.ops, state.k):
+                # A bare-value (uncompared) compound-AND first term (wild
+                # rsltest.exe: `PEEK(&H410) AND &H40 = 48`) -- stage it as
+                # state.pend_bool exactly as _match_bool_term1's caller
+                # does for a comparison-based term1, so the ordinary
+                # movax_family dispatch (control.py) folds term2's own
+                # materialization into it once reached.
+                state.pend_bool = {
+                    "r1": state.ax,
+                    "op": "AND",
+                    "sc": state.ops[state.k + 2][2],
+                    "start": state.cur,
+                }
                 state.ax = None
                 state.k += 3
                 return
