@@ -117,7 +117,14 @@ def test_integer_call_argument_temp_staging():
     assert arith.int_alu(state, ops[0], 0, "movm_ax_temp")
     assert state.pend_args == [value]
     assert state.fn_args == {}
-    assert state.ax is None and state.cur is None and state.k == 1
+    # cur is left alone (still 123): this op stages one argument value
+    # mid-expression inside a CALL statement that's still open -- no
+    # put() happens here, so there's no statement boundary to close.
+    # Clearing it unconditionally let the generic top-of-loop fallback
+    # re-stamp a LATER op's address as the CALL's own, so a loop's
+    # backward branch targeting the CALL's real start failed to resolve
+    # (wild morcalc.exe).
+    assert state.ax is None and state.cur == 123 and state.k == 1
 
 
 def test_nested_fn_call_argument_temp_staging():
@@ -137,7 +144,7 @@ def test_nested_fn_call_argument_temp_staging():
     assert arith.int_alu(state, ops[0], 0, "movm_imm_temp")
     assert state.pend_args == []
     assert state.fn_args == {2: ir.Lit(3)}
-    assert state.cur is None and state.k == 1
+    assert state.cur == 123 and state.k == 1
 
 
 def test_non_for_integer_add_immediate():

@@ -110,7 +110,16 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         else:
             state.fn_args[state.si] = value
         state.ax = None
-        state.cur = None
+        # No state.put() happens here -- this op stages one argument value
+        # mid-expression, inside a CALL/DEF-FN-call statement that's still
+        # open (its own address was already set when IT started, e.g. by
+        # the far-CALL argument-staging prologue). Clearing state.cur here
+        # unconditionally let the generic top-of-loop fallback re-stamp it
+        # with a LATER op's address once more ops ran, so the eventual
+        # far_call's put() recorded the wrong statement address -- a loop's
+        # own backward branch targeting the CALL's real start (its
+        # mov_mem_sp/push_bp prologue) then failed to resolve to any
+        # tracked statement (wild morcalc.exe).
         state.k += 1
         return True
     if kind == "movsim":

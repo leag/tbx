@@ -2815,6 +2815,15 @@ def decode_user_code(exe: bytes) -> list[Any]:
             continue
         # Literal-arg staging: glue ops carry no source.
         if kind == "mov_mem_sp":  # mov [cell],sp: remember the SP-save cell
+            if state.cur is None:
+                # A CALL whose argument-staging opens a loop body (the
+                # backward branch's real re-entry point is THIS op, not
+                # wherever the eventual CallStmt's put() happens to land
+                # once far_call fires) needs its statement address anchored
+                # here, mirroring the generic top-of-loop fallback below
+                # that this early `continue` would otherwise skip (wild
+                # morcalc.exe).
+                state.cur = addr
             state.sp_save_cell = op[2]
             state.k += 1
             continue

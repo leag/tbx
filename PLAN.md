@@ -968,6 +968,48 @@ aside to simulate a bare CI checkout. `wild/probes/` (tracked in git,
 always present) is unaffected -- only genuine `wild/hits/` reads needed
 the guard.
 
+### 2026-07-23 — CALL statement address tracking for a loop-body backward branch (morcalc.exe)
+
+Closed `jump target 0x9298 is not a statement start` for `morcalc.exe`,
+a genuine decoder bug rather than a missing byte pattern: a WHILE-style
+loop's backward branch targets the loop body's first statement -- a
+CALL whose argument is a multi-op computed expression staged through
+the temp-frame mechanism (`movm_ax_temp`/`movm_imm_temp`). Two
+compounding issues, found via `sys.settrace`-based tracing of
+`state.cur` across the exact op range (temporary instrumentation, not
+committed) since the wrong final address (`0x92e4` instead of the real
+`0x9298`) gave no clue on its own:
+
+1. `mov_mem_sp` (the CALL-staging prologue's own opening op, "remember
+   the SP-save cell") never touched `state.cur` at all, so when it was
+   itself the first op of a new statement (a loop body's re-entry
+   point, not witnessed before), the generic top-of-loop `if state.cur
+   is None: state.cur = addr` fallback never got the chance to anchor
+   it -- fixed by setting it explicitly, mirroring the DEF-FN result-
+   slot init case that already does this for the same reason.
+2. `movm_ax_temp`/`movm_imm_temp` (staging one argument value
+   mid-expression) unconditionally reset `state.cur = None` even
+   though it never calls `put()` -- there's no statement boundary to
+   close here, since the enclosing CALL statement stays open until
+   `far_call` eventually fires. Clearing it let a LATER op re-stamp a
+   wrong address via the same generic fallback, so the eventual
+   CallStmt got recorded at that later address instead of its real
+   start. Removing the reset caused ZERO drift across every existing
+   golden fixture (`ops`/`usercode`/`ir_snapshot` all byte-identical
+   after regeneration) and zero wild regressions, strongly suggesting
+   the reset was incidental, not load-bearing for anything previously
+   witnessed -- updated the two low-level unit tests
+   (`test_gap_tools.py`) that had pinned the old behavior to assert
+   `state.cur` is left alone instead.
+
+Not treated as a new-vocabulary/oracle-fixture closure (no new op kind
+was recognized -- this fixes internal statement-address bookkeeping for
+already-recognized ops), so landed with the existing unit-test coverage
+plus the wild advancement as evidence, consistent with how the earlier
+"state.cur, not addr" far_call CC-hook fix (control.py) was verified.
+`morcalc.exe` advances to a distinct, unrelated gap. Zero regressions,
+full suite 2599 passed/16 skipped, Ruff clean.
+
 ### 2026-07-23 — compound-IF dispatch-tail FAR exit (mf.exe)
 
 Closed `compound-IF tail mismatch` for `mf.exe`: `_lift_bool_tail`'s
