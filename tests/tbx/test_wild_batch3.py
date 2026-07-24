@@ -262,6 +262,22 @@ def test_decode_t1_byreflong():
     )
 
 
+def test_decode_t1_forvarlimneg():
+    # Variable-limit integer FOR/NEXT with STEP -1: the NEXT test's JGE
+    # (0x7D) descending condition, mirroring the literal-limit cmp_mi8
+    # case's own wantcc/invcc split. Also the fixture for a real bug the
+    # investigation surfaced: state.fors.append() for this FOR-header shape
+    # never set "idx", so the NEXT-side dec_m STEP -1 patch-up (which reads
+    # f["idx"] to rewrite the provisional Lit(1) step) crashed with a bare
+    # KeyError instead of decoding or raising a clean ValueError. Wild
+    # morcalc.exe.
+    from tbx import decode0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_forvarlimneg.exe"))
+    loops = [s for s in prog if isinstance(s, ir.For)]
+    assert loops == [ir.For(ir.Var("B%"), ir.Lit(5), ir.Var("A%"), ir.Lit(-1))]
+
+
 def test_wild_mf_compound_if_far_exit_advances():
     # A compound-IF's second term closing dispatch pair can end in a FAR
     # `jmpf` (EA, 5 bytes) instead of the near `jmp` (E9, 3 bytes) when the
@@ -2178,6 +2194,7 @@ if __name__ == "__main__":
     test_decode_t1_local2()
     test_decode_t1_byref1()
     test_decode_t1_byreflong()
+    test_decode_t1_forvarlimneg()
     test_wild_mf_compound_if_far_exit_advances()
     test_decode_t1_forvarlimfar()
     test_decode_t1_midvarstart()

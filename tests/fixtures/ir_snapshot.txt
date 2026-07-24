@@ -3989,6 +3989,13 @@ Print(items=(BinOp(op='+', lhs=Var(name='B%'), rhs=Lit(value=59)),), newline=Tru
 NextStmt(var=Var(name='B%'))
 End()
 
+## t1_forvarlimneg
+Assign(target=Var(name='A%'), value=Lit(value=1))
+For(var=Var(name='B%'), init=Lit(value=5), limit=Var(name='A%'), step=Lit(value=-1))
+Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)
+NextStmt(var=Var(name='B%'))
+End()
+
 ## t1_forvarstep
 Assign(target=Var(name='A%'), value=Lit(value=2))
 For(var=Var(name='B%'), init=Lit(value=1), limit=Lit(value=10), step=Var(name='A%'))
@@ -10038,6 +10045,13 @@ Print(items=(BinOp(op='+', lhs=Var(name='B%'), rhs=Lit(value=56)),), newline=Tru
 Print(items=(BinOp(op='+', lhs=Var(name='B%'), rhs=Lit(value=57)),), newline=True, file=None, commas=None)
 Print(items=(BinOp(op='+', lhs=Var(name='B%'), rhs=Lit(value=58)),), newline=True, file=None, commas=None)
 Print(items=(BinOp(op='+', lhs=Var(name='B%'), rhs=Lit(value=59)),), newline=True, file=None, commas=None)
+NextStmt(var=Var(name='B%'))
+End()
+
+## v10_t1_forvarlimneg
+Assign(target=Var(name='A%'), value=Lit(value=1))
+For(var=Var(name='B%'), init=Lit(value=5), limit=Var(name='A%'), step=Lit(value=-1))
+Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)
 NextStmt(var=Var(name='B%'))
 End()
 
