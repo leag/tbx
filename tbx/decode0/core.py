@@ -32,6 +32,7 @@ from tbx.decode0.layout import (
 from tbx.decode0.meta import Program, _meta_stmts, _toggles
 from tbx.decode0.lift import (
     _apply_exit_folds,
+    _find_jmps_back,
     _fold_body_ifgotos,
     _fold_if,
     _is_for_header,
@@ -1482,6 +1483,33 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             state.cur = None
             state.k += 2
             return
+        if (
+            nxt is not None
+            and nxt[1] == "jcc"
+            and nxt[2] in (0x74, 0x75)
+            and state.k + 2 < len(state.ops)
+            and state.ops[state.k + 2][1] == "jmp"
+            and nxt[3] == state.ops[state.k + 2][0] + 3
+        ):
+            test_addr = _find_jmps_back(state.ops, state.ops[state.k + 2][2])
+            if test_addr is not None:
+                # HEAD-test DO/WHILE loop whose condition is a bare value
+                # with no materialization prefix -- the head-test sibling
+                # of the tail-test case just above (same "byte-exact bare
+                # form only" rule: a real comparison compiles the full
+                # movax-FFFF/jcc/incax template instead, handled by
+                # _lift_while). Structurally identical to _lift_while's own
+                # head-test branch, just without a pend_cmp to materialize
+                # first (wild rsltest.exe: `WHILE NOT INSTAT` / `WEND`, an
+                # empty-body busy-wait poll under active event trapping).
+                loop_kind = "WHILE" if nxt[2] == 0x75 else "UNTIL"
+                state.put(ir.Do(loop_kind, state.ax), state.cur)
+                state.dos.append(
+                    {"test": test_addr, "exit": state.ops[state.k + 2][2]}
+                )
+                state.ax = None
+                state.k += 3
+                return
         state.pend_cmp = (state.ax, ir.Lit(0))
         state.ax = None
     elif kind == "fstsw":

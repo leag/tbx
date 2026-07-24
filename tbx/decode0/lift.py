@@ -389,6 +389,25 @@ def _has_jmps_back(ops, exit_addr, test_addr) -> bool:
     return False
 
 
+def _find_jmps_back(ops, exit_addr) -> int | None:
+    """Like `_has_jmps_back`, but for a bare-value head-test loop (core.py's
+    own `orax` self-test branch): here there is no known `test_addr` to
+    check against up front -- an event-trapping poll hook right before the
+    condition's own first op stamps `state.cur` onto ITSELF, not onto the
+    op after it the way trace-hook stripping does elsewhere, so the loop-
+    back `jmps`'s real target can land one op past `state.cur` (wild
+    rsltest.exe: `WHILE NOT INSTAT` under active event trapping). Finds the
+    jmps by its OWN structural signature (immediately followed by
+    exit_addr) and returns whatever it actually targets, sidestepping the
+    mismatch instead of trying to predict it."""
+    for i, o in enumerate(ops):
+        if o[1] == "jmps":
+            nxt = ops[i + 1] if i + 1 < len(ops) else None
+            if nxt is not None and nxt[0] == exit_addr:
+                return o[2]
+    return None
+
+
 def _lift_bool_tail(
     ops, k, pend_cmp, pb, put, whiles, ifs, stmts, flush, pend_outer, wrap_group=False
 ):

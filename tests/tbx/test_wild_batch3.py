@@ -357,8 +357,35 @@ def test_wild_rsltest_argref_advances():
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(ValueError, match=r"unhandled jmp short at 0xc385"):
+    with pytest.raises(ValueError, match=r"displacement 0x5c is neither"):
         decode0.decode_user_code(wild_hits_bytes("rsltest.exe"))
+
+
+def test_decode_t1_whileinstat():
+    # A HEAD-test WHILE loop whose condition is a bare value with no
+    # materialization prefix (WHILE <function call>, not WHILE <compare>):
+    # `fn_ax0;notax;orax;jcc;jmp` with no leading `movax 0FFFF;jcc;incax`
+    # template for _lift_while to key off. Under active event trapping (an
+    # ON TIMER trap, matching wild rsltest.exe's ON TIMER-driven benchmark
+    # loop) a poll hook precedes the condition's own first op and stamps
+    # state.cur onto ITSELF, not onto the following op the way trace-hook
+    # stripping does elsewhere -- so the loop-back jmps's real target
+    # lands one op past state.cur. Found via wild rsltest.exe (TBMENU.INC's
+    # dead-code MAKEMENU: `WHILE NOT INSTAT` / `WEND`, an empty-body
+    # busy-wait poll).
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_whileinstat.exe"))
+    loops = [s for s in prog if isinstance(s, (ir.Do, ir.Loop))]
+    assert loops == [
+        ir.Do("WHILE", ir.Not(ir.Nullary("INSTAT"))),
+        ir.Loop(None, None),
+    ]
+    assert emit0.emit(prog) == (
+        "10 ON TIMER(1) GOSUB 70\n20 TIMER ON\n"
+        "30 DO WHILE NOT INSTAT\n40 LOOP\n50 PRINT \"DONE\"\n60 END\n"
+        "70 RETURN\n"
+    )
 
 
 def test_decode_t1_arrbyrefidx():
@@ -2367,6 +2394,7 @@ if __name__ == "__main__":
     test_decode_t1_palettereset()
     test_decode_t1_argrefonly()
     test_wild_rsltest_argref_advances()
+    test_decode_t1_whileinstat()
     test_decode_t1_arrbyrefidx()
     test_wild_cvt2tb_opaque_helper_advances()
     test_wild_phone_opaque_helper_advances()

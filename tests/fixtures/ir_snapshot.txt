@@ -6137,6 +6137,15 @@ Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(valu
 Loop(kind=None, cond=None)
 End()
 
+## t1_whileinstat
+OnTrap(event='TIMER', n=Lit(value=1), target=6)
+TrapCtl(event='TIMER', n=None, mode='ON')
+Do(kind='WHILE', cond=Not(operand=Nullary(name='INSTAT')))
+Loop(kind=None, cond=None)
+Print(items=(StrLit(value='DONE'),), newline=True, file=None, commas=None)
+End()
+Return(target=None)
+
 ## t1_width
 Width(cols=Lit(value=80), device=None, file=None)
 End()
@@ -11916,6 +11925,15 @@ Do(kind='WHILE', cond=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=5)))
 Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
 Loop(kind=None, cond=None)
 End()
+
+## v10_t1_whileinstat
+OnTrap(event='TIMER', n=Lit(value=1), target=6)
+TrapCtl(event='TIMER', n=None, mode='ON')
+Do(kind='WHILE', cond=Not(operand=Nullary(name='INSTAT')))
+Loop(kind=None, cond=None)
+Print(items=(StrLit(value='DONE'),), newline=True, file=None, commas=None)
+End()
+Return(target=None)
 
 ## v10_t1_width
 Width(cols=Lit(value=80), device=None, file=None)

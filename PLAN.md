@@ -1188,6 +1188,55 @@ constructs specific to their by-ref/LOCAL-heavy coding style.
 
 ## Part III — Investigation history / handoff log
 
+### 2026-07-24 — head-test `WHILE <bare boolean>` loop under active event trapping
+
+Fourth closure in the `rsltest.exe` full-decode goal (continuing from
+the entry directly below): after the near-array-by-ref fix, decode
+advanced to `unhandled jmp short at 0xc385` inside `TBMENU.INC`'s
+(still dead-code) `MAKEMENU`, at `while not instat` / `wend` -- an
+empty-body busy-wait poll loop.
+
+`WHILE <cond> ... WEND` normally compiles through `_lift_while`
+(`lift.py`), gated on a `movax 0FFFF; jcc; incax` prefix that
+materializes a *compared* condition into an explicit 0/-1 value before
+the `orax`/`jcc`/`jmp` test. But `NOT INSTAT` is already a bare
+boolean-returning function call with nothing to compare -- the compiler
+skips the materialization prefix entirely (`fn_ax0 INSTAT; notax; orax;
+jcc; jmp`), so `_lift_while` never got a chance to run, and the tail
+`jmps` back-edge later failed with no `state.dos`/`state.whiles` entry
+registered. `core.py`'s existing `orax`-with-no-`pend_cmp` branch
+already had a sibling case for exactly this "bare value, no compare"
+shape, but only for *tail*-test loops (a backward `jcc`); extended it
+with a parallel head-test branch, structurally mirroring
+`_lift_while`'s own head-test recognition (forward `jcc` skipping past
+a following `jmp`, confirmed by a matching loop-back `jmps`), just
+without a `pend_cmp` to materialize.
+
+The loop-back `jmps`'s target didn't equal `state.cur` as `_lift_while`
+assumes, though: this file has an `ON TIMER` event trap active
+throughout (`TEST.BAS` line 96: `ON TIMER (20) GOSUB 7000`), and under
+active event trapping a per-statement CC-poll `trap_hook` precedes the
+condition's first real op -- the hook stamps `state.cur` onto *itself*,
+not onto the following op the way TRON trace-hook stripping does
+elsewhere, so the `jmps` (which targets the condition's own first op,
+one past the hook) landed one op after `state.cur`. Rather than
+predicting the offset, added `lift.py`'s `_find_jmps_back` (a sibling of
+the existing `_has_jmps_back`) that discovers the loop-back `jmps` by
+its own structural signature (immediately followed by the exit address)
+and returns whatever address it actually targets, sidestepping the
+mismatch instead of guessing at it.
+
+Oracle-verified with `t1_whileinstat.bas` (`ON TIMER(1) GOSUB`; `WHILE
+NOT INSTAT` / `WEND`) -- deliberately includes the event trap to
+reproduce the exact hook-interposed shape, not just the bare mechanism;
+an earlier draft probe without any trap compiled to a *different*,
+hook-free byte shape that would have passed without exercising the
+real bug. Byte-exact both dialects; decodes to the documented
+WHILE-normalizes-to-DO-WHILE form (`ir.Do("WHILE", ...)` / `ir.Loop`).
+`rsltest.exe` now advances to `displacement 0x5c is neither scalar nor
+array element` -- a new, not-yet-investigated gap. Zero regressions,
+full suite 2628 -> 2633 passed/16 skipped, Ruff clean.
+
 ### 2026-07-24 — near/static array element by-ref into a far CALL (`movdx`/`movesdx` sibling of `arg_push_arr`)
 
 Continuing the `rsltest.exe` full-decode goal from the entry directly
