@@ -426,8 +426,9 @@ def _drop_local_descriptor_initializers(state, frame, span, addr) -> None:
     locs = frame["locals"]
     assert locs is not None
     cell_names = {locs[x] for x in span}
-    kept = []
-    for stmt, stmt_addr in zip(state.stmts, state.addrs):
+    start = frame["idx"]
+    kept = list(zip(state.stmts[:start], state.addrs[:start]))
+    for stmt, stmt_addr in zip(state.stmts[start:], state.addrs[start:]):
         refs, _ = _region_refs(stmt)
         if not cell_names.intersection(refs):
             kept.append((stmt, stmt_addr))

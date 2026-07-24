@@ -198,8 +198,8 @@
     {
       "name": "wild/hits/cleanup.exe",
       "dialect": "1.1",
-      "message": "used LOCAL array descriptor cells at 0xbf77",
-      "signature": "used LOCAL array descriptor cells"
+      "message": "59709",
+      "signature": "59709"
     },
     {
       "name": "wild/hits/crossref.exe",
@@ -408,8 +408,8 @@
     {
       "name": "wild/hits/reformat.exe",
       "dialect": "1.1",
-      "message": "used LOCAL array descriptor cells at 0xbf6f",
-      "signature": "used LOCAL array descriptor cells"
+      "message": "unhandled op testw_bp at 0xc86c",
+      "signature": "unhandled op testw_bp"
     },
     {
       "name": "wild/hits/refund.exe",
@@ -589,14 +589,6 @@
       ]
     },
     {
-      "signature": "used LOCAL array descriptor cells",
-      "count": 2,
-      "files": [
-        "wild/hits/cleanup.exe",
-        "wild/hits/reformat.exe"
-      ]
-    },
-    {
       "signature": "'idx'",
       "count": 1,
       "files": [
@@ -615,6 +607,13 @@
       "count": 1,
       "files": [
         "wild/hits/kinetics.exe"
+      ]
+    },
+    {
+      "signature": "59709",
+      "count": 1,
+      "files": [
+        "wild/hits/cleanup.exe"
       ]
     },
     {
@@ -762,6 +761,13 @@
       "count": 1,
       "files": [
         "wild/hits/baby.exe"
+      ]
+    },
+    {
+      "signature": "unhandled op testw_bp",
+      "count": 1,
+      "files": [
+        "wild/hits/reformat.exe"
       ]
     }
   ]

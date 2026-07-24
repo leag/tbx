@@ -33,13 +33,13 @@ def test_runtime_layout_recovers_scalars_after_hole(stem, string_disp, single_di
 
 
 @pytest.mark.parametrize(
-    ("stem", "next_gap"),
+    ("stem", "exc", "next_gap"),
     [
-        ("cleanup.exe", "used LOCAL array descriptor cells at 0xbf77"),
-        ("reformat.exe", "used LOCAL array descriptor cells at 0xbf6f"),
+        ("cleanup.exe", KeyError, "59709"),
+        ("reformat.exe", ValueError, "unhandled op testw_bp at 0xc86c"),
     ],
 )
-def test_runtime_layout_witnesses_reach_next_gap(stem, next_gap):
+def test_runtime_layout_witnesses_reach_next_gap(stem, exc, next_gap):
     exe = (_ROOT / "wild" / "hits" / stem).read_bytes()
-    with pytest.raises(ValueError, match=next_gap):
+    with pytest.raises(exc, match=next_gap):
         decode0.decode_user_code(exe)

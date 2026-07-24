@@ -30,14 +30,14 @@ def test_undimensioned_local_array_cleanup(stem):
 
 
 @pytest.mark.parametrize(
-    ("stem", "next_gap"),
+    ("stem", "exc", "next_gap"),
     [
-        ("cleanup.exe", "used LOCAL array descriptor cells at 0xbf77"),
-        ("crossref.exe", "unhandled INT EC sub 38 at 0x11a63"),
-        ("reformat.exe", "used LOCAL array descriptor cells at 0xbf6f"),
+        ("cleanup.exe", KeyError, "59709"),
+        ("crossref.exe", ValueError, "unhandled INT EC sub 38 at 0x11a63"),
+        ("reformat.exe", ValueError, "unhandled op testw_bp at 0xc86c"),
     ],
 )
-def test_wild_local_bounds_remain_closed(stem, next_gap):
+def test_wild_local_bounds_remain_closed(stem, exc, next_gap):
     data = (_ROOT / "wild" / "hits" / stem).read_bytes()
-    with pytest.raises(ValueError, match=next_gap):
+    with pytest.raises(exc, match=next_gap):
         decode0.decode_user_code(data)

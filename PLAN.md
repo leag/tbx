@@ -935,6 +935,19 @@ fixing the intra-inline-IF gap above will also close it.
 
 ## Part III — Investigation history / handoff log
 
+### 2026-07-23 — descriptor metadata filtering is procedure-scoped
+
+Corrected a false fail-loud stop exposed after the undimensioned-array
+closure. LOCAL placeholder names (`L50%`, etc.) are frame-relative and
+therefore reused across SUBs, but `_drop_local_descriptor_initializers`
+searched the entire accumulated program. A real variable in the
+previous completed SUB could consequently look like use of the current
+SUB's descriptor cell. Filtering and validation now begin at the open
+frame's `idx`, preserving all prior statements and retaining strict
+checks inside the owner. `cleanup.exe` advances to its existing forward
+FN-resolution KeyError; `reformat.exe` advances to a NOP-prefixed
+`testw_bp` loop.
+
 ### 2026-07-23 — declared but undimensioned LOCAL arrays
 
 Closed the first `LOCAL array free of unknown handle 0x42` cleanup in

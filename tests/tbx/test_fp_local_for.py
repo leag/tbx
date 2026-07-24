@@ -18,16 +18,16 @@ def test_scan_testw_bp_is_exact():
 
 
 @pytest.mark.parametrize(
-    ("stem", "next_gap"),
+    ("stem", "exc", "next_gap"),
     [
-        ("cleanup.exe", "used LOCAL array descriptor cells at 0xbf77"),
-        ("crossref.exe", "unhandled INT EC sub 38 at 0x11a63"),
-        ("reformat.exe", "used LOCAL array descriptor cells at 0xbf6f"),
+        ("cleanup.exe", KeyError, "59709"),
+        ("crossref.exe", ValueError, "unhandled INT EC sub 38 at 0x11a63"),
+        ("reformat.exe", ValueError, "unhandled op testw_bp at 0xc86c"),
     ],
 )
-def test_fp_local_for_advances_wild_program(stem, next_gap):
+def test_fp_local_for_advances_wild_program(stem, exc, next_gap):
     data = (_ROOT / "wild" / "hits" / stem).read_bytes()
-    with pytest.raises(ValueError, match=next_gap):
+    with pytest.raises(exc, match=next_gap):
         decode0.decode_user_code(data)
 
 

@@ -43,14 +43,14 @@ def test_string_local_in_block_def_fn(stem):
 
 
 @pytest.mark.parametrize(
-    ("stem", "next_gap"),
+    ("stem", "exc", "next_gap"),
     [
-        ("bmaster.exe", "materialization template mismatch at 0x8f0e"),
-        ("ifi.exe", "materialization template mismatch at 0x8f0e"),
-        ("cleanup.exe", "used LOCAL array descriptor cells at 0xbf77"),
-        ("reformat.exe", "used LOCAL array descriptor cells at 0xbf6f"),
+        ("bmaster.exe", ValueError, "materialization template mismatch at 0x8f0e"),
+        ("ifi.exe", ValueError, "materialization template mismatch at 0x8f0e"),
+        ("cleanup.exe", KeyError, "59709"),
+        ("reformat.exe", ValueError, "unhandled op testw_bp at 0xc86c"),
     ],
 )
-def test_string_local_witnesses_advance(stem, next_gap):
-    with pytest.raises(ValueError, match=next_gap):
+def test_string_local_witnesses_advance(stem, exc, next_gap):
+    with pytest.raises(exc, match=next_gap):
         decode0.decode_user_code((_ROOT / "wild" / "hits" / stem).read_bytes())

@@ -82,13 +82,13 @@ def test_scan_local_array_index_dx_spill():
 
 
 @pytest.mark.parametrize(
-    ("stem", "next_gap"),
+    ("stem", "exc", "next_gap"),
     [
-        ("cleanup.exe", "used LOCAL array descriptor cells at 0xbf77"),
-        ("reformat.exe", "used LOCAL array descriptor cells at 0xbf6f"),
+        ("cleanup.exe", KeyError, "59709"),
+        ("reformat.exe", ValueError, "unhandled op testw_bp at 0xc86c"),
     ],
 )
-def test_large_local_family_advances_wild_program(stem, next_gap):
+def test_large_local_family_advances_wild_program(stem, exc, next_gap):
     data = (_ROOT / "wild" / "hits" / stem).read_bytes()
-    with pytest.raises(ValueError, match=next_gap):
+    with pytest.raises(exc, match=next_gap):
         decode0.decode_user_code(data)
