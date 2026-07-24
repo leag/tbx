@@ -1186,6 +1186,63 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 8: `$SEGMENT` — and the long-open "byte ea" gap explained
+
+Second closure driven by `tbd73.exe`'s real source, and it retires a gap
+that had been open and UNDIAGNOSED for days (see "Gap byte ea
+(elec87/mcmurphy/mf/swbb)" further down, whose ">64K far jump" theory was
+already refuted without a replacement).
+
+`TBW73.INC` carries `$SEGMENT` right before its definition run. The
+metacommand closes the current code segment and continues the program in
+the next paragraph-aligned one, which the compiler reaches with
+`jmp far <newseg>:0000`. `scan.py` read ANY zero-offset EA as "the fixed
+runtime handoff" and **returned**, ending the scan — so everything the
+metacommand moved (in TBWINDOW, every SUB) was silently dropped, and the
+`CALL` into it mis-resolved to a `GOSUB` pointing at the program's own
+entry. Three linked fixes:
+
+1. **Follow the transition** (new `segjmp` op) instead of stopping.
+2. **`far_call`/`fn_call` fold the segment word** into the target. It is 0
+   for every single-segment program — verified across the whole corpus — so
+   this is a no-op everywhere except under `$SEGMENT`, where the callee's
+   offset restarts and the segment word is the only way to reach the right
+   byte.
+3. **`$SEGMENT` rides out as a metastatement** (`Program.metas`, the same
+   channel as `$STACK`/`$EVENT`), since its source position is
+   byte-significant.
+
+Witness `t1_segment`, byte-exact both dialects; goldens purely additive.
+
+**This was truncating six wild programs, not one.** Every file in the
+"byte ea" group is a `$SEGMENT` program, and following the transition means
+they now scan whole: `elec87` 5 -> 21 `jmpf` ops (16935 total),
+`electron` 5 -> 21, `mf` 8 -> 151 (26365 ops), `mcmurphy` 23411 ops,
+`wb`, `swbb` (2 transitions). The earlier investigation's own strongest
+clue fits exactly — it noted the EA targets land "VERY CLOSE to the jump
+site", which is precisely a next-paragraph segment transition (mf.exe's
+lands 16 bytes forward).
+
+Two pinned wild markers moved as a direct consequence, both updated
+deliberately:
+
+- `mf.exe` moves BACKWARDS in the pipeline, from a target-resolution gap to
+  `DGROUP layout not solvable (runtime slot grid anchor)`: it now presents
+  its whole program's evidence to the layout solver instead of one
+  segment's. That is the honest position — the decode it used to reach was
+  of a program with most of its code missing — and the layout gap is real,
+  newly visible work.
+- `ifi.exe` advances from `string BP push outside DEF FN at 0x9279` to
+  `unhandled INT 8c at 0x19bd2`.
+
+`sabpcv3.exe` (previously 0 `jmpf`, i.e. stopped at its transition) now
+reaches `unhandled byte c4 at 0xa406` — `les di,[bp+N]` inside a `$INLINE`
+byte list. **That is exactly where `tbd73.exe` now stands too**
+(`unhandled byte c4 at 0x97c6`, its `SUB Getftblptr INLINE` body): the
+scanner does not yet recognize an inline SUB in this position. Next up for
+both, and `TBW73.INC` hands over the exact `$INLINE` byte list to match
+against.
+
 ### 2026-07-24 — Round 7: COMMON'd arrays (first gap worked from REAL source)
 
 First closure driven by `wild/hits/tbd73.exe` — TBWINDOW 7.3 compiled from

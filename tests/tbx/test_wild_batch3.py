@@ -71,29 +71,53 @@ def test_decode_long_single_and_double_for():
 
 
 def test_scan_wild_far_jump_group():
-    # Seven runtime-revision wild binaries use EA far transfers.  The scanner
-    # must preserve their rebased target (or the fixed zero-offset handoff)
-    # instead of stopping at the raw x86 byte; later decoder failures are
-    # separate, file-specific gaps.
+    # Wild binaries using EA far transfers.  The scanner must preserve their
+    # rebased target instead of stopping at the raw x86 byte; later decoder
+    # failures are separate, file-specific gaps.
+    #
+    # Every one of these is a $SEGMENT program, and the zero-offset EA that
+    # used to be read as "the fixed runtime handoff" is really the metacommand
+    # closing one code segment and continuing in the next (`segjmp`, see
+    # scan.py). Following it multiplies the jmpf counts here because most of
+    # each program lived past that point and was previously never scanned at
+    # all -- elec87 goes 5 -> 21, mf 8 -> 151.
     from tbx import decode0
 
     from conftest import wild_hits_bytes
 
-    cases = (
-        ("elec87.exe", 5),
-        ("electron.exe", 5),
-        ("mcmurphy.exe", 0),
-        ("mf.exe", 8),
-        ("sabpcv3.exe", 0),
-        ("swbb.exe", 0),
-        ("wb.exe", 3),
+    cases = (  # name, jmpf, segjmp
+        ("elec87.exe", 21, 1),
+        ("electron.exe", 21, 1),
+        ("mcmurphy.exe", 0, 1),
+        ("mf.exe", 151, 1),
+        ("swbb.exe", 16, 2),
+        ("wb.exe", 3, 1),
     )
-    for name, count in cases:
+    for name, count, segs in cases:
         exe = wild_hits_bytes(name)
         start, dialect = decode0.find_prologue(exe)
         ops = decode0._scan(exe, start, dialect, set())
-        assert sum(op[1] == "jmpf" for op in ops) == count
-        assert ops[-1][1] == "epilogue"
+        assert sum(op[1] == "jmpf" for op in ops) == count, name
+        assert sum(op[1] == "segjmp" for op in ops) == segs, name
+        assert ops[-1][1] == "epilogue", name
+
+
+def test_scan_wild_sabpcv3_reaches_inline_sub():
+    # sabpcv3.exe was in the group above with zero jmpf ops because the scan
+    # stopped at its $SEGMENT transition. Following it reaches the inline SUB
+    # the metacommand moved -- `les di,[bp+N]` inside a $INLINE byte list,
+    # which the scanner does not yet recognize as a SUB ... INLINE body (the
+    # same wall wild tbd73.exe now stands at).
+    import pytest
+
+    from tbx import decode0
+
+    from conftest import wild_hits_bytes
+
+    exe = wild_hits_bytes("sabpcv3.exe")
+    start, dialect = decode0.find_prologue(exe)
+    with pytest.raises(ValueError, match=r"unhandled byte c4 at 0xa406"):
+        decode0._scan(exe, start, dialect, set())
 
 
 def test_decode_t1_strif():
@@ -380,6 +404,29 @@ def test_decode_t1_declnoend():
         assert [type(s).__name__ for s in prog] == ["Assign", "SubDef", "Print"], stem
         assert emit0.emit(prog) == (
             '10 A% = 1\n20 SUB SUB1\n  PRINT "F"\nEND SUB\n30 PRINT A%\n'
+        ), stem
+
+
+def test_decode_t1_segment():
+    # $SEGMENT closes the current code segment and continues the program in
+    # the next one, which the compiler reaches with a far jump to that
+    # segment's offset 0. That EA was read as the fixed runtime handoff and
+    # ENDED the scan, so everything the metacommand moved -- in TBWINDOW,
+    # every SUB -- was silently dropped and the CALL into it mis-resolved to
+    # a GOSUB. The scan now follows it, far_call/fn_call fold the segment
+    # word into their target (0 for every single-segment program, so a no-op
+    # elsewhere), and the metacommand rides out as a metastatement. Found via
+    # wild tbd73.exe. Byte-exact, both dialects.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_segment", "v10_t1_segment"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        assert prog[1] == ir.CallStmt("SUB1", ()), stem
+        assert any(isinstance(s, ir.SubDef) for s in prog), stem
+        assert (3, "$SEGMENT") in prog.metas, stem
+        assert emit0.emit(prog) == (
+            "10 A% = 1\n20 CALL SUB1\n30 END\n$SEGMENT\n40 SUB SUB1\n"
+            '  PRINT "F"\nEND SUB\n'
         ), stem
 
 
@@ -735,8 +782,14 @@ def test_wild_mf_compound_if_far_exit_advances():
 
     from conftest import wild_hits_bytes
 
+    # Now that the $SEGMENT transition is followed (see
+    # test_scan_wild_far_jump_group), mf.exe scans its WHOLE program rather
+    # than the first segment only, and stops earlier in the pipeline: the
+    # extra evidence no longer solves the DGROUP layout. Moving backwards in
+    # the pipeline is the honest position -- the decode it used to reach was
+    # of a program with most of its code missing.
     with pytest.raises(
-        ValueError, match=r"jump target 0x1d5b8 is not a statement start"
+        ValueError, match=r"DGROUP layout not solvable \(runtime slot grid anchor\)"
     ):
         decode0.decode_user_code(wild_hits_bytes("mf.exe"))
 
@@ -2644,6 +2697,7 @@ if __name__ == "__main__":
     test_decode_t1_declnoend()
     test_decode_t1_dblhook()
     test_decode_t1_fwdcalltgt()
+    test_decode_t1_segment()
     test_decode_t1_commonarr()
     test_decode_t1_commonarrmix()
     test_decode_t1_scgoto()

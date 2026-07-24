@@ -102,6 +102,7 @@ class DecodeState:
     nfn: Any = None
     n_local_arrs: int = 0
     nsub: Any = None
+    seg_metas: Any = None
     ops: Any = None
     option_base: Any = None
     pend_arg: Any = None
@@ -1102,7 +1103,11 @@ def _finalize(state: DecodeState, addr) -> Program:
             _resolve_targets(state.stmts, state.addrs, state.stmt_addr)
         )
     )
-    prog.metas = tuple((0, m) for m in state.metas) + tuple(ev_metas)
+    prog.metas = (
+        tuple((0, m) for m in state.metas)
+        + tuple((i, "$SEGMENT") for i in state.seg_metas)
+        + tuple(ev_metas)
+    )
     prog.toggles = state.toggles
     if fixed_lines is not None:
         prog.lines = _fill_lines(fixed_lines, len(prog))
@@ -2225,6 +2230,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
     # (t1_fnargcall; unlike SUB CALL, which is a statement and structurally
     # can't nest as an argument, DEF FN calls are expressions and can)
     state.main_start = None  # def-region end = entry-jmp target
+    state.seg_metas = []  # stmt indices where a $SEGMENT transition landed
     state.nsub = 0  # SUB counter (entry-offset order)
     state.nfn = 0  # DEF FN counter (entry-offset order)
     state.pend_arg = None  # by-ref param bp_off from arg_ref (les si,[bp+N])
@@ -2396,6 +2402,14 @@ def decode_user_code(exe: bytes) -> list[Any]:
             del state.stmts[fr["idx"] :], state.addrs[fr["idx"] :]
             state.stmts.append(ir.IfInline(fr["cond"], body))
             state.addrs.append(fr["start"])
+        if kind == "segjmp":
+            # $SEGMENT: pure segment-transition glue, no source statement of its
+            # own -- but the metacommand IS spelled in the source and moves every
+            # following definition into a new code segment, so its position has
+            # to ride out as a metastatement (probe t1_segment; wild tbd73.exe).
+            state.seg_metas.append(len(state.stmts))
+            state.k += 1
+            continue
         # --- procedure-region segmentation ---
         if state.has_procs and state.k == 0 and kind == "jmp":
             state.main_start = op[

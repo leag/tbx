@@ -5533,6 +5533,12 @@ Seek(num=1, pos=Lit(value=1))
 Close(num=1)
 End()
 
+## t1_segment
+Assign(target=Var(name='A%'), value=Lit(value=1))
+CallStmt(name='SUB1', args=())
+End()
+SubDef(name='SUB1', params=(), body=(Print(items=(StrLit(value='F'),), newline=True, file=None, commas=None),))
+
 ## t1_selcasechr
 OnTrap(event='TIMER', n=Lit(value=1), target=5)
 TrapCtl(event='TIMER', n=None, mode='ON')
@@ -11521,6 +11527,12 @@ Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'), reclen=None, for
 Seek(num=1, pos=Lit(value=1))
 Close(num=1)
 End()
+
+## v10_t1_segment
+Assign(target=Var(name='A%'), value=Lit(value=1))
+CallStmt(name='SUB1', args=())
+End()
+SubDef(name='SUB1', params=(), body=(Print(items=(StrLit(value='F'),), newline=True, file=None, commas=None),))
 
 ## v10_t1_selcasechr
 OnTrap(event='TIMER', n=Lit(value=1), target=5)

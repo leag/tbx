@@ -484,10 +484,14 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         p += 2
         return p
     if b == 0x9A:  # far call (proc entry; seg loader-relocated)
-        off = struct.unpack_from("<H", exe, p + 1)[0]
+        off, seg = struct.unpack_from("<HH", exe, p + 1)
         ops.append(
-            (p, "far_call", off + start)
-        )  # rebase segment-relative off to file offset
+            (p, "far_call", off + seg * 16 + start)
+        )  # rebase segment-relative off to file offset. The segment word is 0
+        # for every single-segment program (the whole corpus), so folding it in
+        # is a no-op there; under $SEGMENT the callee lives in a later segment
+        # and its offset restarts, so it is the only way to reach the right
+        # byte (probe t1_segment; wild tbd73.exe).
         p += 5
         return p
     if b == 0xC4 and exe[p + 1] == 0x76:  # les si,[bp+off8]: by-ref param access
@@ -1482,9 +1486,11 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
         p += 2
         return p
     if vec in (0x8D, 0x8E):  # value-returning FN call (single/multi-line)
-        off = struct.unpack_from("<H", exe, p + 3)[0]  # CD 8D <sub> <off16> <seg16>
+        off, seg = struct.unpack_from(  # CD 8D <sub> <off16> <seg16>
+            "<HH", exe, p + 3
+        )
         ops.append(
-            (p, "fn_call", off + start)
+            (p, "fn_call", off + seg * 16 + start)
         )  # seg-relative off rebased like far_call
         p += 7
         return p
@@ -1631,10 +1637,20 @@ def _scan_pass(
 
         if b == 0xEA:  # far JMP ptr16:16; segment-relative code target
             off, seg = struct.unpack_from("<HH", exe, p + 1)
-            if off == 0:
+            if off == 0 and seg == 0:
                 # Fixed runtime handoff used by the legacy cleanup/event tail.
                 ops.append((p, "epilogue"))
                 return ops
+            if off == 0:
+                # $SEGMENT: the metacommand closes the current code segment and
+                # continues the program in the next paragraph-aligned one, which
+                # the compiler reaches with a far jump to its offset 0. Code, not
+                # a handoff -- scanning has to follow it or everything the
+                # metacommand moved (TBWINDOW puts every SUB there) is silently
+                # dropped (probe t1_segment; wild tbd73.exe).
+                ops.append((p, "segjmp", start + seg * 16, seg))
+                p = start + seg * 16
+                continue
             # Segment-zero calls use the user-code origin; relocated code
             # segments use the preceding byte as their logical origin (the
             # same one-byte convention seen in wild far-call targets).

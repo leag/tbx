@@ -46,7 +46,7 @@ def test_string_local_in_block_def_fn(stem):
     ("stem", "exc", "next_gap"),
     [
         ("bmaster.exe", ValueError, "string BP push outside DEF FN at 0x9279"),
-        ("ifi.exe", ValueError, "string BP push outside DEF FN at 0x9279"),
+        ("ifi.exe", ValueError, "unhandled INT 8c at 0x19bd2"),
         ("cleanup.exe", ValueError, "LOCAL zero-fill outside a fresh SUB/DEF FN body at 0xd0ca"),
         ("reformat.exe", ValueError, "LOCAL zero-fill outside a fresh SUB/DEF FN body at 0xd455"),
     ],

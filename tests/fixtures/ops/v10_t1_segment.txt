@@ -1,0 +1,14 @@
+# v10_t1_segment dialect=1.0 start=070B0
+070B3:movm_imm:288:1
+070B9:far_call:28883
+070BE:end
+070C1:segjmp:28880:2
+070D0:jmp:28897
+070D3:proc_enter
+070D6:movsi:308
+070D9:rt:156
+070DB:rt:190
+070DD:rt:184
+070DF:proc_ret:0
+070E1:epilogue
+# commits
