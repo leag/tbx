@@ -1259,28 +1259,76 @@ tbx/decode0/lift.py` (twice -- once for the glue_alias attempt, once
 for the debug prints) before anything was staged; working tree
 confirmed clean both times, full suite re-verified green.
 
-Precise next step for a follow-up session: (1) find the still-
-unidentified mechanism that advances `state.main_start` from `0xbe1e`
-to `0xbe29` between those two addresses (not one of the five
-`glue_alias` sites already instrumented -- probably needs the same
-kind of temporary debug-print tracing used this round, now with a
-known exact address window, `0xbd50`-`0xbe30`, to watch); (2) decide
-whether the `glue_alias` chain-following design needs to defer
-resolution until scanning fully completes (so the `trap_hook`-boundary
-hop can look up whatever `main_start` FINALLY becomes, not just its
-value at scan time) rather than recording a fixed target eagerly like
-the five `jmp`-based sites do; (3) confirm empirically, with a few more
-steps of the same debug-print technique, where the glue chain
-ULTIMATELY lands on a REAL statement (not another SUB/DEF-FN entry
-point, which -- like this DEF FN's own `mov_bp_imm` -- is conventionally
-never a valid jump target) -- TBWINDOW libraries interleave MANY
-SUBs and DEF FNs consecutively (the TBW73.INC evidence lists at least
-five just for the attribute/video-mode helpers), so this file's chain
-may need several more hops past `0xbe29` before reaching genuine main
-code; (4) only then design the actual fix, verified with a dedicated
-oracle probe reproducing a GOTO landing exactly on an interleaved
-SUB/DEF-FN skip-jmp's own position (not yet witnessed by any existing
-fixture) before trusting it.
+**Round 2 (same day, same investigation, still reverted):** picked the
+thread back up and closed the `0xbe1e` mystery precisely. Raw ops
+showed `0xbe1e` (`trap_hook`) is IMMEDIATELY followed by `0xbe1f: jmp
+0xbe29` -- a SIXTH glue-jmp, structurally identical to site 5 (right
+after a `proc_ret`, reached via the SAME backward-trap_hook-skip that
+site 5 already computes), just landing on a trap_hook rather than
+being reached FROM one. Extended `glue_alias` recording at site 5 to
+ALSO alias every trap_hook skipped by its OWN existing backward walk
+(`for h in range(j+1, state.k): glue_alias[ops[h][0]] = op[2]`) to the
+SAME final target, not just the jmp's own address -- since a
+`trap_hook` is control-flow-transparent (a bare `INT3` CC-poll byte),
+so if a jmp targets a trap_hook's own position, resolving the trap_hook's
+address to that SAME jmp's destination is exact, not approximate. This
+DID resolve `0xae40` all the way through to a real statement -- but
+building an oracle probe to verify it byte-exact (`t1_gotoglue.bas`: a
+`SUB`, a `DEF FN`, and a `GOTO` landing exactly past both) surfaced a
+REAL, SEPARATE, PRE-EXISTING bug: `verify_fixture` reported a mismatch,
+and the decoded IR showed a genuinely SPURIOUS duplicate `Goto`
+statement that shouldn't exist. Root cause (confirmed against raw ops,
+not guessed): site 4's OWN gating (`addr == state.main_start`, the
+"chained skip-jmp" recognition) has NO trap_hook tolerance of its own
+-- when a trap_hook sits between the PREVIOUS hop's target and the
+NEXT chained skip-jmp's own position (exactly the shape this whole
+investigation is about), site 4 silently fails to recognize that jmp
+as glue at all, so it falls through and gets treated as an ordinary,
+real user `GOTO` -- a bug that predates this session entirely and
+simply never had a witness that reached it. Fixed by folding site 4's
+condition through the SAME backward-trap_hook-skip site 5 already
+uses (`j = state.k-1; while ops[j]=="trap_hook": j -= 1; hook_start =
+ops[j+1][0]`, then requiring `hook_start == state.main_start` instead
+of `addr == state.main_start` directly), with the same alias-recording
+for every hook skipped.
+
+That fix did NOT clear the duplicate-Goto mismatch on its own,
+though: re-tracing showed the very FIRST interleaved-declaration
+skip-jmp in a synthetic two-SUB/one-DEF-FN probe (with NOTHING before
+it establishing `state.main_start` yet -- no `k==0` entry op, no
+preceding `END`, no existing chain) isn't recognized by ANY of the
+five sites, because every one of them requires `state.main_start` to
+already be set, or an immediately preceding `end`/`proc_ret`/`fn_ret`.
+This is presumably NOT how `rsltest.exe` itself starts its own chain
+(its `$INCLUDE`d subs almost certainly reach `state.main_start` via
+the `k==0` entry-skip, since they're the very first thing in the
+compiled file) -- meaning the synthetic probe's STARTING conditions
+don't faithfully reproduce the real file's structure, not that the fix
+above is wrong. Reverted both changes again (`git checkout --
+tbx/decode0/core.py tbx/decode0/lift.py`, confirmed clean, full suite
+green) rather than land a fix verified only against a probe that
+doesn't actually match the real scenario.
+
+Precise next step for a follow-up session: (1) the site-5-mirroring
+fix to site 4 (trap_hook-tolerant `hook_start == state.main_start`,
+with matching alias recording) is likely CORRECT and should be
+re-applied -- it's a real, independently-motivated bug fix, not
+speculative; (2) build the oracle probe more carefully so its OWN
+`state.main_start` chain starts the SAME way `rsltest.exe`'s does --
+put the interleaved `SUB`/`DEF FN` declarations as the ABSOLUTE FIRST
+thing in the source (before ANY other statement, mimicking `$INCLUDE`
+placement) so the entry-skip is a bare `jmp` at `state.ops[0]` (site 1,
+`state.k==0`), not preceded by anything that could itself insert a
+leading `trap_hook` and break that exact-position assumption -- worth
+checking with a plain, non-event-trapped version of the probe first to
+confirm the `k==0` entry fires cleanly, THEN adding the `ON TIMER` back
+to get real trap_hook interposition; (3) once GOTO resolution reaches
+a real, verified-correct statement, confirm the `glue_alias` design
+doesn't need to also handle a THIRD, still-undiscovered hop-type by
+running it against `rsltest.exe` again all the way to a full decode or
+the next distinct gap; (4) only land it once `verify_fixture` passes
+clean, the same discipline this whole investigation has followed
+throughout.
 
 ### 2026-07-24 — GOTO target past a multi-arm SELECT CASE inside a SUB body
 
