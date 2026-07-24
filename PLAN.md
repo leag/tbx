@@ -1212,28 +1212,74 @@ index. Verified zero regressions with all five sites wired up.
 Reverted before committing, though: the chain from `0xae40` hops
 through FIVE more glue-jmps (`0xb2fe -> 0xb5f8 -> 0xbbc3 -> 0xbcbb ->
 0xbd56 -> 0xbe1e`) and terminates at `0xbe1e`, which is not itself a
-`jmp` at all -- it's a `trap_hook`, tied to a SIXTH, distinct mechanism
-(an `addr < state.main_start` gate that "auto-opens" a `DEF FN` body
-once sequential scanning catches up to the chain's final target,
-mentioned only in passing in one of the five sites' own comments: "the
-DEF FN's own auto-open below"). Whatever real statement eventually
-claims address `0xbe1e` wasn't identified before time ran out on this
-investigation, and guessing at a sixth mechanism without understanding
-it would risk a subtle, hard-to-detect bug in `_resolve_targets` --
-used by every fixture, not just this one -- for a gap that, unlike the
-SELECT CASE line-counting fix, never reached a state verifiable by an
-oracle probe. `git checkout -- tbx/decode0/core.py tbx/decode0/lift.py`
-before anything was staged; working tree confirmed clean, full suite
-re-verified green.
+`jmp` at all -- it's a `trap_hook`.
 
-Precise next step for a follow-up session: trace what registers (or
-should register) address `0xbe1e` as a statement -- likely wherever
-the `addr < state.main_start` "DEF FN auto-open" logic lives (grep
-`main_start` in `core.py` for the comment "the DEF FN's own auto-open
-below") -- then re-attempt the same `glue_alias` chain-following
-design (still sound in principle; only the LAST hop was unresolved),
-verified with a dedicated oracle probe whose GOTO specifically targets
-a chained skip-jmp's own position (not yet witnessed by any existing
+The user pointed at a second, independent TBWINDOW find --
+`~/Downloads/tbwin/tbw73/` (TBW73.INC/TBD73.BAS/TBW73.TXT, TBWINDOW
+7.3, still Richard D. Fothergill, a later release than the 5.0/1988
+one `rsltest.exe` embeds) -- specifically because it's REAL, READABLE
+SOURCE, unlike the compiled fingerprints this campaign usually works
+from. It confirmed the exact structural hypothesis directly:
+`TBW73.INC` declares FIVE `DEF FN` block functions back-to-back
+(`FNAttr`/`FNBack`/`FNFore`/`FNCurvideo`/`FNCurdisplay`, lines
+293-329) immediately after a `SUB ... INLINE` closer, and `FNAttr`'s
+own body opens with `LOCAL temp` -- matching the `trap_hook` then
+`local_init` pair this session found sitting right at the chain's
+end. Debug-traced `state.main_start`/`fn_frame`/`proc_frame` through
+the real decode (temporary prints, reverted after) to confirm exactly
+what happens: at `0xbe1e`, `main_start` already equals `0xbe1e` itself
+(not something PAST it), so the `addr < state.main_start` "DEF FN
+auto-open" gate (`core.py` ~2459-2466) doesn't fire yet -- `0xbe1e`'s
+`trap_hook` runs with `fn_frame`/`proc_frame` both still closed, pure
+glue. FOUR bytes later at `0xbe22`, `main_start` has been advanced
+again (by yet ANOTHER, still-unidentified mechanism -- not one of the
+five sites already found) to `0xbe29`, and THAT's where the real DEF
+FN frame actually opens (`mov_bp_imm` at `0xbe22`, matching a block
+DEF FN's own `mov [bp+0],0` result-slot zero-fill prologue).
+
+So the full picture (now SEVEN distinct hop-types along this one GOTO's
+resolution path, not five or six): the interleaved SUB/DEF-FN region
+this file's TBWINDOW copy expands into needs the glue-chase to also
+step across an `addr == main_start`-with-no-open-frame `trap_hook`
+boundary, landing on WHATEVER `main_start` becomes next -- which isn't
+knowable at the trap_hook's own scan-time position without deferring
+resolution until scanning finishes (unlike the five `jmp`-based hops,
+which know their own target immediately). AND, separately: even a
+correctly-chased target would very likely land on `mov_bp_imm`/a DEF
+FN's own entry point, which -- exactly like a `SUB`'s `proc_enter` --
+is conventionally `addrs.append(None)`, never a valid jump target
+itself; whatever this GOTO is ACTUALLY meant to reach is presumably
+still further out, past this DEF FN too. Whatever real statement it
+ultimately resolves to wasn't identified before time ran out, and
+guessing at any of this without full understanding would risk a
+subtle, hard-to-detect bug in `_resolve_targets` -- used by every
+fixture, not just this one -- for a gap that never reached a state
+verifiable by an oracle probe. `git checkout -- tbx/decode0/core.py
+tbx/decode0/lift.py` (twice -- once for the glue_alias attempt, once
+for the debug prints) before anything was staged; working tree
+confirmed clean both times, full suite re-verified green.
+
+Precise next step for a follow-up session: (1) find the still-
+unidentified mechanism that advances `state.main_start` from `0xbe1e`
+to `0xbe29` between those two addresses (not one of the five
+`glue_alias` sites already instrumented -- probably needs the same
+kind of temporary debug-print tracing used this round, now with a
+known exact address window, `0xbd50`-`0xbe30`, to watch); (2) decide
+whether the `glue_alias` chain-following design needs to defer
+resolution until scanning fully completes (so the `trap_hook`-boundary
+hop can look up whatever `main_start` FINALLY becomes, not just its
+value at scan time) rather than recording a fixed target eagerly like
+the five `jmp`-based sites do; (3) confirm empirically, with a few more
+steps of the same debug-print technique, where the glue chain
+ULTIMATELY lands on a REAL statement (not another SUB/DEF-FN entry
+point, which -- like this DEF FN's own `mov_bp_imm` -- is conventionally
+never a valid jump target) -- TBWINDOW libraries interleave MANY
+SUBs and DEF FNs consecutively (the TBW73.INC evidence lists at least
+five just for the attribute/video-mode helpers), so this file's chain
+may need several more hops past `0xbe29` before reaching genuine main
+code; (4) only then design the actual fix, verified with a dedicated
+oracle probe reproducing a GOTO landing exactly on an interleaved
+SUB/DEF-FN skip-jmp's own position (not yet witnessed by any existing
 fixture) before trusting it.
 
 ### 2026-07-24 — GOTO target past a multi-arm SELECT CASE inside a SUB body
