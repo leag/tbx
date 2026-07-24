@@ -47,6 +47,9 @@ jobs:
     continue-on-error: ${{ matrix.os == 'windows-latest' }}
     env:
       CC: ${{ matrix.cc }}
+      # test_c0.py is parked behind TBX_C0 for local runs (decoder-campaign
+      # friction); CI still runs it so the platform matrix keeps its signal
+      TBX_C0: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
