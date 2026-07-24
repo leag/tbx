@@ -1188,6 +1188,29 @@ constructs specific to their by-ref/LOCAL-heavy coding style.
 
 ## Part III — Investigation history / handoff log
 
+### 2026-07-24 — `movax_m` missing the pool-literal fallback its siblings already have
+
+Seventh closure in the `rsltest.exe` full-decode goal (continuing from
+the entry directly below): after the bare-value-AND fix, decode advanced
+to `displacement 0xe8c is neither scalar nor array element`. Tracing
+every `state.loc()` failure (not just the one that finally propagated)
+showed the SAME disp (`3724`, a pooled INTEGER literal used as the LEFT
+operand of an integer divide, `\`) already being reached successfully
+dozens of times elsewhere in the file via `subax_m`/`addax_m`/`imul_m`'s
+own `try: state.loc(...) except ValueError: ... state.pool_lit(...)`
+fallback -- `movax_m` (a plain scalar-load op, `state.ax =
+state.loc(op[2])`) was simply missing that same fallback, calling
+`state.loc()` unconditionally with no pool-literal escape hatch at all.
+A small, low-risk, well-precedented fix: added the identical fallback
+pattern (mirroring `addax_m`'s exact code) to `movax_m`.
+
+Oracle-verified with `t1_movaxmpool.bas` (`B% = 3724 \ A%`, forcing the
+pooled-literal LEFT operand through `movax_m` specifically), byte-exact
+both dialects. `rsltest.exe` now advances to `jump target 0xc599: body
+line not addressable past a multi-line statement` -- a new, not-yet-
+investigated gap. Zero regressions, full suite 2643 -> 2648 passed/16
+skipped, Ruff clean.
+
 ### 2026-07-24 — bare-value compound-AND first term (`PEEK(x) AND cond`)
 
 Sixth closure in the `rsltest.exe` full-decode goal (continuing from the

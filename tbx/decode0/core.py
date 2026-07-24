@@ -3250,7 +3250,15 @@ def decode_user_code(exe: bytes) -> list[Any]:
             elif op[2] == 0x72:  # ERR = [0074], ERL = [0072]
                 state.ax = ir.Erl()
             else:
-                state.ax = state.loc(op[2])
+                try:
+                    state.ax = state.loc(op[2])
+                except ValueError:
+                    # Pooled int-literal operand of a divide/idiv chain
+                    # (`POOL_LIT \ 2`, wild rsltest.exe) -- same pool-
+                    # literal fallback addax_m/subax_m/imul_m already have.
+                    if op[2] < state.lay["pool_base"] - 4:
+                        raise
+                    state.ax = state.pool_lit(op[2])
             state.k += 1
             continue
         if handlers.int_bitwise_m(state, op, addr, kind):

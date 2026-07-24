@@ -357,8 +357,27 @@ def test_wild_rsltest_argref_advances():
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(ValueError, match=r"displacement 0xe8c is neither"):
+    with pytest.raises(
+        ValueError, match=r"body line not addressable past a multi-line statement"
+    ):
         decode0.decode_user_code(wild_hits_bytes("rsltest.exe"))
+
+
+def test_decode_t1_movaxmpool():
+    # movax_m (a plain scalar-load op) was missing the pooled-int-literal
+    # fallback its siblings addax_m/subax_m/imul_m already have: `3724 \
+    # A%` (a pooled literal as the LEFT operand of an integer divide, wild
+    # rsltest.exe) raised unconditionally instead of falling back to
+    # state.pool_lit() the same way those do.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_movaxmpool.exe"))
+    assert prog[1] == ir.Assign(
+        ir.Var("B%"), ir.BinOp("\\", ir.Lit(3724), ir.Var("A%"))
+    )
+    assert emit0.emit(prog) == (
+        "10 A% = 2\n20 B% = 3724 \\ A%\n30 PRINT B%\n40 END\n"
+    )
 
 
 def test_decode_t1_peekand():
@@ -2460,6 +2479,7 @@ if __name__ == "__main__":
     test_decode_t1_palettereset()
     test_decode_t1_argrefonly()
     test_wild_rsltest_argref_advances()
+    test_decode_t1_movaxmpool()
     test_decode_t1_peekand()
     test_decode_t1_selcasechr()
     test_decode_t1_whileinstat()

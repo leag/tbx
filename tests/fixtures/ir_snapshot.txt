@@ -4726,6 +4726,12 @@ End()
 Mkdir(path=StrLit(value='SUB'))
 End()
 
+## t1_movaxmpool
+Assign(target=Var(name='A%'), value=Lit(value=2))
+Assign(target=Var(name='B%'), value=BinOp(op='\\', lhs=Lit(value=3724), rhs=Var(name='A%')))
+Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_mtimer
 Mtimer()
 End()
@@ -10758,6 +10764,12 @@ End()
 
 ## v10_t1_mkdir
 Mkdir(path=StrLit(value='SUB'))
+End()
+
+## v10_t1_movaxmpool
+Assign(target=Var(name='A%'), value=Lit(value=2))
+Assign(target=Var(name='B%'), value=BinOp(op='\\', lhs=Lit(value=3724), rhs=Var(name='A%')))
+Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_mtimer
