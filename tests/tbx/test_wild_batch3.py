@@ -262,6 +262,34 @@ def test_decode_t1_byreflong():
     )
 
 
+def test_decode_t1_localdbl():
+    # DOUBLE-precision LOCAL variable (`LOCAL X#`): fld_bp64/fstp_bp64/
+    # fold_bp64 are the m64 siblings of fld_bp/fstp_bp/fold_bp's SINGLE
+    # forms -- same first-touch retyping convention, just over FOUR
+    # zero-filled words instead of two. Wild filepatc.exe.
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_localdbl.exe")))
+    assert src == (
+        "10 SUB SUB1\n  LOCAL A#\n  A# = 1.5#\n  PRINT A#\n"
+        "  A# = A# + 1\n  PRINT A#\nEND SUB\n"
+        "20 CALL SUB1\n30 END\n"
+    )
+
+
+def test_decode_t1_localdblcmp():
+    # DOUBLE LOCAL compare (fcomp_bp64), the m64 sibling of fcomp_bp.
+    # Wild filepatc.exe.
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_localdblcmp.exe")))
+    assert src == (
+        "10 SUB SUB1\n  LOCAL A#\n  A# = 1.5#\n"
+        '  IF A# <= 1 THEN 15\n  PRINT "YES"\n15 PRINT "DONE"\n'
+        "END SUB\n20 CALL SUB1\n30 END\n"
+    )
+
+
 def test_decode_t1_forvarlimneg():
     # Variable-limit integer FOR/NEXT with STEP -1: the NEXT test's JGE
     # (0x7D) descending condition, mirroring the literal-limit cmp_mi8
@@ -2194,6 +2222,8 @@ if __name__ == "__main__":
     test_decode_t1_local2()
     test_decode_t1_byref1()
     test_decode_t1_byreflong()
+    test_decode_t1_localdbl()
+    test_decode_t1_localdblcmp()
     test_decode_t1_forvarlimneg()
     test_wild_mf_compound_if_far_exit_advances()
     test_decode_t1_forvarlimfar()

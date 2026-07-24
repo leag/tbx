@@ -2029,6 +2029,10 @@ def _scan_pass(
                     (0xDE, 3): "icomp_bp",  # LOCAL int compare (mixed-type
                     # IF/loop test against an FP-stack value; the bp-relative
                     # sibling of icomp/icomp_si32, wild bmaster.exe/ifi.exe)
+                    (0xDD, 0): "fld_bp64",  # DOUBLE LOCAL read (the m64
+                    (0xDD, 3): "fstp_bp64",  # sibling of fld_bp/fstp_bp's
+                    (0xDC, 3): "fcomp_bp64",  # SINGLE m32 forms; fcomp_bp64
+                    # is fcomp_bp's DOUBLE sibling too, wild filepatc.exe)
                 }.get((esc, reg))  # (PRINT of a local int, witnessed t1_local1)
                 if kind:
                     ops.append((p, pre + kind, bp_off))
@@ -2040,6 +2044,17 @@ def _scan_pass(
                     continue
                 if esc == 0xD8 and reg in _FOLD_OPS_N:
                     ops.append((p, pre + "fold_n_bp", _FOLD_OPS_N[reg], bp_off))
+                    p = mo + 2
+                    continue
+                if esc == 0xDC and reg in _FOLD_OPS:
+                    # m64 arithmetic fold, LOCAL DOUBLE operand LEFT (the
+                    # DOUBLE sibling of fold_bp's SINGLE m32 form, wild
+                    # filepatc.exe).
+                    ops.append((p, pre + "fold_bp64", _FOLD_OPS[reg], bp_off))
+                    p = mo + 2
+                    continue
+                if esc == 0xDC and reg in _FOLD_OPS_N:
+                    ops.append((p, pre + "fold_n_bp64", _FOLD_OPS_N[reg], bp_off))
                     p = mo + 2
                     continue
             if mod == 2 and rm == 6 and (esc, reg) in ((0xD9, 0), (0xD9, 3)):

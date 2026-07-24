@@ -1258,8 +1258,27 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
         state.stack.append(state.loc_local(op[2]))
         state.k += 1
         return True
-    if kind in ("fld_bp", "fstp_bp", "fold_bp", "fold_n_bp", "fcomp_bp"):
-        bp_off = op[2] if kind in ("fld_bp", "fstp_bp", "fcomp_bp") else op[3]
+    if kind in (
+        "fld_bp",
+        "fstp_bp",
+        "fold_bp",
+        "fold_n_bp",
+        "fcomp_bp",
+        "fld_bp64",
+        "fstp_bp64",
+        "fold_bp64",
+        "fold_n_bp64",
+        "fcomp_bp64",
+    ):
+        is64 = kind in (
+            "fld_bp64", "fstp_bp64", "fold_bp64", "fold_n_bp64", "fcomp_bp64"
+        )
+        bp_off = (
+            op[2]
+            if kind
+            in ("fld_bp", "fstp_bp", "fcomp_bp", "fld_bp64", "fstp_bp64", "fcomp_bp64")
+            else op[3]
+        )
         local_frame = None
         for frame in (state.proc_frame, state.fn_frame):
             if (
@@ -1274,27 +1293,34 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
             # SINGLE FP ops). Spans TWO consecutive zero-filled words;
             # first touch retypes the first and removes the phantom second
             # word (SUB: wild resume.exe; DEF FN: cleanup/reformat/bmaster/ifi).
+            # DOUBLE (fld_bp64/fstp_bp64/fold_bp64/fold_n_bp64, m64) is the
+            # same first-touch convention over FOUR words instead of two
+            # (wild filepatc.exe).
             locs = local_frame["locals"] or {}
             if bp_off in locs and locs[bp_off].endswith("%"):
-                locs[bp_off] = locs[bp_off][:-1] + "!"
-                locs.pop(bp_off + 2, None)
+                locs[bp_off] = locs[bp_off][:-1] + ("#" if is64 else "!")
+                extra = (2, 4, 6) if is64 else (2,)
+                for e in extra:
+                    locs.pop(bp_off + e, None)
             pvar = ir.Var(locs[bp_off])
-            if kind == "fld_bp":
+            if kind in ("fld_bp", "fld_bp64"):
                 state.stack.append(pvar)
-            elif kind == "fstp_bp":
+            elif kind in ("fstp_bp", "fstp_bp64"):
                 state.put(ir.Assign(pvar, state.stack.pop()), state.cur)
                 state.cur = None
-            elif kind == "fold_bp":
+            elif kind in ("fold_bp", "fold_bp64"):
                 state.stack.append(_orient(op[2], pvar, state.stack.pop()))
-            elif kind == "fold_n_bp":
+            elif kind in ("fold_n_bp", "fold_n_bp64"):
                 top = state.stack.pop()
                 if isinstance(top, ir.BinOp) and _PREC[top.op] < _PREC[op[2]]:
                     top = ir.Group(top)
                 state.stack.append(ir.BinOp(op[2], top, pvar))
-            else:  # fcomp_bp
+            else:  # fcomp_bp / fcomp_bp64
                 state.pend_cmp = (pvar, state.stack.pop())
             state.k += 1
             return True
+        if is64:
+            raise ValueError(f"DOUBLE LOCAL {kind} outside a LOCAL frame at {addr:#x}")
         if state.fn_frame is not None:  # DEF FN body: param read / result / fold
             if bp_off != 0:  # bp+0 is the result cell, not a param
                 state.fn_frame["param_offs"].add(bp_off)
