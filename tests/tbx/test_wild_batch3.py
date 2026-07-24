@@ -357,10 +357,48 @@ def test_wild_rsltest_argref_advances():
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(
-        ValueError, match=r"body line not addressable past a multi-line statement"
-    ):
+    with pytest.raises(ValueError, match=r"jump target 0xae40 is not a statement start"):
         decode0.decode_user_code(wild_hits_bytes("rsltest.exe"))
+
+
+def test_decode_t1_scgoto():
+    # A GOTO landing on a numbered line past a multi-arm SELECT CASE
+    # (with CASE ELSE) inside a SUB body: _resolve_targets' map_body only
+    # ever recursed accurately through a single-arm, ELSE-less IfBlock
+    # ("fully accounted": header + recursed body + END IF); a SelectCase
+    # sets a "multi" flag and keeps a placeholder line count instead,
+    # raising if a LATER target actually needs to resolve past it.
+    # emit0.py's own SelectCase rendering is fully deterministic (1 +
+    # per-arm(1 + body) + [1 + case_else body] + 1), so map_body now
+    # recurses through it the same way. Found via wild rsltest.exe
+    # (TBMENU.INC's `select case ans$ ... end select` followed by `if
+    # curntpos% > itemcount% then curntpos% = 1`, itself a jump target).
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_scgoto.exe"))
+    sub = next(s for s in prog if isinstance(s, ir.SubDef))
+    goto = sub.body[1]
+    assert isinstance(goto, ir.Goto) and isinstance(goto.target, ir.BodyLine)
+    assert emit0.emit(prog) == (
+        "10 CALL SUB1\n20 END\n30 SUB SUB1\n"
+        '  A$ = "X"\n  GOTO 41\n  SELECT CASE A$\n  CASE "A"\n'
+        '    PRINT "A"\n  CASE "B"\n    PRINT "B"\n  CASE ELSE\n'
+        '    PRINT "ELSE"\n  END SELECT\n41 PRINT "AFTER"\nEND SUB\n'
+    )
+
+
+def test_decode_t1_scgotone():
+    # Same as test_decode_t1_scgoto but without CASE ELSE, exercising
+    # that branch of the new recursion independently.
+    from tbx import decode0, emit0
+
+    prog = decode0.decode_user_code(_exe("t1_scgotone.exe"))
+    assert emit0.emit(prog) == (
+        "10 CALL SUB1\n20 END\n30 SUB SUB1\n"
+        '  A$ = "X"\n  GOTO 39\n  SELECT CASE A$\n  CASE "A"\n'
+        '    PRINT "A"\n  CASE "B"\n    PRINT "B"\n  END SELECT\n'
+        '39 PRINT "AFTER"\nEND SUB\n'
+    )
 
 
 def test_decode_t1_movaxmpool():
@@ -2479,6 +2517,8 @@ if __name__ == "__main__":
     test_decode_t1_palettereset()
     test_decode_t1_argrefonly()
     test_wild_rsltest_argref_advances()
+    test_decode_t1_scgoto()
+    test_decode_t1_scgotone()
     test_decode_t1_movaxmpool()
     test_decode_t1_peekand()
     test_decode_t1_selcasechr()

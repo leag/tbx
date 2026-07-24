@@ -1028,7 +1028,22 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
                     # past it (unlike the generic multi-line cases below,
                     # whose width isn't known).
                     phys = map_body(top_idx, b.arms[0][1], phys + 1) + 1
-                elif isinstance(b, (ir.IfBlock, ir.SelectCase, ir.SubDef, ir.DefFn)):
+                elif isinstance(b, ir.SelectCase):
+                    # Fully accounted like the single-arm IfBlock above:
+                    # emit0.py's own SelectCase rendering is a deterministic
+                    # "SELECT CASE" line + per-arm ("CASE guards" line +
+                    # body) + optional ("CASE ELSE" line + body) + "END
+                    # SELECT" line, so flat counting can safely continue
+                    # past it too (wild rsltest.exe: TBMENU.INC's `select
+                    # case ans$ ... end select`, whose first post-arm
+                    # statement is itself a jump target).
+                    phys += 1  # "SELECT CASE selector"
+                    for arm in b.arms:
+                        phys = map_body(top_idx, arm.body, phys + 1)
+                    if b.case_else is not None:
+                        phys = map_body(top_idx, b.case_else, phys + 1)
+                    phys += 1  # "END SELECT"
+                elif isinstance(b, (ir.IfBlock, ir.SubDef, ir.DefFn)):
                     multi = True
                     phys += 1
                 else:

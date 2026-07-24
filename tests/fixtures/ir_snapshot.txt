@@ -5427,6 +5427,16 @@ Close(num=1)
 Print(items=(ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=1))), ArrayRef(name='V1$', indices=(Var(name='A'),))), newline=True, file=None, commas=None)
 End()
 
+## t1_scgoto
+CallStmt(name='SUB1', args=())
+End()
+SubDef(name='SUB1', params=(), body=(Assign(target=Var(name='A$'), value=StrLit(value='X')), Goto(target=BodyLine(stmt=2, phys=11)), SelectCase(selector=Var(name='A$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='A')),), body=(Print(items=(StrLit(value='A'),), newline=True, file=None, commas=None),)), CaseArm(guards=(CaseValue(value=StrLit(value='B')),), body=(Print(items=(StrLit(value='B'),), newline=True, file=None, commas=None),))), case_else=(Print(items=(StrLit(value='ELSE'),), newline=True, file=None, commas=None),)), Print(items=(StrLit(value='AFTER'),), newline=True, file=None, commas=None)))
+
+## t1_scgotone
+CallStmt(name='SUB1', args=())
+End()
+SubDef(name='SUB1', params=(), body=(Assign(target=Var(name='A$'), value=StrLit(value='X')), Goto(target=BodyLine(stmt=2, phys=9)), SelectCase(selector=Var(name='A$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='A')),), body=(Print(items=(StrLit(value='A'),), newline=True, file=None, commas=None),)), CaseArm(guards=(CaseValue(value=StrLit(value='B')),), body=(Print(items=(StrLit(value='B'),), newline=True, file=None, commas=None),))), case_else=None), Print(items=(StrLit(value='AFTER'),), newline=True, file=None, commas=None)))
+
 ## t1_scr
 Cls()
 Locate(row=Lit(value=3), col=Lit(value=5), cursor=None, start=None, stop=None)
@@ -11370,6 +11380,16 @@ InputFile(num=1, vars=(ArrayRef(name='V0', indices=(Var(name='A'), Lit(value=5))
 Close(num=1)
 Print(items=(ArrayRef(name='V0', indices=(Lit(value=1), Lit(value=1))), ArrayRef(name='V1$', indices=(Var(name='A'),))), newline=True, file=None, commas=None)
 End()
+
+## v10_t1_scgoto
+CallStmt(name='SUB1', args=())
+End()
+SubDef(name='SUB1', params=(), body=(Assign(target=Var(name='A$'), value=StrLit(value='X')), Goto(target=BodyLine(stmt=2, phys=11)), SelectCase(selector=Var(name='A$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='A')),), body=(Print(items=(StrLit(value='A'),), newline=True, file=None, commas=None),)), CaseArm(guards=(CaseValue(value=StrLit(value='B')),), body=(Print(items=(StrLit(value='B'),), newline=True, file=None, commas=None),))), case_else=(Print(items=(StrLit(value='ELSE'),), newline=True, file=None, commas=None),)), Print(items=(StrLit(value='AFTER'),), newline=True, file=None, commas=None)))
+
+## v10_t1_scgotone
+CallStmt(name='SUB1', args=())
+End()
+SubDef(name='SUB1', params=(), body=(Assign(target=Var(name='A$'), value=StrLit(value='X')), Goto(target=BodyLine(stmt=2, phys=9)), SelectCase(selector=Var(name='A$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='A')),), body=(Print(items=(StrLit(value='A'),), newline=True, file=None, commas=None),)), CaseArm(guards=(CaseValue(value=StrLit(value='B')),), body=(Print(items=(StrLit(value='B'),), newline=True, file=None, commas=None),))), case_else=None), Print(items=(StrLit(value='AFTER'),), newline=True, file=None, commas=None)))
 
 ## v10_t1_scr
 Cls()
