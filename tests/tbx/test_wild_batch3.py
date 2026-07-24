@@ -258,6 +258,54 @@ def test_decode_t1_byreflong():
     )
 
 
+def test_decode_t1_byrefdbl():
+    # By-ref DOUBLE (`#`) SUB param, the m64 sibling of t1_byreflong's LONG
+    # family: FLD/FSTP/FCOMP onto/from/against the FP stack via `les
+    # si,[bp+N]` + ESC D9/DD by-ref addressing. Wild bmaster.exe/ifi.exe.
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_byrefdbl.exe")))
+    assert src == (
+        "10 SUB SUB1(A#)\n"
+        "  PRINT A#\n  A# = 1.5#\n"
+        '  IF A# <> 1.5# THEN 15\n  PRINT "YES"\n15 PRINT "DONE"\n'
+        "END SUB\n"
+        "20 B# = 2.5#\n30 CALL SUB1(B#)\n40 PRINT B#\n50 END\n"
+    )
+
+
+def test_decode_t1_localincr():
+    # `INCR X%` on a LOCAL scalar: a bare `inc [bp+d8]`, NOT byte-identical
+    # to `X% = X% + 1` (which compiles to addm_ax_bp) the way the two
+    # spellings are for a DGROUP scalar (t1_incr1) -- decodes as its own
+    # `ir.Incr` node instead of normalizing to an Assign. Wild bmaster.exe/
+    # ifi.exe.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_localincr.exe"))
+    sub = prog[0]
+    assert sub.body[2] == ir.Incr(ir.Var("A%"))
+    assert emit0.emit(prog) == (
+        "10 SUB SUB1\n  LOCAL A%\n  A% = 5\n  INCR A%\n  PRINT A%\nEND SUB\n"
+        "20 CALL SUB1\n30 END\n"
+    )
+
+
+def test_decode_t1_byrefincr():
+    # `INCR A%` on a by-ref INTEGER SUB param: the far/by-ref sibling of
+    # t1_localincr's LOCAL case, same bare-INC-vs-addm_ax_si non-identity.
+    # Wild bmaster.exe/ifi.exe.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_byrefincr.exe"))
+    sub = prog[0]
+    assert sub.body[0] == ir.Incr(ir.Var("A%"))
+    assert emit0.emit(prog) == (
+        "10 SUB SUB1(A%)\n  INCR A%\n  PRINT A%\nEND SUB\n"
+        "20 B% = 5\n30 CALL SUB1(B%)\n40 END\n"
+    )
+
+
 def test_decode_t1_incr1():
     # Bare INC [disp16] (FF /0) outside a FOR context is the INCR
     # normalization: `X% = X% + 1`, distinct from the FOR-NEXT step use of
@@ -2045,6 +2093,9 @@ if __name__ == "__main__":
     test_decode_t1_local2()
     test_decode_t1_byref1()
     test_decode_t1_byreflong()
+    test_decode_t1_byrefdbl()
+    test_decode_t1_localincr()
+    test_decode_t1_byrefincr()
     test_decode_t1_incr1()
     test_decode_t1_poolrun()
     test_decode_t1_decr1()

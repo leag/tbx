@@ -74,6 +74,7 @@ from tbx.ir.stmt_nodes import (
     Get,
     GetString,
     GetGfx,
+    Incr,
     Inline,
     Input,
     InputFile,
@@ -246,6 +247,8 @@ def _us_decl(s) -> str | None:
         return f"FOR {s.var.name} = {unparse(s.init)} TO {unparse(s.limit)}{step}"
     if isinstance(s, NextStmt):
         return f"NEXT {s.var.name}"
+    if isinstance(s, Incr):
+        return f"INCR {s.var.name}"
     if isinstance(s, Return):
         return "RETURN" if s.target is None else f"RETURN {s.target}"
     if isinstance(s, Wend):

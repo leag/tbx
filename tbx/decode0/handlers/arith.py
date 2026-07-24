@@ -495,13 +495,19 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         state.k += 1
         return True
     if kind == "inc_bp":
-        # LOCAL-var FOR-NEXT increment (q_locidx). A bare inc [bp+d8] outside
-        # a FOR is unwitnessed (LOCAL `X% = X% + 1` compiles to addm_ax_bp,
-        # t1_local1) -- fail loud.
+        # LOCAL-var FOR-NEXT increment (q_locidx). Outside a FOR, `LOCAL X% =
+        # X% + 1` instead compiles to addm_ax_bp (t1_local1) -- unlike the
+        # DGROUP case, the two spellings are NOT byte-identical for a LOCAL
+        # target, so a bare INCR statement decodes as its own `ir.Incr` node
+        # rather than normalizing to an Assign (wild bmaster.exe/ifi.exe,
+        # probe q_localincr3).
         if state.fors and state.fors[-1]["v"] == op[2]:
             state.k += 1
             return True
-        raise ValueError(f"inc [bp+{op[2]}] outside a FOR at {addr:#x}")
+        state.put(ir.Incr(state.loc_local(op[2])), state.cur)
+        state.cur = None
+        state.k += 1
+        return True
     if kind == "dec_bp":
         # LOCAL-var STEP -1 FOR-NEXT decrement, the descending sibling of
         # inc_bp -- same step patch-up as dec_m's FOR branch (the header

@@ -129,6 +129,7 @@ class DecodeState:
     proc_params: Any = None
     proc_int_offs: Any = None
     proc_long_offs: Any = None
+    proc_dbl_offs: Any = None
     proc_str_offs: Any = None
     reg_logical_results: Any = None
     fp64_bridge: Any = None
@@ -484,7 +485,13 @@ def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, in
 
 
 def _resolve_calls(
-    stmts, proc_names, proc_params, proc_int_offs, proc_long_offs, proc_str_offs
+    stmts,
+    proc_names,
+    proc_params,
+    proc_int_offs,
+    proc_long_offs,
+    proc_dbl_offs,
+    proc_str_offs,
 ):
     """A CALL to a SUB defined later in the file staged a ("addr", n)
     placeholder (see handlers.control.calls) since proc_names had no entry
@@ -514,13 +521,15 @@ def _resolve_calls(
             if isinstance(a, tuple) and a and a[0] == "fwdpending":
                 _, target, _idx, off = a
                 params = proc_params[target]
-                sfx = params[_idx][-1] if params[_idx][-1] in "%$&" else ""
+                sfx = params[_idx][-1] if params[_idx][-1] in "%$&#" else ""
                 if sfx == "%":
                     proc_int_offs.add(off)
                 elif sfx == "$":
                     proc_str_offs.add(off)
                 elif sfx == "&":
                     proc_long_offs.add(off)
+                elif sfx == "#":
+                    proc_dbl_offs.add(off)
                 new_args[i] = ir.Var(f"P{off:02X}{sfx}")
                 changed = True
         return (tuple(new_args) if changed else args), changed
@@ -636,6 +645,7 @@ def _finalize(state: DecodeState, addr) -> Program:
         state.proc_params,
         state.proc_int_offs,
         state.proc_long_offs,
+        state.proc_dbl_offs,
         state.proc_str_offs,
     )
     # Error-trap line table, probed early -- before DATA/dims/COMMON/TRON
@@ -2108,6 +2118,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
     )  # bp_offs the open proc reads as strings (arg_ref;far_spush)
     state.proc_int_offs = set()  # bp_offs read as integers (far_cmpax_si)
     state.proc_long_offs = set()  # bp_offs read as LONG (far_fild_si32 etc.)
+    state.proc_dbl_offs = set()  # bp_offs read as DOUBLE (far_fld_si64 etc.)
 
     # String-space base: ss_base = align16(pool end), but the pool can
     # hold words the code never references (LOCATE/COLOR arg literals compile to
@@ -2426,6 +2437,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
             state.proc_str_offs = set()
             state.proc_int_offs = set()
             state.proc_long_offs = set()
+            state.proc_dbl_offs = set()
             state.cur = None
             state.k += 1
             continue
@@ -2691,7 +2703,11 @@ def decode_user_code(exe: bytes) -> list[Any]:
                         else (
                             f"P{off:02X}&"
                             if off in state.proc_long_offs
-                            else f"P{off:02X}"
+                            else (
+                                f"P{off:02X}#"
+                                if off in state.proc_dbl_offs
+                                else f"P{off:02X}"
+                            )
                         )
                     )
                     for off in (6 + 4 * (nparams - 1 - i) for i in range(nparams))
@@ -2843,7 +2859,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
             state.cur = None
             state.k += 1
             continue
-        if state.pend_arg is not None and kind.endswith(("_si", "_si32")):
+        if state.pend_arg is not None and kind.endswith(("_si", "_si32", "_si64")):
             argvar = ir.Var(f"P{state.pend_arg:02X}")
             base = kind[4:] if kind.startswith("far_") else kind  # strip far_ prefix
             if base == "fld_si":
@@ -2925,11 +2941,19 @@ def decode_user_code(exe: bytes) -> list[Any]:
             elif base == "inc_si":  # inc es:[si]: FOR-NEXT increment of a
                 # by-ref int param used directly as the loop var -- implicit
                 # in BASIC; consume silently, same as inc_m/inc_bp (wild
-                # bmaster.exe/ifi.exe). A bare INC via ES:[SI] outside a FOR
-                # is unwitnessed (by-ref `X% = X% + 1` compiles to
-                # far_addm_ax_si, t1_local2) -- fail loud.
-                if not (state.fors and state.fors[-1]["v"] == state.pend_arg):
-                    raise ValueError(f"inc es:[si] outside a FOR at {addr:#x}")
+                # bmaster.exe/ifi.exe). Outside a FOR, `X% = X% + 1` instead
+                # compiles to far_addm_ax_si (t1_local2) -- like the LOCAL
+                # case, a bare INCR statement is NOT byte-identical to that
+                # spelling for a by-ref param, so it decodes as its own
+                # `ir.Incr` node (wild bmaster.exe/ifi.exe, probe
+                # q_byrefincr).
+                if state.fors and state.fors[-1]["v"] == state.pend_arg:
+                    pass
+                else:
+                    argvar = ir.Var(f"P{state.pend_arg:02X}%")
+                    state.proc_int_offs.add(state.pend_arg)
+                    state.put(ir.Incr(argvar), state.cur)
+                    state.cur = None
             elif base == "dec_si":  # dec es:[si]: FOR-NEXT STEP -1 decrement
                 # of a by-ref int param used as the loop var -- the
                 # descending sibling of inc_si, same NEXT-side step patch-up
@@ -2965,6 +2989,25 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 # own first term, no intervening consumer -- wild
                 # bmaster.exe's second `(... AND ...) OR (LONG AND string)`
                 # group, probe q_orofands2)
+            elif base == "fld_si64":  # by-ref DOUBLE param onto the FP stack:
+                argvar = ir.Var(f"P{state.pend_arg:02X}#")  # the m64 sibling
+                state.proc_dbl_offs.add(state.pend_arg)  # of fld_si's m16
+                state.stack.append(argvar)  # read (wild bmaster.exe/ifi.exe,
+                # probe q_dblread)
+            elif base == "fstp_si64":  # FP stack top -> a by-ref DOUBLE param:
+                argvar = ir.Var(f"P{state.pend_arg:02X}#")  # the m64 sibling
+                state.proc_dbl_offs.add(state.pend_arg)  # of fstp_si's write
+                state.put(ir.Assign(argvar, state.stack.pop()), state.cur)
+                state.cur = None  # (wild bmaster.exe/ifi.exe, probe q_dblwrite)
+            elif base == "fcomp_si64":  # by-ref DOUBLE param vs FP-stack value
+                argvar = ir.Var(f"P{state.pend_arg:02X}#")  # (IF/loop test,
+                state.proc_dbl_offs.add(state.pend_arg)  # far/by-ref sibling
+                state.pend_cmp = (argvar, state.stack.pop())  # of the
+                # computed-array-element fcomp_si64 (wild bmaster.exe/
+                # ifi.exe, probe q_dblcmp)
+                state.pend_cmp_str = False  # replace any materialized string
+                # flags a directly-preceding term left set (same AND-group
+                # hygiene as icomp_si32 above)
             else:
                 raise ValueError(f"unhandled by-ref param op {kind} at {addr:#x}")
             state.pend_arg = None

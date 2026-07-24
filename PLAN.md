@@ -935,6 +935,44 @@ fixing the intra-inline-IF gap above will also close it.
 
 ## Part III — Investigation history / handoff log
 
+### 2026-07-23 — by-ref DOUBLE (`#`) params + LOCAL/by-ref `INCR`
+
+Two more closures continuing to advance `bmaster.exe`/`ifi.exe` one gap
+at a time from the previous two entries. (1) `unhandled op
+far_fcomp_si64`: the by-ref DOUBLE sibling of the LONG work above --
+`fld_si64`/`fstp_si64`/`fcomp_si64` added to the same `pend_arg`
+dispatch (read/write/compare), a new `state.proc_dbl_offs` tracking set
+for the `#` signature suffix, `_resolve_calls`'s forwarded-arg path
+extended too. Fixture `t1_byrefdbl`/`v10_t1_byrefdbl`, byte-exact both
+dialects. (2) `inc [bp+54] outside a FOR`, then (after fixing that)
+`inc es:[si] outside a FOR`: TB's explicit `INCR var` statement compiles
+to a bare `INC` for a LOCAL or by-ref scalar too, same as the
+already-normalized DGROUP case -- but unlike DGROUP, where `INCR X` and
+`X = X + 1` are byte-IDENTICAL (so the decoder just picks the `X = X +
+1` spelling), the two spellings compile to DIFFERENT bytes for a LOCAL
+(bare `inc [bp+d8]` vs `addm_ax_bp`) or by-ref (`inc es:[si]` vs
+`far_addm_ax_si`) target -- confirmed via oracle probes with the literal
+`INCR` keyword (`q_localincr3.bas`/`q_byrefincr.bas`; a plain `X% = X% +
+1` on either target reliably compiles to the add-store form instead, so
+this genuinely needs its own spelling, not a normalization). Added a new
+`ir.Incr(var)` statement node (`stmt_nodes.py`/`ir/__init__.py` exports/
+`render.py`'s `_us_decl`/`rename.py`'s `walk_cond`... `rn()` dispatch)
+rather than reusing `Assign` -- both previously-"unwitnessed, fail loud"
+guards (`inc_bp`, `inc_si`) now emit it instead of raising. `c0.py` has
+no case for it yet (falls through to the existing generic `unsupported
+statement` raise, correct fail-loud behavior for the C backend, not
+addressed this round). New fixtures `t1_localincr`/`v10_t1_localincr`
+and `t1_byrefincr`/`v10_t1_byrefincr`, byte-exact both dialects.
+`bmaster.exe`/`ifi.exe` now advance to `string BP push outside DEF FN`
+-- a LOCAL STRING variable used in a context the existing LOCAL-string
+machinery doesn't cover outside a block DEF FN body; not attempted this
+round. `test_local_string.py`'s pinned next-gap expectation updated
+again. Wild tally still 27/84 (each of these lands a real, verified
+closure but `bmaster.exe`/`ifi.exe` keep landing on fresh gaps rather
+than fully decoding -- a long tail of small, previously-unwitnessed
+by-ref/LOCAL constructs specific to these two files); zero regressions,
+full suite 2573 passed/16 skipped, Ruff clean.
+
 ### 2026-07-23 — by-ref LONG (`&`) SUB parameters
 
 Closed `unhandled op far_icomp_si32`, the gap the previous entry's fix

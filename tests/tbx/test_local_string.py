@@ -45,8 +45,8 @@ def test_string_local_in_block_def_fn(stem):
 @pytest.mark.parametrize(
     ("stem", "exc", "next_gap"),
     [
-        ("bmaster.exe", ValueError, r"inc \[bp\+54\] outside a FOR at 0x9071"),
-        ("ifi.exe", ValueError, r"inc \[bp\+54\] outside a FOR at 0x9071"),
+        ("bmaster.exe", ValueError, "string BP push outside DEF FN at 0x9279"),
+        ("ifi.exe", ValueError, "string BP push outside DEF FN at 0x9279"),
         ("cleanup.exe", ValueError, "unhandled jmp short at 0xcc87"),
         ("reformat.exe", ValueError, "unhandled jmp short at 0xccc3"),
     ],

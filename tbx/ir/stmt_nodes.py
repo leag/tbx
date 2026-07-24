@@ -65,6 +65,18 @@ class NextStmt:
 
 
 @dataclass(frozen=True)
+class Incr:
+    """INCR var: TB's explicit increment-by-1 statement (bare `inc`, `48`/`FF
+    46 d8`). For a DGROUP-scalar target this is byte-identical to `var = var +
+    1` (normalized to that canonical spelling, see t1_incr1); for a LOCAL
+    (bp-relative) target the two spellings compile to DIFFERENT bytes (bare
+    INC vs a full load/add/store), so a LOCAL target keeps this its own
+    node -- wild bmaster.exe/ifi.exe, probe q_localincr3."""
+
+    var: object  # Var (always a LOCAL scalar; the DGROUP case normalizes away)
+
+
+@dataclass(frozen=True)
 class Gosub:
     target: object  # statement index (int); ("addr", a) sentinel pre-resolve
 
