@@ -16,6 +16,7 @@ PAIRS = [
     "t1_mixedbool",
     "t1_mixedbool2",
     "t1_mixedbool3",
+    "t1_orofands",
 ]
 
 
@@ -260,6 +261,41 @@ def test_decode_t1_booluntil():
         ir.Print((V("A"),)),
     ]
     assert decode0.decode_user_code(_exe("t1_booluntil.exe")) == want
+
+
+def test_decode_t1_orofands():
+    # Explicitly parenthesized `(A AND B) OR (C AND D)` (wild bmaster.exe/
+    # ifi.exe): each AND-group's own first term never gets the usual
+    # self-test dispatch pair (`or ax,ax`) -- TB folds the whole group as a
+    # plain VALUE (materialize -> movbxax -> materialize -> andaxbx) and
+    # reuses the SECOND group's own trailing jcc/jmp as the shared decision
+    # point for the entire OR. The explicit parens are byte-significant
+    # (dropping them recompiles a different, self-tested template), so each
+    # group round-trips through an `ir.Group`.
+    from tbx import decode0
+
+    L, V = ir.Lit, ir.Var
+    prog = decode0.decode_user_code(_exe("t1_orofands.exe"))
+    assert prog[0].body[0] == ir.IfInline(
+        ir.LogOp(
+            "OR",
+            ir.Group(
+                ir.LogOp(
+                    "AND",
+                    ir.RelOp("=", V("A%"), L(0)),
+                    ir.RelOp("=", V("B$"), ir.StrLit("X")),
+                )
+            ),
+            ir.Group(
+                ir.LogOp(
+                    "AND",
+                    ir.RelOp("=", V("C%"), L(1)),
+                    ir.RelOp("=", V("D$"), ir.StrLit("Y")),
+                )
+            ),
+        ),
+        (ir.Print((ir.StrLit("YES"),), True, None, None),),
+    )
 
 
 def test_dialect_invariant():

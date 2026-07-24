@@ -389,13 +389,23 @@ def _has_jmps_back(ops, exit_addr, test_addr) -> bool:
     return False
 
 
-def _lift_bool_tail(ops, k, pend_cmp, pb, put, whiles, ifs, stmts, flush, pend_outer):
+def _lift_bool_tail(
+    ops, k, pend_cmp, pb, put, whiles, ifs, stmts, flush, pend_outer, wrap_group=False
+):
     """Consume the compound-IF second term at ops[k] (movax FFFF): dispatch 74 =
     THEN-line IfGoto; dispatch 75 = compound WHILE (jmps-back present)
     or inline-IF body. A 3+-term chain (witnessed t1_and3) cascades: each MID
     segment's dispatch jmp short-circuits into the NEXT segment's fold template
     (comb addr + the same +2/+0 AND/OR delta the first-term match uses) instead
     of exiting -- fold the condition and keep the compound open.
+
+    `wrap_group=True` (an explicitly-parenthesized AND-group used as one
+    operand of an outer OR, e.g. `(A AND B) OR (C AND D)`, wild bmaster.exe/
+    ifi.exe, probe q_orofands) wraps just THIS call's own `pb["r1"], r2` fold
+    in `ir.Group` -- the parens are byte-significant (recompiling the
+    unparenthesized-but-equivalent-precedence spelling produces different
+    bytes). Only the immediate fold is wrapped, never any later outer-join
+    combine, matching the source's own single level of explicit parens.
 
     A combinator SWITCH (`A AND B OR C` = `(A AND B) OR C`, precedence-correct
     left grouping since AND/OR chain byte-identically either way for a single
@@ -437,6 +447,8 @@ def _lift_bool_tail(ops, k, pend_cmp, pb, put, whiles, ifs, stmts, flush, pend_o
         )
     r2 = ir.RelOp(_JCC_RELOP_TRUE[m_jcc[2]], *pend_cmp)
     cond = ir.LogOp(pb["op"], pb["r1"], r2)
+    if wrap_group:
+        cond = ir.Group(cond)
     # own_op -- how `cond` (just folded) joins whatever comes next -- is
     # this segment's OWN dispatch polarity (f_jcc), a fact independent of
     # pb["op"] (the operator that folded r1 with r2 to make `cond`): e.g.

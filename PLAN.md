@@ -935,6 +935,64 @@ fixing the intra-inline-IF gap above will also close it.
 
 ## Part III — Investigation history / handoff log
 
+### 2026-07-23 — explicitly-parenthesized `(A AND B) OR (C AND D)` groups
+
+Closed the "materialization template mismatch" signature shared by
+`bmaster.exe`/`ifi.exe` (both failed at the identical offset `0x8f0e`,
+confirming a shared shape). Root cause, found via a probe matrix (`uv
+run python` one-offs, not `batch_probe.py` -- variations needed live
+byte inspection between each try): an explicitly-parenthesized AND-group
+used as one operand of an outer OR compiles so that the group's OWN
+first term never gets the usual self-test dispatch pair (no `or ax,ax`)
+-- TB folds the whole group as a plain VALUE (materialize -> `movbxax`
+-> materialize -> `andaxbx`) and reuses the group's OWN trailing
+`jcc`/`jmp` as the shared decision point for the WHOLE expression:
+jumping either into the next group (continue) or straight into THAT
+group's closing `jcc`/`jmp` with `ax` already holding this group's true
+short-circuit value. Several plausible triggers (SUB LOCALs, param
+order/count, comparing to 0, WHILE vs IF, DEF FN, 3-flat-term chains,
+dialect 1.0 vs 1.1) were tried and ruled out before the real
+differentiator (explicit parens around each 2-term AND, joined by an
+unparenthesized OR) was found -- none of those decode with a missing
+self-test; only the parenthesized-group shape does (probe
+`q_orofands.bas`, promoted as `t1_orofands`/`v10_t1_orofands`).
+
+Implementation: a new gate in `control.py` (right before the
+`_lift_while` fallback) recognizes a string-compare second term
+combining with an already-materialized `bx` value via `andaxbx` followed
+by a genuine `jcc`/`jmp` dispatch pair, and hands off to the EXISTING
+`_lift_bool_tail` (constructing a synthetic `pb` as if `_match_bool_term1`
+had matched term1, with `sc` set to the only value that keeps its
+internal cross-check a tautology, since there is no real term1 dispatch
+to validate against) -- `_lift_bool_tail`'s own scan-ahead cascade logic
+already recognizes the jump landing on a second group's own `andaxbx` as
+a multi-term deferral, so the AND/OR/AND fold and the outer OR join both
+fall out of the unmodified mechanism. The one genuinely new piece is a
+`wrap_group` flag on `_lift_bool_tail` that wraps just that call's own
+2-term fold in `ir.Group` -- byte-exact verification (oracle,
+`or_of_ands_1.0/1.1.exe`) showed the explicit parens are significant:
+recompiling the unparenthesized-but-same-precedence spelling produces a
+DIFFERENT byte pattern (a self-tested template) than the original. This
+exposed two latent gaps in code that had never seen a Group-wrapped
+condition before: `unparse_cond` fell through to the plain-Expr
+`unparse`, which doesn't know about `LogOp` (`render.py`, fixed by
+handling `Group` in `unparse_cond` directly); and `rename.py`'s `walk`
+had a `Group` case that always recursed via plain `walk`, silently
+skipping variable renaming inside a Group-wrapped condition tree (fixed
+by routing `Group(LogOp | RelOp)` through `walk_cond` instead).
+
+Both dialects round-trip byte-exact via the oracle. `bmaster.exe`/
+`ifi.exe` advance past this signature into a distinct, narrower gap:
+`unhandled op far_icomp_si32` (a by-ref LONG/mixed-FP-compare parameter
+form -- the far/by-ref sibling of the already-calibrated computed-array-
+element `icomp_si32`; the existing `pend_arg`+`kind.endswith("_si")`
+dispatch in `core.py` doesn't cover the `_si32` suffix). Not attempted
+this round; flagged as the concrete next step for these two files.
+`tests/tbx/test_local_string.py`'s pinned next-gap expectation for both
+files was updated to match. Wild tally unchanged at 27/84 (this closes
+a real, oracle-verified gap but doesn't fully decode either file on its
+own); full suite 2553 passed/16 skipped, Ruff clean, zero regressions.
+
 ### 2026-07-23 — forward DEF FN expression calls
 
 Closed forward-FN resolution in `ziptest.exe`, `kinetics.exe`,

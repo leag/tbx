@@ -63,6 +63,13 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
         if isinstance(e, ir.Not):
             return ir.Not(walk(e.operand))
         if isinstance(e, ir.Group):
+            # A Group can wrap a boolean condition too (an explicitly
+            # parenthesized AND-group joined into an outer OR, wild
+            # bmaster.exe/ifi.exe) -- route those through walk_cond so
+            # names inside the LogOp/RelOp tree get renamed, not just
+            # plain-expression Groups.
+            if isinstance(e.inner, (ir.LogOp, ir.RelOp)):
+                return ir.Group(walk_cond(e.inner))
             return ir.Group(walk(e.inner))
         if isinstance(e, ir.ArrayRef):  # ordinary array names are already
             # canonical; whole-array SUB params are Pxx placeholders entered

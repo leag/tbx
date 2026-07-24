@@ -197,11 +197,19 @@ def unparse(e) -> str:
 def unparse_cond(c) -> str:
     """Render an IF/WHILE condition (RelOp or LogOp tree, or a bare
     numeric-truthiness expression -- no explicit compare in source, e.g.
-    `LOOP UNTIL LEN(K$)`, wild metric.exe) without parentheses."""
+    `LOOP UNTIL LEN(K$)`, wild metric.exe) without parentheses.
+
+    A `Group` wrapping a LogOp/RelOp is an explicitly-parenthesized
+    AND-group used as one operand of an outer OR (`(A AND B) OR (C AND
+    D)`, wild bmaster.exe/ifi.exe) -- the parens are byte-significant, so
+    render them here rather than falling through to the plain-Expr
+    `unparse`, which doesn't know about condition-only nodes."""
     if isinstance(c, LogOp):
         return f"{unparse_cond(c.lhs)} {c.op} {unparse_cond(c.rhs)}"
     if isinstance(c, RelOp):
         return f"{unparse(c.lhs)} {c.op} {unparse(c.rhs)}"
+    if isinstance(c, Group):
+        return f"({unparse_cond(c.inner)})"
     return unparse(c)
 
 

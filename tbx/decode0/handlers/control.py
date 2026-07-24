@@ -638,6 +638,62 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             state.pend_cmp = None
             state.k += 3
             return True
+        if (
+            state.pend_cmp_str
+            and isinstance(state.bx, (ir.RelOp, ir.BinOp))
+            and (isinstance(state.bx, ir.RelOp) or state.bx.op in _JCC_RELOP_TRUE.values())
+            and state.k + 5 < len(state.ops)
+            and state.ops[state.k + 3][1] == "andaxbx"
+            and state.ops[state.k + 4][1] == "jcc"
+            and state.ops[state.k + 5][1] == "jmp"
+        ):
+            # `(term1 AND term2) OR (term3 AND term4)` -- an explicitly
+            # parenthesized AND-group used as one operand of an outer OR
+            # (wild bmaster.exe/ifi.exe). Each group's OWN first term never
+            # gets the usual self-test dispatch pair (no `or ax,ax`): TB
+            # folds the group as a plain VALUE (materialize -> movbxax ->
+            # materialize -> andaxbx) and reuses the group's OWN trailing
+            # jcc/jmp as the shared decision point for the WHOLE OR --
+            # jumping either into the next group (continue) or straight
+            # into ITS closing jcc/jmp with ax already holding this group's
+            # true short-circuit value (probe q_orofands). `state.bx` here
+            # already holds term1's raw relation (via the SAME no-dispatch-
+            # pair value path used for a lone term, e.g. t1_cmpfar/hebrew.exe)
+            # -- feed it to `_lift_bool_tail` exactly as if `_match_bool_term1`
+            # had matched it, with a synthetic short-circuit target (there is
+            # no real one to cross-check: this group's first term never had
+            # its own dispatch). `_lift_bool_tail`'s existing scan-ahead loop
+            # already recognizes the jmp landing on a SECOND group's own
+            # andaxbx as a multi-term deferral, so the AND/OR/AND fold and
+            # the outer OR join both fall out of the unmodified mechanism.
+            r1 = (
+                state.bx
+                if isinstance(state.bx, ir.RelOp)
+                else ir.RelOp(state.bx.op, state.bx.lhs, state.bx.rhs)
+            )
+            pb = {
+                "r1": r1,
+                "op": "AND",
+                "sc": state.ops[state.k + 3][0] + 2,
+                "start": state.cur,
+            }
+            state.bx = None
+            state.k, state.pend_bool, state.pend_bool_outer = _lift_bool_tail(
+                state.ops,
+                state.k,
+                state.pend_cmp,
+                pb,
+                state.put,
+                state.whiles,
+                state.ifs,
+                state.stmts,
+                state.flush_pending,
+                state.pend_bool_outer,
+                wrap_group=True,
+            )
+            state.pend_cmp = None
+            state.cur = None
+            return True
         state.k = _lift_while(
             state.ops,
             state.k,

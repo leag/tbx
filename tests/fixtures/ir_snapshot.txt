@@ -4794,6 +4794,12 @@ Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None)
 IfInline(cond=LogOp(op='OR', lhs=LogOp(op='OR', lhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=25)), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=27))), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=57))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='Z'),), newline=True, file=None, commas=None)))
 Resume(next_=False, target=3)
 
+## t1_orofands
+SubDef(name='SUB1', params=('A%', 'B$', 'C%', 'D$'), body=(IfInline(cond=LogOp(op='OR', lhs=Group(inner=LogOp(op='AND', lhs=RelOp(op='=', lhs=Var(name='A%'), rhs=Lit(value=0)), rhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='X')))), rhs=Group(inner=LogOp(op='AND', lhs=RelOp(op='=', lhs=Var(name='C%'), rhs=Lit(value=1)), rhs=RelOp(op='=', lhs=Var(name='D$'), rhs=StrLit(value='Y'))))), body=(Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None),)),))
+Assign(target=Var(name='E%'), value=Lit(value=0))
+CallStmt(name='SUB1', args=(Var(name='E%'), StrLit(value='X'), Var(name='E%'), StrLit(value='Y')))
+End()
+
 ## t1_orrel
 Assign(target=Var(name='A%'), value=Lit(value=1))
 Assign(target=Var(name='B%'), value=Lit(value=2))
@@ -10629,6 +10635,12 @@ End()
 Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None)
 IfInline(cond=LogOp(op='OR', lhs=LogOp(op='OR', lhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=25)), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=27))), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=57))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='Z'),), newline=True, file=None, commas=None)))
 Resume(next_=False, target=3)
+
+## v10_t1_orofands
+SubDef(name='SUB1', params=('A%', 'B$', 'C%', 'D$'), body=(IfInline(cond=LogOp(op='OR', lhs=Group(inner=LogOp(op='AND', lhs=RelOp(op='=', lhs=Var(name='A%'), rhs=Lit(value=0)), rhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='X')))), rhs=Group(inner=LogOp(op='AND', lhs=RelOp(op='=', lhs=Var(name='C%'), rhs=Lit(value=1)), rhs=RelOp(op='=', lhs=Var(name='D$'), rhs=StrLit(value='Y'))))), body=(Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None),)),))
+Assign(target=Var(name='E%'), value=Lit(value=0))
+CallStmt(name='SUB1', args=(Var(name='E%'), StrLit(value='X'), Var(name='E%'), StrLit(value='Y')))
+End()
 
 ## v10_t1_orrel
 Assign(target=Var(name='A%'), value=Lit(value=1))
