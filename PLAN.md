@@ -933,6 +933,48 @@ fixing the intra-inline-IF gap above will also close it.
 
 ---
 
+### Gap: LOCAL slot reuse across a FOR loop's scratch temps, DIAGNOSED, NOT FIXED (bmaster.exe/ifi.exe)
+
+Current blocker after the four closures below: `string BP push outside
+DEF FN at 0x9279`. Traced precisely (via a temporary instrumented
+`core.py` -- reverted, not committed): `frame["locals"]` for this SUB
+(`local_init:5:26`, offsets `{26,28,30,32,34}`) is missing offset `28`
+by the time `spush_bp:28` runs. Root cause: earlier in the SAME SUB, a
+`FOR I% = ... TO N%` loop uses the LOCAL at offset 26 as `I%`; the
+variable-limit-FOR branch (`core.py` ~line 1742, "A variable-limit FOR
+over a LOCAL reserves the SAME [step-temp, limit-temp] word pair...")
+assumes offsets `v+2`/`v+4` (28/30) are TB-synthesized scratch never
+declared in source, and pops `v+2` (28) from `locs` immediately once
+the header is decoded (mirroring the literal-limit case just above it).
+That assumption is right for the *step*-temp in isolation, but wrong
+here: TB's LOCAL frame allocator reuses that same physical slot for a
+GENUINELY SEPARATE, later-declared LOCAL STRING variable once the FOR
+loop's own scratch is no longer live (lifetime-based reuse, not a flat
+1:1 offset<->declared-name mapping) -- confirmed by the fact `28` is
+read again as a real string target (`movsi:28; strassign_bp`) well
+after the loop closes, unrelated to the loop var.
+
+This is a different, deeper problem than the two existing "hidden
+LOCAL"/deferred-pop mechanisms already in `core.py` (the limit-temp's
+own deferred-until-`proc_ret` pop just above this bug, and the plain
+var-STEP FOR temp handling) -- both of those still assume the popped
+offset is DEAD for the rest of the SUB. Here it comes back to life.
+Fixing this needs a way to *re-register* a previously-dropped offset as
+a fresh LOCAL, typed from whatever op references it next (mirroring
+`local_init`'s original seeding), rather than only ever removing
+entries. Not attempted -- this touches the allocator-lifetime
+assumption several other call sites share (`locs.pop(...)` appears at
+five distinct sites in `core.py`), so a fix needs to survey all of them
+before changing behavior, and should get its own oracle probe
+reproducing the exact "FOR over LOCAL I, then a later statement reuses
+I+2 as an unrelated LOCAL string" shape before landing anything.
+Flagged as the concrete next step for `bmaster.exe`/`ifi.exe`, which
+have now advanced through five consecutive gaps (materialization
+template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
+→ this) without fully closing -- each fix below is real and verified,
+but these two files have a long tail of previously-unwitnessed
+constructs specific to their by-ref/LOCAL-heavy coding style.
+
 ## Part III — Investigation history / handoff log
 
 ### 2026-07-23 — by-ref DOUBLE (`#`) params + LOCAL/by-ref `INCR`
