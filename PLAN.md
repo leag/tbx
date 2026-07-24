@@ -1206,10 +1206,48 @@ The rescue now accepts a proc-shaped body on that signal alone, leaving the
 CVT2TB guard otherwise intact. Witness `t1_inlinebp`, byte-exact both
 dialects.
 
-**`tbd73.exe` is NOT closed by this, for a reason worth recording**, since
-it is a genuine byte-level ambiguity rather than a missing template.
-`TBW73.INC` puts seventeen BARE `$INLINE` lines — the frame table — in the
-module body directly after `SUB Getftblptr INLINE`'s own `END SUB`:
+**Round 9b, same day — `tbd73.exe` cleared its whole inline region.** A
+first pass here concluded the SUB/data split was an unrecoverable ambiguity
+and stopped; that was wrong twice over, and both corrections are worth
+keeping.
+
+*First*, the split never needed recovering. `_try_inline_rescue` already
+emits the blob MINUS the terminating CB, and TB re-appends that CB on
+recompile — so one blob emitted as a single `$INLINE` list recompiles
+byte-identically no matter where the original source drew the line. Exactly
+the project's "normalize to one form that recompiles byte-identically"
+rule. *Second*, `TBW73.INC` shows there was no split at all: `SUB
+Getftblptr INLINE` is line 31 and its `END SUB` is line 65, so the frame
+table sits INSIDE the SUB. Witness `t1_inlinedata`, byte-exact both
+dialects.
+
+That exposed the real wall, one blob later: `SUB Openbox INLINE`'s list
+ends with a bare `&H5D` (`pop bp`), leaning on TB's appended `CB`, so its
+tail is `5D CB` — **byte-identical to a framed procedure's `pop bp; retf`
+epilogue**, which is precisely the CVT2TB false positive the guard exists
+for. Confirmed unresolvable locally: the tail cannot separate them, and a
+far_call-targets-the-body test does not either (both are called; phone.exe
+has 20 call sites into one helper).
+
+What DOES separate them is the chain. An unambiguous inline body
+immediately before — one whose own tail is not `5D`, so it needed no
+adjudication — proves the declaration region is the user's, and the blobs
+its skip-jmps bracket are theirs too. TBWINDOW seeds that chain with
+`Getftblptr` (frame-table tail `C4 CB`); `phone.exe` and `CVT2TB.EXE` have
+no seed and stay loud. Also folded in: the epilogue test now skips
+event-trap `CC` hooks backwards, after an intermediate version silently
+swallowed **seven** real gap-19-family framed helpers in `phone.exe`
+(`5D CC CB`) as inline blobs — caught by that file's own pinned marker.
+
+`tbd73.exe` now clears every inline SUB and stops at `unhandled byte 8c at
+0xce4b` (`mov ax,ss; mov ds,ax`, a segment-register reload) deep inside
+TBWINDOW's ORDINARY compiled SUBs — an unrelated template gap, possibly
+the same family as the stat/mdb segment-juggling entry further down.
+`sabpcv3.exe` lands on the same `8c` template at `0xcb3e`.
+
+The original (superseded) note follows, for the record: `TBW73.INC` puts
+seventeen `$INLINE` lines — the frame table — after `SUB Getftblptr
+INLINE`'s own code:
 
 ```
 SUB Getftblptr INLINE
@@ -1222,15 +1260,8 @@ $INLINE &HDA,&HBF,&HC0,&HD9,&HB3,&HC4 ' 1: SINGLE
 
 The compiler emits all of it as one uninterrupted byte run behind a single
 skip-jmp, appending its bare `CB` only at the very end (`0x97C0: e9 81 00`
-spans `0x97C3..0x9843`). So the SUB body and the bare `$INLINE` data are
-one blob and **the boundary between them is not present in the bytes** —
-`Getftblptr`'s own trailing `5D CB` is indistinguishable from frame-table
-data. Recovering this needs bare-`$INLINE`-outside-a-SUB support plus some
-non-byte evidence for the split (the far_call target gives the SUB's START,
-which may be enough: everything from the call target to the blob end that
-is not reachable as a procedure is the trailing data). Not attempted
-without a way to verify the split, so `tbd73.exe` stays loud at
-`unhandled byte c4 at 0x97c6`.
+spans `0x97C3..0x9843`). This was read as an unrecoverable SUB/data
+boundary; round 9b above shows it is neither unrecoverable nor a boundary.
 
 **Second half also left open, with a promoted probe.** The same construct
 WITHOUT unscannable bytes never reaches the rescue at all: `probe_inline_

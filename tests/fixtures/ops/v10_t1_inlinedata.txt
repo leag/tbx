@@ -1,0 +1,9 @@
+# v10_t1_inlinedata dialect=1.0 start=070B0
+070B3:movm_imm:288:1
+070B9:far_call:28883
+070BE:end
+070C1:segjmp:28880:2
+070D0:jmp:28898
+070D3:inline_sub:b'U\x8b\xec\xc4~\n]\xcb\xda\xbf\xc0\xd9\xb3\xc4'
+070E2:epilogue
+# commits

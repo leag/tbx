@@ -102,12 +102,13 @@ def test_scan_wild_far_jump_group():
         assert ops[-1][1] == "epilogue", name
 
 
-def test_scan_wild_sabpcv3_reaches_inline_sub():
+def test_scan_wild_sabpcv3_clears_its_inline_subs():
     # sabpcv3.exe was in the group above with zero jmpf ops because the scan
-    # stopped at its $SEGMENT transition. Following it reaches the inline SUB
-    # the metacommand moved -- `les di,[bp+N]` inside a $INLINE byte list,
-    # which the scanner does not yet recognize as a SUB ... INLINE body (the
-    # same wall wild tbd73.exe now stands at).
+    # stopped at its $SEGMENT transition. Following that, and then reading the
+    # inline SUBs the metacommand moved (whose $INLINE lists open with a proc
+    # prologue), carries it all the way into ordinary compiled SUB bodies --
+    # where it now stops on a segment-register reload, the same `8c` template
+    # wild tbd73.exe reaches.
     import pytest
 
     from tbx import decode0
@@ -116,7 +117,7 @@ def test_scan_wild_sabpcv3_reaches_inline_sub():
 
     exe = wild_hits_bytes("sabpcv3.exe")
     start, dialect = decode0.find_prologue(exe)
-    with pytest.raises(ValueError, match=r"unhandled byte c4 at 0xa406"):
+    with pytest.raises(ValueError, match=r"unhandled byte 8c at 0xcb3e"):
         decode0._scan(exe, start, dialect, set())
 
 
@@ -429,6 +430,28 @@ def test_decode_t1_inlinebp():
         assert emit0.emit(prog) == (
             "10 A% = 1\n20 CALL SUB1\n30 END\n$SEGMENT\n40 SUB SUB1 INLINE\n"
             "  $INLINE &H55, &H8B, &HEC, &HC4, &H7E, &H0A, &H5D, &HCB\nEND SUB\n"
+        ), stem
+
+
+def test_decode_t1_inlinedata():
+    # An inline SUB carrying trailing data inside its own body -- TBWINDOW's
+    # Getftblptr keeps the frame table in $INLINE lines between its own code
+    # and its END SUB, so the compiler emits one uninterrupted blob and the
+    # SUB/data boundary is not in the bytes at all. It does not need to be:
+    # TB appends the terminating CB itself, so re-emitting the whole blob as
+    # one $INLINE list recompiles byte-identically. Byte-exact, both dialects.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_inlinedata", "v10_t1_inlinedata"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        sub = next(s for s in prog if isinstance(s, ir.SubDef))
+        assert sub.body[0].data == bytes(
+            (0x55, 0x8B, 0xEC, 0xC4, 0x7E, 0x0A, 0x5D, 0xCB,
+             0xDA, 0xBF, 0xC0, 0xD9, 0xB3, 0xC4)
+        ), stem
+        assert emit0.emit(prog).endswith(
+            "40 SUB SUB1 INLINE\n  $INLINE &H55, &H8B, &HEC, &HC4, &H7E, &H0A, "
+            "&H5D, &HCB, &HDA, &HBF, &HC0, &HD9, &HB3, &HC4\nEND SUB\n"
         ), stem
 
 
@@ -2723,6 +2746,7 @@ if __name__ == "__main__":
     test_decode_t1_dblhook()
     test_decode_t1_fwdcalltgt()
     test_decode_t1_inlinebp()
+    test_decode_t1_inlinedata()
     test_decode_t1_segment()
     test_decode_t1_commonarr()
     test_decode_t1_commonarrmix()

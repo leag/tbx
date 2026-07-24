@@ -1572,22 +1572,37 @@ def _try_inline_rescue(exe: bytes, ops: list[tuple[Any, ...]]) -> int | None:
                     )
                 )
                 return target
-            if exe[target - 2] == 0xCB:
-                # ...unless the byte BEFORE the terminating CB is itself a CB.
-                # TB always appends a bare far RET to a SUB ... INLINE body, so
-                # a $INLINE list that already ends in its own `retf` produces
-                # the doubled `CB CB` -- which no framed procedure epilogue can
-                # (`pop bp; retf` ends 5D CB, `pop bp; retf N` ends with the
-                # immediate). That makes it safe to accept a proc-shaped body
-                # here (probe t1_inlinebp, whose list is the `push bp; mov
-                # bp,sp; les di,[bp+N]; pop bp; retf` shape TBWINDOW uses).
-                del ops[i + 1 :]
-                ops.append((body_start, "inline_sub", exe[body_start : target - 1]))
-                return target
-            return None  # shape, not $INLINE -- false positive witnessed
-            # in wild CVT2TB.EXE, whose OWN (unrelated, gap-19) construct
-            # ends in a legitimate `pop bp; retf` (5D CB) that coincidentally
-            # also satisfies the bare-target-1-byte-is-CB check above
+            j = target - 2
+            while j > body_start and exe[j] == 0xCC:
+                j -= 1  # event-trap poll hooks sit between the pop and the ret
+            if exe[j] == 0x5D and not (i and ops[i - 1][1] == "inline_sub"):
+                return None  # `pop bp; [hooks;] retf`: a COMPLETE framed
+                # procedure, not $INLINE -- false positives witnessed in wild
+                # CVT2TB.EXE (whose own unrelated gap-19 construct ends in a
+                # legitimate 5D CB that also satisfies the bare-CB check above)
+                # and, under event trapping where the epilogue is 5D CC CB, in
+                # wild phone.exe's seven gap-19-family framed helpers.
+                #
+                # This tail is genuinely ambiguous and cannot be resolved from
+                # the bytes: TB APPENDS the terminating CB, so a $INLINE list
+                # ending in a bare `pop bp` (TBWINDOW's Openbox does exactly
+                # that, leaning on the appended ret) produces the same 5D CB as
+                # a framed epilogue. What does separate them is the chain: an
+                # UNAMBIGUOUS inline body immediately before -- one whose own
+                # tail is not 5D, so it needed no adjudication -- means the
+                # declaration region is provably the user's, and the blobs its
+                # skip-jmps bracket are theirs too. TBWINDOW seeds that chain
+                # with Getftblptr, whose frame-table data ends C4 CB; phone.exe
+                # and CVT2TB.EXE have no such seed, so they stay loud.
+            # Anything else ending in the bare CB is an inline body that merely
+            # OPENS with the prologue shape. TB appends that CB itself, so a
+            # `$INLINE` list ending in its own `retf` gives `CB CB` and one
+            # ending in data gives `<data> CB`; neither can be a framed
+            # epilogue (`pop bp; retf N` ends with the immediate). Witnessed
+            # t1_inlinebp / t1_inlinedata, whose lists are the `push bp; mov
+            # bp,sp; les di,[bp+N]; pop bp; retf` shape TBWINDOW's Getftblptr
+            # uses, the second with the frame-table data that follows it inside
+            # the same SUB (wild tbd73.exe, confirmed against TBW73.INC).
         del ops[i + 1 :]
         ops.append((body_start, "inline_sub", exe[body_start : target - 1]))
         return target
