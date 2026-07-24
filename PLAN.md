@@ -102,6 +102,27 @@ edition/runtime tag, and evidence provenance.
   earlier "bracketing mismatch" diagnosis was a hex-arithmetic error in
   that round's own trace, not a real problem with the mechanism.)
 
+  **New lead, not attempted**: `CVT2TB.EXE`'s NEXT blocker past BODY_12
+  is `unhandled byte 16 at 0xa2ff`, immediately after an already-
+  recognized `stack_chk` op (`core.py`'s semantic-free Stack-test-
+  toggle room check, scan.py ~line 606). The 12 bytes right after
+  `stack_chk`'s own template are `16 b8 0a 00 03 c5 ce 50 16 b8 06 00
+  03 c5 ce 50 9a d5 00 00 00 83 c4 08 ce` -- decodes as: `push ss;
+  mov ax,0Ah; add ax,bp; into; push ax` (an SS:[BP+0Ah] far pointer
+  pushed as an argument), the SAME pattern again for `[BP+06h]`, then
+  `call far 0000:00D5h; add sp,8; into`. This looks like the Stack-
+  test-toggle ('S') VARIANT of calling a SUB/DEF-FN with by-ref
+  arguments -- a sibling of the already-calibrated stack-test GOSUB
+  convention (`vec==0x8A`, i32 start-relative offset, `fst_t1_gosub`)
+  but for a two-by-ref-arg CALL instead of a bare GOSUB, using a
+  literal low-memory far pointer (`0000:00D5`) rather than a
+  relative offset. Needs an oracle probe compiled WITH the 'S' toggle
+  (`--toggles S`, the lower-level `tb_v86_compile.js` path per this
+  repo's memory notes -- `oracle.compile_bas` has no toggle param) to
+  confirm the exact source shape (a SUB call with two args under
+  Stack-test) before touching the decoder. Flagged as the concrete
+  next step for `CVT2TB.EXE` specifically.
+
 - Updated: 2026-07-23 (fifth round, same day)
 - **Oracle correction**: earlier rounds this session incorrectly believed
   no `TBX_ORACLE` was available -- a stale relative-path `ls` check gave a
