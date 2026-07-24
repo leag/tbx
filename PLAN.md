@@ -1186,6 +1186,56 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — GOTO landing on a compiler skip-jmp's own position: DIAGNOSED, REVERTED
+
+Investigated the next `rsltest.exe` gap (continuing from the SELECT
+CASE line-counting closure below): `jump target 0xae40 is not a
+statement start`. `0xae40` (44608) is `jmp 0xB2FE` -- pure compiler
+glue skipping over the next interleaved `SUB`'s body (immediately after
+`SUB1`'s own `proc_ret`/`retf`), never scanned as a statement, so it
+has no entry in `state.addrs`. A plain top-level `GOTO` in main code
+(at `0xa720`) happens to target this exact glue-jmp position -- since
+main code and `SUB` declarations are interleaved in this file (each
+bracketed by its own skip-jmp), the corresponding source line's real
+continuation lands exactly where the compiler placed the "skip the
+next declaration" jump.
+
+Designed and partially implemented a fix: a new `state.glue_alias:
+dict[int,int]` recording `addr -> target` at every existing "glue, not
+a GOTO" recognition site in `core.py` (there are FIVE, not the four
+initially found -- an easy site to miss since they're not grouped
+together and only some share the literal comment text "glue, not a
+GOTO"), then having `_resolve_targets` (`lift.py`) follow the alias
+chain transitively when a target isn't found in the normal statement
+index. Verified zero regressions with all five sites wired up.
+
+Reverted before committing, though: the chain from `0xae40` hops
+through FIVE more glue-jmps (`0xb2fe -> 0xb5f8 -> 0xbbc3 -> 0xbcbb ->
+0xbd56 -> 0xbe1e`) and terminates at `0xbe1e`, which is not itself a
+`jmp` at all -- it's a `trap_hook`, tied to a SIXTH, distinct mechanism
+(an `addr < state.main_start` gate that "auto-opens" a `DEF FN` body
+once sequential scanning catches up to the chain's final target,
+mentioned only in passing in one of the five sites' own comments: "the
+DEF FN's own auto-open below"). Whatever real statement eventually
+claims address `0xbe1e` wasn't identified before time ran out on this
+investigation, and guessing at a sixth mechanism without understanding
+it would risk a subtle, hard-to-detect bug in `_resolve_targets` --
+used by every fixture, not just this one -- for a gap that, unlike the
+SELECT CASE line-counting fix, never reached a state verifiable by an
+oracle probe. `git checkout -- tbx/decode0/core.py tbx/decode0/lift.py`
+before anything was staged; working tree confirmed clean, full suite
+re-verified green.
+
+Precise next step for a follow-up session: trace what registers (or
+should register) address `0xbe1e` as a statement -- likely wherever
+the `addr < state.main_start` "DEF FN auto-open" logic lives (grep
+`main_start` in `core.py` for the comment "the DEF FN's own auto-open
+below") -- then re-attempt the same `glue_alias` chain-following
+design (still sound in principle; only the LAST hop was unresolved),
+verified with a dedicated oracle probe whose GOTO specifically targets
+a chained skip-jmp's own position (not yet witnessed by any existing
+fixture) before trusting it.
+
 ### 2026-07-24 — GOTO target past a multi-arm SELECT CASE inside a SUB body
 
 Eighth closure in the `rsltest.exe` full-decode goal (continuing from
