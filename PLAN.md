@@ -1186,6 +1186,48 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 10 (INVESTIGATED, REVERTED): forwarding an array param
+
+The `unhandled byte 8c` template `tbd73.exe` and `sabpcv3.exe` now stop on
+is **forwarding a whole-array PARAMETER onward as a whole-array CALL
+argument** — `TBW73.INC` relays `item$(1)` through `Makehmenu`. Two
+authored probes reproduce it on the first try and are promoted:
+`probe_arrfwd` (string array) and `probe_arrfwdnum` (numeric), both
+`CALL One(A())` / `SUB One(X(1))` / `CALL Two(X())`.
+
+Byte template (probe `arrfwdnum`, `0x8722`):
+
+```
+8c d0        mov ax,ss
+8e d8        mov ds,ax        <- descriptor is in the FRAME, not DGROUP
+8b f5        mov si,bp
+83 c6 06     add si,6
+cd d4        INT D4           <- arg_push_array, same vector as the DGROUP form
+ba 9a 00     mov dx,<DGROUP>
+8e da        mov ds,dx        <- restore
+```
+
+Implemented far enough to decode both probes end to end (a fused
+`arg_push_array_bp` scan op + a `cargs` handler registering the param in
+`proc_frame["array_params"]`, plus the DS-restore pair as glue) — then
+**reverted**, because the recovered source is not yet right and landing it
+would trade a loud failure for a wrong decode:
+
+- the relaying SUB never touches an element, so the ordinary element-access
+  path that TYPES an array parameter never runs; the header came out as
+  `SUB SUB1(A(1))` where the callee says `B$(1)`, and
+- registering a name eagerly leaked a spurious `SHARED P06()` into both
+  SUBs.
+
+The fix is an array analogue of the existing `fwd`/`fwdpending` machinery
+in `handlers/control.py::calls` — stage the pushed array as a placeholder
+and take its element type from the callee's own parameter in the same
+position (with the deferred variant for a callee defined later), marking
+the enclosing SUB's parameter to match so both headers agree, exactly as
+`q_fwd` does for scalars. That is the next step; the two probes are the
+ready-made witnesses and must round-trip byte-exact in both dialects
+before it lands.
+
 ### 2026-07-24 — Round 9: `SUB ... INLINE` whose byte list opens `55 8B EC`
 
 Third closure from `tbd73.exe`'s real source, and it narrows the wall both
