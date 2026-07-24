@@ -426,19 +426,25 @@ def _lift_bool_tail(
     Returns (next op index, still-open pend_bool or None, pend_outer or
     None)."""
     comb = "andaxbx" if pb["op"] == "AND" else "orax"
-    if [o[1] for o in ops[k : k + 6]] != [
-        "movax",
-        "jcc",
-        "incax",
-        comb,
-        "jcc",
+    want = [o[1] for o in ops[k : k + 6]]
+    # A FAR exit target (segment-crossing THEN/exit, wild mf.exe) uses
+    # `jmpf` (5 bytes, EA) instead of the near `jmp` (3 bytes, E9) here --
+    # same op-kind breadth `direct_bool` already accepts for its own
+    # dispatch-tail jmp.
+    if want[:5] == ["movax", "jcc", "incax", comb, "jcc"] and want[5] in (
         "jmp",
-    ] or ops[k][2] != 0xFFFF:
+        "jmpf",
+    ):
+        pass
+    else:
+        raise ValueError(f"compound-IF tail mismatch at {ops[k][0]:#x}")
+    if ops[k][2] != 0xFFFF:
         raise ValueError(f"compound-IF tail mismatch at {ops[k][0]:#x}")
     m_jcc, f_jcc, f_jmp = ops[k + 1], ops[k + 4], ops[k + 5]
     if m_jcc[3] != ops[k + 3][0] or m_jcc[2] not in _JCC_RELOP_TRUE:
         raise ValueError(f"compound-IF tail: bad Jcc skip at {m_jcc[0]:#x}")
-    if f_jcc[2] not in (0x74, 0x75) or f_jcc[3] != f_jmp[0] + 3:
+    jmp_len = 5 if f_jmp[1] == "jmpf" else 3
+    if f_jcc[2] not in (0x74, 0x75) or f_jcc[3] != f_jmp[0] + jmp_len:
         raise ValueError(f"compound-IF tail: bad dispatch pair at {f_jcc[0]:#x}")
     delta = 2 if pb["op"] == "AND" else 0
     if pb["sc"] != ops[k + 3][0] + delta:

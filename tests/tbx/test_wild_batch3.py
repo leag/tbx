@@ -262,6 +262,28 @@ def test_decode_t1_byreflong():
     )
 
 
+def test_wild_mf_compound_if_far_exit_advances():
+    # A compound-IF's second term closing dispatch pair can end in a FAR
+    # `jmpf` (EA, 5 bytes) instead of the near `jmp` (E9, 3 bytes) when the
+    # exit target crosses segments -- the same op-kind breadth `direct_bool`
+    # already accepts for its own dispatch-tail jmp, extended to
+    # `_lift_bool_tail`'s tail-shape check. Like the OTHER established
+    # `jmpf` closures in this campaign (PLAN.md, "Far JMP (EA) runtime-
+    # revision group"), the oracle's local toolchain doesn't reproduce
+    # segment-crossing jumps, so this is a wild-only witness, not an
+    # oracle-verified fixture.
+    import pytest
+
+    from tbx import decode0
+
+    from conftest import wild_hits_bytes
+
+    with pytest.raises(
+        ValueError, match=r"jump target 0x1d5b8 is not a statement start"
+    ):
+        decode0.decode_user_code(wild_hits_bytes("mf.exe"))
+
+
 def test_decode_t1_forvarlimfar():
     # Variable-limit integer FOR/NEXT whose body is beyond short-jump
     # range: the NEXT test uses the inverse signed condition + JMP instead
@@ -2156,6 +2178,7 @@ if __name__ == "__main__":
     test_decode_t1_local2()
     test_decode_t1_byref1()
     test_decode_t1_byreflong()
+    test_wild_mf_compound_if_far_exit_advances()
     test_decode_t1_forvarlimfar()
     test_decode_t1_midvarstart()
     test_decode_t1_inpfilearr()

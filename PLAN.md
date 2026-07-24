@@ -968,6 +968,26 @@ aside to simulate a bare CI checkout. `wild/probes/` (tracked in git,
 always present) is unaffected -- only genuine `wild/hits/` reads needed
 the guard.
 
+### 2026-07-23 — compound-IF dispatch-tail FAR exit (mf.exe)
+
+Closed `compound-IF tail mismatch` for `mf.exe`: `_lift_bool_tail`'s
+6-op dispatch-tail window hardcoded a near `jmp` (E9, 3 bytes) at its
+last position, but a segment-crossing exit target compiles a far
+`jmpf` (EA, 5 bytes) instead -- the exact same op-kind breadth
+`movax_family`'s `direct_bool` check already accepts for its own
+dispatch-tail jmp (`nxt[1] in ("jmp","jmpf")`, with the matching
+`5 if nxt[1]=="jmpf" else 3` byte-length math), just not yet mirrored
+into this sibling function. Not an oracle-fixture closure: per the
+existing "Far JMP (EA) runtime-revision group" entry elsewhere in this
+file, `jmpf` is a runtime-revision pattern the local oracle toolchain
+doesn't reproduce (no probe emits a genuine segment-crossing jump), so
+this is classified and tested the same way that entry's other jmpf
+closures were -- a pinned wild-witness test
+(`test_wild_mf_compound_if_far_exit_advances`), not a byte-exact
+fixture. `mf.exe` advances to a distinct, unrelated gap (`jump target
+0x1d5b8 is not a statement start`). Full suite 2594 passed/16 skipped,
+zero regressions, wild tally unchanged at 28/84 (advance, not closure).
+
 ### Gap: OR-flavored value-folded groups (`(A AND B) OR (C OR D)`), DIAGNOSED, REVERTED (grdscn.exe/kinder.exe/kinetics.exe/wb.exe)
 
 Tried this session, reverted before commit (no fixture/test landed, tree
