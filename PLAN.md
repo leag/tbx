@@ -933,6 +933,48 @@ fixing the intra-inline-IF gap above will also close it.
 
 ---
 
+### Gap: OR-flavored value-folded groups (`(A AND B) OR (C OR D)`), DIAGNOSED, REVERTED (grdscn.exe/kinder.exe/kinetics.exe/wb.exe)
+
+Tried this session, reverted before commit (no fixture/test landed, tree
+confirmed clean against HEAD): extending the `(A AND B) OR (C AND D)`
+mechanism (the "explicitly-parenthesized `(A AND B) OR (C AND D)`
+groups" entry below) to also accept an OR-flavored group closing via
+`oraxbx` (register combine) instead of the classical bare `orax`
+self-test -- i.e. `(A AND B) OR (C OR D)`, wild kinder.exe/kinetics.exe
+(confirmed via oracle probe `q_orofors3.bas`: a SUB with a 4-param
+`(A%=0 AND S1$="X") OR (S2$="Y" OR S3$="Z")` reproduces the identical
+missing-self-test-on-term1 shape for the OR sub-group too). The
+mechanical extension itself worked (`_lift_bool_tail`'s own_combs/
+alt_combs candidate matching, plus the top-level comb-list check) and
+advanced `grdscn.exe`/`kinder.exe`/`kinetics.exe` past their prior
+failure address with zero regressions in the existing suite -- but the
+DECODED TERM ORDER inside the OR sub-group came out REVERSED from
+source (`D$ = "Z" OR C$ = "Y"` instead of the source's `S2$="Y" OR
+S3$="Z"`), confirmed via oracle round-trip: recompiling the reversed
+spelling produces DIFFERENT bytes (MISMATCH). This is the SAME
+pre-existing, deliberately-untouched bug flagged in the very next
+Live-checkpoint entry below for `wb.exe`/`grdscn.exe` ("decodes but
+visibly mis-orders terms") -- `_lift_bool_tail`'s hardcoded `cond =
+LogOp(pb["op"], pb["r1"], r2)` always puts the FIRST-materialized term
+(moved to bx) on the LHS, but `int_bitwise_bx`'s own documented
+register convention says TB evaluates the RIGHT operand first (into
+bx) -- so for THIS combine shape the LHS/RHS may need swapping, but
+NOT unconditionally (the ALREADY-verified byte-exact AND-group fixture
+`t1_orofands` uses the SAME `LogOp(pb["op"], pb["r1"], r2)` ordering
+successfully, so a blind swap would likely break it). This is exactly
+the class of register-provenance/precedence problem the mixedbool
+campaign already reverted twice (see `int_bitwise_bx`'s own docstring:
+"TWO fix attempts tried live and REVERTED"). Do not attempt a blanket
+LHS/RHS swap; the real fix needs the same provenance-tracking rigor as
+`reg_logical_results` (which distinguishes "this BX value is an
+accumulated chain result" from "an independently computed group") before
+touching term order, and should be verified against BOTH the working
+AND-group fixture and a new OR-group fixture before landing. `wb.exe`
+did not advance at all under this change (its own gap is apparently a
+third, still-different shape). Flagged as a second concrete next step
+for the compound-boolean family, alongside the LOCAL-slot-reuse gap
+below.
+
 ### Gap: LOCAL slot reuse across a FOR loop's scratch temps, DIAGNOSED, NOT FIXED (bmaster.exe/ifi.exe)
 
 Current blocker after the four closures below: `string BP push outside
