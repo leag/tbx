@@ -1,0 +1,10 @@
+10 DIM A(10)
+20 COMMON A(1)
+30 A(1) = 5
+40 CALL Show
+50 END
+60 SUB Show
+70 DIM R$(50)
+80 R$(1) = "X"
+90 PRINT R$(1)
+100 END SUB

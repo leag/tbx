@@ -1186,6 +1186,40 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 12 (DIAGNOSED, NOT LANDED): COMMON arrays + STATIC arrays
+
+`tbd73.exe`'s current stop, `DGROUP layout not solvable (runtime slot grid
+anchor)`, is the COMMON-band layout meeting an ORDINARY STATIC array.
+Round 7 covered COMMON arrays plus COMMON scalars; it did not cover a
+static array living in the ordinary region past the band. Two authored
+probes reproduce it and are promoted:
+
+- `probe_commonarrsubstatic` — `DIM A(10)` + `COMMON A(1)` in main, plus
+  `DIM R$(50)` inside a SUB. Fails with tbd73.exe's exact message.
+- `probe_commonarrstatic` — the same with a second main-code `DIM B(5)`.
+  Fails differently and EARLIER, at `displacement 0x1b4 is neither scalar
+  nor array element`, so it is a second, related shape rather than a
+  duplicate.
+
+Evidence for `commonarrsubstatic`: `rt_blocks = [0x110]` (the COMMON'd A),
+`movsi` targets `0x110`, `0x1a4`, `0x1b4` (R$'s slot and element
+descriptors). The band solves as before — one 0x36 block at 0x110, band
+scalars, align16, a 16-byte stamp, ordinary band at stamp+0x10 — but the
+ordinary region is not scalars-only: R$'s own 0x36 STATIC SLOT sits there
+first, ahead of the scalars, and nothing looks for it. On the non-COMMON
+path the static count comes from the gap between `vb` and `rt_blocks[0]`;
+under COMMON the statics are AFTER the blocks, so that arithmetic gives
+nothing and `walk_run(ord_base)` walks straight into a slot record.
+
+The shape of the fix is clear — search a static count in the ordinary
+region the way the ds-anchor loop already does below `rt_blocks[0]`, i.e.
+call `find_statics` from `ord_base` with an unknown `n_want` and let the
+anchor validation pick the count. Deliberately NOT attempted on the
+remaining budget: `_layout` is the most delicate module in the codebase,
+this touches its anchor search, and it needs both probes byte-exact in both
+dialects plus a purely-additive golden regeneration before it can be
+trusted. The probes are the ready-made witnesses.
+
 ### 2026-07-24 — Round 11: gap 33 (INT EC sub 38) DIAGNOSED from source = static ERASE
 
 Gap 33 (`INT EC sub 38`, catalog/football/refund/varamort, open and
