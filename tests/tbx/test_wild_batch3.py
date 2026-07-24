@@ -262,6 +262,25 @@ def test_decode_t1_byreflong():
     )
 
 
+def test_decode_t1_inpfilearr():
+    # `INPUT #n, A$(i,j), B%(i,j)` -- a computed-index numeric array element
+    # as a LATER INPUT# target: the generic FP->int scratch bridge
+    # (`fistp <scratch>; fwait; movaxmem <scratch>`) lands the read value in
+    # ax, then the ordinary computed-element integer write (movm_ax_si)
+    # consumes it, unlike the direct fstp_si path a lone numeric target
+    # uses. Wild pfl.exe/pwinst.exe.
+    from tbx import decode0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_inpfilearr.exe"))
+    assert ir.InputFile(
+        1,
+        (
+            ir.ArrayRef("V0$", (ir.Var("A%"), ir.Var("B%"))),
+            ir.ArrayRef("V1%", (ir.Var("A%"), ir.Var("B%"))),
+        ),
+    ) in prog
+
+
 def test_decode_t1_byrefdbl():
     # By-ref DOUBLE (`#`) SUB param, the m64 sibling of t1_byreflong's LONG
     # family: FLD/FSTP/FCOMP onto/from/against the FP stack via `les
@@ -2112,6 +2131,7 @@ if __name__ == "__main__":
     test_decode_t1_local2()
     test_decode_t1_byref1()
     test_decode_t1_byreflong()
+    test_decode_t1_inpfilearr()
     test_decode_t1_byrefdbl()
     test_decode_t1_localincr()
     test_decode_t1_localdecr()

@@ -4208,6 +4208,16 @@ Assign(target=Var(name='A'), value=Call(name='INP', args=(Lit(value=888),)))
 Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 End()
 
+## t1_inpfilearr
+Dim(name='V0$', bounds=(3, 3), also=())
+Dim(name='V1%', bounds=(3, 3), also=())
+Open(mode=StrLit(value='I'), num=1, file=StrLit(value='TEST.DAT'), reclen=None, for_as=True)
+Assign(target=Var(name='A%'), value=Lit(value=1))
+Assign(target=Var(name='B%'), value=Lit(value=1))
+InputFile(num=1, vars=(ArrayRef(name='V0$', indices=(Var(name='A%'), Var(name='B%'))), ArrayRef(name='V1%', indices=(Var(name='A%'), Var(name='B%')))))
+Close(num=1)
+End()
+
 ## t1_inpmixed
 Input(prompt=None, var=(Var(name='A$'), Var(name='B')), comma=False, semi=False)
 Print(items=(Var(name='A$'), Var(name='B')), newline=True, file=None, commas=None)
@@ -10151,6 +10161,16 @@ End()
 ## v10_t1_inpf
 Assign(target=Var(name='A'), value=Call(name='INP', args=(Lit(value=888),)))
 Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
+End()
+
+## v10_t1_inpfilearr
+Dim(name='V0$', bounds=(3, 3), also=())
+Dim(name='V1%', bounds=(3, 3), also=())
+Open(mode=StrLit(value='I'), num=1, file=StrLit(value='TEST.DAT'), reclen=None, for_as=True)
+Assign(target=Var(name='A%'), value=Lit(value=1))
+Assign(target=Var(name='B%'), value=Lit(value=1))
+InputFile(num=1, vars=(ArrayRef(name='V0$', indices=(Var(name='A%'), Var(name='B%'))), ArrayRef(name='V1%', indices=(Var(name='A%'), Var(name='B%')))))
+Close(num=1)
 End()
 
 ## v10_t1_inpmixed

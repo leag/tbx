@@ -752,6 +752,36 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                 else:
                     state.put(ir.Assign(ref, v), state.cur)
                 state.cur = None
+        elif (
+            sik[1] == "fistp"
+            and state.k + ao + 4 < len(state.ops)
+            and state.ops[state.k + ao + 2][1] == "fwait"
+            and state.ops[state.k + ao + 3][1] == "movaxmem"
+            and state.ops[state.k + ao + 3][2] == sik[2]
+            and state.ops[state.k + ao + 4][1] == pre + "movm_ax_si"
+        ):
+            # FP-stack value stored as INTEGER into a computed array element
+            # (`INPUT #n, A$(i,j), B%(i,j)`, wild pfl.exe/pwinst.exe): the
+            # generic FP->int scratch bridge (`fistp <scratch>; fwait;
+            # movaxmem <scratch>`, the same IDX% bridge used elsewhere)
+            # lands the value in ax, THEN the ordinary INTEGER element write
+            # (movm_ax_si) consumes it -- unlike the plain fstp_si case
+            # above, the value never sits on the FP stack in a form this
+            # dispatch's ref-typed elif chain can match directly. Reuse
+            # the SAME _FREAD/_READDATA/_INPUTREAD sentinel handling since
+            # the source, not the store width, decides which one applies.
+            v = state.stack.pop()
+            if v is _FREAD:
+                state._fread_target(ref)
+            elif v is _READDATA:
+                state._readdata_target(ref)
+            elif v is _INPUTREAD:
+                state._input_target(ref, is_str=False)
+            else:
+                state.put(ir.Assign(ref, v), state.cur)
+            state.cur = None
+            state.k += ao + 5
+            return True
         elif sik[1] in (pre + "fld_si", pre + "fld_si64", pre + "fild_si32"):
             state.stack.append(ref)
         elif sik[1] in (pre + "fstp_si", pre + "fstp_si64", pre + "fstp_si32"):
