@@ -77,6 +77,15 @@ class Incr:
 
 
 @dataclass(frozen=True)
+class Decr:
+    """DECR var: the decrement-by-1 sibling of `Incr` (bare `dec`), same LOCAL-
+    only non-identity with `var = var - 1` -- wild horses.exe, probe
+    q_localdecr."""
+
+    var: object  # Var (always a LOCAL scalar; the DGROUP case normalizes away)
+
+
+@dataclass(frozen=True)
 class Gosub:
     target: object  # statement index (int); ("addr", a) sentinel pre-resolve
 

@@ -295,6 +295,21 @@ def test_decode_t1_localincr():
     )
 
 
+def test_decode_t1_localdecr():
+    # `DECR X%` on a LOCAL scalar: the decrement sibling of t1_localincr's
+    # bare `inc [bp+d8]`, same LOCAL-only non-identity with `X% = X% - 1`.
+    # Wild horses.exe.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_localdecr.exe"))
+    sub = prog[0]
+    assert sub.body[2] == ir.Decr(ir.Var("A%"))
+    assert emit0.emit(prog) == (
+        "10 SUB SUB1\n  LOCAL A%\n  A% = 5\n  DECR A%\n  PRINT A%\nEND SUB\n"
+        "20 CALL SUB1\n30 END\n"
+    )
+
+
 def test_decode_t1_byrefincr():
     # `INCR A%` on a by-ref INTEGER SUB param: the far/by-ref sibling of
     # t1_localincr's LOCAL case, same bare-INC-vs-addm_ax_si non-identity.
@@ -2099,6 +2114,7 @@ if __name__ == "__main__":
     test_decode_t1_byreflong()
     test_decode_t1_byrefdbl()
     test_decode_t1_localincr()
+    test_decode_t1_localdecr()
     test_decode_t1_byrefincr()
     test_decode_t1_incr1()
     test_decode_t1_poolrun()

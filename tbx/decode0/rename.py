@@ -130,6 +130,8 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.NextStmt(walk(s.var))
         if isinstance(s, ir.Incr):
             return ir.Incr(walk(s.var))
+        if isinstance(s, ir.Decr):
+            return ir.Decr(walk(s.var))
         if isinstance(s, ir.While):
             return ir.While(walk_cond(s.cond))
         if isinstance(s, ir.Do):

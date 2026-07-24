@@ -1,0 +1,16 @@
+# v10_t1_localdecr dialect=1.0 start=070B0
+070B3:jmp:28899
+070B6:proc_enter
+070B9:local_init:1:6
+070CD:mov_bp_imm:6:5
+070D2:dec_bp:6
+070D5:fild_bp:6
+070D9:rt:187
+070DB:rt:184
+070DF:proc_ret:2
+070E3:sub_sp:2
+070E6:far_call:28854
+070EB:end
+070EE:epilogue
+# commits
+070DD

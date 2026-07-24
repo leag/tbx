@@ -4411,6 +4411,11 @@ SubDef(name='SUB1', params=(), body=(Local(names=('V0()', 'V1()')), Dim(name='V0
 CallStmt(name='SUB1', args=())
 End()
 
+## t1_localdecr
+SubDef(name='SUB1', params=(), body=(Local(names=('A%',)), Assign(target=Var(name='A%'), value=Lit(value=5)), Decr(var=Var(name='A%')), Print(items=(Var(name='A%'),), newline=True, file=None, commas=None)))
+CallStmt(name='SUB1', args=())
+End()
+
 ## t1_localforstepm1
 SubDef(name='SUB1', params=(), body=(Local(names=('A%',)), For(var=Var(name='A%'), init=Lit(value=5), limit=Lit(value=1), step=Lit(value=-1)), Print(items=(Var(name='A%'),), newline=True, file=None, commas=None), NextStmt(var=Var(name='A%'))))
 CallStmt(name='SUB1', args=())
@@ -10319,6 +10324,11 @@ End()
 
 ## v10_t1_localarrunused
 SubDef(name='SUB1', params=(), body=(Local(names=('V0()', 'V1()')), Dim(name='V0', bounds=(Lit(value=2),), also=())))
+CallStmt(name='SUB1', args=())
+End()
+
+## v10_t1_localdecr
+SubDef(name='SUB1', params=(), body=(Local(names=('A%',)), Assign(target=Var(name='A%'), value=Lit(value=5)), Decr(var=Var(name='A%')), Print(items=(Var(name='A%'),), newline=True, file=None, commas=None)))
 CallStmt(name='SUB1', args=())
 End()
 

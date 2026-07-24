@@ -52,6 +52,7 @@ from tbx.ir.stmt_nodes import (
     Common,
     Data,
     DateTimeSet,
+    Decr,
     DefFn,
     DefSeg,
     DefType,
@@ -249,6 +250,8 @@ def _us_decl(s) -> str | None:
         return f"NEXT {s.var.name}"
     if isinstance(s, Incr):
         return f"INCR {s.var.name}"
+    if isinstance(s, Decr):
+        return f"DECR {s.var.name}"
     if isinstance(s, Return):
         return "RETURN" if s.target is None else f"RETURN {s.target}"
     if isinstance(s, Wend):

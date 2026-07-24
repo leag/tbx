@@ -1,0 +1,16 @@
+# t1_localdecr dialect=1.1 start=08700
+08703:jmp:34611
+08706:proc_enter
+08709:local_init:1:6
+0871D:mov_bp_imm:6:5
+08722:dec_bp:6
+08725:fild_bp:6
+08729:rt:187
+0872B:rt:184
+0872F:proc_ret:2
+08733:sub_sp:2
+08736:far_call:34566
+0873B:end
+0873E:epilogue
+# commits
+0872D
