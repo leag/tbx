@@ -179,14 +179,20 @@ _OPAQUE_HELPER_BODY_10 = bytes.fromhex(
     89 04 5d cb
     """
 )
-# An eleventh, much larger framed helper (wild phone.exe): same overall
+# An eleventh, much larger framed helper (wild phone.exe): identified by
+# the user as TBWINDOW 5.0, (c) 1988 Richard D. Fothergill -- a
+# commercial third-party TB window-management add-on library, not an
+# in-house Borland runtime routine like BODY..BODY_10. Same overall
 # push-bp/push-ds/push-es framing and "pop es; pop ds; pop bp; int3;
-# retf" TB 1.1 epilogue as the BODY..BODY_8/BODY_9/BODY_10 family, but
-# a genuinely different, much bigger routine -- its own CALL immediately
-# leads into an embedded DATA table (box-drawing/CGA character codes,
-# not instructions) before the real code resumes near the end. Exact
+# retf" TB 1.1 epilogue as the rest of the family; its own CALL
+# immediately leads into an embedded DATA table (box-drawing/CGA
+# character codes, not instructions) before the real code resumes near
+# the end -- consistent with a window-border character set. Exact
 # byte-fingerprint match, same as every other opaque helper; size alone
-# doesn't change the recognition mechanism.
+# doesn't change the recognition mechanism. The jmp-to-jmp thunk chain
+# immediately following this body (phone.exe's next blocker) is very
+# plausibly TBWINDOW's own public-routine dispatch table, given a
+# commercial library would need many stable entry points.
 _OPAQUE_HELPER_BODY_11 = bytes.fromhex(
     """
     55 8b ec 1e 06 e8 4e 00 00 00 00 00 00 00 00 00
@@ -300,6 +306,17 @@ _OPAQUE_HELPER_BODY_11 = bytes.fromhex(
     89 07 fb c3 e8 bb fc 07 1f 5d cc cb
     """
 )
+# A twelfth framed helper (wild CVT2TB.EXE): a small, program-specific
+# directory-search primitive (`AH=4Eh` DOS Find First, INT 21h) wrapped
+# in the SAME push-bp/mov-bp,sp (alternate `89 e5` encoding)/push-es/
+# push-ds framing and bare-CB epilogue as the rest of this family --
+# exact byte-fingerprint match, same recognition mechanism regardless
+# of whether the routine is shared across files or (as here) unique to
+# one program.
+_OPAQUE_HELPER_BODY_12 = bytes.fromhex(
+    "5589e5061ec47e06268b0d81e1ff7f83f9017f0431c0eb1b3e8b160000521f"
+    "268b5502b44eb93700cd21730431c0eb03b8ffffc57e0a3e89051f075dcb"
+)
 _OPAQUE_HELPER_BODIES = (
     _OPAQUE_HELPER_BODY,
     _OPAQUE_HELPER_BODY_2,
@@ -318,6 +335,7 @@ _OPAQUE_HELPER_BODIES = (
     _OPAQUE_HELPER_BODY_9,
     _OPAQUE_HELPER_BODY_10,
     _OPAQUE_HELPER_BODY_11,
+    _OPAQUE_HELPER_BODY_12,
 )
 _OPAQUE_HELPER_PARAM_OFFSETS = (0x1E, 0x1A, 0x16, 0x12, 0x0E, 0x0A, 0x06)
 

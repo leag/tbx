@@ -306,6 +306,23 @@ def test_decode_t1_forvarlimneg():
     assert loops == [ir.For(ir.Var("B%"), ir.Lit(5), ir.Var("A%"), ir.Lit(-1))]
 
 
+def test_wild_cvt2tb_opaque_helper_advances():
+    # A twelfth framed helper (BODY_12, wild CVT2TB.EXE): a small,
+    # program-specific directory-search primitive (AH=4Eh DOS Find
+    # First, INT 21h) wrapped in the same framing/epilogue convention as
+    # the rest of the family -- unlike BODY_11 (a known third-party
+    # library, TBWINDOW), this one is unique to this one program, which
+    # the fingerprint mechanism handles identically either way.
+    import pytest
+
+    from tbx import decode0
+
+    from conftest import wild_hits_bytes
+
+    with pytest.raises(ValueError, match=r"unhandled byte 16 at 0xa2ff"):
+        decode0.decode_user_code(wild_hits_bytes("CVT2TB.EXE"))
+
+
 def test_wild_phone_opaque_helper_advances():
     # An eleventh framed helper (BODY_11, wild phone.exe): same overall
     # framing/epilogue as the BODY..BODY_10 family, but much larger
@@ -2269,6 +2286,7 @@ if __name__ == "__main__":
     test_decode_t1_localdbl()
     test_decode_t1_localdblcmp()
     test_decode_t1_forvarlimneg()
+    test_wild_cvt2tb_opaque_helper_advances()
     test_wild_phone_opaque_helper_advances()
     test_wild_filepatc_opaque_helpers_advance()
     test_wild_mf_compound_if_far_exit_advances()

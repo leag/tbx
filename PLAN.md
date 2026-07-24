@@ -51,8 +51,8 @@ edition/runtime tag, and evidence provenance.
 
 ### Live checkpoint
 
-- Updated: 2026-07-23 (a long later round, same day) -- 16 commits, wild
-  tally 27/84 -> 28/84 decode-ok, full suite 2548 -> 2611 passed, zero
+- Updated: 2026-07-23 (a long later round, same day) -- 18 commits, wild
+  tally 27/84 -> 28/84 decode-ok, full suite 2548 -> 2612 passed, zero
   regressions. Full detail in Part III's dated entries below (newest
   first, all "2026-07-23"); short index of what landed, oldest to
   newest: `(A AND B) OR (C AND D)` explicit-parenthesized compound-
@@ -63,14 +63,26 @@ edition/runtime tag, and evidence provenance.
   limit FOR/NEXT long-distance body and STEP -1 (plus an unrelated
   `f["idx"]` KeyError bug fix); far `jmpf` in a compound-IF dispatch
   tail; a CALL statement's address-tracking bug across a loop backward
-  branch; DOUBLE-precision LOCAL variables; three new opaque
-  framed-helper fingerprints (BODY_9/10/11, filepatc.exe + phone.exe,
-  found using the now-installed `debug` extra's `cfgview`/`iced-x86`
-  tooling). Every closure is either oracle-verified byte-exact or (for
-  wild-only patterns the local oracle can't reproduce: far `jmpf`,
-  opaque helpers) a pinned wild-witness test, consistent with this
-  campaign's existing conventions either way.
-  **Three attempts were investigated and explicitly NOT landed** (each
+  branch; DOUBLE-precision LOCAL variables; four new opaque
+  framed-helper fingerprints (BODY_9/10/11/12: two in filepatc.exe, one
+  in phone.exe, one in CVT2TB.EXE, found using the now-installed
+  `debug` extra's `cfgview`/`iced-x86` tooling). Every closure is
+  either oracle-verified byte-exact or (for wild-only patterns the
+  local oracle can't reproduce: far `jmpf`, opaque helpers) a pinned
+  wild-witness test, consistent with this campaign's existing
+  conventions either way.
+  **Provenance note**: the user identified `BODY_11` (phone.exe's
+  1740-byte helper) by sight as **TBWINDOW 5.0, (c) 1988 Richard D.
+  Fothergill** -- a commercial third-party TB window-management add-on
+  library, not an in-house Borland runtime routine like BODY..BODY_10.
+  Explains the embedded box-drawing character table (a window-border
+  glyph set) and makes the jmp-to-jmp thunk chain immediately following
+  it (phone.exe's current blocker) very plausibly TBWINDOW's own
+  public-routine dispatch table -- a commercial library would need many
+  stable entry points. Checked the rest of `wild/hits` for the same
+  byte fingerprint (none found), so this is a `phone.exe`-only closure
+  for now, not a corpus-wide one.
+  **Two attempts were investigated and explicitly NOT landed** (each
   has its own dated Part III entry with the full trace): (1) an
   OR-flavored sibling of the AND-group work above -- mechanically
   works but decodes with the SAME reversed-term-order bug already
@@ -78,14 +90,17 @@ edition/runtime tag, and evidence provenance.
   problem this campaign has already reverted twice before; (2) LOCAL
   slot reuse across a FOR loop's own scratch temps (`bmaster.exe`/
   `ifi.exe`) -- diagnosed precisely, needs a re-registration mechanism
-  the `locs.pop()`-based design doesn't have; (3) `CVT2TB.EXE`'s
-  `unhandled byte c4` -- a hand-written DOS-interrupt helper (directory
-  search, `AH=4Eh`) whose `jmp`/`retf` framing doesn't line up with
-  `_try_inline_rescue`'s single-most-recent-jmp bracketing. `phone.exe`
-  also has a confirmed-but-unexplored jmp-to-jmp thunk chain past its
-  own new BODY_11 closure. All five are concrete, well-scoped next
-  steps for a future round -- do not re-derive them, they're already
-  written up in detail below.
+  the `locs.pop()`-based design doesn't have. `phone.exe` also has a
+  confirmed-but-unexplored jmp-to-jmp thunk chain (very likely
+  TBWINDOW's dispatch table, see above) past its own BODY_11 closure.
+  All three are concrete, well-scoped next steps for a future round --
+  do not re-derive them, they're already written up in detail below.
+  (`CVT2TB.EXE`'s `unhandled byte c4`, previously flagged here as a
+  bracketing mismatch, turned out to be the SAME already-working
+  `_try_inline_rescue` mechanism correctly finding the boundary but
+  hitting an unregistered fingerprint -- BODY_12 above closes it; the
+  earlier "bracketing mismatch" diagnosis was a hex-arithmetic error in
+  that round's own trace, not a real problem with the mechanism.)
 
 - Updated: 2026-07-23 (fifth round, same day)
 - **Oracle correction**: earlier rounds this session incorrectly believed
