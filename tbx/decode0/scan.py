@@ -143,6 +143,42 @@ _OPAQUE_HELPER_BODY_8 = bytes.fromhex(
     """
 )
 _OPAQUE_HELPER_BODY_8_V10 = _OPAQUE_HELPER_BODY_8[:-2] + b"\xcb"
+# A ninth framed helper (wild filepatc.exe, TB 1.0): same push-bp/push-ds/
+# push-es framing, bp-relative param reads, and CGA snow-avoidance
+# vertical-retrace poll (`in al,dx; test al,1`) as the BODY/BODY_2..8
+# family, but its own epilogue ends directly `pop bp; cld; retf` -- no
+# INT3 padding byte before the far RET the way the resume.exe family's
+# TB 1.1 builds do, so (unlike BODY_3..8) this is not paired with a
+# separate "_V10" INT3-stripped transform: only this one exact shape is
+# witnessed, and inventing an un-witnessed TB 1.1 padded variant would be
+# a guess, not a fingerprint.
+_OPAQUE_HELPER_BODY_9 = bytes.fromhex(
+    """
+    55 8b ec 1e 06 8b 76 0a ad 8b 76 16 8b 1c 8b 76
+    06 8b 3c 8b 76 0e 8b 0c 8b 76 12 8b 34 8e c0 8e
+    db fc 3b c3 75 0b 3b f7 77 07 03 f1 03 f9 4e 4f
+    fd 8c d8 3d 00 b8 74 0c 8c c0 3d 00 b8 74 05 f3
+    a4 eb 26 90 b4 05 cd 66 80 fb 00 74 f2 1e 33 c0
+    8e d8 8b 16 63 04 83 c2 06 1f ec a8 01 75 fb fa
+    ec a8 01 74 fb a4 fb e2 f1 07 1f 5d fc cb
+    """
+)
+# A tenth helper, immediately adjacent to BODY_9 in filepatc.exe (its own
+# JMP lands right after BODY_9's retf) -- a segment-selecting block-move
+# dispatcher (picks a source/dest side via a small jump table, then
+# rep movsb's), same push-bp/push-ds/push-es framing and direct
+# `pop bp; retf` epilogue (no INT3 padding, matching BODY_9).
+_OPAQUE_HELPER_BODY_10 = bytes.fromhex(
+    """
+    55 8b ec 1e 06 8b 76 06 8b 1c 8b 76 0a ad 8b 76
+    0e 8b 14 50 33 f6 ad 8b 76 12 8b 0c 8b 74 02 80
+    e5 7f 8e d8 58 e3 2d 51 8b ce 83 fb 00 75 0b 1e
+    07 8e da 8b f0 8b f9 eb 12 90 83 fb 01 74 06 b8
+    02 00 eb 16 90 8e c2 8b f8 8b f1 59 fc f3 a4 33
+    c0 eb 08 90 b8 01 00 eb 02 90 59 07 1f 8b 76 16
+    89 04 5d cb
+    """
+)
 _OPAQUE_HELPER_BODIES = (
     _OPAQUE_HELPER_BODY,
     _OPAQUE_HELPER_BODY_2,
@@ -158,6 +194,8 @@ _OPAQUE_HELPER_BODIES = (
     _OPAQUE_HELPER_BODY_7_V10,
     _OPAQUE_HELPER_BODY_8,
     _OPAQUE_HELPER_BODY_8_V10,
+    _OPAQUE_HELPER_BODY_9,
+    _OPAQUE_HELPER_BODY_10,
 )
 _OPAQUE_HELPER_PARAM_OFFSETS = (0x1E, 0x1A, 0x16, 0x12, 0x0E, 0x0A, 0x06)
 

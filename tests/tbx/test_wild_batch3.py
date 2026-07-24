@@ -306,6 +306,30 @@ def test_decode_t1_forvarlimneg():
     assert loops == [ir.For(ir.Var("B%"), ir.Lit(5), ir.Var("A%"), ir.Lit(-1))]
 
 
+def test_wild_filepatc_opaque_helpers_advance():
+    # Two more framed far-procedure helpers (BODY_9/BODY_10, wild
+    # filepatc.exe), sitting back-to-back right after the already-
+    # calibrated BODY..BODY_8 family (all from wild resume.exe): same
+    # push-bp/push-ds/push-es framing and CGA-adjacent bp-relative param
+    # convention, but each ends directly `pop bp; retf` with no INT3
+    # padding byte, so neither is paired with a "_V10" transform the way
+    # BODY_3..8 are -- only these exact two shapes are witnessed. Like
+    # the other opaque-helper closures, this is coverage-only recovery
+    # (fingerprint match, not a byte pattern with an oracle-verifiable
+    # source spelling), so it's tested as a wild-witness advance.
+    import pytest
+
+    from tbx import decode0
+
+    from conftest import wild_hits_bytes
+
+    with pytest.raises(
+        ValueError,
+        match=r"displacement 0x1054 is neither scalar nor array element",
+    ):
+        decode0.decode_user_code(wild_hits_bytes("filepatc.exe"))
+
+
 def test_wild_mf_compound_if_far_exit_advances():
     # A compound-IF's second term closing dispatch pair can end in a FAR
     # `jmpf` (EA, 5 bytes) instead of the near `jmp` (E9, 3 bytes) when the
@@ -2225,6 +2249,7 @@ if __name__ == "__main__":
     test_decode_t1_localdbl()
     test_decode_t1_localdblcmp()
     test_decode_t1_forvarlimneg()
+    test_wild_filepatc_opaque_helpers_advance()
     test_wild_mf_compound_if_far_exit_advances()
     test_decode_t1_forvarlimfar()
     test_decode_t1_midvarstart()
