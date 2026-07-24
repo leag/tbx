@@ -1186,6 +1186,25 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 13: a chained skip-jmp landing on a block DEF FN
+
+`tbd73.exe`'s declaration region is a clean chain of skip-jmps through its
+inline SUBs (`0x9844 -> 0x9f22 -> 0xa024 -> ... -> 0xa368`), each matched by
+site 4's `addr == main_start` + next-op-is-a-definition test. The last hop
+lands on a block DEF FN, which has NO `proc_enter` of its own -- the next op
+is its `mov [bp+0],0` result-slot zero-fill -- so the test missed,
+`main_start` stopped advancing, and the DEF FN's own auto-open (gated on
+`addr < main_start`) never fired: `LOCAL zero-fill outside a fresh SUB/DEF
+FN body at 0xa370`.
+
+Fixed by adding `mov_bp_imm` to site 4's accepted next-op set. Safe there
+because `addr == main_start` already pins the jmp to exactly where the
+previous hop landed -- this is not a general "any mov_bp_imm opens a def"
+rule. Witness `t1_inlinethendef` (an `INLINE` SUB followed by a block
+`DEF FN`, the TBWINDOW ordering), byte-exact both dialects.
+
+`tbd73.exe` advances to `[bp+0] outside the open LOCAL frame`.
+
 ### 2026-07-24 — Round 12: COMMON arrays + ORDINARY STATIC arrays (LANDED)
 
 `tbd73.exe`'s current stop, `DGROUP layout not solvable (runtime slot grid

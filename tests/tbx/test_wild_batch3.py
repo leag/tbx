@@ -452,6 +452,26 @@ def test_decode_t1_erasestatic():
         ), stem
 
 
+def test_decode_t1_inlinethendef():
+    # A chained declaration skip-jmp landing on a block DEF FN: a DEF FN has
+    # no proc_enter of its own, so the chain's next-op test (proc_enter /
+    # inline_sub / opaque_helper) missed it, main_start stopped advancing, and
+    # the DEF FN never auto-opened. Its `mov [bp+0],0` result-slot zero-fill
+    # is the marker; safe to accept because `addr == main_start` already pins
+    # the jmp to exactly where the previous hop landed. Found via wild
+    # tbd73.exe, whose TBWINDOW DEF FN run follows its inline SUBs.
+    # Byte-exact, both dialects.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_inlinethendef", "v10_t1_inlinethendef"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        fn = next(s for s in prog if isinstance(s, ir.DefFn))
+        assert fn.is_block and fn.name == "FNFN1", stem
+        assert emit0.emit(prog).endswith(
+            "60 DEF FNFN1(B)\n  LOCAL C\n  C = B + 1\n  FNFN1 = C\nEND DEF\n"
+        ), stem
+
+
 def test_decode_t1_commonarrstatic():
     # The ORDINARY region past the COMMON band is not scalars-only: an
     # ordinary STATIC array's own 0x36 slot sits there first, ahead of the
@@ -2857,6 +2877,7 @@ if __name__ == "__main__":
     test_decode_t1_fwdcalltgt()
     test_decode_t1_inlinebp()
     test_decode_t1_erasestatic()
+    test_decode_t1_inlinethendef()
     test_decode_t1_commonarrstatic()
     test_decode_t1_erasepre()
     test_decode_t1_arrfwd()

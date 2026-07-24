@@ -4353,6 +4353,14 @@ CallStmt(name='SUB1', args=())
 End()
 SubDef(name='SUB1', params=(), body=(Inline(data=b'U\x8b\xec\xc4~\n]\xcb\xda\xbf\xc0\xd9\xb3\xc4'),))
 
+## t1_inlinethendef
+Assign(target=Var(name='A%'), value=Lit(value=1))
+CallStmt(name='SUB1', args=())
+Print(items=(FnCall(name='FNFN1', args=(Lit(value=2),)),), newline=True, file=None, commas=None)
+End()
+SubDef(name='SUB1', params=(), body=(Inline(data=b'U\x8b\xec\xc4~\n]\xcb'),))
+DefFn(name='FNFN1', params=('B',), body=(Local(names=('C',)), Assign(target=Var(name='C'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=1))), FnResult(value=Var(name='C'))), is_block=True)
+
 ## t1_inp
 Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Input(prompt=None, var=Var(name='B$'), comma=False, semi=False)
@@ -10577,6 +10585,14 @@ Assign(target=Var(name='A%'), value=Lit(value=1))
 CallStmt(name='SUB1', args=())
 End()
 SubDef(name='SUB1', params=(), body=(Inline(data=b'U\x8b\xec\xc4~\n]\xcb\xda\xbf\xc0\xd9\xb3\xc4'),))
+
+## v10_t1_inlinethendef
+Assign(target=Var(name='A%'), value=Lit(value=1))
+CallStmt(name='SUB1', args=())
+Print(items=(FnCall(name='FNFN1', args=(Lit(value=2),)),), newline=True, file=None, commas=None)
+End()
+SubDef(name='SUB1', params=(), body=(Inline(data=b'U\x8b\xec\xc4~\n]\xcb'),))
+DefFn(name='FNFN1', params=('B',), body=(Local(names=('C',)), Assign(target=Var(name='C'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=1))), FnResult(value=Var(name='C'))), is_block=True)
 
 ## v10_t1_inp
 Input(prompt=None, var=Var(name='A'), comma=False, semi=False)

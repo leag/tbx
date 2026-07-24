@@ -2540,11 +2540,17 @@ def decode_user_code(exe: bytes) -> list[Any]:
             and addr == state.main_start
             and state.k + 1 < len(state.ops)
             and state.ops[state.k + 1][1]
-            in ("proc_enter", "inline_sub", "opaque_helper")
+            in ("proc_enter", "inline_sub", "opaque_helper", "mov_bp_imm")
         ):  # chained skip-jmp: consecutive SUB defs are each bracketed by
             # their own jmp, so the entry jmp lands on the next def's jmp;
             # extend the def region to its target (witnessed q_fwd; the
-            # inline_sub sibling is probe q_shriek's `SUB ... INLINE`)
+            # inline_sub sibling is probe q_shriek's `SUB ... INLINE`).
+            # A block DEF FN has no proc_enter of its own, so when the chain
+            # reaches one the next op is instead its `mov [bp+0],0` result-slot
+            # zero-fill -- safe to accept here because `addr == main_start`
+            # already pins this jmp to exactly where the previous hop landed
+            # (probe t1_inlinethendef; wild tbd73.exe, whose TBWINDOW DEF FN
+            # run follows the inline SUBs)
             state.main_start = op[2]
             state.k += 1  # glue, not a GOTO
             continue
