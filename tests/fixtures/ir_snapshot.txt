@@ -3305,6 +3305,23 @@ Assign(target=Var(name='A%'), value=Lit(value=7))
 Print(items=(ArrayRef(name='V0', indices=(Lit(value=1),)), Var(name='A%')), newline=True, file=None, commas=None)
 End()
 
+## t1_commonarrstatic
+Dim(name='V0', bounds=(5,), also=())
+Dim(name='V1', bounds=(Lit(value=10),), also=())
+Common(names=('V1(1)',))
+Assign(target=ArrayRef(name='V1', indices=(Lit(value=1),)), value=Lit(value=5))
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=6))
+Print(items=(ArrayRef(name='V1', indices=(Lit(value=1),)), ArrayRef(name='V0', indices=(Lit(value=1),))), newline=True, file=None, commas=None)
+End()
+
+## t1_commonarrsubstatic
+Dim(name='V1', bounds=(Lit(value=10),), also=())
+Common(names=('V1(1)',))
+Assign(target=ArrayRef(name='V1', indices=(Lit(value=1),)), value=Lit(value=5))
+CallStmt(name='SUB1', args=())
+End()
+SubDef(name='SUB1', params=(), body=(Dim(name='V0$', bounds=(50,), also=()), Assign(target=ArrayRef(name='V0$', indices=(Lit(value=1),)), value=StrLit(value='X')), Print(items=(ArrayRef(name='V0$', indices=(Lit(value=1),)),), newline=True, file=None, commas=None)))
+
 ## t1_convf
 Assign(target=Var(name='A#'), value=DblLit(value=1.5))
 Assign(target=Var(name='B'), value=SingleLit(value=2.5))
@@ -9631,6 +9648,23 @@ Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=5))
 Assign(target=Var(name='A%'), value=Lit(value=7))
 Print(items=(ArrayRef(name='V0', indices=(Lit(value=1),)), Var(name='A%')), newline=True, file=None, commas=None)
 End()
+
+## v10_t1_commonarrstatic
+Dim(name='V0', bounds=(5,), also=())
+Dim(name='V1', bounds=(Lit(value=10),), also=())
+Common(names=('V1(1)',))
+Assign(target=ArrayRef(name='V1', indices=(Lit(value=1),)), value=Lit(value=5))
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=6))
+Print(items=(ArrayRef(name='V1', indices=(Lit(value=1),)), ArrayRef(name='V0', indices=(Lit(value=1),))), newline=True, file=None, commas=None)
+End()
+
+## v10_t1_commonarrsubstatic
+Dim(name='V1', bounds=(Lit(value=10),), also=())
+Common(names=('V1(1)',))
+Assign(target=ArrayRef(name='V1', indices=(Lit(value=1),)), value=Lit(value=5))
+CallStmt(name='SUB1', args=())
+End()
+SubDef(name='SUB1', params=(), body=(Dim(name='V0$', bounds=(50,), also=()), Assign(target=ArrayRef(name='V0$', indices=(Lit(value=1),)), value=StrLit(value='X')), Print(items=(ArrayRef(name='V0$', indices=(Lit(value=1),)),), newline=True, file=None, commas=None)))
 
 ## v10_t1_convf
 Assign(target=Var(name='A#'), value=DblLit(value=1.5))

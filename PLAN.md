@@ -1186,7 +1186,7 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
-### 2026-07-24 — Round 12 (DIAGNOSED, NOT LANDED): COMMON arrays + STATIC arrays
+### 2026-07-24 — Round 12: COMMON arrays + ORDINARY STATIC arrays (LANDED)
 
 `tbd73.exe`'s current stop, `DGROUP layout not solvable (runtime slot grid
 anchor)`, is the COMMON-band layout meeting an ORDINARY STATIC array.
@@ -1211,14 +1211,24 @@ path the static count comes from the gap between `vb` and `rt_blocks[0]`;
 under COMMON the statics are AFTER the blocks, so that arithmetic gives
 nothing and `walk_run(ord_base)` walks straight into a slot record.
 
-The shape of the fix is clear — search a static count in the ordinary
-region the way the ds-anchor loop already does below `rt_blocks[0]`, i.e.
-call `find_statics` from `ord_base` with an unknown `n_want` and let the
-anchor validation pick the count. Deliberately NOT attempted on the
-remaining budget: `_layout` is the most delicate module in the codebase,
-this touches its anchor search, and it needs both probes byte-exact in both
-dialects plus a purely-additive golden regeneration before it can be
-trusted. The probes are the ready-made witnesses.
+Landed. The image settled it: for `commonarrsubstatic`, `ds = 0x8840`, so
+R$'s populated slot record sits at **DS:0160 — exactly the `ord_base` round
+7's formula already computes** (`align16(0x146) + 0x10`). Nothing about the
+band solve was wrong; the ordinary region simply needed its statics read
+before the scalar walk. Since `ds` is unknown where the band walk runs but
+KNOWN inside the ds-anchor loop, the static scan moved there: parse
+`_parse_static_slot` records forward from `ds + ord_base` until one stops
+matching, set `sb = ord_base + 0x36*count`, re-walk the scalars from there,
+and merge with the band's own run. `n_static`/naming then follow the
+existing `V{n_static-1-j}` convention.
+
+Witnesses `t1_commonarrstatic` (a second main-code static array) and
+`t1_commonarrsubstatic` (the tbd73 shape, static array DIMmed inside a
+SUB), both byte-exact in BOTH dialects; goldens purely additive (+34, -0)
+even though this touches the layout anchor search. Suite 2305 -> 2314.
+
+`tbd73.exe` now clears layout entirely and fails in decode at `sub ax from
+unexpected cell offset 0x2e at 0x979a`.
 
 ### 2026-07-24 — Round 11: gap 33 (INT EC sub 38) DIAGNOSED from source = static ERASE
 

@@ -1,0 +1,35 @@
+# v10_t1_commonarrsubstatic dialect=1.0 start=07250
+07253:movsi:272
+07256:movdx:154
+07259:movesdx
+0725B:dim_begin
+0725E:movm_imm:282:10
+07264:movm_imm:280:0
+0726A:movsi:272
+0726D:movdx:154
+07270:movesdx
+07272:dim_end
+07275:fild:424
+0727A:movax:1
+0727D:subax_m:280
+07281:movsiax
+07283:shlsi
+07285:shlsi
+07287:moves_m:272
+0728B:far_fstp_si
+07291:far_call:29340
+07296:end
+07299:jmp:29364
+0729C:proc_enter
+0729F:movsi:420
+072A2:rt:156
+072A4:movsi:436
+072A7:strassign
+072A9:movsi:436
+072AC:rt:156
+072AE:rt:190
+072B0:rt:184
+072B2:proc_ret:0
+072B4:epilogue
+# commits
+0728F

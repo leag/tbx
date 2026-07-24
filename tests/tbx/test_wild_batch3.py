@@ -452,6 +452,30 @@ def test_decode_t1_erasestatic():
         ), stem
 
 
+def test_decode_t1_commonarrstatic():
+    # The ORDINARY region past the COMMON band is not scalars-only: an
+    # ordinary STATIC array's own 0x36 slot sits there first, ahead of the
+    # scalars. On the non-COMMON path the static count falls out of the gap
+    # between var_base and the first runtime block; here the statics come
+    # AFTER the blocks, so they are read off the image once ds is known.
+    # Found via wild tbd73.exe. Byte-exact, both dialects.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_commonarrstatic", "v10_t1_commonarrstatic"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        assert [s.name for s in prog if isinstance(s, ir.Dim)] == ["V0", "V1"], stem
+        assert ir.Common(("V1(1)",)) in prog, stem
+
+    for stem in ("t1_commonarrsubstatic", "v10_t1_commonarrsubstatic"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        assert ir.Common(("V1(1)",)) in prog, stem
+        sub = next(s for s in prog if isinstance(s, ir.SubDef))
+        assert any(isinstance(b, ir.Dim) and b.name == "V0$" for b in sub.body), stem
+        assert emit0.emit(prog).endswith(
+            '60 SUB SUB1\n  DIM V0$(50)\n  V0$(1) = "X"\n  PRINT V0$(1)\nEND SUB\n'
+        ), stem
+
+
 def test_decode_t1_erasepre():
     # ERASE reached BEFORE the array's own DIM in address order -- ordinary
     # when the ERASE sits on an earlier line, and in SUB bodies, which the
@@ -2833,6 +2857,7 @@ if __name__ == "__main__":
     test_decode_t1_fwdcalltgt()
     test_decode_t1_inlinebp()
     test_decode_t1_erasestatic()
+    test_decode_t1_commonarrstatic()
     test_decode_t1_erasepre()
     test_decode_t1_arrfwd()
     test_relayed_string_array_param_stays_loud()

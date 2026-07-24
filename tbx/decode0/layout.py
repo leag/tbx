@@ -370,11 +370,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
             # the ordinary scalars need a second walk past the stamp.
             band_slots[:] = sorted(run)
             ord_base = ((dend + 15) & ~15) + 0x10
-            run2, strs2, dend = walk_run(ord_base)
-            if not run2:
-                dend = ord_base
-            run.update(run2)
-            strs |= strs2
+            band_run, band_strs = dict(run), set(strs)
         # Anchor ds on the slot grid itself: every runtime block must
         # show the bare rank+type record, every static slot a populated record.
         pat = tuple(
@@ -391,7 +387,34 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
                 continue
             if not all(_is_rt_slot(exe, ds + b) for b in rt_blocks):
                 continue
-            statics = find_statics(ds, rt_blocks[0], n_static)
+            if base0 == COMMON_BASE:
+                # The ORDINARY region opening at `ord_base` is not
+                # scalars-only: an ordinary STATIC array's own 0x36 slot sits
+                # there first, ahead of the scalars (probe t1_commonarrstatic:
+                # `DIM R$(50)` lands its populated record at DS:0160, right at
+                # ord_base, with the scalars only starting past it). On the
+                # non-COMMON path the static count falls out of the gap between
+                # `vb` and the first runtime block; here the statics come AFTER
+                # the blocks, so read them off the image directly -- ds is
+                # known at this point, which it is not where the band walk runs.
+                statics, q = [], ds + ord_base
+                while True:
+                    rec = _parse_static_slot(exe, q) if q + 24 <= len(exe) else None
+                    if rec is None:
+                        break
+                    statics.append(rec)
+                    q += ARR_BLOCK
+                sb = ord_base + ARR_BLOCK * len(statics)
+                run, strs, dend = walk_run(sb)
+                if not run:
+                    dend = sb
+                run = {**band_run, **run}
+                strs = band_strs | strs
+                n_static = len(statics)
+                for j, a in enumerate(statics):
+                    a["name"] = f"V{n_static - 1 - j}"
+            else:
+                statics = find_statics(ds, rt_blocks[0], n_static)
             if statics is None:
                 continue
             # pool_base >= align16(walk end)+4; trailing unreferenced scalars can
