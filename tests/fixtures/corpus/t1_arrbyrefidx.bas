@@ -1,0 +1,8 @@
+10 DIM A%(5)
+20 A%(2) = 42
+30 I% = 2
+40 CALL SUB1(A%(I%))
+50 END
+SUB SUB1(X%) STATIC
+  X% = X% + 1
+END SUB

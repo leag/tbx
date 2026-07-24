@@ -72,6 +72,14 @@ Assign(target=ArrayRef(name='V1', indices=(Lit(value=2),)), value=Lit(value=6))
 Assign(target=Var(name='A'), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=1),)), rhs=ArrayRef(name='V1', indices=(Lit(value=2),))))
 End()
 
+## t1_arrbyrefidx
+Dim(name='V0%', bounds=(5,), also=())
+Assign(target=ArrayRef(name='V0%', indices=(Lit(value=2),)), value=Lit(value=42))
+Assign(target=Var(name='A%'), value=Lit(value=2))
+CallStmt(name='SUB1', args=(ArrayRef(name='V0%', indices=(Var(name='A%'),)),))
+End()
+SubDef(name='SUB1', params=('B%',), body=(Assign(target=Var(name='B%'), value=BinOp(op='+', lhs=Var(name='B%'), rhs=Lit(value=1))),))
+
 ## t1_arrcmp
 Dim(name='V0%', bounds=(10,), also=())
 Assign(target=Var(name='A'), value=Lit(value=3))
@@ -6304,6 +6312,14 @@ Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=5))
 Assign(target=ArrayRef(name='V1', indices=(Lit(value=2),)), value=Lit(value=6))
 Assign(target=Var(name='A'), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=1),)), rhs=ArrayRef(name='V1', indices=(Lit(value=2),))))
 End()
+
+## v10_t1_arrbyrefidx
+Dim(name='V0%', bounds=(5,), also=())
+Assign(target=ArrayRef(name='V0%', indices=(Lit(value=2),)), value=Lit(value=42))
+Assign(target=Var(name='A%'), value=Lit(value=2))
+CallStmt(name='SUB1', args=(ArrayRef(name='V0%', indices=(Var(name='A%'),)),))
+End()
+SubDef(name='SUB1', params=('B%',), body=(Assign(target=Var(name='B%'), value=BinOp(op='+', lhs=Var(name='B%'), rhs=Lit(value=1))),))
 
 ## v10_t1_arrcmp
 Dim(name='V0%', bounds=(10,), also=())

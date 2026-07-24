@@ -1188,6 +1188,51 @@ constructs specific to their by-ref/LOCAL-heavy coding style.
 
 ## Part III — Investigation history / handoff log
 
+### 2026-07-24 — near/static array element by-ref into a far CALL (`movdx`/`movesdx` sibling of `arg_push_arr`)
+
+Continuing the `rsltest.exe` full-decode goal from the entry directly
+below: after the `argref` deferral closed the `displacement 0x472` gap,
+decode advanced to `element access: unexpected op movdx at 0xc260` --
+inside `TBMENU.INC`'s (still dead-code) `MAKEMENU`, the `CALL
+QPRINTC(...,item$(mloop%),...)` line. `item$()` is `SHARED` but never
+explicitly `DIM`'d anywhere reachable, so Turbo Basic implicitly auto-
+dimensions it to the classic-BASIC default bound of 10 (11 elements,
+0..10) -- a genuine STATIC string array (confirmed by reading its raw
+0x36 slot descriptor's type byte, 0x0A = string, via `_parse_static_slot`,
+not inferred), coincidentally the same element count as `mw%`'s window-
+stack arrays, which is what made the address math initially look like it
+belonged to `wptr()` before checking the actual descriptor bytes settled
+it.
+
+Root cause: `handlers/arith.py`'s computed-array-element dispatch (the
+`shlsi`-triggered chain) only recognized `moves_m`/`moves_bp` as ways to
+convert a computed index into a FAR pointer; a NEAR/static array
+(reached via `addsi <base>`, not `moves_m`) was assumed to never need
+ES loaded at all. But passing a near array element BY REFERENCE to a
+far-CALLed routine (here, the opaque-helper QPRINTC) still needs an
+explicit ES:SI far pointer, built via `mov dx,<relocated DS segment
+literal>; mov es,dx` -- exactly the same `movsi;movdx;movesdx;
+arg_push_arr` four-op shape `core.py` already calibrates for the
+*constant*-index case (which doesn't validate the `movdx` segment value
+either), just reached via a computed index instead of a fixed disp16.
+Fixed by having the `shlsi` dispatch chain recognize `movdx;movesdx`
+immediately before `arg_push_arr` and skip over it (advancing `ao` by 2)
+before falling into the existing `arg_push_arr` terminal handling, rather
+than adding a parallel implementation.
+
+Oracle-verified with `t1_arrbyrefidx.bas` (`DIM A%(5)`, `CALL
+SUB1(A%(I%))`) -- confirms the shape isn't TBWINDOW-specific but the
+ordinary convention for ANY near static array passed by reference with a
+computed index. Byte-exact both dialects. While building this probe,
+found and set aside (NOT fixed this round, tracked separately below) an
+unrelated pre-existing bug: `PRINT A%(2)` (a *constant*-index element)
+decodes as `PRINT 0` instead of `PRINT V0%(2)` -- confirmed independent
+of today's fix (reproduces identically on a bare `DIM A%(5):A%(2)=42:
+PRINT A%(2)` probe with no CALL/by-ref involved at all, both before and
+after this session's changes). `rsltest.exe` now advances to `unhandled
+jmp short at 0xc385`. Zero regressions, full suite 2623 -> 2628
+passed/16 skipped, Ruff clean.
+
 ### 2026-07-24 — deferred by-ref CALL-argument typing (`arg_push_ref` with no other evidence)
 
 Goal set for this session: decode `wild/hits/rsltest.exe` fully, using its

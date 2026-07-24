@@ -1,0 +1,8 @@
+10 DIM V0%(5)
+20 V0%(2) = 42
+30 A% = 2
+40 CALL SUB1(V0%(A%))
+50 END
+60 SUB SUB1(B%)
+  B% = B% + 1
+END SUB

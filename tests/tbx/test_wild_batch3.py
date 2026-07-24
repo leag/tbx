@@ -357,8 +357,31 @@ def test_wild_rsltest_argref_advances():
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(ValueError, match=r"unexpected op movdx at 0xc260"):
+    with pytest.raises(ValueError, match=r"unhandled jmp short at 0xc385"):
         decode0.decode_user_code(wild_hits_bytes("rsltest.exe"))
+
+
+def test_decode_t1_arrbyrefidx():
+    # A computed-index element of a NEAR/STATIC array, passed BY REFERENCE
+    # to an ordinary far-called SUB: needs an explicit ES:SI far pointer
+    # (movdx <relocated DS segment>; movesdx) even though the array itself
+    # is near -- the computed-index sibling of core.py's own constant-index
+    # `movsi d; movdx blk; movesdx; arg_push_arr` handling, which doesn't
+    # validate the movdx segment value either. Found via wild rsltest.exe
+    # (TBMENU.INC's dead-code MAKEMENU passing ITEM$(mloop%), an implicitly
+    # auto-dimensioned 11-element STATIC string array, into QPRINTC).
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_arrbyrefidx.exe"))
+    calls = [s for s in prog if isinstance(s, ir.CallStmt)]
+    assert calls == [
+        ir.CallStmt("SUB1", (ir.ArrayRef("V0%", (ir.Var("A%"),)),))
+    ]
+    assert emit0.emit(prog) == (
+        "10 DIM V0%(5)\n20 V0%(2) = 42\n30 A% = 2\n"
+        "40 CALL SUB1(V0%(A%))\n50 END\n60 SUB SUB1(B%)\n"
+        "  B% = B% + 1\nEND SUB\n"
+    )
 
 
 def test_wild_cvt2tb_opaque_helper_advances():
@@ -2344,6 +2367,7 @@ if __name__ == "__main__":
     test_decode_t1_palettereset()
     test_decode_t1_argrefonly()
     test_wild_rsltest_argref_advances()
+    test_decode_t1_arrbyrefidx()
     test_wild_cvt2tb_opaque_helper_advances()
     test_wild_phone_opaque_helper_advances()
     test_wild_filepatc_opaque_helpers_advance()

@@ -737,6 +737,21 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             state.ax = ir.Neg(state.ax)
             ao += 1
             sik = state.ops[state.k + ao + 1]
+        if (
+            sik[1] == "movdx"
+            and state.k + ao + 3 < len(state.ops)
+            and state.ops[state.k + ao + 2][1] == "movesdx"
+            and state.ops[state.k + ao + 3][1] == "arg_push_arr"
+        ):
+            # A near/static array element passed BY REFERENCE to a far-called
+            # routine (e.g. an opaque helper) needs an explicit ES:SI far
+            # pointer even though the array itself is near -- the computed-
+            # index sibling of core.py's own movsi;movdx;movesdx;arg_push_arr
+            # constant-index handling, which doesn't validate the movdx
+            # segment value either (wild rsltest.exe: ITEM$(mloop%) passed
+            # into QPRINTC).
+            ao += 2
+            sik = state.ops[state.k + ao + 1]
         pre = "far_" if far else ""
         if sik[1] in ("far_spush", "far_strassign") or (
             not far and sik[1] == "strassign"
