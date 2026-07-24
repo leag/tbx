@@ -51,6 +51,42 @@ edition/runtime tag, and evidence provenance.
 
 ### Live checkpoint
 
+- Updated: 2026-07-23 (a long later round, same day) -- 16 commits, wild
+  tally 27/84 -> 28/84 decode-ok, full suite 2548 -> 2611 passed, zero
+  regressions. Full detail in Part III's dated entries below (newest
+  first, all "2026-07-23"); short index of what landed, oldest to
+  newest: `(A AND B) OR (C AND D)` explicit-parenthesized compound-
+  boolean groups; by-ref LONG/DOUBLE (`&`/`#`) SUB params; `ir.Incr`/
+  `ir.Decr` for LOCAL/by-ref `INCR`/`DECR`; `wild/hits` CI-skip safety
+  net (`conftest.py`); `DELAY` under active event trapping; INPUT# onto
+  a computed array element; `MID$=` with a computed start; variable-
+  limit FOR/NEXT long-distance body and STEP -1 (plus an unrelated
+  `f["idx"]` KeyError bug fix); far `jmpf` in a compound-IF dispatch
+  tail; a CALL statement's address-tracking bug across a loop backward
+  branch; DOUBLE-precision LOCAL variables; three new opaque
+  framed-helper fingerprints (BODY_9/10/11, filepatc.exe + phone.exe,
+  found using the now-installed `debug` extra's `cfgview`/`iced-x86`
+  tooling). Every closure is either oracle-verified byte-exact or (for
+  wild-only patterns the local oracle can't reproduce: far `jmpf`,
+  opaque helpers) a pinned wild-witness test, consistent with this
+  campaign's existing conventions either way.
+  **Three attempts were investigated and explicitly NOT landed** (each
+  has its own dated Part III entry with the full trace): (1) an
+  OR-flavored sibling of the AND-group work above -- mechanically
+  works but decodes with the SAME reversed-term-order bug already
+  flagged for `wb.exe`/`grdscn.exe`, the class of register-provenance
+  problem this campaign has already reverted twice before; (2) LOCAL
+  slot reuse across a FOR loop's own scratch temps (`bmaster.exe`/
+  `ifi.exe`) -- diagnosed precisely, needs a re-registration mechanism
+  the `locs.pop()`-based design doesn't have; (3) `CVT2TB.EXE`'s
+  `unhandled byte c4` -- a hand-written DOS-interrupt helper (directory
+  search, `AH=4Eh`) whose `jmp`/`retf` framing doesn't line up with
+  `_try_inline_rescue`'s single-most-recent-jmp bracketing. `phone.exe`
+  also has a confirmed-but-unexplored jmp-to-jmp thunk chain past its
+  own new BODY_11 closure. All five are concrete, well-scoped next
+  steps for a future round -- do not re-derive them, they're already
+  written up in detail below.
+
 - Updated: 2026-07-23 (fifth round, same day)
 - **Oracle correction**: earlier rounds this session incorrectly believed
   no `TBX_ORACLE` was available -- a stale relative-path `ls` check gave a
