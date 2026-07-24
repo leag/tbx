@@ -3569,6 +3569,12 @@ Erase(name='V0')
 Dim(name='V0', bounds=(Var(name='A'),), also=())
 End()
 
+## t1_erasestatic
+Dim(name='V0$', bounds=(10,), also=())
+Assign(target=ArrayRef(name='V0$', indices=(Lit(value=1),)), value=StrLit(value='X'))
+Erase(name='V0$')
+End()
+
 ## t1_errcmp
 OnError(target=5)
 ErrorStmt(code=Lit(value=24))
@@ -9797,6 +9803,12 @@ Dim(name='V0', bounds=(Var(name='A'),), also=())
 Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=2))
 Erase(name='V0')
 Dim(name='V0', bounds=(Var(name='A'),), also=())
+End()
+
+## v10_t1_erasestatic
+Dim(name='V0$', bounds=(10,), also=())
+Assign(target=ArrayRef(name='V0$', indices=(Lit(value=1),)), value=StrLit(value='X'))
+Erase(name='V0$')
 End()
 
 ## v10_t1_errcmp

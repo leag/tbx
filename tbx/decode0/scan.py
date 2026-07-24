@@ -1850,9 +1850,19 @@ def _scan_pass(
                 ops.append((p, "dim_end"))
                 p += 3
                 continue
-            if sub == 0x36:  # ERASE (DIM-style prefix)
-                ops.append((p, "erase"))
-                p += 3
+            if sub in (0x36, 0x38):  # ERASE (DIM-style prefix). 0x36 frees a
+                # DYNAMIC array's heap block; 0x38 is the STATIC-array routine,
+                # which re-initializes in place -- the compiler picks the vector
+                # from the array's own declaration (a variable bound makes it
+                # dynamic, a literal one static), so both lift to the same
+                # ir.Erase and the emitted DIM regenerates the right one
+                # (probe t1_erasestatic; wild tbd73.exe's `ERASE recarr$` after
+                # `DIM recarr$(5000)`, and gap 33's catalog/football/refund/
+                # varamort group).
+                ops.append((p, "erase" if sub == 0x36 else "erase_static"))
+                p += 3  # kept distinct because only the DYNAMIC form's movsi
+                # target is a runtime slot block -- the static form's is an
+                # ordinary static array slot, and layout keys on that.
                 continue
             if sub == 0x3A:  # implicit free of a LOCAL DYNAMIC array's heap
                 # block at SUB exit (movsi <handle disp> precedes, no BASIC

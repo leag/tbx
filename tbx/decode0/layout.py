@@ -105,6 +105,17 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
             and ops[i + 3][1] in ("dim_begin", "dim_end", "erase")
         }
     )
+    # Static-array ERASE (INT EC sub 38): same movsi/movdx/movesdx prefix as the
+    # runtime-DIM forms above, but its target is an ordinary STATIC array slot,
+    # not a runtime block and not a string descriptor (probe t1_erasestatic).
+    erase_static_disps = {
+        ops[i][2]
+        for i in range(len(ops) - 3)
+        if ops[i][1] == "movsi"
+        and ops[i + 1][1] == "movdx"
+        and ops[i + 2][1] == "movesdx"
+        and ops[i + 3][1] == "erase_static"
+    }
     # Far array-element CALL-arg push: movsi:elem; movdx; movesdx; arg_push_arr.
     # The movsi target is the static array element (resolved via loc), not a descriptor.
     argarr_disps = {
@@ -155,6 +166,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
         }
         - set(rt_blocks)
         - argarr_disps
+        - erase_static_disps
         - blit_disps
         - varptr_disps
         - palette_disps

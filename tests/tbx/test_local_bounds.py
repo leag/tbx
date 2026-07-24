@@ -33,7 +33,7 @@ def test_undimensioned_local_array_cleanup(stem):
     ("stem", "exc", "next_gap"),
     [
         ("cleanup.exe", ValueError, "LOCAL zero-fill outside a fresh SUB/DEF FN body at 0xd0ca"),
-        ("crossref.exe", ValueError, "unhandled INT EC sub 38 at 0x11a63"),
+        ("crossref.exe", ValueError, "string BP push outside DEF FN at 0xb081"),
         ("reformat.exe", ValueError, "LOCAL zero-fill outside a fresh SUB/DEF FN body at 0xd455"),
     ],
 )

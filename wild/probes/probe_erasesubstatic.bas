@@ -1,0 +1,7 @@
+10 CALL Show
+20 END
+30 SUB Show
+40 DIM R$(50)
+50 R$(1) = "X"
+60 ERASE R$
+70 END SUB

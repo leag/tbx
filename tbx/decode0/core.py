@@ -3475,7 +3475,8 @@ def decode_user_code(exe: bytes) -> list[Any]:
             and state.k + 3 < len(state.ops)
             and state.ops[state.k + 1][1] == "movdx"
             and state.ops[state.k + 2][1] == "movesdx"
-            and state.ops[state.k + 3][1] in ("dim_begin", "dim_end", "erase")
+            and state.ops[state.k + 3][1]
+            in ("dim_begin", "dim_end", "erase", "erase_static")
         ):
             block = op[2]  # runtime-DIM bracket
             if state.ops[state.k + 3][1] == "dim_begin":
@@ -3484,6 +3485,18 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 if block not in state.r_arrs:
                     raise ValueError(f"ERASE of undimensioned block at {addr:#x}")
                 state.put(ir.Erase(state.r_arrs[block]["name"]), state.cur)
+            elif state.ops[state.k + 3][1] == "erase_static":
+                # ERASE of a STATIC array: the runtime routine differs (it
+                # re-initializes in place rather than freeing a heap block) but
+                # the source spelling is the same, and the compiler picks the
+                # vector back from the array's own DIM (probe t1_erasestatic).
+                # The movsi target is the array's SLOT RECORD on the grid, not
+                # its element data (`base`), so index it off the grid the same
+                # way layout named the statics.
+                j, rem = divmod(block - state.lay["var_base"], ARR_BLOCK)
+                if rem or not 0 <= j < len(state.arrs):
+                    raise ValueError(f"ERASE of unknown static slot at {addr:#x}")
+                state.put(ir.Erase(state.arrs[j]["name"]), state.cur)
             else:
                 if state.dim_frame is None or state.dim_frame["block"] != block:
                     raise ValueError(f"unbalanced DIM bracket at {addr:#x}")

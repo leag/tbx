@@ -1186,6 +1186,48 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 11: gap 33 (INT EC sub 38) DIAGNOSED from source = static ERASE
+
+Gap 33 (`INT EC sub 38`, catalog/football/refund/varamort, open and
+UNDIAGNOSED since 2026-07-19) is **`ERASE` of a STATIC array**. The source
+named it in one look: `tbd73.exe`'s failing site sits immediately before a
+`proc_ret` at the very end of the program, and `TBD73.BAS`'s last SUB is
+
+```
+SUB Showfile
+ DIM recarr$(5000)
+ ...
+ ERASE recarr$
+END SUB
+```
+
+`DIM recarr$(5000)` has a LITERAL bound (static) where `t1_erase`'s
+`DIM A(N)` has a variable one (dynamic) -- two runtime routines, two
+vectors: sub 0x36 frees a dynamic array's heap block, sub 0x38
+re-initializes a static array in place. Three authored probes reproduced it
+on the first try (bare string array, numeric, and inside a SUB).
+
+One source spelling, so both lift to the same `ir.Erase` and the emitted
+`DIM` regenerates the right vector -- but the op KINDS stay distinct
+(`erase` / `erase_static`), because only the dynamic form's `movsi` target
+is a runtime slot block: the static form's is an ordinary static array
+SLOT RECORD on the grid, which layout must not mistake for a runtime block
+or a string descriptor. Witness `t1_erasestatic`, byte-exact both dialects.
+
+Wild movement: `crossref.exe` advances to `string BP push outside DEF FN at
+0xb081`, `rs.exe` to `ERASE of undimensioned block at 0x8fc4` (the DYNAMIC
+path, a separate gap).
+
+**`tbd73.exe` moves backwards in the pipeline**, from this scan gap to
+`DGROUP layout not solvable (runtime slot grid anchor)` -- the same honest
+trade `mf.exe` made in round 8, since the layout only now sees the whole
+op stream. The cause is identified: its `erase_static` target is `0x380`,
+which is NOT on the COMMON-anchored grid (`0x110 + 0x36*k` gives 0x362 then
+0x398), i.e. `recarr$` is a twelfth array whose static slot sits past the
+COMMON band. Round 7 handled COMMON arrays plus COMMON scalars, but not
+COMMON arrays plus ORDINARY STATIC arrays; that combination is the next
+layout step for this file.
+
 ### 2026-07-24 — Round 10: forwarding a whole-array parameter (LANDED)
 
 The `unhandled byte 8c` template `tbd73.exe` and `sabpcv3.exe` now stop on

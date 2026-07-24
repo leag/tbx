@@ -433,6 +433,25 @@ def test_decode_t1_inlinebp():
         ), stem
 
 
+def test_decode_t1_erasestatic():
+    # INT EC sub 38 is ERASE of a STATIC array -- gap 33, undiagnosed until
+    # TBD73.BAS named it: `SUB Showfile` ends `ERASE recarr$` after
+    # `DIM recarr$(5000)`, a LITERAL bound, where t1_erase's `DIM A(N)` is a
+    # variable bound. Two runtime routines (sub 36 frees a dynamic heap block,
+    # sub 38 re-initializes a static array in place), one source spelling: the
+    # compiler picks the vector back from the DIM, so both lift to ir.Erase.
+    # The op kinds stay distinct because only the dynamic form's movsi target
+    # is a runtime slot block. Byte-exact, both dialects.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_erasestatic", "v10_t1_erasestatic"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        assert ir.Erase("V0$") in prog, stem
+        assert emit0.emit(prog) == (
+            '10 DIM V0$(10)\n20 V0$(1) = "X"\n30 ERASE V0$\n40 END\n'
+        ), stem
+
+
 def test_decode_t1_arrfwd():
     # Forwarding a whole-array PARAMETER onward as a whole-array CALL argument
     # (`mov ax,ss; mov ds,ax; mov si,bp; add si,d8; INT D4`): the descriptor
@@ -2784,6 +2803,7 @@ if __name__ == "__main__":
     test_decode_t1_dblhook()
     test_decode_t1_fwdcalltgt()
     test_decode_t1_inlinebp()
+    test_decode_t1_erasestatic()
     test_decode_t1_arrfwd()
     test_relayed_string_array_param_stays_loud()
     test_decode_t1_inlinedata()
