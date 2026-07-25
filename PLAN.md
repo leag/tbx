@@ -1186,6 +1186,85 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 24: DIAGNOSED, NOT LANDED — bare value AND a parenthesized string-OR group
+
+`tbd73.exe`'s current stop, `materialization template mismatch at 0xbc24`, is
+TBWINDOW's `SUB Makevmenu` (`TBW73.INC:510`):
+
+```basic
+IF hmenuopen AND (ans1$ = CHR$(75) OR ans1$ = CHR$(77)) THEN
+```
+
+Reproduced byte-for-byte in shape by an authored probe, promoted as
+`wild/probes/probe_boolstrgroup` (`IF F% AND (A$ = CHR$(75) OR A$ =
+CHR$(77)) THEN`). Full register choreography, decoded from the probe (its
+addresses; tbd73's are the same sequence at 0xbc07..0xbc4e):
+
+```
+0874A orax / jcc 75 / jmp 0x878D   bare outer term1 (F%); `or ax,ax` leaves
+                                   ax = F%, and sc == andaxbx + 2 as usual
+08761 movbxax                      bx = F%  -- outer term1 banked BEFORE the
+                                   group runs
+08763 movax FFFF / jcc / incax     group term A materialized (A$ = CHR$(77));
+                                   note the source's SECOND disjunct compiles
+                                   FIRST
+0877D movrr cx,bx                  F% parked in cx
+0877F movbxax                      bx = group term A
+08781 movax FFFF / jcc / incax     group term B (A$ = CHR$(75))
+08787 oraxbx                       ax = A OR B   (the GROUP's own fold)
+08789 movrr bx,cx                  F% restored to bx
+0878B andaxbx                      ax = F% AND (group)
+0878D jcc 75 / jmp                 IF dispatch
+```
+
+**Why the existing machinery cannot take it, precisely:**
+
+1. `_match_bool_bare_term1` requires the outer `andaxbx` to sit immediately
+   after the first materialization (`ops[j+3]`). With a parenthesized group as
+   term2 the group's own second term and `oraxbx` intervene. Relaxing this to
+   test `andaxbx` at `sc - 2` (the invariant it already relies on, and which
+   DOES hold here: `0x878B + 2 == 0x878D`) makes the match succeed -- but see
+   below, that alone buys nothing.
+2. `_lift_bool_tail` then wants `[movax, jcc, incax, comb, jcc, jmp]` at the
+   term2 site and finds the group's second term instead: `compound-IF tail
+   mismatch`. The group is not a short-circuited segment at all -- its two
+   terms fold through REGISTERS (`oraxbx`), with no dispatch pair between
+   them.
+3. The register-fold path that WOULD fit (`control.py:661`, "a second
+   relational term materializes directly into AX ... combined with an earlier,
+   independently materialized value already stashed in BX") is gated
+   `not state.pend_cmp_str`, and its sibling at `control.py:691` says so
+   outright: "Strings stay fail-loud." Both group terms here are STRING
+   compares.
+
+So the real missing vocabulary is **a string relational materialized as a
+VALUE** (`movax FFFF; jcc; incax` with no dispatch pair, feeding a
+register fold), which is what a parenthesized OR-group of string compares
+needs. The outer join itself then needs nothing new: `andaxbx; jcc 75; jmp`
+already satisfies core.py's `direct_bool` test, so the existing inline-IF
+branch would close the statement once the group's value is correct in ax.
+
+**Attempted and reverted**: the step-1 relaxation on its own. It moves the
+failure from `materialization template mismatch` to `compound-IF tail
+mismatch` and decodes nothing, i.e. it widens what the matcher ACCEPTS
+without anything downstream able to process it -- exactly what the
+calibration rule forbids. Reverted rather than left in.
+
+**Also promoted this round** (compiles, fails to decode, so `wild/probes/`
+per CLAUDE.md -- correcting round 19's call to leave it in working storage;
+the rule is unconditional and a descriptive stem plus this record handles
+attribution): `wild/probes/probe_arrparm_mixedsig`, a MIXED scalar/array SUB
+signature (`SUB One(X$(1), N%)`), failing at `unsupported array-parameter
+frame at 0x8784` (core.py's own comment: "Mixed scalar/array signatures
+remain unwitnessed"). `TBW73.INC`'s `Makevmenu(item$(1), liveitem$,
+itemcount, ...)` is that shape, so `tbd73.exe` reaches it after the round-24
+gap above.
+
+**Next two things to do for `tbd73.exe`**, in order:
+1. String relational as a materialized value + register-folded string group
+   (this round's diagnosis). Probe already promoted.
+2. Mixed scalar/array SUB parameter frames. Probe already promoted.
+
 ### 2026-07-24 — Round 23: a bare `DECR` on a by-ref INTEGER param
 
 `tbd73.exe`'s stop, `dec es:[si] outside a FOR at 0xba82`, is TBWINDOW's
