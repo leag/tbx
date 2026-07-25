@@ -1,0 +1,26 @@
+A$ = ""
+DO
+A$ = INKEY$
+PRINT "line 1"
+PRINT "line 2"
+PRINT "line 3"
+PRINT "line 4"
+PRINT "line 5"
+PRINT "line 6"
+PRINT "line 7"
+PRINT "line 8"
+PRINT "line 9"
+PRINT "line 10"
+PRINT "line 11"
+PRINT "line 12"
+PRINT "line 13"
+PRINT "line 14"
+PRINT "line 15"
+PRINT "line 16"
+PRINT "line 17"
+PRINT "line 18"
+PRINT "line 19"
+PRINT "line 20"
+LOOP UNTIL (A$ = CHR$(13)) OR (A$ = CHR$(27))
+PRINT "done"
+END

@@ -658,7 +658,23 @@ def _lift_bool_do_tail(ops, k, pend_cmp, pb, stmts, addrs, put):
     loop edge, no trailing jmp), except the combining op at index 3 is the
     compound's AND/OR fold (from `pb`) rather than a bare self-test `or ax,ax`.
     Returns the next op index, or None if no match (caller falls back to
-    `_lift_bool_tail`'s dispatch-jcc+jmp shape)."""
+    `_lift_bool_tail`'s dispatch-jcc+jmp shape).
+
+    TWO polarities occur, exactly the pair `_lift_while` already distinguishes
+    for a SIMPLE tail test:
+
+    * the combining jcc IS the backward retry edge (no trailing jmp), or
+    * the combining jcc is the forward EXIT and the template's own trailing
+      `jmp` is the backward retry edge -- the mirror image, since here the jcc
+      causes the exit and falling through to the jmp retries.
+
+    Only the first was handled, so the second silently fell through to
+    `_lift_bool_tail` and the loop was consumed as a compound *IF*: the DO and
+    LOOP statements never materialized at all, and the body's own statements
+    were left dangling in the enclosing block (wild tbd73.exe, TBW73.INC:727:
+    `LOOP UNTIL (ans$ = CHR$(13)) OR (ans$ = CHR$(27))` closing `SUB
+    Makelmenu`'s `DO`, surfacing only as `jump target 0xd49b is not a statement
+    start` from the IF on the line before it). Fixture t1_boolloopuntil."""
     comb = "andaxbx" if pb["op"] == "AND" else "orax"
     want = ["movax", "jcc", "incax", comb, "jcc"]
     if k + len(want) > len(ops) or [o[1] for o in ops[k : k + len(want)]] != want:
@@ -668,17 +684,26 @@ def _lift_bool_do_tail(ops, k, pend_cmp, pb, stmts, addrs, put):
         return None
     if pb["sc"] != ops[k + 3][0] + (2 if pb["op"] == "AND" else 0):
         return None
-    back = back_jcc[3]
-    if back_jcc[2] not in (0x74, 0x75) or back >= ops[k][0] or back not in addrs:
+    if back_jcc[2] not in (0x74, 0x75):
         return None
+    back, nk = back_jcc[3], k + len(want)
+    if back < ops[k][0] and back in addrs:  # the jcc itself retries
+        kind = "WHILE" if back_jcc[2] == 0x75 else "UNTIL"
+    else:  # ...or the trailing jmp does, with the jcc as the exit
+        jmp = ops[nk] if nk < len(ops) else None
+        if jmp is None or jmp[1] != "jmp" or back != jmp[0] + 3:
+            return None
+        back, nk = jmp[2], nk + 1
+        if back >= ops[k][0] or back not in addrs:
+            return None
+        kind = "WHILE" if back_jcc[2] == 0x74 else "UNTIL"
     r2 = ir.RelOp(_JCC_RELOP_TRUE[m_jcc[2]], *pend_cmp)
     cond = ir.LogOp(pb["op"], pb["r1"], r2)
-    kind = "WHILE" if back_jcc[2] == 0x75 else "UNTIL"
     idx = addrs.index(back)  # splice `DO` before the body start
     stmts.insert(idx, ir.Do(None))
     addrs.insert(idx, None)
     put(ir.Loop(kind, cond), pb["start"])
-    return k + len(want)
+    return nk
 
 
 def _lift_while(

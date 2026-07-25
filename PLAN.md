@@ -99,17 +99,18 @@ edition/runtime tag, and evidence provenance.
   it was scoped and deferred, not started. Do not confuse round 22 for
   the whole idea.
 
-  **Where `tbd73.exe` stands as of round 44**: `jump target 0xd49b is not
-  a statement start` -- and unlike rounds 37-44 this one is a silent
-  structural loss, not an address problem: no loop is lifted for
-  TBW73.INC:727's `LOOP UNTIL (...) OR (...)` at all. See the rounds
-  42-44 entry.
+  **Where `tbd73.exe` stands as of round 45**: `jump target 0xd6a8 is not
+  a statement start`.
 
-  Rounds 37-44 each advanced it exactly one gap
+  Rounds 37-45 each advanced it exactly one gap
   (`0xb192` -> `0xc2cc` -> `0xba64` -> `0xba9f` -> `0xcdc4` -> `0xd0ba`
-  -> `0xd1af` -> `0xd367` -> `0xd49b`), all eight determined directly from
-  `TBW73.INC` with no speculative probing -- see their Part III entries.
-  Suite **2484 passed**, 451 skipped. Four of the eight (37, 39, 40, 43)
+  -> `0xd1af` -> `0xd367` -> `0xd49b` -> `0xd6a8`), all nine determined
+  directly from `TBW73.INC` with no speculative probing -- see their
+  Part III entries. Suite **2489 passed**, 451 skipped. Round 45 is the
+  one to read first: the address error was a SYMPTOM of a silent
+  structural loss (a whole `DO`/`LOOP UNTIL` dropped), which is a
+  reminder that a fail-loud address error can be the only visible trace
+  of a much worse defect elsewhere. Four of the nine (37, 39, 40, 43)
   were the SAME class of bug:
   statement addresses ride in a side table keyed by object identity, and
   folds that move or rebuild statements must maintain it by hand. See
@@ -1463,6 +1464,48 @@ Goldens pin what the decoder DOES, and `verify_fixture` was only ever run on
 stems a session happened to touch, so a fixture could sit green in the suite for
 a long time while failing its own round trip. Finishing this census, then wiring
 a periodic (not per-commit -- it is far too slow) sweep, would close that gap.
+
+### 2026-07-25 — Round 45: a compound LOOP UNTIL was SILENTLY dropped when its body was long
+
+Gap: `jump target 0xd49b`, TBW73.INC:727, `LOOP UNTIL (ans$ = CHR$(13)) OR
+(ans$ = CHR$(27))` closing `SUB Makelmenu`'s DO. The address error was a
+symptom, raised by line 726's IF; the real defect was that **no loop existed in
+the IR at all**. Dumping `SUB Makelmenu`'s 22 statements showed a flat list with
+no `Do` before the body and no `Loop` after it -- the `DO` of line 646 and the
+`LOOP UNTIL` of 727 both simply absent, their body statements dangling in the
+enclosing block.
+
+Cause: `_lift_bool_do_tail` matched only ONE of the two polarities a tail test
+can take -- the same pair `_lift_while` already distinguishes for a SIMPLE tail
+test, and already documents:
+
+* the combining jcc IS the backward retry edge (no trailing jmp), or
+* the combining jcc is the forward EXIT and the template's own trailing `jmp` is
+  the backward retry edge.
+
+Here `0D4C8 jcc:117 -> 0xD4CD` is the exit and `0D4CA jmp -> 0xCE89` (the DO body
+start) is the retry. Unmatched, it fell through to `_lift_bool_tail` and was
+consumed as a compound *IF*.
+
+**What picks the polarity is DISTANCE, not shape.** A body inside short-jcc range
+(+/-127) gets `jcc <back>`; a longer one needs `jcc <exit>` + near `jmp <back>`.
+`SUB Makelmenu`'s DO body is ~1600 bytes. This is why the shape was unwitnessed:
+the obvious probe -- the same source with a short body -- decodes correctly
+either way. The landed fixture pads its body past 127 bytes on purpose.
+
+**This was a SILENT mis-decode, the worst category.** The padded probe decoded
+with NO error pre-fix and emitted the loop body as straight-line code, `DO` and
+`LOOP UNTIL` both gone. It is only luck that tbd73 raised at all -- the IF on the
+line before happened to need the tail test's address.
+
+Worth generalizing from: `_lift_while` handles both polarities for simple
+conditions and says so in its docstring, and the compound sibling was written
+against only one of them. The AND form (`comb == "andaxbx"`) now takes the same
+second path but has no witness of its own yet -- it is the same two ops with a
+different combiner, so it is covered by the shared code rather than asserted.
+
+Witness `t1_boolloopuntil` (+ `v10_` twin), byte-exact both dialects. Suite 2484
+-> **2489 passed**. tbd73 advances `0xd49b` -> `0xd6a8`.
 
 ### 2026-07-25 — Rounds 42-44: SELECT CASE arms were never folded, and CALL statements were unanchored
 

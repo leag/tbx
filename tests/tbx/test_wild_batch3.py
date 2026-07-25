@@ -524,6 +524,41 @@ def test_decode_t1_fwdinline():
         ), stem
 
 
+def test_decode_t1_boolloopuntil():
+    # `LOOP UNTIL <compound>` whose retry edge is the template's TRAILING JMP
+    # rather than the combining jcc itself. Two polarities occur -- exactly the
+    # pair `_lift_while` already distinguishes for a SIMPLE tail test -- and
+    # which one the compiler picks is a matter of DISTANCE: a body within short-
+    # jcc range gets `jcc <back>`, a longer one gets `jcc <exit>` + `jmp <back>`.
+    # `_lift_bool_do_tail` only matched the first, so the second fell through to
+    # `_lift_bool_tail` and was consumed as a compound IF.
+    #
+    # The failure mode was SILENT: no error, but the DO and LOOP statements
+    # never materialized and the body's statements were left flat in the
+    # enclosing block. This fixture's body is padded past 127 bytes precisely to
+    # force the far form; the same program with a short body decodes correctly
+    # either way, which is why the shape went unwitnessed.
+    #
+    # Wild tbd73.exe, TBW73.INC:727: `LOOP UNTIL (ans$ = CHR$(13)) OR
+    # (ans$ = CHR$(27))` closes `SUB Makelmenu`'s ~1600-byte DO body. It
+    # surfaced only indirectly, as `jump target 0xd49b is not a statement start`
+    # raised by the IF on the line before it. Byte-exact, both dialects.
+    from tbx import decode0, ir
+
+    for stem in ("t1_boolloopuntil", "v10_t1_boolloopuntil"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        assert prog[1] == ir.Do(None), stem
+        loop = prog[-3]
+        assert loop == ir.Loop(
+            "UNTIL",
+            ir.LogOp(
+                "OR",
+                ir.RelOp("=", ir.Var("A$"), ir.Call("CHR$", (ir.Lit(13),))),
+                ir.RelOp("=", ir.Var("A$"), ir.Call("CHR$", (ir.Lit(27),))),
+            ),
+        ), stem
+
+
 def test_decode_t1_selarmblockif():
     # Block IFs INSIDE a SELECT CASE arm. An arm body is snapshotted at arm
     # close and never revisited by the top-level `_fold_if` pass -- exactly the
@@ -3523,6 +3558,7 @@ if __name__ == "__main__":
     test_decode_t1_selelsetarget()
     test_decode_t1_selarmtarget()
     test_decode_t1_iftaillast()
+    test_decode_t1_boolloopuntil()
     test_decode_t1_selarmblockif()
     test_decode_t1_iftailarm()
     test_decode_t1_ifbeforecall()
