@@ -3732,6 +3732,13 @@ Troff()
 End()
 Return(target=None)
 
+## t1_exitsublocstr
+SubDef(name='SUB1', params=('A%', 'B%'), body=(Local(names=('C$',)), Assign(target=Var(name='C$'), value=StrLit(value='x')), IfBlock(arms=((RelOp(op='>', lhs=Var(name='A%'), rhs=Var(name='B%')), (Assign(target=Var(name='A%'), value=Lit(value=0)), ExitSub())),), else_body=None), Print(items=(Var(name='C$'), Var(name='A%')), newline=True, file=None, commas=None)))
+Assign(target=Var(name='D%'), value=Lit(value=5))
+Assign(target=Var(name='E%'), value=Lit(value=2))
+CallStmt(name='SUB1', args=(Var(name='D%'), Var(name='E%')))
+End()
+
 ## t1_explog
 Assign(target=Var(name='A'), value=Call(name='EXP', args=(DblLit(value=0.5),)))
 Assign(target=Var(name='B'), value=Call(name='LOG', args=(DblLit(value=2.5),)))
@@ -4449,6 +4456,15 @@ End()
 
 ## t1_inkey
 Assign(target=Var(name='A$'), value=Nullary(name='INKEY$'))
+End()
+
+## t1_inlfwdwhile
+SubDef(name='SUB1', params=(), body=(Inline(data=b'U\x8b\xec\xc4~\x06]\xcb'),))
+SubDef(name='SUB2', params=('A$', 'B%', 'C%'), body=(CallStmt(name='SUB1', args=(Var(name='A$'),)), IfGoto(cond=RelOp(op='<>', lhs=Var(name='B%'), rhs=Lit(value=0)), target=BodyLine(stmt=1, phys=7)), IfGoto(cond=RelOp(op='<>', lhs=Var(name='C%'), rhs=Lit(value=0)), target=BodyLine(stmt=1, phys=6)), Assign(target=Var(name='B%'), value=Lit(value=1)), Goto(target=BodyLine(stmt=1, phys=7)), Assign(target=Var(name='B%'), value=Var(name='C%')), Do(kind='WHILE', cond=RelOp(op='<>', lhs=Call(name='MID$', args=(Var(name='A$'), Var(name='B%'), Lit(value=1))), rhs=StrLit(value='1'))), Incr(var=Var(name='B%')), Loop(kind=None, cond=None), Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)))
+Assign(target=Var(name='D$'), value=StrLit(value='001'))
+Assign(target=Var(name='E%'), value=Lit(value=0))
+Assign(target=Var(name='F%'), value=Lit(value=2))
+CallStmt(name='SUB2', args=(Var(name='D$'), Var(name='E%'), Var(name='F%')))
 End()
 
 ## t1_inline
@@ -10186,6 +10202,13 @@ Troff()
 End()
 Return(target=None)
 
+## v10_t1_exitsublocstr
+SubDef(name='SUB1', params=('A%', 'B%'), body=(Local(names=('C$',)), Assign(target=Var(name='C$'), value=StrLit(value='x')), IfBlock(arms=((RelOp(op='>', lhs=Var(name='A%'), rhs=Var(name='B%')), (Assign(target=Var(name='A%'), value=Lit(value=0)), ExitSub())),), else_body=None), Print(items=(Var(name='C$'), Var(name='A%')), newline=True, file=None, commas=None)))
+Assign(target=Var(name='D%'), value=Lit(value=5))
+Assign(target=Var(name='E%'), value=Lit(value=2))
+CallStmt(name='SUB1', args=(Var(name='D%'), Var(name='E%')))
+End()
+
 ## v10_t1_explog
 Assign(target=Var(name='A'), value=Call(name='EXP', args=(DblLit(value=0.5),)))
 Assign(target=Var(name='B'), value=Call(name='LOG', args=(DblLit(value=2.5),)))
@@ -10864,6 +10887,15 @@ End()
 
 ## v10_t1_inkey
 Assign(target=Var(name='A$'), value=Nullary(name='INKEY$'))
+End()
+
+## v10_t1_inlfwdwhile
+SubDef(name='SUB1', params=(), body=(Inline(data=b'U\x8b\xec\xc4~\x06]\xcb'),))
+SubDef(name='SUB2', params=('A$', 'B%', 'C%'), body=(CallStmt(name='SUB1', args=(Var(name='A$'),)), IfGoto(cond=RelOp(op='<>', lhs=Var(name='B%'), rhs=Lit(value=0)), target=BodyLine(stmt=1, phys=7)), IfGoto(cond=RelOp(op='<>', lhs=Var(name='C%'), rhs=Lit(value=0)), target=BodyLine(stmt=1, phys=6)), Assign(target=Var(name='B%'), value=Lit(value=1)), Goto(target=BodyLine(stmt=1, phys=7)), Assign(target=Var(name='B%'), value=Var(name='C%')), Do(kind='WHILE', cond=RelOp(op='<>', lhs=Call(name='MID$', args=(Var(name='A$'), Var(name='B%'), Lit(value=1))), rhs=StrLit(value='1'))), Incr(var=Var(name='B%')), Loop(kind=None, cond=None), Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)))
+Assign(target=Var(name='D$'), value=StrLit(value='001'))
+Assign(target=Var(name='E%'), value=Lit(value=0))
+Assign(target=Var(name='F%'), value=Lit(value=2))
+CallStmt(name='SUB2', args=(Var(name='D$'), Var(name='E%'), Var(name='F%')))
 End()
 
 ## v10_t1_inline

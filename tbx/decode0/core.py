@@ -583,8 +583,22 @@ def _retire_for_temps(frame, locs) -> None:
         locs.pop(d, None)
 
 
-def _respell_params(node, spell):
-    """Rewrite `ir.Var("Pxx")` placeholders to the declared param spelling."""
+def _respell_params(node, spell, stmt_addr=None):
+    """Rewrite `ir.Var("Pxx")` placeholders to the declared param spelling.
+
+    Respelling REPLACES the statement object, so any `stmt_addr` entry keyed on
+    the old `id()` would be orphaned and a jump target landing on that
+    statement would no longer resolve -- the same identity hazard
+    `_resolve_calls` documents, except here the node genuinely changes, so the
+    address has to be MOVED rather than the rebuild avoided. Carried at every
+    depth, since only the top-level walk knows which objects are statements.
+
+    Witnessed by wild tbd73.exe: `SUB Makevmenu` forwards its by-ref array
+    param `item$()` to `SUB Sprint INLINE`, so its whole body is respelled --
+    including the `WHILE MID$(liveitem$,curntpos,1) <> "1"` header, which is
+    the merge target of the preceding single-line nested IF/ELSE
+    (`jump target 0xb192 is not a statement start`). Fixture t1_inlfwdwhile.
+    """
     if isinstance(node, ir.Var) and node.name in spell:
         return ir.Var(spell[node.name])
     if not is_dataclass(node):
@@ -593,12 +607,19 @@ def _respell_params(node, spell):
     for f in fields(node):
         old = getattr(node, f.name)
         if isinstance(old, tuple):
-            new = tuple(_respell_params(x, spell) for x in old)
+            new = tuple(_respell_params(x, spell, stmt_addr) for x in old)
         else:
-            new = _respell_params(old, spell)
+            new = _respell_params(old, spell, stmt_addr)
         if new is not old:
             changes[f.name] = new
-    return replace(node, **changes) if changes else node
+    if not changes:
+        return node
+    new_node = replace(node, **changes)
+    if stmt_addr is not None:
+        a = stmt_addr.pop(id(node), None)
+        if a is not None:
+            stmt_addr[id(new_node)] = a
+    return new_node
 
 
 def _resolve_calls(
@@ -2208,9 +2229,10 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                     else None,
                 }
             )
-        elif (
-            frame is not None and t == frame["exit"]
-        ):  # jmp to ProcRet/FnRet = EXIT SUB/DEF
+        elif frame is not None and t in (
+            frame["exit"],
+            frame.get("exit_entry", frame["exit"]),
+        ):  # jmp to ProcRet/FnRet (or its LOCAL-string teardown) = EXIT SUB/DEF
             exit_stmt = ir.ExitSub() if state.proc_frame is not None else ir.ExitDef()
             if (
                 state.stmts
@@ -2826,10 +2848,34 @@ def decode_user_code(exe: bytes) -> list[Any]:
             state.cur = None  # fall through to lift this op into the body
         if kind == "proc_enter":
             state.flush_pending()
+            _ret = next(
+                i for i, o in enumerate(state.ops[state.k :], state.k)
+                if o[1] == "proc_ret"
+            )
+            # A SUB with LOCAL string variables frees their descriptors in the
+            # epilogue, as a run of `arg_ref <disp>; str_temp_free` pairs ahead
+            # of the proc_ret (t1_localstr/t1_locstrafterfor). Both are no-ops
+            # to the lift, so the run produces no statement -- but it IS where
+            # an `EXIT SUB` jumps, so the frame's exit address has to name the
+            # FIRST pair, not the proc_ret. Recognizing only the proc_ret left
+            # the EXIT SUB decoded as a plain Goto to an address no statement
+            # owns (wild tbd73.exe, TBW73.INC:452: `EXIT SUB` inside
+            # `IF curntpos > itemcount THEN ... END IF` in `SUB Makevmenu`,
+            # whose two LOCAL strings `ans$, ans1$` make the epilogue start six
+            # bytes early -- `jump target 0xc2cc is not a statement start`).
+            # Fixture t1_exitsublocstr.
+            _epi = _ret
+            while (
+                _epi - 2 >= state.k
+                and state.ops[_epi - 1][1] == "str_temp_free"
+                and state.ops[_epi - 2][1] == "arg_ref"
+            ):
+                _epi -= 2
             state.proc_frame = {
                 "entry": addr,
                 "idx": len(state.stmts),
-                "exit": next(o[0] for o in state.ops[state.k :] if o[1] == "proc_ret"),
+                "exit": state.ops[_ret][0],
+                "exit_entry": state.ops[_epi][0],
                 "locals": None,
                 "array_params": {},
             }
@@ -3146,7 +3192,9 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 # spelling, or the header and the body name two different
                 # variables and rename.py letters them apart (t1_fwdinline).
                 spell = {p.rstrip("%$&#"): p for p in params if p.startswith("P")}
-                body = tuple(_respell_params(b, spell) for b in body)
+                body = tuple(
+                    _respell_params(b, spell, state.stmt_addr) for b in body
+                )
                 state.fwd_inline_offs.clear()
             state.stmts.append(ir.SubDef(name, params, body))
             state.addrs.append(None)  # a SUB definition is never a jump target

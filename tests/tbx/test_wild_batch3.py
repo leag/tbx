@@ -524,6 +524,76 @@ def test_decode_t1_fwdinline():
         ), stem
 
 
+def test_decode_t1_inlfwdwhile():
+    # Respelling a SUB body's `Pxx` placeholders (the SUB ... INLINE forwarding
+    # of test_decode_t1_fwdinline above) REBUILDS every statement that mentions
+    # a parameter -- and `stmt_addr`, which places BodyLine jump targets inside
+    # a SUB body, is keyed on `id(stmt)`. So a respelled statement that is ALSO
+    # a jump target lost its address and failed to resolve. The same identity
+    # hazard `_resolve_calls` documents, except the node genuinely changes
+    # here, so the address must be MOVED rather than the rebuild avoided.
+    #
+    # Wild tbd73.exe: `SUB Makevmenu` forwards `item$()` to `SUB Sprint
+    # INLINE`, so its whole body is respelled -- including the
+    # `WHILE MID$(liveitem$,curntpos,1) <> "1"` header (TBW73.INC:444), which
+    # is the merge point of the single-line nested IF/ELSE on the line before
+    # it (`jump target 0xb192 is not a statement start`). Byte-exact, both
+    # dialects.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_inlfwdwhile", "v10_t1_inlfwdwhile"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        wrap = next(s for s in prog if isinstance(s, ir.SubDef) and s.params)
+        assert wrap.params == ("A$", "B%", "C%"), stem
+        # the DO WHILE header is body phys 7 -- both the outer IF's false-skip
+        # and the ELSE arm's skip resolve to it
+        assert wrap.body[1] == ir.IfGoto(
+            ir.RelOp("<>", ir.Var("B%"), ir.Lit(0)), ir.BodyLine(1, 7)
+        ), stem
+        assert wrap.body[4] == ir.Goto(ir.BodyLine(1, 7)), stem
+        assert wrap.body[6].kind == "WHILE", stem
+        assert emit0.emit(prog).endswith(
+            "20 SUB SUB2(A$, B%, C%)\n  CALL SUB1(A$)\n"
+            "  IF B% <> 0 THEN 27\n  IF C% <> 0 THEN 26\n"
+            "  B% = 1\n  GOTO 27\n26 B% = C%\n"
+            '27 DO WHILE MID$(A$,B%,1) <> "1"\n  INCR B%\n  LOOP\n'
+            "  PRINT B%\nEND SUB\n"
+            '30 D$ = "001"\n40 E% = 0\n50 F% = 2\n'
+            "60 CALL SUB2(D$,E%,F%)\n70 END\n"
+        ), stem
+
+
+def test_decode_t1_exitsublocstr():
+    # EXIT SUB out of a SUB that declares LOCAL strings. Their descriptors are
+    # freed in the epilogue, as a run of `arg_ref <disp>; str_temp_free` pairs
+    # ahead of the proc_ret (the shape t1_localstr/t1_locstrafterfor already
+    # witness) -- and since an EXIT SUB jumps to the FIRST pair rather than to
+    # the proc_ret, the frame's exit address has to name the run's start. With
+    # only the proc_ret recognized, the EXIT SUB decoded as a plain Goto to an
+    # address no statement owns.
+    #
+    # Wild tbd73.exe, TBW73.INC:452: `EXIT SUB` inside
+    # `IF curntpos > itemcount THEN ... END IF` in `SUB Makevmenu`, whose two
+    # LOCAL strings `ans$, ans1$` start the epilogue six bytes early
+    # (`jump target 0xc2cc is not a statement start`). Byte-exact, both
+    # dialects.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_exitsublocstr", "v10_t1_exitsublocstr"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        sub = next(s for s in prog if isinstance(s, ir.SubDef))
+        blk = next(b for b in sub.body if isinstance(b, ir.IfBlock))
+        # the EXIT SUB survives as ExitSub inside the block, not as a Goto
+        assert blk.arms[0][1][-1] == ir.ExitSub(), stem
+        assert not any(isinstance(b, ir.Goto) for b in blk.arms[0][1]), stem
+        assert emit0.emit(prog) == (
+            "10 SUB SUB1(A%, B%)\n  LOCAL C$\n  C$ = \"x\"\n"
+            "  IF A% > B% THEN\n    A% = 0\n    EXIT SUB\n  END IF\n"
+            "  PRINT C$; A%\nEND SUB\n"
+            "20 D% = 5\n30 E% = 2\n40 CALL SUB1(D%,E%)\n50 END\n"
+        ), stem
+
+
 def test_decode_t1_fnlitresult():
     # A block DEF FN whose result store is a LITERAL: `FNBar% = 7` compiles to
     # `mov word [bp+0], 7`, the SAME op and cell as the prologue's result-slot
@@ -3241,6 +3311,8 @@ if __name__ == "__main__":
     test_decode_t1_inlinebp()
     test_decode_t1_erasestatic()
     test_decode_t1_fwdinline()
+    test_decode_t1_inlfwdwhile()
+    test_decode_t1_exitsublocstr()
     test_decode_t1_fnintcall()
     test_decode_t1_inlinethendef()
     test_decode_t1_commonarrstatic()

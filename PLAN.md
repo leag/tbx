@@ -99,7 +99,15 @@ edition/runtime tag, and evidence provenance.
   it was scoped and deferred, not started. Do not confuse round 22 for
   the whole idea.
 
-  **Where `tbd73.exe` stands**: `materialization template mismatch at
+  **Where `tbd73.exe` stands as of round 38**: `jump target 0xba64 is not
+  a statement start`. Rounds 37 and 38 each advanced it one gap
+  (`0xb192` -> `0xc2cc` -> `0xba64`), both determined directly from
+  `TBW73.INC` with no speculative probing -- see their Part III entries.
+  Suite **2454 passed**, 451 skipped. The round-24 shape below is still
+  open and still the right description of it, but it is no longer the
+  FRONT gap.
+
+  **Superseded**: `materialization template mismatch at
   0xbc24`, diagnosed in full in Round 24's entry (`IF hmenuopen AND
   (ans1$ = CHR$(75) OR ans1$ = CHR$(77))`, TBW73.INC:510) but
   deliberately NOT landed -- the real need is a STRING relational
@@ -1352,6 +1360,52 @@ runtime prologue's own writes -- `cfgview` the program start and find which
 instructions store to DS:0x102-0x10f. That names the cells directly instead of
 guessing at source shapes, which is where this triage stalled.
 
+### 2026-07-25 — Census FINISHED, and the mismatch class is probably NOT a decoder defect
+
+The `--all` sweep completed: **923 ok, 62 MISMATCH, 19 skip** (the 19 are the
+expected `f*_` flag fixtures). Log: `scratchpad/verify_all2.log`. So the standing
+mismatch class is 62 fixtures, not the 5 targeted sampling had found -- and every
+one of the 62 is a `t1_`/`zz_` stem. **Zero `v10_` fixtures mismatch.**
+
+Every mismatch has IDENTICAL length. Normalizing all 62 stems' differing file
+offsets against the image tail puts every differing byte inside a single
+~180-byte window at the very end of the image -- the const-pool window (EOF-0x2C)
+and the ~0x60 bytes preceding it, i.e. exactly the tail structures the layout
+solver reads. 27 distinct shapes; the dominant one (22 stems) is four
+consecutive 4-byte records in which only the LOW WORD differs, and it sits
+exactly 0x14 from the anchor used earlier -- confirming the DS:0x102/0x106/
+0x10a/0x10e + DS:0x15e localization from the previous entry.
+
+Reading the actual VALUES settles what kind of difference it is. The records are
+`<word> <DS pointer>`; the original stores pointers of `0x0110` (COMMON_BASE),
+`0x0120` (VAR_BASE) or `0x0124`, and our recompile stores `0x0000`:
+
+```
+t1_poke   ours  01 00 64 00 00 00 | 00 00 | 00 00 | 00 00 | 00 00 | 18 00
+          orig  01 00 64 00 00 00 | 20 01 | 00 00 | 20 01 | 00 00 | 18 00
+```
+
+**The decisive test**: `t1_poke.bas` is `10 POKE 100, 1 / 20 END`. Compiling the
+**AUTHORED** source (not the emitted one) against the oracle reproduces the SAME
+4-byte mismatch against `t1_poke.exe`. The emitted source is therefore
+byte-equivalent to the authored source, and the difference lives between the
+fixture EXE and this oracle image -- an environment/toolchain difference, not a
+recovery defect.
+
+Scope honestly: **this was confirmed for `t1_poke` only.** The batch check across
+all 62 was started and then stopped at the user's direction (the recompiler is
+out of scope for the current work), so treat the general claim as strongly
+suggested by the uniform signature (identical length, image-tail-only, `v10_`
+entirely clean, trivial programs like `POKE 100,1` affected) but verified on one
+stem. Cheap way to finish it later: for each of the 62 that has an authored
+`.bas`, compile authored vs emitted and assert the two outputs are equal to each
+other -- that isolates the decoder without needing the fixture EXE to match at
+all.
+
+The section below records the state BEFORE this finding; keep it for the
+reasoning trail, but do not restart the `cfgview`-the-prologue plan it proposes
+until the authored-vs-emitted check above has been run.
+
 ### 2026-07-25 — Full-corpus byte-verify census: IN PROGRESS, partial results
 
 `python -m tbx.tools.verify_fixture --all` over all 1002 corpus EXEs, launched
@@ -1390,6 +1444,92 @@ Goldens pin what the decoder DOES, and `verify_fixture` was only ever run on
 stems a session happened to touch, so a fixture could sit green in the suite for
 a long time while failing its own round trip. Finishing this census, then wiring
 a periodic (not per-commit -- it is far too slow) sweep, would close that gap.
+
+### 2026-07-25 — Round 38: EXIT SUB lands on the LOCAL-string teardown, not the proc_ret
+
+Gap: `jump target 0xc2cc is not a statement start`. Determined from source in
+one step, no probing: `0xC2CC` is `arg_ref:106; str_temp_free; arg_ref:110;
+str_temp_free; proc_ret:112` -- a SUB epilogue -- and the only two ops reaching
+it are `0B1F7 jmp` and the tail test at `0C2C7`. TBW73.INC:447-453 is
+
+```basic
+IF curntpos > itemcount THEN
+  startpos = 0 : curntpos = 0 : done = -1 : vmenuopen = 0
+  EXIT SUB
+END IF
+```
+
+and the ops match statement for statement (`0B1D9`/`0B1E1` the two zero stores,
+`0B1E9` the `-1`, `0B1F1` `vmenuopen = 0`, `0B1F7` the EXIT SUB).
+
+Cause: `proc_frame["exit"]` was `next(o for o in ops if o[1] == "proc_ret")`.
+But a SUB with LOCAL **strings** frees their descriptors first, as a run of
+`arg_ref <disp>; str_temp_free` pairs ahead of the `proc_ret` -- and `EXIT SUB`
+jumps to the FIRST pair. `Makevmenu`'s `LOCAL done, mloop, ans$, ans1$` gives
+two strings, so the epilogue starts six bytes early and the equality test
+missed. The EXIT SUB then fell through to the generic `Goto(("addr", t))` arm
+and died at resolve time.
+
+Fix (`core.py`): compute the epilogue entry at `proc_enter` by walking back from
+the `proc_ret` over the maximal run of `arg_ref; str_temp_free` pairs, store it
+as `exit_entry`, and accept either address in the `jmp` handler. Both ops are
+already no-ops to the lift, so nothing else moves.
+
+Why it had never fired: the corpus has exactly **6** `proc_ret` sites with such
+a trailing run (`t1_localstr`, `t1_locstrafterfor`, `t1_locstrafterforlit` x2
+dialects) and not one of them contains an `EXIT SUB`.
+
+Witness `t1_exitsublocstr` (+ `v10_` twin), cut down from the real shape --
+`LOCAL C$`, an `EXIT SUB` inside a block IF. Confirmed to raise
+`jump target 0x875f is not a statement start` against the UNFIXED decoder, and
+byte-exact both dialects. Suite 2449 -> **2454 passed**, 451 skipped, zero
+regressions. tbd73 advances to `jump target 0xba64`.
+
+### 2026-07-25 — Round 37: respelling a SUB body orphans its statement addresses
+
+Gap: `jump target 0xb192 is not a statement start`. Sixth distinct cause for
+that one message across this campaign, and the first that is purely an
+**object-identity** bug rather than a vocabulary or ordering one.
+
+Source determination (TBW73.INC:443-444):
+
+```basic
+IF curntpos = 0 THEN IF startpos = 0 THEN curntpos = 1 ELSE curntpos = startpos
+WHILE MID$(liveitem$,curntpos,1) <> "1"
+```
+
+A single-line nested IF with an ELSE, no `END IF`. Both forward jumps to
+`0xB192` are that one line's own control flow -- `0B16B` the outer false-skip,
+`0B183` the skip over the ELSE arm -- and `0xB192` is line 444's `WHILE` head
+test. Under the round-16 normalization this renders as `IF <negated> THEN <line>`
++ `GOTO <line>`, so the `WHILE` must be addressable.
+
+Cause: `_respell_params` rewrites a SUB body's `Pxx` placeholders to the
+declared param spelling, which **replaces** every statement object that mentions
+a parameter -- while `stmt_addr`, which places `BodyLine` jump targets inside a
+SUB body, is keyed on `id(stmt)`. The `Do` was created with the right address
+(instrumented: `put(ir.Do("WHILE", ...), 0xB192)`) and then rebuilt into a new
+object, orphaning the entry: `stmt_addr[id(old)] == 0xB192` while the `Do` in
+the tree resolved to `None`. This is exactly the hazard `_resolve_calls`
+documents in its own docstring; the difference is that here the node genuinely
+changes, so the address must be **moved**, not the rebuild avoided.
+
+Fix (`core.py`): `_respell_params` takes `stmt_addr` and transfers the entry on
+every rebuild, at every depth (only the top-level walk knows which objects are
+statements, so the transfer has to happen inside the recursion).
+
+Why it fired here: `_respell_params` runs only when `fwd_inline_offs` is
+non-empty -- an argument forwarded to a `SUB ... INLINE`, which has no
+parameter list to type it from. `TBW73.INC` declares eight of them
+(`Getftblptr`, `Openbox`, `Titlebox`, `Sprint`, `Sfill`, `Scolor`, `Closebox`,
+`Scroll`) and `Makevmenu` forwards `item$()` to `Sprint`, so its ENTIRE body is
+respelled -- including the `WHILE` header two lines in.
+
+Witness `t1_inlfwdwhile` (+ `v10_` twin), cut down from that shape: a `SUB ...
+INLINE` with `$INLINE` bytes, an enclosing SUB that forwards a param to it, and
+a single-line nested IF/ELSE merging on a `WHILE` header that references params.
+Confirmed to raise `jump target 0x87f4` against the UNFIXED decoder; byte-exact
+both dialects; identical IR across 1.0 and 1.1. Suite 2444 -> 2449 passed.
 
 ### 2026-07-25 — Round 36: nested block IF/ELSE reconstruction (item 3)
 
