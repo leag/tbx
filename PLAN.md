@@ -1296,6 +1296,75 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-31 — Round 34: block-IF vs inline-IF is BYTE-SIGNIFICANT — discriminator FOUND, blocked on line accounting
+
+Chasing tbd73's residual ELSE-arm gap led somewhere more consequential: the
+decoder's inline/block IF normalization is **not** byte-neutral, and some
+corpus fixtures have been failing their own round trip because of it.
+
+**Measured, not inferred.** Two hand-written sources differing ONLY in whether
+a two-statement IF body is spelled multi-line or on one line, both compiled by
+our own oracle, differ in **71 bytes** at identical length:
+
+```
+block  ... b8 ff ff 74 01 ...   the movax-FFFF MATERIALIZATION template
+inline ... 74 03 e9 08 00 ...   a bare dispatch pair
+```
+
+**The discriminator.** `_lift_while` exists to consume the materialization
+template, and a genuinely single-line `IF <simple> THEN <stmt>` does NOT
+materialize -- it compiles the bare dispatch pair. Confirmed both ways against
+fixtures that already round-trip byte-exact:
+
+| fixture | verify | template | source spelling |
+|---|---|---|---|
+| `zz_sub7`, `zz_mdeffn2` | ok | dispatch pair | genuinely inline |
+| `zz_bif1`, `zz_bif4` | **MISMATCH -16B** | materialization | block, emitted inline |
+
+So **materialization + a SIMPLE relop is positive evidence the source was a
+multi-line block IF.** Compound conditions materialize either way (their
+negation does not compile the same), which is why `IfInline(cond=LogOp/BinOp/
+Group)` is legitimate -- only the `cond=RelOp` rows are suspect.
+
+**Implemented and PROVEN, then reverted.** Marking those `ifs` entries `block`
+in `_lift_while` and emitting `ir.IfBlock` for them in core.py took `zz_bif1`
+from a 16-byte MISMATCH to **ok**. That is the validation: the rule is right.
+
+**What blocks it**: a block IF occupies 3+ physical lines where an inline IF
+occupies 1, and TRON / error-trap line numbering is byte-significant. With the
+change, `t1_tronif` and `t1_tronerb` do not merely differ -- they RAISE
+`trace-hook lines misaligned with the traced statement's physical lines`. Total
+churn was 15 failures: 12 usercode goldens (mostly legitimate re-spellings),
+`t1_dblhook`'s pinned test, the IR snapshot, and one CLI test. The golden churn
+is expected and reviewable; the trace-hook line accounting is the real work, and
+it sits in the most byte-sensitive machinery in the project. Not something to
+rush at the end of a session.
+
+**Standing round-trip failures found while measuring** (these are corpus
+fixtures failing `verify_fixture` TODAY, independent of any change here -- worth
+knowing that the corpus is not uniformly byte-verified):
+
+- `zz_bif1` -16B, `zz_bif4` -16B — this round's block-IF cause; the fix above
+  clears `zz_bif1`.
+- `zz_bif3` ~8B, `zz_do5` ~9B, `zz_efor` ~8B — same size, small content diffs,
+  and NO materialization template in their ops, so a DIFFERENT cause. `zz_do5`/
+  `zz_efor` are `IF <simple> THEN EXIT LOOP` / `EXIT FOR`. Untriaged.
+- `zz_bif2` verifies ok.
+
+A `verify_fixture --all` sweep would be worth running to get the true count;
+this round only sampled the fixtures the `IfInline(cond=RelOp)` grep pointed at.
+
+**Recommended order for the next session**, all three now well-scoped:
+1. Trace-hook / error-trap physical-line accounting for block IFs. Prerequisite
+   for everything else here.
+2. Land this round's discriminator on top of it. Expect ~12 golden re-spellings;
+   review each, and re-verify `zz_bif1`/`zz_bif4`.
+3. Then tbd73's ELSE-arm reconstruction (round 33's residual), which needs the
+   block form to exist before an ELSE arm can be attached to it -- which is why
+   it is last, not first.
+
+`tbd73.exe` unchanged at `jump target 0xa604`. Suite 2433, tree clean.
+
 ### 2026-07-31 — Round 33: a LITERAL result store in a block DEF FN (root cause of round 32)
 
 Round 32 traced tbd73's `jump target 0xa604` to "DEF FN body addressability".
