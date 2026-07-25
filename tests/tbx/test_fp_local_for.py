@@ -46,12 +46,35 @@ def test_mixed_def_fn_for_storage(stem):
     ]
 
 
-def test_ziptest_advances_to_forward_fn_resolution_gap():
+def test_ziptest_decodes_with_a_tail_if_closing_a_sub():
+    # ziptest.exe used to stop at `jump target 0x9ff7 is not a statement start`
+    # and now decodes end to end. The gap was a single-line IF as the LAST
+    # statement of a SUB: its false-skip lands on the epilogue, which is not a
+    # statement and never can be (END SUB carries no line number), so the
+    # `IF <negated> THEN <line>` normalization had nothing to name. Such an IF
+    # stays inline instead -- DecodeState.open_tail_if.
+    #
+    # This file witnesses the generic-compare path (an FP compare through
+    # fp_dispatch's _JCC_RELOP); corpus t1_iftaillast witnesses the by-ref
+    # param compare path that wild tbd73.exe needed. Both had to be handled.
     from conftest import wild_hits_bytes
 
-    data = wild_hits_bytes("ziptest.exe")
-    with pytest.raises(ValueError, match="jump target 0x9ff7 is not a statement start"):
-        decode0.decode_user_code(data)
+    prog = decode0.decode_user_code(wild_hits_bytes("ziptest.exe"))
+    tails = [
+        s.body[-1]
+        for s in prog
+        if isinstance(s, ir.SubDef) and s.body and isinstance(s.body[-1], ir.IfInline)
+    ]
+    assert tails == [
+        ir.IfInline(
+            ir.RelOp(
+                ">",
+                ir.BinOp("*", ir.DblLit(0.017), ir.Var("AI")),
+                ir.BinOp("-", ir.Var("AG"), ir.Var("AH")),
+            ),
+            (ir.CallStmt("SUB4", (ir.Var("AK$"),)),),
+        )
+    ]
 
 
 @pytest.mark.parametrize("stem", ["t1_fnforward", "v10_t1_fnforward"])

@@ -524,6 +524,45 @@ def test_decode_t1_fwdinline():
         ), stem
 
 
+def test_decode_t1_iftaillast():
+    # A single-line `IF cond THEN <stmt>` as the LAST statement of a SUB body.
+    # The dispatch pair's false-skip lands on the epilogue, and the usual
+    # `IF <negated> THEN <line>` normalization needs that skip address to BE a
+    # statement -- which an epilogue never is, since END SUB carries no line
+    # number. So the IF has to stay INLINE (DecodeState.open_tail_if); the
+    # ifs-close loop fires on the epilogue address before the proc_ret handler
+    # runs, so the body folds normally.
+    #
+    # Wild tbd73.exe, TBW73.INC:634: `IF numrecs - recpos + 1 < i THEN
+    # barpos = j - 1` closes `SUB Drawlist` (`jump target 0xcdc4 is not a
+    # statement start`). Two compare paths reach this shape and both had to be
+    # handled: the by-ref param compare pinned here, and the generic/FP compare
+    # in fp_dispatch -- the latter is what unblocked wild ziptest.exe end to end
+    # (test_fp_local_for.py::test_ziptest_decodes_with_a_tail_if_closing_a_sub).
+    # Byte-exact, both dialects.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_iftaillast", "v10_t1_iftaillast"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        sub = next(s for s in prog if isinstance(s, ir.SubDef))
+        tail = sub.body[-1]
+        # inline, NOT an IfGoto to an unnameable epilogue address
+        assert isinstance(tail, ir.IfInline), f"{stem}: {type(tail).__name__}"
+        assert tail.body == (
+            ir.Assign(ir.Var("B%"), ir.BinOp("-", ir.Var("D"), ir.Lit(1))),
+        ), stem
+        # the by-ref param stays on the LEFT of the compare (orientation is
+        # byte-significant); the relop is the SKIP map's negation
+        assert tail.cond.op == ">" and tail.cond.lhs == ir.Var("C%"), stem
+        assert emit0.emit(prog) == (
+            "10 SUB SUB1(A%, B%, C%)\n  LOCAL D\n  FOR D = 1 TO A%\n"
+            "  PRINT D\n  NEXT D\n"
+            "  IF C% > 1 + (A% + (-B%)) THEN B% = D - 1\nEND SUB\n"
+            "20 E% = 3\n30 F% = 1\n40 G% = 9\n50 CALL SUB1(E%,F%,G%)\n"
+            "60 PRINT F%\n70 END\n"
+        ), stem
+
+
 def test_decode_t1_selarmtarget():
     # A jump target landing INSIDE a SELECT CASE arm. Folding an arm moves its
     # statements off the flat list and deletes their `state.addrs` entries, so
@@ -3378,6 +3417,7 @@ if __name__ == "__main__":
     test_decode_t1_exitsublocstr()
     test_decode_t1_selelsetarget()
     test_decode_t1_selarmtarget()
+    test_decode_t1_iftaillast()
     test_decode_t1_fnintcall()
     test_decode_t1_inlinethendef()
     test_decode_t1_commonarrstatic()

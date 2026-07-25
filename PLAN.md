@@ -99,14 +99,20 @@ edition/runtime tag, and evidence provenance.
   it was scoped and deferred, not started. Do not confuse round 22 for
   the whole idea.
 
-  **Where `tbd73.exe` stands as of round 40**: `jump target 0xcdc4 is not
-  a statement start`. Rounds 37-40 each advanced it one gap
-  (`0xb192` -> `0xc2cc` -> `0xba64` -> `0xba9f` -> `0xcdc4`), all four
-  determined directly from `TBW73.INC` with no speculative probing -- see
-  their Part III entries. Suite **2464 passed**, 451 skipped. Three of
-  the four (37, 39, 40) were the SAME class of bug: statement addresses
-  ride in a side table keyed by object identity, and folds that move or
-  rebuild statements must maintain it by hand. See round 40's entry. Round 39's entry
+  **Where `tbd73.exe` stands as of round 41**: `jump target 0xd0ba is not
+  a statement start`. Rounds 37-41 each advanced it one gap
+  (`0xb192` -> `0xc2cc` -> `0xba64` -> `0xba9f` -> `0xcdc4` -> `0xd0ba`),
+  all five determined directly from `TBW73.INC` with no speculative
+  probing -- see their Part III entries. Suite **2469 passed**, 451
+  skipped. Three of the five (37, 39, 40) were the SAME class of bug:
+  statement addresses ride in a side table keyed by object identity, and
+  folds that move or rebuild statements must maintain it by hand. See
+  round 40's entry. Round 41 also closed `wild/hits/ziptest.exe`
+  end to end.
+
+  **Wild tally (measured, round 41): 26 of 85 decode+emit clean.** This
+  supersedes the "29 of 86" recorded below, which overstated it;
+  `scan_wild.py` and a direct decode+emit loop independently agree on 26. Round 39's entry
   also records an OPEN, separate defect it turned up: a bare numeric
   truth test (`IF flon THEN ...`) does not round-trip when normalized to
   `IF x = 0 THEN <line>` (probe `wild/probes/probe_bareif_negate`). The round-24 shape below is still
@@ -1450,6 +1456,63 @@ Goldens pin what the decoder DOES, and `verify_fixture` was only ever run on
 stems a session happened to touch, so a fixture could sit green in the suite for
 a long time while failing its own round trip. Finishing this census, then wiring
 a periodic (not per-commit -- it is far too slow) sweep, would close that gap.
+
+### 2026-07-25 — Round 41: a single-line IF closing a SUB has no skip target to name
+
+Gap: `jump target 0xcdc4 is not a statement start`. `0xCDC4` is `proc_ret:84`
+itself, reached by one jump, `0CDB3 jmp` -- the second half of a dispatch pair
+(`0CDB1 jcc:124 -> 0xCDB6`, i.e. `jcc +3`). The SUB was identified from its
+signature before reading any source: five params with an array first
+(`P16(1), P12%, P0E%, P0A%, P06%`) matches `SUB Drawlist(ptrarray$(1), numrecs,
+recpos, barpos, i)`, TBW73.INC:622. Its last line, 634, is
+
+```basic
+IF numrecs - recpos + 1 < i THEN barpos = j - 1
+```
+
+Cause: the single-line-IF dispatch pair always normalized to
+`IF <negated> THEN <line>` (round 16's form), naming the skip address as a GOTO
+target. That works for every IF with code after it. When the IF is the LAST
+statement of a SUB/DEF FN body the skip lands on the epilogue -- which is not a
+statement and *never can be*, since `END SUB` carries no line number. The right
+recovery is to keep the IF **inline**, where no target is needed at all.
+
+Fix: `DecodeState.open_tail_if(target, cond)` -- if `target` is the open frame's
+`exit`/`exit_entry` (round 38's pair), push an `ifs` body instead of emitting the
+IfGoto. The `ifs`-close loop runs on the epilogue address BEFORE the
+proc_ret/fn_ret handler, so the body folds with no other change. Callers pass the
+SOURCE polarity; `_NEGATE_REL` inverts the skip map, which keeps operand ORDER
+intact -- load-bearing, since the by-ref path's own comment records that moving
+the param off the left recompiles to different bytes.
+
+**Two compare paths reach this shape and both needed it**, which is only visible
+because two different files exercise different ones:
+
+| path | witness |
+|---|---|
+| `fp_dispatch`'s `_JCC_RELOP` dispatch pair | wild `ziptest.exe` (an FP compare) |
+| the by-ref `cmpax_si` IF form (round 16's own) | wild `tbd73.exe` TBW73.INC:634 |
+
+A third candidate site -- `arith.py`'s computed-array-element `cmpax_si` -- was
+written and then **removed**: with it deleted, nothing in the corpus, `wild/hits`
+or tbd73 changed. It was speculative, so it stays out per the calibration rule.
+Worth recording that the check was done rather than assumed.
+
+**`wild/hits/ziptest.exe` now decodes end to end** -- its recorded gap
+(`jump target 0x9ff7`) was this same shape, closing a SUB with
+`IF 0.017# * AI > AG - AH THEN CALL SUB4(AK$)`. Its advancement test is replaced
+by a full-decode test that pins that tail IF
+(`test_ziptest_decodes_with_a_tail_if_closing_a_sub`).
+
+Wild tally re-measured both ways: **26 of 85 decode+emit clean, up from 25**,
+with a set-level diff confirming ziptest is a pure addition and nothing
+regressed. Note this **corrects the Live checkpoint's "29 of 86"**, which
+overstated it -- `scan_wild.py` and a direct decode+emit loop independently agree
+on 26.
+
+Witness `t1_iftaillast` (+ `v10_` twin), byte-exact both dialects, confirmed to
+raise against the unfixed decoder. Suite 2464 -> **2469 passed**. tbd73 advances
+`0xcdc4` -> `0xd0ba`.
 
 ### 2026-07-25 — Round 40: a CASE arm's statement addresses were discarded with the fold
 

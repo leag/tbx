@@ -14,6 +14,7 @@ from tbx.decode0.const import (
     _JCC_RELOP_STR,
     _JCC_RELOP_STR_TRUE,
     _JCC_RELOP_TRUE,
+    _NEGATE_REL,
     _PREC,
     _PUT_ACTIONS,
     _READDATA,
@@ -264,6 +265,48 @@ class DecodeState:
         frame = self.proc_frame if self.proc_frame is not None else self.fn_frame
         if frame is not None:
             frame.setdefault("touched", set()).add(bp_off)
+
+    def open_tail_if(self, target, cond) -> bool:
+        """If `target` is the open procedure's own epilogue, open an inline-IF
+        body for `cond` and return True; otherwise return False and leave the
+        state untouched.
+
+        The single-line `IF cond THEN <stmt>` dispatch pair (`jcc +3; e9 SKIP`)
+        normally lifts to `IF <negated> THEN <line>` -- the skip address named as
+        a GOTO target. That needs the skip address to BE a statement, which it is
+        for every IF followed by more code. When the IF is the LAST statement of
+        a SUB/DEF FN body, the skip instead lands on the epilogue (the
+        `proc_ret`/`fn_ret`, or the LOCAL-string teardown ahead of it -- see
+        `exit_entry`), which is not a statement and never can be: `END SUB`
+        carries no line number. Opening an `ifs` body keeps it inline and needs
+        no target at all. The `ifs`-close loop fires on the epilogue address
+        BEFORE the proc_ret/fn_ret handler runs, so the body folds normally.
+
+        Callers pass the SOURCE polarity of the condition (the dispatch pair's
+        jcc tests its negation -- the skip), since only they know which relop map
+        produced it.
+
+        Witnessed by wild tbd73.exe, TBW73.INC:634: `IF numrecs - recpos + 1 < i
+        THEN barpos = j - 1` is the closing statement of `SUB Drawlist`
+        (`jump target 0xcdc4 is not a statement start`). Fixture t1_iftaillast.
+        """
+        frame = self.proc_frame if self.proc_frame is not None else self.fn_frame
+        if frame is None or target not in (
+            frame["exit"],
+            frame.get("exit_entry", frame["exit"]),
+        ):
+            return False
+        self.flush_pending()
+        self.ifs.append(
+            {
+                "target": target,
+                "cond": cond,
+                "start": self.cur,
+                "idx": len(self.stmts),
+            }
+        )
+        self.cur = None
+        return True
 
     def loc_local_str(self, bp_off):
         """Resolve a four-byte STRING LOCAL first exposed by INT 9E/A2.
@@ -1874,6 +1917,16 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             lhs, rhs = state.pend_cmp
             state.pend_cmp = None
             state.pend_cmp_str = False
+            # A tail IF closing the procedure has no statement after it to name
+            # as the skip target (see DecodeState.open_tail_if). `_JCC_RELOP` /
+            # `_JCC_RELOP_STR` give the relop under which the jcc is TAKEN, i.e.
+            # the source condition's negation; `_NEGATE_REL` recovers the source
+            # polarity for either map.
+            if state.open_tail_if(
+                nxt[2], ir.RelOp(_NEGATE_REL[relop_map[cc]], lhs, rhs)
+            ):
+                state.k += 2
+                return
             state.put(
                 ir.IfGoto(ir.RelOp(relop_map[cc], lhs, rhs), ("addr", nxt[2])),
                 state.cur,
@@ -3452,6 +3505,20 @@ def decode_user_code(exe: bytes) -> list[Any]:
                         raise ValueError(
                             f"by-ref cmpax_si IF jcc {nx[2]:02x} at {addr:#x}"
                         )
+                    # A tail IF closing the procedure skips to the epilogue,
+                    # which is not a statement (see open_tail_if). Negating
+                    # `skiprel` recovers the source polarity while KEEPING the
+                    # param on the left, which the orientation note above
+                    # requires (wild tbd73.exe, TBW73.INC:634 closes
+                    # `SUB Drawlist` with exactly this compare form).
+                    if state.open_tail_if(
+                        j2[2],
+                        ir.RelOp(_NEGATE_REL[skiprel[nx[2]]], argvar, state.ax),
+                    ):
+                        state.ax = None
+                        state.pend_arg = None
+                        state.k += 3
+                        continue
                     state.put(
                         ir.IfGoto(
                             ir.RelOp(skiprel[nx[2]], argvar, state.ax),

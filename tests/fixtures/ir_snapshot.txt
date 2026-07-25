@@ -4423,6 +4423,15 @@ Assign(target=Var(name='C%'), value=Lit(value=0))
 Assign(target=Var(name='C%'), value=BinOp(op='+', lhs=Var(name='C%'), rhs=Lit(value=1)))
 IfGoto(cond=RelOp(op='<', lhs=Var(name='C%'), rhs=Lit(value=10)), target=3)
 
+## t1_iftaillast
+SubDef(name='SUB1', params=('A%', 'B%', 'C%'), body=(Local(names=('D',)), For(var=Var(name='D'), init=Lit(value=1), limit=Var(name='A%'), step=Lit(value=1)), Print(items=(Var(name='D'),), newline=True, file=None, commas=None), NextStmt(var=Var(name='D')), IfInline(cond=RelOp(op='>', lhs=Var(name='C%'), rhs=BinOp(op='+', lhs=Lit(value=1), rhs=Group(inner=BinOp(op='+', lhs=Var(name='A%'), rhs=Group(inner=Neg(operand=Var(name='B%'))))))), body=(Assign(target=Var(name='B%'), value=BinOp(op='-', lhs=Var(name='D'), rhs=Lit(value=1))),))))
+Assign(target=Var(name='E%'), value=Lit(value=3))
+Assign(target=Var(name='F%'), value=Lit(value=1))
+Assign(target=Var(name='G%'), value=Lit(value=9))
+CallStmt(name='SUB1', args=(Var(name='E%'), Var(name='F%'), Var(name='G%')))
+Print(items=(Var(name='F%'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_imulpool
 Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Assign(target=Var(name='B'), value=Lit(value=2))
@@ -10875,6 +10884,15 @@ Assign(target=Var(name='B%'), value=Erl())
 Assign(target=Var(name='C%'), value=Lit(value=0))
 Assign(target=Var(name='C%'), value=BinOp(op='+', lhs=Var(name='C%'), rhs=Lit(value=1)))
 IfGoto(cond=RelOp(op='<', lhs=Var(name='C%'), rhs=Lit(value=10)), target=3)
+
+## v10_t1_iftaillast
+SubDef(name='SUB1', params=('A%', 'B%', 'C%'), body=(Local(names=('D',)), For(var=Var(name='D'), init=Lit(value=1), limit=Var(name='A%'), step=Lit(value=1)), Print(items=(Var(name='D'),), newline=True, file=None, commas=None), NextStmt(var=Var(name='D')), IfInline(cond=RelOp(op='>', lhs=Var(name='C%'), rhs=BinOp(op='+', lhs=Lit(value=1), rhs=Group(inner=BinOp(op='+', lhs=Var(name='A%'), rhs=Group(inner=Neg(operand=Var(name='B%'))))))), body=(Assign(target=Var(name='B%'), value=BinOp(op='-', lhs=Var(name='D'), rhs=Lit(value=1))),))))
+Assign(target=Var(name='E%'), value=Lit(value=3))
+Assign(target=Var(name='F%'), value=Lit(value=1))
+Assign(target=Var(name='G%'), value=Lit(value=9))
+CallStmt(name='SUB1', args=(Var(name='E%'), Var(name='F%'), Var(name='G%')))
+Print(items=(Var(name='F%'),), newline=True, file=None, commas=None)
+End()
 
 ## v10_t1_imulpool
 Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
