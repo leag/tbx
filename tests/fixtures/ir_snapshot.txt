@@ -4653,6 +4653,19 @@ Print(items=(Var(name='A$'),), newline=True, file=None, commas=None)
 Close(num=1)
 End()
 
+## t1_lineinparr
+Dim(name='V0$', bounds=(50,), also=())
+Assign(target=Var(name='A$'), value=StrLit(value='LMENUTB.TXT'))
+Open(mode=StrLit(value='I'), num=1, file=Var(name='A$'), reclen=None, for_as=True)
+Assign(target=Var(name='B'), value=Lit(value=0))
+Do(kind=None, cond=None)
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=1)))
+LineInput(prompt=None, var=ArrayRef(name='V0$', indices=(Var(name='B'),)), file=1, semi=False)
+Loop(kind='UNTIL', cond=Call(name='EOF', args=(Lit(value=1),)))
+Close(num=1)
+Print(items=(Var(name='B'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_lines
 LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=5), y2=Lit(value=5), color=None, box='', step1=False, step2=True, style=None)
 End()
@@ -10988,6 +11001,19 @@ Open(mode=StrLit(value='I'), num=1, file=StrLit(value='A.TXT'), reclen=None, for
 LineInput(prompt=None, var=Var(name='A$'), file=1, semi=False)
 Print(items=(Var(name='A$'),), newline=True, file=None, commas=None)
 Close(num=1)
+End()
+
+## v10_t1_lineinparr
+Dim(name='V0$', bounds=(50,), also=())
+Assign(target=Var(name='A$'), value=StrLit(value='LMENUTB.TXT'))
+Open(mode=StrLit(value='I'), num=1, file=Var(name='A$'), reclen=None, for_as=True)
+Assign(target=Var(name='B'), value=Lit(value=0))
+Do(kind=None, cond=None)
+Assign(target=Var(name='B'), value=BinOp(op='+', lhs=Var(name='B'), rhs=Lit(value=1)))
+LineInput(prompt=None, var=ArrayRef(name='V0$', indices=(Var(name='B'),)), file=1, semi=False)
+Loop(kind='UNTIL', cond=Call(name='EOF', args=(Lit(value=1),)))
+Close(num=1)
+Print(items=(Var(name='B'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_lines

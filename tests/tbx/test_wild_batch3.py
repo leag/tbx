@@ -2102,6 +2102,24 @@ def test_decode_t1_loc2():
     )
 
 
+def test_decode_t1_lineinparr():
+    # `LINE INPUT #n` into a VARIABLE-INDEXED string array element
+    # (wild tbd73.exe, TBD73.BAS:394 `LINE INPUT #1,recarr$(rec)`).
+    # t1_lineinf's consumer is a fixed `movsi; strassign` pair, but a computed
+    # index puts its whole shl/addsi chain between the read and the store, so
+    # the store is what names the target -- exactly the case the PROMPT form of
+    # LINE INPUT already handled (wild cal87.exe) and the `#n` form did not.
+    # The file number has to ride through the staged state or the rebuilt
+    # statement loses its `#1`.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_lineinparr", "v10_t1_lineinparr"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        li = next(s for s in prog if isinstance(s, ir.LineInput))
+        assert li == ir.LineInput(None, ir.ArrayRef("V0$", (ir.Var("B"),)), 1), stem
+        assert "LINE INPUT #1, V0$(B)" in emit0.emit(prog), stem
+
+
 def test_decode_t1_lineinf():
     # LINE INPUT #n, var$ (wild billadd.exe/crossref.exe/file.exe/
     # grdscn.exe/strpfind.exe): the file-channel sibling of console LINE

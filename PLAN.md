@@ -1296,6 +1296,33 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 29: `LINE INPUT #n` into a computed array element
+
+`tbd73.exe`'s `LINE INPUT # template mismatch at 0x12f96` is `TBD73.BAS:394`,
+in `SUB Showfile`:
+
+```basic
+LINE INPUT #1,recarr$(rec)
+```
+
+Diagnosed source-first this time (the round-28 lesson applied): grep the real
+source for `LINE INPUT`, one hit, done -- no speculative probing at all.
+
+`t1_lineinf`'s file-form consumer is a fixed `movsi; strassign` pair. A
+VARIABLE index puts its whole `movsim; shlsi; shlsi; addsi` chain between the
+read and the store, so the store is what names the target. That is precisely
+the case the PROMPT form of `LINE INPUT` already handled (`graphics.py`'s
+`nxt[1] != "movsi"` branch, wild cal87.exe) -- the `#n` form simply never got
+the same branch. Added it, mirroring the sibling exactly, plus the one thing
+the sibling did not need: the file number has to ride through
+`pend_line_input` so `_lineinput_target` can rebuild the `#1`, or the
+recovered statement silently loses its channel.
+
+Witness `t1_lineinparr`, cut down straight from `TBD73.BAS:387-396` rather
+than invented, byte-exact both dialects. Suite 2412 -> 2417, zero golden drift.
+
+`tbd73.exe` advances to `ERASE of unknown static slot at 0x13384`.
+
 ### 2026-07-24 — Round 28: integer FN result read across a register shuttle (LANDED)
 
 `tbd73.exe`'s `[bp+0] outside the open LOCAL frame` -- the op is `movax_bp:0`

@@ -335,7 +335,9 @@ def console(state: DecodeState, op, addr, kind) -> bool:
             # computation runs between the read and the element store, so
             # the store (the shlsi element-access handler's strassign
             # branch) names the target.
-            state.pend_line_input = {"prompt": prompt, "semi": op[3], "start": state.cur}
+            state.pend_line_input = {
+                "prompt": prompt, "semi": op[3], "start": state.cur, "file": None
+            }
             state.sstack.append(_LINEINPUTREAD)
             state.k += 1
             return True
@@ -351,6 +353,26 @@ def console(state: DecodeState, op, addr, kind) -> bool:
     if kind == "line_input_file":  # LINE INPUT #n, var$
         if state.pend_fnum is None:
             raise ValueError(f"LINE INPUT # without a file number at {addr:#x}")
+        nxt1 = state.ops[state.k + 1] if state.k + 1 < len(state.ops) else None
+        if nxt1 is not None and nxt1[1] != "movsi":
+            # Computed string-array-element target -- `LINE INPUT #1,
+            # recarr$(rec)` (wild tbd73.exe, TBD73.BAS:394). Exactly the case
+            # the prompt-form sibling above already handles: the index
+            # computation runs between the read and the element store, so the
+            # store (the shlsi element-access handler's strassign branch) is
+            # what names the target. Stage it the same way, carrying the file
+            # number through so _lineinput_target can rebuild the `#n` form
+            # (t1_lineinparr).
+            state.pend_line_input = {
+                "prompt": None,
+                "semi": False,
+                "start": state.cur,
+                "file": state.pend_fnum,
+            }
+            state.sstack.append(_LINEINPUTREAD)
+            state.pend_fnum = None
+            state.k += 1
+            return True
         nxt = [o[1] for o in state.ops[state.k + 1 : state.k + 3]]
         if nxt != ["movsi", "strassign"]:
             raise ValueError(f"LINE INPUT # template mismatch at {addr:#x}")

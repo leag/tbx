@@ -397,7 +397,10 @@ class DecodeState:
         and the element store, so the store names the target."""
         pi = self.pend_line_input
         assert pi is not None
-        self.put(ir.LineInput(pi["prompt"], ref, semi=pi["semi"]), pi["start"])
+        self.put(
+            ir.LineInput(pi["prompt"], ref, pi.get("file"), semi=pi["semi"]),
+            pi["start"],
+        )
         self.pend_line_input = None
 
     # decode a pooled string literal at descriptor `desc`; desc and ss_base are ints
