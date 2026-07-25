@@ -1525,6 +1525,23 @@ def stack_ops(state: DecodeState, op, addr, kind) -> bool:
         "str_free_temp",
         "bchk_base",  # Bounds: array-descriptor setup (F3.4)
     ):
+        if kind == "sub_sp" and state.cur is None:
+            # `sub sp,N` reserving the outgoing-argument area OPENS a CALL
+            # statement, and this family returns early -- before core.py's
+            # generic top-of-statement `state.cur = addr` fallback -- so the
+            # CallStmt would otherwise be recorded at whichever later op
+            # happens to anchor it. That address is what an inline IF
+            # immediately before the CALL names as its skip target, so the
+            # target has to be the `sub sp` (the same anchoring `arg_ref` and
+            # `mov_mem_sp` already do, for the same reason).
+            #
+            # Wild tbd73.exe, TBW73.INC:688-689, `SUB Makelmenu`'s
+            # `CASE CHR$(73)`: `IF recpos < 1 THEN recpos = 1` is followed by
+            # `CALL Drawlist(...)`, whose staging prologue runs 0xD1AF..0xD1D8
+            # -- the IF skipped to 0xD1AF while the CallStmt was recorded at
+            # 0xD1D8 (`jump target 0xd1af is not a statement start`).
+            # Fixture t1_ifbeforecall.
+            state.cur = addr
         state.k += 1
         return True
     return False

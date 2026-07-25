@@ -204,6 +204,13 @@ def cargs(state: DecodeState, op, addr, kind) -> bool:
         # lives (probe t1_arrfwd, verified byte-exact either way).
         if state.proc_frame is None:
             raise ValueError(f"whole-array parameter push outside a SUB at {addr:#x}")
+        if state.cur is None:
+            state.cur = addr  # this push may OPEN the CALL statement -- see the
+            # `sub_sp` anchor in handlers.arith for the same reasoning. With few
+            # enough arguments TB pushes them directly instead of reserving an
+            # outgoing area first, so the array push, not `sub sp,N`, is the
+            # statement's first op (t1_ifbeforecall: an inline IF whose skip
+            # target is the CALL that follows it).
         rec = state.proc_frame["array_params"].setdefault(op[2], {"rank": 1})
         # A pure relay carries no element-type evidence, but the SAME procedure
         # may also index the array -- and then the type IS knowable and the

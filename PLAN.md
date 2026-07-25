@@ -99,18 +99,25 @@ edition/runtime tag, and evidence provenance.
   it was scoped and deferred, not started. Do not confuse round 22 for
   the whole idea.
 
-  **Where `tbd73.exe` stands as of round 41**: `jump target 0xd0ba is not
-  a statement start`. Rounds 37-41 each advanced it one gap
-  (`0xb192` -> `0xc2cc` -> `0xba64` -> `0xba9f` -> `0xcdc4` -> `0xd0ba`),
-  all five determined directly from `TBW73.INC` with no speculative
-  probing -- see their Part III entries. Suite **2469 passed**, 451
-  skipped. Three of the five (37, 39, 40) were the SAME class of bug:
+  **Where `tbd73.exe` stands as of round 44**: `jump target 0xd49b is not
+  a statement start` -- and unlike rounds 37-44 this one is a silent
+  structural loss, not an address problem: no loop is lifted for
+  TBW73.INC:727's `LOOP UNTIL (...) OR (...)` at all. See the rounds
+  42-44 entry.
+
+  Rounds 37-44 each advanced it exactly one gap
+  (`0xb192` -> `0xc2cc` -> `0xba64` -> `0xba9f` -> `0xcdc4` -> `0xd0ba`
+  -> `0xd1af` -> `0xd367` -> `0xd49b`), all eight determined directly from
+  `TBW73.INC` with no speculative probing -- see their Part III entries.
+  Suite **2484 passed**, 451 skipped. Four of the eight (37, 39, 40, 43)
+  were the SAME class of bug:
   statement addresses ride in a side table keyed by object identity, and
   folds that move or rebuild statements must maintain it by hand. See
   round 40's entry. Round 41 also closed `wild/hits/ziptest.exe`
   end to end.
 
-  **Wild tally (measured, round 41): 26 of 85 decode+emit clean.** This
+  **Wild tally (re-measured, round 44): 26 of 85 decode+emit clean**
+  (`scan_wild.py`: 26 of 86). This
   supersedes the "29 of 86" recorded below, which overstated it;
   `scan_wild.py` and a direct decode+emit loop independently agree on 26. Round 39's entry
   also records an OPEN, separate defect it turned up: a bare numeric
@@ -1456,6 +1463,62 @@ Goldens pin what the decoder DOES, and `verify_fixture` was only ever run on
 stems a session happened to touch, so a fixture could sit green in the suite for
 a long time while failing its own round trip. Finishing this census, then wiring
 a periodic (not per-commit -- it is far too slow) sweep, would close that gap.
+
+### 2026-07-25 — Rounds 42-44: SELECT CASE arms were never folded, and CALL statements were unanchored
+
+Three gaps in `SUB Makelmenu` (TBW73.INC:637-729), all read off the source.
+
+**Round 42, `jump target 0xd0ba`.** `0xD0BA` is the `CASE CHR$(80)` arm's
+trailing `jmp END SELECT`, and THREE jumps converge on it (`0D041`, `0D060`,
+`0D0AB`) -- the nested block IFs of TBW73.INC:658-670, whose `END IF`s all fall
+through to the end of the arm. Cause: `select_case.py` contained no fold pass at
+all -- no `_fold_if`, no `_fold_body`. An arm body is snapshotted at close and
+never revisited by the top-level pass, exactly the situation `core.py`'s
+`proc_ret` already handles for a SUB body ("it has to happen now or its
+IfInlines stay inline and the else-skip Goto survives as a spurious statement").
+So a block IF inside a CASE arm kept its skip-Goto and **lost its ELSE**.
+`_fold_arm` now runs `_fold_if` with the arm's own end address as `bound`.
+Fixture `t1_selarmblockif`.
+
+**Round 43, `jump target 0xd1af`.** TBW73.INC:688-689: `IF recpos < 1 THEN
+recpos = 1` followed by `CALL Drawlist(...)`. The CALL's staging prologue runs
+0xD1AF..0xD1D8 and the `CallStmt` was recorded at **0xD1D8** while the IF skipped
+to 0xD1AF -- the staging ops return early, before `core.py`'s generic
+`state.cur = addr` fallback, so the statement was anchored at whichever later op
+happened to reach it. The same anchoring `arg_ref` and `mov_mem_sp` already do.
+
+TB picks the opener by argument COUNT, and it took two files to see both: `sub
+sp,N` reserves an outgoing area with enough arguments (tbd73, five), and with few
+enough the first push IS the first op (`arg_push_array_bp`, two). The probe
+initially decoded fine PRE-fix because it had too few arguments to emit `sub_sp`
+at all -- a reminder that "faithful to the source construct" is not the same as
+"reproduces the compiled shape". Fixture `t1_ifbeforecall` pins the two-argument
+form; tbd73 witnessed the other.
+
+**Round 44, `jump target 0xd367`.** TBW73.INC:716, `IF i <> numrecs THEN CALL
+Drawlist(...)` -- the last statement of `CASE CHR$(71)`, so its skip lands on the
+arm-close jmp. Round 41's `open_tail_if` extended to arm ends
+(`cases[-1]["body_jmp"]`). This needed one structural change: the inline-IF close
+loop had to become `DecodeState.close_ifs(addr)` so `select_case` can drain
+pending bodies BEFORE folding the arm -- `select_case.step` runs earlier in the
+dispatch loop than the close point, so the arm would otherwise be folded away
+with an IF body still open. Fixture `t1_iftailarm`.
+
+All six fixtures (three + `v10_` twins) oracle-verified byte-exact; rounds 42-44
+each checked against **unregenerated** goldens with the suite passing unchanged.
+Suite 2469 -> **2484 passed**.
+
+**Where this leaves tbd73: `jump target 0xd49b`, and it is NOT the same class.**
+`0xD49B` is the tail test of TBW73.INC:727, `LOOP UNTIL (ans$ = CHR$(13)) OR
+(ans$ = CHR$(27))`, targeted by line 726's `IF ans$ <> CHR$(27) THEN CALL
+Sprint(...)`. Instrumenting every `ir.Do`/`ir.Loop` construction shows **no loop
+is lifted for line 727 at all** -- the last one before it is line 649's
+`WHILE NOT INSTAT` at 0xCF2B. `state.cur` IS correctly 0xD49B at the tail test
+(verified by tracing assignments to it), so this is not another anchoring bug:
+the compound-boolean tail test is being consumed by some other path and the
+DO/LOOP pair never materializes. That makes it a **silent structural loss**, not
+a missing address -- start by finding which path eats `0xD49B..0xD4CB` rather
+than by looking for a statement to anchor.
 
 ### 2026-07-25 — Round 41: a single-line IF closing a SUB has no skip target to name
 

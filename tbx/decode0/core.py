@@ -266,6 +266,33 @@ class DecodeState:
         if frame is not None:
             frame.setdefault("touched", set()).add(bp_off)
 
+    def close_ifs(self, addr) -> None:
+        """Close every open inline-IF body whose skip target is `addr`, folding
+        each into an `ir.IfInline`.
+
+        Normally driven from the top of the dispatch loop. `select_case.py` also
+        calls it just before it snapshots an arm, because an inline IF that is
+        the LAST statement of a CASE arm skips to the arm-close jmp -- and
+        `select_case.step` runs BEFORE this point in the loop, so the arm would
+        otherwise be folded away with the IF's body still open (wild tbd73.exe,
+        TBW73.INC:716).
+        """
+        while self.ifs and addr == self.ifs[-1]["target"]:
+            fr = self.ifs.pop()
+            self.flush_pending()
+            body = tuple(self.stmts[fr["idx"] :])
+            if not body:
+                raise ValueError(f"empty inline-IF body at {addr:#x}")
+            for st, ad in zip(body, self.addrs[fr["idx"] :]):
+                if ad is not None:  # retain leaf/body addrs before they drop
+                    self.stmt_addr[id(st)] = ad  # (the fold discards addrs[fr.idx:])
+            body = _fold_body_ifgotos(body, fr["target"], self.stmt_addr)  # AFTER the
+            # addr retention: the fold nests the tail statements, and their (and
+            # the consumed IfGoto's) addrs must stay visible to the line table
+            del self.stmts[fr["idx"] :], self.addrs[fr["idx"] :]
+            self.stmts.append(ir.IfInline(fr["cond"], body))
+            self.addrs.append(fr["start"])
+
     def open_tail_if(self, target, cond) -> bool:
         """If `target` is the open procedure's own epilogue, open an inline-IF
         body for `cond` and return True; otherwise return False and leave the
@@ -286,15 +313,25 @@ class DecodeState:
         jcc tests its negation -- the skip), since only they know which relop map
         produced it.
 
-        Witnessed by wild tbd73.exe, TBW73.INC:634: `IF numrecs - recpos + 1 < i
-        THEN barpos = j - 1` is the closing statement of `SUB Drawlist`
-        (`jump target 0xcdc4 is not a statement start`). Fixture t1_iftaillast.
+        The same reasoning covers a SELECT CASE arm: an IF closing an arm skips
+        to the arm's trailing `jmp END SELECT`, which is glue, not a statement.
+        `cases[-1]["body_jmp"]` is that address while the arm is open (and equals
+        the END SELECT for a flow-through final arm).
+
+        Witnessed by wild tbd73.exe: TBW73.INC:634 (`IF numrecs - recpos + 1 < i
+        THEN barpos = j - 1` closing `SUB Drawlist`, `jump target 0xcdc4`) for
+        the epilogue case -- fixture t1_iftaillast -- and TBW73.INC:716
+        (`IF i <> numrecs THEN CALL Drawlist(...)` closing `CASE CHR$(71)`,
+        `jump target 0xd367`) for the arm case -- fixture t1_iftailarm.
         """
         frame = self.proc_frame if self.proc_frame is not None else self.fn_frame
-        if frame is None or target not in (
-            frame["exit"],
-            frame.get("exit_entry", frame["exit"]),
-        ):
+        ends = set()
+        if frame is not None:
+            ends.add(frame["exit"])
+            ends.add(frame.get("exit_entry", frame["exit"]))
+        if self.cases and self.cases[-1]["body_jmp"] is not None:
+            ends.add(self.cases[-1]["body_jmp"])
+        if target not in ends:
             return False
         self.flush_pending()
         self.ifs.append(
@@ -2691,21 +2728,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
             continue
         if select_case.step(state):
             continue
-        while state.ifs and addr == state.ifs[-1]["target"]:  # inline-IF body ends here
-            fr = state.ifs.pop()
-            state.flush_pending()
-            body = tuple(state.stmts[fr["idx"] :])
-            if not body:
-                raise ValueError(f"empty inline-IF body at {addr:#x}")
-            for st, ad in zip(body, state.addrs[fr["idx"] :]):
-                if ad is not None:  # retain leaf/body addrs before they drop
-                    state.stmt_addr[id(st)] = ad  # (the fold discards addrs[fr.idx:])
-            body = _fold_body_ifgotos(body, fr["target"], state.stmt_addr)  # AFTER the addr
-            # retention: the fold nests the tail statements, and their (and the
-            # consumed IfGoto's) addrs must stay visible to the line table
-            del state.stmts[fr["idx"] :], state.addrs[fr["idx"] :]
-            state.stmts.append(ir.IfInline(fr["cond"], body))
-            state.addrs.append(fr["start"])
+        state.close_ifs(addr)
         if kind == "segjmp":
             # $SEGMENT: pure segment-transition glue, no source statement of its
             # own -- but the metacommand IS spelled in the source and moves every

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from tbx import ir
 from tbx.decode0.const import _IS_RELOP, VAR_BASE
+from tbx.decode0.lift import _fold_if, _jump_targets
 
 
 def _kind_at(state, i):
@@ -129,6 +130,46 @@ def _begin_body(state, body_i, next_test):
     state.cur = None
 
 
+def _fold_arm(state, body_idx, merge):
+    """Block-fold the arm (or CASE ELSE) body sitting at `state.stmts[body_idx:]`
+    and return it as a tuple, addresses retained.
+
+    An arm body is snapshotted here and never revisited by the top-level
+    `_fold_if` pass -- exactly the situation `core.py`'s `proc_ret` already
+    handles for a SUB body ("it has to happen now or its IfInlines stay inline
+    and the else-skip Goto survives as a spurious statement"). Arms had no such
+    pass at all, so a block IF inside a CASE arm kept its skip-Goto and lost its
+    ELSE.
+
+    `merge` is the arm's own end address: a nested IF/ELSE whose arms all fall
+    through to the end of the arm skips straight to the arm-close jmp, so that
+    address -- not any statement -- is the region terminator `_fold_if` needs as
+    `bound`.
+
+    Witnessed by wild tbd73.exe, TBW73.INC:658-670, `SUB Makelmenu`'s
+    `CASE CHR$(80)`: three nested block IFs (one with an ELSE) all end at the
+    arm, so three skips converge on the arm's trailing `jmp END SELECT`
+    (`jump target 0xd0ba is not a statement start`). Fixture t1_selarmblockif.
+    """
+    # An inline IF closing this arm skips to the arm-close address, and
+    # `select_case.step` runs BEFORE the dispatch loop's own close point -- so
+    # drain those bodies here or the arm folds away with one still open
+    # (TBW73.INC:716, via DecodeState.open_tail_if).
+    state.close_ifs(merge)
+    stmts, addrs = _fold_if(
+        state.stmts[body_idx:],
+        state.addrs[body_idx:],
+        bound=merge,
+        targets=_jump_targets(state.stmts),
+        stmt_addr=state.stmt_addr,
+        block_ifs=state.block_if_addrs,
+    )
+    state.stmts[body_idx:], state.addrs[body_idx:] = stmts, addrs
+    body = tuple(state.stmts[body_idx:])
+    _keep_addrs(state, body, body_idx)
+    return body
+
+
 def _keep_addrs(state, body, body_idx) -> None:
     """Carry an arm/CASE-ELSE body's statement addresses into `state.stmt_addr`
     before the snapshot deletes them from `state.addrs`.
@@ -169,8 +210,7 @@ def step(state):
         fr = state.cases.pop()
         case_else = None
         if fr["in_else"]:
-            case_else = tuple(state.stmts[fr["body_idx"] :])
-            _keep_addrs(state, case_else, fr["body_idx"])
+            case_else = _fold_arm(state, fr["body_idx"], addr)
             del state.stmts[fr["body_idx"] :], state.addrs[fr["body_idx"] :]
         state.stmts.append(ir.SelectCase(fr["selector"], tuple(fr["arms"]), case_else))
         state.addrs.append(fr["start"])
@@ -180,8 +220,7 @@ def step(state):
     if state.cases and state.cases[-1]["body_jmp"] == addr:
         state.flush_pending()
         fr = state.cases[-1]
-        body = tuple(state.stmts[fr["body_idx"] :])
-        _keep_addrs(state, body, fr["body_idx"])
+        body = _fold_arm(state, fr["body_idx"], addr)
         del state.stmts[fr["body_idx"] :], state.addrs[fr["body_idx"] :]
         fr["arms"].append(ir.CaseArm(tuple(fr["cur_guards"]), body))
         fr["cur_guards"] = []

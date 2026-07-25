@@ -524,6 +524,111 @@ def test_decode_t1_fwdinline():
         ), stem
 
 
+def test_decode_t1_selarmblockif():
+    # Block IFs INSIDE a SELECT CASE arm. An arm body is snapshotted at arm
+    # close and never revisited by the top-level `_fold_if` pass -- exactly the
+    # situation core.py's proc_ret already handles for a SUB body -- but arms
+    # had no fold pass at all, so a block IF in an arm kept its skip-Goto as a
+    # spurious statement and lost its ELSE. `select_case._fold_arm` runs the
+    # fold with the arm's own end address as `bound`, since nested IFs that all
+    # fall through to the end of the arm skip to the arm-close jmp, which is
+    # glue rather than a statement.
+    #
+    # Wild tbd73.exe, TBW73.INC:658-670 (`SUB Makelmenu`, `CASE CHR$(80)`):
+    # three nested block IFs, one with an ELSE, all ending at the arm, so three
+    # skips converge on its trailing `jmp END SELECT` (`jump target 0xd0ba is
+    # not a statement start`). Byte-exact, both dialects.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_selarmblockif", "v10_t1_selarmblockif"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        sel = next(
+            b
+            for s in prog
+            if isinstance(s, ir.SubDef)
+            for b in s.body
+            if isinstance(b, ir.SelectCase)
+        )
+        arm = sel.arms[0].body
+        # the arm holds ONE block IF, nested three deep, with no leftover Goto
+        assert len(arm) == 1 and isinstance(arm[0], ir.IfBlock), stem
+        assert not any(isinstance(b, ir.Goto) for b in arm), stem
+        inner = arm[0].arms[0][1][1]  # IF C% > 2 THEN ...
+        assert isinstance(inner, ir.IfBlock), stem
+        deepest = inner.arms[0][1][1]  # IF A% <= B% THEN ... ELSE ...
+        assert isinstance(deepest, ir.IfBlock), stem
+        assert deepest.else_body == (ir.Assign(ir.Var("A%"), ir.Var("B%")),), stem
+        assert emit0.emit(prog).startswith(
+            "10 SUB SUB1(A%, B%, C%, D$)\n  SELECT CASE D$\n  CASE \"a\"\n"
+            "    IF A% < B% THEN\n      INCR C%\n      IF C% > 2 THEN\n"
+            "        DECR C%\n        IF A% <= B% THEN\n          PRINT \"u\"\n"
+            "        ELSE\n          A% = B%\n        END IF\n      END IF\n"
+            "    END IF\n  CASE ELSE\n    PRINT \"z\"\n  END SELECT\nEND SUB\n"
+        ), stem
+
+
+def test_decode_t1_iftailarm():
+    # A single-line IF as the LAST statement of a SELECT CASE arm: its skip
+    # lands on the arm's trailing `jmp END SELECT`, which is glue, so there is
+    # nothing to name as a GOTO target -- the same situation as an IF closing a
+    # procedure (test_decode_t1_iftaillast), extended to arm ends in
+    # DecodeState.open_tail_if. `select_case` also has to drain pending inline-IF
+    # bodies before folding the arm, because `select_case.step` runs BEFORE the
+    # dispatch loop's own close point (DecodeState.close_ifs).
+    #
+    # Wild tbd73.exe, TBW73.INC:716 (`SUB Makelmenu`, closing `CASE CHR$(71)`):
+    # `IF i <> numrecs THEN CALL Drawlist(...)` (`jump target 0xd367 is not a
+    # statement start`). Byte-exact, both dialects.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_iftailarm", "v10_t1_iftailarm"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        sel = next(
+            b
+            for s in prog
+            if isinstance(s, ir.SubDef)
+            for b in s.body
+            if isinstance(b, ir.SelectCase)
+        )
+        assert sel.arms[0].body == (
+            ir.IfInline(
+                ir.RelOp("<>", ir.Var("A%"), ir.Var("B%")),
+                (ir.Print((ir.StrLit("x"),), True, None, None),),
+            ),
+        ), stem
+        assert emit0.emit(prog).startswith(
+            "10 SUB SUB1(A%, B%, C$)\n  SELECT CASE C$\n  CASE \"a\"\n"
+            "    IF A% <> B% THEN PRINT \"x\"\n  CASE ELSE\n    PRINT \"z\"\n"
+            "  END SELECT\nEND SUB\n"
+        ), stem
+
+
+def test_decode_t1_ifbeforecall():
+    # An inline IF whose skip target is the CALL that follows it. A CALL's
+    # argument-staging prologue opens the statement, but that family of ops
+    # returns early -- before core.py's generic `state.cur = addr` fallback --
+    # so the CallStmt was recorded at whichever later op happened to anchor it
+    # and the IF's skip address belonged to no statement.
+    #
+    # TB picks the opener by argument count: `sub sp,N` reserves an outgoing
+    # area when there are enough arguments (wild tbd73.exe, TBW73.INC:688-689 --
+    # `IF recpos < 1 THEN recpos = 1` then `CALL Drawlist(...)` with five,
+    # `jump target 0xd1af`), and otherwise the first push IS the first op --
+    # here `arg_push_array_bp`, with two. Both anchor now; this fixture pins the
+    # two-argument form and tbd73 witnessed the other. Byte-exact, both dialects.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_ifbeforecall", "v10_t1_ifbeforecall"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        sub = next(s for s in prog if isinstance(s, ir.SubDef) and len(s.params) == 3)
+        assert sub.body[1] == ir.IfGoto(
+            ir.RelOp(">=", ir.Var("D%"), ir.Lit(1)), ir.BodyLine(1, 4)
+        ), stem
+        assert isinstance(sub.body[3], ir.CallStmt), stem
+        # the CALL is numbered at the skip target, i.e. it owns that address
+        assert "24 CALL SUB1(C$(),B%)\n" in emit0.emit(prog), stem
+
+
 def test_decode_t1_iftaillast():
     # A single-line `IF cond THEN <stmt>` as the LAST statement of a SUB body.
     # The dispatch pair's false-skip lands on the epilogue, and the usual
@@ -3418,6 +3523,9 @@ if __name__ == "__main__":
     test_decode_t1_selelsetarget()
     test_decode_t1_selarmtarget()
     test_decode_t1_iftaillast()
+    test_decode_t1_selarmblockif()
+    test_decode_t1_iftailarm()
+    test_decode_t1_ifbeforecall()
     test_decode_t1_fnintcall()
     test_decode_t1_inlinethendef()
     test_decode_t1_commonarrstatic()

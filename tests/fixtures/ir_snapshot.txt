@@ -4401,6 +4401,16 @@ IfGoto(cond=RelOp(op='=', lhs=Var(name='A'), rhs=Var(name='B')), target=6)
 Assign(target=Var(name='C'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
 End()
 
+## t1_ifbeforecall
+SubDef(name='SUB1', params=('A$(1)', 'B%'), body=(Print(items=(ArrayRef(name='A$', indices=(Var(name='B%'),)),), newline=True, file=None, commas=None),))
+SubDef(name='SUB2', params=('C$(1)', 'D%', 'B%'), body=(Assign(target=ArrayRef(name='C$', indices=(Lit(value=1),)), value=StrLit(value='z')), IfGoto(cond=RelOp(op='>=', lhs=Var(name='D%'), rhs=Lit(value=1)), target=BodyLine(stmt=1, phys=4)), Assign(target=Var(name='D%'), value=Lit(value=1)), CallStmt(name='SUB1', args=(ArrayRef(name='C$', indices=()), Var(name='B%')))))
+Dim(name='V0$', bounds=(10,), also=())
+Assign(target=ArrayRef(name='V0$', indices=(Lit(value=2),)), value=StrLit(value='hi'))
+Assign(target=Var(name='E%'), value=Lit(value=0))
+Assign(target=Var(name='F%'), value=Lit(value=2))
+CallStmt(name='SUB2', args=(ArrayRef(name='V0$', indices=()), Var(name='E%'), Var(name='F%')))
+End()
+
 ## t1_ifgoto
 Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
 IfInline(cond=LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='T')), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='t'))), body=(Cls(), Goto(target=5)))
@@ -4414,6 +4424,14 @@ Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Input(prompt=None, var=Var(name='B'), comma=False, semi=False)
 IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), body=(Assign(target=Var(name='C'), value=Lit(value=1)), Assign(target=Var(name='D'), value=Lit(value=2))))
 Print(items=(Var(name='C'), Var(name='D')), newline=True, file=None, commas=None)
+End()
+
+## t1_iftailarm
+SubDef(name='SUB1', params=('A%', 'B%', 'C$'), body=(SelectCase(selector=Var(name='C$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='a')),), body=(IfInline(cond=RelOp(op='<>', lhs=Var(name='A%'), rhs=Var(name='B%')), body=(Print(items=(StrLit(value='x'),), newline=True, file=None, commas=None),)),)),), case_else=(Print(items=(StrLit(value='z'),), newline=True, file=None, commas=None),)),))
+Assign(target=Var(name='D%'), value=Lit(value=1))
+Assign(target=Var(name='E%'), value=Lit(value=2))
+Assign(target=Var(name='F$'), value=StrLit(value='a'))
+CallStmt(name='SUB1', args=(Var(name='D%'), Var(name='E%'), Var(name='F$')))
 End()
 
 ## t1_iftailerr
@@ -5790,6 +5808,15 @@ Assign(target=Var(name='A%'), value=Lit(value=1))
 CallStmt(name='SUB1', args=())
 End()
 SubDef(name='SUB1', params=(), body=(Print(items=(StrLit(value='F'),), newline=True, file=None, commas=None),))
+
+## t1_selarmblockif
+SubDef(name='SUB1', params=('A%', 'B%', 'C%', 'D$'), body=(SelectCase(selector=Var(name='D$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='a')),), body=(IfBlock(arms=((RelOp(op='<', lhs=Var(name='A%'), rhs=Var(name='B%')), (Incr(var=Var(name='C%')), IfBlock(arms=((RelOp(op='>', lhs=Var(name='C%'), rhs=Lit(value=2)), (Decr(var=Var(name='C%')), IfBlock(arms=((RelOp(op='<=', lhs=Var(name='A%'), rhs=Var(name='B%')), (Print(items=(StrLit(value='u'),), newline=True, file=None, commas=None),)),), else_body=(Assign(target=Var(name='A%'), value=Var(name='B%')),)))),), else_body=None))),), else_body=None),)),), case_else=(Print(items=(StrLit(value='z'),), newline=True, file=None, commas=None),)),))
+Assign(target=Var(name='E%'), value=Lit(value=1))
+Assign(target=Var(name='F%'), value=Lit(value=5))
+Assign(target=Var(name='G%'), value=Lit(value=3))
+Assign(target=Var(name='H$'), value=StrLit(value='a'))
+CallStmt(name='SUB1', args=(Var(name='E%'), Var(name='F%'), Var(name='G%'), Var(name='H$')))
+End()
 
 ## t1_selarmtarget
 SubDef(name='SUB1', params=('A$', 'B%', 'C%'), body=(SelectCase(selector=Var(name='A$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='a')),), body=(Decr(var=Var(name='B%')), IfGoto(cond=RelOp(op='>=', lhs=Var(name='B%'), rhs=Lit(value=1)), target=BodyLine(stmt=0, phys=6)), Assign(target=Var(name='B%'), value=Var(name='C%')), Do(kind='WHILE', cond=RelOp(op='=', lhs=Call(name='MID$', args=(Var(name='A$'), Var(name='B%'), Lit(value=1))), rhs=StrLit(value='0'))), Decr(var=Var(name='B%')), Loop(kind=None, cond=None))),), case_else=(Assign(target=Var(name='B%'), value=Lit(value=0)),)),))
@@ -10863,6 +10890,16 @@ IfGoto(cond=RelOp(op='=', lhs=Var(name='A'), rhs=Var(name='B')), target=6)
 Assign(target=Var(name='C'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
 End()
 
+## v10_t1_ifbeforecall
+SubDef(name='SUB1', params=('A$(1)', 'B%'), body=(Print(items=(ArrayRef(name='A$', indices=(Var(name='B%'),)),), newline=True, file=None, commas=None),))
+SubDef(name='SUB2', params=('C$(1)', 'D%', 'B%'), body=(Assign(target=ArrayRef(name='C$', indices=(Lit(value=1),)), value=StrLit(value='z')), IfGoto(cond=RelOp(op='>=', lhs=Var(name='D%'), rhs=Lit(value=1)), target=BodyLine(stmt=1, phys=4)), Assign(target=Var(name='D%'), value=Lit(value=1)), CallStmt(name='SUB1', args=(ArrayRef(name='C$', indices=()), Var(name='B%')))))
+Dim(name='V0$', bounds=(10,), also=())
+Assign(target=ArrayRef(name='V0$', indices=(Lit(value=2),)), value=StrLit(value='hi'))
+Assign(target=Var(name='E%'), value=Lit(value=0))
+Assign(target=Var(name='F%'), value=Lit(value=2))
+CallStmt(name='SUB2', args=(ArrayRef(name='V0$', indices=()), Var(name='E%'), Var(name='F%')))
+End()
+
 ## v10_t1_ifgoto
 Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
 IfInline(cond=LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='T')), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='t'))), body=(Cls(), Goto(target=5)))
@@ -10876,6 +10913,14 @@ Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Input(prompt=None, var=Var(name='B'), comma=False, semi=False)
 IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), body=(Assign(target=Var(name='C'), value=Lit(value=1)), Assign(target=Var(name='D'), value=Lit(value=2))))
 Print(items=(Var(name='C'), Var(name='D')), newline=True, file=None, commas=None)
+End()
+
+## v10_t1_iftailarm
+SubDef(name='SUB1', params=('A%', 'B%', 'C$'), body=(SelectCase(selector=Var(name='C$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='a')),), body=(IfInline(cond=RelOp(op='<>', lhs=Var(name='A%'), rhs=Var(name='B%')), body=(Print(items=(StrLit(value='x'),), newline=True, file=None, commas=None),)),)),), case_else=(Print(items=(StrLit(value='z'),), newline=True, file=None, commas=None),)),))
+Assign(target=Var(name='D%'), value=Lit(value=1))
+Assign(target=Var(name='E%'), value=Lit(value=2))
+Assign(target=Var(name='F$'), value=StrLit(value='a'))
+CallStmt(name='SUB1', args=(Var(name='D%'), Var(name='E%'), Var(name='F$')))
 End()
 
 ## v10_t1_iftailerr
@@ -12070,6 +12115,15 @@ Assign(target=Var(name='A%'), value=Lit(value=1))
 CallStmt(name='SUB1', args=())
 End()
 SubDef(name='SUB1', params=(), body=(Print(items=(StrLit(value='F'),), newline=True, file=None, commas=None),))
+
+## v10_t1_selarmblockif
+SubDef(name='SUB1', params=('A%', 'B%', 'C%', 'D$'), body=(SelectCase(selector=Var(name='D$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='a')),), body=(IfBlock(arms=((RelOp(op='<', lhs=Var(name='A%'), rhs=Var(name='B%')), (Incr(var=Var(name='C%')), IfBlock(arms=((RelOp(op='>', lhs=Var(name='C%'), rhs=Lit(value=2)), (Decr(var=Var(name='C%')), IfBlock(arms=((RelOp(op='<=', lhs=Var(name='A%'), rhs=Var(name='B%')), (Print(items=(StrLit(value='u'),), newline=True, file=None, commas=None),)),), else_body=(Assign(target=Var(name='A%'), value=Var(name='B%')),)))),), else_body=None))),), else_body=None),)),), case_else=(Print(items=(StrLit(value='z'),), newline=True, file=None, commas=None),)),))
+Assign(target=Var(name='E%'), value=Lit(value=1))
+Assign(target=Var(name='F%'), value=Lit(value=5))
+Assign(target=Var(name='G%'), value=Lit(value=3))
+Assign(target=Var(name='H$'), value=StrLit(value='a'))
+CallStmt(name='SUB1', args=(Var(name='E%'), Var(name='F%'), Var(name='G%'), Var(name='H$')))
+End()
 
 ## v10_t1_selarmtarget
 SubDef(name='SUB1', params=('A$', 'B%', 'C%'), body=(SelectCase(selector=Var(name='A$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='a')),), body=(Decr(var=Var(name='B%')), IfGoto(cond=RelOp(op='>=', lhs=Var(name='B%'), rhs=Lit(value=1)), target=BodyLine(stmt=0, phys=6)), Assign(target=Var(name='B%'), value=Var(name='C%')), Do(kind='WHILE', cond=RelOp(op='=', lhs=Call(name='MID$', args=(Var(name='A$'), Var(name='B%'), Lit(value=1))), rhs=StrLit(value='0'))), Decr(var=Var(name='B%')), Loop(kind=None, cond=None))),), case_else=(Assign(target=Var(name='B%'), value=Lit(value=0)),)),))
