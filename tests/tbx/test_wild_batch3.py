@@ -1668,6 +1668,43 @@ def test_decode_t1_bigjmp():
     ]
 
 
+def test_decode_t1_nestelse():
+    # A nested block IF/ELSE inside another block IF. `_fold_body`, which folds
+    # a nested body, had NO ELSE leg -- its docstring said "bodies carry no
+    # Goto-else marker", true only while nested ELSE was unwitnessed. So the
+    # ELSE arm was LOST: the else-skip Goto survived as a spurious statement and
+    # the ELSE body was hoisted to a sibling of the IF:
+    #
+    #   IF A = 2 THEN / B = 1 / GOTO 30 / END IF / B = 2      (wrong)
+    #
+    # `_fold_body` now delegates to `_fold_if` when a nested else-skip marker is
+    # actually present, so there is one implementation of the ELSE
+    # reconstruction. The skip lands on the ENCLOSING structure's merge point,
+    # outside this body, which is what `_fold_if`'s `bound` parameter is for.
+    #
+    # Wild tbd73.exe: TBW73.INC's DEF FNCurdisplay nests block IF/ELSE four
+    # deep and showed exactly this shape at every level.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_nestelse", "v10_t1_nestelse"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        outer = next(s for s in prog if isinstance(s, ir.IfBlock))
+        inner = outer.arms[0][1][0]
+        assert isinstance(inner, ir.IfBlock), stem
+        assert inner.else_body == (
+            ir.Assign(ir.Var("B"), ir.Lit(2)),
+        ), stem  # the ELSE arm, not a hoisted sibling
+        src = emit0.emit(prog)
+        assert "GOTO" not in src, stem  # no surviving else-skip
+        assert src == (
+            "10 A = 1\n"
+            "20 IF A = 1 THEN\n"
+            "  IF A = 2 THEN\n    B = 1\n  ELSE\n    B = 2\n  END IF\n"
+            "END IF\n"
+            "30 PRINT B\n40 END\n"
+        ), stem
+
+
 def test_block_if_is_distinguished_from_inline_if():
     # Block vs inline IF is BYTE-SIGNIFICANT, not a spelling choice: a block IF
     # compiles its condition through the movax-FFFF MATERIALIZATION template,

@@ -1296,6 +1296,48 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-25 — Round 36: nested block IF/ELSE reconstruction (item 3)
+
+The last of the three queued items. `_fold_body` -- which folds a NESTED body --
+had no ELSE leg at all; its docstring said "bodies carry no Goto-else marker",
+which was true only while nested ELSE was unwitnessed. So an ELSE inside an
+enclosing block was silently LOST, the else-skip Goto surviving as a spurious
+statement and the ELSE body hoisted to a SIBLING of the IF:
+
+```
+IF A = 2 THEN / B = 1 / GOTO 30 / END IF / B = 2       (before)
+IF A = 2 THEN / B = 1 / ELSE / B = 2 / END IF          (after)
+```
+
+`_fold_body` now delegates to `_fold_if` when a nested else-skip marker is
+actually present, so there is ONE implementation of the ELSE reconstruction
+rather than a second copy. Two details made it work:
+
+- **`bound` is required.** The skip lands on the ENCLOSING structure's merge
+  point, which is outside the body being folded, so `_fold_if`'s `end_idx`
+  search finds nothing and the leg is skipped. `_fold_if` already has `bound`
+  for exactly this ("else-skip to the region's merge"); passing the marker's own
+  target fills it. The first attempt omitted it and changed nothing.
+- **Guarded on the marker being present**, so no body without one changes shape.
+  Confirmed: zero golden drift beyond the new fixture.
+
+Witness `t1_nestelse`, byte-exact both dialects, and it fails informatively
+without the fix (the `GOTO 30` / hoisted-sibling form above). `t1_dblhooksub`,
+`t1_tronif`, `t1_fnblockif` re-verified. Suite 2439 -> 2444.
+
+**`tbd73.exe` advances from `jump target 0xa604` to `jump target 0xb192`** --
+`FNCurdisplay`'s four levels of nested IF/ELSE now reconstruct completely. The
+new stop is in `SUB Makevmenu`, at the head of round 18's
+`WHILE MID$(liveitem$,curntpos,1) <> "1"` loop, so something now targets that
+loop head and it is not registering as a statement start. Untraced.
+
+**Sequence note.** All three items landed, and the order in the round-34 handoff
+turned out to matter: item 1 (trace-hook accounting) needed NO work -- it was
+round 34's misplacement of the evidence, not a real prerequisite -- and item 3
+was only witnessable AFTER item 2, exactly as predicted. Round 33's removal of
+the DEF FN fold pass as unwitnessed was also correct at the time; item 2 is what
+made it witnessable (`t1_fnblockif`).
+
 ### 2026-07-25 — Round 35: block-IF vs inline-IF landed (items 1 + 2), and the DEF FN fold with it
 
 Round 34 found the discriminator and reverted, believing trace-hook physical-line

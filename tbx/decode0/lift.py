@@ -808,6 +808,45 @@ def _fold_body(body, targets=frozenset(), stmt_addr=None, block_ifs=None):
     `stmt_addr` entry, the same transfer `_fold_body_ifgotos` already does
     when it discards a node; otherwise the address stays keyed to the
     discarded `ir.IfInline` and `_resolve_targets` can never find it."""
+    if stmt_addr is not None and any(
+        isinstance(b, ir.IfInline)
+        and b.body
+        and isinstance(b.body[-1], ir.Goto)
+        and isinstance(b.body[-1].target, tuple)
+        and b.body[-1].target[0] == "addr"
+        for b in body
+    ):
+        # A nested IF inside THIS body carries an else-skip Goto, so the body
+        # needs the full `_fold_if` treatment (its FIRST leg is what turns that
+        # Goto into an ELSE arm) -- not just the block-fold below. Delegating
+        # rather than duplicating keeps one implementation of the ELSE
+        # reconstruction. Guarded on the marker actually being present so no
+        # body without one changes shape (wild tbd73.exe: TBW73.INC's
+        # DEF FNCurdisplay nests block IF/ELSE four deep, and its ELSE arms
+        # were left as siblings with the skip-Goto surviving).
+        # The skip lands on the ENCLOSING structure's merge point, which is
+        # outside this body -- so pass it as `bound`, the parameter _fold_if
+        # already has for "else-skip to the region's merge", or its end_idx
+        # search finds nothing and the leg is skipped.
+        marker = next(
+            b.body[-1].target[1]
+            for b in body
+            if isinstance(b, ir.IfInline)
+            and b.body
+            and isinstance(b.body[-1], ir.Goto)
+            and isinstance(b.body[-1].target, tuple)
+            and b.body[-1].target[0] == "addr"
+        )
+        addrs = [stmt_addr.get(id(b)) for b in body]
+        folded, _ = _fold_if(
+            list(body),
+            addrs,
+            bound=marker,
+            targets=targets,
+            stmt_addr=stmt_addr,
+            block_ifs=block_ifs,
+        )
+        body = tuple(folded)
     out = []
     for b in body:
         if isinstance(b, ir.IfInline) and (

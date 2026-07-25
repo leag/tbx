@@ -1,0 +1,10 @@
+10 A = 1
+20 IF A = 1 THEN
+  IF A = 2 THEN
+    B = 1
+  ELSE
+    B = 2
+  END IF
+END IF
+30 PRINT B
+40 END
