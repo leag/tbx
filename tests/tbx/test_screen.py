@@ -93,6 +93,32 @@ def test_emit_screen():
     )
 
 
+def test_emit_locate_array_operands():
+    # LOCATE whose row AND column are both variable-indexed array elements:
+    # the row, already read out of the first element, is shuttled into bx one
+    # op ahead of the column element's own read (the index chain needs ax as
+    # scratch), so the element-access terminal walk has to step over that
+    # interposed movbxax instead of treating it as the terminal. Near/static
+    # (t1_locarr) and far/COMMON (t1_locarrcom) compile to different address
+    # templates -- addsi vs moves_m -- and the COMMON one is wild tbd73.exe's
+    # exact shape (TBWINDOW `SUB Closewin`: `LOCATE wlstx(idx), wlsty(idx)`),
+    # which also restores ax from bx mid-chain via movrr.
+    from tbx import decode0, emit0
+
+    assert emit0.emit(decode0.decode_user_code(_exe("t1_locarr.exe"))) == (
+        "10 DIM V0%(10)\n20 DIM V1%(10)\n30 A% = 1\n"
+        "40 LOCATE V0%(A%),V1%(A%)\n50 END\n"
+    )
+    assert emit0.emit(decode0.decode_user_code(_exe("t1_locarrcom.exe"))) == (
+        "10 DIM V0%(10), V1%(10)\n20 COMMON V0%(1), V1%(1)\n30 A% = 1\n"
+        "40 LOCATE V0%(A%),V1%(A%)\n50 END\n"
+    )
+    for name in ("t1_locarr", "t1_locarrcom"):  # dialect-blind
+        assert decode0.decode_user_code(
+            _exe(f"v10_{name}.exe")
+        ) == decode0.decode_user_code(_exe(f"{name}.exe")), name
+
+
 if __name__ == "__main__":
     test_decode_t1_scr()
     test_decode_t1_scr2()

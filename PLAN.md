@@ -1186,6 +1186,46 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 17: `LOCATE` whose row AND column are array elements
+
+`tbd73.exe`'s stop, `element access: unexpected op movbxax at 0xacc8`, is
+TBWINDOW's `SUB Closewin` (`TBW73.INC:409`):
+
+```basic
+LOCATE wlstx(idx), wlsty(idx)
+```
+
+LOCATE takes its row in bx and its column in ax. With both operands
+variable-indexed array elements, the row -- already read out of the FIRST
+element -- has to be banked in bx one op AHEAD of the second element's own
+read, because that element's index chain needs ax as scratch. So the
+element-access terminal walk in `arith.py` meets an interposed `movbxax`
+where it expects the `movax_si` read, and rejected it.
+
+This is the same situation the `negax` skip right above it already handles:
+an op acting on whatever the CALLER staged in ax, not on this element. Fix
+is to apply the generic `movbxax` effect (`int_alu`'s own `LOCATE row ->
+bx`) and keep walking -- gated on the next op actually being this element's
+`movax_si`/`far_movax_si`, so it stays a LOCATE-shaped skip rather than a
+general "movbxax ends an element access" rule.
+
+Two witnesses, because the near and far address templates differ and the
+one change unblocks both:
+
+- `t1_locarr` — static arrays, near form (`addsi` + `movax_si`).
+- `t1_locarrcom` — `COMMON` arrays, far/ES-aliased form (`moves_m` +
+  `far_movax_si`). This is `tbd73.exe`'s exact shape, `movrr` mid-chain
+  ax-restore included; TBW73.INC's arrays are all `COMMON` (line 25-27),
+  which is why the wild file takes the far path.
+
+Both byte-exact both dialects (`verify_fixture`). A third probe, the same
+LOCATE inside a SUB reading the arrays via `SHARED`, compiles to the near
+template and so adds no vocabulary -- left unpromoted (it does round-trip
+byte-exact, which incidentally confirms that its odd-looking decode, with
+the DIMs re-emitted inside the SUB body, is a valid normalization).
+
+`tbd73.exe` advances to `unhandled jmp short at 0xb1be`.
+
 ### 2026-07-24 — Round 16: a by-ref INT param compared in an IF condition
 
 `tbd73.exe`'s stop, `unhandled jcc 7f at 0xa876`, is TBWINDOW's

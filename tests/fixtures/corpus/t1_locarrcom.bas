@@ -1,0 +1,5 @@
+10 DIM A%(10), B%(10)
+20 COMMON A%(1), B%(1)
+30 I% = 1
+40 LOCATE A%(I%), B%(I%)
+50 END

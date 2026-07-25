@@ -743,6 +743,26 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             ao += 1
             sik = state.ops[state.k + ao + 1]
         if (
+            sik[1] == "movbxax"
+            and state.ax is not None
+            and state.k + ao + 2 < len(state.ops)
+            and state.ops[state.k + ao + 2][1] == ("far_" if far else "") + "movax_si"
+        ):
+            # `LOCATE <arr>(i), <arr>(j)`: the ROW operand -- already read out of
+            # the first element -- is shuttled into bx here, one op ahead of this
+            # (the column) element's own read, because the index chain needed ax
+            # as scratch. Same "coincidental neighbor acting on whatever the
+            # CALLER staged in ax, not on this element" situation as the negax
+            # case above, so apply the generic movbxax effect (int_alu's own
+            # `LOCATE row -> bx`) and keep looking for the real terminal.
+            # Witnessed near/static (t1_locarr) and far/COMMON (t1_locarrcom;
+            # wild tbd73.exe's TBWINDOW `SUB Closewin`, `LOCATE wlstx(idx),
+            # wlsty(idx)`), whose far form additionally restores ax from bx
+            # mid-chain via movrr once movsiax has banked the index.
+            state.bx, state.ax = state.ax, None
+            ao += 1
+            sik = state.ops[state.k + ao + 1]
+        if (
             sik[1] == "movdx"
             and state.k + ao + 3 < len(state.ops)
             and state.ops[state.k + ao + 2][1] == "movesdx"

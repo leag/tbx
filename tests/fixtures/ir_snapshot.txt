@@ -4686,6 +4686,20 @@ SubDef(name='SUB1', params=('A%',), body=(Local(names=('B%', 'C%', 'D%')), Assig
 CallStmt(name='SUB1', args=(Lit(value=2),))
 End()
 
+## t1_locarr
+Dim(name='V0%', bounds=(10,), also=())
+Dim(name='V1%', bounds=(10,), also=())
+Assign(target=Var(name='A%'), value=Lit(value=1))
+Locate(row=ArrayRef(name='V0%', indices=(Var(name='A%'),)), col=ArrayRef(name='V1%', indices=(Var(name='A%'),)), cursor=None, start=None, stop=None)
+End()
+
+## t1_locarrcom
+Dim(name='V0%', bounds=(Lit(value=10),), also=(('V1%', (Lit(value=10),)),))
+Common(names=('V0%(1)', 'V1%(1)'))
+Assign(target=Var(name='A%'), value=Lit(value=1))
+Locate(row=ArrayRef(name='V0%', indices=(Var(name='A%'),)), col=ArrayRef(name='V1%', indices=(Var(name='A%'),)), cursor=None, start=None, stop=None)
+End()
+
 ## t1_locate5
 Locate(row=Lit(value=11), col=Lit(value=20), cursor=Lit(value=1), start=Lit(value=0), stop=Lit(value=7))
 Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None)
@@ -10896,6 +10910,20 @@ End()
 ## v10_t1_localvarstep
 SubDef(name='SUB1', params=('A%',), body=(Local(names=('B%', 'C%', 'D%')), Assign(target=Var(name='C%'), value=Lit(value=0)), Assign(target=Var(name='D%'), value=Var(name='A%')), For(var=Var(name='B%'), init=Lit(value=1), limit=Lit(value=10), step=Var(name='D%')), Assign(target=Var(name='C%'), value=BinOp(op='+', lhs=Var(name='C%'), rhs=Var(name='B%'))), NextStmt(var=Var(name='B%')), Print(items=(Var(name='C%'),), newline=True, file=None, commas=None)))
 CallStmt(name='SUB1', args=(Lit(value=2),))
+End()
+
+## v10_t1_locarr
+Dim(name='V0%', bounds=(10,), also=())
+Dim(name='V1%', bounds=(10,), also=())
+Assign(target=Var(name='A%'), value=Lit(value=1))
+Locate(row=ArrayRef(name='V0%', indices=(Var(name='A%'),)), col=ArrayRef(name='V1%', indices=(Var(name='A%'),)), cursor=None, start=None, stop=None)
+End()
+
+## v10_t1_locarrcom
+Dim(name='V0%', bounds=(Lit(value=10),), also=(('V1%', (Lit(value=10),)),))
+Common(names=('V0%(1)', 'V1%(1)'))
+Assign(target=Var(name='A%'), value=Lit(value=1))
+Locate(row=ArrayRef(name='V0%', indices=(Var(name='A%'),)), col=ArrayRef(name='V1%', indices=(Var(name='A%'),)), cursor=None, start=None, stop=None)
 End()
 
 ## v10_t1_loccmp
