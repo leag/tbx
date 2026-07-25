@@ -1296,6 +1296,65 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-31 — Round 32: tbd73's `jump target ... is not a statement start` — TRACED, NOT LANDED
+
+`tbd73.exe` (0xa604) and `prtguide.exe` (0x80bc) both stop here after round 31.
+This is the 8-file cluster the round-25 tally ranked second. **Traced far
+enough to name tbd73's actual mechanism, which is NOT what it looks like.**
+
+The obvious reading is wrong. `0xa604` is a compiler CONVERGENCE JUMP inside
+`DEF FNCurdisplay` (`TBW73.INC:314-357`): three IF-false paths jump to it and
+it jumps onward to `0xa637`. Structure, confirmed against the real source:
+
+```
+0A5F9 jmp 0xA604      IF FNCurvideo <> 7 THEN  -- false path
+0A5FC mov_bp_imm:0:2    FNCurdisplay = 2
+0A601 jmp 0xA63C        EXIT DEF            (0xA63C = fn_ret)
+0A604 jmp 0xA637      <-- convergence pad; also targeted from 0xa584, 0xa5d1
+0A637 mov_bp_imm:0:0  FNCurdisplay = 0      (TBW73.INC:356, the fall-through)
+0A63C fn_ret          END DEF
+```
+
+So the first hypothesis was jump threading -- follow an unconditional-jmp
+target to its destination. Prior art existed: a `glue_alias` chain-follower was
+built for `rsltest.exe` and REVERTED because that file's chain hopped through
+five glue-jmps and terminated on a `trap_hook`, not a statement (entry below).
+tbd73's chain is a single hop onto what looks like a real statement, so it
+seemed like the case that mechanism would finally resolve.
+
+**It is not.** Wired the op stream into `_resolve_targets` (which has no access
+to it today -- that alone is why the threading cannot live in `lift.py`) and
+traced: threading works mechanically, `0xa604 -> 0xa637`, and then
+`0xa637` is **ALSO not in the statement index**. `FNCurdisplay = 0` is a
+statement at the TOP LEVEL of a block `DEF FN` body, and it is not addressable
+as a jump target.
+
+So tbd73's real gap is **statement addressability inside block DEF FN bodies**,
+not convergence-jump glue. Threading is a red herring here and would have been
+wasted work; it resolves the first hop and lands on the same error.
+
+This is the same FAMILY as Part II's spec (which was about a target inside a
+still-inline `IF` body in main code, resolved 2026-07-23 by a fourth mechanism
+none of its three candidates guessed) but a DISTINCT instance -- consistent
+with that spec's own warning not to assume shared causes for this message.
+Worth restating: this message now has FIVE known distinct causes.
+
+**Where to start next time** (do not re-derive the above):
+1. `lift._resolve_targets`'s `map_body` DOES descend into block `DefFn` bodies
+   (`isinstance(s, ir.DefFn) and s.is_block`), so the miss is not a failure to
+   recurse. Check instead whether `FNCurdisplay = 0`'s `addrs` entry survives
+   as non-None, and whether `ir.FnResult` statements are addressable at all --
+   the DEF FN result store is a distinct node type from an ordinary `Assign`.
+2. Note `map_body` descends into an `ir.IfBlock` only when
+   `len(s.arms) == 1 and s.else_body is None`. `FNCurdisplay`'s body is nested
+   block IFs WITH `ELSE` (lines 337-355), so anything inside those is
+   unreachable to the index by construction. Even once the top-level statement
+   resolves, expect targets inside the ELSE arms to need this widened.
+3. `prtguide.exe` stops on the same message at 0x80bc and was NOT traced --
+   do not assume it is the same cause.
+
+Reverted clean; no code change landed this round. Suite 2427, unchanged.
+
 ### 2026-07-31 — Round 31: SUB-local array allocation order (guard was BACKWARDS)
 
 `tbd73.exe`'s `SUB-local array record after a main array record (allocation
