@@ -159,6 +159,20 @@ def calls(state: DecodeState, op, addr, kind) -> bool:
 def cargs(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: arg_ref, arg_push_ref."""
     if kind == "arg_ref":  # les si,[bp+N]: by-ref param operand (offset)
+        if state.cur is None:
+            # A statement whose FIRST op is a by-ref param operand has to
+            # anchor its own address here: this family returns early, before
+            # core.py's generic top-of-statement `state.cur = addr` fallback,
+            # so otherwise the statement would be recorded at its SECOND op.
+            # That misses a loop-back edge landing on the arg_ref -- a head-
+            # test `WHILE MID$(S$, X%, 1) <> "1"` over by-ref params reads its
+            # string param first, and _has_jmps_back then fails to match the
+            # `jmps` target against the test address, so _lift_while
+            # misclassifies the loop as an inline-IF body skip and the
+            # backward jmps has nothing left to close (t1_whmidref; wild
+            # tbd73.exe's TBWINDOW `SUB Makevmenu`). Same anchoring the
+            # mov_mem_sp branch below already does for the same reason.
+            state.cur = addr
         state.pend_arg = op[2]
         state.k += 1
         return True

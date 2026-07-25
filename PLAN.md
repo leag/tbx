@@ -1186,6 +1186,46 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 18: a statement that OPENS with a by-ref param operand
+
+`tbd73.exe`'s stop, `unhandled jmp short at 0xb1be`, is TBWINDOW's
+`SUB Makevmenu` (`TBW73.INC:444`):
+
+```basic
+WHILE MID$(liveitem$,curntpos,1) <> "1"
+  INCR curntpos
+WEND
+```
+
+Both operands are by-ref params, so the loop's head test BEGINS with the
+`arg_ref` that stages `liveitem$`. `handlers.cargs` handles `arg_ref` and
+`continue`s early -- **before** core.py's generic top-of-statement
+`if state.cur is None: state.cur = addr` fallback -- so the statement was
+recorded at its SECOND op instead of at the `arg_ref`. The loop-back `jmps`
+lands on the `arg_ref`, `_has_jmps_back` therefore matched no recorded test
+address, `_lift_while` fell through to its inline-IF branch (`ifs.append`,
+which emits nothing until folded), and the backward `jmps` reached the jmps
+dispatch with empty `dos`/`whiles` and nothing left to close.
+
+Fix is to anchor `state.cur` in the `arg_ref` path, exactly the anchoring
+the `mov_mem_sp` branch a few lines below core.py's fallback already does
+for the same early-`continue` reason (wild morcalc.exe). Guarded on
+`state.cur is None`, so a mid-statement `arg_ref` is untouched.
+
+Worth stressing what this is NOT: the diagnosis walked past two plausible
+but wrong suspects -- the `jmps` vocabulary itself (fine) and
+`_has_jmps_back`'s adjacency test (also fine). The bug was upstream of
+both, in where the statement's address got recorded, and the symptom
+surfaced three ops later. `state.dos == [] and state.whiles == [] and
+len(state.stmts) == 1` at the raise was the evidence that pinned it.
+
+Witness `t1_whmidref`, byte-exact both dialects. Because this changes
+statement anchoring corpus-wide, the full suite was run against the
+UNREGENERATED goldens first: 2343 passed, zero drift, so no calibrated
+fixture depends on the old (second-op) address.
+
+`tbd73.exe` advances to `inconsistent array-parameter type at 0xb2cc`.
+
 ### 2026-07-24 — Round 17: `LOCATE` whose row AND column are array elements
 
 `tbd73.exe`'s stop, `element access: unexpected op movbxax at 0xacc8`, is

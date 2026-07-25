@@ -6327,6 +6327,13 @@ Print(items=(StrLit(value='DONE'),), newline=True, file=None, commas=None)
 End()
 Return(target=None)
 
+## t1_whmidref
+SubDef(name='SUB1', params=('A$', 'B%'), body=(Do(kind='WHILE', cond=RelOp(op='<>', lhs=Call(name='MID$', args=(Var(name='A$'), Var(name='B%'), Lit(value=1))), rhs=StrLit(value='1'))), Incr(var=Var(name='B%')), Loop(kind=None, cond=None)))
+Assign(target=Var(name='C$'), value=StrLit(value='001'))
+Assign(target=Var(name='D%'), value=Lit(value=1))
+CallStmt(name='SUB1', args=(Var(name='C$'), Var(name='D%')))
+End()
+
 ## t1_width
 Width(cols=Lit(value=80), device=None, file=None)
 End()
@@ -12296,6 +12303,13 @@ Loop(kind=None, cond=None)
 Print(items=(StrLit(value='DONE'),), newline=True, file=None, commas=None)
 End()
 Return(target=None)
+
+## v10_t1_whmidref
+SubDef(name='SUB1', params=('A$', 'B%'), body=(Do(kind='WHILE', cond=RelOp(op='<>', lhs=Call(name='MID$', args=(Var(name='A$'), Var(name='B%'), Lit(value=1))), rhs=StrLit(value='1'))), Incr(var=Var(name='B%')), Loop(kind=None, cond=None)))
+Assign(target=Var(name='C$'), value=StrLit(value='001'))
+Assign(target=Var(name='D%'), value=Lit(value=1))
+CallStmt(name='SUB1', args=(Var(name='C$'), Var(name='D%')))
+End()
 
 ## v10_t1_width
 Width(cols=Lit(value=80), device=None, file=None)
