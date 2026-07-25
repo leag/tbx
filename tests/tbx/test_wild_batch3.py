@@ -524,6 +524,39 @@ def test_decode_t1_fwdinline():
         ), stem
 
 
+def test_decode_t1_ifthenfncall():
+    # A jump target landing on a statement whose FIRST op is `push bp` -- the
+    # DEF FN call-staging opener (`push bp; sub sp,N; mov bp,sp`). Third opener
+    # in this family after `sub_sp` and `arg_push_array_bp`
+    # (test_decode_t1_ifbeforecall); all three return early, before core.py's
+    # generic `state.cur = addr` fallback, so the statement was recorded at a
+    # later op and the jump had no statement to land on.
+    #
+    # Wild tbd73.exe, TBD73.BAS:6-13 -- a five-arm `SELECT CASE FNCurdisplay`
+    # followed by `msg1$ = STR$(FNCurvideo)`, so all five arm-end jumps land on
+    # that statement's `push bp` (`jump target 0xd6a8 is not a statement
+    # start`). THIS WAS THE LAST GAP: tbd73.exe decodes end to end with it.
+    #
+    # The fixture reduces the five converging jumps to one (an inline IF) and
+    # keeps `FNCurvideo` verbatim from TBW73.INC:308-312, because the SELECT
+    # CASE itself is separately mis-recovered as an IF/GOTO chain --
+    # wild/probes/probe_selfpchain, which is the unreduced source shape.
+    # Byte-exact, both dialects.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_ifthenfncall", "v10_t1_ifthenfncall"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        assert isinstance(prog[0], ir.DefFn) and prog[0].is_block, stem
+        # the inline IF's skip target IS the FN-call assignment
+        assert prog[1] == ir.IfGoto(
+            ir.RelOp("<>", ir.Var("A%"), ir.Lit(0)), 3
+        ), stem
+        assert prog[3] == ir.Assign(
+            ir.Var("C$"), ir.Call("STR$", (ir.FnCall("FNFN1", ()),))
+        ), stem
+        assert "40 C$ = STR$(FNFN1)\n" in emit0.emit(prog), stem
+
+
 def test_decode_t1_boolloopuntil():
     # `LOOP UNTIL <compound>` whose retry edge is the template's TRAILING JMP
     # rather than the combining jcc itself. Two polarities occur -- exactly the
@@ -3559,6 +3592,7 @@ if __name__ == "__main__":
     test_decode_t1_selarmtarget()
     test_decode_t1_iftaillast()
     test_decode_t1_boolloopuntil()
+    test_decode_t1_ifthenfncall()
     test_decode_t1_selarmblockif()
     test_decode_t1_iftailarm()
     test_decode_t1_ifbeforecall()

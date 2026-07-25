@@ -99,8 +99,17 @@ edition/runtime tag, and evidence provenance.
   it was scoped and deferred, not started. Do not confuse round 22 for
   the whole idea.
 
-  **Where `tbd73.exe` stands as of round 45**: `jump target 0xd6a8 is not
-  a statement start`.
+  **`tbd73.exe` DECODES END TO END as of round 46** (906 lines, exit 0) --
+  ten consecutive gaps closed this session, every one determined from
+  `TBD73.BAS`/`TBW73.INC` rather than reverse-engineered. Wild tally
+  **27 of 86**.
+
+  **It does NOT round-trip yet**, and decoding is not the standard.
+  Recompiling the emitted source fails with `Error 463: Duplicate
+  variable declaration`, and a second silent defect sits behind it (a
+  numeric `SELECT CASE` emitted as an IF/GOTO chain). Both are diagnosed
+  in round 46's entry with the direction of the bug already pinned --
+  read that before touching either.
 
   Rounds 37-45 each advanced it exactly one gap
   (`0xb192` -> `0xc2cc` -> `0xba64` -> `0xba9f` -> `0xcdc4` -> `0xd0ba`
@@ -1464,6 +1473,77 @@ Goldens pin what the decoder DOES, and `verify_fixture` was only ever run on
 stems a session happened to touch, so a fixture could sit green in the suite for
 a long time while failing its own round trip. Finishing this census, then wiring
 a periodic (not per-commit -- it is far too slow) sweep, would close that gap.
+
+### 2026-07-25 — Round 46: tbd73.exe DECODES END TO END (and the round trip does not yet)
+
+Gap: `jump target 0xd6a8`. `0xD6A8` is `push_bp; sub_sp:2; mov_bp_sp; fn_call` --
+a DEF FN call-staging frame -- and FIVE jumps converge on it. TBD73.BAS:6-13:
+
+```basic
+SELECT CASE FNCurdisplay
+CASE 0 : msg$ = "MONO"
+...
+CASE 4 : msg$ = "VGA"
+END SELECT
+msg1$ = STR$(FNCurvideo)     ' <- 0xD6A8, the five arm-ends land here
+```
+
+`push_bp` is the THIRD opener in the family rounds 43 found (`sub_sp`,
+`arg_push_array_bp`): all return early, before `core.py`'s generic
+`state.cur = addr` fallback, so the statement was recorded at a later op.
+One-line fix, and **`wild/hits/tbd73.exe` now decodes end to end** -- 906
+emitted lines, exit 0. Wild tally **27 of 86** (`scan_wild.py`), up from 26.
+
+**Method note, and it mattered.** This witness was cut DOWN from the real source
+rather than invented alongside it (`FNCurvideo` copied verbatim from
+TBW73.INC:308-312, the SELECT CASE copied from TBD73.BAS:6-12), and it
+reproduced the exact failure on the FIRST try -- versus rounds 43 and 45, where
+invented probes decoded fine pre-fix and had to be rebuilt twice. When the
+authoring source is available, reduce it; do not re-derive it.
+
+Fixture `t1_ifthenfncall` (+ `v10_` twin), byte-exact both dialects. Suite 2489
+-> **2494 passed**.
+
+#### Two defects the full-program round trip then exposed -- both OPEN
+
+Decoding end to end is not the standard; recompiling is. `oracle.compile_bas` on
+the emitted 906-line source **fails to compile**: `Error 463: Duplicate variable
+declaration`.
+
+**(1) SHARED over-includes the SUB's own LOCALs.** In `SUB20`/`SUB21`
+(= `Makevmenu`/`Makehmenu`) the emitted `SHARED` and `LOCAL` lists share four
+names:
+
+```
+SHARED AE%, AF%, AG%, A%, AH$, AI$, AJ%, AK%, V5%(), ...
+LOCAL  AE%, AG%, AI$, AH$
+```
+
+The real source (TBW73.INC:438-440) declares `SHARED ... idx` +
+`SHARED vmenuopen, hmenuopen, movbar` -- four scalars, **no strings** -- and
+`LOCAL done, mloop, ans$, ans1$`. Direction pinned by scanning the emitted
+source for where each name occurs: `AE%`, `AH$`, `AI$` appear **only inside
+SUB20 and SUB21 and nowhere else**, so they are not DS globals at all. The LOCAL
+list is right; the SHARED list wrongly repeats the frame locals. Start there,
+not at the renamer -- the collision is an over-inclusion, not a naming clash.
+
+**(2) A numeric SELECT CASE is mis-recovered as an IF/GOTO chain.** The
+unreduced TBD73.BAS:6-13 shape compiles and decodes with NO error, but emits
+
+```basic
+20 IF A% <> 0 THEN 50
+30 B$ = "MONO"
+40 GOTO 160
+...
+```
+
+instead of a `SELECT CASE`, and misses its round trip by ~213 bytes (~389 with an
+integer selector). Silent, like round 45. Promoted as
+`wild/probes/probe_selfpchain` (compiles, decodes, mis-recovers). Note the
+selector type is NOT the trigger -- both `SELECT CASE disp` (single) and
+`SELECT CASE disp%` fail the same way, so `select_case.py` is not recognizing
+this arm shape at all (`CASE <const> : <one statement>`, five arms, arm-ends
+converging on the following statement).
 
 ### 2026-07-25 — Round 45: a compound LOOP UNTIL was SILENTLY dropped when its body was long
 

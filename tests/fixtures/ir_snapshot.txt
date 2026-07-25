@@ -4478,6 +4478,15 @@ CallStmt(name='SUB1', args=(Var(name='E%'), Var(name='F%'), Var(name='G%')))
 Print(items=(Var(name='F%'),), newline=True, file=None, commas=None)
 End()
 
+## t1_ifthenfncall
+DefFn(name='FNFN1', params=(), body=(RegSet(n=Lit(value=1), value=Lit(value=3840)), CallInterrupt(n=Lit(value=16)), FnResult(value=BinOp(op='AND', lhs=Call(name='REG', args=(Lit(value=1),)), rhs=Lit(value=15)))), is_block=True)
+IfGoto(cond=RelOp(op='<>', lhs=Var(name='A%'), rhs=Lit(value=0)), target=3)
+Assign(target=Var(name='B$'), value=StrLit(value='MONO'))
+Assign(target=Var(name='C$'), value=Call(name='STR$', args=(FnCall(name='FNFN1', args=()),)))
+Assign(target=Var(name='B$'), value=BinOp(op='+', lhs=BinOp(op='+', lhs=Var(name='B$'), rhs=StrLit(value=' monitor in video mode ')), rhs=Var(name='C$')))
+Print(items=(Var(name='B$'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_imulpool
 Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Assign(target=Var(name='B'), value=Lit(value=2))
@@ -10993,6 +11002,15 @@ Assign(target=Var(name='F%'), value=Lit(value=1))
 Assign(target=Var(name='G%'), value=Lit(value=9))
 CallStmt(name='SUB1', args=(Var(name='E%'), Var(name='F%'), Var(name='G%')))
 Print(items=(Var(name='F%'),), newline=True, file=None, commas=None)
+End()
+
+## v10_t1_ifthenfncall
+DefFn(name='FNFN1', params=(), body=(RegSet(n=Lit(value=1), value=Lit(value=3840)), CallInterrupt(n=Lit(value=16)), FnResult(value=BinOp(op='AND', lhs=Call(name='REG', args=(Lit(value=1),)), rhs=Lit(value=15)))), is_block=True)
+IfGoto(cond=RelOp(op='<>', lhs=Var(name='A%'), rhs=Lit(value=0)), target=3)
+Assign(target=Var(name='B$'), value=StrLit(value='MONO'))
+Assign(target=Var(name='C$'), value=Call(name='STR$', args=(FnCall(name='FNFN1', args=()),)))
+Assign(target=Var(name='B$'), value=BinOp(op='+', lhs=BinOp(op='+', lhs=Var(name='B$'), rhs=StrLit(value=' monitor in video mode ')), rhs=Var(name='C$')))
+Print(items=(Var(name='B$'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_imulpool

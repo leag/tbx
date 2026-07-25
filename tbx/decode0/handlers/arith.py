@@ -1493,6 +1493,25 @@ def far_fp(state: DecodeState, op, addr, kind) -> bool:
 def stack_ops(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: mov_si_sp, add_si_sp, sub_sp, add_sp, arg_push_temp, mov_bx_sp, les_si_ss_bx, str_temp_free, push_bp, pop_bp, mov_bp_sp, str_free_temp, bchk_base."""
     if kind == "push_bp":  # opens a call-staging temp frame -- save the
+        if state.cur is None:
+            # ...and, when nothing is open yet, it also opens the STATEMENT: a
+            # DEF FN call stages through `push bp; sub sp,N; mov bp,sp`, so an
+            # assignment whose right-hand side starts with an FN call begins
+            # here. Same anchoring as `sub_sp`/`arg_push_array_bp` below and
+            # `arg_ref` in handlers.control, and for the same reason -- this
+            # family returns early, before core.py's generic `state.cur = addr`
+            # fallback. A NESTED call frame leaves `cur` already set, so the
+            # guard keeps it at the outermost push.
+            #
+            # Wild tbd73.exe, TBD73.BAS:6-13: a five-arm `SELECT CASE
+            # FNCurdisplay` is followed by `msg1$ = STR$(FNCurvideo)`, so all
+            # five arm-end jumps land on that statement's `push bp`
+            # (`jump target 0xd6a8 is not a statement start`). This was the
+            # LAST gap: tbd73.exe decodes end to end with it. Fixture
+            # t1_ifthenfncall reduces it to one converging jump, because the
+            # SELECT CASE itself is separately mis-recovered -- see
+            # wild/probes/probe_selfpchain.
+            state.cur = addr
         # enclosing context's SP-save cell (if any) so a NESTED call used as
         # this call's own argument can freely overwrite it via its own
         # mov_mem_sp without corrupting the outer movm_imm-glue match once
