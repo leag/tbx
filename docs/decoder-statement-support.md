@@ -1,6 +1,6 @@
 # Turbo BASIC decoder statement support
 
-Status: 2026-07-23
+Status: 2026-07-24
 
 This is the statement-level support matrix for `tbx.decode0`. “Supported” means
 that the decoder has a typed IR representation and an emitter form for the
@@ -60,7 +60,7 @@ known source subset does not provide a direct source-level witness for them.
 | `NextStmt` | `NEXT [v]` | Supported; corpus observed |
 | `Gosub` | `GOSUB line` | Supported; corpus observed |
 | `Return` | `RETURN` | Supported; corpus observed |
-| `While`, `Wend` | `WHILE condition` / `WEND` | Supported; corpus observed |
+| `While`, `Wend` | `WHILE condition` / `WEND` | Supported; corpus observed. Normalized to `DO WHILE ... LOOP` (byte-identical). Includes a head test whose first operand is a by-ref param, which opens the statement with its `arg_ref` (`t1_whmidref`) |
 | `Do`, `Loop` | `DO [WHILE/UNTIL]` / `LOOP [WHILE/UNTIL]` | Supported; corpus observed |
 | `ExitFor` | `EXIT FOR` | Supported; no source witness |
 | `ExitLoop` | `EXIT LOOP` | Supported; no source witness |
@@ -80,13 +80,13 @@ known source subset does not provide a direct source-level witness for them.
 | `Data` | `DATA item[, ...]` | Supported; corpus observed |
 | `Read` | `READ target[, ...]` | Supported; executable/source witness may be indirect |
 | `Restore` | `RESTORE [line]` | Supported; executable/source witness may be indirect |
-| `SubDef` | `SUB name[(params)] ... END SUB` | Supported, including witnessed rank-1 array parameters declared as `A(1)`; c0 is fail-loud for array parameters |
+| `SubDef` | `SUB name[(params)] ... END SUB` | Supported, including witnessed rank-1 array parameters declared as `A(1)` and MIXED scalar/array signatures in any order (`SUB One(X$(1), N%)`, `SUB One(N%, X$(1))` -- the 0x3C descriptor's own witnessed frame offset decides the split, `t1_arrparmmix`/`t1_arrparmmixlast`/`t1_arrparmmixmany`); c0 is fail-loud for array parameters |
 | `CallStmt` | `CALL name[(args)]` | Supported, including whole-array `A()` arguments (D4); c0 remains fail-loud for whole-array parameters |
 | `DefFn` | `DEF FN... = expression` or block form | Supported, including forward expression calls; corpus observed in function fixtures |
 | `FnResult` | assignment to a multi-line `DEF FN` result | Internal procedure-body node; emitted as source |
 | `Inline` | `$INLINE byte, ...` inside a `SUB` | Supported; corpus observed |
 | `Shared` | `SHARED ...` inside a procedure | Supported; corpus observed |
-| `Local` | `LOCAL ...` inside a `SUB` or block `DEF FN` | Supported for INTEGER, SINGLE, scalar STRING reads/writes, large BP+disp16 frames, and witnessed local dynamic arrays including declared-but-undimensioned arrays and STRING arrays in mixed DEF FN frames; c0 remains fail-loud |
+| `Local` | `LOCAL ...` inside a `SUB` or block `DEF FN` | Supported for INTEGER, SINGLE, DOUBLE, scalar STRING reads/writes, large BP+disp16 frames, and witnessed local dynamic arrays including declared-but-undimensioned arrays and STRING arrays in mixed DEF FN frames. A `LOCAL` declared AFTER a FOR loop variable is preserved: the loop's [step, limit] temp words are retired at `proc_ret` from the frame TAIL and only if the body never referenced them, not guessed at `loop_var + 2` (`t1_locstrafterfor`, `t1_locstrafterforlit`). c0 remains fail-loud |
 | `Common` | `COMMON ...` | Supported; corpus observed |
 
 ### Console, printer, and formatting
@@ -103,7 +103,7 @@ known source subset does not provide a direct source-level witness for them.
 | `Tab`/`Spc` print items | `TAB(n)` / `SPC(n)` | Supported; corpus observed |
 | `Beep` | `BEEP` | Supported; corpus observed |
 | `Cls` | `CLS` | Supported; corpus observed |
-| `Locate` | `LOCATE ...` | Supported; corpus observed |
+| `Locate` | `LOCATE ...` | Supported; corpus observed, including row AND column both variable-indexed array elements, near/static and far/`COMMON` (`t1_locarr`, `t1_locarrcom`) |
 | `Color` | `COLOR ...` | Supported; corpus observed |
 | `Width` | `WIDTH cols` / `WIDTH device$, cols` / `WIDTH #filenum, cols` | Supported; both extended forms oracle-verified, file form also wild-observed |
 | `Key` | `KEY ON|OFF` | Supported; corpus observed |

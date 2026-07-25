@@ -51,26 +51,88 @@ edition/runtime tag, and evidence provenance.
 
 ### Live checkpoint
 
-- Updated: 2026-07-23 (a long later round, same day) -- 18 commits, wild
-  tally 27/84 -> 28/84 decode-ok, full suite 2548 -> 2612 passed, zero
-  regressions. Full detail in Part III's dated entries below (newest
-  first, all "2026-07-23"); short index of what landed, oldest to
-  newest: `(A AND B) OR (C AND D)` explicit-parenthesized compound-
-  boolean groups; by-ref LONG/DOUBLE (`&`/`#`) SUB params; `ir.Incr`/
-  `ir.Decr` for LOCAL/by-ref `INCR`/`DECR`; `wild/hits` CI-skip safety
-  net (`conftest.py`); `DELAY` under active event trapping; INPUT# onto
-  a computed array element; `MID$=` with a computed start; variable-
-  limit FOR/NEXT long-distance body and STEP -1 (plus an unrelated
-  `f["idx"]` KeyError bug fix); far `jmpf` in a compound-IF dispatch
-  tail; a CALL statement's address-tracking bug across a loop backward
-  branch; DOUBLE-precision LOCAL variables; four new opaque
-  framed-helper fingerprints (BODY_9/10/11/12: two in filepatc.exe, one
-  in phone.exe, one in CVT2TB.EXE, found using the now-installed
-  `debug` extra's `cfgview`/`iced-x86` tooling). Every closure is
-  either oracle-verified byte-exact or (for wild-only patterns the
-  local oracle can't reproduce: far `jmpf`, opaque helpers) a pinned
-  wild-witness test, consistent with this campaign's existing
-  conventions either way.
+- Updated: 2026-07-24 (`tbd73.exe` campaign, rounds 16-25) -- 10 commits,
+  full suite 2329 -> 2387 passed with zero regressions, 14 new corpus
+  fixtures (+ their `v10_` twins), all oracle-verified byte-exact via
+  `verify_fixture`. Wild tally **29 of 86** decode+emit clean (the
+  previous entry's 28/84 counted a smaller `wild/hits`; `tbd73.exe`
+  itself is one of the two additions). Every dated Part III entry
+  below tagged Round 16-25 belongs to this session, newest first.
+
+  **The through-line**: all ten rounds were driven by ONE file's real
+  source. `wild/hits/tbd73.exe` is TBWINDOW 7.3 compiled from
+  `TBD73.BAS` + `TBW73.INC` **by our own oracle**, so every gap could be
+  read straight off the authoring source rather than reverse-engineered,
+  and a byte-exact round trip is genuinely meaningful for it (no runtime-
+  revision skew, unlike the rest of `wild/hits`). It advanced through
+  SEVEN consecutive gaps this session.
+
+  Short index, oldest to newest: by-ref INT param in an IF compare
+  (`t1_cmpfarif`); `LOCATE` with array elements as BOTH row and column
+  (`t1_locarr`/`t1_locarrcom`); statement-address anchoring for a
+  statement OPENING with a by-ref param operand (`t1_whmidref`); array
+  parameter typed from `arg_push_arr` (`t1_arrparmref`); LOCAL-loop-var
+  FOR whose body is past short-jump range (`t1_locforlong`); a LOCAL
+  declared AFTER a variable-limit FOR's loop var (`t1_locstrafterfor`),
+  then the same for a literal bound plus the layering rework below
+  (`t1_locstrafterforlit`); bare `DECR` on a by-ref INT param
+  (`t1_byrefdecr`); MIXED scalar/array SUB signatures (`t1_arrparmmix`,
+  `t1_arrparmmixlast`, `t1_arrparmmixmany`).
+
+  **Half of these were NOT missing vocabulary.** Rounds 18, 19, 21 and
+  22 were single-pass state-ordering bugs: the decoder infers
+  whole-procedure facts (the LOCAL frame map, param types, statement
+  addresses) incrementally and destructively WHILE lifting, so the
+  answer depended on which op it happened to see first. Round 19 was
+  literally first-access-wins typing; round 21 deleted a real declared
+  LOCAL on a positional guess. **Round 22 is the first "decode in
+  layers" change**: `touch_local` records what a body genuinely
+  referenced and `_retire_for_temps` decides at `proc_ret` with the
+  whole procedure in hand, so FOR temp words are retired by EVIDENCE
+  instead of by a mid-walk positional guess. It bought correctness, not
+  reach -- deliberately.
+
+  **The layering work is NOT finished.** Rounds 18 and 19 are the same
+  class and are still handled ad hoc; a per-procedure TYPE resolution
+  pre-pass would close both structurally. That needs its own plan and
+  an oracle re-verification sweep across all 984 op-golden fixtures, so
+  it was scoped and deferred, not started. Do not confuse round 22 for
+  the whole idea.
+
+  **Where `tbd73.exe` stands**: `materialization template mismatch at
+  0xbc24`, diagnosed in full in Round 24's entry (`IF hmenuopen AND
+  (ans1$ = CHR$(75) OR ans1$ = CHR$(77))`, TBW73.INC:510) but
+  deliberately NOT landed -- the real need is a STRING relational
+  materialized as a VALUE feeding a register (`oraxbx`) fold, which
+  `control.py` currently refuses on purpose ("Strings stay fail-loud").
+  A one-line matcher relaxation was tried and REVERTED because it only
+  swapped one fail-loud error for another. Probe promoted:
+  `wild/probes/probe_boolstrgroup`.
+
+  **What the 86-file wild tally says to do next** (measured this
+  session, not guessed). The two biggest clusters are both the
+  compound-boolean lifter:
+
+  | n | fail-loud error |
+  |---|---|
+  | 9 | `materialization template mismatch` |
+  | 8 | `jump target ... is not a statement start` |
+  | 4 | `unhandled materialized test` |
+  | 4 | `DGROUP layout not solvable from the calibrated rules` |
+  | 3 | `ax,bx combine with empty regs` |
+
+  Caveat before anyone treats "9" as a nine-file payoff:
+  `materialization template mismatch` is a GENERIC message raised
+  whenever `_lift_while`'s six-op template does not match, so it covers
+  several distinct causes and one fix will not close all nine. It is
+  still the largest cluster and Round 24's shape is in it.
+  Counter-example worth remembering from this session: `unsupported
+  array-parameter frame` appears ZERO times in the wild tally, yet
+  Round 25 had to close it anyway because it is a hard wall for
+  `tbd73.exe` -- wild frequency ranks work, it does not gate it.
+
+  **Carried forward from 2026-07-23:**
+
   **Provenance note**: the user identified `BODY_11` (phone.exe's
   1740-byte helper) by sight as **TBWINDOW 5.0, (c) 1988 Richard D.
   Fothergill** -- a commercial third-party TB window-management add-on
@@ -81,7 +143,13 @@ edition/runtime tag, and evidence provenance.
   public-routine dispatch table -- a commercial library would need many
   stable entry points. Checked the rest of `wild/hits` for the same
   byte fingerprint (none found), so this is a `phone.exe`-only closure
-  for now, not a corpus-wide one.
+  for now, not a corpus-wide one. **Note the connection to this
+  session**: `tbd73.exe` is TBWINDOW **7.3**, from source. The same
+  commercial library, three versions later, with its `.INC` available --
+  which is why rounds 16-25 could read every gap off real authoring
+  source, and why they are the best available lever on `phone.exe`'s
+  TBWINDOW 5.0 blob too.
+
   **Two attempts were investigated and explicitly NOT landed** (each
   has its own dated Part III entry with the full trace): (1) an
   OR-flavored sibling of the AND-group work above -- mechanically
@@ -90,15 +158,22 @@ edition/runtime tag, and evidence provenance.
   problem this campaign has already reverted twice before; (2) LOCAL
   slot reuse across a FOR loop's own scratch temps (`bmaster.exe`/
   `ifi.exe`) -- diagnosed precisely, needs a re-registration mechanism
-  the `locs.pop()`-based design doesn't have. `phone.exe` also has a
-  confirmed-but-unexplored jmp-to-jmp thunk chain (very likely
-  TBWINDOW's dispatch table, see above) past its own BODY_11 closure.
-  All three are concrete, well-scoped next steps for a future round --
-  do not re-derive them, they're already written up in detail below.
+  the `locs.pop()`-based design doesn't have.
+  **(2) IS NOW RESOLVED** -- that is exactly what Round 22 below did:
+  the `locs.pop()`-based design is gone from the lift path, replaced by
+  `touch_local` evidence plus deferred retirement at `proc_ret`, and
+  `bmaster.exe` duly advanced past `string BP push outside DEF FN` to
+  `forwarded arg to unknown callee params at 0x9391`. **(1) is still
+  open**, and note it is in the SAME compound-boolean lifter that the
+  wild tally now ranks first and that Round 24 diagnosed -- these are
+  probably one piece of work, not three.
+  `phone.exe` also has a confirmed-but-unexplored jmp-to-jmp thunk chain
+  (very likely TBWINDOW's dispatch table, see above) past its own
+  BODY_11 closure -- still open.
   (`CVT2TB.EXE`'s `unhandled byte c4`, previously flagged here as a
   bracketing mismatch, turned out to be the SAME already-working
   `_try_inline_rescue` mechanism correctly finding the boundary but
-  hitting an unregistered fingerprint -- BODY_12 above closes it; the
+  hitting an unregistered fingerprint -- BODY_12 closes it; the
   earlier "bracketing mismatch" diagnosis was a hex-arithmetic error in
   that round's own trace, not a real problem with the mechanism.)
 
@@ -485,6 +560,41 @@ and **unlock value**. Counts below are only the first-failure snapshot from
 a lower-frequency gap when prior results show that it exposes shared downstream
 work in several files. This blocker history is the campaign's unlock graph; do
 not overwrite it with only the latest state.
+
+#### Wave 12 — next up (queued 2026-07-24, after rounds 16-25)
+
+Ranked by the 86-file wild tally MEASURED at the end of that session (see the
+Live checkpoint's table), tempered by unlock value. Both items already have a
+promoted probe, so neither needs re-deriving.
+
+- [ ] **Compound-boolean lifter: a STRING relational materialized as a VALUE.**
+  Round 24's full diagnosis (register choreography included) is in Part III;
+  probe `wild/probes/probe_boolstrgroup`. Blocks `tbd73.exe` at
+  `materialization template mismatch at 0xbc24`
+  (`IF hmenuopen AND (ans1$ = CHR$(75) OR ans1$ = CHR$(77))`).
+  `control.py:661`/`:691` gate the register-fold path on `not
+  state.pend_cmp_str` and say so explicitly ("Strings stay fail-loud"); that
+  gate is the thing to open, with `oraxbx`-folded string groups as the
+  witness. **Do this one first**, and read it together with the still-open
+  carried-forward item (1) (the OR-flavored AND-group sibling with the
+  reversed-term-order bug) -- they are in the same lifter and are probably one
+  piece of work. The two largest wild clusters, `materialization template
+  mismatch` (9) and `unhandled materialized test` (4), both live here.
+  Caveat already recorded above: the 9 is a GENERIC message covering several
+  causes, so do not promise nine files.
+- [ ] **`jump target ... is not a statement start`** (8 files: `mdb.exe`,
+  `mdb87.exe`, `morcalc.exe`, `photo.exe`, `resume.exe`, `rsltest.exe`, +2).
+  Second-largest cluster, untouched this session. Related in spirit to Round
+  18's statement-anchoring fix, which resolved one instance of "the address a
+  jump lands on was never recorded as a statement" -- worth re-reading that
+  entry before starting, since the mechanism may generalize.
+- [ ] **Per-procedure TYPE resolution pre-pass** (the rest of the layering
+  work; Round 22 was only the down payment). Rounds 18 and 19 are the same
+  single-pass class -- first-access-wins typing and statement anchoring --
+  still handled ad hoc. Needs its own plan and an oracle re-verification sweep
+  over all 984 op goldens. Correctness, not reach; schedule it when the
+  vocabulary tail stops dominating (4 of this session's 10 rounds were
+  genuinely missing templates, so: not yet).
 
 #### Wave 0 — restore the validation baseline
 
