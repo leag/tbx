@@ -6165,6 +6165,16 @@ SubDef(name='SUB1', params=(), body=(Gosub(target=BodyLine(stmt=0, phys=3)), Exi
 CallStmt(name='SUB1', args=())
 End()
 
+## t1_sublocafter
+Dim(name='V0$', bounds=(10,), also=())
+Dim(name='V1$', bounds=(10,), also=())
+Assign(target=ArrayRef(name='V0$', indices=(Lit(value=1),)), value=StrLit(value='X'))
+Assign(target=ArrayRef(name='V1$', indices=(Lit(value=1),)), value=StrLit(value='Y'))
+CallStmt(name='SUB1', args=())
+Print(items=(ArrayRef(name='V0$', indices=(Lit(value=1),)), ArrayRef(name='V1$', indices=(Lit(value=1),))), newline=True, file=None, commas=None)
+End()
+SubDef(name='SUB1', params=(), body=(Dim(name='V2$', bounds=(50,), also=()), Assign(target=ArrayRef(name='V2$', indices=(Lit(value=1),)), value=StrLit(value='HI')), Print(items=(ArrayRef(name='V2$', indices=(Lit(value=1),)),), newline=True, file=None, commas=None)))
+
 ## t1_subm
 Assign(target=Var(name='A%'), value=Lit(value=100))
 Assign(target=Var(name='B%'), value=Lit(value=5))
@@ -12308,6 +12318,16 @@ Print(items=(Call(name='INSTR', args=(Var(name='A$'), StrLit(value='l'))),), new
 Print(items=(Call(name='LEN', args=(Var(name='A$'),)),), newline=True, file=None, commas=None)
 Print(items=(Call(name='STR$', args=(Lit(value=42),)),), newline=True, file=None, commas=None)
 End()
+
+## v10_t1_sublocafter
+Dim(name='V0$', bounds=(10,), also=())
+Dim(name='V1$', bounds=(10,), also=())
+Assign(target=ArrayRef(name='V0$', indices=(Lit(value=1),)), value=StrLit(value='X'))
+Assign(target=ArrayRef(name='V1$', indices=(Lit(value=1),)), value=StrLit(value='Y'))
+CallStmt(name='SUB1', args=())
+Print(items=(ArrayRef(name='V0$', indices=(Lit(value=1),)), ArrayRef(name='V1$', indices=(Lit(value=1),))), newline=True, file=None, commas=None)
+End()
+SubDef(name='SUB1', params=(), body=(Dim(name='V2$', bounds=(50,), also=()), Assign(target=ArrayRef(name='V2$', indices=(Lit(value=1),)), value=StrLit(value='HI')), Print(items=(ArrayRef(name='V2$', indices=(Lit(value=1),)),), newline=True, file=None, commas=None)))
 
 ## v10_t1_subm
 Assign(target=Var(name='A%'), value=Lit(value=100))

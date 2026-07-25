@@ -117,3 +117,23 @@ def test_dialect_parity_v10_subdef():
     a = _decode("t1_subdef.exe")
     b = _decode("v10_subdef.exe")
     assert [repr(s) for s in a] == [repr(s) for s in b]
+
+
+def test_sub_local_array_dim_after_main_dims():
+    # The mirror of test_sub_local_array_dim_inside_body above. There the SUB is
+    # emitted FIRST and its array holds the HIGHEST base; here the SUB comes
+    # AFTER the main code and its array holds the LOWEST. Static array data
+    # allocates descending in DIM order, and emit0 keeps each SUB at its
+    # original position, so both directions reproduce their own allocation
+    # order -- both are byte-exact.
+    #
+    # A guard used to reject this second direction outright ("allocation order
+    # would flip; no witness"). It was backwards, and asserting the opposite
+    # inequality instead would reject t1_subad. Wild tbd73.exe (`SUB Showfile`,
+    # DIM recarr$(5000)) and prtguide.exe are both this shape.
+    prog = _decode("t1_sublocafter.exe")
+    sub = next(s for s in prog if isinstance(s, ir.SubDef))
+    assert ir.Dim("V2$", (50,)) in sub.body
+    # main's two arrays stay at the top level, in descending-base (DIM) order
+    top = [s for s in prog if isinstance(s, ir.Dim)]
+    assert top == [ir.Dim("V0$", (10,)), ir.Dim("V1$", (10,))]

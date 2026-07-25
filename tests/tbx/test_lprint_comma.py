@@ -10,11 +10,9 @@ from tbx.ir import unparse_stmt
     ("stem", "next_gap"),
     [
         ("billadd.exe", "displacement 0x76 is neither scalar nor array element"),
-        (
-            "prtguide.exe",
-            r"SUB-local array record after a main array record \(allocation "
-            r"order would flip; no witness\)",
-        ),
+        # advanced past the SUB-local-array allocation-order guard, which was
+        # a conservative guess in the wrong direction (t1_sublocafter)
+        ("prtguide.exe", "jump target 0x80bc is not a statement start"),
         ("rs.exe", "numeric INPUT read without FSTP at 0xbb1a"),
     ],
 )

@@ -1296,6 +1296,56 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-31 — Round 31: SUB-local array allocation order (guard was BACKWARDS)
+
+`tbd73.exe`'s `SUB-local array record after a main array record (allocation
+order would flip; no witness)` -- and `prtguide.exe`'s too, the first gap this
+campaign has closed for TWO wild files at once.
+
+The guard was a conservative guess in the WRONG DIRECTION, and its own message
+said so ("no witness"). Static array DATA allocates DESCENDING in DIM order
+(first DIM gets the highest base; `state.arrs` is ascending by base, which is
+why the dims loop walks it reversed). The guard was `if dims: raise`, which in
+a descending walk fires exactly when the SUB-local array is the LOWEST-based
+one -- i.e. the last allocated. That is precisely the SAFE case: emit0 keeps
+each SUB at its ORIGINAL position rather than hoisting it, so a SUB that came
+after the main code emits its DIM after the main DIMs, reproducing exactly the
+order TB allocated in.
+
+**The instructive part: replacing it with the opposite inequality is ALSO
+wrong.** Tried that first -- `raise if any main array sits below a SUB-local
+one` -- and the suite immediately failed on `t1_subad`, which has always
+round-tripped byte-exact and whose layout is the mirror image:
+
+```
+t1_subad        SUB emitted FIRST -> its array has the HIGHEST base
+                                    (V0 0x1e0 vs main V1 0x1b0)
+t1_sublocafter  SUB emitted AFTER -> its array has the LOWEST base
+                                    (V2$ 0x1f0 vs main 0x2c0, 0x2f0)
+```
+
+Both directions occur in real programs and both are byte-exact, because the
+answer depends on where the SUB sits -- which emit0 already reproduces. There
+is no single inequality to assert, so the ordering assertion is GONE (the
+OPTION BASE invariant next to it stays). That is the honest outcome: the guard
+was not protecting an invariant, it was encoding one author's assumption about
+which shape occurs.
+
+Worth noting no fixture had ever exercised it in either direction:
+`t1_erasesubcommon` (round 30) has a single array record, so `dims` is
+trivially empty there. Both directions are now pinned --
+`test_sub_local_array_dim_inside_body` (SUB first, pre-existing) and
+`test_sub_local_array_dim_after_main_dims` (SUB after, new).
+
+Witness `t1_sublocafter`, byte-exact both dialects; `t1_subad` and
+`t1_erasesubcommon` re-verified. Suite 2422 -> 2427.
+
+**Both files advance to the same place**: `jump target ... is not a statement
+start` (tbd73 at 0xa604, prtguide at 0x80bc) -- the 8-file wild cluster that
+the round-25 tally ranked second, and now the single largest blocker in front
+of `tbd73.exe`. That is the obvious next target, and it is no longer a
+tbd73-specific one.
+
 ### 2026-07-24 — Round 30: `ERASE` of a SUB-local static array past a COMMON band
 
 `tbd73.exe`'s `ERASE of unknown static slot at 0x13384` is `TBD73.BAS:409`,

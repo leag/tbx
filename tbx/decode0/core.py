@@ -962,18 +962,34 @@ def _finalize(state: DecodeState, addr) -> Program:
                 h if lo == ob else (lo, h) for lo, h in zip(a["lo"], a["hi"])
             )
         if a["name"] in sub_local_arrays:
-            # A SUB-local static array: its DIM belongs inside that body. Its
-            # record precedes every main record (SUB bodies are textually
-            # first, and records allocate in first-mention order), so
-            # splitting it out cannot reorder allocations -- checked below.
+            # A SUB-local static array: its DIM belongs inside that body, and
+            # allocation order is preserved by emit0 keeping each SUB at its
+            # ORIGINAL position rather than hoisting it, so the recovered DIM
+            # lands on the same side of the main DIMs it started on. Static
+            # array data allocates DESCENDING in DIM order (first DIM = highest
+            # base; `state.arrs` is ascending by base, hence the reversed walk),
+            # and BOTH directions are now witnessed byte-exact:
+            #
+            #   t1_subad        SUB emitted FIRST  -> its array has the HIGHEST
+            #                                        base (0x1e0 vs main 0x1b0)
+            #   t1_sublocafter  SUB emitted AFTER  -> its array has the LOWEST
+            #                                        base (0x1f0 vs main 0x2c0,
+            #                                        0x2f0); wild tbd73.exe's
+            #                                        `SUB Showfile` is this
+            #                                        shape, and prtguide.exe too
+            #
+            # A guard used to sit here rejecting the second case (`if dims:
+            # raise`, reached in a descending walk exactly when the SUB-local
+            # array is the lowest-based one). It was a conservative guess -- its
+            # own message said "no witness" -- and it was backwards. Replacing
+            # it with the opposite inequality is equally wrong: that rejects
+            # t1_subad, which has always round-tripped byte-exact. There is no
+            # single direction to assert, because the answer depends on where
+            # the SUB sits, which emit0 already reproduces; so nothing is
+            # asserted here beyond the OPTION BASE invariant below.
             if want != cur_ob:
                 raise ValueError(
                     "OPTION BASE change around a SUB-local array (no witness)"
-                )
-            if dims:
-                raise ValueError(
-                    "SUB-local array record after a main array record "
-                    "(allocation order would flip; no witness)"
                 )
             local_dims.setdefault(sub_local_arrays[a["name"]], []).append(
                 ir.Dim(a["name"], bounds)
