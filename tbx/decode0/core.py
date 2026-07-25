@@ -1903,16 +1903,27 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             if cmp_at_t[1] == "movax_bp" and state.proc_frame is not None:
                 # A variable-limit FOR over a LOCAL reserves the SAME
                 # [step-temp, limit-temp] word pair as the literal-limit
-                # case above, right after the loop var -- the step-temp
-                # (v+2) is unused with a literal step and dropped
-                # immediately, but the limit-temp (v+4, == cmp_at_t[2]) is
-                # read again at every iteration's test (movax_bp reloads
+                # case above -- the step-temp is unused with a literal step
+                # and dropped immediately, but the limit-temp (== cmp_at_t[2])
+                # is read again at every iteration's test (movax_bp reloads
                 # it), so it can't be dropped yet; stash it and strip it
                 # only once the SUB body is fully decoded (proc_ret),
                 # mirroring the variable-STEP LOCAL case's step-temp
                 # handling above.
+                #
+                # Anchor the pair to the LIMIT-temp (step == limit - 2), the
+                # way the by-ref-loop-var sibling below already does. The
+                # temps go at the END of the frame, NOT right after the loop
+                # var: `v + 2` only coincides with them when the loop var is
+                # the last declared LOCAL, as in t1_locforvarlim. Declare
+                # anything after it -- `LOCAL I%, S$` -- and v+2 is a REAL
+                # local, silently deleted from the frame table here, so its
+                # own later access raised `string [bp+N] outside the open
+                # LOCAL frame` (t1_locstrafterfor; wild tbd73.exe's TBWINDOW
+                # `SUB Makevmenu`, whose `LOCAL done, mloop, ans$, ans1$` puts
+                # the string descriptor ans$ exactly at mloop+2).
                 locs = state.proc_frame["locals"] or {}
-                locs.pop(nxt_t[2] + 2, None)
+                locs.pop(cmp_at_t[2] - 2, None)
                 state.proc_frame.setdefault("hidden_locals", set()).add(
                     cmp_at_t[2]
                 )

@@ -1,0 +1,31 @@
+# t1_locstrafterfor dialect=1.1 start=08700
+08703:jmp:34646
+08706:proc_enter
+08709:local_init:5:10
+0871D:arg_ref:6
+08720:far_movax_si
+08723:movm_ax_bp:18
+08726:mov_bp_imm:10:1
+0872B:jmp:34628
+0872E:movsi:308
+08731:rt:156
+08733:movsi:12
+08736:strassign_bp
+08738:movsi:12
+0873B:spush_bp
+0873D:rt:190
+0873F:rt:184
+08741:inc_bp:10
+08744:movax_bp:18
+08747:cmpm_ax_bp:10
+0874A:jcc:126:34606
+0874C:arg_ref:12
+08750:str_temp_free
+08752:proc_ret:14
+08756:movm_imm:288:2
+0875C:sub_sp:10
+0875F:arg_push_ref:288
+08764:far_call:34566
+08769:end
+0876C:epilogue
+# commits

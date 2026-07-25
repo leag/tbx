@@ -1186,6 +1186,35 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 21: a LOCAL declared AFTER a variable-limit FOR's var
+
+`tbd73.exe`'s stop, `string BP push outside DEF FN at 0xb74c`, is TBWINDOW's
+`SUB Makevmenu` reading its own `ans$` (`TBW73.INC:472`, `IF LEN(ans$) = 2`).
+The frame table had no entry for that slot at all -- the decoder had
+DELETED it.
+
+`LOCAL done, mloop, ans$, ans1$`: the variable-limit FOR over `mloop`
+reserves a [step-temp, limit-temp] word pair, and core.py's LOCAL branch
+dropped the step-temp at `loop_var + 2`. But the temps sit at the END of the
+frame, not next to the loop var -- `v + 2` only coincides with them when the
+loop var is the LAST declared LOCAL, which is exactly the shape
+`t1_locforvarlim` witnessed. Here `v + 2` is `ans$`'s own descriptor, so it
+was silently removed from `frame["locals"]`; the store went to the
+FN-call-argument staging path unnoticed and the later read raised.
+
+Fix: anchor the pair to the LIMIT-temp (`cmp_at_t[2] - 2`), which is what
+the by-ref-loop-var sibling twenty lines below already does. For
+`t1_locforvarlim` both expressions denote the same word, so that fixture is
+unaffected -- re-verified byte-exact alongside the new one.
+
+Witness `t1_locstrafterfor` (`LOCAL I%, S$` + `FOR I% = 1 TO N%`), byte-exact
+both dialects.
+
+**Also advanced: `bmaster.exe`**, whose gap-ledger entry in
+`test_local_string.py` was pinned on this very error (`0x9279`). It now
+reaches `forwarded arg to unknown callee params at 0x9391`; ledger updated.
+`ifi.exe`/`cleanup.exe`/`reformat.exe` are unchanged.
+
 ### 2026-07-24 — Round 20: a LOCAL-loop-var FOR whose body is past jump range
 
 `tbd73.exe`'s stop, `int NEXT (var limit): expected JLE to body at 0xb487`,

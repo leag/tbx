@@ -45,7 +45,10 @@ def test_string_local_in_block_def_fn(stem):
 @pytest.mark.parametrize(
     ("stem", "exc", "next_gap"),
     [
-        ("bmaster.exe", ValueError, "string BP push outside DEF FN at 0x9279"),
+        # advanced past `string BP push outside DEF FN at 0x9279` once the
+        # variable-limit LOCAL FOR stopped deleting the local at loop_var+2
+        # from the frame table (t1_locstrafterfor)
+        ("bmaster.exe", ValueError, "forwarded arg to unknown callee params at 0x9391"),
         ("ifi.exe", ValueError, "unhandled INT 8c at 0x19bd2"),
         ("cleanup.exe", ValueError, "LOCAL zero-fill outside a fresh SUB/DEF FN body at 0xd0ca"),
         ("reformat.exe", ValueError, "LOCAL zero-fill outside a fresh SUB/DEF FN body at 0xd455"),

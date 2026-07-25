@@ -1,0 +1,10 @@
+10 SUB SUB1(A%)
+  LOCAL B%, C$
+  FOR B% = 1 TO A%
+  C$ = "X"
+  PRINT C$
+  NEXT B%
+END SUB
+20 D% = 2
+30 CALL SUB1(D%)
+40 END
