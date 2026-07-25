@@ -1296,6 +1296,74 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-31 — Round 33: a LITERAL result store in a block DEF FN (root cause of round 32)
+
+Round 32 traced tbd73's `jump target 0xa604` to "DEF FN body addressability".
+That framing was too broad. The root cause is ONE line, and it is a silent
+mis-decode that happens to surface as a jump-target error.
+
+`core.py`'s `mov_bp_imm` branch treated ANY write to **bp+0** inside a DEF FN
+body as the prologue's result-slot zero-init that marks the block form -- it
+never looked at the immediate. But `FNCurdisplay = 4` compiles to `mov word
+[bp+0], 4`: the same op, the same cell. So **every `FNname = <literal>` in a
+block DEF FN body was silently discarded.** The op stream shows it plainly for
+`FNCurdisplay`: prologue init at `0A42D:mov_bp_imm:0:0`, then five real result
+stores (`0A491`=4, `0A4F8`=3, `0A5C9`=2, `0A5FC`=2, `0A637`=0), none of which
+reached the IR.
+
+Value cannot discriminate them (`FNCurdisplay = 0` is itself a literal zero).
+POSITION can: the prologue's own write is what sets `block`, so a bp+0 literal
+store seen while `block` is already set is a result assignment. Mirrors
+`movm_ax_bp`'s bp+0 branch, the COMPUTED-result sibling -- which is exactly why
+`t1_fnintarith` (round 28, computed result) never exposed this.
+
+**One bug, three symptoms:**
+- round 28's `probe_fnintarith_zeroarg` decoding with no error but WRONG
+  (`DEF FNFN1` with an empty body and no `%` -- the suffix rides the `int` flag
+  the result store sets, per `t1_fnintcall`'s gap 2);
+- `FNCurdisplay`'s `IfInline` bodies containing only `ExitDef`, with the
+  `FNCurdisplay = N` that should precede each one missing;
+- round 32's unresolvable jump target: `0xa637` IS `FNCurdisplay = 0`, so with
+  the store dropped there was no statement for the convergence `Goto` to
+  resolve to. Confirmed by instrumenting the index: `FnResult 0xa637` is now
+  present and indexed.
+
+**A second, dependent fix landed with it.** `emit0` substituted the FN's name
+only for a `FnResult` at the body's TOP level; a nested one fell through to
+`unparse_stmt`, whose fallback is the placeholder `FN = ...` -- NOT valid
+Turbo Basic. Nested results were unreachable before this round, so the
+placeholder never mattered; the moment literal stores survive, it does.
+`_name_fn_results` now rewrites them at any depth. This is not optional
+polish: without it round 33 emits uncompilable source.
+
+Witness `t1_fnlitresult` (promoted from `probe_fnintarith_zeroarg`), byte-exact
+both dialects; `t1_fnintarith`, `t1_fnintcall`, `t1_fnstr`,
+`t1_fnlocalarrstr` re-verified. Suite 2427 -> 2433, zero golden drift.
+
+**Tried and REMOVED as unwitnessed**: adding `proc_ret`'s `_fold_if` pass to
+`fn_ret`, so block DEF FN bodies get the multi-line-IF fold that SUB bodies and
+the top level both get (they genuinely do NOT get it today -- `fn_ret` runs
+`_apply_exit_folds` only). With it, `FNCurdisplay`'s nested IFs did fold to
+`ir.IfBlock` and the tree looked much closer to source. But it changed NOTHING
+measurable -- same tbd73 error, identical probe output, identical suite -- so
+it has no witness and was removed rather than committed on aesthetics. Keep it
+in mind as the likely companion to the two items below; it is a three-line
+addition mirroring `core.py`'s `proc_ret`.
+
+**`tbd73.exe` still stops at `jump target 0xa604`**, now for a narrower and
+fully-characterised reason. `0xa604` is the ELSE-skip `Goto` of the nested
+`IF REG(2) <> 1 THEN ... ELSE ...` (TBW73.INC:338-350). With the fold pass
+enabled the fold consumes that Goto correctly but hoists the ELSE content to a
+SIBLING of the `IfBlock` instead of into its `else_body`, leaving a surviving
+`Goto 0xa5d1` pointing at the removed statement. So the remaining work is
+ELSE-arm reconstruction for a nested block IF inside a DEF FN body -- and note
+it is gated behind the same block-IF-preservation defect round 28 recorded
+(measured there: block vs inline differ, so the current normalize-to-inline is
+not byte-exact). A probe for THIS round's shape, `s_fnblockif` (block IF inside
+a block DEF FN), was NOT promoted as a fixture because it mismatches on exactly
+that defect -- at identical length, so it is content, not the inline collapse
+itself.
+
 ### 2026-07-31 — Round 32: tbd73's `jump target ... is not a statement start` — TRACED, NOT LANDED
 
 `tbd73.exe` (0xa604) and `prtguide.exe` (0x80bc) both stop here after round 31.

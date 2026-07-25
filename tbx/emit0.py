@@ -18,6 +18,40 @@ out-of-band.
 from tbx import ir
 
 
+
+def _name_fn_results(body, name):
+    """Rewrite a DEF FN body's `FnResult`s into `NAME = value` at ANY nesting
+    depth, as an ordinary `Assign` so the existing rendering handles them.
+
+    `render_fn_body` above only substitutes the name for a result sitting at the
+    body's TOP level; a nested one falls through to `unparse_stmt`, whose
+    `FnResult` fallback is the placeholder `FN = ...` -- not valid source.
+    Nested results only became reachable once a LITERAL result store stopped
+    being swallowed as the prologue's result-slot init: wild tbd73.exe's
+    `DEF FNCurdisplay` assigns its result inside five levels of block IF
+    (t1_fnblockif).
+    """
+    out = []
+    for b in body:
+        if isinstance(b, ir.FnResult):
+            out.append(ir.Assign(ir.Var(name), b.value))
+        elif isinstance(b, ir.IfInline):
+            out.append(ir.IfInline(b.cond, tuple(_name_fn_results(b.body, name))))
+        elif isinstance(b, ir.IfBlock):
+            out.append(
+                ir.IfBlock(
+                    tuple(
+                        (c, tuple(_name_fn_results(arm, name))) for c, arm in b.arms
+                    ),
+                    None
+                    if b.else_body is None
+                    else tuple(_name_fn_results(b.else_body, name)),
+                )
+            )
+        else:
+            out.append(b)
+    return out
+
 def emit(stmts) -> str:
     # Jump targets INSIDE a SUB/DEF FN body (ir.BodyLine): physical line k of
     # the block at top-level index i is numbered line[i] + k, and only that
@@ -145,7 +179,7 @@ def emit(stmts) -> str:
                     return f"{s.name} = {ir.unparse(b.value)}"
                 return txt(b)
 
-            inner = block_lines(s.body, render_fn_body)
+            inner = block_lines(_name_fn_results(s.body, s.name), render_fn_body)
             return f"{header}\nEND DEF" if not inner else f"{header}\n{inner}\nEND DEF"
         return ir.unparse_stmt(s)
 

@@ -524,6 +524,64 @@ def test_decode_t1_fwdinline():
         ), stem
 
 
+def test_decode_t1_fnlitresult():
+    # A block DEF FN whose result store is a LITERAL: `FNBar% = 7` compiles to
+    # `mov word [bp+0], 7`, the SAME op and cell as the prologue's result-slot
+    # init `mov word [bp+0], 0`. Only POSITION separates them -- the prologue's
+    # own write is what marks the block form, and a literal-zero result
+    # (`FNCurdisplay = 0`) makes the immediate useless as a discriminator.
+    #
+    # Every bp+0 literal store used to be swallowed as that marker, so the
+    # assignment vanished AND the FN lost its `%` (the suffix rides the `int`
+    # flag the result store sets -- t1_fnintcall's gap 2). It decoded with no
+    # error, silently wrong: `DEF FNFN1` with an EMPTY body. t1_fnintarith's
+    # result is COMPUTED (movm_ax_bp), which is why it never showed this.
+    #
+    # Wild tbd73.exe: TBW73.INC's `DEF FNCurdisplay` assigns its result five
+    # times, every one a literal.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_fnlitresult", "v10_t1_fnlitresult"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        fn = next(s for s in prog if isinstance(s, ir.DefFn))
+        assert fn.name == "FNFN1%" and fn.is_block, stem
+        assert fn.body == (ir.FnResult(ir.Lit(7)),), stem
+        assert emit0.emit(prog) == (
+            "10 DEF FNFN1%\n  FNFN1% = 7\nEND DEF\n"
+            "20 SUB SUB1\n  A% = FNFN1% - 7\n  PRINT A%\nEND SUB\n"
+            "30 CALL SUB1\n40 END\n"
+        ), stem
+
+
+def test_nested_fn_result_renders_the_fn_name():
+    # emit0 substituted the DEF FN's name only for a FnResult at the body's TOP
+    # level; a nested one fell through to unparse_stmt, whose FnResult fallback
+    # is the placeholder `FN = ...` -- not valid Turbo Basic. Nested results
+    # only became reachable once literal result stores stopped being swallowed
+    # (see above); wild tbd73.exe's DEF FNCurdisplay assigns its result inside
+    # five levels of block IF.
+    from tbx import emit0, ir
+
+    prog = [
+        ir.DefFn(
+            "FNX%",
+            (),
+            (
+                ir.IfInline(
+                    ir.RelOp("=", ir.Var("A%"), ir.Lit(1)),
+                    (ir.FnResult(ir.Lit(4)), ir.ExitDef()),
+                ),
+                ir.FnResult(ir.Lit(0)),
+            ),
+            True,
+        ),
+        ir.End(),
+    ]
+    src = emit0.emit(prog)
+    assert "FNX% = 4" in src and "FN = 4" not in src
+    assert "FNX% = 0" in src
+
+
 def test_decode_t1_fnintarith():
     # t1_fnintcall's sibling, and TWO gaps in one shape.
     #

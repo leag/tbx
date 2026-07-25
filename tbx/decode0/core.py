@@ -3176,7 +3176,34 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 continue
             if state.fn_frame is not None:
                 if op[2] == 0:
-                    state.fn_frame["block"] = True
+                    if state.fn_frame["block"]:
+                        # A LITERAL result assignment -- `FNCurdisplay = 4`
+                        # (wild tbd73.exe, TBW73.INC:314-357) -- NOT the
+                        # prologue's result-slot init. Identical op, identical
+                        # cell; only the POSITION separates them, since the
+                        # prologue's own write is what sets `block` just below
+                        # and a literal-zero result (`FNCurdisplay = 0`) makes
+                        # the immediate useless as a discriminator.
+                        #
+                        # Every bp+0 literal store used to be swallowed as the
+                        # marker, which silently DROPPED each `FNname =
+                        # <literal>` from the body. That one omission is what
+                        # made tbd73.exe's DEF FNCurdisplay lose all five of
+                        # its result assignments -- taking its `%` suffix with
+                        # them (the suffix rides the `int` flag set here, per
+                        # t1_fnintcall's own gap 2) and leaving a jump target
+                        # at the last one, 0xa637, with no statement to resolve
+                        # to (`jump target 0xa637 is not a statement start`).
+                        # Mirrors movm_ax_bp's bp+0 branch, the computed-result
+                        # sibling of this literal one.
+                        state.fn_frame["int"] = True  # a WORD store to bp+0:
+                        # a SINGLE-valued FN stores its result via fstp instead
+                        if state.cur is None:
+                            state.cur = addr
+                        state.put(ir.FnResult(ir.Lit(op[3])), state.cur)
+                        state.cur = None
+                    else:
+                        state.fn_frame["block"] = True
                 elif op[2] != 2:
                     raise ValueError(f"[bp+{op[2]}] init in DEF FN body at {addr:#x}")
             elif op[3] != 0:  # caller: literal-int FN-call arg staging (wild

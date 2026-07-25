@@ -1,0 +1,27 @@
+# v10_t1_fnlitresult dialect=1.0 start=070B0
+070B3:jmp:28866
+070B6:mov_bp_imm:0:0
+070BB:mov_bp_imm:0:7
+070C0:fn_ret
+070C2:jmp:28916
+070C5:proc_enter
+070C8:movax:7
+070CB:push_bp
+070CC:sub_sp:2
+070CF:mov_bp_sp
+070D1:fn_call:28854
+070D8:movbxax
+070DA:movax_bp:0
+070DD:add_sp:2
+070E0:pop_bp
+070E1:subaxbx
+070E3:movm_ax:288
+070E7:fild:288
+070EC:rt:187
+070EE:rt:184
+070F2:proc_ret:0
+070F4:far_call:28869
+070F9:end
+070FC:epilogue
+# commits
+070F0
