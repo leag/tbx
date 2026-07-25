@@ -512,6 +512,23 @@ def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, in
     return shared_subs, sub_local_arrays
 
 
+def _scalar_param_name(state, off) -> str:
+    """Spell one by-ref SUB parameter slot from the type evidence its body
+    accesses left behind. Shared by the all-scalar and the mixed
+    scalar/array signature paths, which must agree: the declared header and
+    every body reference have to name the same variable or rename.py letters
+    them apart (byte-exact needs both spellings identical)."""
+    if off in state.proc_str_offs:
+        return f"P{off:02X}$"
+    if off in state.proc_int_offs:
+        return f"P{off:02X}%"
+    if off in state.proc_long_offs:
+        return f"P{off:02X}&"
+    if off in state.proc_dbl_offs:
+        return f"P{off:02X}#"
+    return f"P{off:02X}"
+
+
 def _retire_for_temps(frame, locs) -> None:
     """Drop a LOCAL FOR's unused [step, limit] temp words from the frame table.
 
@@ -3018,39 +3035,49 @@ def decode_user_code(exe: bytes) -> list[Any]:
             # right along with the params (witnessed t1_local2)
             array_params = state.proc_frame["array_params"]
             if array_params:
-                # D4 copies one rank-1 descriptor (0x3C bytes), rather than
-                # passing fifteen ordinary four-byte by-ref parameters.
-                # Mixed scalar/array signatures remain unwitnessed.
-                if (
-                    len(array_params) != 1
-                    or op[2]
-                    != 0x3C + 2 * state.proc_frame.get("frame_words", 0)
-                ):
+                # Runtime vector D4 copies a rank-1 DESCRIPTOR (0x3C bytes) for
+                # each whole-array parameter, rather than passing it as
+                # ordinary four-byte by-ref slots -- and a signature may MIX
+                # the two: `SUB One(X$(1), N%)` (t1_arrparmmix; TBWINDOW's
+                # `Makevmenu(item$(1), liveitem$, itemcount, ...)` is the same
+                # shape with nine scalars).
+                fw = 2 * state.proc_frame.get("frame_words", 0)
+                scalar_bytes = op[2] - fw - 0x3C * len(array_params)
+                if scalar_bytes < 0 or scalar_bytes % 4:
                     raise ValueError(
                         f"unsupported array-parameter frame at {addr:#x}"
                     )
-                rec = next(iter(array_params.values()))
-                params = (f"{rec['name']}(1)",)
+                # Params fill the frame from bp+6 UPWARD in reverse source
+                # order -- the last source param lands nearest bp+6, which is
+                # exactly what the all-scalar branch's `6 + 4*(nparams-1-i)`
+                # encodes. Each descriptor's own start offset is witnessed
+                # (its `moves_bp` segment-word load keys array_params), so walk
+                # the frame and let those offsets decide which slot is an array
+                # and which a scalar, instead of assuming an order.
+                slots, off = [], 6
+                for _ in range(len(array_params) + scalar_bytes // 4):
+                    rec = array_params.get(off)
+                    if rec is None:
+                        slots.append(_scalar_param_name(state, off))
+                        off += 4
+                    elif "name" in rec:
+                        slots.append(f"{rec['name']}(1)")
+                        off += 0x3C
+                    else:  # descriptor never element-accessed: no type evidence
+                        raise ValueError(
+                            f"unsupported array-parameter frame at {addr:#x}"
+                        )
+                if off != 6 + op[2] - fw:  # every descriptor offset accounted
+                    raise ValueError(  # for, and the frame exactly consumed
+                        f"unsupported array-parameter frame at {addr:#x}"
+                    )
+                params = tuple(reversed(slots))
             else:
                 nparams = (
                     op[2] - 2 * state.proc_frame.get("frame_words", len(locs or ()))
                 ) // 4
                 params = tuple(
-                    f"P{off:02X}$"
-                    if off in state.proc_str_offs
-                    else (
-                        f"P{off:02X}%"
-                        if off in state.proc_int_offs
-                        else (
-                            f"P{off:02X}&"
-                            if off in state.proc_long_offs
-                            else (
-                                f"P{off:02X}#"
-                                if off in state.proc_dbl_offs
-                                else f"P{off:02X}"
-                            )
-                        )
-                    )
+                    _scalar_param_name(state, off)
                     for off in (6 + 4 * (nparams - 1 - i) for i in range(nparams))
                 )
             state.proc_params[state.proc_frame["entry"]] = params

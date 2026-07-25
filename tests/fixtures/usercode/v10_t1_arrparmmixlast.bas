@@ -1,0 +1,7 @@
+10 DIM V0$(3)
+20 V0$(1) = "HI"
+30 CALL SUB1(1,V0$())
+40 END
+50 SUB SUB1(A%, B$(1))
+  PRINT A%; B$(A%)
+END SUB

@@ -1186,6 +1186,56 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 25: MIXED scalar/array SUB parameter signatures
+
+Closes the gap `core.py`'s own comment had carried as a known hole ("Mixed
+scalar/array signatures remain unwitnessed"), reached by round 19's probe and
+promoted then as `wild/probes/probe_arrparm_mixedsig`.
+
+A whole-array parameter arrives as a rank-1 DESCRIPTOR (0x3C bytes) copied by
+runtime vector D4; an ordinary parameter is a 4-byte by-ref slot. The old code
+accepted only the two pure cases -- exactly one array and nothing else, or all
+scalars -- because the `retf` pop count alone gives just the TOTAL frame size
+and cannot say how it splits.
+
+The split does not need to be guessed. Each descriptor's own START offset is
+already witnessed: its `moves_bp` segment-word load is what keys
+`array_params`. So walk the frame from bp+6 UPWARD, and at each step let the
+offset itself decide -- present in `array_params` means a descriptor (advance
+0x3C), absent means a scalar (advance 4). Params fill the frame in REVERSE
+source order, the same relationship the all-scalar branch's own
+`6 + 4*(nparams-1-i)` already encodes, so the collected slots reverse into the
+declared order. Two cross-checks keep it fail-loud: the leftover scalar byte
+count must be a non-negative multiple of 4, and the walk must land exactly on
+`6 + pop - locals_span`.
+
+Also factored the four-way suffix conditional into `_scalar_param_name` so the
+all-scalar and mixed paths cannot drift -- the declared header and every body
+reference must spell a param identically or `rename.py` letters them apart.
+
+Three witnesses, all byte-exact both dialects, chosen for distinct axes:
+
+- `t1_arrparmmix` — array first + one scalar (the minimal case).
+- `t1_arrparmmixlast` — `SUB One(N%, X$(1))`, array LAST. This is the one that
+  proves the walk reads the witnessed offsets rather than assuming arrays
+  lead; a "descriptor always first" implementation passes the other two.
+- `t1_arrparmmixmany` — array + three scalars, so the 0x3C-vs-4 arithmetic is
+  exercised past n=1. Closest to `Makevmenu(item$(1), liveitem$, itemcount,
+  ...)`, which is one array + NINE scalars.
+
+`t1_arrfwd` (the pure-array path) re-verified byte-exact alongside them.
+
+**`tbd73.exe` is unchanged by this round** -- still `materialization template
+mismatch at 0xbc24`. Expected: that stop is inside `Makevmenu`'s BODY, and the
+frame check only runs at `proc_ret`, so this closure is banked ahead of where
+the file currently is. Round 24's compound-boolean gap is the one thing
+between them.
+
+**Wild-corpus note**: `unsupported array-parameter frame` appears ZERO times
+in the 86-file wild tally, so this round buys no wild reach -- it is a real
+language feature and a hard wall for `tbd73.exe`, but the wild tally's own
+priorities lie elsewhere (see the checkpoint below).
+
 ### 2026-07-24 — Round 24: DIAGNOSED, NOT LANDED — bare value AND a parenthesized string-OR group
 
 `tbd73.exe`'s current stop, `materialization template mismatch at 0xbc24`, is

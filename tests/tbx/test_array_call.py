@@ -64,6 +64,37 @@ def test_zip_string_array_parameter_decodes_completely():
     )
 
 
+@pytest.mark.parametrize(
+    ("stem", "params", "header"),
+    [
+        # array FIRST + one scalar: the minimal mixed signature
+        ("t1_arrparmmix", ("A$(1)", "B%"), "SUB SUB1(A$(1), B%)"),
+        # array LAST -- the case that proves the frame walk reads each
+        # descriptor's own witnessed offset instead of assuming arrays lead
+        ("t1_arrparmmixlast", ("A%", "B$(1)"), "SUB SUB1(A%, B$(1))"),
+        # several scalars, so the 0x3C-vs-4 byte arithmetic is exercised past
+        # n=1 -- the shape TBWINDOW's Makevmenu(item$(1), + 9 scalars) uses
+        ("t1_arrparmmixmany", ("A$(1)", "B%", "C%", "D%"), "SUB SUB1(A$(1), B%, C%, D%)"),
+    ],
+)
+def test_mixed_scalar_array_sub_signature(stem, params, header):
+    # A whole-array param arrives as a 0x3C rank-1 descriptor copied by
+    # runtime vector D4, an ordinary param as a 4-byte by-ref slot -- and a
+    # signature may MIX them. The retf pop count only gives the TOTAL, so the
+    # split comes from each descriptor's own start offset (witnessed by its
+    # `moves_bp`) walked from bp+6 upward in reverse source order.
+    # Previously `unsupported array-parameter frame`.
+    from tbx import emit0
+
+    for pfx in ("", "v10_"):
+        prog = decode0.decode_user_code(
+            (_ROOT / "tests/fixtures/corpus" / f"{pfx}{stem}.exe").read_bytes()
+        )
+        sub = next(s for s in prog if isinstance(s, ir.SubDef))
+        assert sub.params == params, (pfx, stem)
+        assert header in emit0.emit(prog), (pfx, stem)
+
+
 def test_string_array_parameter_element_passed_by_reference():
     # An array PARAMETER's element read as a string AND passed by reference:
     # `arg_push_arr` is a bare ES:SI pointer push, byte-identical for every
