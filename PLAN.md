@@ -1186,6 +1186,40 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 16: a by-ref INT param compared in an IF condition
+
+`tbd73.exe`'s stop, `unhandled jcc 7f at 0xa876`, is TBWINDOW's
+`SUB Openwin` (`TBW73.INC:379`):
+
+```basic
+IF shadow < 1 THEN wsize = (rows + 1) * (cols + 2) * 2 ELSE wsize = rows * cols * 2
+```
+
+`shadow` is a by-ref INTEGER param at `bp+10`, so the compare is
+`arg_ref; far_cmpax_si` -- the same op `t1_cmpfar` already witnessed, but
+consumed by a **jcc + skip-jmp** instead of `t1_cmpfar`'s `movax FFFF`
+relational-as-value template. core.py's by-ref-param `cmpax_si` branch
+only ever staged `state.pend_icmp`, and the ONLY consumer of `pend_icmp`
+is that `movax FFFF` path (`control.py:512`), so the IF-form jcc reached
+core.py's jcc dispatch with `pend_cmp is None` and fell through to the
+final raise. The scan was never at fault; it is a decode-side gap.
+
+The three sibling compare ops (`cmpax_m`, `cmpax_bp`, and the computed
+array-element `cmpax_si`) each already handle BOTH forms, and the by-ref
+form needs nothing new beyond theirs: flags are rhs-vs-lhs (the compiler
+evaluates the source RHS into ax and compares the param as `es:[si]`
+memory), so their mirrored skip map applies unchanged and the param must
+stay on the LEFT -- respelling `shadow < 1` as `1 > shadow` is logically
+equal but puts the param in ax and recompiles to different bytes.
+
+Witness `t1_cmpfarif`, byte-exact both dialects (`verify_fixture`).
+Worth noting the emitted shape is NOT a lifted block IF -- a single-line
+`IF ... THEN ... ELSE ...` normalizes to `IF <mirrored> THEN <line>` +
+`GOTO`, which is exactly what the already-calibrated LOCAL sibling
+(`cmpax_bp`) emits for the same source, and it round-trips byte-exact.
+
+`tbd73.exe` advances to `element access: unexpected op movbxax at 0xacc8`.
+
 ### 2026-07-24 — Round 15: forwarding a by-ref param into a `SUB ... INLINE`
 
 A `SUB ... INLINE` declares **no parameter list at all**, yet TB happily

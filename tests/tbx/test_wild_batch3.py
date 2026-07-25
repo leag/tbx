@@ -209,6 +209,30 @@ def test_decode_t1_cmpfar():
     assert "B% = A% = 1" in src
 
 
+def test_decode_t1_cmpfarif():
+    # The IF-form sibling of t1_cmpfar: the same `cmp ax,es:[si]` compare
+    # consumed by a jcc + skip-jmp instead of the movax-FFFF value template
+    # (wild tbd73.exe, TBWINDOW `SUB Openwin`'s `IF shadow < 1 THEN ... ELSE`).
+    # Flags are rhs-vs-lhs, so the skip relop is the source "<" mirrored to
+    # ">=", and the param stays on the LEFT -- respelling it `1 > A%` would
+    # put the param in ax and recompile to different bytes.
+    from tbx import decode0, emit0
+
+    for stem in ("t1_cmpfarif.exe", "v10_t1_cmpfarif.exe"):
+        src = emit0.emit(decode0.decode_user_code(_exe(stem)))
+        assert src == (
+            "10 SUB SUB1(A%)\n"
+            "  LOCAL B%\n"
+            "  IF A% >= 1 THEN 15\n"
+            "  B% = 5\n"
+            "  GOTO 16\n"
+            "15 B% = 7\n"
+            "16 PRINT B%\n"
+            "END SUB\n"
+            "20 C% = 1\n30 CALL SUB1(C%)\n40 END\n"
+        ), stem
+
+
 def test_decode_t1_local1():
     # LOCAL's zero-fill prologue (push cx/di; ...; rep stosw; pop di/cx, right
     # after proc_enter) declares a true per-call stack int, read/written via

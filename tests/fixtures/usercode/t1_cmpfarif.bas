@@ -1,0 +1,11 @@
+10 SUB SUB1(A%)
+  LOCAL B%
+  IF A% >= 1 THEN 15
+  B% = 5
+  GOTO 16
+15 B% = 7
+16 PRINT B%
+END SUB
+20 C% = 1
+30 CALL SUB1(C%)
+40 END

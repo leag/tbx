@@ -1,0 +1,8 @@
+10 SUB F(A%)
+20 LOCAL W%
+30 IF A% < 1 THEN W% = 5 ELSE W% = 7
+40 PRINT W%
+50 END SUB
+60 X% = 1
+70 CALL F(X%)
+80 END

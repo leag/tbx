@@ -3156,6 +3156,47 @@ def decode_user_code(exe: bytes) -> list[Any]:
             elif base == "cmpax_si":  # cmp ax, es:[si]: relational value vs a
                 argvar = ir.Var(f"P{state.pend_arg:02X}%")  # by-ref INT param
                 state.proc_int_offs.add(state.pend_arg)  # (t1_cmpfar)
+                nx = state.ops[state.k + 1] if state.k + 1 < len(state.ops) else None
+                j2 = state.ops[state.k + 2] if state.k + 2 < len(state.ops) else None
+                if (
+                    nx is not None
+                    and nx[1] == "jcc"
+                    and j2 is not None
+                    and j2[1] == "jmp"
+                    and nx[3] == j2[0] + 3
+                ):
+                    # IF form (`IF <param> < 1 THEN ... ELSE ...`, witnessed
+                    # t1_cmpfarif / wild tbd73.exe's TBWINDOW `SUB Openwin`),
+                    # as opposed to t1_cmpfar's relational-as-value form below.
+                    # The compiler evaluates the SOURCE RHS into ax and compares
+                    # the by-ref param as es:[si] memory, so flags are rhs-vs-lhs
+                    # -- REVERSED, exactly like cmpax_m/cmpax_bp/the computed
+                    # array-element cmpax_si, and their mirrored skip map applies
+                    # unchanged. The param must stay on the LEFT: respelling it
+                    # as `1 > <param>` is logically equal but puts the param in
+                    # ax and recompiles to different bytes. Only "<" is
+                    # witnessed; the other rows follow the same orientation
+                    # derivation as the three sibling forms'.
+                    skiprel = {
+                        0x74: "<>", 0x75: "=", 0x7F: ">=",
+                        0x7D: ">", 0x7C: "<=", 0x7E: "<",
+                    }
+                    if nx[2] not in skiprel:
+                        raise ValueError(
+                            f"by-ref cmpax_si IF jcc {nx[2]:02x} at {addr:#x}"
+                        )
+                    state.put(
+                        ir.IfGoto(
+                            ir.RelOp(skiprel[nx[2]], argvar, state.ax),
+                            ("addr", j2[2]),
+                        ),
+                        state.cur,
+                    )
+                    state.ax = None
+                    state.cur = None
+                    state.pend_arg = None
+                    state.k += 3
+                    continue
                 state.pend_icmp = (argvar, state.ax)
                 state.ax = None
             elif base == "addax_si":  # add ax, es:[si]: arithmetic fold of a
