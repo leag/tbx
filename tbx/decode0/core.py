@@ -3398,15 +3398,31 @@ def decode_user_code(exe: bytes) -> list[Any]:
         ):
             # Variable-limit integer NEXT, LOCAL loop var: the bp-relative
             # mirror of the movax_m/cmpm_ax case just above (wild
-            # bmaster.exe/ifi.exe, probe q_locforvarlim).
+            # bmaster.exe/ifi.exe, probe q_locforvarlim). A body beyond
+            # short-jump range takes the inverse condition + JMP, the same
+            # indirect form that case already handles -- witnessed here by
+            # t1_locforlong / wild tbd73.exe's TBWINDOW `SUB Makevmenu`
+            # (`FOR mloop = 1 TO itemcount` around a body of CALL Sprint /
+            # Scolor statements, well past 127 bytes).
             f = state.fors[-1]
             jcc = state.ops[state.k + 2]
-            if jcc[1] != "jcc" or jcc[2] not in (0x7E, 0x76) or jcc[3] != f["body"]:
+            direct = (
+                jcc[1] == "jcc" and jcc[2] in (0x7E, 0x76) and jcc[3] == f["body"]
+            )
+            indirect = (
+                state.k + 3 < len(state.ops)
+                and jcc[1] == "jcc"
+                and jcc[2] in (0x7F, 0x77)
+                and state.ops[state.k + 3][1] == "jmp"
+                and state.ops[state.k + 3][2] == f["body"]
+                and jcc[3] == state.ops[state.k + 3][0] + 3
+            )
+            if not (direct or indirect):
                 raise ValueError(f"int NEXT (var limit): expected JLE to body at {addr:#x}")
             state.put(ir.NextStmt(state.loc_local(f["v"])), state.cur)
             state.fors.pop()
             state.cur = None
-            state.k += 3
+            state.k += 4 if indirect else 3
             continue
         if (
             kind == "movax_bp"

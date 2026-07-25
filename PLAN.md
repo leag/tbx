@@ -1186,6 +1186,33 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 20: a LOCAL-loop-var FOR whose body is past jump range
+
+`tbd73.exe`'s stop, `int NEXT (var limit): expected JLE to body at 0xb487`,
+is TBWINDOW's `SUB Makevmenu`'s `FOR mloop = 1 TO itemcount` -- the one
+whose body is the run of `CALL Sprint`/`CALL Scolor` statements, well past
+127 bytes.
+
+Three sibling branches decode a variable-limit integer NEXT, keyed on where
+the loop var lives: DGROUP (`movax_m`/`cmpm_ax`), LOCAL
+(`movax_bp`/`cmpm_ax_bp`), and by-ref param (`arg_ref`/`far_cmpm_ax_si`).
+Only the DGROUP one handled the case where the body is beyond short-jump
+range, which flips the test to the inverse condition plus a `JMP` back
+(`jg +3; e9 body` instead of `jle body`). Ported that same `direct or
+indirect` pair to the LOCAL branch verbatim.
+
+Left alone deliberately: the by-ref-param branch (no witness for its
+long-body form yet) and the LOCAL branch's `STEP -1` rows (the DGROUP
+branch derives `wantcc`/`invcc` from `f["step"]`; the LOCAL branch has
+never witnessed a negative step at all, so adding the rows would be
+guessing).
+
+Witness `t1_locforlong` -- 20 `PRINT` statements in the body, comfortably
+past the 127-byte threshold rather than just over it, so the fixture can't
+quietly stop exercising the indirect form. Byte-exact both dialects.
+
+`tbd73.exe` advances to `string BP push outside DEF FN at 0xb74c`.
+
 ### 2026-07-24 — Round 19: an array PARAM's element passed by reference
 
 `tbd73.exe`'s stop, `inconsistent array-parameter type at 0xb2cc`, is

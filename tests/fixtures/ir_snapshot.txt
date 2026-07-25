@@ -4722,6 +4722,12 @@ End()
 Locate(row=None, col=None, cursor=Lit(value=1), start=Lit(value=6), stop=Lit(value=7))
 End()
 
+## t1_locforlong
+SubDef(name='SUB1', params=('A%',), body=(Local(names=('B%',)), For(var=Var(name='B%'), init=Lit(value=1), limit=Var(name='A%'), step=Lit(value=1)), Print(items=(StrLit(value='LINE1'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE2'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE3'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE4'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE5'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE6'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE7'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE8'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE9'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE10'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE11'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE12'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE13'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE14'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE15'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE16'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE17'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE18'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE19'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE20'),), newline=True, file=None, commas=None), NextStmt(var=Var(name='B%'))))
+Assign(target=Var(name='C%'), value=Lit(value=3))
+CallStmt(name='SUB1', args=(Var(name='C%'),))
+End()
+
 ## t1_locforvarlim
 SubDef(name='SUB1', params=('A%',), body=(Local(names=('B%',)), For(var=Var(name='B%'), init=Lit(value=1), limit=Var(name='A%'), step=Lit(value=1)), Print(items=(Var(name='B%'),), newline=True, file=None, commas=None), NextStmt(var=Var(name='B%'))))
 CallStmt(name='SUB1', args=(Lit(value=5),))
@@ -10958,6 +10964,12 @@ End()
 
 ## v10_t1_loccurs
 Locate(row=None, col=None, cursor=Lit(value=1), start=Lit(value=6), stop=Lit(value=7))
+End()
+
+## v10_t1_locforlong
+SubDef(name='SUB1', params=('A%',), body=(Local(names=('B%',)), For(var=Var(name='B%'), init=Lit(value=1), limit=Var(name='A%'), step=Lit(value=1)), Print(items=(StrLit(value='LINE1'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE2'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE3'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE4'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE5'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE6'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE7'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE8'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE9'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE10'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE11'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE12'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE13'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE14'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE15'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE16'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE17'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE18'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE19'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='LINE20'),), newline=True, file=None, commas=None), NextStmt(var=Var(name='B%'))))
+Assign(target=Var(name='C%'), value=Lit(value=3))
+CallStmt(name='SUB1', args=(Var(name='C%'),))
 End()
 
 ## v10_t1_locforvarlim

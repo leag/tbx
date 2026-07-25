@@ -2810,6 +2810,29 @@ def test_decode_t1_locforvarlim():
     )
 
 
+def test_decode_t1_locforlong():
+    # t1_locforvarlim's LONG-BODY sibling: once the body is past short-jump
+    # range the NEXT test takes the inverse condition plus a JMP back
+    # (`jg +3; e9 body`) instead of a direct `jle body`. The DGROUP
+    # movax_m/cmpm_ax case already handled that indirect form; the
+    # bp-relative one raised `int NEXT (var limit): expected JLE to body`.
+    # Wild tbd73.exe: TBWINDOW `SUB Makevmenu`'s `FOR mloop = 1 TO itemcount`.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_locforlong.exe", "v10_t1_locforlong.exe"):
+        prog = decode0.decode_user_code(_exe(stem))
+        sub = next(s for s in prog if isinstance(s, ir.SubDef))
+        for_stmt = next(s for s in sub.body if isinstance(s, ir.For))
+        assert for_stmt == ir.For(
+            ir.Var("B%"), ir.Lit(1), ir.Var("A%"), ir.Lit(1)
+        ), stem
+        assert isinstance(sub.body[-1], ir.NextStmt), stem
+        assert sub.body[-1].var == ir.Var("B%"), stem
+        src = emit0.emit(prog)
+        assert src.count('PRINT "LINE') == 20, stem  # body must stay long
+        assert src.endswith("END SUB\n20 C% = 3\n30 CALL SUB1(C%)\n40 END\n"), stem
+
+
 def test_decode_t1_byrefforvar():
     # Integer FOR over a BY-REF INTEGER PARAMETER used directly as the loop
     # var, with a VARIABLE (non-literal) limit: the ES:[SI] mirror of
