@@ -298,7 +298,24 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         # than on "no frame is open" is what lets an integer FN be called from
         # inside a SUB body at all (probe t1_fnintcall; wild tbd73.exe, whose
         # TBWINDOW SUBs call FNAttr() -- integer-typed under its DEFINT a-z).
-        if op[2] == 0 and state.k and state.ops[state.k - 1][1] == "fn_call":
+        # The fn_call need not be the IMMEDIATELY preceding op: when the
+        # result is about to be compared, the comparison's other operand was
+        # evaluated BEFORE the call and is shuttled into bx right after it
+        # (`IF FNCurvideo <> 7 THEN` -- wild tbd73.exe, TBW73.INC:339 -- puts
+        # the 7 in ax, calls, then `movbxax` banks it before `mov ax,[bp+0]`
+        # reads the result). Skip that register-shuttle boilerplate, and
+        # require an integer FnCall result to actually be waiting on the
+        # stack, which is what makes the skip safe rather than a guess.
+        j = state.k - 1
+        while j >= 0 and state.ops[j][1] in ("movbxax", "movrr"):
+            j -= 1
+        if (
+            op[2] == 0
+            and j >= 0
+            and state.ops[j][1] == "fn_call"
+            and state.stack
+            and isinstance(state.stack[-1], ir.FnCall)
+        ):
             state.ax = state.stack.pop()
         else:
             state.ax = state.loc_local(op[2])

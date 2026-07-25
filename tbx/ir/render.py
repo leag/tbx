@@ -169,6 +169,15 @@ def unparse(e) -> str:
     if isinstance(e, Call):
         return f"{e.name}({','.join(unparse(a) for a in e.args)})"
     if isinstance(e, FnCall):
+        if not e.args:
+            # A zero-argument DEF FN is DECLARED without a parameter list
+            # (`DEF FNCurvideo`) and CALLED without parens (`FNCurvideo`).
+            # Turbo Basic REJECTS the empty-parens spelling outright, so
+            # emitting `FNCurvideo()` produced source that would not even
+            # recompile. No corpus fixture called a zero-arg DEF FN, which is
+            # why this went unwitnessed (t1_fnintarith; wild tbd73.exe's
+            # TBWINDOW FNCurvideo/FNCurdisplay).
+            return e.name
         return f"{e.name}({','.join(unparse(a) for a in e.args)})"
     if isinstance(e, Group):
         return f"({unparse(e.inner)})"

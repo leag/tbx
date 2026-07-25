@@ -94,3 +94,11 @@ if __name__ == "__main__":
     test_parse_rejects_trailing_garbage()
     test_lift_assign()
     print("ALL PASS")
+
+
+def test_zero_arg_fncall_unparses_without_parens():
+    # `DEF FNCurvideo` is declared with no parameter list and called as
+    # `FNCurvideo`; Turbo Basic REJECTS `FNCurvideo()`, so the empty-parens
+    # spelling produced source that would not recompile at all (t1_fnintarith).
+    assert ir.unparse(ir.FnCall("FNFN1%", ())) == "FNFN1%"
+    assert ir.unparse(ir.FnCall("FNFN1%", (ir.Lit(2),))) == "FNFN1%(2)"

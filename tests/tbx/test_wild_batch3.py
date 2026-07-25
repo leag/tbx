@@ -499,6 +499,38 @@ def test_decode_t1_fwdinline():
         ), stem
 
 
+def test_decode_t1_fnintarith():
+    # t1_fnintcall's sibling, and TWO gaps in one shape.
+    #
+    # 1. The caller's `mov ax,[bp+0]` result read was keyed on the fn_call
+    #    being the IMMEDIATELY preceding op. When the result feeds a binary
+    #    operator, the OTHER operand was evaluated before the call and is
+    #    banked into bx right after it, so a `movbxax` sits between and the
+    #    key missed: `[bp+0] outside the open LOCAL frame`. Worse, with a DEF
+    #    FN frame open instead of a SUB frame the same shape did not raise at
+    #    all -- loc_local fell through to its DEF-FN-param branch and returned
+    #    P00%, a SILENT mis-decode (wild tbd73.exe, three sites at 0xa5xx).
+    # 2. A ZERO-ARG DEF FN is declared without a parameter list and called
+    #    WITHOUT parens; TB rejects `FNFN1%()` outright, so the emitted source
+    #    did not even recompile. No corpus fixture had ever called a zero-arg
+    #    DEF FN, so nothing witnessed it.
+    #
+    # Wild tbd73.exe: TBWINDOW's `IF FNCurvideo <> 7 THEN` (TBW73.INC:339).
+    # The witness uses arithmetic rather than that IF because the compare form
+    # is still blocked by two unrelated open gaps -- see PLAN.md round 28.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_fnintarith", "v10_t1_fnintarith"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        fn = next(s for s in prog if isinstance(s, ir.DefFn))
+        assert fn.name == "FNFN1%" and fn.params == (), stem
+        assert emit0.emit(prog) == (
+            "10 DEF FNFN1%\n  FNFN1% = A% AND 15\nEND DEF\n"
+            "20 SUB SUB1\n  B% = FNFN1% - 7\n  PRINT B%\nEND SUB\n"
+            "30 A% = 7\n40 CALL SUB1\n50 END\n"
+        ), stem
+
+
 def test_decode_t1_fnintcall():
     # An INTEGER-valued DEF FN called from inside a SUB body. Two gaps in one
     # shape: the caller reads the result with `mov ax,[bp+0]` (the integer

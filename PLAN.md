@@ -1296,18 +1296,17 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
-### 2026-07-24 — Round 28: integer FN result read across a register shuttle — DIAGNOSED, REVERTED
+### 2026-07-24 — Round 28: integer FN result read across a register shuttle (LANDED)
 
-`tbd73.exe`'s stop, `[bp+0] outside the open LOCAL frame` (no address in the
-message; the op is `movax_bp:0` at **0xdc86**), is TBWINDOW's `IF FNCurvideo <>
-7 THEN` (`TBW73.INC:339`).
+`tbd73.exe`'s `[bp+0] outside the open LOCAL frame` -- the op is `movax_bp:0`
+at **0xdc86**, TBWINDOW's `IF FNCurvideo <> 7 THEN` (`TBW73.INC:339`).
 
 Round 14 taught the caller to read an INTEGER `DEF FN`'s result from `[bp+0]`,
-keyed on the IMMEDIATELY preceding op being `fn_call` -- deliberately, because
-`mov_bp_sp` has repointed BP at the call-staging frame by then, so frame state
-says nothing about what `bp+0` means. When the result is about to be COMPARED,
-the comparison's other operand was evaluated BEFORE the call and is banked
-into bx right after it, so a `movbxax` sits between:
+keyed on the IMMEDIATELY preceding op being `fn_call` -- deliberately, since
+`mov_bp_sp` has repointed BP at the staging frame by then, so frame state says
+nothing about what `bp+0` means. But when the result feeds a binary operator,
+the OTHER operand was evaluated BEFORE the call and is banked into bx right
+after it, so a `movbxax` sits between and the key misses:
 
 ```
 0DC74 movax:7          the 7, evaluated before the call
@@ -1318,54 +1317,60 @@ into bx right after it, so a `movbxax` sits between:
 0DC8D cmpax_bx
 ```
 
-**Two distinct defects here, and the second is worse.** At 0xdc86 a SUB frame
-is open, so `loc_local(0)` raises -- fail-loud. But at **0xa5b3, 0xa5e6 and
-0xa619** the same shape occurs with a DEF FN frame open, and there `loc_local`
-falls through to its "integer-typed DEF FN param read via the ax path" branch
-and returns `P00%`: a SILENT mis-decode, not an error. Those three are
-`FNCurdisplay`'s own body calling `FNCurvideo`.
+**Two defects, and the second was worse.** At 0xdc86 a SUB frame is open, so
+`loc_local(0)` raises. But at **0xa5b3, 0xa5e6 and 0xa619** the same shape
+occurs with a DEF FN frame open, where `loc_local` falls through to its
+"integer DEF FN param read via the ax path" branch and returns `P00%`: a
+SILENT mis-decode. Those three are `FNCurdisplay`'s body calling `FNCurvideo`.
 
-**The fix is one small change** -- walk back over `movbxax`/`movrr` shuttle
-boilerplate when looking for the `fn_call`, and additionally require an
-`ir.FnCall` to actually be waiting on `state.stack`, which is what makes the
-skip evidence-backed rather than a guess. Applied, it takes `tbd73.exe` from
-0xdc86 all the way to `LINE INPUT # template mismatch at 0x12f96` -- a large
-region cleared -- with the full suite at 2406 passed and ZERO drift against
-unregenerated goldens.
+Fix: walk back over `movbxax`/`movrr` shuttle boilerplate when looking for the
+`fn_call`, and require an `ir.FnCall` to actually be waiting on `state.stack`
+-- that requirement is what makes the skip evidence-backed rather than a guess,
+since it confirms an integer FN result really is pending.
 
-**It was nevertheless reverted, for want of a byte-exact witness.** Every
-shape authorable against the oracle clears this gap and then lands on a
-DIFFERENT unclosed one, so no probe can round-trip to prove the emitted source
-is right. All four are promoted, each pinning its own next gap:
+**Plus a second, independent gap this exposed:** a ZERO-ARG `DEF FN` is
+declared without a parameter list (`DEF FNCurvideo`) and called WITHOUT parens.
+`unparse` emitted `FNFN1%()`, which Turbo Basic **rejects outright** -- so the
+emitted source would not even recompile. NO corpus fixture had ever called a
+zero-arg DEF FN, which is exactly why it went unwitnessed (confirmed: no
+`usercode/` golden contains an empty FN paren pair). Fixed in `ir/render.py`.
 
-- `probe_fnintcmp_sub` — `IF FNBar% <> 7 THEN PRINT` in a SUB, i.e. tbd73's
-  actual shape. With the fix it reaches `jump target ... is not a statement
-  start` (the 8-file wild cluster).
-- `probe_fnintcmp_deffn` — the same inside a block `DEF FN` body, the silent
-  mis-decode site. Reaches the same jump-target gap (it hits it even WITHOUT
-  the fix, at 0x8744).
-- `probe_fnintarith_zeroarg` — `A% = FNBar% - 7` with a ZERO-ARG integer FN.
-  With the fix it decodes with NO error but WRONG: `DEF FNBar%` / `FNBar% = 7`
-  / `END DEF` comes back as `DEF FNFN1` with an EMPTY body and no `%` suffix.
-  So a second gap: a zero-arg block DEF FN loses both its result store and its
-  integer typing. (Round 14's `t1_fnintcall` has a parameter, which is why
-  this never showed.)
-- `probe_fnintarith_param` — the same with `DEF FNBar%(X%)`. With the fix it
-  reaches `ax,bx combine with empty regs at 0x8749`: the pre-call `movax:7`
-  value does not survive the FN-call staging in the decoder's register model,
-  so `movbxax` banks None.
+Witness `t1_fnintarith`, byte-exact both dialects; `t1_fnintcall` and
+`t1_fnstr` re-verified; suite 2406 -> 2412 with ZERO golden drift.
 
-**Recommended order for a future session**: close the zero-arg block DEF FN
-body/suffix gap first (`probe_fnintarith_zeroarg`), because that is the
-shortest path to a shape that both exercises this round's fix AND can
-round-trip. Then land this fix together with it as one witnessed closure. The
-fix itself is written up above in enough detail to reproduce in a few lines --
-do not re-derive it.
+**Method note, worth keeping.** This round was first written up as
+DIAGNOSED/REVERTED because four hand-authored probes each cleared this gap and
+landed on a different one, and no shape would round-trip. That conclusion was
+wrong, and the reason is instructive: the probes were SPECULATIVE shapes, and
+two of them differed from the REAL source in precisely the way that broke them
+-- `TBW73.INC:339` uses a BLOCK `IF ... END IF`, not the single-line `IF ...
+THEN <stmt>` probed, and the real `FNCurvideo` COMPUTES its result
+(`REG(1) AND &H0F`) rather than storing a literal, which is what made the
+trivial-body probe lose its body. We have the actual authoring source for this
+file; probes for it should be cut down FROM that source, not invented alongside
+it. Re-probing that way reached byte-exact in three attempts.
 
-Filed as a KNOWN DEFECT while unlanded: the three `0xa5xx` sites decode
-`P00%` for what is really a called FN's result. Reverting restores that, which
-is the uncomfortable half of this decision and the reason it is recorded here
-rather than just dropped.
+**Two further real defects were isolated on the way, both still open**, each
+now pinned by its own promoted probe:
+
+- **Block `IF` (no `ELSE`) inside a SUB body is normalized to an inline `IF`,
+  and that is NOT byte-exact** -- measured directly: block 34806 bytes vs
+  inline 34790, a 16-byte difference. (Contrast the IF/**ELSE** case, where
+  both spellings genuinely do compile identically -- see `zip.exe`'s note in
+  `test_array_call.py`. The no-ELSE case does not.) This is why the compare
+  form of tbd73's own line cannot be the witness yet; the arithmetic form is
+  used instead. Probes: `probe_fnintcmp_sub`, `probe_fnintcmp_deffn` (both now
+  reach `jump target ... is not a statement start`).
+- **A zero-arg block `DEF FN` whose body stores a LITERAL result** (`FNBar% =
+  7`) loses BOTH its body and its `%` suffix -- decodes with no error, silently
+  wrong. Probe `probe_fnintarith_zeroarg`. Distinct from the computed-result
+  body this round's witness uses.
+- Also still open: `probe_fnintarith_param` -- with a parameterized FN, the
+  pre-call `ax` value does not survive the FN-call staging in the decoder's
+  register model (`ax,bx combine with empty regs`).
+
+`tbd73.exe` advances from 0xdc86 to `LINE INPUT # template mismatch at
+0x12f96`, clearing a large region.
 
 ### 2026-07-24 — Round 27: array-param type resolved from a LATER access
 
