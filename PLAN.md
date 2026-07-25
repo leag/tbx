@@ -1296,6 +1296,45 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-25 — Full-corpus byte-verify census: IN PROGRESS, partial results
+
+`python -m tbx.tools.verify_fixture --all` over all 1002 corpus EXEs, launched
+against post-round-36 code. It runs one real oracle compile per fixture at
+roughly 6-9 s each, so a full pass is **~2 hours** -- too slow to gate a working
+session on, but worth having as a standing baseline. Log:
+`scratchpad/verify_all2.log` (an earlier run was discarded: it had snapshotted
+pre-round-35 code, so its `zz_bif1` result was already stale).
+
+**Read the log with two caveats**: the 19 flag fixtures (`f*_`) legitimately
+report `skip` (the oracle compiles with default Options), and a MISMATCH is not
+automatically a decoder bug -- a fixture compiled by a different TB 1.1 build
+can carry genuine revision skew (cf. wild `rev.exe`'s documented ~937-byte
+difference).
+
+**Known mismatch set from targeted sampling so far** (all found while chasing
+rounds 34-36, all still open):
+
+| fixture | delta | note |
+|---|---|---|
+| `zz_bif3` | same size, ~8B | no materialization in ops |
+| `zz_bif4` | same size, ~8B | was -16B; round 35 fixed the block-IF half |
+| `zz_do5` | same size, ~9B | `IF <simple> THEN EXIT LOOP` |
+| `zz_efor` | same size, ~8B | `IF <simple> THEN EXIT FOR` |
+| `t1_bsave` | same size, ~9B | found by the sweep's first pass |
+
+Five fixtures, one signature: **identical length, ~8-9 differing bytes, and no
+materialization template involved**. That self-similarity across `EXIT LOOP`,
+`EXIT FOR`, `BSAVE` and two block-IF fixtures suggests ONE cause, and it is
+almost certainly NOT the IF machinery rounds 34-36 worked on. Triaging it is the
+obvious next task: diff the bytes of one of them (`zz_do5` is the smallest
+shape) rather than reasoning from the emitted source.
+
+Worth stating plainly: **the corpus was not uniformly byte-verified before this**.
+Goldens pin what the decoder DOES, and `verify_fixture` was only ever run on
+stems a session happened to touch, so a fixture could sit green in the suite for
+a long time while failing its own round trip. Finishing this census, then wiring
+a periodic (not per-commit -- it is far too slow) sweep, would close that gap.
+
 ### 2026-07-25 — Round 36: nested block IF/ELSE reconstruction (item 3)
 
 The last of the three queued items. `_fold_body` -- which folds a NESTED body --
