@@ -594,6 +594,36 @@ def test_decode_t1_exitsublocstr():
         ), stem
 
 
+def test_decode_t1_selelsetarget():
+    # A jump target reachable ONLY through a SELECT CASE arm. `_jump_targets`
+    # recursed into IfInline bodies but not into IfBlock arms/ELSE or
+    # SelectCase arms/CASE ELSE, so it under-delivered on its own "anywhere in
+    # the statement tree" contract -- and since `targets` is what promotes an
+    # inline-safe IfInline to a block (_fold_if's second leg), the enclosing IF
+    # stayed inline and its interior never became addressable.
+    #
+    # Wild tbd73.exe, TBW73.INC:476-483: the compound
+    # `IF ans1$ = CHR$(72) OR ... THEN` block holds two SELECT CASEs, and the
+    # inline `IF flon THEN CALL Sprint(...)` ending the FIRST one's CASE ELSE
+    # skips forward to the SECOND one's header -- so that address appears
+    # nowhere except inside a CASE ELSE (`jump target 0xba64 is not a statement
+    # start`). The compound condition matters: a plain RelOp would have been
+    # promoted anyway by the block_ifs leg. Byte-exact, both dialects.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_selelsetarget", "v10_t1_selelsetarget"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        sub = next(s for s in prog if isinstance(s, ir.SubDef))
+        # the compound IF is a BLOCK, not an IfInline, and holds both SELECTs
+        blk = sub.body[0]
+        assert isinstance(blk, ir.IfBlock), f"{stem}: {type(blk).__name__}"
+        arm = blk.arms[0][1]
+        assert sum(isinstance(b, ir.SelectCase) for b in arm) == 2, stem
+        # the second SELECT is the inline IF's skip target, numbered in place
+        assert emit0.emit(prog).count("\n20 SELECT CASE B$\n") == 1, stem
+        assert "  IF C% <= 2 THEN 20\n" in emit0.emit(prog), stem
+
+
 def test_decode_t1_fnlitresult():
     # A block DEF FN whose result store is a LITERAL: `FNBar% = 7` compiles to
     # `mov word [bp+0], 7`, the SAME op and cell as the prologue's result-slot
@@ -3313,6 +3343,7 @@ if __name__ == "__main__":
     test_decode_t1_fwdinline()
     test_decode_t1_inlfwdwhile()
     test_decode_t1_exitsublocstr()
+    test_decode_t1_selelsetarget()
     test_decode_t1_fnintcall()
     test_decode_t1_inlinethendef()
     test_decode_t1_commonarrstatic()

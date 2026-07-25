@@ -1,0 +1,22 @@
+SUB Wrap(A%, B$, C%)
+IF B$ = "a" OR B$ = "b" THEN
+SELECT CASE A%
+CASE 3
+PRINT "three"
+CASE ELSE
+PRINT "other"
+IF C% > 2 THEN PRINT "flon"
+END SELECT
+SELECT CASE B$
+CASE "a"
+PRINT "AA"
+CASE ELSE
+PRINT "BB"
+END SELECT
+END IF
+END SUB
+D% = 3
+E$ = "a"
+F% = 1
+CALL Wrap(D%, E$, F%)
+END

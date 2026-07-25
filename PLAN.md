@@ -99,11 +99,14 @@ edition/runtime tag, and evidence provenance.
   it was scoped and deferred, not started. Do not confuse round 22 for
   the whole idea.
 
-  **Where `tbd73.exe` stands as of round 38**: `jump target 0xba64 is not
-  a statement start`. Rounds 37 and 38 each advanced it one gap
-  (`0xb192` -> `0xc2cc` -> `0xba64`), both determined directly from
-  `TBW73.INC` with no speculative probing -- see their Part III entries.
-  Suite **2454 passed**, 451 skipped. The round-24 shape below is still
+  **Where `tbd73.exe` stands as of round 39**: `jump target 0xba9f is not
+  a statement start`. Rounds 37, 38 and 39 each advanced it one gap
+  (`0xb192` -> `0xc2cc` -> `0xba64` -> `0xba9f`), all three determined
+  directly from `TBW73.INC` with no speculative probing -- see their
+  Part III entries. Suite **2459 passed**, 451 skipped. Round 39's entry
+  also records an OPEN, separate defect it turned up: a bare numeric
+  truth test (`IF flon THEN ...`) does not round-trip when normalized to
+  `IF x = 0 THEN <line>` (probe `wild/probes/probe_bareif_negate`). The round-24 shape below is still
   open and still the right description of it, but it is no longer the
   FRONT gap.
 
@@ -1444,6 +1447,69 @@ Goldens pin what the decoder DOES, and `verify_fixture` was only ever run on
 stems a session happened to touch, so a fixture could sit green in the suite for
 a long time while failing its own round trip. Finishing this census, then wiring
 a periodic (not per-commit -- it is far too slow) sweep, would close that gap.
+
+### 2026-07-25 — Round 39: `_jump_targets` did not walk SELECT CASE / block-IF arms
+
+Gap: `jump target 0xba64 is not a statement start`. `0xBA64` is
+`movsi:110; spush_bp; movsi:92; strassign` -- a SELECT CASE selector being
+copied to a temp -- and it is reached by exactly two forward jumps, `0B8D8` and
+`0B987`. TBW73.INC:476-483:
+
+```basic
+IF ans1$ = CHR$(72) OR ans1$ = CHR$(80) OR ans1$ = CHR$(71) OR ans1$ = CHR$(79) THEN
+  SELECT CASE bartype
+  CASE 3 : CALL Sprint(...)
+  CASE ELSE
+    CALL Scolor(...)
+    IF flon THEN CALL Sprint(...)          ' <- skips to 0xBA64
+  END SELECT
+  SELECT CASE ans1$                        ' <- 0xBA64, line 483
+```
+
+So the target is line 483's `SELECT CASE`, and the only reference to it is the
+false-skip of the inline `IF flon THEN ...` that ENDS the first SELECT's
+CASE ELSE.
+
+Cause: `_jump_targets` recursed into `ir.IfInline` bodies only -- not `IfBlock`
+arms/ELSE, not `SelectCase` arms/CASE ELSE -- despite its docstring promising
+"anywhere in the statement tree". `targets` is what `_fold_if`'s second leg and
+`_body_has_target` use to promote an inline-safe `IfInline` to a block, so the
+line-476 IF stayed an `IfInline` holding two `SelectCase`s, and
+`_resolve_targets`'s `map_body` (which descends into IfBlock/SelectCase but NOT
+IfInline) never reached the interior to make it addressable.
+
+The compound condition is load-bearing: a plain `RelOp` would have been promoted
+anyway by round 35's `block_ifs` leg, which only counts simple conditions. It
+took a four-way `OR` for the omission to become reachable.
+
+Fix (`lift.py`): walk `IfBlock` arms + `else_body` and `SelectCase` arms +
+`case_else` in `_jump_targets`. SubDef/DefFn bodies deliberately stay out (by
+the time a body sits inside one, its own `_fold_if` pass already ran with those
+statements at top level). Verified against **unregenerated** goldens: the whole
+suite passed unchanged, so no existing corpus decode shifts.
+
+Witness `t1_selelsetarget` (+ `v10_` twin), byte-exact both dialects; confirmed
+to raise against the unfixed decoder. tbd73 advances to `jump target 0xba9f`.
+
+**Second defect found while building this witness -- open, NOT fixed.** The
+first, fully faithful probe used line 481's actual condition, a BARE numeric
+truth test (`IF flon THEN ...`). It decodes fine but does not round-trip: the
+emitter renders the normalized negation as `IF C% = 0 THEN <line>`, and
+
+| | bytes |
+|---|---|
+| source `IF C% THEN` | `les si,[bp+6]; mov ax,[es:si]; or ax,ax; jnz` |
+| our `IF C% = 0 THEN` | `xor ax,ax; les si,[bp+6]; cmp ax,[es:si]; jnz` |
+
+11 bytes differ: the compare form is longer by no bytes overall but shaped
+differently, and it also needs a pool constant `0` the original never allocates,
+which shifts one string pointer (`0x0154` vs `0x0152`) and the pool tail. A
+relop condition negates byte-exactly (`>` -> `<=`, flipped jcc, no constant), so
+the landed fixture uses `IF C% > 2 THEN` and the bare-test shape is parked as
+`wild/probes/probe_bareif_negate` (compiles, decodes, mis-recovers -- the worst
+of the three states, since it is silent). Fixing it needs a negation that keeps
+the `or ax,ax` self-test, i.e. rendering `IF NOT C% THEN <line>` or keeping the
+statement inline; both need their own byte-exact verification.
 
 ### 2026-07-25 — Round 38: EXIT SUB lands on the LOCAL-string teardown, not the proc_ret
 

@@ -933,7 +933,22 @@ def _fold_body_ifgotos(body, end_addr, stmt_addr=None):
 def _jump_targets(stmts) -> frozenset[int]:
     """Every address referenced as a jump target anywhere in the statement
     tree (Goto/IfGoto/Gosub, ON GOTO/GOSUB lists, ON ERROR/RESUME/ON-trap),
-    including inside already-lifted IfInline bodies."""
+    including inside already-lifted IfInline bodies, IfBlock arms/ELSE and
+    SelectCase arms/CASE ELSE.
+
+    The block/SELECT arms used to be skipped, which quietly under-delivered on
+    "anywhere in the tree": `targets` is what promotes an inline-safe IfInline
+    to a block (`_fold_if`'s second leg, and `_body_has_target`), so a jump
+    target reachable only through an arm left the enclosing IF inline and its
+    interior un-addressable. Wild tbd73.exe, TBW73.INC:476-483: the compound
+    `IF ans1$ = CHR$(72) OR ... THEN` block holds two SELECT CASEs, and the
+    first one's CASE ELSE jumps to the SECOND one's header -- so the target
+    only appears inside a CASE ELSE (`jump target 0xba64 is not a statement
+    start`). Fixture t1_selelsetarget.
+
+    SubDef/DefFn bodies are deliberately NOT walked: by the time a body is
+    inside one, its own `_fold_if` pass at proc_ret/fn_ret has already run
+    with its statements at top level, so its targets were collected then."""
     out = set()
 
     def walk(s):
@@ -952,6 +967,18 @@ def _jump_targets(stmts) -> frozenset[int]:
                 out.add(s.target[1])
         elif isinstance(s, ir.IfInline):
             for b in s.body:
+                walk(b)
+        elif isinstance(s, ir.IfBlock):
+            for _cond, arm in s.arms:
+                for b in arm:
+                    walk(b)
+            for b in s.else_body or ():
+                walk(b)
+        elif isinstance(s, ir.SelectCase):
+            for arm in s.arms:
+                for b in arm.body:
+                    walk(b)
+            for b in s.case_else or ():
                 walk(b)
 
     for s in stmts:

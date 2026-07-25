@@ -5790,6 +5790,14 @@ SelectCase(selector=Var(name='A$'), arms=(CaseArm(guards=(CaseValue(value=Call(n
 End()
 Return(target=None)
 
+## t1_selelsetarget
+SubDef(name='SUB1', params=('A%', 'B$', 'C%'), body=(IfBlock(arms=((LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='a')), rhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='b'))), (SelectCase(selector=Var(name='A%'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=3)),), body=(Print(items=(StrLit(value='three'),), newline=True, file=None, commas=None),)),), case_else=(Print(items=(StrLit(value='other'),), newline=True, file=None, commas=None), IfGoto(cond=RelOp(op='<=', lhs=Var(name='C%'), rhs=Lit(value=2)), target=BodyLine(stmt=0, phys=10)), Print(items=(StrLit(value='flon'),), newline=True, file=None, commas=None))), SelectCase(selector=Var(name='B$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='a')),), body=(Print(items=(StrLit(value='AA'),), newline=True, file=None, commas=None),)),), case_else=(Print(items=(StrLit(value='BB'),), newline=True, file=None, commas=None),)))),), else_body=None),))
+Assign(target=Var(name='D%'), value=Lit(value=3))
+Assign(target=Var(name='E$'), value=StrLit(value='a'))
+Assign(target=Var(name='F%'), value=Lit(value=1))
+CallStmt(name='SUB1', args=(Var(name='D%'), Var(name='E$'), Var(name='F%')))
+End()
+
 ## t1_shell
 Shell(cmd=StrLit(value='DIR'))
 End()
@@ -12044,6 +12052,14 @@ Assign(target=Var(name='A$'), value=StrLit(value='Y'))
 SelectCase(selector=Var(name='A$'), arms=(CaseArm(guards=(CaseValue(value=Call(name='CHR$', args=(Lit(value=88),))), CaseValue(value=Call(name='CHR$', args=(Lit(value=89),))), CaseValue(value=StrLit(value='Z'))), body=(Print(items=(StrLit(value='MATCH'),), newline=True, file=None, commas=None),)),), case_else=(Print(items=(StrLit(value='NOMATCH'),), newline=True, file=None, commas=None),))
 End()
 Return(target=None)
+
+## v10_t1_selelsetarget
+SubDef(name='SUB1', params=('A%', 'B$', 'C%'), body=(IfBlock(arms=((LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='a')), rhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='b'))), (SelectCase(selector=Var(name='A%'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=3)),), body=(Print(items=(StrLit(value='three'),), newline=True, file=None, commas=None),)),), case_else=(Print(items=(StrLit(value='other'),), newline=True, file=None, commas=None), IfGoto(cond=RelOp(op='<=', lhs=Var(name='C%'), rhs=Lit(value=2)), target=BodyLine(stmt=0, phys=10)), Print(items=(StrLit(value='flon'),), newline=True, file=None, commas=None))), SelectCase(selector=Var(name='B$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='a')),), body=(Print(items=(StrLit(value='AA'),), newline=True, file=None, commas=None),)),), case_else=(Print(items=(StrLit(value='BB'),), newline=True, file=None, commas=None),)))),), else_body=None),))
+Assign(target=Var(name='D%'), value=Lit(value=3))
+Assign(target=Var(name='E$'), value=StrLit(value='a'))
+Assign(target=Var(name='F%'), value=Lit(value=1))
+CallStmt(name='SUB1', args=(Var(name='D%'), Var(name='E$'), Var(name='F%')))
+End()
 
 ## v10_t1_shell
 Shell(cmd=StrLit(value='DIR'))
