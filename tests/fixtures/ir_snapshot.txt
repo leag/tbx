@@ -3110,6 +3110,19 @@ Assign(target=Var(name='B'), value=Lit(value=1))
 IfInline(cond=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='A'), rhs=Lit(value=0))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='B'), rhs=Lit(value=0))))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None),))
 End()
 
+## t1_boolstrgroup
+Assign(target=Var(name='A$'), value=StrLit(value='K'))
+Assign(target=Var(name='B%'), value=Neg(operand=Lit(value=1)))
+IfInline(cond=BinOp(op='AND', lhs=Var(name='B%'), rhs=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=75),)))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=77),))))))), body=(Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None),))
+End()
+
+## t1_boolstrord
+Assign(target=Var(name='A$'), value=StrLit(value='K'))
+Assign(target=Var(name='B%'), value=Neg(operand=Lit(value=1)))
+IfInline(cond=BinOp(op='AND', lhs=Var(name='B%'), rhs=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='<', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=75),)))), rhs=Group(inner=BinOp(op='>', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=77),))))))), body=(Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None),))
+IfInline(cond=BinOp(op='AND', lhs=Var(name='B%'), rhs=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='<=', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=75),)))), rhs=Group(inner=BinOp(op='>=', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=77),))))))), body=(Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None),))
+End()
+
 ## t1_booluntil
 Do(kind=None, cond=None)
 Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
@@ -9600,6 +9613,19 @@ End()
 Assign(target=Var(name='A'), value=Lit(value=0))
 Assign(target=Var(name='B'), value=Lit(value=1))
 IfInline(cond=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='A'), rhs=Lit(value=0))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='B'), rhs=Lit(value=0))))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None),))
+End()
+
+## v10_t1_boolstrgroup
+Assign(target=Var(name='A$'), value=StrLit(value='K'))
+Assign(target=Var(name='B%'), value=Neg(operand=Lit(value=1)))
+IfInline(cond=BinOp(op='AND', lhs=Var(name='B%'), rhs=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=75),)))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=77),))))))), body=(Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None),))
+End()
+
+## v10_t1_boolstrord
+Assign(target=Var(name='A$'), value=StrLit(value='K'))
+Assign(target=Var(name='B%'), value=Neg(operand=Lit(value=1)))
+IfInline(cond=BinOp(op='AND', lhs=Var(name='B%'), rhs=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='<', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=75),)))), rhs=Group(inner=BinOp(op='>', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=77),))))))), body=(Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None),))
+IfInline(cond=BinOp(op='AND', lhs=Var(name='B%'), rhs=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='<=', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=75),)))), rhs=Group(inner=BinOp(op='>=', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=77),))))))), body=(Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None),))
 End()
 
 ## v10_t1_booluntil

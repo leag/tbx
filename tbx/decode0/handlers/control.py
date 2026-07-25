@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from tbx import ir
 from tbx.decode0.const import (
+    _JCC_RELOP_STR_TRUE,
     _JCC_RELOP_TRUE,
     _JCC_RELOP_VALUE,
     _TRAP_CTL,
@@ -688,25 +689,39 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             state.pend_cmp = None
             state.k += 3
             return True
+        # A STRING compare may take this path too, but ONLY inside an
+        # ungrouped outer AND's right-hand group (direct_bool_gate): that is
+        # the witnessed context -- t1_nestedbool's own right group reaches
+        # here for each of its FP terms, and t1_boolstrgroup is the same
+        # shape with string terms (wild tbd73.exe's TBWINDOW `SUB
+        # Makevmenu`). Outside it, strings stay fail-loud as before; in
+        # particular `V% = A$ = B$` (wild hebrew.exe) has no such gate and
+        # still falls through to its own movm_ax branch below.
+        # strcmp's flags are FORWARD, so the four ORDERING rows need
+        # _JCC_RELOP_STR_TRUE, NOT _JCC_RELOP_TRUE's FP-reversed rows.
+        _tmap = _JCC_RELOP_STR_TRUE if state.pend_cmp_str else _JCC_RELOP_TRUE
         if (
-            not state.pend_cmp_str
+            (not state.pend_cmp_str or state.direct_bool_gate)
             and state.k + 3 < len(state.ops)
             and state.ops[state.k + 1][1] == "jcc"
             and state.ops[state.k + 2][1] == "incax"
             and state.ops[state.k + 1][3] == state.ops[state.k + 3][0]
-            and state.ops[state.k + 1][2] in _JCC_RELOP_TRUE
+            and state.ops[state.k + 1][2] in _tmap
             and state.ops[state.k + 3][1] not in ("orax", "andaxbx")
         ):
             # FP relational-as-VALUE inside arithmetic (t1_relval, wild
             # schart.exe): `(A > 0) * 3` materializes -1/0 into ax with no
             # dispatch pair after the inc -- the next op consumes ax directly
             # (imulbx/imul_m). The source REQUIRES the parens for this parse,
-            # so the value carries an explicit Group. Strings stay fail-loud.
+            # so the value carries an explicit Group -- and per-term parens
+            # inside a logical group are a FREE normalization (oracle-checked:
+            # `(A OR B)` and `((A) OR (B))` compile byte-identically).
             lhs, rhs = state.pend_cmp
             state.ax = ir.Group(
-                ir.BinOp(_JCC_RELOP_TRUE[state.ops[state.k + 1][2]], lhs, rhs)
+                ir.BinOp(_tmap[state.ops[state.k + 1][2]], lhs, rhs)
             )
             state.pend_cmp = None
+            state.pend_cmp_str = False
             state.k += 3
             return True
         if (

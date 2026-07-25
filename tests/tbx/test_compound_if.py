@@ -94,6 +94,46 @@ def test_decode_t1_erase():
     assert decode0.decode_user_code(_exe("t1_erase.exe")) == want
 
 
+def test_decode_t1_boolstrgroup():
+    # A BARE VALUE as the left operand of an ungrouped outer AND whose right
+    # operand is a parenthesized group of STRING compares:
+    # `IF F% AND (A$ = CHR$(75) OR A$ = CHR$(77)) THEN`. Wild tbd73.exe's
+    # TBWINDOW `SUB Makevmenu` (TBW73.INC:510).
+    #
+    # `or ax,ax` self-tests the bare value without destroying it, so the group
+    # protocol (bank in bx, park in cx across the group, fold with andaxbx) is
+    # the SAME one t1_nestedbool already drives via direct_bool_gate -- there
+    # the left operand is a folded group (`oraxbx`) instead of a bare value.
+    # Previously `materialization template mismatch`.
+    #
+    # Per-term parens are emitted because the source's own single level of
+    # parens around the group is byte-identical either way (oracle-checked).
+    from tbx import decode0, emit0
+
+    for stem in ("t1_boolstrgroup.exe", "v10_t1_boolstrgroup.exe"):
+        src = emit0.emit(decode0.decode_user_code(_exe(stem)))
+        assert src == (
+            '10 A$ = "K"\n20 B% = -1\n'
+            '30 IF B% AND ((A$ = CHR$(75)) OR (A$ = CHR$(77))) THEN PRINT "YES"\n'
+            "40 END\n"
+        ), stem
+
+
+def test_decode_t1_boolstrord():
+    # The ORDERING rows of the same shape. strcmp's flags are FORWARD, so a
+    # materialized string relational needs _JCC_RELOP_STR_TRUE, not
+    # _JCC_RELOP_TRUE's FP-reversed unsigned rows -- the two maps agree only on
+    # `=`/`<>`, so this fixture (and not t1_boolstrgroup) is what pins the four
+    # ordering rows. With the wrong map every one of them decodes mirrored,
+    # which still recompiles to a valid program, just not the source's.
+    from tbx import decode0, emit0
+
+    for stem in ("t1_boolstrord.exe", "v10_t1_boolstrord.exe"):
+        src = emit0.emit(decode0.decode_user_code(_exe(stem)))
+        assert "((A$ < CHR$(75)) OR (A$ > CHR$(77)))" in src, stem
+        assert "((A$ <= CHR$(75)) OR (A$ >= CHR$(77)))" in src, stem
+
+
 def test_decode_t1_and3():
     # 3+-term compound chain: each MID segment materializes its term, folds
     # with `and ax,bx` (`or ax,bx`), and its dispatch jmp short-circuits into

@@ -36,6 +36,19 @@ _NEGATE_REL = {"=": "<>", "<>": "=", "<": ">=", ">=": "<", ">": "<=", "<=": ">"}
 # FORWARD (lhs cmp rhs), unlike the FP shape's reversed orientation, so the
 # unsigned Jcc codes need their own skip-relop rows.
 _JCC_RELOP_STR = {0x75: "=", 0x74: "<>", 0x72: ">=", 0x73: "<", 0x76: ">", 0x77: "<="}
+# ...and its inverse: the relop the Jcc tests TRUE, for a string compare
+# MATERIALIZED as a value (`movax FFFF; Jcc; inc ax`) or consumed by a direct
+# conditional GOTO. Distinct from _JCC_RELOP_TRUE's unsigned rows, which assume
+# the FP shape's REVERSED (mem, top) pend_cmp: strcmp's flags are FORWARD, so
+# the four ORDERING rows come out mirrored. `=`/`<>` coincide in both maps,
+# which is why the only prior string-as-value shape (`V% = A$ = B$`, wild
+# hebrew.exe) never distinguished them -- that path still reads
+# _JCC_RELOP_TRUE and would mis-spell an ordering compare, latent and
+# unwitnessed. Rows witnessed here: `=` by t1_boolstrgroup, and all four
+# ordering rows (`<`, `>`, `<=`, `>=`) by t1_boolstrord.
+_JCC_RELOP_STR_TRUE = {
+    0x74: "=", 0x75: "<>", 0x73: ">=", 0x72: "<", 0x77: ">", 0x76: "<=",
+}
 # Materialization form (WHILE / boolean values): the Jcc tests the relop TRUE --
 # the inverse mapping of _JCC_RELOP.
 _JCC_RELOP_TRUE = {

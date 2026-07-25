@@ -12,6 +12,7 @@ from tbx.decode0.const import (
     _FREAD,
     _JCC_RELOP,
     _JCC_RELOP_STR,
+    _JCC_RELOP_STR_TRUE,
     _JCC_RELOP_TRUE,
     _PREC,
     _PUT_ACTIONS,
@@ -1713,6 +1714,40 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 state.ax = None
                 state.k += 3
                 return
+            if nxt[2] == 0x75 and any(
+                o[0] == state.ops[state.k + 2][2] - 2 and o[1] == "andaxbx"
+                for o in state.ops
+            ):
+                # A bare value as the LEFT operand of an ungrouped outer AND
+                # whose RIGHT operand is a parenthesized GROUP: `IF F% AND
+                # (A$ = CHR$(75) OR A$ = CHR$(77))` (t1_boolstrgroup; wild
+                # tbd73.exe's TBWINDOW `SUB Makevmenu`, `IF hmenuopen AND
+                # (ans1$ = CHR$(75) OR ans1$ = CHR$(77))`).
+                #
+                # `or ax,ax` self-tests the value WITHOUT destroying it, so
+                # unlike _match_bool_bare_term1's flat-chain case just above
+                # this must NOT clear ax: the very next `movbxax` banks it in
+                # bx, the group is then computed in ax (parking bx in cx
+                # meanwhile), and a final `andaxbx` folds the two. That whole
+                # right-hand-group protocol is exactly what direct_bool_gate
+                # already drives for t1_nestedbool -- whose left operand is a
+                # folded group (`oraxbx`) rather than a bare value, and which
+                # therefore enters through the jcc handler's `direct_bool`
+                # test instead of here. So set the same flag and let the
+                # existing machinery run: arith's andaxbx branch reads it to
+                # put bx (this value) on the LEFT, and the jcc handler reads
+                # it to skip the extra Group wrapper before clearing it.
+                #
+                # Distinguished from the flat AND-chain above by WHERE the
+                # outer fold sits: a chain folds immediately after its second
+                # term's materialization, a group only after its own inner
+                # fold. Both agree the short-circuit lands two bytes past the
+                # outer `andaxbx`, so that is the anchor tested here. AND only
+                # (cc 75), matching _match_bool_bare_term1's own restriction:
+                # a bare-value OR term1 stays unwitnessed.
+                state.direct_bool_gate = True
+                state.k += 3
+                return
         state.pend_cmp = (state.ax, ir.Lit(0))
         state.ax = None
     elif kind == "fstsw":
@@ -1809,8 +1844,8 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             # forward strcmp flags, so the TRUE map is _JCC_RELOP_STR's inverse
             # (witnessed t1_strgodo `IF A$ = "X" THEN <line>` / wild schart.exe;
             # only "="/"<>" seen, remaining rows by the same forward derivation)
-            true_str = {0x74: "=", 0x75: "<>", 0x73: ">=", 0x72: "<",
-                        0x77: ">", 0x76: "<="}
+            true_str = _JCC_RELOP_STR_TRUE  # shared with the
+            # materialized-as-a-value string path (handlers.control)
             if cc not in true_str:
                 raise ValueError(
                     f"string compare jcc {cc:02x} without skip-jmp at {addr:#x}"

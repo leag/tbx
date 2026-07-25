@@ -1296,6 +1296,88 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 26: bare value AND a parenthesized STRING-OR group (LANDED)
+
+Closes Round 24's diagnosis. `tbd73.exe`'s `materialization template mismatch
+at 0xbc24` -- TBWINDOW's `SUB Makevmenu` (`TBW73.INC:510`):
+
+```basic
+IF hmenuopen AND (ans1$ = CHR$(75) OR ans1$ = CHR$(77)) THEN
+```
+
+**The key realization is that almost none of this needed new machinery.**
+`t1_nestedbool` (`IF ((A=0) OR (B=0)) AND ((C=0) OR (D=0))`) is the SAME
+shape, and its right-hand group already drives the whole protocol: bank the
+left operand in bx, park it in cx across the group, fold the group with
+`oraxbx`, restore cx, fold the outer `andaxbx`, dispatch. Only two things
+differ in tbd73's version:
+
+1. the LEFT operand is a bare value self-tested by `orax`, not a folded group
+   closed by `oraxbx` -- so it never reached the jcc handler's `direct_bool`
+   test that sets `direct_bool_gate`;
+2. the group's terms are STRING compares, and the value-materialization path
+   they need was gated `not state.pend_cmp_str` ("Strings stay fail-loud").
+
+So the fix is two narrow changes, and `_lift_bool_tail` -- the function with
+THREE documented reverts (see the OR-flavored-group entry below) -- was not
+touched at all:
+
+- **core.py's `orax` handler**: a new branch for a bare value as the left
+  operand of an ungrouped outer AND whose right operand is a GROUP. Crucially
+  it does NOT clear `state.ax` (unlike `_match_bool_bare_term1`'s flat-chain
+  sibling): `or ax,ax` self-tests without destroying, and the next `movbxax`
+  banks the value. It just sets `direct_bool_gate` and lets the existing
+  machinery run. Discriminated from the flat AND-chain by WHERE the outer fold
+  sits -- a chain folds immediately after its second term, a group only after
+  its own inner fold -- with both agreeing the short-circuit lands two bytes
+  past the outer `andaxbx`, which is the anchor tested.
+- **control.py's relational-as-VALUE branch**: strings allowed, but ONLY when
+  `direct_bool_gate` is set, i.e. exactly inside an ungrouped outer AND's
+  right-hand group. `V% = A$ = B$` (wild hebrew.exe) has no such gate and
+  still falls through to its own `movm_ax` branch, unchanged.
+
+**The reversed-term-order bug did NOT recur.** The register-fold handler's
+DEFAULT orientation (`BinOp(comb, ax, bx)`, ax on the left) is already correct
+for an independently-computed group, because TB evaluates the right operand
+first into bx -- source `A OR B` compiles B first. That is the same reasoning
+the reverted OR-flavored-group attempt needed but applied at the wrong layer:
+the reverts were all in `_lift_bool_tail`'s SHORT-CIRCUIT path, where terms
+arrive in source order and `LogOp(pb["op"], pb["r1"], r2)` is right. Both
+orientations are correct; they just belong to different mechanisms. Nothing
+was swapped.
+
+**A latent map bug found and avoided.** `strcmp`'s flags are FORWARD, so a
+materialized string relational needs `_JCC_RELOP_STR`'s inverse, NOT
+`_JCC_RELOP_TRUE`'s FP-reversed unsigned rows -- the two agree only on
+`=`/`<>`. Added `_JCC_RELOP_STR_TRUE` to const.py (also replacing core.py's
+inline copy of the same table in the string direct-GOTO path). Since tbd73 and
+the natural probe both use `=` only, a SECOND fixture deliberately witnesses
+the four ordering rows: without it the map choice would have been assumed
+rather than verified. Note the pre-existing `V% = A$ = B$` path still reads
+`_JCC_RELOP_TRUE` and would mis-spell an ordering compare -- latent,
+unwitnessed, left alone and now documented in const.py.
+
+Witnesses `t1_boolstrgroup` (tbd73's `=` shape) and `t1_boolstrord` (`<`, `>`,
+`<=`, `>=`), byte-exact both dialects. `t1_nestedbool`, `t1_orofands` and
+`t1_nestedgoto` re-verified byte-exact, and the full suite passed against the
+UNREGENERATED goldens first -- zero drift in the compound-boolean lifter.
+
+Per-term parens in the output (`((A$ = CHR$(75)) OR (A$ = CHR$(77)))` for a
+source `(A$ = CHR$(75) OR A$ = CHR$(77))`) are a FREE normalization,
+oracle-checked byte-identical before relying on it, and match the existing
+calibrated choice for `t1_nestedbool`.
+
+**Wild effect: 9 -> 8 on the `materialization template mismatch` cluster, and
+the OK count did NOT move (29/86).** One file advanced to a new gap; none
+completed. That is exactly the caveat recorded in the Round-25 checkpoint --
+the message is generic and covers several distinct causes, so it was never a
+nine-file payoff. Still open in that cluster: `elec87`, `electron`, `grdscn`,
+`kinder`, `kinetics`, `mcmurphy`, `pwinst`, `wb`.
+
+`tbd73.exe` advances to `inconsistent array-parameter type at 0xc40a` -- the
+Round 19 error again but at a different array parameter, so a further shape of
+the same family rather than a regression.
+
 ### 2026-07-24 — Round 25: MIXED scalar/array SUB parameter signatures
 
 Closes the gap `core.py`'s own comment had carried as a known hole ("Mixed
