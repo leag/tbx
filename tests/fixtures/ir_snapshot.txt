@@ -3888,6 +3888,12 @@ DefFn(name='FNFN2', params=('C$', 'D%'), body=(Local(names=('E%',)), Assign(targ
 Print(items=(FnCall(name='FNFN2', args=(StrLit(value='text'), FnCall(name='FNFN1', args=(Lit(value=3),)))),), newline=True, file=None, commas=None)
 End()
 
+## t1_fnblockif
+DefFn(name='FNFN1%', params=(), body=(IfBlock(arms=((RelOp(op='=', lhs=Var(name='A%'), rhs=Lit(value=1)), (FnResult(value=Lit(value=4)), ExitDef())),), else_body=None), FnResult(value=Lit(value=0))), is_block=True)
+Assign(target=Var(name='A%'), value=Lit(value=1))
+Print(items=(FnCall(name='FNFN1%', args=()),), newline=True, file=None, commas=None)
+End()
+
 ## t1_fnforward
 Print(items=(FnCall(name='FNFN1', args=(Lit(value=3),)),), newline=True, file=None, commas=None)
 End()
@@ -10321,6 +10327,12 @@ DefFn(name='FNFN2', params=('C$', 'D%'), body=(Local(names=('E%',)), Assign(targ
 Print(items=(FnCall(name='FNFN2', args=(StrLit(value='text'), FnCall(name='FNFN1', args=(Lit(value=3),)))),), newline=True, file=None, commas=None)
 End()
 
+## v10_t1_fnblockif
+DefFn(name='FNFN1%', params=(), body=(IfBlock(arms=((RelOp(op='=', lhs=Var(name='A%'), rhs=Lit(value=1)), (FnResult(value=Lit(value=4)), ExitDef())),), else_body=None), FnResult(value=Lit(value=0))), is_block=True)
+Assign(target=Var(name='A%'), value=Lit(value=1))
+Print(items=(FnCall(name='FNFN1%', args=()),), newline=True, file=None, commas=None)
+End()
+
 ## v10_t1_fnforward
 Print(items=(FnCall(name='FNFN1', args=(Lit(value=3),)),), newline=True, file=None, commas=None)
 End()
@@ -12628,7 +12640,7 @@ End()
 
 ## zz_bif1
 Assign(target=Var(name='A'), value=Lit(value=1))
-IfInline(cond=RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=1)), body=(Assign(target=Var(name='B'), value=Lit(value=2)), Assign(target=Var(name='C'), value=Lit(value=3))))
+IfBlock(arms=((RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=1)), (Assign(target=Var(name='B'), value=Lit(value=2)), Assign(target=Var(name='C'), value=Lit(value=3)))),), else_body=None)
 End()
 
 ## zz_bif2
@@ -12643,7 +12655,7 @@ End()
 
 ## zz_bif4
 Assign(target=Var(name='A'), value=Lit(value=1))
-IfBlock(arms=((RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=1)), (IfInline(cond=RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=2)), body=(Assign(target=Var(name='B'), value=Lit(value=5)),)), Assign(target=Var(name='C'), value=Lit(value=6)))),), else_body=None)
+IfBlock(arms=((RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=1)), (IfBlock(arms=((RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=2)), (Assign(target=Var(name='B'), value=Lit(value=5)),)),), else_body=None), Assign(target=Var(name='C'), value=Lit(value=6)))),), else_body=None)
 End()
 
 ## zz_bifg

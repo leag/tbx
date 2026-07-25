@@ -1668,6 +1668,57 @@ def test_decode_t1_bigjmp():
     ]
 
 
+def test_block_if_is_distinguished_from_inline_if():
+    # Block vs inline IF is BYTE-SIGNIFICANT, not a spelling choice: a block IF
+    # compiles its condition through the movax-FFFF MATERIALIZATION template,
+    # an inline `IF <simple> THEN <stmt>` through a bare dispatch pair. Measured
+    # on the oracle: the two spellings of one two-statement body differ in 71
+    # bytes, and emitting the block form inline loses 16 -- which is why
+    # zz_bif1/zz_bif4 used to FAIL their own verify_fixture round trip.
+    #
+    # `_lift_while` only ever sees the materialization template, so a SIMPLE
+    # relop arriving there is positive evidence of a block IF. Compound
+    # conditions materialize either way, so IfInline(cond=LogOp/BinOp/Group)
+    # stays legitimate -- only the plain-RelOp rows are block evidence.
+    from tbx import decode0, emit0, ir
+
+    # simple cond, two-statement body: block, NOT `IF A = 1 THEN B = 2: C = 3`
+    prog = decode0.decode_user_code(_exe("zz_bif1.exe"))
+    blk = next(s for s in prog if isinstance(s, ir.IfBlock))
+    assert blk.arms[0][0] == ir.RelOp("=", ir.Var("A"), ir.Lit(1))
+    assert blk.else_body is None
+    assert "IF A = 1 THEN\n  B = 2\n  C = 3\nEND IF" in emit0.emit(prog)
+
+    # the same leg applies to a NESTED body IF (_fold_body), zz_bif4's inner one
+    src = emit0.emit(decode0.decode_user_code(_exe("zz_bif4.exe")))
+    assert "  IF A = 2 THEN\n    B = 5\n  END IF" in src
+
+    # ...and an inline IF whose condition never materialized stays inline
+    src = emit0.emit(decode0.decode_user_code(_exe("zz_sub7.exe")))
+    assert "IF A < 0 THEN EXIT SUB" in src
+
+
+def test_decode_t1_fnblockif():
+    # A block IF inside a block DEF FN body. `fn_ret` never ran the `_fold_if`
+    # pass that proc_ret runs for SUB bodies and the top level runs for main
+    # code, so a DEF FN body's IfInlines stayed inline -- byte-wrong once the
+    # block/inline distinction is honoured (see the test above). Wild tbd73.exe:
+    # TBW73.INC's DEF FNCurdisplay is five levels of nested block IF.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_fnblockif", "v10_t1_fnblockif"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        fn = next(s for s in prog if isinstance(s, ir.DefFn))
+        assert isinstance(fn.body[0], ir.IfBlock), stem
+        assert emit0.emit(prog) == (
+            "10 DEF FNFN1%\n"
+            "  IF A% = 1 THEN\n    FNFN1% = 4\n    EXIT DEF\n  END IF\n"
+            "  FNFN1% = 0\n"
+            "END DEF\n"
+            "20 A% = 1\n30 PRINT FNFN1%\n40 END\n"
+        ), stem
+
+
 def test_decode_t1_blkgoto():
     # GOTO into a block IF's interior: TB accepts a numbered line inside
     # IF..END IF as a jump target (wild inv87.exe). The inline-IF region

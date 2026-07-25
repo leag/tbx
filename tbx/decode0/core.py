@@ -1155,6 +1155,7 @@ def _finalize(state: DecodeState, addr) -> Program:
         state.addrs,
         targets=_jump_targets(state.stmts),
         stmt_addr=state.stmt_addr,
+        block_ifs=state.block_if_addrs,
     )  # multi-line IF blocks (Task 3.3)
     fixed_lines = None
     trace_partial: dict[int, int] = {}
@@ -2436,6 +2437,8 @@ def decode_user_code(exe: bytes) -> list[Any]:
     state.pend_dataread = None  # open READ target chain
     state.pend_field = None  # open FIELD AS-entry chain
     state.ifs = []  # open inline-IF bodies
+    state.block_if_addrs = set()  # statement addrs whose BYTES prove the
+    # source spelled a multi-line block IF (see lift._lift_while)
     state.has_procs = any(
         o[1] in ("proc_enter", "fn_ret", "inline_sub", "opaque_helper")
         for o in state.ops
@@ -3061,6 +3064,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 state.addrs[i0:],
                 targets=_jump_targets(state.stmts),
                 stmt_addr=state.stmt_addr,
+                block_ifs=state.block_if_addrs,
             )
             body = tuple(state.stmts[state.proc_frame["idx"] :])
             for st, ad in zip(body, state.addrs[state.proc_frame["idx"] :]):
@@ -3239,6 +3243,22 @@ def decode_user_code(exe: bytes) -> list[Any]:
                     state.stmts, state.addrs, state.exit_folds
                 )  # EXIT DEF fold (body-local)
                 state.exit_folds.clear()
+                # Multi-line IF blocks inside the body -- the SAME fold
+                # proc_ret runs for a SUB body, for the same reason: a DEF FN
+                # body is snapshotted here and never revisited by the top-level
+                # `_fold_if` pass, so without this its IfInlines stay inline.
+                # Byte-significant, not cosmetic: a block IF compiles the
+                # movax-FFFF materialization template and an inline one a bare
+                # dispatch pair (t1_fnblockif). SUB bodies got this treatment
+                # with t1_dblhooksub; DEF FN bodies were never given it.
+                i0 = state.fn_frame["idx"]
+                state.stmts[i0:], state.addrs[i0:] = _fold_if(
+                    state.stmts[i0:],
+                    state.addrs[i0:],
+                    targets=_jump_targets(state.stmts),
+                    stmt_addr=state.stmt_addr,
+                    block_ifs=state.block_if_addrs,
+                )
                 body = tuple(state.stmts[state.fn_frame["idx"] :])
                 for st, ad in zip(body, state.addrs[state.fn_frame["idx"] :]):
                     if ad is not None:  # keep body addrs (as in the SUB fold)

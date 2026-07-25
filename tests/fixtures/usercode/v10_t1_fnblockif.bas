@@ -1,0 +1,10 @@
+10 DEF FNFN1%
+  IF A% = 1 THEN
+    FNFN1% = 4
+    EXIT DEF
+  END IF
+  FNFN1% = 0
+END DEF
+20 A% = 1
+30 PRINT FNFN1%
+40 END

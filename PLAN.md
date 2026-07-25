@@ -1296,6 +1296,65 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-25 — Round 35: block-IF vs inline-IF landed (items 1 + 2), and the DEF FN fold with it
+
+Round 34 found the discriminator and reverted, believing trace-hook physical-line
+accounting had to be rebuilt first. **That prerequisite did not exist.** The
+`t1_tronif`/`t1_tronerb` failures were caused by WHERE round 34 applied the
+evidence, not by the accounting:
+
+Round 34 built `ir.IfBlock` at the `ifs`-close in core.py, which BYPASSES
+`_fold_if` -- and `_fold_if`'s first leg is what reconstructs ELSE arms. So an
+IF with an ELSE lost its ELSE, its physical-line count shrank, and the hooks
+misaligned. `zz_bif1` "worked" under round 34 only because it has a single arm.
+
+The fix is to carry the evidence INTO the fold instead of pre-empting it:
+
+- `_lift_while` records the statement ADDRESS in `state.block_if_addrs` when the
+  materialized condition is a plain `ir.RelOp` (keyed on address, not `id()`, so
+  it survives the fold's node rebuilding).
+- `_fold_if` gains a THIRD leg beside "not inline-safe" and "body has a target":
+  fold when the address carries block evidence. Placed AFTER the ELSE leg, so
+  ELSE reconstruction still wins.
+- `_fold_body` gets the same leg recursively, for a nested body IF (`zz_bif4`'s
+  inner one).
+
+Results, all measured:
+
+| fixture | before | after |
+|---|---|---|
+| `zz_bif1` | MISMATCH -16B | **ok** |
+| `zz_bif2` | ok | ok |
+| `zz_bif4` | MISMATCH -16B, 97 differ | same size, ~8 differ (block form now right; residual is the OTHER bug below) |
+| `t1_tronif`, `t1_tronerb` | RAISED under round 34 | **ok** |
+| `t1_blkgoto`, `zz_sub7`, `zz_mdeffn2` | ok | ok |
+
+Golden churn was two files -- `zz_bif1` and `zz_bif4` usercode, both the exact
+intended inline->block re-spelling, both reviewed -- plus the IR snapshot. NO
+ops drift. For a change that rewrites a whole class of IF nodes that is a very
+narrow blast radius, and `zz_bif1`'s round trip going green is the proof the new
+spelling is the correct one.
+
+**The DEF FN fold pass landed with it (item 3, partially).** Round 33 removed
+`fn_ret`'s `_fold_if` call as unwitnessed -- it changed nothing measurable then,
+because without the discriminator a DEF FN body's IfInlines had no reason to
+become blocks. With the discriminator in place it is witnessable and needed:
+`t1_fnblockif` (a block IF inside a block DEF FN) now emits the block form and
+round-trips byte-exact both dialects. Round 33's judgement to remove it was
+right at the time; the ordering was simply 1-2-then-3, as recorded.
+
+Suite 2433 -> 2439. New fixtures `t1_fnblockif` (+v10).
+
+**Still open, now clearly a separate 4th cause**: `zz_bif3`, `zz_bif4`, `zz_do5`,
+`zz_efor` all mismatch at IDENTICAL size by ~8-9 bytes with NO materialization
+template in their ops. `zz_do5`/`zz_efor` are `IF <simple> THEN EXIT LOOP` /
+`EXIT FOR`. Untriaged; small and self-similar, so probably one cause across all
+four.
+
+**`tbd73.exe` is unchanged at `jump target 0xa604`** -- item 3's ELSE-arm
+reconstruction for its nested DEF FN IFs is still open, and is now the only
+thing between it and the next gap.
+
 ### 2026-07-31 — Round 34: block-IF vs inline-IF is BYTE-SIGNIFICANT — discriminator FOUND, blocked on line accounting
 
 Chasing tbd73's residual ELSE-arm gap led somewhere more consequential: the

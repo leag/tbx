@@ -681,7 +681,10 @@ def _lift_bool_do_tail(ops, k, pend_cmp, pb, stmts, addrs, put):
     return k + len(want)
 
 
-def _lift_while(ops, k, pend_cmp, whiles, dos, ifs, stmts, addrs, put, flush, cur) -> int:
+def _lift_while(
+    ops, k, pend_cmp, whiles, dos, ifs, stmts, addrs, put, flush, cur,
+    block_ifs=None,
+) -> int:
     """Consume the materialized loop test at ops[k] (mov ax,0FFFF):
     Jcc(R) +1; inc ax; or ax,ax; <cc> +3; e9 EXIT. With a loop-back before
     EXIT it is a head-test loop -- `DO WHILE cond` (cc 75, continue-if-true) or
@@ -740,6 +743,24 @@ def _lift_while(ops, k, pend_cmp, whiles, dos, ifs, stmts, addrs, put, flush, cu
         put(ir.Loop(loop_kind, cond), cur)
     elif exit_jcc[2] == 0x75:  # inline-IF (forward skip, by exclusion above)
         flush()
+        if block_ifs is not None and isinstance(cond, ir.RelOp):
+            # A SIMPLE condition that reached here MATERIALIZED (this function
+            # consumes the movax-FFFF template), and a genuinely single-line
+            # `IF <simple> THEN <stmt>` does NOT materialize -- it compiles a
+            # bare dispatch pair (zz_sub7/zz_mdeffn2: `jcc; jmp`, no movax
+            # FFFF, both byte-exact as inline). So this is positive evidence
+            # the SOURCE spelled a multi-line block IF. Measured on our own
+            # oracle: the two spellings of one two-statement body compile 71
+            # differing bytes, and rendering the block form inline loses 16 --
+            # the standing round-trip mismatch on zz_bif1/zz_bif4.
+            #
+            # Recorded as EVIDENCE for `_fold_if` rather than acted on here:
+            # the ELSE arms are reconstructed there, so building an IfBlock at
+            # this point would bypass that and drop the ELSE (t1_tronif /
+            # t1_tronerb, whose hooks then misalign with the physical lines).
+            # Compound conditions materialize either way, so only a plain
+            # RelOp counts.
+            block_ifs.add(cur)
         ifs.append(
             {"target": exit_jmp[2], "cond": cond, "start": cur, "idx": len(stmts)}
         )
@@ -772,7 +793,7 @@ def _body_has_target(body, targets, stmt_addr) -> bool:
     return False
 
 
-def _fold_body(body, targets=frozenset(), stmt_addr=None):
+def _fold_body(body, targets=frozenset(), stmt_addr=None, block_ifs=None):
     """Recursively block-fold nested non-inline-safe IFs within an arm/else body
     (bodies carry no Goto-else marker; only the rendering split applies here) --
     also block-folds an inline-safe IfInline whose OWN body contains a jump
@@ -790,9 +811,20 @@ def _fold_body(body, targets=frozenset(), stmt_addr=None):
     out = []
     for b in body:
         if isinstance(b, ir.IfInline) and (
-            not _inline_safe(b.body) or _body_has_target(b.body, targets, stmt_addr)
+            not _inline_safe(b.body)
+            or _body_has_target(b.body, targets, stmt_addr)
+            # `_fold_if`'s third leg, applied recursively: the BYTES say this
+            # nested IF was spelled multi-line too (zz_bif4, a block IF whose
+            # own first body statement is another block IF).
+            or (
+                block_ifs is not None
+                and stmt_addr is not None
+                and stmt_addr.get(id(b)) in block_ifs
+            )
         ):
-            new_b = ir.IfBlock(((b.cond, _fold_body(b.body, targets, stmt_addr)),), None)
+            new_b = ir.IfBlock(
+                ((b.cond, _fold_body(b.body, targets, stmt_addr, block_ifs)),), None
+            )
             if stmt_addr is not None:
                 a = stmt_addr.get(id(b))
                 if a is not None:
@@ -888,7 +920,9 @@ def _jump_targets(stmts) -> frozenset[int]:
     return frozenset(out)
 
 
-def _fold_if(stmts, addrs, bound=None, targets=frozenset(), stmt_addr=None):
+def _fold_if(
+    stmts, addrs, bound=None, targets=frozenset(), stmt_addr=None, block_ifs=None
+):
     """Fold multi-line IF blocks, address-level (before target resolution).
     A block IF/ELSE is an IfInline whose body ends in a forward Goto past its own start
     (the else-skip): strip it, take the statements up to the Goto target as the ELSE
@@ -925,13 +959,14 @@ def _fold_if(stmts, addrs, bound=None, targets=frozenset(), stmt_addr=None):
             ):
                 end_idx = None  # targeted interior: not an ELSE region
             if end_idx is not None:
-                arms = [(s.cond, _fold_body(s.body[:-1], targets, stmt_addr))]
+                arms = [(s.cond, _fold_body(s.body[:-1], targets, stmt_addr, block_ifs))]
                 else_s, _ = _fold_if(
                     stmts[i + 1 : end_idx],
                     addrs[i + 1 : end_idx],
                     bound=end,
                     targets=targets,
                     stmt_addr=stmt_addr,
+                    block_ifs=block_ifs,
                 )
                 if len(else_s) == 1 and isinstance(else_s[0], ir.IfBlock):
                     arms.extend(else_s[0].arms)  # ELSEIF flatten
@@ -943,14 +978,22 @@ def _fold_if(stmts, addrs, bound=None, targets=frozenset(), stmt_addr=None):
                 i = end_idx
                 continue
         if isinstance(s, ir.IfInline) and (
-            not _inline_safe(s.body) or _body_has_target(s.body, targets, stmt_addr)
+            not _inline_safe(s.body)
+            or _body_has_target(s.body, targets, stmt_addr)
+            # Third leg: the BYTES say the source spelled this IF multi-line
+            # (see _lift_while's `block_ifs`). Checked after the ELSE leg
+            # above, so an IF with an ELSE still reconstructs its arms there.
+            or (block_ifs is not None and a is not None and a in block_ifs)
         ):
             # Second leg: a body statement is a jump target -- the source was
             # a block IF with a NUMBERED interior line jumped into from
             # outside (witnessed t1_blkgoto / wild inv87.exe); the block form
             # lets emit0 number that physical line (ir.BodyLine).
             out_s.append(
-                ir.IfBlock(((s.cond, _fold_body(s.body, targets, stmt_addr)),), None)
+                ir.IfBlock(
+                    ((s.cond, _fold_body(s.body, targets, stmt_addr, block_ifs)),),
+                    None,
+                )
             )
             out_a.append(a)
             i += 1

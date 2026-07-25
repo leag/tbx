@@ -834,6 +834,7 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             state.put,
             state.flush_pending,
             state.cur,
+            block_ifs=state.block_if_addrs,
         )
         state.pend_cmp = None
         state.cur = None
