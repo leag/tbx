@@ -64,6 +64,33 @@ def test_zip_string_array_parameter_decodes_completely():
     )
 
 
+def test_string_array_parameter_element_passed_by_reference():
+    # An array PARAMETER's element read as a string AND passed by reference:
+    # `arg_push_arr` is a bare ES:SI pointer push, byte-identical for every
+    # element type, so it carries no type evidence. The suffix derivation used
+    # to fall through to "" (SINGLE) there and collide with the `$` the
+    # earlier far_spush had established for the same param
+    # (`inconsistent array-parameter type`). Wild tbd73.exe: TBWINDOW
+    # `SUB Makevmenu`'s `CALL Sprint(..., LEN(item$(mloop)) \ 2,
+    # item$(mloop), ...)` does both in ONE statement.
+    from tbx import emit0
+
+    for stem in ("t1_arrparmref.exe", "v10_t1_arrparmref.exe"):
+        prog = decode0.decode_user_code(
+            (_ROOT / "tests/fixtures/corpus" / stem).read_bytes()
+        )
+        sub = prog[5]
+        assert isinstance(sub, ir.SubDef) and sub.params == ("B$(1)",), stem
+        # both accesses resolve to the SAME string-typed element
+        assert sub.body[1] == ir.Print(
+            (ir.Call("LEN", (ir.ArrayRef("B$", (ir.Var("A%"),)),)),)
+        ), stem
+        assert sub.body[2] == ir.CallStmt(
+            "SUB2", (ir.ArrayRef("B$", (ir.Var("A%"),)),)
+        ), stem
+        assert "CALL SUB2(B$(A%))" in emit0.emit(prog), stem
+
+
 def test_whole_array_ir_spelling_and_c0_refusal():
     arg = ir.ArrayRef("A", ())
     assert ir.unparse(arg) == "A()"

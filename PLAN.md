@@ -1186,6 +1186,49 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 19: an array PARAM's element passed by reference
+
+`tbd73.exe`'s stop, `inconsistent array-parameter type at 0xb2cc`, is
+TBWINDOW's `SUB Makevmenu` (`TBW73.INC:456`):
+
+```basic
+CALL Sprint(wrow(idx) + mloop, wcol(idx) + (wcols(idx) \ 2) - (LEN(item$(mloop)) \ 2), item$(mloop), noattr)
+```
+
+One statement touches the array PARAM `item$()` twice: once read as a
+string (`far_spush`, feeding `LEN`) and once passed BY REFERENCE
+(`arg_push_arr`). The suffix derivation that types an array parameter from
+its access terminal has no row for `arg_push_arr` -- correctly, since that
+push is a bare ES:SI pointer, byte-identical whatever the element type is
+-- but it fell through to `""` (SINGLE) instead of abstaining, and the
+resulting `inferred` dict then collided with the `$` the earlier
+`far_spush` had already recorded.
+
+Fix: when the terminal is `arg_push_arr` and a type is already recorded,
+keep it and cross-check only what this access genuinely witnesses (stride
+and rank). The "arg_push_arr is the FIRST access" case keeps its existing
+(unwitnessed, default-SINGLE) behavior -- not made worse, not guessed at.
+
+Witness `t1_arrparmref`, byte-exact both dialects.
+
+**Negative evidence — a distinct gap found on the way.** The first two
+probes used `SUB One(X$(1), N%)`, i.e. a MIXED scalar/array signature, and
+got past the type collision only to hit `unsupported array-parameter frame`
+(core.py:2940, whose comment already says "Mixed scalar/array signatures
+remain unwitnessed"). That is a separate and larger piece of work --
+reconstructing a param list that interleaves a 0x3C array descriptor with
+ordinary 4-byte by-ref slots -- and `TBW73.INC`'s own
+`Makevmenu(item$(1), liveitem$, itemcount, ...)` is exactly that shape, so
+`tbd73.exe` WILL reach it. Deliberately not bundled here. The promoted
+probe uses a single array param plus a `SHARED` index instead, which
+isolates this round's fix and decodes clean. Left in working storage, not
+promoted: `p_arrparmref` / `p_arrparmref2` (they compile and fail, but they
+fail on the mixed-signature gap, so `wild/probes/` would mis-file them as
+witnesses for this one).
+
+`tbd73.exe` advances to `int NEXT (var limit): expected JLE to body at
+0xb487`.
+
 ### 2026-07-24 — Round 18: a statement that OPENS with a by-ref param operand
 
 `tbd73.exe`'s stop, `unhandled jmp short at 0xb1be`, is TBWINDOW's

@@ -718,11 +718,28 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                 "esz": esz,
                 "lo_off": param_rec["lo_off"],
             }
-            if "name" in param_rec and any(
+            if sik[1] == "arg_push_arr" and "name" in param_rec:
+                # Passing a computed element BY REFERENCE carries no
+                # element-TYPE evidence: the push is a bare ES:SI pointer,
+                # byte-identical whatever the element type is. So the suffix
+                # derivation above cannot speak here -- it falls through to
+                # `""` (SINGLE) and collides with the `$` an earlier far_spush
+                # already established for the same param. Keep the recorded
+                # type and cross-check only what this access DOES witness, the
+                # stride and the rank (t1_arrparmref; wild tbd73.exe's
+                # TBWINDOW `SUB Makevmenu`, whose `CALL Sprint(..., LEN(
+                # item$(mloop)) \ 2, item$(mloop), ...)` reads the element as a
+                # string and passes it by reference in ONE statement).
+                if param_rec["rank"] != 1 or param_rec["esz"] != esz:
+                    raise ValueError(
+                        f"inconsistent array-parameter type at {addr:#x}"
+                    )
+            elif "name" in param_rec and any(
                 param_rec.get(k) != v for k, v in inferred.items()
             ):
                 raise ValueError(f"inconsistent array-parameter type at {addr:#x}")
-            param_rec.update(inferred)
+            else:
+                param_rec.update(inferred)
             a = param_rec
         else:
             a = state.slot_info[blk]
