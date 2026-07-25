@@ -99,11 +99,14 @@ edition/runtime tag, and evidence provenance.
   it was scoped and deferred, not started. Do not confuse round 22 for
   the whole idea.
 
-  **Where `tbd73.exe` stands as of round 39**: `jump target 0xba9f is not
-  a statement start`. Rounds 37, 38 and 39 each advanced it one gap
-  (`0xb192` -> `0xc2cc` -> `0xba64` -> `0xba9f`), all three determined
-  directly from `TBW73.INC` with no speculative probing -- see their
-  Part III entries. Suite **2459 passed**, 451 skipped. Round 39's entry
+  **Where `tbd73.exe` stands as of round 40**: `jump target 0xcdc4 is not
+  a statement start`. Rounds 37-40 each advanced it one gap
+  (`0xb192` -> `0xc2cc` -> `0xba64` -> `0xba9f` -> `0xcdc4`), all four
+  determined directly from `TBW73.INC` with no speculative probing -- see
+  their Part III entries. Suite **2464 passed**, 451 skipped. Three of
+  the four (37, 39, 40) were the SAME class of bug: statement addresses
+  ride in a side table keyed by object identity, and folds that move or
+  rebuild statements must maintain it by hand. See round 40's entry. Round 39's entry
   also records an OPEN, separate defect it turned up: a bare numeric
   truth test (`IF flon THEN ...`) does not round-trip when normalized to
   `IF x = 0 THEN <line>` (probe `wild/probes/probe_bareif_negate`). The round-24 shape below is still
@@ -1447,6 +1450,49 @@ Goldens pin what the decoder DOES, and `verify_fixture` was only ever run on
 stems a session happened to touch, so a fixture could sit green in the suite for
 a long time while failing its own round trip. Finishing this census, then wiring
 a periodic (not per-commit -- it is far too slow) sweep, would close that gap.
+
+### 2026-07-25 — Round 40: a CASE arm's statement addresses were discarded with the fold
+
+Gap: `jump target 0xba9f is not a statement start`. TBW73.INC:484-490, inside
+`SELECT CASE ans1$`:
+
+```basic
+CASE CHR$(72)
+  DECR curntpos
+  IF curntpos < 1 THEN curntpos = itemcount
+  WHILE MID$(liveitem$,curntpos,1) = "0"
+```
+
+The ops match one-for-one (`0BA7F far_dec_si` the DECR, `0BA85..0BA90` the IF as
+a plain dispatch pair, `0BA93` the THEN body, `0BA9F` the WHILE header, and
+`0BAE5 jmps` the WEND back-edge). The IF normalizes to
+`IF curntpos >= 1 THEN <line>`, target `0xBA9F` -- the WHILE header two
+statements later in the SAME arm. Holder confirmed by instrumentation:
+`IfGoto(RelOp('>=', P1E%, 1), ('addr', 47775))` at
+`top/31.body/22.arm0/1.case0/1`.
+
+Cause: `select_case.py` snapshots an arm (or CASE ELSE) body off `state.stmts`
+and deletes the matching `state.addrs` slice -- without carrying the addresses
+into `state.stmt_addr` first. So every statement inside a CASE arm silently lost
+its address. `core.py` already does exactly this transfer at `proc_ret` for a SUB
+body (the t1_subgsb path), and `_resolve_targets`'s `map_body` already walks
+SelectCase arms and knows how to number them; the address was simply never
+recorded.
+
+Fix (`select_case.py`): `_keep_addrs(state, body, body_idx)` at both snapshot
+sites. Verified against **unregenerated** goldens -- full suite passed unchanged.
+
+This is the third address-plumbing bug in four rounds (37 rebuilt and orphaned,
+39 failed to collect, 40 discarded outright). They are all the same underlying
+fragility: statement addresses ride in a side table keyed by object identity,
+and every fold that moves or rebuilds statements has to remember to maintain it.
+Worth noting as a candidate for the deferred layering work -- an address that
+lived ON the statement, or a fold that returned its address mapping, would make
+all three unrepresentable rather than merely fixed.
+
+Witness `t1_selarmtarget` (+ `v10_` twin), byte-exact both dialects, confirmed to
+raise against the unfixed decoder. Suite 2459 -> **2464 passed**. tbd73 advances
+`0xba9f` -> `0xcdc4`, roughly 0x1300 bytes further into the image.
 
 ### 2026-07-25 — Round 39: `_jump_targets` did not walk SELECT CASE / block-IF arms
 

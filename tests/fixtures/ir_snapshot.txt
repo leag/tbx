@@ -5782,6 +5782,14 @@ CallStmt(name='SUB1', args=())
 End()
 SubDef(name='SUB1', params=(), body=(Print(items=(StrLit(value='F'),), newline=True, file=None, commas=None),))
 
+## t1_selarmtarget
+SubDef(name='SUB1', params=('A$', 'B%', 'C%'), body=(SelectCase(selector=Var(name='A$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='a')),), body=(Decr(var=Var(name='B%')), IfGoto(cond=RelOp(op='>=', lhs=Var(name='B%'), rhs=Lit(value=1)), target=BodyLine(stmt=0, phys=6)), Assign(target=Var(name='B%'), value=Var(name='C%')), Do(kind='WHILE', cond=RelOp(op='=', lhs=Call(name='MID$', args=(Var(name='A$'), Var(name='B%'), Lit(value=1))), rhs=StrLit(value='0'))), Decr(var=Var(name='B%')), Loop(kind=None, cond=None))),), case_else=(Assign(target=Var(name='B%'), value=Lit(value=0)),)),))
+Assign(target=Var(name='D$'), value=StrLit(value='a'))
+Assign(target=Var(name='E%'), value=Lit(value=2))
+Assign(target=Var(name='F%'), value=Lit(value=3))
+CallStmt(name='SUB1', args=(Var(name='D$'), Var(name='E%'), Var(name='F%')))
+End()
+
 ## t1_selcasechr
 OnTrap(event='TIMER', n=Lit(value=1), target=5)
 TrapCtl(event='TIMER', n=None, mode='ON')
@@ -12044,6 +12052,14 @@ Assign(target=Var(name='A%'), value=Lit(value=1))
 CallStmt(name='SUB1', args=())
 End()
 SubDef(name='SUB1', params=(), body=(Print(items=(StrLit(value='F'),), newline=True, file=None, commas=None),))
+
+## v10_t1_selarmtarget
+SubDef(name='SUB1', params=('A$', 'B%', 'C%'), body=(SelectCase(selector=Var(name='A$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='a')),), body=(Decr(var=Var(name='B%')), IfGoto(cond=RelOp(op='>=', lhs=Var(name='B%'), rhs=Lit(value=1)), target=BodyLine(stmt=0, phys=6)), Assign(target=Var(name='B%'), value=Var(name='C%')), Do(kind='WHILE', cond=RelOp(op='=', lhs=Call(name='MID$', args=(Var(name='A$'), Var(name='B%'), Lit(value=1))), rhs=StrLit(value='0'))), Decr(var=Var(name='B%')), Loop(kind=None, cond=None))),), case_else=(Assign(target=Var(name='B%'), value=Lit(value=0)),)),))
+Assign(target=Var(name='D$'), value=StrLit(value='a'))
+Assign(target=Var(name='E%'), value=Lit(value=2))
+Assign(target=Var(name='F%'), value=Lit(value=3))
+CallStmt(name='SUB1', args=(Var(name='D$'), Var(name='E%'), Var(name='F%')))
+End()
 
 ## v10_t1_selcasechr
 OnTrap(event='TIMER', n=Lit(value=1), target=5)

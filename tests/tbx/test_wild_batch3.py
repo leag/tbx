@@ -524,6 +524,39 @@ def test_decode_t1_fwdinline():
         ), stem
 
 
+def test_decode_t1_selarmtarget():
+    # A jump target landing INSIDE a SELECT CASE arm. Folding an arm moves its
+    # statements off the flat list and deletes their `state.addrs` entries, so
+    # the addresses vanished with them -- the same loss `core.py` already guards
+    # against at proc_ret for a SUB body. `_resolve_targets`'s `map_body`
+    # already walks SelectCase arms and knows how to number them; it just never
+    # had an address to work with.
+    #
+    # Wild tbd73.exe, TBW73.INC:486-487 inside `SELECT CASE ans1$ /
+    # CASE CHR$(72)`: `IF curntpos < 1 THEN curntpos = itemcount` normalizes to
+    # `IF curntpos >= 1 THEN <line>`, whose target is the WHILE header two
+    # statements later in the SAME arm (`jump target 0xba9f is not a statement
+    # start`). Byte-exact, both dialects.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_selarmtarget", "v10_t1_selarmtarget"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        sub = next(s for s in prog if isinstance(s, ir.SubDef))
+        sel = next(b for b in sub.body if isinstance(b, ir.SelectCase))
+        arm = sel.arms[0].body
+        assert arm[1] == ir.IfGoto(
+            ir.RelOp(">=", ir.Var("B%"), ir.Lit(1)), ir.BodyLine(0, 6)
+        ), stem
+        assert arm[3].kind == "WHILE", stem  # the DO WHILE it targets
+        assert emit0.emit(prog) == (
+            "10 SUB SUB1(A$, B%, C%)\n  SELECT CASE A$\n  CASE \"a\"\n"
+            "    DECR B%\n    IF B% >= 1 THEN 16\n    B% = C%\n"
+            "16 DO WHILE MID$(A$,B%,1) = \"0\"\n    DECR B%\n    LOOP\n"
+            "  CASE ELSE\n    B% = 0\n  END SELECT\nEND SUB\n"
+            "20 D$ = \"a\"\n30 E% = 2\n40 F% = 3\n50 CALL SUB1(D$,E%,F%)\n60 END\n"
+        ), stem
+
+
 def test_decode_t1_inlfwdwhile():
     # Respelling a SUB body's `Pxx` placeholders (the SUB ... INLINE forwarding
     # of test_decode_t1_fwdinline above) REBUILDS every statement that mentions
@@ -3344,6 +3377,7 @@ if __name__ == "__main__":
     test_decode_t1_inlfwdwhile()
     test_decode_t1_exitsublocstr()
     test_decode_t1_selelsetarget()
+    test_decode_t1_selarmtarget()
     test_decode_t1_fnintcall()
     test_decode_t1_inlinethendef()
     test_decode_t1_commonarrstatic()

@@ -129,6 +129,33 @@ def _begin_body(state, body_i, next_test):
     state.cur = None
 
 
+def _keep_addrs(state, body, body_idx) -> None:
+    """Carry an arm/CASE-ELSE body's statement addresses into `state.stmt_addr`
+    before the snapshot deletes them from `state.addrs`.
+
+    Folding an arm moves its statements off the flat list, so their addresses
+    vanish with it -- exactly what `core.py` already guards against at
+    `proc_ret` for a SUB body (`stmt_addr[id(st)] = ad`, the t1_subgsb path).
+    Without it a jump landing INSIDE a CASE arm can never resolve, even though
+    `_resolve_targets`'s `map_body` walks SelectCase arms and knows how to
+    number them.
+
+    Witnessed by wild tbd73.exe, TBW73.INC:486-487, inside
+    `SELECT CASE ans1$ / CASE CHR$(72)`:
+
+        DECR curntpos
+        IF curntpos < 1 THEN curntpos = itemcount
+        WHILE MID$(liveitem$,curntpos,1) = "0"
+
+    The IF normalizes to `IF curntpos >= 1 THEN <line>` whose target is the
+    WHILE header two statements later, in the SAME arm
+    (`jump target 0xba9f is not a statement start`). Fixture t1_selarmtarget.
+    """
+    for st, ad in zip(body, state.addrs[body_idx:]):
+        if ad is not None:
+            state.stmt_addr[id(st)] = ad
+
+
 def step(state):
     op = state.ops[state.k]
     addr, kind = op[0], op[1]
@@ -143,6 +170,7 @@ def step(state):
         case_else = None
         if fr["in_else"]:
             case_else = tuple(state.stmts[fr["body_idx"] :])
+            _keep_addrs(state, case_else, fr["body_idx"])
             del state.stmts[fr["body_idx"] :], state.addrs[fr["body_idx"] :]
         state.stmts.append(ir.SelectCase(fr["selector"], tuple(fr["arms"]), case_else))
         state.addrs.append(fr["start"])
@@ -153,6 +181,7 @@ def step(state):
         state.flush_pending()
         fr = state.cases[-1]
         body = tuple(state.stmts[fr["body_idx"] :])
+        _keep_addrs(state, body, fr["body_idx"])
         del state.stmts[fr["body_idx"] :], state.addrs[fr["body_idx"] :]
         fr["arms"].append(ir.CaseArm(tuple(fr["cur_guards"]), body))
         fr["cur_guards"] = []
