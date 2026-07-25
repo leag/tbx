@@ -72,7 +72,7 @@ def test_ziptest_decodes_with_a_tail_if_closing_a_sub():
                 ir.BinOp("*", ir.DblLit(0.017), ir.Var("AI")),
                 ir.BinOp("-", ir.Var("AG"), ir.Var("AH")),
             ),
-            (ir.CallStmt("SUB4", (ir.Var("AK$"),)),),
+            (ir.CallStmt("SUB4", (ir.Var("AJ$"),)),),
         )
     ]
 

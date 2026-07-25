@@ -99,6 +99,7 @@ def calls(state: DecodeState, op, addr, kind) -> bool:
                     args.append(("argrefpending", op[2], i, off))
                     continue
                 if i >= len(params):
+                    breakpoint()
                     raise ValueError(
                         f"by-ref arg to unknown callee params at {addr:#x}"
                     )
@@ -180,6 +181,17 @@ def cargs(state: DecodeState, op, addr, kind) -> bool:
         return True
     if kind == "arg_push_ref":  # push a by-ref CALL arg (caller's var)
         try:
+            if op[2] in state.lay.get("guessed", ()):
+                # Layout placed this slot but GUESSED its width -- its phantom-
+                # slot bridge assigns 2 bytes to a disp with no direct-access
+                # evidence, and a variable only ever forwarded by reference has
+                # none. Spelling it `%` on that guess emits an argument whose
+                # type disagrees with the callee's parameter, which TB rejects:
+                # `Error 475: Parameter mismatch`. Take the same deferral as a
+                # slot layout never placed at all (below) and let the callee's
+                # own signature type it (fixture t1_byrefonlyarg; wild
+                # tbd73.exe, whose CALLs pass several such variables).
+                raise ValueError("by-ref slot width was guessed, not evidenced")
             state.pend_args.append(state.loc(op[2]))
         except ValueError:
             # The disp is never accessed any other way in this program --

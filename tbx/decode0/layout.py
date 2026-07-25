@@ -185,6 +185,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
         filds = {d for d in fild_disps0 if d >= sb}
         f64s = {d for d in fp64_disps if d >= sb}
         longs = {d for d in long_disps0 if d >= sb}
+        guessed = set()
         run, strs, d = {}, set(), sb
         while True:
             if d in ints or (d in filds and d not in fp_disps and d not in f64s):
@@ -206,6 +207,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
                 # is never referenced when STEP is the literal-1 INC fast path
                 # (witnessed t1_fori: 0x120 phantom, 0x122 limit, 0x124 I%).
                 run[d] = 2
+                guessed.add(d)
                 d += 2
             elif d + 4 in ints:
                 # Both temp slots phantom: a literal limit AND a literal step
@@ -214,9 +216,10 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
                 # unreferenced (witnessed q_forstep: 0x120/0x122 phantom, 0x124
                 # I%).
                 run[d] = 2
+                guessed.add(d)
                 d += 2
             else:
-                return run, strs, d
+                return run, strs, guessed, d
 
     def find_statics(ds, sb, n_want):
         """Static records sit at exact slot positions in mixed programs but float
@@ -247,7 +250,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
     # COMMON, where the band pushes the statics out past it (see that branch).
     static_base: list[int] = [vb]
 
-    def finish(ds, n_static, statics, sb, run, strs, pool_base, delta):
+    def finish(ds, n_static, statics, sb, run, strs, guessed, pool_base, delta):
         # Augment `run` with any evidenced scalar disps in [sb, pool_base-4) that
         # walk_run missed due to a gap (e.g. phantom step/limit slots before I% in
         # an integer FOR loop, or typed scalars after a wholly unreferenced slot).
@@ -332,6 +335,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
             "scalars": run,
             "strs": strs,
             "long_slots": long_slots,
+            "guessed": set(guessed),
             "pool_base": pool_base,
             "arrs": statics,
             "rt_blocks": rt_blocks,
@@ -362,7 +366,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
             raise ValueError("runtime blocks are not 0x36-contiguous after statics")
         n = n_static + len(rt_blocks)
         sb = base0 + ARR_BLOCK * n
-        run, strs, dend = walk_run(sb)
+        run, strs, guessed, dend = walk_run(sb)
         if base0 == COMMON_BASE:
             # Past the blocks the band runs on into the COMMON SCALARS, then
             # aligns to 16 and carries a 16-byte band stamp; the ORDINARY band
@@ -374,7 +378,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
             # the ordinary scalars need a second walk past the stamp.
             band_slots[:] = sorted(run)
             ord_base = ((dend + 15) & ~15) + 0x10
-            band_run, band_strs = dict(run), set(strs)
+            band_run, band_strs, band_guessed = dict(run), set(strs), set(guessed)
         # Anchor ds on the slot grid itself: every runtime block must
         # show the bare rank+type record, every static slot a populated record.
         pat = tuple(
@@ -410,11 +414,12 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
                     q += ARR_BLOCK
                 static_base[0] = ord_base
                 sb = ord_base + ARR_BLOCK * len(statics)
-                run, strs, dend = walk_run(sb)
+                run, strs, guessed, dend = walk_run(sb)
                 if not run:
                     dend = sb
                 run = {**band_run, **run}
                 strs = band_strs | strs
+                guessed = band_guessed | guessed
                 n_static = len(statics)
                 for j, a in enumerate(statics):
                     a["name"] = f"V{n_static - 1 - j}"
@@ -435,7 +440,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
                 delta = ds + pool_base - 4 - P
                 if delta < 0:
                     continue
-                lay = finish(ds, n_static, statics, sb, run, strs, pool_base, delta)
+                lay = finish(ds, n_static, statics, sb, run, strs, guessed, pool_base, delta)
                 if lay is not None:
                     return lay
         raise ValueError("DGROUP layout not solvable (runtime slot grid anchor)")
@@ -516,7 +521,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
         # Band-style scalar construction: evidenced widths (walk_run's
         # priority order), 2-byte int fillers in unreferenced numeric space
         # (phantom FOR temp slots land here), '$' every 4 string bytes.
-        run, strs, d = {}, set(), b1
+        run, strs, guessed, d = {}, set(), set(), b1
         while d < b1 + s1:
             if d in int_disps0 or (
                 d in fild_disps0 and d not in fp_disps and d not in fp64_disps
@@ -531,13 +536,14 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
                 d += 4
             else:
                 run[d] = 2
+                guessed.add(d)
                 d += 2
         if d != b1 + s1:
             continue  # an evidenced width straddles the numeric sub-band edge
         for d in range(b1 + s1, b1 + s1 + s2, 4):
             run[d] = 4
             strs.add(d)
-        lay = finish(ds, n, statics, b1, run, strs, pool_base, 0)
+        lay = finish(ds, n, statics, b1, run, strs, guessed, pool_base, 0)
         if lay is not None:
             return lay
 
@@ -546,7 +552,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
     # never fabricate records, so the largest consistent candidate is the right one.
     for n in range(31, -1, -1):
         sb = vb + ARR_BLOCK * n
-        run, strs, dend = walk_run(sb)
+        run, strs, guessed, dend = walk_run(sb)
         # Candidate walk ends: greedy first (the normal case), then each
         # 16-aligned string position, longest first. A scalar band ending
         # exactly on a paragraph boundary puts the marker at a movsi-referenced
@@ -556,6 +562,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
         for dc in [dend] + sorted((d for d in strs if d % 16 == 0), reverse=True):
             run_c = {k: w for k, w in run.items() if k < dc}
             strs_c = {k for k in strs if k < dc}
+            guessed_c = {k for k in guessed if k < dc}
             pool_base = ((dc + 15) & ~15) + 4
             ds = P + 4 - pool_base
             if ds % 16 or ds <= 0:
@@ -576,7 +583,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
                 for m in movsi_disps - set(run_c)
             ):
                 continue
-            lay = finish(ds, n, statics, sb, run_c, strs_c, pool_base, 0)
+            lay = finish(ds, n, statics, sb, run_c, strs_c, guessed_c, pool_base, 0)
             if lay is not None:
                 return lay
 
@@ -664,6 +671,7 @@ def _bands_layout(
     bytes of string space. Returns None if any evidence contradicts the bands."""
     run: dict[int, int] = {}
     strs: set[int] = set()
+    guessed: set[int] = set()
     long_slots: set[int] = set()
     spans = []
     for s_num, s_str, base in (com, ord_):
@@ -682,8 +690,12 @@ def _bands_layout(
             elif d in fp_disps:
                 run[d] = 4
                 d += 4
-            else:  # int evidence or unreferenced filler
+            elif d in int_disps0 or d in fild_disps0:
                 run[d] = 2
+                d += 2
+            else:  # unreferenced filler
+                run[d] = 2
+                guessed.add(d)
                 d += 2
         if d != mid:
             return None  # an evidenced width straddles the band edge
@@ -719,6 +731,7 @@ def _bands_layout(
         "scalars": run,
         "strs": strs,
         "long_slots": long_slots,
+        "guessed": guessed,
         "pool_base": pool_base,
         "arrs": [],
         "rt_blocks": [],

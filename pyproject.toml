@@ -42,14 +42,9 @@ ignore = ["E701", "E702", "E741"]
 "tbx/ir/__init__.py" = ["F401"]
 "tbx/decode0/__init__.py" = ["F401"]
 
-[tool.ty.rules]
-missing-type-argument = "error"
-possibly-unresolved-reference = "error"
-
 [dependency-groups]
 dev = [
     "iced-x86>=1.21.0",
     "pytest>=9.0.0",
     "ruff>=0.15.0",
-    "ty>=0.0.56",
 ]

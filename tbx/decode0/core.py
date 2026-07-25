@@ -936,7 +936,113 @@ def _resolve_calls(
             return s if not changed else ir.SelectCase(s.selector, tuple(arms), case_else)
         return fix_value(s)
 
-    return walk(stmts)
+    resolved = walk(stmts)
+    return _propagate_call_types(resolved, stmt_addr)
+
+
+def _propagate_call_types(stmts, stmt_addr=None):
+    """Refine unsuffixed SubDef parameter placeholders ('Pxx') using caller
+    argument type evidence from CallStmts across the program (e.g., a parameter
+    forwarded solely to a signature-less INLINE sub, where the callee provides no
+    signature evidence, but the call site passes a typed argument like `W$`).
+    """
+    sub_defs: dict[str, ir.SubDef] = {}
+    calls: list[ir.CallStmt] = []
+
+    def collect(body):
+        for s in body:
+            if isinstance(s, ir.SubDef):
+                sub_defs[s.name] = s
+                collect(s.body)
+            elif isinstance(s, ir.CallStmt):
+                calls.append(s)
+            elif isinstance(s, ir.IfInline):
+                collect(s.body)
+            elif isinstance(s, ir.IfBlock):
+                for _, b in s.arms:
+                    collect(b)
+                if s.else_body:
+                    collect(s.else_body)
+            elif isinstance(s, ir.SelectCase):
+                for arm in s.arms:
+                    collect(arm.body)
+                if s.case_else:
+                    collect(s.case_else)
+            elif isinstance(s, ir.DefFn) and s.is_block:
+                collect(s.body)
+
+    collect(stmts)
+
+    if not sub_defs or not calls:
+        return stmts
+
+    refinements: dict[str, dict[str, str]] = {}
+
+    for c in calls:
+        if not isinstance(c.name, str) or c.name not in sub_defs:
+            continue
+        sub = sub_defs[c.name]
+        for i, arg in enumerate(c.args):
+            if i >= len(sub.params):
+                continue
+            p = sub.params[i]
+            if p.startswith("P") and not p.endswith(("%", "$", "&", "#", "(1)")):
+                sfx = None
+                if isinstance(arg, ir.Var) and arg.name[-1:] in "%$&#":
+                    sfx = arg.name[-1:]
+                elif isinstance(arg, ir.ArrayRef) and arg.name[-1:] in "%$&#":
+                    sfx = arg.name[-1:]
+                if sfx:
+                    refinements.setdefault(c.name, {})[p] = f"{p}{sfx}"
+
+    if not refinements:
+        return stmts
+
+    def update_stmt(s):
+        if isinstance(s, ir.SubDef) and s.name in refinements:
+            spell = refinements[s.name]
+            new_params = tuple(spell.get(p, p) for p in s.params)
+            new_body = tuple(_respell_params(b, spell, stmt_addr) for b in s.body)
+            new_body = tuple(update_stmt(b) for b in new_body)
+            return ir.SubDef(s.name, new_params, new_body)
+        if isinstance(s, ir.SubDef):
+            new_body = tuple(update_stmt(b) for b in s.body)
+            return s if all(a is b for a, b in zip(s.body, new_body)) else ir.SubDef(s.name, s.params, new_body)
+        if isinstance(s, ir.IfInline):
+            new_body = tuple(update_stmt(b) for b in s.body)
+            return s if all(a is b for a, b in zip(s.body, new_body)) else ir.IfInline(s.cond, new_body)
+        if isinstance(s, ir.IfBlock):
+            changed = False
+            arms = []
+            for cond, b in s.arms:
+                nb = tuple(update_stmt(x) for x in b)
+                changed = changed or any(x is not y for x, y in zip(b, nb))
+                arms.append((cond, nb))
+            eb = s.else_body
+            if eb:
+                neb = tuple(update_stmt(x) for x in eb)
+                if any(x is not y for x, y in zip(eb, neb)):
+                    changed = True
+                    eb = neb
+            return s if not changed else ir.IfBlock(tuple(arms), eb)
+        if isinstance(s, ir.SelectCase):
+            changed = False
+            arms = []
+            for arm in s.arms:
+                nb = tuple(update_stmt(x) for x in arm.body)
+                changed = changed or any(x is not y for x, y in zip(arm.body, nb))
+                arms.append(ir.CaseArm(arm.guards, nb))
+            ce = s.case_else
+            if ce:
+                nce = tuple(update_stmt(x) for x in ce)
+                if any(x is not y for x, y in zip(ce, nce)):
+                    changed = True
+                    ce = nce
+            return s if not changed else ir.SelectCase(s.selector, tuple(arms), ce)
+        return s
+
+    return [update_stmt(s) for s in stmts]
+
 
 
 def _finalize(state: DecodeState, addr) -> Program:

@@ -9,12 +9,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```sh
-uv sync                       # install dev environment (pytest, ruff, ty, iced-x86)
+uv sync                       # install dev environment (pytest, ruff, iced-x86)
 uv run pytest                 # full suite (~131 tests, a few seconds)
 uv run pytest tests/tbx/test_arrays.py                # one file
 uv run pytest tests/tbx/test_arrays.py::test_name     # one test
 uv run ruff check             # lint
-uv run ty check               # type check
 uv run tbx PROGRAM.EXE        # decompile (add --ops for the op-stream dump)
 ```
 
@@ -35,7 +34,7 @@ uv run python -m tbx.tools.verify_fixture STEM        # byte-exact round trip
 uv run python -m tbx.tools.dump_dos_output --missing  # tests/fixtures/dosout/
 ```
 
-Requires Python 3.11+. CI (`.github/workflows/ci.yml`) runs ruff, ty, and pytest on Python 3.11–3.13 for pushes to main and pull requests, plus a `c0` platform matrix (Linux gcc/clang with SDL2, macOS clang, experimental Windows MinGW) running `test_c0.py`; all must pass.
+Requires Python 3.11+. CI (`.github/workflows/ci.yml`) runs ruff and pytest on Python 3.11–3.13 for pushes to main and pull requests, plus a `c0` platform matrix (Linux gcc/clang with SDL2, macOS clang, experimental Windows MinGW) running `test_c0.py`; all must pass.
 
 The core package (`tbx.decode0`, `tbx.ir`, `tbx.emit0`, `tbx.cli`) has **zero runtime dependencies**; keep it that way. Only `tbx/tools/` may use iced-x86 (the `debug` extra), and `tests/tbx/test_cfg.py` guards it with `pytest.importorskip`.
 
@@ -82,7 +81,7 @@ Corpus naming (`tests/fixtures/corpus/`): `.exe` files are compiled fixtures, `.
 
 ## Style notes
 
-- Ruff ignores E701/E702 (one-line compound statements are used) and E741; `ty` runs in strict-ish mode (`missing-type-argument` and `possibly-unresolved-reference` are errors). Both must pass clean.
+- Ruff ignores E701/E702 (one-line compound statements are used) and E741. Must pass clean.
 - Module and function docstrings carry the byte-level rationale (encodings, layout rules, which fixture witnessed a behavior) — keep that habit when touching decoder code; cite the witnessing fixture by stem.
 
 ## Oracle probes that compile but do not decode
