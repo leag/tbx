@@ -230,10 +230,12 @@ class DecodeState:
             locs = self.proc_frame["locals"]
             if locs is None or bp_off not in locs:
                 raise ValueError(f"[bp+{bp_off}] outside the open LOCAL frame")
+            self.touch_local(bp_off)
             return ir.Var(locs[bp_off])
         if self.fn_frame is not None:
             locs = self.fn_frame["locals"]
             if locs is not None and bp_off in locs:
+                self.touch_local(bp_off)
                 return ir.Var(locs[bp_off])
             # Not a declared LOCAL: an integer-typed DEF FN param read via the
             # ax-register path (fp_bp handles the FP-typed equivalent) --
@@ -248,6 +250,20 @@ class DecodeState:
             # name and every body reference to agree)
         raise ValueError(f"[bp+{bp_off}] outside the open LOCAL frame")
 
+    def touch_local(self, bp_off):
+        """Record that the body really referenced this frame slot.
+
+        A LOCAL FOR reserves unused step/limit temp words that can only be
+        located positionally, at the frame tail. Rather than delete a guessed
+        offset mid-walk, the FOR paths just flag `has_local_for` and
+        `proc_ret`/`fn_ret` call `_retire_for_temps`, which drops tail words
+        only if they were never touched -- the whole body's evidence is in by
+        then, which a single forward pass cannot have at the FOR header.
+        """
+        frame = self.proc_frame if self.proc_frame is not None else self.fn_frame
+        if frame is not None:
+            frame.setdefault("touched", set()).add(bp_off)
+
     def loc_local_str(self, bp_off):
         """Resolve a four-byte STRING LOCAL first exposed by INT 9E/A2.
 
@@ -261,6 +277,7 @@ class DecodeState:
         locs = frame["locals"]
         if locs is None or bp_off not in locs:
             raise ValueError(f"string [bp+{bp_off}] outside the open LOCAL frame")
+        self.touch_local(bp_off)
         name = locs[bp_off]
         if name.endswith("%"):
             name = name[:-1] + "$"
@@ -493,6 +510,56 @@ def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, in
         if names:
             shared_subs[i] = ir.Shared(tuple(names))
     return shared_subs, sub_local_arrays
+
+
+def _retire_for_temps(frame, locs) -> None:
+    """Drop a LOCAL FOR's unused [step, limit] temp words from the frame table.
+
+    Runs at proc_ret/fn_ret, once the WHOLE body is decoded, because that is
+    the earliest point the evidence exists. A FOR over a LOCAL reserves two
+    temp words that are NOT declared LOCALs (q_locidx), but a literal bound
+    leaves no op referring to either, so they cannot be found by anchoring --
+    only by position. Position from the wrong end is what used to break: the
+    FOR paths guessed `loop_var + 2` / `+ 4` and deleted whatever sat there
+    mid-walk, which is a REAL declared LOCAL whenever the loop var is not the
+    last one declared -- `LOCAL I%, S$` with `FOR I% = ...` puts S$'s
+    descriptor exactly at `I% + 2` (t1_locstrafterfor / t1_locstrafterforlit;
+    wild tbd73.exe's TBWINDOW `SUB Makevmenu`, `LOCAL done, mloop, ans$,
+    ans1$`).
+
+    The compiler allocates the temps at the frame TAIL, after every declared
+    LOCAL, and reuses ONE pair however many LOCAL FORs the procedure contains
+    (Makevmenu: 8 zero-filled words = 6 declared + 1 shared pair, across
+    several FORs). So walk back from the tail -- and retire a word only if the
+    body never touched it, which is the part a single forward pass cannot know
+    at the FOR header. An untouched tail word is genuinely a temp; a touched
+    one is a declared LOCAL that merely sits where a temp could.
+
+    Deliberately NOT the unconditional `hidden_locals` path, which serves
+    offsets the op stream DOES anchor -- the variable-limit case's limit-temp
+    is reloaded by movax_bp at every test, so it is always touched and must be
+    retired regardless.
+    """
+    if locs is None or not frame.get("has_local_for"):
+        return
+    span = frame.get("local_span")
+    if span is None:
+        return
+    disp, cnt = span
+    touched = frame.get("touched") or set()
+    hidden = frame.get("hidden_locals") or set()
+    for i in range(cnt - 1, -1, -1):  # tail-first; stop at the first word the
+        d = disp + 2 * i  # body actually used -- everything below it is
+        if d in hidden or d not in locs:
+            # An anchored temp (the variable-limit case's limit-temp, retired
+            # unconditionally just below -- it IS touched, since movax_bp
+            # reloads it at every test, so it must not halt the walk), or the
+            # high word of a string/SINGLE descriptor already folded into its
+            # low word. Neither is evidence of a declared LOCAL here.
+            continue
+        if d in touched:  # a real declared LOCAL: no temp can be below it
+            break
+        locs.pop(d, None)
 
 
 def _respell_params(node, spell):
@@ -1845,13 +1912,18 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 a,
             )
             if cmp_at_t[1] == "cmp_bpi8" and state.proc_frame is not None:
-                # A literal-bound FOR over a LOCAL reserves its two unused
-                # limit/step temp words in the LOCAL frame right after the
-                # loop var (the frame analog of the static band's phantom
-                # slots, q_forstep) -- they are not declared LOCALs (q_locidx)
-                locs = state.proc_frame["locals"] or {}
-                locs.pop(cmp_at_t[2] + 2, None)
-                locs.pop(cmp_at_t[2] + 4, None)
+                # A literal-bound FOR over a LOCAL reserves two unused
+                # limit/step temp words in the LOCAL frame (the frame analog of
+                # the static band's phantom slots, q_forstep) -- they are not
+                # declared LOCALs (q_locidx). A literal bound leaves NO op
+                # referring to either temp, so there is nothing to anchor them
+                # to and the offsets can only be guessed positionally; stage
+                # the guess and let proc_ret drop it only if the body never
+                # touched it (see touch_local -- the compiler actually puts the
+                # temps at the frame TAIL, so `v+2`/`v+4` are real declared
+                # LOCALs whenever the loop var is not the last one declared,
+                # t1_locstrafterforlit).
+                state.proc_frame["has_local_for"] = True
             state.fors.append(
                 {
                     "v": cmp_at_t[2],
@@ -1921,9 +1993,11 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 # own later access raised `string [bp+N] outside the open
                 # LOCAL frame` (t1_locstrafterfor; wild tbd73.exe's TBWINDOW
                 # `SUB Makevmenu`, whose `LOCAL done, mloop, ans$, ans1$` puts
-                # the string descriptor ans$ exactly at mloop+2).
-                locs = state.proc_frame["locals"] or {}
-                locs.pop(cmp_at_t[2] - 2, None)
+                # the string descriptor ans$ exactly at mloop+2). The step-temp
+                # rides the frame-tail retirement instead of being deleted
+                # here; the limit-temp IS anchored (movax_bp names it) and so
+                # stays unconditional.
+                state.proc_frame["has_local_for"] = True
                 state.proc_frame.setdefault("hidden_locals", set()).add(
                     cmp_at_t[2]
                 )
@@ -1976,8 +2050,9 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 limit = state.stmts.pop().value
                 a = state.addrs.pop()
             if state.proc_frame is not None:
-                locs = state.proc_frame["locals"] or {}
-                locs.pop(cmp_at_t[2] - 2, None)
+                # Step-temp rides the frame-tail retirement (see the movax_bp
+                # sibling above); limit-temp is anchored by cmp_at_t itself.
+                state.proc_frame["has_local_for"] = True
                 state.proc_frame.setdefault("hidden_locals", set()).add(
                     cmp_at_t[2]
                 )
@@ -2703,6 +2778,9 @@ def decode_user_code(exe: bytes) -> list[Any]:
             frame["locals"] = {
                 disp + 2 * i: f"L{disp + 2 * i:02X}%" for i in range(cnt)
             }
+            frame["local_span"] = (disp, cnt)  # _retire_for_temps needs the
+            # zero-filled extent to find the frame TAIL, where a LOCAL FOR's
+            # temp words actually live
             if state.proc_frame is not None:
                 state.proc_frame["frame_words"] = cnt  # retf pop math needs the
                 # full zero-filled span even after FOR temp words are dropped
@@ -2922,6 +3000,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 state.addrs[state.proc_frame["idx"] :],
             )
             locs = state.proc_frame["locals"]
+            _retire_for_temps(state.proc_frame, locs)
             for d in state.proc_frame.get("hidden_locals") or ():
                 if locs is not None:
                     locs.pop(d, None)  # var-STEP FOR temps (see above): never
@@ -3061,6 +3140,7 @@ def decode_user_code(exe: bytes) -> list[Any]:
                     state.addrs[state.fn_frame["idx"] :],
                 )
                 locs = state.fn_frame["locals"]
+                _retire_for_temps(state.fn_frame, locs)
                 for d in state.fn_frame.get("hidden_locals") or ():
                     if locs is not None:
                         locs.pop(d, None)

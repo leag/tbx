@@ -2810,6 +2810,37 @@ def test_decode_t1_locforvarlim():
     )
 
 
+def test_for_temps_retired_by_evidence_not_position():
+    # A LOCAL FOR reserves two [step, limit] temp words that are NOT declared
+    # LOCALs. A literal bound leaves no op referring to either, so they can
+    # only be found positionally -- and the compiler puts them at the frame
+    # TAIL, after every declared LOCAL, reusing one pair however many LOCAL
+    # FORs the procedure has. The lift used to guess `loop_var + 2` / `+ 4`
+    # and delete those words mid-walk, which silently removed a REAL local
+    # whenever the loop var was not the last one declared. Retirement now
+    # happens at proc_ret, walking back from the tail and stopping at the
+    # first word the body actually touched.
+    #
+    # Both fixtures declare a LOCAL string AFTER the loop var, so `v + 2` is
+    # that string's descriptor: the variable-limit form used to raise
+    # `string BP push outside DEF FN` and the literal-bound form used to keep
+    # the real temps as two phantom `LOCAL`s.
+    from tbx import decode0, emit0, ir
+
+    for stem, params, locals_ in (
+        ("t1_locstrafterfor", ("A%",), ("B%", "C$")),
+        ("t1_locstrafterforlit", (), ("A%", "B$")),
+    ):
+        for pfx in ("", "v10_"):
+            prog = decode0.decode_user_code(_exe(f"{pfx}{stem}.exe"))
+            sub = next(s for s in prog if isinstance(s, ir.SubDef))
+            assert sub.params == params, (pfx, stem)
+            # exactly the declared LOCALs: no deleted local, no phantom temp
+            assert sub.body[0] == ir.Local(locals_), (pfx, stem)
+            src = emit0.emit(prog)
+            assert f"LOCAL {', '.join(locals_)}\n" in src, (pfx, stem)
+
+
 def test_decode_t1_locforlong():
     # t1_locforvarlim's LONG-BODY sibling: once the body is past short-jump
     # range the NEXT test takes the inverse condition plus a JMP back

@@ -4744,6 +4744,11 @@ Assign(target=Var(name='D%'), value=Lit(value=2))
 CallStmt(name='SUB1', args=(Var(name='D%'),))
 End()
 
+## t1_locstrafterforlit
+SubDef(name='SUB1', params=(), body=(Local(names=('A%', 'B$')), For(var=Var(name='A%'), init=Lit(value=1), limit=Lit(value=5), step=Lit(value=1)), Assign(target=Var(name='B$'), value=StrLit(value='X')), Print(items=(Var(name='B$'),), newline=True, file=None, commas=None), NextStmt(var=Var(name='A%'))))
+CallStmt(name='SUB1', args=())
+End()
+
 ## t1_lof
 Open(mode=StrLit(value='O'), num=1, file=StrLit(value='A.TXT'), reclen=None, for_as=True)
 Print(items=(Call(name='LOF', args=(Lit(value=1),)),), newline=True, file=None, commas=None)
@@ -10992,6 +10997,11 @@ End()
 SubDef(name='SUB1', params=('A%',), body=(Local(names=('B%', 'C$')), For(var=Var(name='B%'), init=Lit(value=1), limit=Var(name='A%'), step=Lit(value=1)), Assign(target=Var(name='C$'), value=StrLit(value='X')), Print(items=(Var(name='C$'),), newline=True, file=None, commas=None), NextStmt(var=Var(name='B%'))))
 Assign(target=Var(name='D%'), value=Lit(value=2))
 CallStmt(name='SUB1', args=(Var(name='D%'),))
+End()
+
+## v10_t1_locstrafterforlit
+SubDef(name='SUB1', params=(), body=(Local(names=('A%', 'B$')), For(var=Var(name='A%'), init=Lit(value=1), limit=Lit(value=5), step=Lit(value=1)), Assign(target=Var(name='B$'), value=StrLit(value='X')), Print(items=(Var(name='B$'),), newline=True, file=None, commas=None), NextStmt(var=Var(name='A%'))))
+CallStmt(name='SUB1', args=())
 End()
 
 ## v10_t1_lof

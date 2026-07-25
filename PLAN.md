@@ -1186,6 +1186,61 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 22: FOR temps retired by EVIDENCE, not position (layering)
+
+First of the "decode in layers" changes, taken as a down payment on the
+larger frame-pre-pass idea rather than the whole thing. Round 21 fixed one
+positional guess about where a LOCAL FOR's temp words live; this removes the
+guessing from the lift path entirely.
+
+**The class of bug.** A FOR over a LOCAL reserves two [step, limit] temp
+words that are NOT declared LOCALs. With a literal bound NOTHING in the op
+stream refers to either, so they can only be found positionally -- and the
+lift was doing that from the wrong end, at `loop_var + 2` / `+ 4`, deleting
+whatever sat there mid-walk. That is a REAL declared LOCAL whenever the loop
+var is not the last one declared. Round 21 hit the variable-limit form of
+this; probing the literal-bound sibling reproduced it immediately
+(`LOCAL I%, S$` + `FOR I% = 1 TO 5`), and there the round-21 trick does not
+even apply -- a literal bound gives nothing to anchor to.
+
+**The layering.** The compiler allocates the temps at the frame TAIL, after
+every declared LOCAL, and reuses ONE pair however many LOCAL FORs the
+procedure contains (Makevmenu: 8 zero-filled words = 6 declared + 1 shared
+pair, across several FORs). So:
+
+- the FOR paths no longer touch the frame table at all -- they just set
+  `has_local_for`;
+- `DecodeState.touch_local` records every slot the body genuinely resolved;
+- `_retire_for_temps`, called from `proc_ret`/`fn_ret`, walks BACK from the
+  tail and stops at the first word the body actually touched.
+
+An untouched tail word is genuinely a temp; a touched one is a declared LOCAL
+that merely sits where a temp could. That decision needs the whole body's
+evidence, which is exactly what a single forward pass cannot have at the FOR
+header -- the point of moving it to the procedure boundary.
+
+Two wrinkles the walk has to skip rather than stop on, both found by the
+corpus rather than by reasoning (the first attempt regressed
+`t1_locforvarlim`/`t1_byrefforvar`/`t1_locforlong`): the variable-limit
+form's limit-temp IS touched (`movax_bp` reloads it at every test) but is
+anchored and already retired via `hidden_locals`; and a string/SINGLE
+descriptor's high word is folded into its low word and so is absent from the
+table. Neither is evidence of a declared LOCAL.
+
+Witness `t1_locstrafterforlit` (literal bound) joining round 21's
+`t1_locstrafterfor` (variable limit), byte-exact both dialects.
+`t1_locforvarlim`, `t1_byrefforvar` and `t1_locforlong` re-verified
+byte-exact too, since all three route through the rewritten path. Full suite
+2362 -> 2367, and it passed against the UNREGENERATED goldens first, so no
+calibrated fixture's LOCAL list moved.
+
+**Not done here** (still the open layering work): per-procedure TYPE
+resolution. Round 19's "first access to touch it wins" typing and round 18's
+statement-address anchoring are the same single-pass class and are untouched.
+`tbd73.exe` is unchanged by this round -- it still stops at `dec es:[si]
+outside a FOR at 0xba82` -- which is the point: this bought correctness and
+removed a footgun, not reach.
+
 ### 2026-07-24 — Round 21: a LOCAL declared AFTER a variable-limit FOR's var
 
 `tbd73.exe`'s stop, `string BP push outside DEF FN at 0xb74c`, is TBWINDOW's
