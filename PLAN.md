@@ -1296,6 +1296,44 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 30: `ERASE` of a SUB-local static array past a COMMON band
+
+`tbd73.exe`'s `ERASE of unknown static slot at 0x13384` is `TBD73.BAS:409`,
+`ERASE recarr$` at the end of `SUB Showfile`. Source-first again: one grep,
+one hit.
+
+`SUB Showfile` does `DIM recarr$(5000)` -- a CONSTANT bound, so a compile-time
+static, and indeed the SUB body carries no `dim_begin` at all. The
+`erase_static` branch re-derived the array's index positionally,
+`divmod(block - var_base, ARR_BLOCK)`, which assumes every slot record sits at
+a plain grid stride from `var_base`. `TBW73.INC`'s COMMON band shifts that, so
+the arithmetic missed.
+
+The giveaway was twelve lines earlier in the same SUB: `CALL
+Makelmenu(recarr$(), ...)` resolves the SAME slot operand without trouble,
+because the whole-array-argument path uses the `state.slot_info` REGISTRY
+rather than recomputing a position. So `erase_static` now does the same. This
+is the third time this session that a positional guess turned out to have a
+registry-lookup sibling sitting right next to it (cf. rounds 21/22 and 27) --
+worth treating as a smell in its own right.
+
+**A near-miss worth recording.** The first probe -- SUB-local `DIM` + whole-
+array `CALL` + `ERASE`, cut from `TBD73.BAS:388-409` -- DECODED FINE pre-fix
+and round-tripped byte-exact, i.e. it witnessed nothing: without a COMMON band
+the positional arithmetic happens to land right. The `COMMON` declarations in
+the promoted fixture are load-bearing, and the near-miss is exactly the trap
+round 28 fell into, caught this time by checking the probe against the
+UNFIXED decoder before trusting it.
+
+Witness `t1_erasesubcommon`, byte-exact both dialects; `t1_erasestatic` and
+`t1_erasepre` re-verified. Suite 2417 -> 2422, zero golden drift.
+
+`tbd73.exe` advances to `SUB-local array record after a main array record
+(allocation order would flip; no witness)` -- an ALREADY-KNOWN gap, the one
+`prtguide.exe` stops on too (1 file in the wild tally), so this is the first
+time this session that tbd73 has landed on a gap that was already on the
+books rather than a fresh one.
+
 ### 2026-07-24 — Round 29: `LINE INPUT #n` into a computed array element
 
 `tbd73.exe`'s `LINE INPUT # template mismatch at 0x12f96` is `TBD73.BAS:394`,

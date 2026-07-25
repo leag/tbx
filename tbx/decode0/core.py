@@ -3785,13 +3785,23 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 # re-initializes in place rather than freeing a heap block) but
                 # the source spelling is the same, and the compiler picks the
                 # vector back from the array's own DIM (probe t1_erasestatic).
-                # The movsi target is the array's SLOT RECORD on the grid, not
-                # its element data (`base`), so index it off the grid the same
-                # way layout named the statics.
-                j, rem = divmod(block - state.lay["var_base"], ARR_BLOCK)
-                if rem or not 0 <= j < len(state.arrs):
+                # The movsi target is the array's SLOT RECORD, so look it up in
+                # the slot registry -- exactly as the whole-array CALL argument
+                # path (`arg_push_array`) does with the same operand. This used
+                # to re-derive an index positionally,
+                # `divmod(block - var_base, ARR_BLOCK)`, which assumes every
+                # slot record sits at a plain grid stride from var_base and so
+                # broke for a static array whose record does not (wild
+                # tbd73.exe's `SUB Showfile`: `DIM recarr$(5000)` with a
+                # constant bound is a compile-time static -- the SUB body has
+                # no dim_begin at all -- and `ERASE recarr$` at TBD73.BAS:409
+                # raised `ERASE of unknown static slot`, while the
+                # `CALL Makelmenu(recarr$(), ...)` twelve lines earlier
+                # resolved the very same slot fine through the registry).
+                a = state.slot_info.get(block)
+                if a is None or a.get("rank", 0) < 1:
                     raise ValueError(f"ERASE of unknown static slot at {addr:#x}")
-                state.put(ir.Erase(state.arrs[j]["name"]), state.cur)
+                state.put(ir.Erase(a["name"]), state.cur)
             else:
                 if state.dim_frame is None or state.dim_frame["block"] != block:
                     raise ValueError(f"unbalanced DIM bracket at {addr:#x}")

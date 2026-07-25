@@ -457,6 +457,31 @@ def test_decode_t1_inlinebp():
         ), stem
 
 
+def test_decode_t1_erasesubcommon():
+    # `ERASE` of a SUB-LOCAL static array in a program that also has COMMON
+    # arrays (wild tbd73.exe: `SUB Showfile` does `DIM recarr$(5000)` --
+    # a constant bound, so a compile-time static, and the SUB body has no
+    # dim_begin at all -- then `ERASE recarr$` at TBD73.BAS:409).
+    #
+    # erase_static used to re-derive the array's index positionally,
+    # `divmod(block - var_base, ARR_BLOCK)`, which assumes every slot record
+    # sits at a plain grid stride from var_base. A COMMON band shifts that, so
+    # the arithmetic missed and raised `ERASE of unknown static slot` -- even
+    # though the whole-array CALL argument path resolves the very SAME operand
+    # correctly through state.slot_info. Now ERASE uses that registry too.
+    #
+    # The COMMON declarations are load-bearing: without them the positional
+    # arithmetic happens to land right and the fixture witnesses nothing.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_erasesubcommon", "v10_t1_erasesubcommon"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        sub = next(s for s in prog if isinstance(s, ir.SubDef) and s.name == "SUB1")
+        assert ir.Erase("V0$") in sub.body, stem
+        assert ir.CallStmt("SUB2", (ir.ArrayRef("V0$", ()), ir.Var("B"))) in sub.body, stem
+        assert "  ERASE V0$\n" in emit0.emit(prog), stem
+
+
 def test_decode_t1_erasestatic():
     # INT EC sub 38 is ERASE of a STATIC array -- gap 33, undiagnosed until
     # TBD73.BAS named it: `SUB Showfile` ends `ERASE recarr$` after
