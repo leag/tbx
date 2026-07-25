@@ -1296,6 +1296,62 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-25 — Triage of the ~8-9-byte same-size mismatch class: LOCALIZED, cause not yet named
+
+The class now has six known members and one signature: identical file length,
+~8-9 differing bytes. Triaged `zz_do5` (smallest shape) by DIFFING THE BYTES
+rather than reasoning from emitted source, which is what finally made it
+tractable.
+
+**Where the differences are.** For `zz_do5`: `ds` = 0x8670, `var_base` = 0x120
+(so the scalar grid starts at file 0x8790), and the user code ends at 0x8742.
+Every differing byte is at **DS:0x102, 0x106, 0x10a, 0x10e** -- four 4-byte
+cells, stride 4, holding `0x0110` (= `COMMON_BASE`) in the original and
+`0x0000` in ours -- plus **one byte at DS:0x15e**, near the end of the 0x2C
+const-pool window. So: entirely in runtime/header init data, BELOW the first
+variable and PAST the code. Nothing in the user-code region differs, which is
+weak evidence that these are not statement-level decode errors.
+
+**Compiler-revision skew is DISPROVED** (it was the obvious first guess, and
+PLAN.md's own caveat invites it): `zz_sub7` and `zz_mdeffn2` VERIFY BYTE-EXACT
+while carrying the same `00 00 10 01` pattern. Our oracle therefore produces
+both forms, so the form is program-dependent, not build-dependent.
+
+**What sets the cells**: an ARRAY does (`DIM X(3)` + a reference -> `10 01`).
+**What does NOT**: strings, a SUB, a SUB defined FIRST, `$STACK`, or a
+declared-but-unreferenced array (that last one is recovered correctly --
+`n_static = 1`, `DIM V0(3)` emitted, so it is not the gap).
+
+**And a missing array is NOT the explanation.** Appending `DIM X(3)` / `X(1)` /
+`X$(1)` to `zz_do5`'s recovered source makes it 64 bytes LONGER and 41 bytes
+different -- worse, not better. `zz_do5` genuinely has no static array record
+(only 0x14 bytes sit between `var_base` 0x120 and `pool_base` 0x134, and
+`ARR_BLOCK` is 0x36), yet its array-heap pointers are set.
+
+So the cells track some allocation boundary that an array is sufficient but not
+necessary to set, and the trigger is still unnamed.
+
+**Members and their cell values** -- note the value VARIES, which is itself a
+clue (0x120/0x128 are variable-grid addresses, not the fixed 0x110):
+
+| fixture | cells at DS:0x100 | shape |
+|---|---|---|
+| `zz_do5` | `00 00 10 01` x4 | `IF ... THEN EXIT LOOP` |
+| `zz_efor` | `00 00 16 00 / 01 80 16 00 / 01 80 17 00 / 00...` | `IF ... THEN EXIT FOR` |
+| `zz_bif3`, `zz_bif4` | `20 01 / 28 01 / 20 01 / 20 01` | block IF |
+| `t1_bsave` | `00 00 10 01` x4 | BSAVE |
+| `t1_defseg` | (found by the sweep) | DEF SEG |
+
+`t1_bsave` and `t1_defseg` are both MACHINE-ACCESS statements, and `DEF SEG`
+sets a segment cell -- so the low-DGROUP cells being segment/heap bookkeeping is
+the most promising lead. `zz_efor`'s pattern is different again and contains
+`01 80`, so it may not belong to the same cause at all.
+
+**Next step**: identify the cells. Rather than more black-box probing, read the
+runtime prologue's own writes -- `cfgview` the program start and find which
+instructions store to DS:0x102-0x10f. That names the cells directly instead of
+guessing at source shapes, which is where this triage stalled.
+
 ### 2026-07-25 — Full-corpus byte-verify census: IN PROGRESS, partial results
 
 `python -m tbx.tools.verify_fixture --all` over all 1002 corpus EXEs, launched
