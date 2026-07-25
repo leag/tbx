@@ -1296,6 +1296,77 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 28: integer FN result read across a register shuttle — DIAGNOSED, REVERTED
+
+`tbd73.exe`'s stop, `[bp+0] outside the open LOCAL frame` (no address in the
+message; the op is `movax_bp:0` at **0xdc86**), is TBWINDOW's `IF FNCurvideo <>
+7 THEN` (`TBW73.INC:339`).
+
+Round 14 taught the caller to read an INTEGER `DEF FN`'s result from `[bp+0]`,
+keyed on the IMMEDIATELY preceding op being `fn_call` -- deliberately, because
+`mov_bp_sp` has repointed BP at the call-staging frame by then, so frame state
+says nothing about what `bp+0` means. When the result is about to be COMPARED,
+the comparison's other operand was evaluated BEFORE the call and is banked
+into bx right after it, so a `movbxax` sits between:
+
+```
+0DC74 movax:7          the 7, evaluated before the call
+0DC7B mov_bp_sp        BP repointed at the staging frame
+0DC7D fn_call          FNCurvideo
+0DC84 movbxax          bx = 7   <-- breaks the "prev op is fn_call" key
+0DC86 movax_bp:0       the FN result
+0DC8D cmpax_bx
+```
+
+**Two distinct defects here, and the second is worse.** At 0xdc86 a SUB frame
+is open, so `loc_local(0)` raises -- fail-loud. But at **0xa5b3, 0xa5e6 and
+0xa619** the same shape occurs with a DEF FN frame open, and there `loc_local`
+falls through to its "integer-typed DEF FN param read via the ax path" branch
+and returns `P00%`: a SILENT mis-decode, not an error. Those three are
+`FNCurdisplay`'s own body calling `FNCurvideo`.
+
+**The fix is one small change** -- walk back over `movbxax`/`movrr` shuttle
+boilerplate when looking for the `fn_call`, and additionally require an
+`ir.FnCall` to actually be waiting on `state.stack`, which is what makes the
+skip evidence-backed rather than a guess. Applied, it takes `tbd73.exe` from
+0xdc86 all the way to `LINE INPUT # template mismatch at 0x12f96` -- a large
+region cleared -- with the full suite at 2406 passed and ZERO drift against
+unregenerated goldens.
+
+**It was nevertheless reverted, for want of a byte-exact witness.** Every
+shape authorable against the oracle clears this gap and then lands on a
+DIFFERENT unclosed one, so no probe can round-trip to prove the emitted source
+is right. All four are promoted, each pinning its own next gap:
+
+- `probe_fnintcmp_sub` — `IF FNBar% <> 7 THEN PRINT` in a SUB, i.e. tbd73's
+  actual shape. With the fix it reaches `jump target ... is not a statement
+  start` (the 8-file wild cluster).
+- `probe_fnintcmp_deffn` — the same inside a block `DEF FN` body, the silent
+  mis-decode site. Reaches the same jump-target gap (it hits it even WITHOUT
+  the fix, at 0x8744).
+- `probe_fnintarith_zeroarg` — `A% = FNBar% - 7` with a ZERO-ARG integer FN.
+  With the fix it decodes with NO error but WRONG: `DEF FNBar%` / `FNBar% = 7`
+  / `END DEF` comes back as `DEF FNFN1` with an EMPTY body and no `%` suffix.
+  So a second gap: a zero-arg block DEF FN loses both its result store and its
+  integer typing. (Round 14's `t1_fnintcall` has a parameter, which is why
+  this never showed.)
+- `probe_fnintarith_param` — the same with `DEF FNBar%(X%)`. With the fix it
+  reaches `ax,bx combine with empty regs at 0x8749`: the pre-call `movax:7`
+  value does not survive the FN-call staging in the decoder's register model,
+  so `movbxax` banks None.
+
+**Recommended order for a future session**: close the zero-arg block DEF FN
+body/suffix gap first (`probe_fnintarith_zeroarg`), because that is the
+shortest path to a shape that both exercises this round's fix AND can
+round-trip. Then land this fix together with it as one witnessed closure. The
+fix itself is written up above in enough detail to reproduce in a few lines --
+do not re-derive it.
+
+Filed as a KNOWN DEFECT while unlanded: the three `0xa5xx` sites decode
+`P00%` for what is really a called FN's result. Reverting restores that, which
+is the uncomfortable half of this decision and the reason it is recorded here
+rather than just dropped.
+
 ### 2026-07-24 — Round 27: array-param type resolved from a LATER access
 
 `tbd73.exe`'s `inconsistent array-parameter type at 0xc40a`, in TBWINDOW's
