@@ -560,17 +560,38 @@ def _us_fileio(s) -> str | None:
         return f"MID$({unparse(s.target)}, {unparse(s.start)}) = {unparse(s.source)}"
 
 
+_INLINE_PER_LINE = 14
+
+
+def _inline_lines(data: bytes) -> str:
+    """`$INLINE` byte list, wrapped across as many source lines as it takes.
+
+    How many bytes ride on one `$INLINE` line contributes nothing to the
+    emitted image, but the line LENGTH is not free: a single line long enough
+    trips Turbo Basic's editor limit ("Line too long - CR inserted") and the
+    program will not compile at all. TBWINDOW's machine-code SUBs run to
+    thousands of bytes -- wild tbd73.exe emitted one 10,532-character line --
+    which is what kept its round trip failing after the recovery itself was
+    correct. 14 per line is the original source's own convention
+    (TBW73.INC:219-227).
+    """
+    return "\n".join(
+        "$INLINE " + ", ".join(f"&H{b:02X}" for b in data[i : i + _INLINE_PER_LINE])
+        for i in range(0, len(data), _INLINE_PER_LINE)
+    ) or "$INLINE"
+
+
 def _us_procdata(s) -> str | None:
     """Render procedures, OS, event-trap and DATA statements; None if `s` is not one of them."""
     if isinstance(s, Inline):
-        return "$INLINE " + ", ".join(f"&H{b:02X}" for b in s.data)
+        return _inline_lines(s.data)
     if isinstance(s, OpaqueHelper):
         # Framed helpers recovered from the wild corpus are external
         # `$INLINE "file"` payloads after linking.  The compiler contributes
         # the final far RET (CB), so emit the payload as byte-list INLINE and
         # let Turbo BASIC append CB again on recompilation.
         data = s.data[:-1] if s.data.endswith(b"\xCB") else s.data
-        return "$INLINE " + ", ".join(f"&H{b:02X}" for b in data)
+        return _inline_lines(data)
     if isinstance(s, CallStmt):
         if s.args:
             return f"CALL {s.name}({','.join(unparse(a) for a in s.args)})"

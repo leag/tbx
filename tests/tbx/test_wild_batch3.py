@@ -524,6 +524,65 @@ def test_decode_t1_fwdinline():
         ), stem
 
 
+def test_decode_t1_twosublocal():
+    # Two SUBs each declaring `LOCAL done, mloop, ans$, ans1$`. A LOCAL is named
+    # from its FRAME offset, so locals at the same offset in different SUBs share
+    # a name -- and `_scope_procs`, which synthesizes SHARED from "referenced in
+    # more than one region", read each SUB's own locals as cross-region and
+    # emitted a SHARED that REPEATED them. TB rejects that outright:
+    # `Error 463: Duplicate variable declaration`. It already filtered the SUB's
+    # own params and array formals for exactly this reason; locals were missed.
+    #
+    # Wild tbd73.exe, TBW73.INC:440 and 551 -- `Makevmenu` and `Makehmenu`
+    # collide four ways, which blocked the WHOLE program's recompile once it
+    # started decoding. Byte-exact, both dialects.
+    from tbx import decode0, ir
+
+    for stem in ("t1_twosublocal", "v10_t1_twosublocal"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        subs = [s for s in prog if isinstance(s, ir.SubDef)]
+        assert len(subs) == 2, stem
+        for sub in subs:
+            loc = next(b for b in sub.body if isinstance(b, ir.Local))
+            sh = [b for b in sub.body if isinstance(b, ir.Shared)]
+            # the genuinely shared globals are still declared...
+            assert sh and len(sh[0].names) >= 1, stem
+            # ...and no name appears in both lists
+            assert not (set(loc.names) & set(sh[0].names)), (
+                f"{stem}: {sorted(set(loc.names) & set(sh[0].names))}"
+            )
+
+
+def test_decode_t1_ifblockselect():
+    # A compound-condition BLOCK IF whose body is a SELECT CASE. `_inline_safe`
+    # only rejected a nested IF, and only BEFORE the last statement, so this
+    # decoded as an IfInline and emitted `IF c THEN SELECT CASE` -- which TB
+    # rejects with `Error 470: Block/scanned statements not allowed here`. A
+    # block-structured statement cannot render inline anywhere, including last.
+    # The condition being compound is what left it exposed: round 35's
+    # `block_ifs` discriminator only counts a plain RelOp.
+    #
+    # Also pins the empty-CASE-ELSE fix: `in_else` is set whenever the op after
+    # the last arm's jmp is not another arm header, which includes landing on
+    # the END SELECT -- so a two-arm SELECT gained a `CASE ELSE` with nothing
+    # under it, and that alone was the entire 213-byte round-trip mismatch here.
+    #
+    # Wild tbd73.exe, TBW73.INC:510-514. Byte-exact, both dialects.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_ifblockselect", "v10_t1_ifblockselect"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        sub = next(s for s in prog if isinstance(s, ir.SubDef))
+        blk = sub.body[0]
+        assert isinstance(blk, ir.IfBlock), f"{stem}: {type(blk).__name__}"
+        sel = blk.arms[0][1][0]
+        assert isinstance(sel, ir.SelectCase), stem
+        assert len(sel.arms) == 2 and sel.case_else is None, stem
+        src = emit0.emit(prog)
+        assert "CASE ELSE" not in src, stem
+        assert "THEN SELECT" not in src, stem
+
+
 def test_decode_t1_ifthenfncall():
     # A jump target landing on a statement whose FIRST op is `push bp` -- the
     # DEF FN call-staging opener (`push bp; sub sp,N; mov bp,sp`). Third opener
@@ -2727,9 +2786,11 @@ def test_decode_t1_inline():
     # ordinary scan has already failed: it finds the most recent `jmp`,
     # confirms its target's preceding byte is a bare 0xCB, and treats the
     # whole span as one opaque `inline_sub` blob rather than guessing at
-    # individual bytes. The original 4-line $INLINE split has no separate
-    # byte-level representation (confirmed byte-exact both ways), so the
-    # emitter consolidates onto one line.
+    # individual bytes. How many bytes ride on one $INLINE source line has no
+    # byte-level representation (confirmed byte-exact both ways), but the LINE
+    # LENGTH does matter: a long enough line trips TB's editor limit and the
+    # program will not compile, so the emitter wraps at 14 per line -- the
+    # original source's own convention. Here that means two lines.
     from tbx import decode0, emit0, ir
 
     prog = decode0.decode_user_code(_exe("t1_inline.exe"))
@@ -2744,8 +2805,9 @@ def test_decode_t1_inline():
     assert emit0.emit(prog) == (
         "10 SUB SUB1 INLINE\n"
         "  $INLINE &HBA, &H00, &H07, &HE4, &H61, &H24, &HFC, &H34, &H02, "
-        "&HE6, &H61, &HB9, &H40, &H01, &HE2, &HFE, &H4A, &H74, &H02, &HEB, "
-        "&HF2\nEND SUB\n20 CALL SUB1\n30 END\n"
+        "&HE6, &H61, &HB9, &H40, &H01\n"
+        "  $INLINE &HE2, &HFE, &H4A, &H74, &H02, &HEB, &HF2\n"
+        "END SUB\n20 CALL SUB1\n30 END\n"
     )
 
 
@@ -3593,6 +3655,8 @@ if __name__ == "__main__":
     test_decode_t1_iftaillast()
     test_decode_t1_boolloopuntil()
     test_decode_t1_ifthenfncall()
+    test_decode_t1_twosublocal()
+    test_decode_t1_ifblockselect()
     test_decode_t1_selarmblockif()
     test_decode_t1_iftailarm()
     test_decode_t1_ifbeforecall()

@@ -576,6 +576,26 @@ def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, in
             # not read as a cross-region SHARED reference (probe t1_arrfwd).
             own = {p[: p.index("(")] for p in s.params if p.endswith("(1)")}
             ars = [a for a in ars if a not in own]
+            # ...and the same, again, for its declared LOCALs. A LOCAL is named
+            # from its FRAME offset (`L52%`, `L6E$`), so two SUBs whose locals
+            # land on the same offset share a name -- and TWO SUBs declaring
+            # `LOCAL done, mloop, ans$, ans1$` is the ordinary case, not a rare
+            # one. Without this the cross-region test reads each SUB's own
+            # locals as SHARED and synthesizes a declaration that REPEATS them,
+            # which TB rejects outright: `Error 463: Duplicate variable
+            # declaration` (wild tbd73.exe -- TBW73.INC:440 and 551, whose
+            # `Makevmenu`/`Makehmenu` locals collide four ways, blocking the
+            # whole program's recompile). Array locals are spelled `NAME()` in
+            # the LOCAL statement, matching how `ars` names them.
+            #
+            # Only the SHARED synthesis is filtered: a genuinely SHARED
+            # variable is never also declared LOCAL, so nothing legitimate can
+            # be hidden by this (fixture t1_twosublocal).
+            own_loc = {
+                n for b in s.body if isinstance(b, ir.Local) for n in b.names
+            }
+            vs = [v for v in vs if v not in own_loc]
+            ars = [a for a in ars if f"{a}()" not in own_loc]
             regions.append((i, vs, ars))
     main_stmts = [s for s in state.stmts if not isinstance(s, ir.SubDef)]
     mvs, mars = _region_refs(tuple(main_stmts))

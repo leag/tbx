@@ -4439,6 +4439,18 @@ Assign(target=Var(name='F%'), value=Lit(value=2))
 CallStmt(name='SUB2', args=(ArrayRef(name='V0$', indices=()), Var(name='E%'), Var(name='F%')))
 End()
 
+## t1_ifblockselect
+SubDef(name='SUB1', params=('A', 'B$', 'C', 'D', 'E', 'F'), body=(IfBlock(arms=((BinOp(op='AND', lhs=Var(name='A'), rhs=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='B$'), rhs=Call(name='CHR$', args=(Lit(value=75),)))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='B$'), rhs=Call(name='CHR$', args=(Lit(value=77),))))))), (SelectCase(selector=Var(name='B$'), arms=(CaseArm(guards=(CaseValue(value=Call(name='CHR$', args=(Lit(value=75),))),), body=(Assign(target=Var(name='C'), value=Neg(operand=Lit(value=1))),)), CaseArm(guards=(CaseValue(value=Call(name='CHR$', args=(Lit(value=77),))),), body=(Assign(target=Var(name='C'), value=Lit(value=1)),))), case_else=None), Assign(target=Var(name='D'), value=Neg(operand=Lit(value=1))), Assign(target=Var(name='E'), value=Var(name='F')), Assign(target=Var(name='F'), value=Lit(value=0)))),), else_body=None),))
+Assign(target=Var(name='G'), value=Neg(operand=Lit(value=1)))
+Assign(target=Var(name='H$'), value=Call(name='CHR$', args=(Lit(value=75),)))
+Assign(target=Var(name='I'), value=Lit(value=0))
+Assign(target=Var(name='J'), value=Lit(value=0))
+Assign(target=Var(name='K'), value=Lit(value=0))
+Assign(target=Var(name='L'), value=Lit(value=3))
+CallStmt(name='SUB1', args=(Var(name='G'), Var(name='H$'), Var(name='I'), Var(name='J'), Var(name='K'), Var(name='L')))
+Print(items=(Var(name='I'), Var(name='J'), Var(name='K'), Var(name='L')), newline=True, file=None, commas=None)
+End()
+
 ## t1_ifgoto
 Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
 IfInline(cond=LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='T')), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='t'))), body=(Cls(), Goto(target=5)))
@@ -6498,6 +6510,20 @@ End()
 ## t1_two
 Data(items=(DataItem(text='12', is_str=False), DataItem(text='3', is_str=False)))
 Read(targets=(Var(name='A'), Var(name='B')))
+End()
+
+## t1_twosublocal
+SubDef(name='SUB1', params=('A', 'B'), body=(Shared(names=('C',)), Local(names=('D', 'E', 'F$', 'G$')), Assign(target=Var(name='D'), value=Lit(value=0)), Assign(target=Var(name='C'), value=Neg(operand=Lit(value=1))), Assign(target=Var(name='F$'), value=StrLit(value='a')), Assign(target=Var(name='G$'), value=StrLit(value='b')), For(var=Var(name='E'), init=Lit(value=1), limit=Var(name='A'), step=Lit(value=1)), Assign(target=Var(name='B'), value=Var(name='E')), NextStmt(var=Var(name='E')), Print(items=(Var(name='F$'), Var(name='G$'), Var(name='D')), newline=True, file=None, commas=None)))
+SubDef(name='SUB2', params=('A', 'B'), body=(Shared(names=('H', 'I', 'C')), Local(names=('D', 'E', 'F$', 'G$')), Assign(target=Var(name='D'), value=Lit(value=0)), Assign(target=Var(name='H'), value=Neg(operand=Lit(value=1))), Assign(target=Var(name='I'), value=Var(name='C')), Assign(target=Var(name='F$'), value=StrLit(value='c')), Assign(target=Var(name='G$'), value=StrLit(value='d')), For(var=Var(name='E'), init=Lit(value=1), limit=Var(name='A'), step=Lit(value=1)), Assign(target=Var(name='B'), value=Var(name='E')), NextStmt(var=Var(name='E')), Print(items=(Var(name='F$'), Var(name='G$'), Var(name='D')), newline=True, file=None, commas=None)))
+Assign(target=Var(name='C'), value=Lit(value=0))
+Assign(target=Var(name='H'), value=Lit(value=0))
+Assign(target=Var(name='I'), value=Lit(value=0))
+Assign(target=Var(name='J'), value=Lit(value=2))
+Assign(target=Var(name='K'), value=Lit(value=0))
+Assign(target=Var(name='L'), value=Lit(value=0))
+CallStmt(name='SUB1', args=(Var(name='J'), Var(name='K')))
+CallStmt(name='SUB2', args=(Var(name='J'), Var(name='L')))
+Print(items=(Var(name='K'), Var(name='L'), Var(name='C'), Var(name='H'), Var(name='I')), newline=True, file=None, commas=None)
 End()
 
 ## t1_using
@@ -10965,6 +10991,18 @@ Assign(target=Var(name='F%'), value=Lit(value=2))
 CallStmt(name='SUB2', args=(ArrayRef(name='V0$', indices=()), Var(name='E%'), Var(name='F%')))
 End()
 
+## v10_t1_ifblockselect
+SubDef(name='SUB1', params=('A', 'B$', 'C', 'D', 'E', 'F'), body=(IfBlock(arms=((BinOp(op='AND', lhs=Var(name='A'), rhs=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='B$'), rhs=Call(name='CHR$', args=(Lit(value=75),)))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='B$'), rhs=Call(name='CHR$', args=(Lit(value=77),))))))), (SelectCase(selector=Var(name='B$'), arms=(CaseArm(guards=(CaseValue(value=Call(name='CHR$', args=(Lit(value=75),))),), body=(Assign(target=Var(name='C'), value=Neg(operand=Lit(value=1))),)), CaseArm(guards=(CaseValue(value=Call(name='CHR$', args=(Lit(value=77),))),), body=(Assign(target=Var(name='C'), value=Lit(value=1)),))), case_else=None), Assign(target=Var(name='D'), value=Neg(operand=Lit(value=1))), Assign(target=Var(name='E'), value=Var(name='F')), Assign(target=Var(name='F'), value=Lit(value=0)))),), else_body=None),))
+Assign(target=Var(name='G'), value=Neg(operand=Lit(value=1)))
+Assign(target=Var(name='H$'), value=Call(name='CHR$', args=(Lit(value=75),)))
+Assign(target=Var(name='I'), value=Lit(value=0))
+Assign(target=Var(name='J'), value=Lit(value=0))
+Assign(target=Var(name='K'), value=Lit(value=0))
+Assign(target=Var(name='L'), value=Lit(value=3))
+CallStmt(name='SUB1', args=(Var(name='G'), Var(name='H$'), Var(name='I'), Var(name='J'), Var(name='K'), Var(name='L')))
+Print(items=(Var(name='I'), Var(name='J'), Var(name='K'), Var(name='L')), newline=True, file=None, commas=None)
+End()
+
 ## v10_t1_ifgoto
 Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
 IfInline(cond=LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='T')), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='t'))), body=(Cls(), Goto(target=5)))
@@ -12740,6 +12778,20 @@ End()
 ## v10_t1_two
 Data(items=(DataItem(text='12', is_str=False), DataItem(text='3', is_str=False)))
 Read(targets=(Var(name='A'), Var(name='B')))
+End()
+
+## v10_t1_twosublocal
+SubDef(name='SUB1', params=('A', 'B'), body=(Shared(names=('C',)), Local(names=('D', 'E', 'F$', 'G$')), Assign(target=Var(name='D'), value=Lit(value=0)), Assign(target=Var(name='C'), value=Neg(operand=Lit(value=1))), Assign(target=Var(name='F$'), value=StrLit(value='a')), Assign(target=Var(name='G$'), value=StrLit(value='b')), For(var=Var(name='E'), init=Lit(value=1), limit=Var(name='A'), step=Lit(value=1)), Assign(target=Var(name='B'), value=Var(name='E')), NextStmt(var=Var(name='E')), Print(items=(Var(name='F$'), Var(name='G$'), Var(name='D')), newline=True, file=None, commas=None)))
+SubDef(name='SUB2', params=('A', 'B'), body=(Shared(names=('H', 'I', 'C')), Local(names=('D', 'E', 'F$', 'G$')), Assign(target=Var(name='D'), value=Lit(value=0)), Assign(target=Var(name='H'), value=Neg(operand=Lit(value=1))), Assign(target=Var(name='I'), value=Var(name='C')), Assign(target=Var(name='F$'), value=StrLit(value='c')), Assign(target=Var(name='G$'), value=StrLit(value='d')), For(var=Var(name='E'), init=Lit(value=1), limit=Var(name='A'), step=Lit(value=1)), Assign(target=Var(name='B'), value=Var(name='E')), NextStmt(var=Var(name='E')), Print(items=(Var(name='F$'), Var(name='G$'), Var(name='D')), newline=True, file=None, commas=None)))
+Assign(target=Var(name='C'), value=Lit(value=0))
+Assign(target=Var(name='H'), value=Lit(value=0))
+Assign(target=Var(name='I'), value=Lit(value=0))
+Assign(target=Var(name='J'), value=Lit(value=2))
+Assign(target=Var(name='K'), value=Lit(value=0))
+Assign(target=Var(name='L'), value=Lit(value=0))
+CallStmt(name='SUB1', args=(Var(name='J'), Var(name='K')))
+CallStmt(name='SUB2', args=(Var(name='J'), Var(name='L')))
+Print(items=(Var(name='K'), Var(name='L'), Var(name='C'), Var(name='H'), Var(name='I')), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_usingtab

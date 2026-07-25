@@ -212,6 +212,21 @@ def step(state):
         if fr["in_else"]:
             case_else = _fold_arm(state, fr["body_idx"], addr)
             del state.stmts[fr["body_idx"] :], state.addrs[fr["body_idx"] :]
+            if not case_else:
+                # An EMPTY else region means the source had no CASE ELSE at all:
+                # `in_else` is set whenever the op after the last arm's jmp is
+                # not another arm header, which also covers landing straight on
+                # the END SELECT. Emitting `CASE ELSE` with nothing under it is
+                # not byte-free -- it was the ENTIRE 213-byte round-trip
+                # mismatch on the two-arm string SELECT inside TBW73.INC:510-514
+                # (fixture t1_ifblockselect: dropping just those two emitted
+                # lines makes the recompile byte-identical).
+                #
+                # This maps empty -> None, so a source that really did spell an
+                # empty `CASE ELSE` would come back without it. That spelling is
+                # unwitnessed and would compile to different bytes, so it would
+                # surface as a round-trip mismatch rather than pass silently.
+                case_else = None
         state.stmts.append(ir.SelectCase(fr["selector"], tuple(fr["arms"]), case_else))
         state.addrs.append(fr["start"])
         state.cur = None

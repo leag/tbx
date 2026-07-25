@@ -797,7 +797,22 @@ def _lift_while(
 def _inline_safe(body) -> bool:
     """A THEN/ELSE body renders on one line only if no nested IF precedes the last
     statement (else a trailing statement would bind to the inner IF -- it must block).
-    """
+
+    A BLOCK-structured statement cannot render inline at all, wherever it sits --
+    including last, where the nested-IF rule above would otherwise allow it:
+    `IF c THEN SELECT CASE ...` is not valid source, and TB rejects it outright
+    with `Error 470: Block/scanned statements not allowed here`. So any body
+    containing one forces the enclosing IF to a block.
+
+    Witnessed by wild tbd73.exe, TBW73.INC:510: `IF hmenuopen AND (ans1$ =
+    CHR$(75) OR ans1$ = CHR$(77)) THEN` opens a block whose body is a
+    `SELECT CASE`. Its condition is COMPOUND, so round 35's `block_ifs`
+    discriminator (plain-RelOp only) never promoted it and it stayed an
+    IfInline -- decoding cleanly and emitting unrecompilable source, which is
+    what kept tbd73's round trip broken after it started decoding end to end.
+    Fixture t1_ifblockselect."""
+    if any(isinstance(b, (ir.SelectCase, ir.IfBlock)) for b in body):
+        return False
     return not any(isinstance(b, (ir.IfInline, ir.IfBlock)) for b in body[:-1])
 
 

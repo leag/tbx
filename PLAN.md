@@ -104,12 +104,15 @@ edition/runtime tag, and evidence provenance.
   `TBD73.BAS`/`TBW73.INC` rather than reverse-engineered. Wild tally
   **27 of 86**.
 
-  **It does NOT round-trip yet**, and decoding is not the standard.
-  Recompiling the emitted source fails with `Error 463: Duplicate
-  variable declaration`, and a second silent defect sits behind it (a
-  numeric `SELECT CASE` emitted as an IF/GOTO chain). Both are diagnosed
-  in round 46's entry with the direction of the bug already pinned --
-  read that before touching either.
+  **It does NOT round-trip yet.** Round 47 fixed four defects standing
+  between "decodes" and "recompiles" (duplicate SHARED/LOCAL, a block
+  statement emitted inline, an unbounded `$INLINE` line length, and a
+  synthesized empty `CASE ELSE`). The recompile now stops at
+  `Error 475: Parameter mismatch`, with two distinct causes diagnosed and
+  OPEN -- a lost trailing STRING parameter (TBW73.INC:427) and a by-ref
+  argument with no other use spelled `%`. Read round 47's entry before
+  touching either; the second one needs layout to distinguish "typed by
+  evidence" from "defaulted", not another caller-side special case.
 
   Rounds 37-45 each advanced it exactly one gap
   (`0xb192` -> `0xc2cc` -> `0xba64` -> `0xba9f` -> `0xcdc4` -> `0xd0ba`
@@ -1473,6 +1476,82 @@ Goldens pin what the decoder DOES, and `verify_fixture` was only ever run on
 stems a session happened to touch, so a fixture could sit green in the suite for
 a long time while failing its own round trip. Finishing this census, then wiring
 a periodic (not per-commit -- it is far too slow) sweep, would close that gap.
+
+### 2026-07-25 — Round 47: four defects between "decodes" and "recompiles"
+
+Round 46 got tbd73 decoding; this round chases its RECOMPILE, which is the actual
+standard. Each fix was found by compiling the emitted 906-line source and reading
+the next oracle error, so they are ordered by how the compiler met them.
+
+**(a) `Error 463: Duplicate variable declaration`.** `_scope_procs` synthesizes
+SHARED from "referenced in more than one region", and a LOCAL is named from its
+FRAME offset -- so two SUBs whose locals land on the same offset share a name and
+each read as cross-region. `Makevmenu` and `Makehmenu` (TBW73.INC:440, 551) both
+declare `LOCAL done, mloop, ans$, ans1$`, so the synthesized SHARED repeated all
+four and TB refused the program. The function already filtered the SUB's own
+params and array formals with a comment describing exactly this hazard; locals
+were simply missed. Fixture `t1_twosublocal`.
+
+**(b) `Error 470: Block/scanned statements not allowed here`.** `_inline_safe`
+rejected only a nested IF, and only BEFORE the last statement. A
+block-structured statement cannot render inline ANYWHERE -- `IF c THEN SELECT
+CASE` is not valid source. TBW73.INC:510's `IF hmenuopen AND (ans1$ = CHR$(75) OR
+ans1$ = CHR$(77)) THEN` wraps a SELECT CASE, and because its condition is
+COMPOUND, round 35's `block_ifs` discriminator (plain RelOp only) never promoted
+it. It decoded cleanly and emitted unrecompilable source. Fixture
+`t1_ifblockselect`.
+
+**(c) `Line too long - CR inserted`.** The emitter put an entire `$INLINE` blob
+on one source line -- 10,532 characters for TBWINDOW's largest machine-code SUB.
+How many bytes ride on a line is byte-free; the line LENGTH is not, because past
+TB's editor limit the program will not compile at all. Now wrapped at 14 per
+line, the original source's own convention (TBW73.INC:219-227). Verified
+byte-invisible by re-verifying all five INLINE fixtures (`t1_inline`,
+`t1_inlinedata`, `t1_inlinebp`, `t1_inlinethendef`, `v10_t1_inline`) -- the only
+golden churn in the whole round.
+
+**(d) A synthesized empty `CASE ELSE`.** `select_case` sets `in_else` whenever
+the op after the last arm's jmp is not another arm header -- which includes
+landing straight on the END SELECT. A two-arm SELECT therefore gained a
+`CASE ELSE` with nothing under it, and that alone was the ENTIRE 213-byte
+mismatch on `t1_ifblockselect`: deleting just those two emitted lines by hand
+made the recompile byte-identical. Empty else region now maps to no CASE ELSE.
+(A source that really spelled an empty `CASE ELSE` would come back without it;
+that spelling is unwitnessed and would show up as a round-trip mismatch, not
+silently.)
+
+Two fixtures + `v10_` twins, oracle-verified byte-exact. Suite 2494 ->
+**2504 passed**.
+
+#### Still OPEN: tbd73's recompile stops at `Error 475: Parameter mismatch`
+
+Two distinct causes found, neither fixed:
+
+**1. A SUB's trailing STRING parameter is lost.** TBW73.INC:427 is
+`SUB Titlewin (dir, attr, title$)`; it is recovered as `SUB SUB13(U%, S)` -- two
+params -- and `title$` leaks into the body as an undeclared global `W$`:
+
+```
+250 SUB SUB13(U%, S)
+  SHARED A%, V5%(), V7%(), V8%(), V9%()
+  CALL SUB14(V5%(A%) + U%,V7%(A%),V7%(A%) + V8%(A%),W$,V9%(A%))
+```
+
+The body only ever FORWARDS `title$` to `Titlebox` (an INLINE sub with no
+signature), so nothing types the slot and the signature walk drops it. Compare
+round 43's lesson -- forwarding to a signature-less INLINE callee is exactly the
+case with no type evidence.
+
+**2. A by-ref argument with no other use is spelled `%`.** Reproduced minimally
+while building this round's witnesses: `CALL Makevmenu(n, g)` where `g` is only
+ever passed by reference emits `CALL SUB1(J,K%)` against a single-precision
+param, which TB rejects. `handlers.control.calls` ALREADY has the right logic --
+take the type from the callee's param -- but it is reached only when
+`state.loc(off)` raises, and for these slots layout has already defaulted them to
+a 2-byte integer, so `loc` succeeds and the deferral never fires. The fix needs
+layout to distinguish "typed by evidence" from "defaulted", not another special
+case in the caller. Both of this round's fixtures side-step it by giving the
+argument variables direct type evidence.
 
 ### 2026-07-25 — Round 46: tbd73.exe DECODES END TO END (and the round trip does not yet)
 
