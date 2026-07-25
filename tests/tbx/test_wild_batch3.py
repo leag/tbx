@@ -1149,6 +1149,24 @@ def test_decode_t1_byrefincr():
     )
 
 
+def test_decode_t1_byrefdecr():
+    # `DECR A%` on a by-ref INTEGER SUB param: the descending mirror of
+    # t1_byrefincr just above. `dec es:[si]` had only its FOR-NEXT STEP -1
+    # leg -- the bare-statement leg was explicitly left fail-loud as
+    # unwitnessed. Wild tbd73.exe supplies the witness: TBWINDOW
+    # `SUB Makevmenu`, `CASE CHR$(72) : DECR curntpos`.
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_byrefdecr.exe", "v10_t1_byrefdecr.exe"):
+        prog = decode0.decode_user_code(_exe(stem))
+        sub = prog[0]
+        assert sub.body[0] == ir.Decr(ir.Var("A%")), stem
+        assert emit0.emit(prog) == (
+            "10 SUB SUB1(A%)\n  DECR A%\n  PRINT A%\nEND SUB\n"
+            "20 B% = 5\n30 CALL SUB1(B%)\n40 END\n"
+        ), stem
+
+
 def test_decode_t1_incr1():
     # Bare INC [disp16] (FF /0) outside a FOR context is the INCR
     # normalization: `X% = X% + 1`, distinct from the FOR-NEXT step use of

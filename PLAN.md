@@ -1186,6 +1186,22 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 23: a bare `DECR` on a by-ref INTEGER param
+
+`tbd73.exe`'s stop, `dec es:[si] outside a FOR at 0xba82`, is TBWINDOW's
+`SUB Makevmenu` (`TBW73.INC:483`, `CASE CHR$(72) : DECR curntpos`).
+
+A one-line closure the existing comment had already predicted: `dec_si` had
+only its FOR-NEXT STEP -1 leg, and the bare-statement leg was deliberately
+left fail-loud as unwitnessed. `inc_si` right above it already carries both
+legs (`ir.Incr` for the bare form), and `ir.Decr` already existed, so this is
+the exact mirror -- by-ref `X% = X% - 1` compiles to `far_subm_ax_si`, so
+`DECR` is not byte-identical to that spelling and needs its own node.
+
+Witness `t1_byrefdecr`, byte-exact both dialects.
+
+`tbd73.exe` advances to `materialization template mismatch at 0xbc24`.
+
 ### 2026-07-24 — Round 22: FOR temps retired by EVIDENCE, not position (layering)
 
 First of the "decode in layers" changes, taken as a down payment on the

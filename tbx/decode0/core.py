@@ -3363,16 +3363,26 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 # of a by-ref int param used as the loop var -- the
                 # descending sibling of inc_si, same NEXT-side step patch-up
                 # as dec_m/dec_bp (the header folded a provisional Lit(1)
-                # step before this evidence was available). A bare DEC via
-                # ES:[SI] outside a FOR is unwitnessed (by-ref `X% = X% - 1`
-                # compiles to far_subm_ax_si) -- fail loud (wild
-                # bmaster.exe/ifi.exe).
-                if not (state.fors and state.fors[-1]["v"] == state.pend_arg):
-                    raise ValueError(f"dec es:[si] outside a FOR at {addr:#x}")
-                f = state.fors[-1]
-                old = state.stmts[f["idx"]]
-                state.stmts[f["idx"]] = ir.For(old.var, old.init, old.limit, ir.Lit(-1))
-                f["step"] = -1
+                # step before this evidence was available) -- or, outside a
+                # FOR, a bare `DECR <by-ref param>` statement, the exact
+                # mirror of inc_si's own non-FOR leg: by-ref `X% = X% - 1`
+                # compiles to far_subm_ax_si instead, so DECR is not
+                # byte-identical to that spelling and needs its own ir.Decr
+                # node (wild bmaster.exe/ifi.exe for the FOR leg;
+                # t1_byrefdecr / wild tbd73.exe's TBWINDOW `SUB Makevmenu`,
+                # `CASE CHR$(72) : DECR curntpos`, for the bare leg).
+                if state.fors and state.fors[-1]["v"] == state.pend_arg:
+                    f = state.fors[-1]
+                    old = state.stmts[f["idx"]]
+                    state.stmts[f["idx"]] = ir.For(
+                        old.var, old.init, old.limit, ir.Lit(-1)
+                    )
+                    f["step"] = -1
+                else:
+                    argvar = ir.Var(f"P{state.pend_arg:02X}%")
+                    state.proc_int_offs.add(state.pend_arg)
+                    state.put(ir.Decr(argvar), state.cur)
+                    state.cur = None
             elif base == "fild_si32":  # by-ref LONG param onto the FP stack:
                 argvar = ir.Var(f"P{state.pend_arg:02X}&")  # the m32 sibling of
                 state.proc_long_offs.add(state.pend_arg)  # fild_si's m16 read
