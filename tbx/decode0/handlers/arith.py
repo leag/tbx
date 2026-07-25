@@ -19,6 +19,7 @@ from tbx.decode0.const import (
     _PREC,
     _READDATA,
 )
+from tbx.decode0.lift import _arr_param_suffix_ahead
 from tbx.decode0.scan import _grp, _orient, _rgrp
 
 if TYPE_CHECKING:
@@ -476,10 +477,15 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             or state.ops[j + 1][2] + 8 != op[2]
         ):
             raise ValueError(f"subax_bp array-parameter shape mismatch at {addr:#x}")
-        state.proc_frame["array_params"].setdefault(
-            state.ops[j + 1][2],
-            {"rank": 1, "lo_off": op[2]},
+        rec = state.proc_frame["array_params"].setdefault(
+            state.ops[j + 1][2], {"rank": 1}
         )
+        rec.setdefault("lo_off", op[2])  # `setdefault` on the DICT alone leaves
+        # lo_off missing when a whole-array RELAY (arg_push_array_bp) registered
+        # the descriptor first -- that path knows the name but not the index
+        # base, and the element access here is where the base becomes known
+        # (wild tbd73.exe's TBWINDOW `SUB Makehmenu`, which forwards item$()
+        # onward AND indexes it; previously a raw KeyError on 'lo_off').
         state.k += 1
         return True
     if kind == "andax_bp":  # and ax,[bp+d8]: bitwise fold of a LOCAL int,
@@ -711,6 +717,22 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                 if esz == 8
                 else ""
             )
+            if sik[1] == "arg_push_arr" and "esz" not in param_rec:
+                # This type-BLIND by-ref push is the FIRST access to the
+                # descriptor, so there is no recorded type to keep (the branch
+                # below handles that case) and the derivation above has just
+                # defaulted it to SINGLE. Defaulting is what collides later:
+                # wild tbd73.exe's `SUB Makehmenu` forwards `item$(mloop)` into
+                # `CALL Sprint(...)` BEFORE any element is read as a string, so
+                # the param got typed `P2A` and the eventual far_spush raised.
+                # Take the type from a LATER access in the same procedure that
+                # does carry evidence -- same evidence, just found by looking
+                # ahead instead of by arrival order. Still no guessing: with no
+                # typed access anywhere, the SINGLE default stands exactly as
+                # before (t1_arrparmfwdfirst).
+                ahead = _arr_param_suffix_ahead(state.ops, state.k + ao, blk)
+                if ahead is not None:
+                    suffix = ahead
             inferred = {
                 "name": f"P{blk:02X}{suffix}",
                 "rank": 1,
@@ -718,7 +740,13 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                 "esz": esz,
                 "lo_off": param_rec["lo_off"],
             }
-            if sik[1] == "arg_push_arr" and "name" in param_rec:
+            # "esz" is set only by an element access, so it -- not "name" --
+            # is what says the element TYPE was actually established. A
+            # whole-array relay records a provisional unsuffixed `name` and
+            # nothing else, and must not be treated as an authority to
+            # contradict (wild tbd73.exe SUB Makehmenu).
+            typed = "esz" in param_rec
+            if sik[1] == "arg_push_arr" and typed:
                 # Passing a computed element BY REFERENCE carries no
                 # element-TYPE evidence: the push is a bare ES:SI pointer,
                 # byte-identical whatever the element type is. So the suffix
@@ -734,7 +762,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                     raise ValueError(
                         f"inconsistent array-parameter type at {addr:#x}"
                     )
-            elif "name" in param_rec and any(
+            elif typed and any(
                 param_rec.get(k) != v for k, v in inferred.items()
             ):
                 raise ValueError(f"inconsistent array-parameter type at {addr:#x}")

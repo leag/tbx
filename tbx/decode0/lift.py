@@ -416,6 +416,40 @@ def _match_bool_bare_term1(ops, k) -> bool:
     return False
 
 
+_ARR_PARAM_SUFFIX_BY_TERMINAL = {
+    "far_spush": "$", "far_strassign": "$",
+    "far_fild_si": "%", "far_fstp_si": "%",
+    "far_fild_si32": "&", "far_fstp_si32": "&",
+}
+
+
+def _arr_param_suffix_ahead(ops, k, blk) -> str | None:
+    """Element type of the array PARAMETER whose descriptor sits at bp+``blk``,
+    taken from a later access in the same procedure.
+
+    `arg_push_arr` (passing a computed element by reference) is a bare ES:SI
+    pointer push -- byte-identical for every element type, so it witnesses
+    nothing about the type. When it is the FIRST access to a descriptor there is
+    no recorded type to fall back on, and defaulting to SINGLE collides with
+    whatever the real type turns out to be. The evidence does exist, just
+    later in the body, so look for it: scan forward within this procedure for
+    another `moves_bp` on the SAME offset whose terminal is type-bearing.
+
+    Returns None when no such access exists, leaving the caller's default
+    intact rather than inventing a type. Bounded by `proc_ret` -- a different
+    procedure's bp+``blk`` is an unrelated frame slot.
+    """
+    for j in range(k, len(ops)):
+        if ops[j][1] == "proc_ret":
+            return None
+        if ops[j][1] != "moves_bp" or ops[j][2] != blk or j + 1 >= len(ops):
+            continue
+        sfx = _ARR_PARAM_SUFFIX_BY_TERMINAL.get(ops[j + 1][1])
+        if sfx is not None:
+            return sfx
+    return None
+
+
 def _has_jmps_back(ops, exit_addr, test_addr) -> bool:
     """True iff a short `jmp test` sits immediately before the exit address -- the
     WHILE loop-back; its absence marks an inline-IF body skip. Checked

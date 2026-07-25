@@ -1,0 +1,13 @@
+10 DIM A$(3)
+20 A$(1) = "HI"
+30 N% = 1
+40 CALL One(A$())
+50 END
+60 SUB One(X$(1))
+70 SHARED N%
+80 CALL Two(X$(N%))
+90 PRINT LEN(X$(N%))
+100 END SUB
+110 SUB Two(T$)
+120 PRINT T$
+130 END SUB

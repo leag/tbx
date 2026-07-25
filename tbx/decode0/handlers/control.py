@@ -19,6 +19,7 @@ from tbx.decode0.const import (
     _pp_commas,
 )
 from tbx.decode0.lift import (
+    _arr_param_suffix_ahead,
     _lift_bool_do_tail,
     _lift_bool_tail,
     _lift_do_tail,
@@ -204,7 +205,19 @@ def cargs(state: DecodeState, op, addr, kind) -> bool:
         if state.proc_frame is None:
             raise ValueError(f"whole-array parameter push outside a SUB at {addr:#x}")
         rec = state.proc_frame["array_params"].setdefault(op[2], {"rank": 1})
-        rec.setdefault("name", f"P{op[2]:02X}")
+        # A pure relay carries no element-type evidence, but the SAME procedure
+        # may also index the array -- and then the type IS knowable and the
+        # spelling matters: for a STRING array `A$()` and `A()` are different
+        # variables and recompile to different bytes. So look ahead for a typed
+        # element access before falling back to the unsuffixed name (wild
+        # tbd73.exe's TBWINDOW `SUB Makehmenu` both forwards item$() onward and
+        # indexes it; t1_arrfwd's numeric array needs no suffix either way,
+        # which is why the unsuffixed fallback was byte-exact there).
+        rec.setdefault(
+            "name",
+            f"P{op[2]:02X}"
+            + (_arr_param_suffix_ahead(state.ops, state.k, op[2]) or ""),
+        )
         state.pend_args.append(ir.ArrayRef(rec["name"], ()))
         state.k += 1
         return True

@@ -1296,6 +1296,58 @@ template mismatch → far_icomp_si32 → LOCAL/by-ref INCR → far_fcomp_si64
 but these two files have a long tail of previously-unwitnessed
 constructs specific to their by-ref/LOCAL-heavy coding style.
 
+### 2026-07-24 — Round 27: array-param type resolved from a LATER access
+
+`tbd73.exe`'s `inconsistent array-parameter type at 0xc40a`, in TBWINDOW's
+`SUB Makehmenu`. Round 19 closed the case where a type-blind access follows a
+typed one; this is the same class from the other direction -- the type-blind
+access comes FIRST -- which Round 19 explicitly left alone as unwitnessed
+("keeps its existing default-SINGLE behavior, not made worse, not guessed
+at"). `tbd73.exe` now witnesses it, in TWO flavors:
+
+1. **`arg_push_arr` first** -- the array param's element is forwarded by
+   reference before any element is read as a string, so the param got typed
+   `P2A` (SINGLE) and the eventual `far_spush` collided.
+2. **`arg_push_array_bp` first** -- the WHOLE array is relayed onward before
+   being indexed. This one crashed with a raw `KeyError: 'lo_off'` rather than
+   failing loud, because two different sites create the `array_params` record
+   and only one of them knows the index base: `setdefault` on the dict leaves
+   `lo_off` missing when the relay registered the descriptor first.
+
+Neither push witnesses anything about the element type -- both are bare
+pointer/descriptor pushes, byte-identical whatever the type is. But the
+evidence does exist, just later in the body, so `_arr_param_suffix_ahead`
+(lift.py) looks for it: scan forward within the procedure for another
+`moves_bp` on the SAME descriptor offset whose terminal IS type-bearing. With
+no such access anywhere the SINGLE default stands exactly as before -- this
+finds real evidence out of order, it does not invent any. Same "resolve the
+procedure, then name things" idea as Round 22, applied to types instead of
+frame slots.
+
+Three changes:
+
+- `lo_off` is now backfilled with `rec.setdefault` at the element-access site,
+  which is where the index base becomes known.
+- The conflict check keys on `"esz" in param_rec` instead of `"name"`. Only an
+  element access sets `esz`, so `esz` -- not `name` -- is what says the type
+  was actually ESTABLISHED. A relay records a provisional unsuffixed `name`
+  and nothing else, and must not be treated as an authority that a real
+  element access then contradicts.
+- The relay itself takes the same lookahead for its own spelling. This matters
+  for bytes, not just tidiness: for a STRING array `A$()` and `A()` are
+  DIFFERENT variables. The unsuffixed fallback was byte-exact for `t1_arrfwd`
+  only because that fixture's array is numeric, where no suffix is correct
+  anyway -- the old comment's "verified byte-exact either way" was true of
+  that fixture, not of the general case.
+
+Witnesses `t1_arrparmfwdfirst` (by-ref element push first) and
+`t1_arrparmrelayidx` (whole-array relay first), byte-exact both dialects.
+`t1_arrfwd`, `t1_arrparmref` and `t1_arrparmmix` re-verified byte-exact, and
+the suite passed against the UNREGENERATED goldens first.
+
+`tbd73.exe` advances to `[bp+0] outside the open LOCAL frame` -- and note it is
+a fail-loud error again, not the raw KeyError flavor 2 produced.
+
 ### 2026-07-24 — Round 26: bare value AND a parenthesized STRING-OR group (LANDED)
 
 Closes Round 24's diagnosis. `tbd73.exe`'s `materialization template mismatch

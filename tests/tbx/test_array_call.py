@@ -9,6 +9,44 @@ from tbx import c0, decode0, ir
 _ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_array_parameter_type_resolved_from_a_later_access():
+    # `arg_push_arr` (passing a computed element by reference) and
+    # `arg_push_array_bp` (relaying the whole array onward) BOTH carry no
+    # element-type evidence -- they are bare pointer/descriptor pushes,
+    # byte-identical for every element type. When one of them is the FIRST
+    # thing a SUB does with its array parameter, defaulting the type to SINGLE
+    # collides with the real type later in the body. The type is found by
+    # looking ahead for an access that does witness it.
+    #
+    # Both shapes come from wild tbd73.exe's TBWINDOW `SUB Makehmenu`, which
+    # forwards item$() onward AND indexes it.
+    from tbx import emit0
+
+    # by-ref element push first, string read after
+    for pfx in ("", "v10_"):
+        prog = decode0.decode_user_code(
+            (_ROOT / "tests/fixtures/corpus" / f"{pfx}t1_arrparmfwdfirst.exe").read_bytes()
+        )
+        sub = prog[5]
+        assert isinstance(sub, ir.SubDef) and sub.params == ("B$(1)",), pfx
+        assert sub.body[1] == ir.CallStmt(
+            "SUB2", (ir.ArrayRef("B$", (ir.Var("A%"),)),)
+        ), pfx
+
+    # whole-array RELAY first, element read after. The relay's own spelling
+    # must pick up the suffix too: `B$()` and `B()` are different variables and
+    # recompile to different bytes. Previously a raw KeyError on 'lo_off',
+    # because the relay registered the descriptor without an index base.
+    for pfx in ("", "v10_"):
+        prog = decode0.decode_user_code(
+            (_ROOT / "tests/fixtures/corpus" / f"{pfx}t1_arrparmrelayidx.exe").read_bytes()
+        )
+        sub = prog[5]
+        assert isinstance(sub, ir.SubDef) and sub.params == ("B$(1)",), pfx
+        assert sub.body[1] == ir.CallStmt("SUB2", (ir.ArrayRef("B$", ()),)), pfx
+        assert "CALL SUB2(B$())" in emit0.emit(prog), pfx
+
+
 @pytest.mark.parametrize(
     "path",
     [
