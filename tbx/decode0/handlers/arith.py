@@ -1215,7 +1215,32 @@ def int_bitwise_bx(state: DecodeState, op, addr, kind) -> bool:
             # nested tree `C OR (A OR B)`.
             state.ax = ir.BinOp(comb, state.bx, _rgrp(comb, state.ax))
         else:
-            state.ax = ir.BinOp(comb, state.ax, _rgrp(comb, state.bx))
+            # `AX` can hold a completed higher-precedence left operand while
+            # `BX` retains the trailing leaf.  TB uses this saved-register
+            # template only when that left operand was explicitly grouped:
+            # `(back * 16) + fore` and `(attr \ 16) AND 7` (tbd73's
+            # TBW73.INC).  Leaving it bare preserves the parse tree but picks
+            # the fold template and changes the code bytes.
+            left = state.ax
+            if (
+                isinstance(left, ir.BinOp)
+                and not isinstance(state.bx, ir.BinOp)
+                and _PREC[left.op] > _PREC[comb]
+            ):
+                left = ir.Group(left)
+            right = _rgrp(comb, state.bx)
+            if (
+                comb in ("+", "-", "*")
+                and isinstance(right, ir.BinOp)
+                and _PREC[right.op] > _PREC[comb]
+            ):
+                # The arithmetic register path likewise preserves a completed
+                # right subexpression only when it was explicitly grouped.
+                # `(... AND ...) + ((attr \ 128) * 16)` is the FNFN3 shape
+                # in tbd73's TBW73.INC; the logical families intentionally
+                # stay out because their flat chains use the same registers.
+                right = ir.Group(right)
+            state.ax = ir.BinOp(comb, left, right)
         if kind in ("andaxbx", "oraxbx", "xoraxbx"):
             state.reg_logical_results.append(state.ax)
         state.bx = None

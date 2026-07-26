@@ -701,6 +701,15 @@ def _respell_params(node, spell, stmt_addr=None):
     """
     if isinstance(node, ir.Var) and node.name in spell:
         return ir.Var(spell[node.name])
+    array_key = f"{node.name}(1)" if isinstance(node, ir.ArrayRef) else None
+    if array_key in spell:
+        return ir.ArrayRef(
+            spell[array_key][:-3],
+            tuple(_respell_params(i, spell, stmt_addr) for i in node.indices),
+        )
+    if isinstance(node, tuple):
+        new = tuple(_respell_params(x, spell, stmt_addr) for x in node)
+        return node if all(a is b for a, b in zip(node, new)) else new
     if not is_dataclass(node):
         return node
     changes = {}
@@ -785,13 +794,14 @@ def _resolve_calls(
                 # forward-reference sibling): same type source, but this is
                 # an ordinary DGROUP scalar (V#### -> canonical_rename),
                 # not the callee's own PXX by-ref param.
-                _, target, _idx, off = a
+                _, target, _idx, off, fallback = a
                 params = proc_params[target]
                 if target in inline_procs:
                     # Same no-signature case as fwdpending above: retain the
-                    # caller's layout spelling rather than indexing an empty
-                    # INLINE parameter list (tbd73's Openbox call).
-                    new_args[i] = ir.Var(_slot(off))
+                    # caller's layout spelling captured at the call rather
+                    # than indexing an empty INLINE parameter list (tbd73's
+                    # Openbox call).
+                    new_args[i] = fallback
                     changed = True
                     continue
                 sfx = params[_idx][-1] if params[_idx][-1] in "%$&#" else ""
@@ -961,29 +971,29 @@ def _propagate_call_types(stmts, stmt_addr=None):
     signature evidence, but the call site passes a typed argument like `W$`).
     """
     sub_defs: dict[str, ir.SubDef] = {}
-    calls: list[ir.CallStmt] = []
+    calls: list[tuple[str | None, ir.CallStmt]] = []
 
-    def collect(body):
+    def collect(body, owner=None):
         for s in body:
             if isinstance(s, ir.SubDef):
                 sub_defs[s.name] = s
-                collect(s.body)
+                collect(s.body, s.name)
             elif isinstance(s, ir.CallStmt):
-                calls.append(s)
+                calls.append((owner, s))
             elif isinstance(s, ir.IfInline):
-                collect(s.body)
+                collect(s.body, owner)
             elif isinstance(s, ir.IfBlock):
                 for _, b in s.arms:
-                    collect(b)
+                    collect(b, owner)
                 if s.else_body:
-                    collect(s.else_body)
+                    collect(s.else_body, owner)
             elif isinstance(s, ir.SelectCase):
                 for arm in s.arms:
-                    collect(arm.body)
+                    collect(arm.body, owner)
                 if s.case_else:
-                    collect(s.case_else)
+                    collect(s.case_else, owner)
             elif isinstance(s, ir.DefFn) and s.is_block:
-                collect(s.body)
+                collect(s.body, owner)
 
     collect(stmts)
 
@@ -992,7 +1002,7 @@ def _propagate_call_types(stmts, stmt_addr=None):
 
     refinements: dict[str, dict[str, str]] = {}
 
-    for c in calls:
+    for owner, c in calls:
         if not isinstance(c.name, str) or c.name not in sub_defs:
             continue
         sub = sub_defs[c.name]
@@ -1000,14 +1010,72 @@ def _propagate_call_types(stmts, stmt_addr=None):
             if i >= len(sub.params):
                 continue
             p = sub.params[i]
-            if p.startswith("P") and not p.endswith(("%", "$", "&", "#", "(1)")):
+            if p.startswith("P") and not p.endswith("(1)"):
+                base = p.rstrip("%$&#")
                 sfx = None
-                if isinstance(arg, ir.Var) and arg.name[-1:] in "%$&#":
+                # A caller's numeric type does not determine a by-ref formal's
+                # spelling: TB accepts an INTEGER actual for an unsuffixed
+                # (SINGLE) parameter, so propagating `%`, `&`, or `#` here
+                # silently changes valid declarations.  Strings cannot undergo
+                # that numeric coercion, making `$` the only calibrated
+                # caller-side refinement (tbd73's Titlewin -> Titlebox INLINE).
+                if isinstance(arg, ir.Var) and arg.name[-1:] == "$":
                     sfx = arg.name[-1:]
-                elif isinstance(arg, ir.ArrayRef) and arg.name[-1:] in "%$&#":
+                elif isinstance(arg, ir.ArrayRef) and arg.name[-1:] == "$":
                     sfx = arg.name[-1:]
+                elif isinstance(arg, ir.StrLit):
+                    sfx = "$"
                 if sfx:
-                    refinements.setdefault(c.name, {})[p] = f"{p}{sfx}"
+                    want = f"{base}{sfx}"
+                    if want != p:
+                        refinements.setdefault(c.name, {})[p] = want
+
+            # Passing an array element by reference proves the element type
+            # when the receiving formal is already known.  The source array
+            # descriptor itself is typed in its owner SUB's header, so update
+            # that declaration (and its body references) rather than trying
+            # to infer a type from the descriptor push.  This is the direct
+            # `Drawlist(ptrarray$(...)) -> Printwin(..., strdat$)` chain in
+            # tbd73; only `$` is safe for the same coercion reason above.
+            if (
+                owner in sub_defs
+                and p[-1:] == "$"
+                and isinstance(arg, ir.ArrayRef)
+                and arg.name.startswith("P")
+                and arg.name[-1:] != "$"
+            ):
+                owner_sub = sub_defs[owner]
+                array_p = next(
+                    (q for q in owner_sub.params if q == f"{arg.name}(1)"),
+                    None,
+                )
+                if array_p is not None:
+                    want = f"{arg.name}$(1)"
+                    if want != array_p:
+                        refinements.setdefault(owner, {})[array_p] = want
+
+            # A whole-array relay carries the same descriptor type through
+            # another SUB boundary.  The callee's `$(1)` formal is direct
+            # evidence for the caller's matching array formal; unlike a
+            # scalar numeric actual, this is not a coercion.  tbd73's
+            # Makelmenu -> Drawlist relay is the witnessed shape.
+            if (
+                owner in sub_defs
+                and p.endswith("$(1)")
+                and isinstance(arg, ir.ArrayRef)
+                and not arg.indices
+                and arg.name.startswith("P")
+                and arg.name[-1:] != "$"
+            ):
+                owner_sub = sub_defs[owner]
+                array_p = next(
+                    (q for q in owner_sub.params if q == f"{arg.name}(1)"),
+                    None,
+                )
+                if array_p is not None:
+                    want = f"{arg.name}$(1)"
+                    if want != array_p:
+                        refinements.setdefault(owner, {})[array_p] = want
 
     if not refinements:
         return stmts
@@ -1055,7 +1123,11 @@ def _propagate_call_types(stmts, stmt_addr=None):
             return s if not changed else ir.SelectCase(s.selector, tuple(arms), ce)
         return s
 
-    return [update_stmt(s) for s in stmts]
+    updated = [update_stmt(s) for s in stmts]
+    # One refinement can expose the typed callee required by its caller (a
+    # string literal fixes Printwin, then its array-element caller fixes
+    # Drawlist).  Refinements only add a suffix, so this reaches a fixed point.
+    return _propagate_call_types(updated, stmt_addr)
 
 
 
@@ -1251,7 +1323,16 @@ def _finalize(state: DecodeState, addr) -> Program:
             continue
         prefix = []
         if i in shared_subs:
-            prefix.append(shared_subs[i])
+            shared = shared_subs[i]
+            # Turbo Basic accepts only ten SHARED names in one source
+            # statement.  Keep the groups as actual body statements, rather
+            # than splitting them in emit0 after BodyLine targets have already
+            # been assigned: tbd73's Initmenus has forty names and branches
+            # immediately after the declarations.
+            prefix.extend(
+                ir.Shared(tuple(shared.names[j : j + 10]))
+                for j in range(0, len(shared.names), 10)
+            )
         prefix.extend(local_dims.get(i, ()))
         if prefix:
             state.stmts[i] = ir.SubDef(s.name, s.params, tuple(prefix) + s.body)
@@ -2871,11 +2952,15 @@ def decode_user_code(exe: bytes) -> list[Any]:
             continue
         state.close_ifs(addr)
         if kind == "segjmp":
-            # $SEGMENT: pure segment-transition glue, no source statement of its
-            # own -- but the metacommand IS spelled in the source and moves every
-            # following definition into a new code segment, so its position has
-            # to ride out as a metastatement (probe t1_segment; wild tbd73.exe).
-            state.seg_metas.append(len(state.stmts))
+            # An explicitly authored `$SEGMENT` carries selector 2 (the
+            # t1_segment family).  Larger selectors are the compiler's own
+            # automatic code-segment transitions: they use the same far-jump
+            # glue but have NO source spelling.  Re-emitting `$SEGMENT` for
+            # the latter changes its segment bookkeeping (tbd73's selector
+            # 30; the original EXE records 0x001e where the forced directive
+            # records 1).
+            if op[3] == 2:
+                state.seg_metas.append(len(state.stmts))
             state.k += 1
             continue
         # --- procedure-region segmentation ---
@@ -3408,7 +3493,29 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 # Re-point those unsuffixed placeholders at the declared
                 # spelling, or the header and the body name two different
                 # variables and rename.py letters them apart (t1_fwdinline).
-                spell = {p.rstrip("%$&#"): p for p in params if p.startswith("P")}
+                # The INLINE call can combine the forwarded formals with
+                # expressions over their siblings (Openwin passes `col +
+                # cols`, for example).  The assembly boundary requires the
+                # whole scalar signature's concrete stack widths.  Normalize
+                # unsuffixed numeric slots to INTEGER; retain independently
+                # evidenced string, LONG, and DOUBLE spellings (tbd73's
+                # DEFINT-authored Openwin; t1_fwdinline).
+                fwd_bases = {
+                    p.rstrip("%$&#")
+                    for p in params
+                    if p.startswith("P") and not p.endswith("(1)")
+                }
+                spell = {}
+                for p in params:
+                    if p.endswith("(1)"):
+                        continue
+                    base = p.rstrip("%$&#")
+                    if base not in fwd_bases:
+                        continue
+                    want = p if p[-1:] in "$&#" else f"{base}%"
+                    spell[p] = want
+                    spell[base] = want  # staged arg_push_fwd placeholder
+                params = tuple(spell.get(p, p) for p in params)
                 body = tuple(
                     _respell_params(b, spell, state.stmt_addr) for b in body
                 )
@@ -3585,7 +3692,12 @@ def decode_user_code(exe: bytes) -> list[Any]:
             and state.k + 1 < len(state.ops)
             and state.ops[state.k + 1][1] == "add_si_sp"
         ):
-            state.k += 1  # mov si,off feeding add si,sp: temp-slot glue
+            # `mov si,off; add si,sp` selects one outgoing DEF-FN argument
+            # slot.  `movm_*_temp` keys fn_args by this offset, so discarding
+            # it makes successive arguments overwrite each other (tbd73's
+            # `FNAttr(0, 0)` became `FNAttr(0)`).
+            state.si = op[2]
+            state.k += 1
             continue
         if (
             kind == "movm_imm" and op[2] == state.sp_save_cell

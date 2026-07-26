@@ -95,7 +95,10 @@ def calls(state: DecodeState, op, addr, kind) -> bool:
                 params = state.proc_params.get(op[2])
                 off = a[1]
                 if params is None:
-                    args.append(("argrefpending", op[2], i, off))
+                    # Retain the layout spelling for a target that later turns
+                    # out to be INLINE: it has no signature to supersede that
+                    # fallback during final resolution.
+                    args.append(("argrefpending", op[2], i, off, state.loc(off)))
                     continue
                 if op[2] in state.inline_procs:
                     # An INLINE SUB has no declared parameter list, so it

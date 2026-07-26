@@ -31,7 +31,7 @@ def _is_is_mat_at(state, c):  # IS-relational materialized-boolean compare idiom
 
 
 def _is_arm_header_at(state, i):
-    return _kind_at(state, i) in ("fld1", "fild", "fld") and (
+    return _kind_at(state, i) in ("fldz", "fld1", "fild", "fld") and (
         _kind_at(state, i + 1) == "fcomp64" or _is_is_mat_at(state, i + 1)
     )
 
