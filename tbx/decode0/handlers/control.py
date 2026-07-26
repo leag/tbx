@@ -30,7 +30,6 @@ from tbx.decode0.lift import (
 if TYPE_CHECKING:
     from tbx.decode0.core import DecodeState
 
-
 def calls(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: call_abs, call_int, far_call, fn_call."""
     if kind == "call_abs":  # CALL ABSOLUTE addr
@@ -98,8 +97,15 @@ def calls(state: DecodeState, op, addr, kind) -> bool:
                 if params is None:
                     args.append(("argrefpending", op[2], i, off))
                     continue
+                if op[2] in state.inline_procs:
+                    # An INLINE SUB has no declared parameter list, so it
+                    # cannot type a guessed caller-side slot. Preserve the
+                    # layout spelling; this is the same no-signature case
+                    # handled above for forwarded frame parameters (tbd73's
+                    # Openbox call).
+                    args.append(state.loc(off))
+                    continue
                 if i >= len(params):
-                    breakpoint()
                     raise ValueError(
                         f"by-ref arg to unknown callee params at {addr:#x}"
                     )

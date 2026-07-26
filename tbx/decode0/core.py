@@ -726,6 +726,7 @@ def _resolve_calls(
     stmts,
     proc_names,
     proc_params,
+    inline_procs,
     proc_int_offs,
     proc_long_offs,
     proc_dbl_offs,
@@ -760,6 +761,12 @@ def _resolve_calls(
             if isinstance(a, tuple) and a and a[0] == "fwdpending":
                 _, target, _idx, off = a
                 params = proc_params[target]
+                if target in inline_procs:
+                    # A later-defined INLINE SUB has no parameter signature
+                    # to resolve this deferred forwarded argument from.
+                    new_args[i] = ir.Var(f"P{off:02X}")
+                    changed = True
+                    continue
                 sfx = params[_idx][-1] if params[_idx][-1] in "%$&#" else ""
                 if sfx == "%":
                     proc_int_offs.add(off)
@@ -780,6 +787,13 @@ def _resolve_calls(
                 # not the callee's own PXX by-ref param.
                 _, target, _idx, off = a
                 params = proc_params[target]
+                if target in inline_procs:
+                    # Same no-signature case as fwdpending above: retain the
+                    # caller's layout spelling rather than indexing an empty
+                    # INLINE parameter list (tbd73's Openbox call).
+                    new_args[i] = ir.Var(_slot(off))
+                    changed = True
+                    continue
                 sfx = params[_idx][-1] if params[_idx][-1] in "%$&#" else ""
                 new_args[i] = ir.Var(_slot(off) + sfx)
                 changed = True
@@ -1052,6 +1066,7 @@ def _finalize(state: DecodeState, addr) -> Program:
         state.stmts,
         state.proc_names,
         state.proc_params,
+        state.inline_procs,
         state.proc_int_offs,
         state.proc_long_offs,
         state.proc_dbl_offs,
