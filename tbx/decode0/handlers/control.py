@@ -868,7 +868,11 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
         state.cur = None
         return True
     if kind == "movax":  # int literal into ax
-        state.ax = ir.Lit(op[2] - 0x10000 if op[2] >= 0x8000 else op[2])
+        # ``MOV AX,FFFF`` is the compiler's direct unsigned-token template
+        # for `&HFFFF`; a source `-1` instead materializes one then negates.
+        # Preserve the raw bit-pattern spelling for byte-exact re-emission
+        # (tbd73's `IF REG(3) <> &HFFFF`).
+        state.ax = ir.HexLit(op[2]) if op[2] >= 0x8000 else ir.Lit(op[2])
         state.k += 1
         return True
     return False

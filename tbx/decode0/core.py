@@ -156,7 +156,14 @@ class DecodeState:
     whiles: Any = None
 
     def pool_lit(self, disp):
-        return ir.Lit(struct.unpack_from("<h", self.exe, self.dsd + disp)[0])
+        raw = struct.unpack_from("<H", self.exe, self.dsd + disp)[0]
+        # A signed negative literal is materialized with runtime arithmetic
+        # (`-1` becomes `FLD1; FCHS` / `MOV AX,1; NEG AX`), whereas an
+        # unsigned 16-bit token such as `&HFFFF` lives in the integer pool
+        # and is loaded with FILD.  Retain that raw token spelling: treating
+        # it as the numerically equivalent ``Lit(-1)`` changes the code
+        # template (tbd73's FNCurdisplay REG masks).
+        return ir.HexLit(raw) if raw & 0x8000 else ir.Lit(raw)
 
     def pool_lit32(self, disp):
         """Pooled signed-32 integer literal (long-integer const pool)."""

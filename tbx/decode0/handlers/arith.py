@@ -1189,7 +1189,19 @@ def int_bitwise_bx(state: DecodeState, op, addr, kind) -> bool:
         }[kind]
         if state.ax is None or state.bx is None:
             raise ValueError(f"ax,bx combine with empty regs at {addr:#x}")
-        if kind == "andaxbx" and state.direct_bool_gate:
+        if (
+            kind == "addaxbx"
+            and isinstance(state.ax, ir.Neg)
+            and isinstance(state.bx, ir.BinOp)
+            and _PREC[state.bx.op] <= _PREC["+"]
+        ):
+            # `NEG AX; ADD AX,BX` with a grouped BX is TB's source-order
+            # template for `grouped_left - (computed_right)`, not a leading
+            # negative addend.  Keeping it as `-right + left` recompiles with
+            # array accesses on the wrong side of the register staging (the
+            # repeated centering expressions in tbd73's Makevmenu/Makehmenu).
+            state.ax = ir.BinOp("-", ir.Group(state.bx), ir.Group(state.ax.operand))
+        elif kind == "andaxbx" and state.direct_bool_gate:
             # An ungrouped outer logical AND evaluates its short-circuiting
             # left group first and preserves it through BX/CX while AX computes
             # the right group (t1_nestedbool), reversing the usual arithmetic
