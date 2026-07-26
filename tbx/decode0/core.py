@@ -1368,6 +1368,14 @@ def _finalize(state: DecodeState, addr) -> Program:
             data_orphan_lines = []  # consumed -- DATA recovery below won't fire
     state.stmts[ins:ins] = dims
     state.addrs[ins:ins] = [None] * len(dims)
+    if dims:
+        # `$SEGMENT` positions are recorded while scanning executable code;
+        # recovered static DIMs are codeless and inserted afterwards.  Rebase
+        # every following meta index so the directive remains before the same
+        # scanned statement (tbd73's four leading DIMs).
+        state.seg_metas = [
+            i + len(dims) if i >= ins else i for i in state.seg_metas
+        ]
     # DATA is codeless: re-emit as a block at the very top. Recover the pool
     # when the program consumes it (a READ/RESTORE) so a string-literal pool
     # frame is never misread as DATA -- OR when the error-trap line table
@@ -1576,6 +1584,7 @@ def _finalize(state: DecodeState, addr) -> Program:
                 at += 1
         state.stmts.insert(at, ir.Common(names))
         state.addrs.insert(at, None)
+        state.seg_metas = [i + 1 if i >= at else i for i in state.seg_metas]
     # $EVENT regions: when trapping is in play the compiler emits a CC
     # poll hook before EVERY statement; $EVENT OFF..ON suppresses them
     # for a run of statements (witnessed t1_evreg), or everywhere when OFF

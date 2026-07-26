@@ -182,6 +182,19 @@ def unparse(e) -> str:
     if isinstance(e, Group):
         return f"({unparse(e.inner)})"
     if isinstance(e, BinOp):
+        # TB distinguishes a subtraction from an addition of a grouped
+        # negative literal in its integer register staging.  The latter is
+        # commonly an artefact of lifting `SUB AX,imm` through a negation;
+        # spell the source-level subtraction instead (tbd73's window bounds
+        # use `wcols(idx) - 2`).  Keep symbolic negations untouched: their
+        # grouping can carry real evaluation-order evidence.
+        if (
+            e.op == "+"
+            and isinstance(e.rhs, Group)
+            and isinstance(e.rhs.inner, Neg)
+            and isinstance(e.rhs.inner.operand, Lit)
+        ):
+            return f"{unparse(e.lhs)} - {unparse(e.rhs.inner.operand)}"
         # Minimal parenthesization: add parens only where needed to
         # reproduce the same parse tree (lhs needs prec >= op; rhs needs prec > op).
         p = _PREC[e.op]
