@@ -2959,15 +2959,11 @@ def decode_user_code(exe: bytes) -> list[Any]:
             continue
         state.close_ifs(addr)
         if kind == "segjmp":
-            # An explicitly authored `$SEGMENT` carries selector 2 (the
-            # t1_segment family).  Larger selectors are the compiler's own
-            # automatic code-segment transitions: they use the same far-jump
-            # glue but have NO source spelling.  Re-emitting `$SEGMENT` for
-            # the latter changes its segment bookkeeping (tbd73's selector
-            # 30; the original EXE records 0x001e where the forced directive
-            # records 1).
-            if op[3] == 2:
-                state.seg_metas.append(len(state.stmts))
+            # The far jump is the source-level `$SEGMENT` metacommand.  Its
+            # selector is a compiler allocation detail, not a discriminator:
+            # t1_segment happens to receive 2, while TBWINDOW/tbd73's authored
+            # `$SEGMENT` receives 30 after its larger pre-directive region.
+            state.seg_metas.append(len(state.stmts))
             state.k += 1
             continue
         # --- procedure-region segmentation ---
