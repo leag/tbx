@@ -7,3 +7,4 @@ dist/
 *.egg-info/
 wild/hits/
 wild/pcsig8-scan.log
+.vscode
