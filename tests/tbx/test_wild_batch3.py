@@ -2934,7 +2934,7 @@ def test_decode_t1_closevar():
     # dispatch via the standard FP-to-int bridge (fld/fistp/fwait/
     # movaxmem), leaving a Var in ax rather than a Lit. ir.Close.num now
     # accepts either -- a plain int (existing literal case, unchanged)
-    # or an Expr, with render.py/c0.py each gaining a branch for the
+    # or an Expr, with render.py gaining a branch for the
     # latter.
     from tbx import decode0, emit0, ir
 

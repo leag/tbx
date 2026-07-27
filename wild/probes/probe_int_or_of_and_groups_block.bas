@@ -1,0 +1,6 @@
+I% = 0
+IF I% > 10 OR (I% < 18 AND I% > 28) OR (I% < 36 AND I% > 46) THEN
+  PRINT "YES"
+  PRINT "OK"
+END IF
+END

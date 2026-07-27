@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from tbx import c0, decode0, emit0, ir
+from tbx import decode0, emit0, ir
 
 _ROOT = Path(__file__).resolve().parents[2]
 _PROBES = _ROOT / "wild" / "probes"
@@ -34,7 +34,7 @@ def test_palette_using_dynamic_constant_element():
     )
 
 
-def test_palette_using_dynamic_variable_element_and_c0():
+def test_palette_using_dynamic_variable_element():
     # mov si,[index]; shl si,1; mov es,[array block]; EC/8A.
     prog = _decode("probe_paletteusing_var.exe")
     assert prog[2] == ir.PaletteUsing(ir.ArrayRef("V0%", (ir.Var("A%"),)))
@@ -44,6 +44,3 @@ def test_palette_using_dynamic_variable_element_and_c0():
         "30 PALETTE USING V0%(A%)\n"
         "40 END\n"
     )
-    c_src = c0.emit_c(prog)
-    assert "tb_pal[0]" in c_src
-    assert "tb_pal[15]" in c_src

@@ -106,7 +106,9 @@ the real Turbo Basic 1.0/1.1 compilers when it was added; validating new
 recoveries end-to-end requires access to the original DOS toolchain (e.g.
 under an emulator), which this repository does not include or automate.
 
-## Native recompilation
+## Experimental native recompilation
+
+The native C recompiler is maintained on the `experimental/c0` branch and is not included in the decoder release branch. The commands below apply only there.
 
 Beyond source recovery, `tbx` can recompile a decoded program for modern
 platforms by emitting a self-contained C translation unit:

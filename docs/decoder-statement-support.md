@@ -80,13 +80,13 @@ known source subset does not provide a direct source-level witness for them.
 | `Data` | `DATA item[, ...]` | Supported; corpus observed |
 | `Read` | `READ target[, ...]` | Supported; executable/source witness may be indirect |
 | `Restore` | `RESTORE [line]` | Supported; executable/source witness may be indirect |
-| `SubDef` | `SUB name[(params)] ... END SUB` | Supported, including witnessed rank-1 array parameters declared as `A(1)` and MIXED scalar/array signatures in any order (`SUB One(X$(1), N%)`, `SUB One(N%, X$(1))` -- the 0x3C descriptor's own witnessed frame offset decides the split, `t1_arrparmmix`/`t1_arrparmmixlast`/`t1_arrparmmixmany`); c0 is fail-loud for array parameters |
-| `CallStmt` | `CALL name[(args)]` | Supported, including whole-array `A()` arguments (D4); c0 remains fail-loud for whole-array parameters |
+| `SubDef` | `SUB name[(params)] ... END SUB` | Supported, including witnessed rank-1 array parameters declared as `A(1)` and MIXED scalar/array signatures in any order (`SUB One(X$(1), N%)`, `SUB One(N%, X$(1))` -- the 0x3C descriptor's own witnessed frame offset decides the split, `t1_arrparmmix`/`t1_arrparmmixlast`/`t1_arrparmmixmany`) |
+| `CallStmt` | `CALL name[(args)]` | Supported, including whole-array `A()` arguments (D4) |
 | `DefFn` | `DEF FN... = expression` or block form | Supported, including forward expression calls; corpus observed in function fixtures |
 | `FnResult` | assignment to a multi-line `DEF FN` result | Internal procedure-body node; emitted as source |
 | `Inline` | `$INLINE byte, ...` inside a `SUB` | Supported; corpus observed |
 | `Shared` | `SHARED ...` inside a procedure | Supported; corpus observed |
-| `Local` | `LOCAL ...` inside a `SUB` or block `DEF FN` | Supported for INTEGER, SINGLE, DOUBLE, scalar STRING reads/writes, large BP+disp16 frames, and witnessed local dynamic arrays including declared-but-undimensioned arrays and STRING arrays in mixed DEF FN frames. A `LOCAL` declared AFTER a FOR loop variable is preserved: the loop's [step, limit] temp words are retired at `proc_ret` from the frame TAIL and only if the body never referenced them, not guessed at `loop_var + 2` (`t1_locstrafterfor`, `t1_locstrafterforlit`). c0 remains fail-loud |
+| `Local` | `LOCAL ...` inside a `SUB` or block `DEF FN` | Supported for INTEGER, SINGLE, DOUBLE, scalar STRING reads/writes, large BP+disp16 frames, and witnessed local dynamic arrays including declared-but-undimensioned arrays and STRING arrays in mixed DEF FN frames. A `LOCAL` declared AFTER a FOR loop variable is preserved: the loop's [step, limit] temp words are retired at `proc_ret` from the frame TAIL and only if the body never referenced them, not guessed at `loop_var + 2` (`t1_locstrafterfor`, `t1_locstrafterforlit`) |
 | `Common` | `COMMON ...` | Supported; corpus observed |
 
 ### Console, printer, and formatting

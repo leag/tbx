@@ -665,11 +665,15 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             state.pend_cmp = None
             state.k += 6
             return True
-        if state.pend_cmp_str and _match_bool_outer_and_group(state.ops, state.k):
+        if (
+            _match_bool_outer_and_group(state.ops, state.k)
+            and any(o[1] == "strcmp" for o in state.ops[state.k + 6 : state.k + 36])
+        ):
             # The materialized left term of `A AND (B OR C)` is preserved
             # through BX/CX while the right group uses its own spill fold.
             state.ax = ir.RelOp(_JCC_RELOP_TRUE[state.ops[state.k + 1][2]], *state.pend_cmp)
             state.pend_cmp = None
+            state.pend_cmp_str = False
             state.direct_bool_gate = True
             state.direct_bool_logical = True
             state.k += 6

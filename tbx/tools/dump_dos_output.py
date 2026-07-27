@@ -8,9 +8,8 @@
 Runs the ORIGINAL corpus EXE on the oracle's emulated machine and records
 what it visibly did: the final text screen into tests/fixtures/dosout/
 <stem>.txt and every file the program created into <stem>.file.<NAME>.
-These are the behavior goldens the recompiled native binaries are compared
-against (test_c0.py) -- the c0 analog of the byte-exact rule. Capture once,
-commit; regeneration is only for intended semantic changes.
+These are behavior goldens for the optional native-recompiler branch. Capture
+once, commit; regeneration is only for intended semantic changes.
 
 Programs that never return to the DOS prompt within the budget (graphics
 modes lose the text screen; event loops wait forever) are reported and get

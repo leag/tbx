@@ -413,6 +413,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         if state.ax is None:
             raise ValueError(f"cmpm_ax without ax operand at {addr:#x}")
         state.pend_cmp = (state.loc(op[2]), state.ax)
+        state.pend_cmp_str = False
         state.ax = None
         state.k += 1
         return True

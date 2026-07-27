@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from tbx import c0, decode0, ir
+from tbx import decode0, ir
 
 _ROOT = Path(__file__).resolve().parents[2]
 
@@ -160,17 +160,7 @@ def test_string_array_parameter_element_passed_by_reference():
         assert "CALL SUB2(B$(A%))" in emit0.emit(prog), stem
 
 
-def test_whole_array_ir_spelling_and_c0_refusal():
+def test_whole_array_ir_spelling():
     arg = ir.ArrayRef("A", ())
     assert ir.unparse(arg) == "A()"
-    prog = [
-        ir.SubDef("SUB1", ("B",), ()),
-        ir.CallStmt("SUB1", (arg,)),
-        ir.End(),
-    ]
-    with pytest.raises(ValueError, match="whole-array SUB argument"):
-        c0.emit_c(prog)
-
-    prog = [ir.SubDef("SUB1", ("A(1)",), ()), ir.End()]
-    with pytest.raises(ValueError, match="whole-array SUB parameter"):
-        c0.emit_c(prog)
+    assert arg == ir.ArrayRef("A", ())

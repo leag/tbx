@@ -55,30 +55,7 @@ def main(argv=None) -> int:
         action="store_true",
         help="dump the canonical op stream instead of source",
     )
-    ap.add_argument(
-        "--emit-c",
-        action="store_true",
-        help="recompile to portable C for modern platforms "
-        "(build the output with `cc out.c -lm`)",
-    )
-    ap.add_argument(
-        "--no-runtime",
-        action="store_true",
-        help="with --emit-c: emit #include \"tb_runtime.h\" instead of "
-        "embedding the runtime; build against the runtime library "
-        "(`make` in tbx/c0_runtime/ gives libtbrt.a, then "
-        "`cc out.c -I<dir> -L<dir> -ltbrt -lm`)",
-    )
-    ap.add_argument(
-        "--sdl",
-        action="store_true",
-        help="with --emit-c: present graphics in an SDL2 window instead of "
-        "the PPM-at-exit surrogate; build the output with "
-        "`cc out.c -lm $(sdl2-config --cflags --libs)`",
-    )
     args = ap.parse_args(argv)
-    if (args.no_runtime or args.sdl) and not args.emit_c:
-        ap.error("--no-runtime/--sdl require --emit-c")
 
     try:
         exe = args.exe.read_bytes()
@@ -88,14 +65,6 @@ def main(argv=None) -> int:
     try:
         if args.ops:
             text = _dump_ops(exe)
-        elif args.emit_c:
-            from tbx import c0
-
-            text = c0.emit_c(
-                decode0.decode_user_code(exe),
-                standalone=not args.no_runtime,
-                sdl=args.sdl,
-            )
         else:
             prog = decode0.decode_user_code(exe)
             text = emit0.emit(prog)

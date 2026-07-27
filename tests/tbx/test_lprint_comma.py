@@ -2,7 +2,7 @@
 
 import pytest
 
-from tbx import c0, decode0, ir
+from tbx import decode0, ir
 from tbx.ir import unparse_stmt
 
 
@@ -34,13 +34,10 @@ def test_wild_lprint_comma_advances_to_later_gap(stem, next_gap):
         decode0.decode_user_code(data)
 
 
-def test_lprint_comma_render_and_c0():
+def test_lprint_comma_render():
     stmt = ir.Lprint(
         (ir.StrLit("A"), ir.Lit(2)),
         newline=False,
         commas=(1, 2, 1),
     )
     assert unparse_stmt(stmt) == 'LPRINT , "A",, 2,'
-    c_src = c0.emit_c([stmt, ir.End()])
-    # One leading zone, two between the items, and one trailing.
-    assert c_src.count("tb_zone();") == 4

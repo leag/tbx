@@ -91,6 +91,24 @@ def test_decode_string_nested_and_or_group():
     )
 
 
+def test_decode_int_string_nested_and_or_group():
+    from tbx import decode0, emit0
+
+    exe = open(
+        os.path.join(
+            _ROOT, "..", "wild", "probes", "probe_int_string_nested_and_or_block.exe"
+        ),
+        "rb",
+    ).read()
+    assert emit0.emit(decode0.decode_user_code(exe)) == (
+        "10 A% = 0\n"
+        '20 B$ = "B"\n'
+        '30 C$ = "C"\n'
+        '40 IF A% = 0 AND ((B$ = "B") OR (C$ = "C")) THEN PRINT "YES": PRINT "OK"\n'
+        "50 END\n"
+    )
+
+
 def test_decode_t1_and():
     from tbx import decode0
 

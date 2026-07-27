@@ -6288,6 +6288,18 @@ the `mov cx,bx; mov bx,ax; ...; or ax,bx; mov bx,cx; and ax,bx` spill
 protocol. This is a source-grouping/control-flow lift gap, not a scan or
 DGROUP issue.
 
+**Mixed outer leaf (2026-07-27):** `wild/probes/probe_int_string_nested_and_or_block.bas`
+is the integer-left sibling, `I% = 0 AND (B$ = "B" OR C$ = "C")`; it compiles
+and stops at `materialization template mismatch at 0x873e`. grdscn's next
+instance after the string-left fix has this exact `cmp ax,[mem]` outer term.
+
+**Five-term integer closure (2026-07-27):**
+`wild/probes/probe_int_or_of_and_groups_block.bas` reproduces grdscn's next
+gap, `unhandled jcc 74 at 0x873f`, with `I% > 10 OR (I% < 18 AND I% > 28)
+OR (I% < 36 AND I% > 46)`. A completed first AND-group's JZ transfers to the
+second group's final JNZ, preserving a true AX value as the outer OR's
+short-circuit result.
+
 Surfaced by this session's `imul_si` fix (`bab24ce`), which advanced
 grdscn.exe past its old blocker into new territory: `materialization
 template mismatch at 0xa8f9` (raised by `lift.py`'s `_lift_while`, whose

@@ -50,11 +50,6 @@ def test_decode_t1_using_tab_item():
         '10 A = 1\n20 B = 2\n'
         '30 PRINT USING "##"; A; TAB(5); B\n40 END\n'
     )
-    from tbx import c0
-
-    generated = c0.emit_c(prog, standalone=False)
-    assert "tb_tab(5);" in generated
-    assert "tb_pu_val(5);" not in generated
 
 
 def test_decode_t1_kill():
