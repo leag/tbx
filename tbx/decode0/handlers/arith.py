@@ -1386,7 +1386,7 @@ def fp_math(state: DecodeState, op, addr, kind) -> bool:
 
 
 def fp_bp(state: DecodeState, op, addr, kind) -> bool:
-    """Dispatch family: fld_bp, fstp_bp, fold_bp, fold_n_bp, fcomp_bp, fild_bp."""
+    """Dispatch family: BP-frame floating-point loads, folds and compares."""
     if kind == "fild_bp":  # LOCAL (or DEF FN param) int onto the FP stack,
         # e.g. for PRINT, or an int LOCAL/param promoted into a float result
         # expression (wild resume.exe / probe_d)
@@ -1401,6 +1401,7 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
         "fld_bp",
         "fstp_bp",
         "fold_bp",
+        "ifold_bp",
         "fold_n_bp",
         "fcomp_bp",
         "fld_bp64",
@@ -1447,7 +1448,7 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
             elif kind in ("fstp_bp", "fstp_bp64"):
                 state.put(ir.Assign(pvar, state.stack.pop()), state.cur)
                 state.cur = None
-            elif kind in ("fold_bp", "fold_bp64"):
+            elif kind in ("fold_bp", "fold_bp64", "ifold_bp"):
                 state.stack.append(_orient(op[2], pvar, state.stack.pop()))
             elif kind in ("fold_n_bp", "fold_n_bp64"):
                 top = state.stack.pop()
@@ -1463,7 +1464,9 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
         if state.fn_frame is not None:  # DEF FN body: param read / result / fold
             if bp_off != 0:  # bp+0 is the result cell, not a param
                 state.fn_frame["param_offs"].add(bp_off)
-            pvar = ir.Var(f"P{bp_off:02X}")
+                if kind == "ifold_bp":
+                    state.fn_frame["int_offs"].add(bp_off)
+            pvar = ir.Var(f"P{bp_off:02X}" + ("%" if kind == "ifold_bp" else ""))
             if kind == "fld_bp":
                 state.stack.append(pvar)
             elif kind == "fstp_bp":
@@ -1474,7 +1477,7 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
                     state.cur = None
                 else:  # single-line: inline result expr
                     state.fn_frame["result"] = state.stack.pop()
-            elif kind == "fold_bp":  # param as LEFT operand
+            elif kind in ("fold_bp", "ifold_bp"):  # param as LEFT operand
                 state.stack.append(_orient(op[2], pvar, state.stack.pop()))
             elif kind == "fold_n_bp":  # non-R: param is the RIGHT operand
                 top = state.stack.pop()

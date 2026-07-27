@@ -188,12 +188,15 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         and exe[p + 1] == 0xB8
         and exe[p + 4] == 0x03
         and exe[p + 5] == 0xC5
-        and exe[p + 6] == 0x50
+        and exe[p + 6] in (0x50, 0xCE)
+        and (exe[p + 6] == 0x50 or exe[p + 7] == 0x50)
     ):  # push ss; mov ax,off; add ax,bp; push ax: the LOCAL-frame sibling of
-        # arg_push_ref -- forwards a LOCAL var's address as a by-ref CALL
-        # arg (wild bmaster.exe/ifi.exe/resume.exe, probe q_localargcall)
+        # arg_push_ref -- forwards a LOCAL var's address as a by-ref CALL arg.
+        # With Overflow checking enabled, `INTO` sits between ADD and PUSH
+        # (wild CVT2TB.EXE); it has no source spelling and is handled here
+        # rather than leaving a fake instruction boundary in the call setup.
         ops.append((p, "arg_push_ref_bp", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 7
+        p += 8 if exe[p + 6] == 0xCE else 7
         return p
     if (
         b == 0x8C
@@ -1979,6 +1982,13 @@ def _scan_pass(
                 }.get((esc, reg))  # (PRINT of a local int, witnessed t1_local1)
                 if kind:
                     ops.append((p, pre + kind, bp_off))
+                    p = mo + 2
+                    continue
+                if esc == 0xDE and reg in _FOLD_OPS:  # FIADD/FIMUL/FISUB/FIDIV
+                    # m16 [bp+d8]:
+                    # integer BP-frame operand folded as the left side of a
+                    # floating expression (FIMUL: probe_fimul_bp; both: CVT2TB).
+                    ops.append((p, pre + "ifold_bp", _FOLD_OPS[reg], bp_off))
                     p = mo + 2
                     continue
                 if esc == 0xD8 and reg in _FOLD_OPS:

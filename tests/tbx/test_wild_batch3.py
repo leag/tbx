@@ -1485,7 +1485,7 @@ def test_wild_cvt2tb_opaque_helper_advances():
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(ValueError, match=r"unhandled byte 16 at 0xa2ff"):
+    with pytest.raises(ValueError, match=r"DGROUP layout not solvable \(runtime slot grid anchor\)"):
         decode0.decode_user_code(wild_hits_bytes("CVT2TB.EXE"))
 
 
