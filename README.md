@@ -46,10 +46,11 @@ uv run pytest
 
 ## How it works
 
-Turbo Basic compiles to a thin threaded style over a runtime library: floating
-point uses the x87 *emulation* encoding (INT 34h+n in place of ESC opcodes),
-statements dispatch through INT ECh/EDh/EEh sub-vectors, and control flow is
-raw x86 interleaved with the INT stream. The decoder:
+Turbo Basic compiles compact x86 templates interleaved with calls into its
+runtime library: floating point uses the x87 *emulation* encoding (INT 34h+n
+in place of ESC opcodes), statements dispatch through INT ECh/EDh/EEh
+sub-vectors, and control flow remains raw x86 between those runtime calls. The
+decoder:
 
 1. **Scans** the user-code region into a canonical op stream (`decode0.scan`),
    auto-detecting the compiler version from the program prologue and
