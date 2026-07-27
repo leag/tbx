@@ -105,7 +105,7 @@ def _loose_for_header(ops, k, stmts, vdisp):
         pass
     else:
         return None
-    if skip[2] != second_fld[0]:
+    if not _same_code_offset(skip[2], second_fld[0]):
         return None
     lim, var = first_fld[2], first_cmp[2]
     # The sign bit lives in the high word of the step cell: +2 for SINGLE,
@@ -183,7 +183,8 @@ def _lift_next(ops, k, fors, stmts, addrs, exit_folds) -> int:
     neg_start = i
     i = expect(i, [(fld_kind, lim), (cmp_kind, v), ("fstsw",)])
     i = jcc_body(i, 0x76, 0x77)
-    if ops[k + 2][2] != ops[neg_start][0]:  # e9 NEG must land on the second FLD
+    if not _same_code_offset(ops[k + 2][2], ops[neg_start][0]):
+        # e9 NEG must land on the second FLD
         raise ValueError("NEXT template: bad negative-path target")
     # the increment `v = v + step` was lifted as the preceding Assign -- fold it in
     inc = stmts[-1]
@@ -312,6 +313,16 @@ def _lift_var_step_next(ops, k, fors, stmts, addrs) -> int:
     return i
 
 
+def _same_code_offset(a: int, b: int) -> bool:
+    """Whether two file-linear addresses name the same 16-bit code offset.
+
+    The scanner retains a near branch's canonical first-window target. A later
+    procedure can spell the same IP 64 KiB above it, so boolean short-circuit
+    edges compare offsets rather than file positions (wild electron.exe).
+    """
+    return (a - b) % 0x10000 == 0
+
+
 def _match_bool_term1(ops, k):
     """ops[k] = movax FFFF with a pending compare. Detect a compound-IF first
     term: the materialization header whose closing jmp short-circuits INTO the
@@ -365,7 +376,7 @@ def _match_bool_term1(ops, k):
         ):
             if nxt3 == ["jcc", "incax", candidate[0]]:
                 tail_comb = ops[j + 3]
-                if sc == tail_comb[0] + cdelta:
+                if _same_code_offset(sc, tail_comb[0] + cdelta):
                     # term1's OWN polarity (comb[1]) is always how it joins
                     # whatever was found -- candidate only describes the
                     # SHAPE of that thing (a same-op cascade continuation,
@@ -409,11 +420,30 @@ def _match_bool_bare_term1(ops, k) -> bool:
             ops[j + 1][1] == "jcc"
             and ops[j + 2][1] == "incax"
             and ops[j + 3][1] == "andaxbx"
-            and sc == ops[j + 3][0] + 2
+            and _same_code_offset(sc, ops[j + 3][0] + 2)
         ):
             return True
         return False
     return False
+
+
+def _match_bool_outer_and_group(ops, k) -> bool:
+    """Outer ``A AND (B OR C)`` header, whose skip lands at final AND.
+
+    The right group owns the register-spill protocol rather than starting with
+    a directly-combined materialization (probe_string_nested_and_or_block;
+    wild grdscn.exe).
+    """
+    if [o[1] for o in ops[k : k + 6]] != ["movax", "jcc", "incax", "orax", "jcc", "jmp"]:
+        return False
+    m, gate, jmp = ops[k + 1], ops[k + 4], ops[k + 5]
+    return (
+        m[3] == ops[k + 3][0]
+        and m[2] in _JCC_RELOP_TRUE
+        and gate[2] == 0x75
+        and gate[3] == jmp[0] + 3
+        and any(o[1] == "andaxbx" and _same_code_offset(jmp[2], o[0] + 2) for o in ops[k + 6 : k + 36])
+    )
 
 
 _ARR_PARAM_SUFFIX_BY_TERMINAL = {
@@ -540,7 +570,7 @@ def _lift_bool_tail(
     if f_jcc[2] not in (0x74, 0x75) or f_jcc[3] != f_jmp[0] + jmp_len:
         raise ValueError(f"compound-IF tail: bad dispatch pair at {f_jcc[0]:#x}")
     delta = 2 if pb["op"] == "AND" else 0
-    if pb["sc"] != ops[k + 3][0] + delta:
+    if not _same_code_offset(pb["sc"], ops[k + 3][0] + delta):
         raise ValueError(
             f"compound-IF: short-circuit target mismatch at {ops[k][0]:#x}"
         )
@@ -574,7 +604,7 @@ def _lift_bool_tail(
         ):
             if (
                 nxt3 == ["jcc", "incax", candidate_comb]
-                and f_jmp[2] == ops[j + 3][0] + candidate_delta
+                and _same_code_offset(f_jmp[2], ops[j + 3][0] + candidate_delta)
             ):
                 if not seen_materialize:  # immediately-next term: flat fold
                     return (
@@ -682,7 +712,7 @@ def _lift_bool_do_tail(ops, k, pend_cmp, pb, stmts, addrs, put):
     m_jcc, back_jcc = ops[k + 1], ops[k + 4]
     if m_jcc[3] != ops[k + 3][0] or m_jcc[2] not in _JCC_RELOP_TRUE:
         return None
-    if pb["sc"] != ops[k + 3][0] + (2 if pb["op"] == "AND" else 0):
+    if not _same_code_offset(pb["sc"], ops[k + 3][0] + (2 if pb["op"] == "AND" else 0)):
         return None
     if back_jcc[2] not in (0x74, 0x75):
         return None

@@ -6278,6 +6278,16 @@ session can pick this up directly without re-deriving the shape.
 
 ### Gap: grdscn.exe's 3-term mixed short-circuit/combinator string-compare chain, NEW (2026-07-21)
 
+**Reproduced (2026-07-27):** authored oracle probe
+`wild/probes/probe_string_nested_and_or_block.bas` compiles under TB 1.1 and
+fails decoding with `materialization template mismatch at 0x8748`. Its
+`A$ = "A" AND (B$ = "B" OR C$ = "C")` block-IF has the same core sequence
+as grdscn: a first materialized string term short-circuits to the final
+`and ax,bx` closure, while the nested OR materializes its two terms through
+the `mov cx,bx; mov bx,ax; ...; or ax,bx; mov bx,cx; and ax,bx` spill
+protocol. This is a source-grouping/control-flow lift gap, not a scan or
+DGROUP issue.
+
 Surfaced by this session's `imul_si` fix (`bab24ce`), which advanced
 grdscn.exe past its old blocker into new territory: `materialization
 template mismatch at 0xa8f9` (raised by `lift.py`'s `_lift_while`, whose

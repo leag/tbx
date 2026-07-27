@@ -45,6 +45,7 @@ from tbx.decode0.lift import (
     _lift_next,
     _lift_var_step_next,
     _resolve_targets,
+    _same_code_offset,
 )
 from tbx.decode0.rename import _slot, _str_lit, canonical_rename
 
@@ -54,6 +55,36 @@ from tbx.decode0.rename import _slot, _str_lit, canonical_rename
 # the 30 words are ever written (handle, type/rank, esize, one bound pair),
 # the rest is dead padding sized for the worst case the runtime supports.
 _LOCAL_ARR_WORDS = 30
+
+
+def _logical_condition(value):
+    """Convert register-folded logical values back into condition IR.
+
+    Boolean groups use the integer register combiner, so their intermediate
+    representation is a ``BinOp`` even when every leaf is a relation.  At a
+    direct branch gate that value cannot be arithmetic: preserving the logical
+    tree here retains the source grouping and keeps numeric bitwise values out
+    of the conversion (probe_string_nested_and_or_block; wild grdscn.exe).
+    """
+    if isinstance(value, (ir.RelOp, ir.LogOp)):
+        return value
+    if isinstance(value, ir.Group):
+        inner = _logical_condition(value.inner)
+        return ir.Group(inner) if inner is not None else None
+    if isinstance(value, ir.BinOp) and value.op in ("=", "<>", "<", "<=", ">", ">="):
+        return ir.RelOp(value.op, value.lhs, value.rhs)
+    if isinstance(value, ir.BinOp) and value.op in ("AND", "OR"):
+        lhs, rhs = _logical_condition(value.lhs), _logical_condition(value.rhs)
+        if lhs is not None and rhs is not None:
+            # The integer fold has no node for the explicit outer parens in
+            # `(A OR B) AND C`; retain the grouping needed to regenerate its
+            # distinct short-circuit template (t1_nestedbool).
+            if value.op == "AND" and isinstance(value.lhs, ir.BinOp) and value.lhs.op == "OR":
+                lhs = ir.Group(lhs)
+            if value.op == "AND" and isinstance(value.rhs, ir.BinOp) and value.rhs.op == "OR":
+                rhs = ir.Group(rhs)
+            return ir.LogOp(value.op, lhs, rhs)
+    return None
 
 
 @dataclass
@@ -80,6 +111,7 @@ class DecodeState:
     dim_frame: dict[str, Any] | None = None
     discard_strs: Any = None
     direct_bool_gate: bool = False
+    direct_bool_logical: bool = False
     data_items: Any = None
     dos: Any = None
     ds: Any = None
@@ -2141,9 +2173,23 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             # Direct-GOTO sibling of the inline-body form: JZ skips the far
             # jump when the completed logical value is false, so the far jump
             # itself is the source THEN target (t1_nestedgoto; wild styled).
-            state.put(ir.IfGoto(state.ax, ("addr", nxt[2])), state.cur)
+            # The materialized outer term is positive evidence for a block
+            # IF here: the equivalent one-line direct boolean form has no
+            # movax-FFFF header (probe_string_nested_and_or_block).
+            if state.direct_bool_logical:
+                state.block_if_addrs.add(state.cur)
+            state.put(
+                ir.IfGoto(
+                    (_logical_condition(state.ax) or state.ax)
+                    if state.direct_bool_logical
+                    else state.ax,
+                    ("addr", nxt[2]),
+                ),
+                state.cur,
+            )
             state.ax = None
             state.direct_bool_gate = False
+            state.direct_bool_logical = False
             state.cur = None
             state.k += 2
             return
@@ -2169,7 +2215,9 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                     # logical value was parenthesized in source; without this
                     # outer Group TB chooses its short-circuit IF template.
                     "cond": (
-                        state.ax if state.direct_bool_gate else ir.Group(state.ax)
+                        _logical_condition(state.ax) or state.ax
+                        if state.direct_bool_logical
+                        else state.ax if state.direct_bool_gate else ir.Group(state.ax)
                     ),
                     "start": state.cur,
                     "idx": len(state.stmts),
@@ -2177,6 +2225,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             )
             state.ax = None
             state.direct_bool_gate = False
+            state.direct_bool_logical = False
             state.cur = None
             state.k += 2
             return
@@ -2243,8 +2292,18 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     elif kind in ("jmp", "jmpf"):
         t = op[2]
         frame = state.proc_frame if state.proc_frame is not None else state.fn_frame
-        cmp_at_t = next((o for o in state.ops if o[0] == t), None)
-        test_k = next((i for i, o in enumerate(state.ops) if o[0] == t), None)
+        # Near branch targets are canonicalized to their first 64 KiB window
+        # by the scanner.  A FOR test can live in a later file window, so use
+        # the matching IP nearest this branch (wild electron.exe).
+        test_k, cmp_at_t = min(
+            (
+                (i, candidate)
+                for i, candidate in enumerate(state.ops)
+                if _same_code_offset(candidate[0], t)
+            ),
+            key=lambda found: abs(found[1][0] - addr),
+            default=(None, None),
+        )
         if (
             test_k is not None
             and state.ops[test_k][1] == "fwait"

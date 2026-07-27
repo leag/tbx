@@ -22,6 +22,7 @@ from tbx.decode0.lift import (
     _arr_param_suffix_ahead,
     _lift_bool_do_tail,
     _lift_bool_tail,
+    _match_bool_outer_and_group,
     _lift_do_tail,
     _lift_while,
     _match_bool_term1,
@@ -662,6 +663,15 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
                     "start": state.cur,
                 }
             state.pend_cmp = None
+            state.k += 6
+            return True
+        if state.pend_cmp_str and _match_bool_outer_and_group(state.ops, state.k):
+            # The materialized left term of `A AND (B OR C)` is preserved
+            # through BX/CX while the right group uses its own spill fold.
+            state.ax = ir.RelOp(_JCC_RELOP_TRUE[state.ops[state.k + 1][2]], *state.pend_cmp)
+            state.pend_cmp = None
+            state.direct_bool_gate = True
+            state.direct_bool_logical = True
             state.k += 6
             return True
         nk = _lift_do_tail(

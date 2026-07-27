@@ -24,6 +24,73 @@ def _exe(name):
     return open(os.path.join(_ROOT, "fixtures", "corpus", name), "rb").read()
 
 
+def test_compound_first_term_matches_wrapped_near_target():
+    from tbx.decode0.lift import _loose_for_header, _match_bool_term1
+
+    # `electron.exe` reaches this ordinary AND template in a later 64 KiB
+    # code window.  The scanner's canonical near-jump target is the same
+    # 16-bit offset in the first window, so this comparison must be modular.
+    ops = [
+        (0x1EEB7, "movax", 0xFFFF),
+        (0x1EEBA, "jcc", 0x72, 0x1EEBD),
+        (0x1EEBC, "incax"),
+        (0x1EEBD, "orax"),
+        (0x1EEC1, "jcc", 0x75, 0x1EEC6),
+        (0x1EEC3, "jmp", 0xEEDA),
+        (0x1EED2, "movax", 0xFFFF),
+        (0x1EED5, "jcc", 0x72, 0x1EED8),
+        (0x1EED7, "incax"),
+        (0x1EED8, "andaxbx"),
+    ]
+    assert _match_bool_term1(ops, 0) == ("AND", False)
+
+    # The same program's SINGLE FOR header jumps to its negative comparison
+    # branch at the canonical offset; its scanned second branch is 64 KiB
+    # later.  This remains the distinctive loose-FOR template.
+    for_ops = [
+        (0x1DB8D, "testw", 978, 0x8000),
+        (0x1DB95, "jcc", 0x74, 0x1DB9A),
+        (0x1DB97, "jmp", 0xDBAD),
+        (0x1DB9A, "fld", 980),
+        (0x1DB9F, "fcomp", 996),
+        (0x1DBA4, "fstsw"),
+        (0x1DBA8, "jcc", 0x73, 0x1DB5E),
+        (0x1DBAA, "jmp", 0xDBBD),
+        (0x1DBAD, "fld", 980),
+        (0x1DBB2, "fcomp", 996),
+        (0x1DBB7, "fstsw"),
+        (0x1DBBB, "jcc", 0x76, 0x1DB5E),
+    ]
+    stmts = [
+        ir.Assign(ir.Var("V03D4"), ir.Lit(0)),
+        ir.Assign(ir.Var("V03D0"), ir.Lit(1)),
+        ir.Assign(ir.Var("V03E4"), ir.Lit(2)),
+    ]
+    assert _loose_for_header(for_ops, 0, stmts, lambda v: int(v.name[1:], 16)) == (
+        980,
+        976,
+        996,
+    )
+
+
+def test_decode_string_nested_and_or_group():
+    from tbx import decode0, emit0
+
+    exe = open(
+        os.path.join(
+            _ROOT, "..", "wild", "probes", "probe_string_nested_and_or_block.exe"
+        ),
+        "rb",
+    ).read()
+    assert emit0.emit(decode0.decode_user_code(exe)) == (
+        '10 A$ = "A"\n'
+        '20 B$ = "B"\n'
+        '30 C$ = "C"\n'
+        '40 IF A$ = "A" AND ((B$ = "B") OR (C$ = "C")) THEN PRINT "YES": PRINT "OK"\n'
+        "50 END\n"
+    )
+
+
 def test_decode_t1_and():
     from tbx import decode0
 
