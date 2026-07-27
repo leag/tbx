@@ -62,6 +62,25 @@ def corpus_fingerprint() -> str:
     return digest.hexdigest()
 
 
+def roundtrip_category(original: bytes, rebuilt: bytes) -> str:
+    """Classify a byte mismatch without masking an actual source/code drift."""
+    if original == rebuilt:
+        return "exact"
+    # MZ's last-page byte count can change when padding differs.  Ignore its
+    # two-byte header field only when every payload difference is the known
+    # runtime-revision 0x1A/zero filler convention (wild autonum.exe).
+    payload = [
+        (a, b)
+        for i, (a, b) in enumerate(zip(original, rebuilt))
+        if a != b and i not in (2, 3)
+    ]
+    if len(original) == len(rebuilt) and payload and all({a, b} == {0, 0x1A} for a, b in payload):
+        return "filler"
+    if len(original) == len(rebuilt) and any({a, b} == {0, 0x1A} for a, b in payload):
+        return "filler-plus-metadata"
+    return "code-or-metadata"
+
+
 def try_exe(name: str, data: bytes, outdir: Path | None, roundtrip: bool = False):
     global nontb, nexe
     if len(data) < 64 or data[:2] not in (b"MZ", b"ZM"):
@@ -84,10 +103,11 @@ def try_exe(name: str, data: bytes, outdir: Path | None, roundtrip: bool = False
                 try:
                     rebuilt = oracle.compile_bas(bas, dialect=dia.name)
                     exact = rebuilt == data
-                    roundtrips.append((name, exact, len(rebuilt) - len(data)))
-                    print(f"  ROUNDTRIP  {'EXACT' if exact else f'DIFF {len(rebuilt) - len(data):+d}'}")
+                    category = roundtrip_category(data, rebuilt)
+                    roundtrips.append((name, exact, len(rebuilt) - len(data), category))
+                    print(f"  ROUNDTRIP  {'EXACT' if exact else f'{category} {len(rebuilt) - len(data):+d}'}")
                 except Exception as e:
-                    roundtrips.append((name, None, None))
+                    roundtrips.append((name, None, None, "compile-fail"))
                     print(f"  ROUNDTRIP  COMPILE-FAIL {str(e)[:80]}")
     except Exception as e:
         fails.append((name, dia.name, str(e)))
@@ -129,10 +149,13 @@ def main():
         outdir = Path(sys.argv[sys.argv.index("--copy-hits") + 1])
     report = None
     roundtrip = "--roundtrip" in sys.argv
+    only = sys.argv[sys.argv.index("--only") + 1] if "--only" in sys.argv else None
     if "--report" in sys.argv:
         report = Path(sys.argv[sys.argv.index("--report") + 1])
     for p in sorted(root.rglob("*")):
         if not p.is_file():
+            continue
+        if only and p.name.lower() != only.lower():
             continue
         low = p.suffix.lower()
         if low == ".zip":
@@ -144,8 +167,8 @@ def main():
     print(f"\n{nexe} EXEs scanned: {len(hits)} TB decode-ok, "
           f"{len(fails)} TB-but-fail, {nontb} not Turbo Basic")
     if roundtrip:
-        exact = sum(ok is True for _, ok, _ in roundtrips)
-        attempted = sum(ok is not None for _, ok, _ in roundtrips)
+        exact = sum(ok is True for _, ok, _, _ in roundtrips)
+        attempted = sum(ok is not None for _, ok, _, _ in roundtrips)
         print(f"Round trips: {exact}/{attempted} byte-exact ({len(roundtrips) - attempted} compile failures)")
     if report:
         groups: dict[str, list[str]] = {}
@@ -167,8 +190,8 @@ def main():
                 for name, dialect, statements in hits
             ],
             "roundtrips": [
-                {"name": name, "exact": exact, "size_delta": delta}
-                for name, exact, delta in roundtrips
+                {"name": name, "exact": exact, "size_delta": delta, "category": category}
+                for name, exact, delta, category in roundtrips
             ],
             "failures": [
                 {

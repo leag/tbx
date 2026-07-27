@@ -40,6 +40,7 @@ from tbx.ir.expr_nodes import (
     SingleLit,
     Stmt,
     StrLit,
+    Template,
     Unknown,
     Var,
     VarSeg,

@@ -28,6 +28,7 @@ from tbx.ir.expr_nodes import (
     RelOp,
     SingleLit,
     StrLit,
+    Template,
     Unknown,
     Var,
     VarSeg,
@@ -144,6 +145,17 @@ from tbx.ir.stmt_nodes import (
 
 
 def unparse(e) -> str:
+    if isinstance(e, Template):
+        if e.kind == "subtraction":
+            if not (
+                isinstance(e.inner, BinOp)
+                and e.inner.op == "+"
+                and isinstance(e.inner.rhs, Group)
+                and isinstance(e.inner.rhs.inner, Neg)
+            ):
+                raise ValueError("bad subtraction template")
+            return f"{unparse(e.inner.lhs)} - {unparse(e.inner.rhs.inner.operand)}"
+        raise ValueError(f"unknown expression template {e.kind!r}")
     if isinstance(e, Lit):
         if isinstance(e.value, float):
             return _fmt_float(e.value)
@@ -200,9 +212,23 @@ def unparse(e) -> str:
         p = _PREC[e.op]
         lhs_s = unparse(e.lhs)
         rhs_s = unparse(e.rhs)
-        if isinstance(e.lhs, BinOp) and _PREC[e.lhs.op] < p:
+        lhs_op = (
+            e.lhs.op
+            if isinstance(e.lhs, BinOp)
+            else "-"
+            if isinstance(e.lhs, Template) and e.lhs.kind == "subtraction"
+            else None
+        )
+        rhs_op = (
+            e.rhs.op
+            if isinstance(e.rhs, BinOp)
+            else "-"
+            if isinstance(e.rhs, Template) and e.rhs.kind == "subtraction"
+            else None
+        )
+        if lhs_op is not None and _PREC[lhs_op] < p:
             lhs_s = f"({lhs_s})"
-        if isinstance(e.rhs, BinOp) and _PREC[e.rhs.op] <= p:
+        if rhs_op is not None and _PREC[rhs_op] <= p:
             rhs_s = f"({rhs_s})"
         return f"{lhs_s} {e.op} {rhs_s}"
     if isinstance(e, Neg):

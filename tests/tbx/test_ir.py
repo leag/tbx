@@ -14,6 +14,14 @@ def test_unparse_roundtrips_node_shapes():
     assert ir.unparse(e2) == "(A + 1) * B", ir.unparse(e2)
     e3 = ir.BinOp("+", ir.Var("A"), ir.BinOp("+", ir.Var("B"), ir.Var("C")))
     assert ir.unparse(e3) == "A + (B + C)", ir.unparse(e3)
+    # A calibrated compiler-template wrapper preserves syntax that is
+    # algebraically equivalent but byte-distinct in Turbo Basic.
+    sub = ir.Template(
+        "subtraction",
+        ir.BinOp("+", ir.Var("A%"), ir.Group(ir.Neg(ir.Var("B%")))),
+    )
+    assert ir.unparse(sub) == "A% - B%"
+    assert ir.unparse(ir.BinOp("\\", sub, ir.Lit(2))) == "(A% - B%) \\ 2"
     # array ref: no space after commas
     a = ir.ArrayRef("NU", (ir.Lit(7), ir.Var("V_0AE0")))
     assert ir.unparse(a) == "NU(7,V_0AE0)", ir.unparse(a)

@@ -58,6 +58,8 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.Var(name(e.name))
         if isinstance(e, ir.BinOp):
             return ir.BinOp(e.op, walk(e.lhs), walk(e.rhs))
+        if isinstance(e, ir.Template):
+            return ir.Template(e.kind, walk(e.inner))
         if isinstance(e, ir.Neg):
             return ir.Neg(walk(e.operand))
         if isinstance(e, ir.Not):

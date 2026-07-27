@@ -3833,7 +3833,16 @@ def decode_user_code(exe: bytes) -> list[Any]:
             elif base == "addax_si":  # add ax, es:[si]: arithmetic fold of a
                 argvar = ir.Var(f"P{state.pend_arg:02X}%")  # by-ref INT param
                 state.proc_int_offs.add(state.pend_arg)  # (t1_local2)
-                state.ax = ir.BinOp("+", argvar, _rgrp("+", state.ax))
+                nx = state.ops[state.k + 1] if state.k + 1 < len(state.ops) else None
+                expr = ir.BinOp("+", argvar, _rgrp("+", state.ax))
+                if isinstance(state.ax, ir.Neg) and nx is not None and nx[1] == "cwd":
+                    # `NEG AX; ADD AX,ES:[SI]; CWD; IDIV` is TB's source
+                    # `param - expr` template.  Keep the machine-derived
+                    # syntax choice in IR: t1_iftaillast's `...; ADD` sibling
+                    # remains an actual addition of a negative.
+                    state.ax = ir.Template("subtraction", expr)
+                else:
+                    state.ax = expr
             elif base == "subax_si":  # sub ax, es:[si]: subtractive fold of a
                 argvar = ir.Var(f"P{state.pend_arg:02X}%")  # by-ref INT param,
                 state.proc_int_offs.add(state.pend_arg)  # mem on the right
