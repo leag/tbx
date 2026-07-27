@@ -125,46 +125,34 @@ def test_try_inline_rescue():
         assert decode0._try_inline_rescue(bytes(exe2), ops2) is None
         assert ops2 == [(7, "jmp", 20)]  # unchanged
 
-    # One fully fingerprinted framed library helper is intentionally retained
-    # as coverage-only opaque IR. Exact full-body matching keeps the CVT2TB
-    # false-positive guard intact for every other framed procedure.
+    # Exact framed helpers are classified before normal scanning, rather than
+    # being smuggled through this failure-driven INLINE rescue.
     helper = decode0._OPAQUE_HELPER_BODY
-    exe3 = b"\x00" * 10 + helper + b"\x00"
-    ops3 = [(7, "jmp", 10 + len(helper)), (10, "proc_enter")]
-    assert decode0._try_inline_rescue(exe3, ops3) == 10 + len(helper)
-    assert ops3 == [
-        (7, "jmp", 10 + len(helper)),
-        (
-            10,
-            "opaque_helper",
-            helper,
-            (0x1E, 0x1A, 0x16, 0x12, 0x0E, 0x0A, 0x06),
-        ),
-    ]
+    from tbx.decode0 import opaque_helpers
+    from tbx.decode0.opaque import find_opaque_helpers
 
-    helper2 = decode0._OPAQUE_HELPER_BODY_2
-    exe4 = b"\x00" * 10 + helper2 + b"\x00"
-    ops4 = [(7, "jmp", 10 + len(helper2)), (10, "proc_enter")]
-    assert decode0._try_inline_rescue(bytes(exe4), ops4) == 10 + len(helper2)
-    assert ops4[1][1] == "opaque_helper" and ops4[1][2] == helper2
+    image = b"\x00" * 7 + b"\xe9" + len(helper).to_bytes(2, "little") + helper + b"\x00"
+    spec = opaque_helpers.OpaqueHelperSpec(helper, (0x1E,))
+    assert find_opaque_helpers(image, 0, (spec,)) == {
+        10: (10 + len(helper), helper, (0x1E,))
+    }
 
     # Turbo Basic 1.0 omits the INT3 immediately before RETF in graphics
     # helper variants 3-8 (wild bmaster/ifi). Each exact v1.0 body remains
     # eligible for the same full-fingerprint rescue.
-    from tbx.decode0 import scan
-
     for helper10 in (
-        scan._OPAQUE_HELPER_BODY_3_V10,
-        scan._OPAQUE_HELPER_BODY_4_V10,
-        scan._OPAQUE_HELPER_BODY_5_V10,
-        scan._OPAQUE_HELPER_BODY_6_V10,
-        scan._OPAQUE_HELPER_BODY_7_V10,
-        scan._OPAQUE_HELPER_BODY_8_V10,
+        opaque_helpers._OPAQUE_HELPER_BODY_3_V10,
+        opaque_helpers._OPAQUE_HELPER_BODY_4_V10,
+        opaque_helpers._OPAQUE_HELPER_BODY_5_V10,
+        opaque_helpers._OPAQUE_HELPER_BODY_6_V10,
+        opaque_helpers._OPAQUE_HELPER_BODY_7_V10,
+        opaque_helpers._OPAQUE_HELPER_BODY_8_V10,
     ):
-        image = b"\x00" * 10 + helper10 + b"\x00"
-        helper_ops = [(7, "jmp", 10 + len(helper10)), (10, "proc_enter")]
-        assert decode0._try_inline_rescue(image, helper_ops) == 10 + len(helper10)
-        assert helper_ops[1][1:3] == ("opaque_helper", helper10)
+        image = b"\x00" * 7 + b"\xe9" + len(helper10).to_bytes(2, "little") + helper10
+        spec = opaque_helpers.OpaqueHelperSpec(helper10, (0x1E,))
+        assert find_opaque_helpers(image, 0, (spec,)) == {
+            10: (10 + len(helper10), helper10, (0x1E,))
+        }
 
 
 def test_scan_nop_padding():
