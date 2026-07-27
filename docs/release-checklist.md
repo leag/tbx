@@ -4,8 +4,8 @@ Per-PR CI (ruff and pytest) is necessary but not
 sufficient: the goldens it sweeps encode *past* oracle verifications, and
 oracle runs are minutes-per-fixture, so they deliberately stay out of CI.
 Before tagging a release, re-verify a sample against the REAL toolchain on
-a machine with the oracle (`TBX_ORACLE`, see `tbx/tools/oracle.py`; the
-default location is `../frame/oracle`).
+a machine with the vendored v86 oracle (see `vendor/turbo_basic_oracle/`).
+Use `TBX_ORACLE` only to select another compatible v86 harness.
 
 ## 1. Byte-exact round trip (the decompiler's contract)
 

@@ -25,9 +25,8 @@ python tbx/tools/dump_user_code.py                    # tests/fixtures/usercode/
 uv run python tests/tbx/test_ir_snapshot.py --write   # tests/fixtures/ir_snapshot.txt
 ```
 
-With the external toolchain oracle available (`TBX_ORACLE`, see
-`tbx/tools/oracle.py` — a headless real-TB-compiler automation from a sister
-project; needs node + mtools):
+With the vendored v86 toolchain oracle available (optionally selected with
+`TBX_ORACLE`, see `tbx/tools/oracle.py`; needs node + mtools):
 
 ```sh
 uv run python -m tbx.tools.verify_fixture STEM        # byte-exact round trip

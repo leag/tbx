@@ -22,7 +22,7 @@ Why a minimal `PRINT "HI"` program would not trip this but `fp.bas` does: Turbo 
 ## Classification
 
 - [ ] (a) JIT-only bug — **RULED OUT.** `instr_DF_4_mem` is unimplemented in v86's CPU *core* (`fpu.rs`), not its JIT; it affects both JIT and interpreter. (The debug wasm asserts in the shared instruction handler.)
-- [x] (b) **Unimplemented decoder opcode** — `DF /4` (FBLD) is a real x87 instruction DOSBox executes; v86 stubs it with `fpu_unimpl`.
+- [x] (b) **Unimplemented decoder opcode** — `DF /4` (FBLD) is a real x87 instruction used by Turbo Basic; stock v86 stubs it with `fpu_unimpl`.
 - [ ] (c) FPU/environment config — N/A; no config knob enables an unimplemented instruction.
 - [ ] (d) Fixed upstream — **CHECKED, INSUFFICIENT.** Upstream `master` (npm latest `0.5.360`) now implements **FBSTP** (`fpu_fbstp`, DF /6) but **FBLD (DF /4) is still missing**. A version bump alone does not fix the observed fault.
 
