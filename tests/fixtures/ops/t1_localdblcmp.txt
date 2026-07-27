@@ -1,0 +1,27 @@
+# t1_localdblcmp dialect=1.1 start=08700
+08703:jmp:34638
+08706:proc_enter
+08709:local_init:4:6
+0871D:fld64:302
+08722:fstp_bp64:6
+08728:fld1
+0872B:fcomp_bp64:6
+0872F:fstsw
+08733:jcc:114:34616
+08735:jmp:34625
+08738:movsi:296
+0873B:rt:156
+0873D:rt:190
+0873F:rt:184
+08741:movsi:292
+08744:rt:156
+08746:rt:190
+08748:rt:184
+0874A:proc_ret:8
+0874E:sub_sp:8
+08751:far_call:34566
+08756:end
+08759:epilogue
+# commits
+08726
+08731

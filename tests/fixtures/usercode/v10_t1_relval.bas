@@ -1,0 +1,5 @@
+10 INPUT A
+20 B = 2
+30 C = (A > 0) * 3 + B
+40 PRINT C
+50 END

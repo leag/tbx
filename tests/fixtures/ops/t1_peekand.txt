@@ -1,0 +1,34 @@
+# t1_peekand dialect=1.1 start=08700
+08703:fild:320
+08708:fn_ax:PEEK
+0870B:orax
+0870F:jcc:117:34580
+08711:jmp:34601
+08714:movbxax
+08716:movax:48
+08719:cmpax_m:318
+0871D:movrr:ax:bx
+0871F:movbxax
+08721:movax:65535
+08724:jcc:116:34599
+08726:incax
+08727:andaxbx
+08729:jcc:117:34606
+0872B:jmp:34619
+0872E:movsi:312
+08731:rt:156
+08733:movsi:288
+08736:strassign
+08738:jmp:34629
+0873B:movsi:308
+0873E:rt:156
+08740:movsi:288
+08743:strassign
+08745:movsi:288
+08748:rt:156
+0874A:rt:190
+0874C:rt:184
+0874E:end
+08751:epilogue
+# commits
+0870D

@@ -1,0 +1,10 @@
+# v10_t1_loccurs dialect=1.0 start=07160
+07163:movax:1
+07166:cursor
+07168:movax:6
+0716B:movbxax
+0716D:movax:7
+07170:cursor_shape
+07172:end
+07175:epilogue
+# commits

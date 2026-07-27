@@ -1,0 +1,5 @@
+10 DIM A$(20)
+20 A$(3) = "HELLO"
+30 I = 3
+40 PRINT A$(I)
+50 END

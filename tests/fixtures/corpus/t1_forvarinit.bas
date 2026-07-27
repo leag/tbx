@@ -1,0 +1,5 @@
+10 N% = 5
+20 FOR I% = N% TO 23
+30 PRINT I%
+40 NEXT I%
+50 END

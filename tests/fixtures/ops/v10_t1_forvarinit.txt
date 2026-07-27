@@ -1,0 +1,15 @@
+# v10_t1_forvarinit dialect=1.0 start=070B0
+070B3:movm_imm:294:5
+070B9:movax_m:294
+070BD:movm_ax:292
+070C1:jmp:28883
+070C4:fild:292
+070C9:rt:187
+070CB:rt:184
+070CF:inc_m:292
+070D3:cmp_mi8:292:23
+070D8:jcc:126:28868
+070DA:end
+070DD:epilogue
+# commits
+070CD

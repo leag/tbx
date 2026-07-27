@@ -1,0 +1,4 @@
+10 A% = ERR: B% = ERL
+20 DATA 1: DATA 2,3,4
+30 A% = 2
+40 END

@@ -1,0 +1,6 @@
+10 A$ = "AB"
+20 B = 1.5
+30 LPRINT A$;
+40 LPRINT USING "##.##"; B;
+50 LPRINT A$
+60 END

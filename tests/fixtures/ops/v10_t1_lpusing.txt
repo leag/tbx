@@ -1,0 +1,25 @@
+# v10_t1_lpusing dialect=1.0 start=075E0
+075E3:movsi:312
+075E6:rt:156
+075E8:movsi:292
+075EB:strassign
+075ED:fld64:316
+075F2:fstp:288
+075F9:movsi:292
+075FC:rt:156
+075FE:rt:191
+07600:movsi:308
+07603:rt:156
+07605:rt:202
+07607:fld:288
+0760C:rt:203
+0760E:rt:191
+07612:movsi:292
+07615:rt:156
+07617:rt:191
+07619:rt:185
+0761B:end
+0761E:epilogue
+# commits
+075F7
+07610

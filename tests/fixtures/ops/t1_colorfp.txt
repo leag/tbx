@@ -1,0 +1,22 @@
+# t1_colorfp dialect=1.1 start=08800
+08803:fld64:316
+08808:fstp:292
+0880F:fld64:308
+08814:fstp:288
+0881B:fld:292
+08820:fistp:44
+08825:fwait
+08827:movaxmem:44
+0882A:movm_ax:136
+0882E:fld:288
+08833:fistp:44
+08838:fwait
+0883A:movaxmem:44
+0883D:movm_ax:148
+08841:color_commit:6
+08847:end
+0884A:epilogue
+# commits
+0880D
+08819
+08845

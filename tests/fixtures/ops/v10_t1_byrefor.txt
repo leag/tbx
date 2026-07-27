@@ -1,0 +1,24 @@
+# v10_t1_byrefor dialect=1.0 start=070B0
+070B3:jmp:28903
+070B6:proc_enter
+070B9:local_init:1:10
+070CD:movax:5
+070D0:arg_ref:6
+070D3:far_orax_si
+070D6:movm_ax_bp:10
+070D9:fild_bp:10
+070DD:rt:187
+070DF:rt:184
+070E3:proc_ret:6
+070E7:movm_imm:288:7
+070ED:sub_sp:2
+070F0:arg_push_ref:288
+070F5:far_call:28854
+070FA:fild:288
+070FF:rt:187
+07101:rt:184
+07105:end
+07108:epilogue
+# commits
+070E1
+07103

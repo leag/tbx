@@ -1,0 +1,11 @@
+10 N = 4
+20 DIM B(2, N, 3)
+30 FOR I = 0 TO 2
+40 FOR J = 0 TO 4
+50 FOR K = 0 TO 3
+60 B(I, J, K) = I * 100 + J * 10 + K
+70 NEXT K
+80 NEXT J
+90 NEXT I
+100 PRINT B(2, 4, 3); B(1, 2, 1); B(0, 0, 0)
+110 END

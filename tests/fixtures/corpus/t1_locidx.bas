@@ -1,0 +1,9 @@
+10 SUB SUB1
+20   LOCAL A%
+30   FOR A% = 1 TO 5
+40     B$(A%) = "X"
+50   NEXT A%
+60   PRINT B$(3)
+70 END SUB
+80 CALL SUB1
+90 END

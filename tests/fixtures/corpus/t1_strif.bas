@@ -1,0 +1,5 @@
+10 A$ = "AB"
+20 B$ = "AB"
+30 IF A$ = B$ THEN PRINT "EQ"
+40 IF A$ < "M" THEN PRINT "LT"
+50 END

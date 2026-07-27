@@ -1,0 +1,15 @@
+# t1_subgsb dialect=1.1 start=08700
+08703:jmp:34587
+08706:proc_enter
+08709:call:34575
+0870C:jmp:34585
+0870F:movsi:292
+08712:rt:156
+08714:rt:190
+08716:rt:184
+08718:ret
+08719:proc_ret:0
+0871B:far_call:34566
+08720:end
+08723:epilogue
+# commits

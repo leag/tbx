@@ -1,0 +1,18 @@
+# v10_t1_strgodo dialect=1.0 start=071E0
+071E3:input:304:0
+071EA:read_str
+071ED:movsi:288
+071F0:strassign
+071F2:movsi:312
+071F5:rt:156
+071F7:rt:190
+071F9:rt:184
+071FB:movsi:288
+071FE:rt:156
+07200:movsi:308
+07203:rt:156
+07205:strcmp
+07207:jcc:116:29155
+07209:end
+0720C:epilogue
+# commits

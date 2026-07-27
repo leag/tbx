@@ -1,0 +1,30 @@
+# v10_t1_arrfwd dialect=1.0 start=070B0
+070B3:fild:356
+070B8:fstp:372
+070BF:movsi:288
+070C2:arg_push_array
+070C4:far_call:28879
+070C9:end
+070CC:jmp:28907
+070CF:proc_enter
+070D2:arg_push_array_bp:6
+070DD:movdx:154
+070E0:movdsdx
+070E2:far_call:28910
+070E7:proc_ret:60
+070EB:jmp:28942
+070EE:proc_enter
+070F1:movax:1
+070F4:subax_bp:14
+070F7:movsiax
+070F9:shlsi
+070FB:shlsi
+070FD:moves_bp:6
+07100:far_fld_si
+07104:rt:187
+07106:rt:184
+0710A:proc_ret:60
+0710E:epilogue
+# commits
+070BD
+07108

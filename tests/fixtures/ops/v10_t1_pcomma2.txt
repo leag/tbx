@@ -1,0 +1,36 @@
+# v10_t1_pcomma2 dialect=1.0 start=070B0
+070B3:movsi:312
+070B6:rt:156
+070B8:movsi:292
+070BB:strassign
+070BD:movsi:308
+070C0:rt:156
+070C2:movsi:288
+070C5:strassign
+070C7:movsi:292
+070CA:rt:156
+070CC:rt:190
+070CE:rt:193
+070D0:rt:193
+070D2:movsi:288
+070D5:rt:156
+070D7:rt:190
+070D9:rt:184
+070DB:rt:193
+070DD:rt:193
+070DF:movsi:292
+070E2:rt:156
+070E4:rt:190
+070E6:rt:184
+070E8:movsi:292
+070EB:rt:156
+070ED:rt:190
+070EF:rt:193
+070F1:rt:193
+070F3:movsi:288
+070F6:rt:156
+070F8:rt:190
+070FA:rt:184
+070FC:end
+070FF:epilogue
+# commits

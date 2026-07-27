@@ -1,0 +1,21 @@
+# t1_argrefonly dialect=1.1 start=08700
+08703:far_call:34574
+08708:end
+0870B:jmp:34589
+0870E:proc_enter
+08711:arg_push_ref:288
+08716:far_call:34592
+0871B:proc_ret:0
+0871D:jmp:34621
+08720:proc_enter
+08723:movax:1
+08726:arg_ref:6
+08729:far_addm_ax_si
+0872C:arg_ref:6
+0872F:far_fild_si
+08733:rt:187
+08735:rt:184
+08739:proc_ret:4
+0873D:epilogue
+# commits
+08737

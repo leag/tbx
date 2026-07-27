@@ -1,0 +1,17 @@
+# t1_ioctlfn dialect=1.1 start=08C70
+08C73:movm_imm:96:1
+08C79:movsi:308
+08C7C:rt:156
+08C7E:movsi:312
+08C81:rt:156
+08C83:movax:128
+08C86:open
+08C89:movax:1
+08C8C:strfn:IOCTL$
+08C8F:movsi:288
+08C92:strassign
+08C94:movax:1
+08C97:close
+08C9A:end
+08C9D:epilogue
+# commits

@@ -1,0 +1,13 @@
+# t1_subgoto dialect=1.1 start=08700
+08703:jmp:34574
+08706:proc_enter
+08709:jmp:34579
+0870C:proc_ret:0
+0870E:far_call:34566
+08713:movsi:292
+08716:rt:156
+08718:rt:190
+0871A:rt:184
+0871C:end
+0871F:epilogue
+# commits

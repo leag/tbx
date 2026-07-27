@@ -1,0 +1,35 @@
+# t1_lineinf dialect=1.1 start=08DC0
+08DC3:movsi:312
+08DC6:rt:156
+08DC8:movm_imm:46:20225
+08DCE:shortstr
+08DD0:movm_imm:96:1
+08DD6:movax:128
+08DD9:open
+08DDC:movm_imm:96:1
+08DE2:movsi:308
+08DE5:rt:156
+08DE7:rt:192
+08DE9:rt:186
+08DEB:movax:1
+08DEE:close
+08DF1:movsi:312
+08DF4:rt:156
+08DF6:movm_imm:46:18689
+08DFC:shortstr
+08DFE:movm_imm:96:1
+08E04:movax:128
+08E07:open
+08E0A:movm_imm:96:1
+08E10:line_input_file
+08E13:movsi:288
+08E16:strassign
+08E18:movsi:288
+08E1B:rt:156
+08E1D:rt:190
+08E1F:rt:184
+08E21:movax:1
+08E24:close
+08E27:end
+08E2A:epilogue
+# commits

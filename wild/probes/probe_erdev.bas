@@ -1,0 +1,2 @@
+10 A$ = ERDEV$
+20 PRINT A$

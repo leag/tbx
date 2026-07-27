@@ -1,0 +1,5 @@
+10 A% = 2
+20 FOR B% = 1 TO 10 STEP A%
+30 PRINT B%
+40 NEXT B%
+50 END

@@ -1,0 +1,13 @@
+10 DIM V0$(3)
+20 V0$(1) = "HI"
+30 A% = 1
+40 CALL SUB1(V0$())
+50 END
+60 SUB SUB1(B$(1))
+  SHARED A%
+  CALL SUB2(B$())
+  PRINT B$(A%)
+END SUB
+70 SUB SUB2(B$(1))
+  PRINT B$(1)
+END SUB

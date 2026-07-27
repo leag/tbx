@@ -1,0 +1,16 @@
+10 DIM V0%(10)
+20 DIM V1%(5,5)
+30 FOR A% = 1 TO 10
+40 V0%(A%) = A%
+50 NEXT A%
+60 FOR B% = 1 TO 5
+70 FOR C% = 1 TO 5
+80 V1%(B%,C%) = B% + C%
+90 NEXT C%
+100 NEXT B%
+110 D% = 0
+120 FOR A% = 1 TO 5
+130 D% = D% + V0%(A%) * V1%(A%,A%)
+140 NEXT A%
+150 PRINT D%
+160 END

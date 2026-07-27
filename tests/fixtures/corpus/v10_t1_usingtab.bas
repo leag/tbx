@@ -1,0 +1,2 @@
+10 A=1: B=2: PRINT USING "##"; A; TAB(5); B
+20 END

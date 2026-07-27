@@ -11,9 +11,17 @@ appear can be trusted to recompile byte-identically.
 
 import argparse
 import sys
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from tbx import decode0, emit0
+
+
+def _version() -> str:
+    try:
+        return version("tbx")
+    except PackageNotFoundError:  # running from a source tree without install
+        return "unknown"
 
 
 def _dump_ops(exe: bytes) -> str:
@@ -33,6 +41,7 @@ def main(argv=None) -> int:
         prog="tbx",
         description="Byte-exact decompiler for Borland Turbo Basic 1.0/1.1 DOS EXEs.",
     )
+    ap.add_argument("--version", action="version", version=f"%(prog)s {_version()}")
     ap.add_argument("exe", type=Path, help="compiled Turbo Basic .EXE")
     ap.add_argument(
         "-o",

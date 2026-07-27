@@ -1,0 +1,20 @@
+# t1_addpool dialect=1.1 start=087C0
+087C3:movsi:312
+087C6:rt:156
+087C8:movsi:288
+087CB:strassign
+087CD:movax:1
+087D0:movsi:288
+087D3:rt:156
+087D5:movbxax
+087D7:str2num:LEN
+087DA:negax
+087DC:addax_m:316
+087E0:locate
+087E2:movsi:308
+087E5:rt:156
+087E7:rt:190
+087E9:rt:184
+087EB:end
+087EE:epilogue
+# commits

@@ -1,0 +1,23 @@
+# v10_t1_inparr dialect=1.0 start=071E0
+071E3:fild:356
+071E8:fstp:342
+071EF:input:352:16384
+071F6:read_num
+071F9:fld:342
+071FE:fistp:44
+07203:fwait
+07205:movaxmem:44
+07208:movsiax
+0720A:shlsi
+0720C:shlsi
+0720E:addsi:368
+07212:fstp_si
+07217:fld:380
+0721C:rt:187
+0721E:rt:184
+07222:end
+07225:epilogue
+# commits
+071ED
+07215
+07220

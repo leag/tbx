@@ -1,0 +1,3 @@
+10 LPRINT TAB(5); "X"
+20 LPRINT SPC(3); "Y"
+30 END

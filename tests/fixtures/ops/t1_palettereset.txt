@@ -1,0 +1,9 @@
+# t1_palettereset dialect=1.1 start=08700
+08703:movax:1
+08706:movbxax
+08708:movax:2
+0870B:palette
+0870E:palette_reset
+08711:end
+08714:epilogue
+# commits

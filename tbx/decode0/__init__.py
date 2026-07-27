@@ -58,7 +58,14 @@ from tbx.decode0.const import (
     _TRAP_GOSUB,
 )
 from tbx.decode0.dialect import DIALECTS, Dialect, TB10, TB11, _try_swap, find_prologue
-from tbx.decode0.scan import _grp, _orient, _rgrp, _scan
+from tbx.decode0.opaque_helpers import _OPAQUE_HELPER_BODY, _OPAQUE_HELPER_BODY_2
+from tbx.decode0.scan import (
+    _grp,
+    _orient,
+    _rgrp,
+    _scan,
+    _try_inline_rescue,
+)
 from tbx.decode0.datapool import (
     _data_find_frame,
     _data_find_sentinel,
@@ -81,10 +88,12 @@ from tbx.decode0.lift import (
     _has_jmps_back,
     _inline_safe,
     _is_for_header,
+    _lift_bool_do_tail,
     _lift_bool_tail,
     _lift_do_tail,
     _lift_midblock_troff,
     _lift_next,
+    _lift_var_step_next,
     _lift_while,
     _match_bool_term1,
     _resolve_targets,

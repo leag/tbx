@@ -1,0 +1,20 @@
+# t1_fwdinline dialect=1.1 start=08700
+08703:jmp:34575
+08706:inline_sub:b'U\x8b\xec\xc4~\x06]\xcb'
+0870F:jmp:34612
+08712:proc_enter
+08715:arg_push_fwd:6
+0871B:far_call:34566
+08720:add_sp:4
+08723:arg_ref:6
+08726:far_fild_si
+0872A:rt:187
+0872C:rt:184
+08730:proc_ret:4
+08734:movm_imm:288:3
+0873A:arg_push_ref:288
+0873F:far_call:34578
+08744:end
+08747:epilogue
+# commits
+0872E

@@ -1,0 +1,5 @@
+10 A$ = STRING$(5, "-")
+20 B$ = STRING$(6, 42)
+30 C$ = STRING$(4, A$)
+40 PRINT A$; B$; C$
+50 END

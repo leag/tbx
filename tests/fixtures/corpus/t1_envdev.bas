@@ -1,0 +1,3 @@
+10 A$ = ENVIRON$("PATH")
+20 B$ = ERDEV$
+30 PRINT A$; B$

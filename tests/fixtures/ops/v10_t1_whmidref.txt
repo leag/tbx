@@ -1,0 +1,34 @@
+# v10_t1_whmidref dialect=1.0 start=07150
+07153:jmp:29067
+07156:proc_enter
+07159:arg_ref:10
+0715C:far_spush
+0715E:arg_ref:6
+07161:far_movax_si
+07164:movbxax
+07166:movax:1
+07169:strfn:MID$
+0716B:movsi:312
+0716E:rt:156
+07170:strcmp
+07172:movax:65535
+07175:jcc:117:29048
+07177:incax
+07178:orax
+0717A:jcc:117:29055
+0717C:jmp:29063
+0717F:arg_ref:6
+07182:far_inc_si
+07185:jmps:29017
+07187:proc_ret:8
+0718B:movsi:308
+0718E:rt:156
+07190:movsi:290
+07193:strassign
+07195:movm_imm:288:1
+0719B:arg_push_ref:290
+071A0:arg_push_ref:288
+071A5:far_call:29014
+071AA:end
+071AD:epilogue
+# commits

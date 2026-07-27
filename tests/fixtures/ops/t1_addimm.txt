@@ -1,0 +1,11 @@
+# t1_addimm dialect=1.1 start=08700
+08703:movm_imm:288:5
+08709:movax:3
+0870C:addm_ax:288
+08710:fild:288
+08715:rt:187
+08717:rt:184
+0871B:end
+0871E:epilogue
+# commits
+08719

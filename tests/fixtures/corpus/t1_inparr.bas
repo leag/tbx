@@ -1,0 +1,5 @@
+10 DIM A(10)
+20 I = 3
+30 INPUT A(I)
+40 PRINT A(3)
+50 END

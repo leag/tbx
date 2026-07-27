@@ -1,0 +1,32 @@
+# t1_strs2 dialect=1.1 start=08780
+08783:movax:5
+08786:movsi:308
+08789:rt:156
+0878B:strfn:STRING$S
+0878E:movsi:296
+08791:strassign
+08793:movax:6
+08796:movbxax
+08798:movax:42
+0879B:strfn:STRING$
+0879E:movsi:292
+087A1:strassign
+087A3:movax:4
+087A6:movsi:296
+087A9:rt:156
+087AB:strfn:STRING$S
+087AE:movsi:288
+087B1:strassign
+087B3:movsi:296
+087B6:rt:156
+087B8:rt:190
+087BA:movsi:292
+087BD:rt:156
+087BF:rt:190
+087C1:movsi:288
+087C4:rt:156
+087C6:rt:190
+087C8:rt:184
+087CA:end
+087CD:epilogue
+# commits

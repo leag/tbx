@@ -1,0 +1,14 @@
+# t1_databig dialect=1.1 start=08760
+08763:on_error:34686
+0876A:movsi:308
+0876D:rt:156
+0876F:rt:190
+08771:rt:184
+08773:data_read_str
+08776:movsi:288
+08779:strassign
+0877B:end
+0877E:resume_pre
+08781:resume_next
+08784:epilogue
+# commits

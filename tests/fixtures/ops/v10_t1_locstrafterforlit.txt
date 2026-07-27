@@ -1,0 +1,25 @@
+# v10_t1_locstrafterforlit dialect=1.0 start=070B0
+070B3:jmp:28923
+070B6:proc_enter
+070B9:local_init:5:6
+070CD:mov_bp_imm:6:1
+070D2:jmp:28907
+070D5:movsi:292
+070D8:rt:156
+070DA:movsi:8
+070DD:strassign_bp
+070DF:movsi:8
+070E2:spush_bp
+070E4:rt:190
+070E6:rt:184
+070E8:inc_bp:6
+070EB:cmp_bpi8:6:5
+070EF:jcc:126:28885
+070F1:arg_ref:8
+070F5:str_temp_free
+070F7:proc_ret:10
+070FB:sub_sp:10
+070FE:far_call:28854
+07103:end
+07106:epilogue
+# commits

@@ -1,0 +1,19 @@
+# v10_t1_localforstepm1 dialect=1.0 start=070B0
+070B3:jmp:28908
+070B6:proc_enter
+070B9:local_init:3:6
+070CD:mov_bp_imm:6:5
+070D2:jmp:28898
+070D5:fild_bp:6
+070D9:rt:187
+070DB:rt:184
+070DF:dec_bp:6
+070E2:cmp_bpi8:6:1
+070E6:jcc:125:28885
+070E8:proc_ret:6
+070EC:sub_sp:6
+070EF:far_call:28854
+070F4:end
+070F7:epilogue
+# commits
+070DD

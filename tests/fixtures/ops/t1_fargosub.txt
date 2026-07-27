@@ -1,0 +1,32 @@
+# t1_fargosub dialect=1.1 start=08840
+08843:trap_hook
+08844:movax:1
+08847:on_trap:120:34921
+0884E:trap_hook
+0884F:movax:1
+08852:trap_ctl:94
+08855:trap_hook
+08856:far_call:34933
+0885B:trap_hook
+0885C:movsi:300
+0885F:rt:156
+08861:rt:190
+08863:rt:184
+08865:trap_hook
+08866:end
+08869:trap_hook
+0886A:movsi:296
+0886D:rt:156
+0886F:rt:190
+08871:rt:184
+08873:trap_hook
+08874:retf
+08875:trap_hook
+08876:movsi:292
+08879:rt:156
+0887B:rt:190
+0887D:rt:184
+0887F:trap_hook
+08880:retf
+08881:epilogue
+# commits

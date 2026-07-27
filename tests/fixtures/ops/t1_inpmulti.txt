@@ -1,0 +1,15 @@
+# t1_inpmulti dialect=1.1 start=08830
+08833:input:304:24577
+0883A:read_num
+0883D:fstp:292
+08842:read_num
+08845:fstp:288
+0884C:fld:288
+08851:fold:+:292
+08856:rt:187
+08858:rt:184
+0885C:end
+0885F:epilogue
+# commits
+0884A
+0885A

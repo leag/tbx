@@ -1,0 +1,34 @@
+# v10_t1_erasepre dialect=1.0 start=07500
+07503:input:352:16384
+0750A:read_num
+0750D:fstp:342
+07514:jmp:29989
+07517:movsi:288
+0751A:movdx:154
+0751D:movesdx
+0751F:erase
+07522:jmp:30040
+07525:movsi:288
+07528:movdx:154
+0752B:movesdx
+0752D:dim_begin
+07530:fld:342
+07535:fistp:44
+0753A:fwait
+0753C:movaxmem:44
+0753F:movm_ax:298
+07543:movm_imm:296:0
+07549:movsi:288
+0754C:movdx:154
+0754F:movesdx
+07551:dim_end
+07556:jmps:29975
+07558:movsi:356
+0755B:rt:156
+0755D:rt:190
+0755F:rt:184
+07561:end
+07564:epilogue
+# commits
+07512
+07554

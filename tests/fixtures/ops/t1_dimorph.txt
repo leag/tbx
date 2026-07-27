@@ -1,0 +1,15 @@
+# t1_dimorph dialect=1.1 start=08700
+08703:movax_m:116
+08707:movm_ax:398
+0870B:movax_m:114
+0870F:movm_ax:396
+08713:movsi:420
+08716:rt:156
+08718:movsi:400
+0871B:strassign
+0871D:fild:424
+08722:fstp:468
+08729:end
+0872C:epilogue
+# commits
+08727

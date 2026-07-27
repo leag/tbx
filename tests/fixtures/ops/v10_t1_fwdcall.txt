@@ -1,0 +1,23 @@
+# v10_t1_fwdcall dialect=1.0 start=070B0
+070B3:jmp:28879
+070B6:proc_enter
+070B9:arg_ref:6
+070BC:far_fild_si
+070C0:rt:187
+070C2:rt:184
+070C6:far_call:28882
+070CB:proc_ret:4
+070CF:jmp:28896
+070D2:proc_enter
+070D5:movsi:308
+070D8:rt:156
+070DA:rt:190
+070DC:rt:184
+070DE:proc_ret:0
+070E0:movm_imm:288:5
+070E6:arg_push_ref:288
+070EB:far_call:28854
+070F0:end
+070F3:epilogue
+# commits
+070C4

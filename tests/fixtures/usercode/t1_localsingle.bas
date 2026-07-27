@@ -1,0 +1,8 @@
+10 SUB SUB1
+  LOCAL A
+  A = 1.5#
+  A = A + 1
+  PRINT A
+END SUB
+20 CALL SUB1
+30 END

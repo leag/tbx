@@ -1,0 +1,5 @@
+10 A% = 5
+20 FOR B% = A% TO 23
+30 PRINT B%
+40 NEXT B%
+50 END

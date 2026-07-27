@@ -1,0 +1,20 @@
+# t1_closevar dialect=1.1 start=08C10
+08C13:fld1
+08C16:fstp:288
+08C1D:movsi:308
+08C20:rt:156
+08C22:movm_imm:46:20225
+08C28:shortstr
+08C2A:movm_imm:96:1
+08C30:movax:128
+08C33:open
+08C36:fld:288
+08C3B:fistp:44
+08C40:fwait
+08C42:movaxmem:44
+08C45:close
+08C4A:end
+08C4D:epilogue
+# commits
+08C1B
+08C48

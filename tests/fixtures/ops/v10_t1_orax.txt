@@ -1,0 +1,16 @@
+# v10_t1_orax dialect=1.0 start=07100
+07103:strfn:INKEY$
+07106:movsi:288
+07109:strassign
+0710B:movsi:288
+0710E:rt:156
+07110:str2num:LEN
+07113:orax
+07115:jcc:116:28931
+07117:movsi:288
+0711A:rt:156
+0711C:rt:190
+0711E:rt:184
+07120:end
+07123:epilogue
+# commits

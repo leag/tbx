@@ -1,0 +1,30 @@
+# v10_t1_boolwh dialect=1.0 start=071E0
+071E3:input:304:16384
+071EA:read_num
+071ED:fstp:288
+071F4:fldz
+071F7:fcomp:288
+071FC:fstsw
+071FE:movax:65535
+07201:jcc:119:29188
+07203:incax
+07204:orax
+07208:jcc:116:29197
+0720A:jmp:29213
+0720D:fld1
+07210:fcomp:288
+07215:fstsw
+07217:movax:65535
+0721A:jcc:114:29213
+0721C:incax
+0721D:orax
+07221:jcc:117:29155
+07223:fld:288
+07228:rt:187
+0722A:rt:184
+0722E:epilogue
+# commits
+071F2
+07206
+0721F
+0722C

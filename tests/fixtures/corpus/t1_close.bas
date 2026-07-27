@@ -1,0 +1,4 @@
+10 OPEN "O", 1, "A.TXT"
+20 PRINT #1, "X"
+30 CLOSE
+40 END

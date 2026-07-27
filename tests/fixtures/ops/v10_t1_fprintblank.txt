@@ -1,0 +1,15 @@
+# v10_t1_fprintblank dialect=1.0 start=07700
+07703:movsi:292
+07706:rt:156
+07708:movm_imm:46:20225
+0770E:shortstr
+07710:movm_imm:96:1
+07716:movax:128
+07719:open
+0771C:movm_imm:96:1
+07722:rt:186
+07724:movax:1
+07727:close
+0772A:end
+0772D:epilogue
+# commits

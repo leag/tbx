@@ -1,0 +1,2 @@
+10 A = SCREEN(3,1,1)
+20 PRINT A

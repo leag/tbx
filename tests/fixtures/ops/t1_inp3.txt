@@ -1,8 +1,8 @@
 # t1_inp3 dialect=1.1 start=08750
-08753:line_input:304
+08753:line_input:304:False
 08759:movsi:292
 0875C:strassign
-0875E:line_input:308
+0875E:line_input:308:False
 08764:movsi:288
 08767:strassign
 08769:end

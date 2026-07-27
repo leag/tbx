@@ -1,0 +1,12 @@
+# v10_t1_erasestatic dialect=1.0 start=07240
+07243:movsi:356
+07246:rt:156
+07248:movsi:372
+0724B:strassign
+0724D:movsi:288
+07250:movdx:150
+07253:movesdx
+07255:erase_static
+07258:end
+0725B:epilogue
+# commits

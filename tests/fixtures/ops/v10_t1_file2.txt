@@ -1,5 +1,5 @@
 # v10_t1_file2 dialect=1.0 start=076F0
-076F3:line_input:304
+076F3:line_input:304:False
 076F9:movsi:296
 076FC:strassign
 076FE:movm_imm:96:2

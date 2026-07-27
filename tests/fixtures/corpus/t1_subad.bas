@@ -1,0 +1,7 @@
+10 SUB S1
+20 B(1) = 42
+30 PRINT "S"; B(1)
+40 END SUB
+50 B(1) = 7
+60 CALL S1
+70 PRINT "M"; B(1)

@@ -1,0 +1,21 @@
+# v10_t1_ioctl dialect=1.0 start=07620
+07623:movm_imm:96:1
+07629:movsi:312
+0762C:rt:156
+0762E:movsi:316
+07631:rt:156
+07633:movax:128
+07636:open
+07639:movsi:308
+0763C:rt:156
+0763E:movsi:288
+07641:strassign
+07643:movm_imm:96:1
+07649:movsi:288
+0764C:rt:156
+0764E:ioctl
+07651:movax:1
+07654:close
+07657:end
+0765A:epilogue
+# commits

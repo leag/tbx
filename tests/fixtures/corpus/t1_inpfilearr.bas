@@ -1,0 +1,7 @@
+10 DIM A$(3,3), B%(3,3)
+20 OPEN "TEST.DAT" FOR INPUT AS #1
+30 I% = 1
+40 J% = 1
+50 INPUT #1, A$(I%,J%), B%(I%,J%)
+60 CLOSE #1
+70 END

@@ -25,8 +25,10 @@ from tbx.ir.expr_nodes import (
     Neg,
     Not,
     Nullary,
+    RelOp,
     SingleLit,
     StrLit,
+    Template,
     Unknown,
     Var,
     VarSeg,
@@ -48,10 +50,13 @@ from tbx.ir.stmt_nodes import (
     Close,
     Cls,
     Color,
+    Common,
     Data,
     DateTimeSet,
+    Decr,
     DefFn,
     DefSeg,
+    DefType,
     Delay,
     Dim,
     Do,
@@ -69,14 +74,20 @@ from tbx.ir.stmt_nodes import (
     FnResult,
     For,
     Get,
+    GetString,
     GetGfx,
+    Incr,
+    Inline,
     Input,
     InputFile,
+    Ioctl,
     Key,
+    KeyDef,
     KeyList,
     Kill,
     LineInput,
     LineStmt,
+    Local,
     Locate,
     Loop,
     Lprint,
@@ -90,11 +101,13 @@ from tbx.ir.stmt_nodes import (
     OnGosub,
     OnGoto,
     OnTrap,
+    OpaqueHelper,
     Open,
     OptionBase,
     Out,
     Paint,
     Palette,
+    PaletteUsing,
     Play,
     Poke,
     Print,
@@ -102,6 +115,7 @@ from tbx.ir.stmt_nodes import (
     Pset,
     Put,
     PutGfx,
+    PutString,
     Randomize,
     Read,
     RegSet,
@@ -114,6 +128,7 @@ from tbx.ir.stmt_nodes import (
     Run,
     Screen,
     Seek,
+    Shared,
     Shell,
     Sound,
     Swap,
@@ -130,6 +145,17 @@ from tbx.ir.stmt_nodes import (
 
 
 def unparse(e) -> str:
+    if isinstance(e, Template):
+        if e.kind == "subtraction":
+            if not (
+                isinstance(e.inner, BinOp)
+                and e.inner.op == "+"
+                and isinstance(e.inner.rhs, Group)
+                and isinstance(e.inner.rhs.inner, Neg)
+            ):
+                raise ValueError("bad subtraction template")
+            return f"{unparse(e.inner.lhs)} - {unparse(e.inner.rhs.inner.operand)}"
+        raise ValueError(f"unknown expression template {e.kind!r}")
     if isinstance(e, Lit):
         if isinstance(e.value, float):
             return _fmt_float(e.value)
@@ -155,18 +181,54 @@ def unparse(e) -> str:
     if isinstance(e, Call):
         return f"{e.name}({','.join(unparse(a) for a in e.args)})"
     if isinstance(e, FnCall):
+        if not e.args:
+            # A zero-argument DEF FN is DECLARED without a parameter list
+            # (`DEF FNCurvideo`) and CALLED without parens (`FNCurvideo`).
+            # Turbo Basic REJECTS the empty-parens spelling outright, so
+            # emitting `FNCurvideo()` produced source that would not even
+            # recompile. No corpus fixture called a zero-arg DEF FN, which is
+            # why this went unwitnessed (t1_fnintarith; wild tbd73.exe's
+            # TBWINDOW FNCurvideo/FNCurdisplay).
+            return e.name
         return f"{e.name}({','.join(unparse(a) for a in e.args)})"
     if isinstance(e, Group):
         return f"({unparse(e.inner)})"
     if isinstance(e, BinOp):
+        # TB distinguishes a subtraction from an addition of a grouped
+        # negative literal in its integer register staging.  The latter is
+        # commonly an artefact of lifting `SUB AX,imm` through a negation;
+        # spell the source-level subtraction instead (tbd73's window bounds
+        # use `wcols(idx) - 2`).  Keep symbolic negations untouched: their
+        # grouping can carry real evaluation-order evidence.
+        if (
+            e.op == "+"
+            and isinstance(e.rhs, Group)
+            and isinstance(e.rhs.inner, Neg)
+            and isinstance(e.rhs.inner.operand, Lit)
+        ):
+            return f"{unparse(e.lhs)} - {unparse(e.rhs.inner.operand)}"
         # Minimal parenthesization: add parens only where needed to
         # reproduce the same parse tree (lhs needs prec >= op; rhs needs prec > op).
         p = _PREC[e.op]
         lhs_s = unparse(e.lhs)
         rhs_s = unparse(e.rhs)
-        if isinstance(e.lhs, BinOp) and _PREC[e.lhs.op] < p:
+        lhs_op = (
+            e.lhs.op
+            if isinstance(e.lhs, BinOp)
+            else "-"
+            if isinstance(e.lhs, Template) and e.lhs.kind == "subtraction"
+            else None
+        )
+        rhs_op = (
+            e.rhs.op
+            if isinstance(e.rhs, BinOp)
+            else "-"
+            if isinstance(e.rhs, Template) and e.rhs.kind == "subtraction"
+            else None
+        )
+        if lhs_op is not None and _PREC[lhs_op] < p:
             lhs_s = f"({lhs_s})"
-        if isinstance(e.rhs, BinOp) and _PREC[e.rhs.op] <= p:
+        if rhs_op is not None and _PREC[rhs_op] <= p:
             rhs_s = f"({rhs_s})"
         return f"{lhs_s} {e.op} {rhs_s}"
     if isinstance(e, Neg):
@@ -183,10 +245,22 @@ def unparse(e) -> str:
 
 
 def unparse_cond(c) -> str:
-    """Render an IF/WHILE condition (RelOp or LogOp tree) without parentheses."""
+    """Render an IF/WHILE condition (RelOp or LogOp tree, or a bare
+    numeric-truthiness expression -- no explicit compare in source, e.g.
+    `LOOP UNTIL LEN(K$)`, wild metric.exe) without parentheses.
+
+    A `Group` wrapping a LogOp/RelOp is an explicitly-parenthesized
+    AND-group used as one operand of an outer OR (`(A AND B) OR (C AND
+    D)`, wild bmaster.exe/ifi.exe) -- the parens are byte-significant, so
+    render them here rather than falling through to the plain-Expr
+    `unparse`, which doesn't know about condition-only nodes."""
     if isinstance(c, LogOp):
         return f"{unparse_cond(c.lhs)} {c.op} {unparse_cond(c.rhs)}"
-    return f"{unparse(c.lhs)} {c.op} {unparse(c.rhs)}"
+    if isinstance(c, RelOp):
+        return f"{unparse(c.lhs)} {c.op} {unparse(c.rhs)}"
+    if isinstance(c, Group):
+        return f"({unparse_cond(c.inner)})"
+    return unparse(c)
 
 
 def unparse_case_guard(g) -> str:
@@ -222,8 +296,12 @@ def _us_decl(s) -> str | None:
         return f"FOR {s.var.name} = {unparse(s.init)} TO {unparse(s.limit)}{step}"
     if isinstance(s, NextStmt):
         return f"NEXT {s.var.name}"
+    if isinstance(s, Incr):
+        return f"INCR {s.var.name}"
+    if isinstance(s, Decr):
+        return f"DECR {s.var.name}"
     if isinstance(s, Return):
-        return "RETURN"
+        return "RETURN" if s.target is None else f"RETURN {s.target}"
     if isinstance(s, Wend):
         return "WEND"
     if isinstance(s, Do):
@@ -239,7 +317,7 @@ def _us_decl(s) -> str | None:
     if isinstance(s, ExitDef):
         return "EXIT DEF"
     if isinstance(s, Run):
-        return "RUN"
+        return "RUN" if s.file is None else f"RUN {unparse(s.file)}"
     if isinstance(s, Dim):
 
         def bound(b):
@@ -251,24 +329,44 @@ def _us_decl(s) -> str | None:
         def arr(name, bounds):
             return f"{name}({','.join(bound(b) for b in bounds)})"
 
-        return "DIM " + ", ".join(arr(n, b) for n, b in ((s.name, s.bounds), *s.also))
+        prefix = "DIM DYNAMIC " if s.dynamic else "DIM "
+        return prefix + ", ".join(arr(n, b) for n, b in ((s.name, s.bounds), *s.also))
     if isinstance(s, OptionBase):
         return f"OPTION BASE {s.n}"
+    if isinstance(s, DefType):
+        return "DEFSNG A-Z"
     if isinstance(s, Erase):
         return f"ERASE {s.name}"
+    if isinstance(s, Shared):
+        return "SHARED " + ", ".join(s.names)
+    if isinstance(s, Local):
+        return "LOCAL " + ", ".join(s.names)
+    if isinstance(s, Common):
+        return "COMMON " + ", ".join(s.names)
 
 
 def _us_output(s) -> str | None:
     """Render PRINT family, sound and misc actions; None if `s` is not one of them."""
     if isinstance(s, Print):
         txt = "PRINT" + (f" #{s.file}," if s.file is not None else "")
+        cs = s.commas or (0,) * (len(s.items) + 1)
         if s.items:
-            txt += " " + "; ".join(unparse(i) for i in s.items)
-        return txt + ("" if s.newline else ";")
+            parts = []
+            if cs[0]:
+                parts.append("," * cs[0] + " ")
+            for i, item in enumerate(s.items):
+                parts.append(unparse(item))
+                if i < len(s.items) - 1:
+                    parts.append("," * cs[i + 1] + " " if cs[i + 1] else "; ")
+            txt += " " + "".join(parts)
+        if s.newline:
+            return txt
+        return txt + ("," * cs[-1] if s.items and cs[-1] else ";")
     if isinstance(s, PrintUsing):
+        kw = "LPRINT" if s.lprint else "PRINT"
         pre = f"#{s.file}, " if s.file is not None else ""
         vals = "; ".join(unparse(v) for v in s.values)
-        return f"PRINT {pre}USING {unparse(s.fmt)}; {vals}" + ("" if s.newline else ";")
+        return f"{kw} {pre}USING {unparse(s.fmt)}; {vals}" + ("" if s.newline else ";")
     if isinstance(s, Kill):
         return f"KILL {unparse(s.file)}"
     if isinstance(s, Play):
@@ -297,10 +395,8 @@ def _us_graphics(s) -> str | None:
     if isinstance(s, LineStmt):
         st1 = "STEP " if s.step1 else ""
         st2 = "STEP " if s.step2 else ""
-        txt = (
-            f"LINE {st1}({unparse(s.x1)},{unparse(s.y1)})"
-            f"-{st2}({unparse(s.x2)},{unparse(s.y2)})"
-        )
+        p1 = f"{st1}({unparse(s.x1)},{unparse(s.y1)})" if s.x1 is not None else ""
+        txt = f"LINE {p1}-{st2}({unparse(s.x2)},{unparse(s.y2)})"
         # Trailing arg slots: color, box, style -- absent slots before a present
         # one render as bare `, ` (e.g. `LINE (..)-(..), 2, , &HAAAA`).
         slots = [
@@ -346,7 +442,11 @@ def _us_graphics(s) -> str | None:
     if isinstance(s, DefSeg):
         return "DEF SEG" if s.seg is None else f"DEF SEG = {unparse(s.seg)}"
     if isinstance(s, Palette):
+        if s.attr is None:
+            return "PALETTE"
         return f"PALETTE {unparse(s.attr)}, {unparse(s.color)}"
+    if isinstance(s, PaletteUsing):
+        return f"PALETTE USING {unparse(s.source)}"
     if isinstance(s, View):
         scr = "SCREEN " if s.screen else ""
         txt = (
@@ -367,11 +467,20 @@ def _us_graphics(s) -> str | None:
             f"-({unparse(s.x2)},{unparse(s.y2)})"
         )
     if isinstance(s, Width):
+        if s.device is not None:
+            return f"WIDTH {unparse(s.device)},{unparse(s.cols)}"
+        if s.file is not None:
+            return f"WIDTH #{s.file},{unparse(s.cols)}"
         return f"WIDTH {unparse(s.cols)}"
     if isinstance(s, Key):
         return "KEY ON" if s.on else "KEY OFF"
+    if isinstance(s, KeyDef):
+        return f"KEY {unparse(s.num)},{unparse(s.text)}"
     if isinstance(s, Screen):
-        return f"SCREEN {unparse(s.mode)}"
+        args = [s.mode, s.burst, s.apage, s.vpage]
+        while args and args[-1] is None:
+            args.pop()
+        return "SCREEN " + ",".join("" if a is None else unparse(a) for a in args)
 
 
 def _us_console(s) -> str | None:
@@ -381,51 +490,99 @@ def _us_console(s) -> str | None:
         return "WRITE" + pre + " " + ", ".join(unparse(i) for i in s.items)
     if isinstance(s, Lprint):
         txt = "LPRINT"
+        cs = s.commas or (0,) * (len(s.items) + 1)
         if s.items:
-            txt += " " + "; ".join(unparse(i) for i in s.items)
-        return txt + ("" if s.newline else ";")
+            parts = []
+            if cs[0]:
+                parts.append("," * cs[0] + " ")
+            for i, item in enumerate(s.items):
+                parts.append(unparse(item))
+                if i < len(s.items) - 1:
+                    parts.append("," * cs[i + 1] + " " if cs[i + 1] else "; ")
+            txt += " " + "".join(parts)
+        if s.newline:
+            return txt
+        return txt + ("," * cs[-1] if s.items and cs[-1] else ";")
     if isinstance(s, Cls):
         return "CLS"
     if isinstance(s, Locate):
-        cur = "" if s.cursor is None else f",{unparse(s.cursor)}"
-        return f"LOCATE {unparse(s.row)},{unparse(s.col)}{cur}"
+        args = (s.row, s.col, s.cursor, s.start, s.stop)
+        last = max((i for i, a in enumerate(args) if a is not None), default=1)
+        parts = [unparse(a) if a is not None else "" for a in args[: last + 1]]
+        return "LOCATE " + ",".join(parts)
     if isinstance(s, Color):
-        fg = "" if s.fg is None else unparse(s.fg)
-        bg = "" if s.bg is None else f",{unparse(s.bg)}"
-        return f"COLOR {fg}{bg}"
+        args = (s.fg, s.bg, s.border)
+        last = max((i for i, a in enumerate(args) if a is not None), default=-1)
+        parts = [unparse(a) if a is not None else "" for a in args[: last + 1]]
+        return f"COLOR {','.join(parts)}"
     if isinstance(s, Input):
+        kw = "INPUT;" if s.semi else "INPUT"
+        vs = (
+            ", ".join(unparse(v) for v in s.var)
+            if isinstance(s.var, tuple)
+            else unparse(s.var)
+        )
         if s.prompt is None:
-            return f"INPUT {unparse(s.var)}"
+            return f"{kw} {vs}"
         sep = "," if s.comma else ";"
-        return f"INPUT {unparse(s.prompt)}{sep} {unparse(s.var)}"
+        return f"{kw} {unparse(s.prompt)}{sep} {vs}"
     if isinstance(s, LineInput):
+        if s.file is not None:
+            return f"LINE INPUT #{s.file}, {unparse(s.var)}"
+        kw = "LINE INPUT;" if s.semi else "LINE INPUT"
         if s.prompt is None:
-            return f"LINE INPUT {unparse(s.var)}"
-        return f"LINE INPUT {unparse(s.prompt)}; {unparse(s.var)}"
+            return f"{kw} {unparse(s.var)}"
+        return f"{kw} {unparse(s.prompt)}; {unparse(s.var)}"
+
+
+_OPEN_MODE_KW = {
+    "O": "OUTPUT",
+    "I": "INPUT",
+    "A": "APPEND",
+    "R": "RANDOM",
+    "B": "BINARY",
+}  # `OPEN f$ FOR mode AS #n` keyword -> packed mode letter (witnessed q_openfor
+# and q_mode_{OUTPUT,INPUT,APPEND,RANDOM,BINARY})
 
 
 def _us_fileio(s) -> str | None:
     """Render file I/O statements; None if `s` is not one of them."""
     if isinstance(s, Open):
-        return f"OPEN {unparse(s.mode)},#{s.num},{unparse(s.file)}"
+        if s.for_as:
+            kw = _OPEN_MODE_KW.get(s.mode.value)
+            if kw is None or s.reclen is not None:
+                raise ValueError(f"unsupported FOR-AS OPEN mode {s.mode!r}")
+            return f"OPEN {unparse(s.file)} FOR {kw} AS #{s.num}"
+        rl = "" if s.reclen is None else f",{unparse(s.reclen)}"
+        return f"OPEN {unparse(s.mode)},#{s.num},{unparse(s.file)}{rl}"
     if isinstance(s, InputFile):
         return f"INPUT #{s.num}, {', '.join(unparse(v) for v in s.vars)}"
     if isinstance(s, Close):
-        return f"CLOSE #{s.num}"
+        if s.num is None:
+            return "CLOSE"
+        n = s.num if isinstance(s.num, int) else unparse(s.num)
+        return f"CLOSE #{n}"
     if isinstance(s, Reset):
         return "RESET"
     if isinstance(s, Files):
-        return f"FILES {unparse(s.spec)}"
+        return "FILES" if s.spec is None else f"FILES {unparse(s.spec)}"
     if isinstance(s, Name):
         return f"NAME {unparse(s.old)} AS {unparse(s.new)}"
     if isinstance(s, Get):
         return f"GET #{s.num}, {unparse(s.pos)}"
+    if isinstance(s, GetString):
+        return f"GET$ #{s.num}, {unparse(s.count)}, {unparse(s.target)}"
     if isinstance(s, Put):
         return f"PUT #{s.num}, {unparse(s.pos)}"
+    if isinstance(s, PutString):
+        return f"PUT$ #{s.num}, {unparse(s.text)}"
     if isinstance(s, Seek):
         return f"SEEK #{s.num}, {unparse(s.pos)}"
+    if isinstance(s, Ioctl):
+        return f"IOCTL #{s.num}, {unparse(s.text)}"
     if isinstance(s, Bload):
-        return f"BLOAD {unparse(s.file)}, {unparse(s.offset)}"
+        off = f", {unparse(s.offset)}" if s.offset is not None else ""
+        return f"BLOAD {unparse(s.file)}{off}"
     if isinstance(s, Bsave):
         return f"BSAVE {unparse(s.file)}, {unparse(s.offset)}, {unparse(s.length)}"
     if isinstance(s, Write):
@@ -442,8 +599,38 @@ def _us_fileio(s) -> str | None:
         return f"MID$({unparse(s.target)}, {unparse(s.start)}) = {unparse(s.source)}"
 
 
+_INLINE_PER_LINE = 14
+
+
+def _inline_lines(data: bytes) -> str:
+    """`$INLINE` byte list, wrapped across as many source lines as it takes.
+
+    How many bytes ride on one `$INLINE` line contributes nothing to the
+    emitted image, but the line LENGTH is not free: a single line long enough
+    trips Turbo Basic's editor limit ("Line too long - CR inserted") and the
+    program will not compile at all. TBWINDOW's machine-code SUBs run to
+    thousands of bytes -- wild tbd73.exe emitted one 10,532-character line --
+    which is what kept its round trip failing after the recovery itself was
+    correct. 14 per line is the original source's own convention
+    (TBW73.INC:219-227).
+    """
+    return "\n".join(
+        "$INLINE " + ", ".join(f"&H{b:02X}" for b in data[i : i + _INLINE_PER_LINE])
+        for i in range(0, len(data), _INLINE_PER_LINE)
+    ) or "$INLINE"
+
+
 def _us_procdata(s) -> str | None:
     """Render procedures, OS, event-trap and DATA statements; None if `s` is not one of them."""
+    if isinstance(s, Inline):
+        return _inline_lines(s.data)
+    if isinstance(s, OpaqueHelper):
+        # Framed helpers recovered from the wild corpus are external
+        # `$INLINE "file"` payloads after linking.  The compiler contributes
+        # the final far RET (CB), so emit the payload as byte-list INLINE and
+        # let Turbo BASIC append CB again on recompilation.
+        data = s.data[:-1] if s.data.endswith(b"\xCB") else s.data
+        return _inline_lines(data)
     if isinstance(s, CallStmt):
         if s.args:
             return f"CALL {s.name}({','.join(unparse(a) for a in s.args)})"

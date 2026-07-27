@@ -1,0 +1,9 @@
+10 SUB SUB1(A$, B%)
+  DO WHILE MID$(A$,B%,1) <> "1"
+  INCR B%
+  LOOP
+END SUB
+20 C$ = "001"
+30 D% = 1
+40 CALL SUB1(C$,D%)
+50 END

@@ -1,0 +1,21 @@
+# v10_t1_localsingle dialect=1.0 start=070B0
+070B3:jmp:28915
+070B6:proc_enter
+070B9:local_init:2:6
+070CD:fld64:294
+070D2:fstp_bp:6
+070D8:fld1
+070DB:fold_bp:+:6
+070DF:fstp_bp:6
+070E5:fld_bp:6
+070E9:rt:187
+070EB:rt:184
+070EF:proc_ret:4
+070F3:sub_sp:4
+070F6:far_call:28854
+070FB:end
+070FE:epilogue
+# commits
+070D6
+070E3
+070ED

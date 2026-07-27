@@ -1,0 +1,3 @@
+X& = 100000
+IF X& > 5.5 THEN PRINT "Y"
+END

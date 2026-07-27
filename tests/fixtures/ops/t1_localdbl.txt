@@ -1,0 +1,25 @@
+# t1_localdbl dialect=1.1 start=08700
+08703:jmp:34637
+08706:proc_enter
+08709:local_init:4:6
+0871D:fld64:294
+08722:fstp_bp64:6
+08728:fld_bp64:6
+0872C:rt:187
+0872E:rt:184
+08732:fld1
+08735:fold_bp64:+:6
+08739:fstp_bp64:6
+0873F:fld_bp64:6
+08743:rt:187
+08745:rt:184
+08749:proc_ret:8
+0874D:sub_sp:8
+08750:far_call:34566
+08755:end
+08758:epilogue
+# commits
+08726
+08730
+0873D
+08747

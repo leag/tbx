@@ -1,0 +1,5 @@
+10 OPEN "R",#1,"TEST.DAT"
+20 A$ = "X"
+30 IOCTL #1, A$
+40 CLOSE #1
+50 END

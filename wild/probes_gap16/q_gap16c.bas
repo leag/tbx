@@ -1,0 +1,35 @@
+10 DIM P1(20)
+20 DIM P2(20)
+30 DIM P3(20)
+40 DIM P4(20)
+50 DIM P5(20)
+60 DIM P6(20)
+70 DIM P7(20)
+80 DIM S1(751)
+90 DIM S2(2701)
+100 DIM S3(2701)
+110 A% = 1
+120 B% = 2
+130 C = 1.5
+140 D = 2.5
+150 E# = 3.5#
+160 F# = 4.5#
+170 G% = 3
+180 FOR I% = 1 TO 7
+190 P1(I%) = I%
+200 P2(I%) = I%
+210 P3(I%) = I%
+220 P4(I%) = I%
+230 P5(I%) = I%
+240 P6(I%) = I%
+250 P7(I%) = I%
+260 NEXT I%
+270 H% = S1(1) + S2(1) + S3(1)
+280 INPUT "Enter A"; A%
+290 INPUT B%
+300 INPUT "Enter C"; C
+310 INPUT D
+320 INPUT "Enter G"; G%
+330 INPUT B%
+340 PRINT A%, B%, C, D, E#, F#, G%, H%
+350 END

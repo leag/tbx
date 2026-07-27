@@ -1,0 +1,9 @@
+10 SUB SUB1
+  LOCAL A%, B$
+  FOR A% = 1 TO 5
+  B$ = "X"
+  PRINT B$
+  NEXT A%
+END SUB
+20 CALL SUB1
+30 END

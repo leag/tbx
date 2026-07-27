@@ -1,0 +1,26 @@
+# t1_locidx dialect=1.1 start=08700
+08703:jmp:34637
+08706:proc_enter
+08709:local_init:3:6
+0871D:mov_bp_imm:6:1
+08722:jmp:34618
+08725:movsi:356
+08728:rt:156
+0872A:movsi_bp:6
+0872D:shlsi
+0872F:shlsi
+08731:addsi:368
+08735:strassign
+08737:inc_bp:6
+0873A:cmp_bpi8:6:5
+0873E:jcc:126:34597
+08740:movsi:380
+08743:rt:156
+08745:rt:190
+08747:rt:184
+08749:proc_ret:6
+0874D:sub_sp:6
+08750:far_call:34566
+08755:end
+08758:epilogue
+# commits

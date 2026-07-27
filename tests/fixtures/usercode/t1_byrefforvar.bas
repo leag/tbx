@@ -1,0 +1,7 @@
+10 SUB SUB1(A%, B%)
+  FOR A% = 1 TO B%
+  PRINT A%
+  NEXT A%
+END SUB
+20 CALL SUB1(1,5)
+30 END

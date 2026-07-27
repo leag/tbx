@@ -1,0 +1,7 @@
+10 CALL SUB1
+20 END
+30 SUB SUB1
+  LOCAL A$
+  A$ = "X"
+  PRINT A$
+END SUB

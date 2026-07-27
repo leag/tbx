@@ -1,0 +1,826 @@
+{
+  "schema_version": 1,
+  "generator": "tbx.tools.scan_wild",
+  "root": "wild/hits",
+  "corpus_fingerprint": "2043f80bf6bf929b0a8058ebb0b83e3ec6b63664855e4428b4781db63c4924a3",
+  "totals": {
+    "executables": 84,
+    "decode_ok": 16,
+    "decode_failed": 68,
+    "not_turbo_basic": 0
+  },
+  "hits": [
+    {
+      "name": "wild/hits/autonum.exe",
+      "dialect": "1.0",
+      "statements": 144
+    },
+    {
+      "name": "wild/hits/banker.exe",
+      "dialect": "1.0",
+      "statements": 3029
+    },
+    {
+      "name": "wild/hits/book.exe",
+      "dialect": "1.0",
+      "statements": 488
+    },
+    {
+      "name": "wild/hits/ck.exe",
+      "dialect": "1.1",
+      "statements": 2
+    },
+    {
+      "name": "wild/hits/inv87.exe",
+      "dialect": "1.1",
+      "statements": 2786
+    },
+    {
+      "name": "wild/hits/invoice.exe",
+      "dialect": "1.1",
+      "statements": 2786
+    },
+    {
+      "name": "wild/hits/metric.exe",
+      "dialect": "1.1",
+      "statements": 1789
+    },
+    {
+      "name": "wild/hits/mm.exe",
+      "dialect": "1.1",
+      "statements": 33
+    },
+    {
+      "name": "wild/hits/onelab87.exe",
+      "dialect": "1.1",
+      "statements": 88
+    },
+    {
+      "name": "wild/hits/onelabel.exe",
+      "dialect": "1.1",
+      "statements": 88
+    },
+    {
+      "name": "wild/hits/pz.exe",
+      "dialect": "1.0",
+      "statements": 146
+    },
+    {
+      "name": "wild/hits/r.exe",
+      "dialect": "1.1",
+      "statements": 616
+    },
+    {
+      "name": "wild/hits/rev.exe",
+      "dialect": "1.0",
+      "statements": 78
+    },
+    {
+      "name": "wild/hits/schart.exe",
+      "dialect": "1.1",
+      "statements": 593
+    },
+    {
+      "name": "wild/hits/startup.exe",
+      "dialect": "1.0",
+      "statements": 24
+    },
+    {
+      "name": "wild/hits/strpfind.exe",
+      "dialect": "1.0",
+      "statements": 38
+    }
+  ],
+  "failures": [
+    {
+      "name": "wild/hits/CVT2TB.EXE",
+      "dialect": "1.1",
+      "message": "unhandled byte c4 at 0xa28a",
+      "signature": "unhandled byte c4"
+    },
+    {
+      "name": "wild/hits/baby.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT 8c at 0x9c3f",
+      "signature": "unhandled INT 8c"
+    },
+    {
+      "name": "wild/hits/be.exe",
+      "dialect": "1.0",
+      "message": "pop from empty list",
+      "signature": "pop from empty list"
+    },
+    {
+      "name": "wild/hits/bill.exe",
+      "dialect": "1.1",
+      "message": "store to unknown system cell 0x8a at 0xe786",
+      "signature": "store to unknown system cell 0x8a"
+    },
+    {
+      "name": "wild/hits/billadd.exe",
+      "dialect": "1.1",
+      "message": "unhandled INT c2 at 0x111b1",
+      "signature": "unhandled INT c2"
+    },
+    {
+      "name": "wild/hits/bm1_dsk2.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte 18 at 0x45a30",
+      "signature": "unhandled byte 18"
+    },
+    {
+      "name": "wild/hits/bmaster.exe",
+      "dialect": "1.0",
+      "message": "unhandled FP op esc=da modrm=1c at 0x8f21",
+      "signature": "unhandled FP op esc=da modrm=1c"
+    },
+    {
+      "name": "wild/hits/cal.exe",
+      "dialect": "1.1",
+      "message": "unhandled INT EC sub ee at 0x15d0a",
+      "signature": "unhandled INT EC sub ee"
+    },
+    {
+      "name": "wild/hits/cal87.exe",
+      "dialect": "1.1",
+      "message": "unhandled INT EC sub ee at 0x15d0a",
+      "signature": "unhandled INT EC sub ee"
+    },
+    {
+      "name": "wild/hits/catalog.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT EC sub 38 at 0xa81b",
+      "signature": "unhandled INT EC sub 38"
+    },
+    {
+      "name": "wild/hits/cleanup.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte 8b at 0xa55c",
+      "signature": "unhandled byte 8b"
+    },
+    {
+      "name": "wild/hits/color.exe",
+      "dialect": "1.1",
+      "message": "store to unknown system cell 0x8a at 0x8ef6",
+      "signature": "store to unknown system cell 0x8a"
+    },
+    {
+      "name": "wild/hits/crossref.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte 8b at 0xbda5",
+      "signature": "unhandled byte 8b"
+    },
+    {
+      "name": "wild/hits/elec87.exe",
+      "dialect": "1.1",
+      "message": "48762",
+      "signature": "48762"
+    },
+    {
+      "name": "wild/hits/electron.exe",
+      "dialect": "1.1",
+      "message": "IDX% bridge mismatch at 0xbd9e",
+      "signature": "IDX% bridge mismatch"
+    },
+    {
+      "name": "wild/hits/file.exe",
+      "dialect": "1.0",
+      "message": "LINE INPUT # template mismatch at 0x9557",
+      "signature": "LINE INPUT # template mismatch"
+    },
+    {
+      "name": "wild/hits/filepatc.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte 8b at 0x8d0f",
+      "signature": "unhandled byte 8b"
+    },
+    {
+      "name": "wild/hits/football.exe",
+      "dialect": "1.1",
+      "message": "unhandled INT EC sub 38 at 0x9e6c",
+      "signature": "unhandled INT EC sub 38"
+    },
+    {
+      "name": "wild/hits/grdscn.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte f7 at 0x10d91",
+      "signature": "unhandled byte f7"
+    },
+    {
+      "name": "wild/hits/hebrew.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte 36 at 0xdd02",
+      "signature": "unhandled byte 36"
+    },
+    {
+      "name": "wild/hits/help.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT 8c at 0x7a20",
+      "signature": "unhandled INT 8c"
+    },
+    {
+      "name": "wild/hits/hfprop.exe",
+      "dialect": "1.1",
+      "message": "displacement 0x2b2 is neither scalar nor array element",
+      "signature": "displacement 0x2b2 is neither scalar nor array element"
+    },
+    {
+      "name": "wild/hits/horses.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte ff at 0x8460",
+      "signature": "unhandled byte ff"
+    },
+    {
+      "name": "wild/hits/ifi.exe",
+      "dialect": "1.0",
+      "message": "unhandled FP op esc=da modrm=1c at 0x8f21",
+      "signature": "unhandled FP op esc=da modrm=1c"
+    },
+    {
+      "name": "wild/hits/invent.exe",
+      "dialect": "1.0",
+      "message": "READ chain closed without any stored target",
+      "signature": "READ chain closed without any stored target"
+    },
+    {
+      "name": "wild/hits/kinder.exe",
+      "dialect": "1.0",
+      "message": "materialization template mismatch at 0x84d5",
+      "signature": "materialization template mismatch"
+    },
+    {
+      "name": "wild/hits/kinetics.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT EC sub ee at 0xdd25",
+      "signature": "unhandled INT EC sub ee"
+    },
+    {
+      "name": "wild/hits/lmaster.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte 38 at 0x2bdd2",
+      "signature": "unhandled byte 38"
+    },
+    {
+      "name": "wild/hits/mcmurphy.exe",
+      "dialect": "1.1",
+      "message": "shl si outside an element access at 0x9c84",
+      "signature": "shl si outside an element access"
+    },
+    {
+      "name": "wild/hits/mdb.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte 8c at 0x10bae",
+      "signature": "unhandled byte 8c"
+    },
+    {
+      "name": "wild/hits/mdb87.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte 8c at 0x10bae",
+      "signature": "unhandled byte 8c"
+    },
+    {
+      "name": "wild/hits/menu.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte 0b at 0xff11",
+      "signature": "unhandled byte 0b"
+    },
+    {
+      "name": "wild/hits/mf.exe",
+      "dialect": "1.1",
+      "message": "DGROUP layout not solvable (runtime slot grid anchor)",
+      "signature": "DGROUP layout not solvable (runtime slot grid anchor)"
+    },
+    {
+      "name": "wild/hits/morcalc.exe",
+      "dialect": "1.0",
+      "message": "unhandled movsi continuation at 0x9696: ('movdx', 3552)",
+      "signature": "unhandled movsi continuation"
+    },
+    {
+      "name": "wild/hits/mymenu.exe",
+      "dialect": "1.0",
+      "message": "displacement 0x3a6 is neither scalar nor array element",
+      "signature": "displacement 0x3a6 is neither scalar nor array element"
+    },
+    {
+      "name": "wild/hits/night.exe",
+      "dialect": "1.1",
+      "message": "DGROUP layout not solvable from the calibrated rules",
+      "signature": "DGROUP layout not solvable from the calibrated rules"
+    },
+    {
+      "name": "wild/hits/number.exe",
+      "dialect": "1.0",
+      "message": "cmpax_si without an IF jcc consumer at 0xaf75",
+      "signature": "cmpax_si without an IF jcc consumer"
+    },
+    {
+      "name": "wild/hits/nvg.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte ad at 0xa19e",
+      "signature": "unhandled byte ad"
+    },
+    {
+      "name": "wild/hits/nvginst.exe",
+      "dialect": "1.1",
+      "message": "unhandled INT EC sub ac at 0xaa00",
+      "signature": "unhandled INT EC sub ac"
+    },
+    {
+      "name": "wild/hits/pcdcfile.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte 21 at 0xae75",
+      "signature": "unhandled byte 21"
+    },
+    {
+      "name": "wild/hits/pfl.exe",
+      "dialect": "1.1",
+      "message": "cmpax_si without an IF jcc consumer at 0xcf2b",
+      "signature": "cmpax_si without an IF jcc consumer"
+    },
+    {
+      "name": "wild/hits/phone.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte 00 at 0xa2e2",
+      "signature": "unhandled byte 00"
+    },
+    {
+      "name": "wild/hits/photo.exe",
+      "dialect": "1.1",
+      "message": "unhandled movsi continuation at 0xad10: ('movdx', 786)",
+      "signature": "unhandled movsi continuation"
+    },
+    {
+      "name": "wild/hits/process.exe",
+      "dialect": "1.0",
+      "message": "37902",
+      "signature": "37902"
+    },
+    {
+      "name": "wild/hits/prtguide.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT 8c at 0x792f",
+      "signature": "unhandled INT 8c"
+    },
+    {
+      "name": "wild/hits/pw.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte 8e at 0x9b1f",
+      "signature": "unhandled byte 8e"
+    },
+    {
+      "name": "wild/hits/pwinst.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT EC sub ac at 0x893e",
+      "signature": "unhandled INT EC sub ac"
+    },
+    {
+      "name": "wild/hits/readme.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT 8c at 0x79ab",
+      "signature": "unhandled INT 8c"
+    },
+    {
+      "name": "wild/hits/reformat.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte 8b at 0xa555",
+      "signature": "unhandled byte 8b"
+    },
+    {
+      "name": "wild/hits/refund.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT EC sub 38 at 0x8f16",
+      "signature": "unhandled INT EC sub 38"
+    },
+    {
+      "name": "wild/hits/resume.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte 16 at 0x9f10",
+      "signature": "unhandled byte 16"
+    },
+    {
+      "name": "wild/hits/rs.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT c2 at 0xa1e0",
+      "signature": "unhandled INT c2"
+    },
+    {
+      "name": "wild/hits/rstprint.exe",
+      "dialect": "1.1",
+      "message": "IDX% bridge mismatch at 0x8b19",
+      "signature": "IDX% bridge mismatch"
+    },
+    {
+      "name": "wild/hits/sabpcv3.exe",
+      "dialect": "1.1",
+      "message": "displacement 0xc18 is neither scalar nor array element",
+      "signature": "displacement 0xc18 is neither scalar nor array element"
+    },
+    {
+      "name": "wild/hits/secure.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT EC sub ac at 0x8703",
+      "signature": "unhandled INT EC sub ac"
+    },
+    {
+      "name": "wild/hits/sprogh.exe",
+      "dialect": "1.1",
+      "message": "DGROUP layout not solvable from the calibrated rules",
+      "signature": "DGROUP layout not solvable from the calibrated rules"
+    },
+    {
+      "name": "wild/hits/stat.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte 0b at 0xcb6e",
+      "signature": "unhandled byte 0b"
+    },
+    {
+      "name": "wild/hits/state.exe",
+      "dialect": "1.1",
+      "message": "jump target 0xb841 is not a statement start",
+      "signature": "jump target 0xb841 is not a statement start"
+    },
+    {
+      "name": "wild/hits/state87.exe",
+      "dialect": "1.1",
+      "message": "jump target 0xb841 is not a statement start",
+      "signature": "jump target 0xb841 is not a statement start"
+    },
+    {
+      "name": "wild/hits/styled.exe",
+      "dialect": "1.0",
+      "message": "87",
+      "signature": "87"
+    },
+    {
+      "name": "wild/hits/styllist.exe",
+      "dialect": "1.0",
+      "message": "pop from empty list",
+      "signature": "pop from empty list"
+    },
+    {
+      "name": "wild/hits/swbb.exe",
+      "dialect": "1.0",
+      "message": "DGROUP layout not solvable from the calibrated rules",
+      "signature": "DGROUP layout not solvable from the calibrated rules"
+    },
+    {
+      "name": "wild/hits/tamstart.exe",
+      "dialect": "1.1",
+      "message": "store to unknown system cell 0x110 at 0xefc9",
+      "signature": "store to unknown system cell 0x110"
+    },
+    {
+      "name": "wild/hits/varamort.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT EC sub 38 at 0x9893",
+      "signature": "unhandled INT EC sub 38"
+    },
+    {
+      "name": "wild/hits/vhfprop.exe",
+      "dialect": "1.1",
+      "message": "codeless DO...LOOP WHILE/UNTIL (no orphan evidence) has no witnessed non-DO source construct to un-synthesize to",
+      "signature": "codeless DO...LOOP WHILE/UNTIL (no orphan evidence) has no witnessed non-DO source construct to un-synthesize to"
+    },
+    {
+      "name": "wild/hits/wb.exe",
+      "dialect": "1.1",
+      "message": "unexpected fold_bp in main body at 0xa8f6",
+      "signature": "unexpected fold_bp in main body"
+    },
+    {
+      "name": "wild/hits/zip.exe",
+      "dialect": "1.1",
+      "message": "unhandled INT d4 at 0x8b70",
+      "signature": "unhandled INT d4"
+    },
+    {
+      "name": "wild/hits/ziptest.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte f7 at 0xa5c6",
+      "signature": "unhandled byte f7"
+    }
+  ],
+  "groups": [
+    {
+      "signature": "unhandled INT 8c",
+      "count": 4,
+      "files": [
+        "wild/hits/baby.exe",
+        "wild/hits/help.exe",
+        "wild/hits/prtguide.exe",
+        "wild/hits/readme.exe"
+      ]
+    },
+    {
+      "signature": "unhandled INT EC sub 38",
+      "count": 4,
+      "files": [
+        "wild/hits/catalog.exe",
+        "wild/hits/football.exe",
+        "wild/hits/refund.exe",
+        "wild/hits/varamort.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 8b",
+      "count": 4,
+      "files": [
+        "wild/hits/cleanup.exe",
+        "wild/hits/crossref.exe",
+        "wild/hits/filepatc.exe",
+        "wild/hits/reformat.exe"
+      ]
+    },
+    {
+      "signature": "DGROUP layout not solvable from the calibrated rules",
+      "count": 3,
+      "files": [
+        "wild/hits/night.exe",
+        "wild/hits/sprogh.exe",
+        "wild/hits/swbb.exe"
+      ]
+    },
+    {
+      "signature": "unhandled INT EC sub ac",
+      "count": 3,
+      "files": [
+        "wild/hits/nvginst.exe",
+        "wild/hits/pwinst.exe",
+        "wild/hits/secure.exe"
+      ]
+    },
+    {
+      "signature": "unhandled INT EC sub ee",
+      "count": 3,
+      "files": [
+        "wild/hits/cal.exe",
+        "wild/hits/cal87.exe",
+        "wild/hits/kinetics.exe"
+      ]
+    },
+    {
+      "signature": "IDX% bridge mismatch",
+      "count": 2,
+      "files": [
+        "wild/hits/electron.exe",
+        "wild/hits/rstprint.exe"
+      ]
+    },
+    {
+      "signature": "cmpax_si without an IF jcc consumer",
+      "count": 2,
+      "files": [
+        "wild/hits/number.exe",
+        "wild/hits/pfl.exe"
+      ]
+    },
+    {
+      "signature": "jump target 0xb841 is not a statement start",
+      "count": 2,
+      "files": [
+        "wild/hits/state.exe",
+        "wild/hits/state87.exe"
+      ]
+    },
+    {
+      "signature": "pop from empty list",
+      "count": 2,
+      "files": [
+        "wild/hits/be.exe",
+        "wild/hits/styllist.exe"
+      ]
+    },
+    {
+      "signature": "store to unknown system cell 0x8a",
+      "count": 2,
+      "files": [
+        "wild/hits/bill.exe",
+        "wild/hits/color.exe"
+      ]
+    },
+    {
+      "signature": "unhandled FP op esc=da modrm=1c",
+      "count": 2,
+      "files": [
+        "wild/hits/bmaster.exe",
+        "wild/hits/ifi.exe"
+      ]
+    },
+    {
+      "signature": "unhandled INT c2",
+      "count": 2,
+      "files": [
+        "wild/hits/billadd.exe",
+        "wild/hits/rs.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 0b",
+      "count": 2,
+      "files": [
+        "wild/hits/menu.exe",
+        "wild/hits/stat.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 8c",
+      "count": 2,
+      "files": [
+        "wild/hits/mdb.exe",
+        "wild/hits/mdb87.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte f7",
+      "count": 2,
+      "files": [
+        "wild/hits/grdscn.exe",
+        "wild/hits/ziptest.exe"
+      ]
+    },
+    {
+      "signature": "unhandled movsi continuation",
+      "count": 2,
+      "files": [
+        "wild/hits/morcalc.exe",
+        "wild/hits/photo.exe"
+      ]
+    },
+    {
+      "signature": "37902",
+      "count": 1,
+      "files": [
+        "wild/hits/process.exe"
+      ]
+    },
+    {
+      "signature": "48762",
+      "count": 1,
+      "files": [
+        "wild/hits/elec87.exe"
+      ]
+    },
+    {
+      "signature": "87",
+      "count": 1,
+      "files": [
+        "wild/hits/styled.exe"
+      ]
+    },
+    {
+      "signature": "DGROUP layout not solvable (runtime slot grid anchor)",
+      "count": 1,
+      "files": [
+        "wild/hits/mf.exe"
+      ]
+    },
+    {
+      "signature": "LINE INPUT # template mismatch",
+      "count": 1,
+      "files": [
+        "wild/hits/file.exe"
+      ]
+    },
+    {
+      "signature": "READ chain closed without any stored target",
+      "count": 1,
+      "files": [
+        "wild/hits/invent.exe"
+      ]
+    },
+    {
+      "signature": "codeless DO...LOOP WHILE/UNTIL (no orphan evidence) has no witnessed non-DO source construct to un-synthesize to",
+      "count": 1,
+      "files": [
+        "wild/hits/vhfprop.exe"
+      ]
+    },
+    {
+      "signature": "displacement 0x2b2 is neither scalar nor array element",
+      "count": 1,
+      "files": [
+        "wild/hits/hfprop.exe"
+      ]
+    },
+    {
+      "signature": "displacement 0x3a6 is neither scalar nor array element",
+      "count": 1,
+      "files": [
+        "wild/hits/mymenu.exe"
+      ]
+    },
+    {
+      "signature": "displacement 0xc18 is neither scalar nor array element",
+      "count": 1,
+      "files": [
+        "wild/hits/sabpcv3.exe"
+      ]
+    },
+    {
+      "signature": "materialization template mismatch",
+      "count": 1,
+      "files": [
+        "wild/hits/kinder.exe"
+      ]
+    },
+    {
+      "signature": "shl si outside an element access",
+      "count": 1,
+      "files": [
+        "wild/hits/mcmurphy.exe"
+      ]
+    },
+    {
+      "signature": "store to unknown system cell 0x110",
+      "count": 1,
+      "files": [
+        "wild/hits/tamstart.exe"
+      ]
+    },
+    {
+      "signature": "unexpected fold_bp in main body",
+      "count": 1,
+      "files": [
+        "wild/hits/wb.exe"
+      ]
+    },
+    {
+      "signature": "unhandled INT d4",
+      "count": 1,
+      "files": [
+        "wild/hits/zip.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 00",
+      "count": 1,
+      "files": [
+        "wild/hits/phone.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 16",
+      "count": 1,
+      "files": [
+        "wild/hits/resume.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 18",
+      "count": 1,
+      "files": [
+        "wild/hits/bm1_dsk2.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 21",
+      "count": 1,
+      "files": [
+        "wild/hits/pcdcfile.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 36",
+      "count": 1,
+      "files": [
+        "wild/hits/hebrew.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 38",
+      "count": 1,
+      "files": [
+        "wild/hits/lmaster.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 8e",
+      "count": 1,
+      "files": [
+        "wild/hits/pw.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte ad",
+      "count": 1,
+      "files": [
+        "wild/hits/nvg.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte c4",
+      "count": 1,
+      "files": [
+        "wild/hits/CVT2TB.EXE"
+      ]
+    },
+    {
+      "signature": "unhandled byte ff",
+      "count": 1,
+      "files": [
+        "wild/hits/horses.exe"
+      ]
+    }
+  ]
+}

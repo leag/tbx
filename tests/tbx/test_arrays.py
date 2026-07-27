@@ -16,6 +16,53 @@ def test_dim_node():
     d = ir.Dim("V0", (10,))
     assert ir.unparse_stmt(d) == "DIM V0(10)"
     assert ir.unparse_stmt(ir.Dim("V0", (5, 5))) == "DIM V0(5,5)"
+    assert ir.unparse_stmt(ir.Dim("V0%", (20,), dynamic=True)) == "DIM DYNAMIC V0%(20)"
+
+
+def test_decode_t1_dynconstnum():
+    from tbx import decode0
+
+    L = ir.Lit
+    want = [
+        ir.Dim("V0%", (L(20),), dynamic=True),
+        ir.Assign(ir.ArrayRef("V0%", (L(1),)), L(7)),
+        ir.Print((ir.ArrayRef("V0%", (L(1),)),), newline=True),
+        ir.End(),
+    ]
+    assert decode0.decode_user_code(_exe("t1_dynconstnum.exe")) == want
+    assert decode0.decode_user_code(_exe("v10_dynconstnum.exe")) == want
+
+
+def test_decode_varptr_dollar():
+    from tbx import decode0
+
+    A, L, V = ir.Assign, ir.Lit, ir.Var
+    scalar = [
+        A(V("A%"), L(1)),
+        A(V("B$"), ir.Call("VARPTR$", (V("A%"),))),
+        ir.End(),
+    ]
+    array = [
+        ir.Dim("V0%", (20,)),
+        A(V("A$"), ir.Call("VARPTR$", (AR("V0%", L(0)),))),
+        ir.End(),
+    ]
+    assert decode0.decode_user_code(_exe("t1_varptrs_scalar.exe")) == scalar
+    assert decode0.decode_user_code(_exe("v10_varptrs_scalar.exe")) == scalar
+    assert decode0.decode_user_code(_exe("t1_varptrs_arr.exe")) == array
+    assert decode0.decode_user_code(_exe("v10_varptrs_arr.exe")) == array
+
+
+def test_decode_reverse_dynamic_array_swap():
+    from tbx import decode0
+
+    L, V = ir.Lit, ir.Var
+    s = decode0.decode_user_code(_exe("t1_swap_dynstr.exe"))
+    d = decode0.decode_user_code(_exe("t1_swap_dyndbl.exe"))
+    assert s[0] == ir.Dim("V1$", (L(10),), also=(("V0$", (L(10),)),), dynamic=True)
+    assert d[0] == ir.Dim("V1#", (L(10),), also=(("V0#", (L(10),)),), dynamic=True)
+    assert s[5] == ir.Swap(AR("V1$", V("A")), AR("V0$", V("B")))
+    assert d[5] == ir.Swap(AR("V1#", V("A")), AR("V0#", V("B")))
 
 
 def test_decode_t1_arr1():
@@ -123,6 +170,36 @@ def test_emit_arrays():
     assert emit0.emit(decode0.decode_user_code(_exe("t1_arrv.exe"))) == (
         "10 DIM V0(10)\n20 A = 3\n30 V0(A) = 2\n40 B = V0(A) + V0(1)\n50 END\n"
     )
+
+
+def test_decode_local_dynamic_array():
+    """LOCAL A() + runtime DIM A(n) inside a SUB: a heap-allocated array
+    scoped to the current call, distinct from both static locals and
+    DGROUP $DYNAMIC arrays (t1_localarr/t1_localarrint, both dialects)."""
+    from tbx import decode0
+
+    A, L = ir.Assign, ir.Lit
+
+    def want(name):
+        return [
+            ir.SubDef(
+                "SUB1",
+                (),
+                (
+                    ir.Local((f"{name}()",)),
+                    ir.Dim(name, (L(5),)),
+                    A(AR(name, L(2)), L(7)),
+                    ir.Print((AR(name, L(2)),), newline=True),
+                ),
+            ),
+            ir.CallStmt("SUB1", ()),
+            ir.End(),
+        ]
+
+    assert decode0.decode_user_code(_exe("t1_localarr.exe")) == want("V0")
+    assert decode0.decode_user_code(_exe("v10_t1_localarr.exe")) == want("V0")
+    assert decode0.decode_user_code(_exe("t1_localarrint.exe")) == want("V0%")
+    assert decode0.decode_user_code(_exe("v10_t1_localarrint.exe")) == want("V0%")
 
 
 if __name__ == "__main__":

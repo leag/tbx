@@ -7,6 +7,9 @@ license = "MIT"
 requires-python = ">=3.11"
 dependencies = []
 
+[project.urls]
+Repository = "https://github.com/leag/tbx"
+
 [project.optional-dependencies]
 # Disassembly-based debugging tools (tbx.tools.cfgview and friends); the
 # core decompile pipeline needs no third-party packages.
@@ -39,14 +42,9 @@ ignore = ["E701", "E702", "E741"]
 "tbx/ir/__init__.py" = ["F401"]
 "tbx/decode0/__init__.py" = ["F401"]
 
-[tool.ty.rules]
-missing-type-argument = "error"
-possibly-unresolved-reference = "error"
-
 [dependency-groups]
 dev = [
     "iced-x86>=1.21.0",
     "pytest>=9.0.0",
     "ruff>=0.15.0",
-    "ty>=0.0.56",
 ]

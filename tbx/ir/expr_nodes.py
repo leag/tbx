@@ -74,6 +74,20 @@ class BinOp:
 
 
 @dataclass(frozen=True)
+class Template:
+    """A calibrated, byte-significant source spelling for ``inner``.
+
+    Turbo Basic sometimes gives algebraically equivalent expression trees
+    different register-staging templates.  The decoder attaches this wrapper
+    only when the scanned opcode shape witnesses the original spelling; the
+    renderer consumes it without exposing machine bytes to the IR client.
+    """
+
+    kind: str
+    inner: object  # Expr
+
+
+@dataclass(frozen=True)
 class StrLit:
     """String literal (pooled as a 4-byte descriptor into the string space)."""
 

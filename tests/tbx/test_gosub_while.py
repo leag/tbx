@@ -68,6 +68,37 @@ def test_emit_gosub_while():
     )
 
 
+def test_return_to_line():
+    from tbx import decode0, emit0
+
+    got = decode0.decode_user_code(_exe("t1_returnline.exe"))
+    assert got[-1] == ir.Return(2)
+    assert emit0.emit(got).endswith("40 CLS\n50 RETURN 30\n")
+
+
+def test_decode_t1_whmidref():
+    # A head-test WHILE whose condition READS A BY-REF PARAM FIRST
+    # (`WHILE MID$(S$, X%, 1) <> "1"`). The statement's opening op is the
+    # arg_ref that stages the string param, and `cargs` returns before
+    # core.py's generic top-of-statement address anchor -- so the loop-back
+    # jmps' target used to match no recorded statement address, and
+    # _lift_while misclassified the loop as an inline-IF body skip, leaving
+    # the backward jmps with nothing to close (`unhandled jmp short`).
+    # Wild tbd73.exe: TBWINDOW `SUB Makevmenu`.
+    from tbx import decode0, emit0
+
+    for stem in ("t1_whmidref.exe", "v10_t1_whmidref.exe"):
+        src = emit0.emit(decode0.decode_user_code(_exe(stem)))
+        assert src == (
+            "10 SUB SUB1(A$, B%)\n"
+            '  DO WHILE MID$(A$,B%,1) <> "1"\n'
+            "  INCR B%\n"
+            "  LOOP\n"
+            "END SUB\n"
+            '20 C$ = "001"\n30 D% = 1\n40 CALL SUB1(C$,D%)\n50 END\n'
+        ), stem
+
+
 if __name__ == "__main__":
     test_ir_nodes()
     test_decode_t1_gosub()

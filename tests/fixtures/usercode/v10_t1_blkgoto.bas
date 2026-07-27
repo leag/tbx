@@ -1,0 +1,9 @@
+10 A$ = "X"
+20 IF A$ <> "Q" THEN
+  PRINT "A"
+22 PRINT "B"
+END IF
+30 IF A$ = "X" THEN 50
+40 END
+50 A$ = "Q"
+60 GOTO 22

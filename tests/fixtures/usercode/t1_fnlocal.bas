@@ -1,0 +1,7 @@
+10 DEF FNFN1(A)
+  LOCAL B%
+  B% = A + 1
+  FNFN1 = B% + 2
+END DEF
+20 PRINT FNFN1(3)
+30 END

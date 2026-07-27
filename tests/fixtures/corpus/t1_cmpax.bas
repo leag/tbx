@@ -1,0 +1,5 @@
+10 A$ = "AB"
+20 B$ = "CD"
+30 IF LEN(A$) = LEN(B$) THEN PRINT "EQ"
+40 IF INSTR(A$, "B") > LEN(B$) THEN PRINT "GT"
+50 END

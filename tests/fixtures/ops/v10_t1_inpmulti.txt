@@ -1,0 +1,15 @@
+# v10_t1_inpmulti dialect=1.0 start=071E0
+071E3:input:304:24577
+071EA:read_num
+071ED:fstp:292
+071F2:read_num
+071F5:fstp:288
+071FC:fld:288
+07201:fold:+:292
+07206:rt:187
+07208:rt:184
+0720C:end
+0720F:epilogue
+# commits
+071FA
+0720A

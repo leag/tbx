@@ -1,0 +1,28 @@
+# t1_dispill dialect=1.1 start=08790
+08793:movax:16
+08796:movbxax
+08798:movax:3
+0879B:movrr:cx:bx
+0879D:movbxax
+0879F:movax:4
+087A2:movrr:di:cx
+087A4:movrr:cx:bx
+087A6:movbxax
+087A8:movax:1
+087AB:fn_screen
+087AE:movrr:bx:cx
+087B0:movrr:cx:di
+087B2:fn_screen
+087B5:movrr:bx:cx
+087B7:cwd
+087B8:idivbx
+087BA:movmem_ax:44
+087BD:fild:44
+087C2:fstp:288
+087C9:fld:288
+087CE:rt:187
+087D0:rt:184
+087D4:epilogue
+# commits
+087C7
+087D2

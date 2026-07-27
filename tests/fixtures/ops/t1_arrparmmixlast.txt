@@ -1,0 +1,36 @@
+# t1_arrparmmixlast dialect=1.1 start=08700
+08703:movsi:356
+08706:rt:156
+08708:movsi:372
+0870B:strassign
+0870D:mov_mem_sp:102
+08711:sub_sp:2
+08714:movax:1
+08717:mov_si_sp
+08719:movm_ax_temp
+0871C:arg_push_temp
+0871E:movsi:288
+08721:arg_push_array
+08723:movm_imm:102:0
+08729:far_call:34615
+0872E:add_sp:2
+08731:end
+08734:jmp:34657
+08737:proc_enter
+0873A:arg_ref:66
+0873D:far_fild_si
+08741:rt:187
+08743:arg_ref:66
+08746:far_movax_si
+08749:subax_bp:14
+0874C:movsiax
+0874E:shlsi
+08750:shlsi
+08752:moves_bp:6
+08755:far_spush
+08757:rt:190
+08759:rt:184
+0875D:proc_ret:64
+08761:epilogue
+# commits
+0875B

@@ -1,0 +1,18 @@
+# v10_t1_inpmixed dialect=1.0 start=071E0
+071E3:input:304:8193
+071EA:read_str
+071ED:movsi:292
+071F0:strassign
+071F2:read_num
+071F5:fstp:288
+071FC:movsi:292
+071FF:rt:156
+07201:rt:190
+07203:fld:288
+07208:rt:187
+0720A:rt:184
+0720E:end
+07211:epilogue
+# commits
+071FA
+0720C

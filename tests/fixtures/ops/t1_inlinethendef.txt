@@ -1,0 +1,36 @@
+# t1_inlinethendef dialect=1.1 start=08700
+08703:movm_imm:288:1
+08709:far_call:34630
+0870E:push_bp
+0870F:mov_mem_sp:104
+08713:sub_sp:12
+08716:mov_bp_sp
+08718:fild:324
+0871D:fstp_bp:4
+08721:movm_imm:104:0
+08729:fn_call:34642
+08730:fld_bp:0
+08734:fwait
+08736:add_sp:12
+08739:pop_bp
+0873A:rt:187
+0873C:rt:184
+08740:end
+08743:jmp:34639
+08746:inline_sub:b'U\x8b\xec\xc4~\n]\xcb'
+0874F:jmp:34697
+08752:mov_bp_imm:0:0
+08757:mov_bp_imm:2:0
+0875C:local_init:2:8
+08770:fld1
+08773:fold_bp:+:4
+08777:fstp_bp:8
+0877D:fld_bp:8
+08781:fstp_bp:0
+08787:fn_ret
+08789:epilogue
+# commits
+08727
+0873E
+0877B
+08785

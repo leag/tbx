@@ -58,14 +58,27 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.Var(name(e.name))
         if isinstance(e, ir.BinOp):
             return ir.BinOp(e.op, walk(e.lhs), walk(e.rhs))
+        if isinstance(e, ir.Template):
+            return ir.Template(e.kind, walk(e.inner))
         if isinstance(e, ir.Neg):
             return ir.Neg(walk(e.operand))
         if isinstance(e, ir.Not):
             return ir.Not(walk(e.operand))
         if isinstance(e, ir.Group):
+            # A Group can wrap a boolean condition too (an explicitly
+            # parenthesized AND-group joined into an outer OR, wild
+            # bmaster.exe/ifi.exe) -- route those through walk_cond so
+            # names inside the LogOp/RelOp tree get renamed, not just
+            # plain-expression Groups.
+            if isinstance(e.inner, (ir.LogOp, ir.RelOp)):
+                return ir.Group(walk_cond(e.inner))
             return ir.Group(walk(e.inner))
-        if isinstance(e, ir.ArrayRef):  # array names are already canonical
-            return ir.ArrayRef(e.name, tuple(walk(i) for i in e.indices))
+        if isinstance(e, ir.ArrayRef):  # ordinary array names are already
+            # canonical; whole-array SUB params are Pxx placeholders entered
+            # into `names` while their header is renamed.
+            return ir.ArrayRef(
+                names.get(e.name, e.name), tuple(walk(i) for i in e.indices)
+            )
         if isinstance(e, ir.Call):
             return ir.Call(e.name, tuple(walk(a) for a in e.args))
         if isinstance(e, ir.FnCall):
@@ -75,7 +88,10 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
     def walk_cond(c):
         if isinstance(c, ir.LogOp):
             return ir.LogOp(c.op, walk_cond(c.lhs), walk_cond(c.rhs))
-        return ir.RelOp(c.op, walk(c.lhs), walk(c.rhs))
+        if isinstance(c, ir.RelOp):
+            return ir.RelOp(c.op, walk(c.lhs), walk(c.rhs))
+        return walk(c)  # bare numeric-truthiness condition (no explicit
+        # compare in source, e.g. `LOOP UNTIL LEN(K$)` -- wild metric.exe)
 
     def rn(s):
         if isinstance(s, ir.Assign):
@@ -114,6 +130,10 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.For(walk(s.var), walk(s.init), walk(s.limit), walk(s.step))
         if isinstance(s, ir.NextStmt):
             return ir.NextStmt(walk(s.var))
+        if isinstance(s, ir.Incr):
+            return ir.Incr(walk(s.var))
+        if isinstance(s, ir.Decr):
+            return ir.Decr(walk(s.var))
         if isinstance(s, ir.While):
             return ir.While(walk_cond(s.cond))
         if isinstance(s, ir.Do):
@@ -122,7 +142,10 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.Loop(s.kind, walk_cond(s.cond) if s.cond is not None else None)
         if isinstance(s, ir.Print):
             return ir.Print(
-                tuple(walk(i) for i in s.items), newline=s.newline, file=s.file
+                tuple(walk(i) for i in s.items),
+                newline=s.newline,
+                file=s.file,
+                commas=s.commas,
             )
         if isinstance(s, ir.PrintUsing):
             return ir.PrintUsing(
@@ -130,7 +153,10 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
                 tuple(walk(v) for v in s.values),
                 file=s.file,
                 newline=s.newline,
+                lprint=s.lprint,
             )
+        if isinstance(s, ir.Close):
+            return ir.Close(None if s.num is None else walk(s.num))
         if isinstance(s, ir.Kill):
             return ir.Kill(walk(s.file))
         if isinstance(s, ir.Play):
@@ -147,6 +173,8 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.Shell(walk(s.cmd))
         if isinstance(s, ir.Chain):
             return ir.Chain(walk(s.file))
+        if isinstance(s, ir.Run):
+            return ir.Run(None if s.file is None else walk(s.file))
         if isinstance(s, ir.OnGoto):
             return ir.OnGoto(walk(s.selector), s.targets)
         if isinstance(s, ir.OnGosub):
@@ -209,8 +237,24 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.Poke(walk(s.addr), walk(s.value))
         if isinstance(s, ir.DefSeg):
             return ir.DefSeg(None if s.seg is None else walk(s.seg))
+        if isinstance(s, ir.Locate):
+            return ir.Locate(
+                None if s.row is None else walk(s.row),
+                None if s.col is None else walk(s.col),
+                None if s.cursor is None else walk(s.cursor),
+                None if s.start is None else walk(s.start),
+                None if s.stop is None else walk(s.stop),
+            )
+        if isinstance(s, ir.Color):
+            return ir.Color(
+                None if s.fg is None else walk(s.fg),
+                None if s.bg is None else walk(s.bg),
+                None if s.border is None else walk(s.border),
+            )
         if isinstance(s, ir.Palette):
             return ir.Palette(walk(s.attr), walk(s.color))
+        if isinstance(s, ir.PaletteUsing):
+            return ir.PaletteUsing(walk(s.source))
         if isinstance(s, ir.View):
             return ir.View(
                 walk(s.x1),
@@ -224,19 +268,30 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
         if isinstance(s, ir.Window):
             return ir.Window(walk(s.x1), walk(s.y1), walk(s.x2), walk(s.y2), s.screen)
         if isinstance(s, ir.Width):
-            return ir.Width(walk(s.cols))
-        if isinstance(s, ir.Screen):
-            return ir.Screen(walk(s.mode))
+            return ir.Width(
+                walk(s.cols),
+                walk(s.device) if s.device is not None else None,
+                s.file,
+            )
         if isinstance(s, ir.Write):
             return ir.Write(tuple(walk(i) for i in s.items), file=s.file)
         if isinstance(s, ir.Lprint):
-            return ir.Lprint(tuple(walk(i) for i in s.items), newline=s.newline)
+            return ir.Lprint(
+                tuple(walk(i) for i in s.items),
+                newline=s.newline,
+                commas=s.commas,
+            )
         if isinstance(s, ir.Input):
-            return ir.Input(s.prompt, walk(s.var), s.comma)
+            var = (
+                tuple(walk(v) for v in s.var)
+                if isinstance(s.var, tuple)
+                else walk(s.var)
+            )
+            return ir.Input(s.prompt, var, s.comma, s.semi)
         if isinstance(s, ir.LineInput):
-            return ir.LineInput(s.prompt, walk(s.var))
+            return ir.LineInput(s.prompt, walk(s.var), s.file, s.semi)
         if isinstance(s, ir.Open):
-            return ir.Open(s.mode, s.num, walk(s.file))
+            return ir.Open(s.mode, s.num, walk(s.file), s.reclen, s.for_as)
         if isinstance(s, ir.InputFile):
             return ir.InputFile(s.num, tuple(walk(v) for v in s.vars))
         if isinstance(s, ir.Dim):
@@ -250,17 +305,29 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
                 s.name,
                 tuple(wb(b) for b in s.bounds),
                 tuple((n, tuple(wb(b) for b in bs)) for n, bs in s.also),
+                s.dynamic,
             )
+        if isinstance(s, ir.Screen):
+            wn = lambda e: None if e is None else walk(e)  # noqa: E731
+            return ir.Screen(walk(s.mode), wn(s.burst), wn(s.apage), wn(s.vpage))
+        if isinstance(s, ir.KeyDef):
+            return ir.KeyDef(walk(s.num), walk(s.text))
         if isinstance(s, ir.Files):
-            return ir.Files(walk(s.spec))
+            return ir.Files(None if s.spec is None else walk(s.spec))
         if isinstance(s, ir.Name):
             return ir.Name(walk(s.old), walk(s.new))
         if isinstance(s, ir.Get):
             return ir.Get(s.num, walk(s.pos))
+        if isinstance(s, ir.GetString):
+            return ir.GetString(s.num, walk(s.count), walk(s.target))
         if isinstance(s, ir.Put):
             return ir.Put(s.num, walk(s.pos))
+        if isinstance(s, ir.PutString):
+            return ir.PutString(s.num, walk(s.text))
         if isinstance(s, ir.Seek):
             return ir.Seek(s.num, walk(s.pos))
+        if isinstance(s, ir.Ioctl):
+            return ir.Ioctl(s.num, walk(s.text))
         if isinstance(s, ir.Bload):
             return ir.Bload(walk(s.file), walk(s.offset))
         if isinstance(s, ir.Bsave):
@@ -275,9 +342,31 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.Rset(walk(s.target), walk(s.source))
         if isinstance(s, ir.MidAssign):
             return ir.MidAssign(walk(s.target), walk(s.start), walk(s.source))
+        if isinstance(s, ir.Shared):
+            # scalar names are V#### placeholders; array names ('V0()') are
+            # already canonical
+            return ir.Shared(
+                tuple(n if n.endswith("()") else name(n) for n in s.names)
+            )
+        if isinstance(s, ir.Local):
+            # first body statement (Local's placeholder names are never seen
+            # before this point), so declaration order == first-store order.
+            # LOCAL DYNAMIC array names ('V0()') are already canonical, same
+            # convention as ir.Shared above.
+            return ir.Local(
+                tuple(n if n.endswith("()") else name(n) for n in s.names)
+            )
+        if isinstance(s, ir.Common):
+            # always the program's first statement, so the COMMON band's
+            # slots letter first, in band order. A COMMON'd ARRAY carries its
+            # rank in parens (`V0(1)`, see core.py's synthesis) and keeps its
+            # canonical V-name -- runtime array names are never lettered, same
+            # convention as ir.Shared/ir.Local above (probe t1_commonarr).
+            return ir.Common(tuple(n if "(" in n else name(n) for n in s.names))
         if isinstance(s, ir.SubDef):
             params = tuple(
-                name(p) for p in s.params
+                name(p[:-3]) + "(1)" if p.endswith("(1)") else name(p)
+                for p in s.params
             )  # params first: A, B... in decl order
             return ir.SubDef(s.name, params, tuple(rn(b) for b in s.body))
         if isinstance(s, ir.CallStmt):

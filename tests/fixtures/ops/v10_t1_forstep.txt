@@ -1,0 +1,13 @@
+# v10_t1_forstep dialect=1.0 start=070B0
+070B3:movm_imm:292:1
+070B9:jmp:28876
+070BC:fild:292
+070C1:rt:187
+070C3:rt:184
+070C7:addm_i8:292:10
+070CC:cmp_mi8:292:100
+070D1:jcc:126:28860
+070D3:end
+070D6:epilogue
+# commits
+070C5

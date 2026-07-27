@@ -1,0 +1,6 @@
+10 INPUT A$
+20 IF A$ = "T" OR A$ = "t" THEN CLS: GOTO 60
+30 IF A$ = "X" THEN 50
+40 PRINT "A"
+50 PRINT "B"
+60 END

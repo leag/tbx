@@ -1,0 +1,23 @@
+# v10_t1_localargcall dialect=1.0 start=070B0
+070B3:jmp:28870
+070B6:proc_enter
+070B9:movax:1
+070BC:arg_ref:6
+070BF:far_addm_ax_si
+070C2:proc_ret:4
+070C6:jmp:28927
+070C9:proc_enter
+070CC:local_init:1:6
+070E0:mov_bp_imm:6:5
+070E5:arg_push_ref_bp:6
+070EC:far_call:28854
+070F1:fild_bp:6
+070F5:rt:187
+070F7:rt:184
+070FB:proc_ret:2
+070FF:sub_sp:2
+07102:far_call:28873
+07107:end
+0710A:epilogue
+# commits
+070F9

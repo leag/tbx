@@ -1,0 +1,20 @@
+# t1_errcmp dialect=1.1 start=08700
+08703:on_error:34597
+0870A:movax:24
+0870D:error_stmt
+08710:movsi:296
+08713:rt:156
+08715:rt:190
+08717:rt:184
+08719:end
+0871C:movsi:292
+0871F:rt:156
+08721:rt:190
+08723:rt:184
+08725:movax:24
+08728:cmpax_m:116
+0872C:jcc:116:34588
+0872E:resume_pre
+08731:jmps:34585
+08733:epilogue
+# commits

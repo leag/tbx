@@ -1,0 +1,34 @@
+# t1_erasepre dialect=1.1 start=08B60
+08B63:input:352:16384
+08B6A:read_num
+08B6D:fstp:342
+08B74:jmp:35717
+08B77:movsi:288
+08B7A:movdx:154
+08B7D:movesdx
+08B7F:erase
+08B82:jmp:35768
+08B85:movsi:288
+08B88:movdx:154
+08B8B:movesdx
+08B8D:dim_begin
+08B90:fld:342
+08B95:fistp:44
+08B9A:fwait
+08B9C:movaxmem:44
+08B9F:movm_ax:298
+08BA3:movm_imm:296:0
+08BA9:movsi:288
+08BAC:movdx:154
+08BAF:movesdx
+08BB1:dim_end
+08BB6:jmps:35703
+08BB8:movsi:356
+08BBB:rt:156
+08BBD:rt:190
+08BBF:rt:184
+08BC1:end
+08BC4:epilogue
+# commits
+08B72
+08BB4
