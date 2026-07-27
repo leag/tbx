@@ -77,10 +77,11 @@ uv run pytest
 
 ## Oracle verification
 
-The repository vendors a headless v86 harness containing the real Turbo Basic
-compiler. It is used for new fixture calibration and release checks; it is not
-part of the decompiler's runtime dependencies. Install its Node dependencies
-and follow [the oracle guide](vendor/turbo_basic_oracle/README.tbx.md), then:
+The repository vendors the headless v86 harness and its patched emulator, but
+does **not** distribute Borland's proprietary `TB.EXE` or the compiler floppy
+images. Those ignored assets must be provisioned locally before calibration.
+The oracle is used for new fixtures and release checks, never at runtime.
+Install its Node dependencies and follow [the oracle guide](vendor/turbo_basic_oracle/README.tbx.md), then:
 
 ```sh
 uv run python -m tbx.tools.verify_fixture \

@@ -1,8 +1,10 @@
 # Vendored Turbo BASIC oracle
 
-This directory contains the headless v86 Turbo BASIC compiler harness used by
-tbx for byte-exact probes. Install its JavaScript dependency with `npm install`
-in this directory, then set `TBX_ORACLE` to this path when invoking
+This directory contains the headless v86 harness used by tbx for byte-exact
+probes. The repository includes the harness and patched emulator, but does not
+include Borland's proprietary `TB.EXE` or the compiler floppy images. Supply
+those ignored assets locally, then install the JavaScript dependency with
+`npm install` in this directory and set `TBX_ORACLE` to this path when invoking
 `tbx.tools.oracle`.
 
 The harness stages source-relative external `$INLINE "file"` operands into the
@@ -22,8 +24,9 @@ TBX_ORACLE=$PWD/vendor/turbo_basic_oracle \
 `CB`). The fixed harness compiles each payload and the compiler appends `CB`,
 reproducing the exact 116-byte and 125-byte executable bodies byte-for-byte.
 
-Generated disk images and compiler outputs are intentionally not part of the
-vendored set. The v86 dependency is installed from `package-lock.json`.
+Compiler floppy images (`*.img`) and generated outputs are intentionally
+gitignored and are not distributed. The v86 dependency is installed from
+`package-lock.json`.
 
 ## Performance and concurrency
 

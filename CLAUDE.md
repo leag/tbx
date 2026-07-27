@@ -33,7 +33,7 @@ BASIC source:
 The decoder is fail-loud. Unknown byte patterns must raise `ValueError`; never
 guess a construct or add a speculative fallback. A new mapping requires a
 compiled fixture in `tests/fixtures/corpus/` and byte-exact verification with
-the vendored v86 Turbo Basic oracle:
+the vendored v86 oracle harness (with locally provisioned compiler assets):
 
 ```sh
 uv run python -m tbx.tools.verify_fixture STEM
