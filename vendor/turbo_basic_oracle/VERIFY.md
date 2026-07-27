@@ -35,16 +35,13 @@ B:\SOLVER.BAS too large.  Truncate? (Y/N)
 ```
 
 TB 1.1's editor caps source size (~64 KB), so the IDE refuses to load the file. This is
-a **TB IDE constraint, independent of the emulator** — DOSBox runs the same `TB.EXE`
-and hits the identical prompt; the v86 fix does not change it.
+a **Turbo Basic IDE constraint, independent of v86**.
 
 Paths to compile the full solver (each out of scope for the v86 fix itself):
 - Split the source with `$INCLUDE` so the editor-resident main stays under the limit.
 - Trim/condense the reconstructed source below ~64 KB.
 
-## What was compared to DOSBox
+## Verification scope
 
-The spec's "byte-compare against the DOSBox-built EXE" step is **not applicable** to the
-full solver while it can't be loaded in either backend. For programs within the editor
-limit, v86 and DOSBox drive the same `TB.EXE` code generator, so the produced EXEs are
-expected to match; the FP probe EXE is the verified artifact here.
+The verified artifact here is the FP probe EXE produced by the v86 harness. The
+full solver remains outside the compiler's editor-size limit.

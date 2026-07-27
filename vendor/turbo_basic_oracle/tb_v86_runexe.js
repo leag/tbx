@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Headless run of a TB-compiled DOS EXE in v86: boot FreeDOS, run the EXE on B:, then
 // drive its interactive INPUT prompts entirely via the emulated keyboard (v86 reaches the
-// BIOS buffer -- unlike SDL-dummy DOSBox), reading the mirrored text screen to know when
+// BIOS buffer -- unlike an SDL-dummy display), reading the mirrored text screen to know when
 // each prompt appears. The byte-exact FRAME1 asks for two filenames:
 //   1. "...ARCHIVO DE DATOS"  -> the input .DAT
 //   2. "...ARCHIVO DE SALIDA" -> the output report file (appears after the solve)

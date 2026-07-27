@@ -1,7 +1,7 @@
 """Bridge to the external Turbo Basic toolchain oracle (triage/authoring only).
 
-The oracle is a headless automation of the ORIGINAL Borland toolchain living
-outside this repository (a sister project); tbx depends only on this contract:
+The oracle is a headless v86 automation of the ORIGINAL Borland toolchain
+vendored under ``vendor/turbo_basic_oracle``; tbx depends only on this contract:
 
     node <oracle>/tb_v86.js FILE.BAS --compile-exe [--floppy IMG]
         compiles FILE.BAS with the real Turbo Basic compiler and leaves the
@@ -15,8 +15,8 @@ outside this repository (a sister project); tbx depends only on this contract:
         DOS prompt (interactive/graphics/hang) -- no usable capture.
 
 Locate it with TBX_ORACLE=/path/to/oracle (default: the vendored
-`vendor/turbo_basic_oracle`, falling back to `../frame/oracle`). Needs node and
-mtools. Like cfgview, this is
+`vendor/turbo_basic_oracle`; a compatible external harness may be selected
+explicitly). Needs node and mtools. Like cfgview, this is
 never part of the decompile pipeline; everything here is for verifying new
 fixtures byte-exact and capturing behavior goldens.
 """
@@ -59,11 +59,9 @@ def oracle_dir() -> Path:
     if env:
         cand = Path(env)
     else:
-        # Prefer the repository-vendored harness; retain the historical sibling
-        # checkout as a fallback for existing development environments.
+        # The repository-vendored v86 harness is the supported default.
         vendored = _REPO / "vendor" / "turbo_basic_oracle"
-        sibling = _REPO.parent / "frame" / "oracle"
-        cand = vendored if (vendored / "tb_v86.js").is_file() else sibling
+        cand = vendored
     if not (cand / "tb_v86.js").is_file():
         raise RuntimeError(
             f"Turbo Basic oracle not found at {cand} -- set TBX_ORACLE to the "
