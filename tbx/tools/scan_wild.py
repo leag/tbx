@@ -35,13 +35,15 @@ import hashlib
 import json
 import re
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
-from tbx import decode0
+from tbx import decode0, emit0
+from tbx.tools import oracle
 
 REPORT_SCHEMA_VERSION = 1
-hits, fails, corpus_members, nontb, nexe = [], [], [], 0, 0
+hits, fails, corpus_members, roundtrips, nontb, nexe = [], [], [], [], 0, 0
 
 
 def failure_signature(message: str) -> str:
@@ -60,7 +62,7 @@ def corpus_fingerprint() -> str:
     return digest.hexdigest()
 
 
-def try_exe(name: str, data: bytes, outdir: Path | None):
+def try_exe(name: str, data: bytes, outdir: Path | None, roundtrip: bool = False):
     global nontb, nexe
     if len(data) < 64 or data[:2] not in (b"MZ", b"ZM"):
         return
@@ -75,6 +77,18 @@ def try_exe(name: str, data: bytes, outdir: Path | None):
         prog = decode0.decode_user_code(data)
         hits.append((name, dia.name, len(prog)))
         print(f"HIT  {dia.name}  {len(prog):4d} stmts  {name}")
+        if roundtrip:
+            with tempfile.TemporaryDirectory(prefix="tbx-wild-") as work:
+                bas = Path(work) / "WILD.BAS"
+                bas.write_text(emit0.emit(prog))
+                try:
+                    rebuilt = oracle.compile_bas(bas, dialect=dia.name)
+                    exact = rebuilt == data
+                    roundtrips.append((name, exact, len(rebuilt) - len(data)))
+                    print(f"  ROUNDTRIP  {'EXACT' if exact else f'DIFF {len(rebuilt) - len(data):+d}'}")
+                except Exception as e:
+                    roundtrips.append((name, None, None))
+                    print(f"  ROUNDTRIP  COMPILE-FAIL {str(e)[:80]}")
     except Exception as e:
         fails.append((name, dia.name, str(e)))
         print(f"TB-BUT-FAILS  {dia.name}  {name}: {str(e)[:90]}")
@@ -107,13 +121,14 @@ def walk_zip(name: str, data: bytes, outdir, depth=0):
 
 
 def main():
-    global hits, fails, corpus_members, nontb, nexe
-    hits, fails, corpus_members, nontb, nexe = [], [], [], 0, 0
+    global hits, fails, corpus_members, roundtrips, nontb, nexe
+    hits, fails, corpus_members, roundtrips, nontb, nexe = [], [], [], [], 0, 0
     root = Path(sys.argv[1])
     outdir = None
     if "--copy-hits" in sys.argv:
         outdir = Path(sys.argv[sys.argv.index("--copy-hits") + 1])
     report = None
+    roundtrip = "--roundtrip" in sys.argv
     if "--report" in sys.argv:
         report = Path(sys.argv[sys.argv.index("--report") + 1])
     for p in sorted(root.rglob("*")):
@@ -123,11 +138,15 @@ def main():
         if low == ".zip":
             walk_zip(str(p), p.read_bytes(), outdir)
         elif low in (".exe", ".com"):
-            try_exe(str(p), p.read_bytes(), outdir)
+            try_exe(str(p), p.read_bytes(), outdir, roundtrip)
         elif low == ".iso":
             print(f"(skipping iso {p}; mount or extract it first)")
     print(f"\n{nexe} EXEs scanned: {len(hits)} TB decode-ok, "
           f"{len(fails)} TB-but-fail, {nontb} not Turbo Basic")
+    if roundtrip:
+        exact = sum(ok is True for _, ok, _ in roundtrips)
+        attempted = sum(ok is not None for _, ok, _ in roundtrips)
+        print(f"Round trips: {exact}/{attempted} byte-exact ({len(roundtrips) - attempted} compile failures)")
     if report:
         groups: dict[str, list[str]] = {}
         for name, _dialect, message in fails:
@@ -146,6 +165,10 @@ def main():
             "hits": [
                 {"name": name, "dialect": dialect, "statements": statements}
                 for name, dialect, statements in hits
+            ],
+            "roundtrips": [
+                {"name": name, "exact": exact, "size_delta": delta}
+                for name, exact, delta in roundtrips
             ],
             "failures": [
                 {

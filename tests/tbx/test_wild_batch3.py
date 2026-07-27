@@ -1472,6 +1472,18 @@ def test_decode_t1_arrbyrefidx():
     )
 
 
+def test_wild_baby_event_hook_loops_decode():
+    """Event-hook-prefixed loop targets normalize to their semantic start."""
+    from tbx import decode0, emit0, ir
+
+    from conftest import wild_hits_bytes
+
+    prog = decode0.decode_user_code(wild_hits_bytes("baby.exe"))
+    src = emit0.emit(prog)
+    assert any(isinstance(s, ir.Loop) for s in prog)
+    assert "INKEY$" in src
+
+
 def test_wild_cvt2tb_opaque_helper_advances():
     # A twelfth framed helper (BODY_12, wild CVT2TB.EXE): a small,
     # program-specific directory-search primitive (AH=4Eh DOS Find
@@ -1485,7 +1497,7 @@ def test_wild_cvt2tb_opaque_helper_advances():
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(ValueError, match=r"DGROUP layout not solvable \(runtime slot grid anchor\)"):
+    with pytest.raises(ValueError, match=r"\[bp\+6\] outside the open LOCAL frame"):
         decode0.decode_user_code(wild_hits_bytes("CVT2TB.EXE"))
 
 
@@ -1549,14 +1561,10 @@ def test_wild_mf_compound_if_far_exit_advances():
 
     from conftest import wild_hits_bytes
 
-    # Now that the $SEGMENT transition is followed (see
-    # test_scan_wild_far_jump_group), mf.exe scans its WHOLE program rather
-    # than the first segment only, and stops earlier in the pipeline: the
-    # extra evidence no longer solves the DGROUP layout. Moving backwards in
-    # the pipeline is the honest position -- the decode it used to reach was
-    # of a program with most of its code missing.
+    # The runtime-grid layout now resolves; this advances mf.exe to its next
+    # independent string-descriptor recovery gap.
     with pytest.raises(
-        ValueError, match=r"DGROUP layout not solvable \(runtime slot grid anchor\)"
+        ValueError, match=r"bad string descriptor at \[0x05a0\]: 0x01b8"
     ):
         decode0.decode_user_code(wild_hits_bytes("mf.exe"))
 

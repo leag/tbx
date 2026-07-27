@@ -277,6 +277,14 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
                 # distinguishes it from a pooled literal descriptor.
                 run[d] = 4
                 strs.add(d)
+        # INPUT/LINE INPUT prompt descriptors can be the sole direct evidence
+        # for a string scalar after an unreferenced slot stopped walk_run.
+        # They are the same four-byte descriptor representation as movsi
+        # string variables (wild CVT2TB.EXE, DS:0244).
+        for d in prompt_disps:
+            if d >= sb and d < pool_base - 4 and d not in run:
+                run[d] = 4
+                strs.add(d)
         # Validate every code-referenced descriptor under (pool_base, delta): pooled
         # literal descs (movsi targets that aren't slots) and prompt words map to
         # file P + 4 + (d - pool_base) and must read as <len|8000><ptr> records --
@@ -288,7 +296,7 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
             for a in statics
             if a["str"]
         ]
-        descs = (movsi_disps - set(run)) | (prompt_disps - {pool_base - 4})
+        descs = (movsi_disps - set(run)) | (prompt_disps - set(run) - {pool_base - 4})
         for d in descs:
             if any(lo <= d < hi for lo, hi in str_spans):
                 continue

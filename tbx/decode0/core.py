@@ -2617,6 +2617,11 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             # line carries a number -- witnessed t1_blkgoto / wild inv87.exe);
             # resolves to ir.BodyLine at finalize
             state.put(ir.Goto(("addr", op[2])), state.cur)
+        elif op[2] == addr - 1:
+            # Empty event-polling DO...LOOP: the only body byte is the hook
+            # immediately before this short back edge (wild baby.exe, TB 1.0).
+            state.put(ir.Do(None), state.cur)
+            state.put(ir.Loop(None), None)
         else:
             raise ValueError(f"unhandled jmp short at {addr:#x}")
         state.cur = None
@@ -2684,21 +2689,25 @@ def decode_user_code(exe: bytes) -> list[Any]:
     # those targets onto the run's first hook: every hook in a run precedes the
     # same statement, so they resolve identically (probe t1_dblhook; wild
     # rsltest.exe's TBWINDOW IF/ELSEIF/ELSE chain).
-    hook_alias, run_first = {}, None
-    for o in state.ops:
+    hook_alias, entry_hook, run_first = {}, {}, None
+    for i, o in enumerate(state.ops):
         if o[1] != "trap_hook":
             run_first = None
         elif run_first is None:
             run_first = o[0]
+            if i + 1 < len(state.ops) and state.ops[i + 1][1] != "trap_hook":
+                entry_hook[state.ops[i + 1][0]] = o[0]
         else:
             hook_alias[o[0]] = run_first
-    if hook_alias:
+    if hook_alias or entry_hook:
         ops3 = []
         for o in state.ops:
             if o[1] in ("jmp", "jmps") or (o[1] == "on_error" and o[2] is not None):
-                o = (o[0], o[1], hook_alias.get(o[2], o[2]))
+                target = entry_hook.get(o[2], o[2])
+                o = (o[0], o[1], hook_alias.get(target, target))
             elif o[1] in ("jcc", "on_trap"):
-                o = o[:3] + (hook_alias.get(o[3], o[3]),) + o[4:]
+                target = entry_hook.get(o[3], o[3])
+                o = o[:3] + (hook_alias.get(target, target),) + o[4:]
             ops3.append(o)
         state.ops = ops3
     state.lay = _layout(exe, state.ops)
