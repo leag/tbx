@@ -526,16 +526,41 @@ structured construct or remained a raw jump", at the level the decoder
 actually operates: an unattributed append is a decoded statement, and
 everything else names the transformation and the pass behind it.
 
-### Remaining
+### The graph, built before the decisions
 
-The graph itself is still `ControlGraph.from_statements`, which validates
-targets against the finished statement list. Building it from branch and
-boundary events — and moving folding behind it so expression handlers stop
-deciding whether a branch is an IF, a loop, a CASE arm, or a procedure
-boundary — is the rest of the chapter. What has changed is that the input now
-exists: every transformation the current folding performs is recorded, named,
-and replayable, so the new passes can be checked against the old ones edit by
-edit rather than by diffing final source.
+`ControlGraph.from_events` builds the graph from the commit-time event log
+with targets still unresolved, alongside the existing `from_statements`
+validation. `classify_branches` then reports what became of each committed
+branch — `raw` when it survives as a jump, `absorbed` when folding moved it
+into a body, `folded` when folding rewrote it — and attributes each one to the
+pass responsible, taken from the edit log rather than inferred from the
+branch's shape. `dump_events --branches` prints it.
+
+Across the fixture corpus that classifies 321 committed branches: 185 raw, 97
+folded, 39 absorbed, attributed to `close_ifs`, `fold_proc_body`,
+`select_case`, `lift_while`, `lift_next`, `apply_exit_folds`,
+`fold_loop_header` and `finalize`.
+
+### The gap that remains
+
+The commit log does not contain every branch. 103 fixtures end up with
+structured control flow while committing **no branch statement at all** —
+`t1_ifblockselect` produces a block IF and a SELECT CASE from branches the
+handlers recognised and folded without ever committing one. The graph cannot
+show a decision that was never recorded.
+
+That is precisely the change this chapter asks for and has not yet made:
+expression handlers must emit branch events instead of deciding whether a
+branch is an IF, a loop, a CASE arm, or a procedure boundary.
+`test_some_structure_is_built_from_branches_that_never_commit` pins the gap
+and fails once they do, which is the signal the graph can take over.
+
+So the remaining work is now specific rather than architectural: make the
+handlers that currently fold in place — `close_ifs`, `select_case.step`, the
+inline-IF and loop-header paths — commit a branch first and fold second. Every
+transformation they perform is already recorded, named, and replayable, so
+each one can be moved and checked against the old behaviour edit by edit
+rather than by diffing final source.
 
 ## Chapter 7 — Remove the migration scaffolding
 

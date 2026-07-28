@@ -47,6 +47,28 @@ def _dump_edits(program) -> None:
         print(f"{n:05d} {edit.kind:8} {span:10} {origin:36} {payload}")
 
 
+def _dump_branches(name: str, program) -> None:
+    """What became of each committed branch, and which pass decided it.
+
+    A branch the handlers folded without ever committing does not appear:
+    the commit log cannot show a decision it never recorded. That gap is the
+    remaining distance to control-flow recovery running off the graph.
+    """
+    from tbx.decode0.control_graph import classify_branches
+
+    outcomes = classify_branches(program)
+    if not outcomes:
+        print(f"{name}: no committed branches")
+        return
+    for branch in outcomes:
+        address = "--------" if branch.address is None else f"{branch.address:08X}"
+        flag = "" if branch.resolvable else "  UNRESOLVED"
+        print(
+            f"{branch.seq:05d} {address} -> {branch.target:08X} "
+            f"{branch.outcome:9} {branch.decided_by or '-':20}{flag}"
+        )
+
+
 def _reconcile_line(name: str, program) -> str:
     report = program.event_reconciliation
     events = len(program.events)
@@ -69,6 +91,11 @@ def main(argv: list[str] | None = None) -> None:
         help="report event/program divergence instead of the event list",
     )
     parser.add_argument(
+        "--branches",
+        action="store_true",
+        help="dump each committed branch: what became of it and which pass decided",
+    )
+    parser.add_argument(
         "--edits",
         action="store_true",
         help="dump the statement edit log: which pass made each change",
@@ -88,6 +115,8 @@ def main(argv: list[str] | None = None) -> None:
         decoded += 1
         if args.reconcile:
             print(_reconcile_line(path.name, program))
+        elif args.branches:
+            _dump_branches(path.name, program)
         elif args.edits:
             _dump_edits(program)
         else:
