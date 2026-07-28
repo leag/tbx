@@ -474,11 +474,18 @@ class DecodeState:
         A queued region is a pair of list positions, so a statement inserted
         below one moves the body it names. The eager fold never had to know:
         by the time a loop lift ran, the region was already a single statement.
+
+        The bounds are half-open and move differently at their own index. An
+        insert *at* `start` pushes the body's first statement down, so the
+        region follows it. An insert *at* `stop` lands after the body's last
+        statement, outside the region, and must not stretch it -- which is
+        exactly where a `DO` goes when a loop begins right after an inline IF
+        (wild state.exe, the IF at 0xeaca, whose body took in the `DO`).
         """
         for fr in self.pending_ifs:
             if fr["start"] >= index:
                 fr["start"] += delta
-            if fr["stop"] >= index:
+            if fr["stop"] > index:
                 fr["stop"] += delta
 
     def drain_folds(self, limit: int = 0) -> None:
@@ -495,6 +502,15 @@ class DecodeState:
         innermost-first by `close_ifs` -- both give the same rule. Each fold
         collapses its region to one statement, so the regions still queued move
         by what it removed.
+
+        Every position here is in the coordinates the regions were *recorded*
+        in, and `shifts` is keyed the same way -- a fold's boundary is where
+        the region ended when it closed, not where the splice landed. The two
+        agree for the first fold in a batch and diverge from there, and mixing
+        them makes a fold look as though it precedes a region that is really
+        nested inside it, so the enclosing body starts too early (wild
+        invoice.exe, the IF at 0xd316: 11 statements folded where the walk saw
+        8, the three extra being the ones its own inner regions had taken).
         """
         with editing(self.stmts, "close_ifs"):
             draining = [fr for fr in self.pending_ifs if fr["start"] >= limit]
@@ -522,7 +538,7 @@ class DecodeState:
                 # the consumed IfGoto's) addrs must stay visible to the line table
                 self.stmts[start:stop] = [ir.IfInline(opened.payload.cond, body)]
                 self.addrs[start:stop] = [opened.address]
-                shifts.append((stop, (stop - start) - 1))
+                shifts.append((fr["stop"], (stop - start) - 1))
 
     def frame_event(self, frame):
         """The branch event an open frame is: the record, not a copy of it.
