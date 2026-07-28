@@ -560,7 +560,9 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             f = c.fors[-1]
             old = o.stmts[f["idx"]]
             with editing(o.stmts, "patch_for_step"):
-                o.stmts[f["idx"]] = ir.For(old.var, old.init, old.limit, ir.Lit(-1))
+                state.patch(
+                    f["idx"], ir.For(old.var, old.init, old.limit, ir.Lit(-1))
+                )
             f["step"] = -1
             state.advance()
             return True
@@ -580,7 +582,9 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             f = c.fors[-1]
             old = o.stmts[f["idx"]]
             with editing(o.stmts, "patch_for_step"):
-                o.stmts[f["idx"]] = ir.For(old.var, old.init, old.limit, ir.Lit(-1))
+                state.patch(
+                    f["idx"], ir.For(old.var, old.init, old.limit, ir.Lit(-1))
+                )
             f["step"] = -1
             state.advance()
             return True
@@ -606,7 +610,9 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         f = c.fors[-1]
         old = o.stmts[f["idx"]]
         with editing(o.stmts, "patch_for_step"):
-            o.stmts[f["idx"]] = ir.For(old.var, old.init, old.limit, ir.Lit(op[3]))
+            state.patch(
+                f["idx"], ir.For(old.var, old.init, old.limit, ir.Lit(op[3]))
+            )
         f["step"] = op[3]
         state.advance()
         return True

@@ -185,6 +185,86 @@ def test_every_statement_in_the_list_comes_from_a_commit():
     assert not missing, f"{len(missing)} appends with no event: {missing[:5]}"
 
 
+#: The decode-time passes that revise an already-committed statement, as
+#: opposed to the folding passes that rewrite the list afterwards. A LOCATE
+#: gains its cursor argument from a later runtime call; a FOR's provisional
+#: step is corrected by NEXT-side evidence; a second DIM on one source line
+#: joins the first as a comma list.
+_PATCHES = ("patch_locate", "patch_for_step", "dim_declaration")
+
+
+def test_a_revised_statement_records_its_revision():
+    """`LOCATE 5,10,1` is two runtime calls: the second patches the first.
+
+    The row/column call commits an `ir.Locate`; the cursor call arrives after
+    and rewrites it in place. Without an event for the revision, the log
+    describes a statement the program does not contain and misses the one it
+    does.
+    """
+    prog = decode0.decode_user_code(_exe("t1_loccurs.exe"))
+
+    revised = [
+        e.payload[0]
+        for e in prog.statement_edits
+        if e.kind == "replace" and e.origin == "patch_locate"
+    ]
+    assert revised, "fixture should patch a LOCATE"
+    from tbx.decode0.events import replay_events
+
+    replayed = replay_events(prog.events)
+    for statement in revised:
+        assert statement in replayed
+
+
+def test_a_revision_replaces_rather_than_adds():
+    """A patch is not a new statement.
+
+    Replay has to apply the revision to the statement already there, or the
+    program grows one statement per patch -- which is worse than the gap it
+    closes.
+    """
+    from tbx.decode0.events import replay_events
+
+    prog = decode0.decode_user_code(_exe("t1_loccurs.exe"))
+
+    commits = [e for e in prog.events if e.kind == "statement"]
+    assert [e for e in prog.events if e.kind == "patch"]
+    assert len(replay_events(prog.events)) == len(commits)
+
+
+def test_no_decode_time_revision_is_lost_across_the_corpus():
+    """Every revised statement is in the replay, in its last decoded form.
+
+    Last per position, because a statement can be revised twice -- `LOCATE`
+    takes a cursor call and then a cursor-shape call, and three DIMs on one
+    source line join the list one after another. The intermediate drafts are
+    supposed to be gone; requiring them back would ask replay to keep
+    statements the decoder itself discarded.
+
+    Positions are stable to group by: nothing folds during decoding at the
+    index a patch names, so one index means one statement being revised.
+    """
+    from tbx.decode0.events import replay_events
+
+    missing = []
+    for exe in sorted(FIXTURES.glob("*.exe")):
+        try:
+            prog = decode0.decode_user_code(exe.read_bytes())
+        except ValueError:
+            continue
+        latest = {}
+        for edit in prog.statement_edits:
+            if edit.kind == "replace" and edit.origin in _PATCHES:
+                latest[edit.index] = edit.payload[0]
+        if not latest:
+            continue
+        replayed = replay_events(prog.events)
+        for statement in latest.values():
+            if statement not in replayed:
+                missing.append((exe.name, type(statement).__name__))
+    assert not missing, f"{len(missing)} revisions with no event: {missing[:5]}"
+
+
 def test_codeless_data_statements_are_synthesized_not_committed():
     """A known gap: DATA never reaches the commit-time log.
 

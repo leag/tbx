@@ -582,6 +582,25 @@ class DecodeState:
             output.event_log = EventLog()
         output.event_log.commit(stmt, addr)
 
+    def patch(self, index, stmt) -> None:
+        """Revise an already-committed statement, recording the revision.
+
+        Some statements compile to two runtime calls -- a LOCATE's cursor
+        argument, a FOR's real step, a second DIM joining the first as a comma
+        list -- so the handler that sees the second one rewrites what the
+        first committed. The list edit alone leaves the log describing a
+        statement the program does not contain; the event says what replaced
+        it. Callers keep their own `editing` scope, which is what attributes
+        the list edit to the pass.
+        """
+        output = self.output
+        assert output is not None
+        previous = output.stmts[index]
+        output.stmts[index] = stmt
+        if output.event_log is None:
+            output.event_log = EventLog()
+        output.event_log.supersede(previous, stmt)
+
     def arrive(self, address) -> None:
         """Record reaching `address`, when some recorded branch targets it.
 
@@ -4656,11 +4675,14 @@ def _decode_user_code(
                 ):
                     prev = out.stmts[-1]  # no commit after the previous
                     with editing(out.stmts, "dim_declaration"):
-                        out.stmts[-1] = ir.Dim(
-                            prev.name,
-                            prev.bounds,  # allocate: same
-                            prev.also + ((name, bounds),),
-                            prev.dynamic,
+                        state.patch(
+                            -1,
+                            ir.Dim(
+                                prev.name,
+                                prev.bounds,  # allocate: same
+                                prev.also + ((name, bounds),),
+                                prev.dynamic,
+                            ),
                         )  # comma list
                 else:
                     state.put(

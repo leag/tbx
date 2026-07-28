@@ -92,10 +92,15 @@ class ControlGraph:
             for e in events
             if e.address is not None and e.kind != "arrive"
         }
+        # A revised statement is the one that matters: its first draft may
+        # name a target the decoder went on to correct.
+        from tbx.decode0.events import committed
+
+        final = {e.seq: e.payload for e in committed(events)}
         edges: list[ControlEdge] = []
         for event in events:
-            if event.kind == "arrive":
-                continue  # a moment, not a node with successors
+            if event.kind in ("arrive", "patch"):
+                continue  # a moment, or a revision already folded into `final`
             if event.kind == "branch":
                 # A recognised branch names its target directly; there is no
                 # committed statement to walk for an ("addr", n) operand. A
@@ -108,7 +113,7 @@ class ControlGraph:
                         )
                     )
                 continue
-            for kind, target in _address_targets(event.payload):
+            for kind, target in _address_targets(final.get(event.seq, event.payload)):
                 edges.append(ControlEdge(event.seq, target, kind))
         return cls(nodes, tuple(edges), frozenset(known))
 

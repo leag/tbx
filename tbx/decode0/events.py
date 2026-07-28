@@ -70,6 +70,28 @@ class RegionEvent:
 
 
 @dataclass(frozen=True)
+class PatchEvent:
+    """A statement the decoder revised after committing it.
+
+    Some statements are compiled as two runtime calls: a LOCATE gains its
+    cursor argument from a call that arrives after the row/column one, a FOR's
+    provisional step is corrected by NEXT-side evidence, a second DIM on one
+    source line joins the first as a comma list. The handler rewrites the
+    committed statement in place.
+
+    A revision is not a new statement -- it replaces one already in the list,
+    so it names the commit it supersedes rather than standing alone. Replay
+    applies it in place; treating it as a commit would grow the program by one
+    statement per patch.
+    """
+
+    #: ``seq`` of the event this revises: a commit, or an earlier revision of
+    #: it (LOCATE takes a cursor call and then a cursor-shape call).
+    supersedes: int
+    statement: Any
+
+
+@dataclass(frozen=True)
 class ArrivalEvent:
     """Decoding reached an address that a recorded branch targets.
 
@@ -156,6 +178,33 @@ class EventLog:
             self._wanted.add(target)
         return event
 
+    def supersede(self, previous: Any, statement: Any) -> DecodedEvent:
+        """Record that ``previous`` was revised into ``statement``.
+
+        The event revised is found by identity, scanning back: the object
+        being replaced is the one some earlier event committed, and it is
+        alive in the caller's hand while we look. Fail-loud when nothing
+        committed it -- a pass revising a statement the log never saw is
+        exactly the hole this closes, and it must not pass silently.
+        """
+        for event in reversed(self.events):
+            if event.kind == "statement" and event.payload is previous:
+                seq, address = event.seq, event.address
+                break
+            if event.kind == "patch" and event.payload.statement is previous:
+                seq, address = event.seq, event.address
+                break
+        else:
+            raise ValueError("revised a statement that was never committed")
+        event = DecodedEvent(
+            kind="patch",
+            address=address,
+            payload=PatchEvent(seq, statement),
+            seq=len(self.events),
+        )
+        self.events.append(event)
+        return event
+
     def arrive(self, address: int | None) -> DecodedEvent | None:
         """Record that decoding reached ``address``, if a branch wants it.
 
@@ -208,21 +257,52 @@ def statement_events(
     )
 
 
-def replay_events(events: Iterable[DecodedEvent]) -> tuple[Any, ...]:
-    """Replay committed statement events into the next pipeline pass.
+def committed(events: Iterable[DecodedEvent]) -> tuple[DecodedEvent, ...]:
+    """One event per committed statement, carrying its final decoded form.
+
+    A revision does not add a statement, so it collapses onto the commit it
+    supersedes: the entry keeps that commit's ``seq`` and address, and takes
+    the revised payload. Everything downstream -- replay, reconciliation, the
+    graph -- then sees what the decoder ended up deciding rather than its
+    first draft.
 
     Rejecting unknown kinds is deliberate: adding an event kind must update
-    the replay contract instead of silently dropping it.
+    this contract instead of silently dropping it.
     """
 
-    statements = []
+    order: list[int] = []
+    final: dict[int, DecodedEvent] = {}
+    root: dict[int, int] = {}
     for event in events:
         if event.kind in ("branch", "region", "arrive"):
             continue  # carries no statement; the control pass consumes it
+        if event.kind == "patch":
+            try:
+                target = root[event.payload.supersedes]
+            except KeyError:
+                raise ValueError(
+                    f"revision at {event.seq} supersedes no committed statement"
+                ) from None
+            root[event.seq] = target
+            final[target] = DecodedEvent(
+                kind="statement",
+                address=final[target].address,
+                payload=event.payload.statement,
+                seq=target,
+            )
+            continue
         if event.kind != "statement":
             raise ValueError(f"unknown decoded event kind: {event.kind!r}")
-        statements.append(event.payload)
-    return tuple(statements)
+        root[event.seq] = event.seq
+        final[event.seq] = event
+        order.append(event.seq)
+    return tuple(final[seq] for seq in order)
+
+
+def replay_events(events: Iterable[DecodedEvent]) -> tuple[Any, ...]:
+    """Replay committed statement events into the next pipeline pass."""
+
+    return tuple(event.payload for event in committed(events))
 
 
 def _nested_statements(value: Any) -> set:
@@ -271,8 +351,10 @@ def reconcile(
     statements.
     """
     # Only statement events relate to the statement list; a branch event has
-    # no statement, and counting one would report a phantom rewrite.
-    events = tuple(e for e in events if e.kind == "statement")
+    # no statement, and counting one would report a phantom rewrite. A
+    # revision folds onto the commit it supersedes, so each committed
+    # statement is one entry, in its final decoded form.
+    events = committed(events)
     statements = list(statements)
 
     positions: dict[Any, deque] = {}
