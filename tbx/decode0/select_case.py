@@ -134,13 +134,24 @@ def _begin_body(state, body_i, next_test):
         if fr["end_select"] == 0 or next_test != fr["end_select"]:
             raise ValueError("SELECT CASE arm: flow-through without known END SELECT")
         fr["body_jmp"] = next_test
+    # The body's extent is known here and nowhere earlier: where it starts, and
+    # the arm-close jmp it runs to. Recording it is what lets the snapshot read
+    # its own region back out of the log instead of off this frame.
+    fr["body_seq"] = state.region(
+        "case_arm", start=img.ops[body_i][0], end=fr["body_jmp"]
+    ).seq
     state.seek(body_i)
     c.cur = None
 
 
-def _fold_arm(state, body_idx, merge):
-    """Block-fold the arm (or CASE ELSE) body sitting at `o.stmts[body_idx:]`
-    and return it as a tuple, addresses retained.
+def _fold_arm(state, frame, merge):
+    """Block-fold the arm (or CASE ELSE) body and return it, addresses retained.
+
+    Where the body begins comes from the record: `frame["body_seq"]` is the
+    region event `_begin_body` wrote, and the list length at that event is the
+    position. `frame["body_idx"]` rides along as the cross-check that the two
+    agree -- the same arrangement the inline-IF fold uses, and the same one
+    Chapter 7 removes.
 
     An arm body is snapshotted here and never revisited by the top-level
     `_fold_if` pass -- exactly the situation `core.py`'s `proc_ret` already
@@ -163,8 +174,10 @@ def _fold_arm(state, body_idx, merge):
     # An inline IF closing this arm skips to the arm-close address, and
     # `select_case.step` runs BEFORE the dispatch loop's own close point -- so
     # drain those bodies here or the arm folds away with one still open
-    # (TBW73.INC:716, via DecodeState.open_tail_if).
+    # (TBW73.INC:716, via DecodeState.open_tail_if). It runs before the region
+    # is read back, since folding one shortens the list the position indexes.
     state.close_ifs(merge)
+    body_idx = state.frame_start({"seq": frame["body_seq"], "idx": frame["body_idx"]})
     stmts, addrs = _fold_if(
         o.stmts[body_idx:],
         o.addrs[body_idx:],
@@ -222,7 +235,7 @@ def step(state):
             fr = c.cases.pop()
             case_else = None
             if fr["in_else"]:
-                case_else = _fold_arm(state, fr["body_idx"], addr)
+                case_else = _fold_arm(state, fr, addr)
                 del o.stmts[fr["body_idx"] :], o.addrs[fr["body_idx"] :]
                 if not case_else:
                     # An EMPTY else region means the source had no CASE ELSE at all:
@@ -247,7 +260,7 @@ def step(state):
         if c.cases and c.cases[-1]["body_jmp"] == addr:
             state.flush_pending()
             fr = c.cases[-1]
-            body = _fold_arm(state, fr["body_idx"], addr)
+            body = _fold_arm(state, fr, addr)
             del o.stmts[fr["body_idx"] :], o.addrs[fr["body_idx"] :]
             fr["arms"].append(ir.CaseArm(tuple(fr["cur_guards"]), body))
             fr["cur_guards"] = []
@@ -268,6 +281,12 @@ def step(state):
             else:  # trailing CASE ELSE body
                 fr["in_else"] = True
                 fr["body_idx"] = len(o.stmts)
+                # A CASE ELSE has no guard to recognise it by, so nothing else
+                # in the log would mark where its body starts. It runs to the
+                # END SELECT, which is known by now.
+                fr["body_seq"] = state.region(
+                    "case_else", start=i.ops[c.k][0], end=fr["end_select"]
+                ).seq
             return True
         in_body = bool(c.cases) and c.cases[-1]["body_jmp"] is not None
         # (3) Numeric entry: fstp64 [temp] to a scratch slot, arm header following.

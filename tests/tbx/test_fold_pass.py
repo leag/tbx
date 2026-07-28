@@ -29,14 +29,21 @@ def _eager_folds(prog):
     ]
 
 
-def _every_statement(statements):
-    """Every statement in the tree, nested bodies included."""
-    for statement in statements:
-        yield statement
-        for name in getattr(statement, "__dataclass_fields__", ()):
-            value = getattr(statement, name)
-            if isinstance(value, tuple):
-                yield from _every_statement(value)
+def _every_statement(value):
+    """Every node in the tree, nested bodies included.
+
+    Plain tuples are walked through, not just dataclass fields: an `IfBlock`'s
+    arms are `(cond, body)` pairs, so a statement inside a block IF is two
+    tuples deep and a walker that only descends named fields never sees it.
+    """
+    if isinstance(value, (tuple, list)):
+        for item in value:
+            yield from _every_statement(item)
+        return
+    if hasattr(value, "__dataclass_fields__"):
+        yield value
+        for name in value.__dataclass_fields__:
+            yield from _every_statement(getattr(value, name))
 
 
 def test_the_pass_folds_a_single_inline_if():
