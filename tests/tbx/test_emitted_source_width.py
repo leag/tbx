@@ -14,10 +14,12 @@ inside the limit, and every violation is in a wild program. Three shapes:
   which is free: the compiler is lossy about how such a list was divided.
   Fixed wild zip.exe (295), book.exe (396) and baby.exe (6116) -- and zip.exe
   went from failing to reach the compiler at all to compiling.
-- an inline IF whose folded body does not fit. Rendering it as a block IF
-  would fit, and for the compound conditions these all carry the bytes do not
-  distinguish the two spellings -- but that claim has no fixture witness yet,
-  and narrowing on a guess is what the calibration rule forbids.
+- an inline IF whose folded body does not fit, respelled as a block IF. Free
+  for the compound conditions these carry: `t1_ifin` and `t1_orrel` compile
+  byte-identically either way, checked through the oracle. A *simple*
+  condition is not interchangeable -- its inline form does not materialize,
+  which is what `decode0`'s `block_ifs` turns on -- so it is left alone.
+  Fixed wild inv87/invoice (353) and state/state87 (265).
 - a program whose line table did not come back, so every statement is grouped
   onto one physical line 0 (wild metric.exe, 43759 characters). Not an
   emitter problem: there are no line numbers to spread it over.
@@ -33,6 +35,24 @@ from tbx import decode0, emit0
 
 #: Turbo Basic Owner's Handbook (1987), editor limits.
 EDITOR_LINE_LIMIT = 248
+#: "The editor integrated within Turbo Basic allows source programs to be no
+#: larger than 64K in size", and `$INCLUDE` is how the handbook says to compile
+#: anything bigger. A single emitted file over this is the same kind of defect
+#: as an over-wide line: not source that could have been handed to the editor.
+EDITOR_FILE_LIMIT = 65536
+
+#: Wild programs whose emitted source exceeds that, with its size. The source
+#: they came from must have been divided across `$INCLUDE` files, which the
+#: emitter does not reconstruct -- so these are the programs the oracle cannot
+#: round-trip as one file however narrow their lines get.
+_OVER_LONG = {
+    "banker.exe": 98245,
+    "horses.exe": 67442,
+    "inv87.exe": 88275,
+    "invoice.exe": 88275,
+    "state.exe": 68875,
+    "state87.exe": 68875,
+}
 
 CORPUS = Path(__file__).resolve().parents[1] / "fixtures" / "corpus"
 
@@ -41,11 +61,7 @@ CORPUS = Path(__file__).resolve().parents[1] / "fixtures" / "corpus"
 #: reconstruction or line-table work that fixes it -- recorded here so a new
 #: one is noticed the moment it appears.
 _OVER_WIDE = {
-    "inv87.exe": 353,  # inline IF, body does not fit
-    "invoice.exe": 353,  # inline IF
     "metric.exe": 43759,  # no line table: the whole program on line 0
-    "state.exe": 265,  # inline IF
-    "state87.exe": 265,  # inline IF
 }
 
 
@@ -96,3 +112,28 @@ def test_no_other_wild_program_emits_an_over_wide_line():
             over.add(exe.name)
 
     assert over == set(_OVER_WIDE)
+
+
+def _size(exe: bytes) -> int:
+    return len(emit0.emit(decode0.decode_user_code(exe)))
+
+
+def test_no_fixture_emits_a_file_the_editor_could_not_load():
+    over = []
+    for exe in sorted(CORPUS.glob("*.exe")):
+        try:
+            size = _size(exe.read_bytes())
+        except ValueError:
+            continue
+        if size > EDITOR_FILE_LIMIT:
+            over.append((exe.name, size))
+
+    assert not over, f"{len(over)} fixtures emit over 64K: {over[:5]}"
+
+
+@pytest.mark.parametrize("name,size", sorted(_OVER_LONG.items()))
+def test_a_known_over_long_program_has_not_got_worse(name, size):
+    """Pinned like the widths, so a change in either direction is visible."""
+    from conftest import wild_hits_bytes
+
+    assert _size(wild_hits_bytes(name)) == size
