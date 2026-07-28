@@ -61,6 +61,81 @@ def test_a_case_else_records_its_own_region():
     assert "case_else" in kinds
 
 
+def test_an_arm_region_carries_the_guards_it_matched_on():
+    """The extent says where the body is; the guards say what it is.
+
+    `CaseValue`, `CaseRange` and `CaseIs` accumulate on the recognizer's frame
+    and used to be consumed straight into the `CaseArm` it built. A pass that
+    folds afterwards has to build that arm itself, and the extent alone does
+    not say what it matched.
+    """
+    prog = decode0.decode_user_code((CORPUS / "t1_selarmtarget.exe").read_bytes())
+
+    select = next(
+        s for s in _every_statement(tuple(prog)) if isinstance(s, ir.SelectCase)
+    )
+    recorded = [r.payload.detail for r in _arm_regions(prog)]
+
+    assert recorded == [arm.guards for arm in select.arms]
+
+
+def test_a_select_records_its_own_extent_and_selector():
+    """Recorded at END SELECT, the one point where both ends are known.
+
+    A SELECT header cannot record its extent: the END SELECT address is not
+    known until an arm closes and names it, which is why the header's branch
+    event carries `target=None`.
+    """
+    prog = decode0.decode_user_code((CORPUS / "t1_selarmtarget.exe").read_bytes())
+
+    # Compared against the statement the walk built, not the program's: the
+    # event holds what recognition decided, and canonical renaming rewrites
+    # the variable names afterwards.
+    built = next(
+        edit.payload[0]
+        for edit in prog.statement_edits
+        if edit.origin == "select_case"
+        and edit.payload
+        and isinstance(edit.payload[0], ir.SelectCase)
+    )
+    regions = [
+        e.payload
+        for e in prog.events
+        if e.kind == "region" and e.payload.kind == "select"
+    ]
+
+    assert len(regions) == 1
+    assert regions[0].end > regions[0].start
+    assert regions[0].detail == built.selector
+
+
+def test_every_select_in_the_corpus_records_its_guards():
+    missed = []
+    for exe in sorted(CORPUS.glob("*.exe")):
+        try:
+            prog = decode0.decode_user_code(exe.read_bytes())
+        except ValueError:
+            continue
+        selects = [
+            s for s in _every_statement(tuple(prog)) if isinstance(s, ir.SelectCase)
+        ]
+        if not selects:
+            continue
+        # Guards are compared as a multiset of what was recorded against what
+        # the program ended up with: a program may hold several SELECTs, and
+        # the arms are folded into them in close order, not source order.
+        recorded = sorted(
+            (str(g) for r in _arm_regions(prog) for g in r.payload.detail)
+        )
+        emitted = sorted(
+            str(g) for s in selects for arm in s.arms for g in arm.guards
+        )
+        if recorded != emitted:
+            missed.append((exe.name, len(emitted), len(recorded)))
+
+    assert not missed, f"{len(missed)} programs mis-record their guards: {missed[:5]}"
+
+
 def test_every_arm_in_the_corpus_is_recorded():
     """One region per arm, everywhere.
 

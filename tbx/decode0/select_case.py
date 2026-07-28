@@ -138,7 +138,13 @@ def _begin_body(state, body_i, next_test):
     # the arm-close jmp it runs to. Recording it is what lets the snapshot read
     # its own region back out of the log instead of off this frame.
     fr["body_seq"] = state.region(
-        "case_arm", start=img.ops[body_i][0], end=fr["body_jmp"]
+        "case_arm",
+        start=img.ops[body_i][0],
+        end=fr["body_jmp"],
+        # Every guard of this arm has been matched by now -- the body only
+        # begins once the last one has -- so this is where the arm's whole
+        # recognition is known at once.
+        detail=tuple(fr["cur_guards"]),
     ).seq
     state.seek(body_i)
     c.cur = None
@@ -252,6 +258,13 @@ def step(state):
                     # unwitnessed and would compile to different bytes, so it would
                     # surface as a round-trip mismatch rather than pass silently.
                     case_else = None
+            # The construct's own extent, recorded here because this is the one
+            # point where both ends are known: a SELECT header cannot record it,
+            # since the END SELECT address is not known until an arm names it
+            # (which is why the header's branch event carries `target=None`).
+            state.region(
+                "select", start=fr["start"], end=addr, detail=fr["selector"]
+            )
             o.stmts.append(ir.SelectCase(fr["selector"], tuple(fr["arms"]), case_else))
             o.addrs.append(fr["start"])
             c.cur = None

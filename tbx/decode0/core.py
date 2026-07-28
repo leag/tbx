@@ -667,7 +667,7 @@ class DecodeState:
             self.flush_pending()
         output.event_log.arrive(address)
 
-    def region(self, kind: str, *, start, end):
+    def region(self, kind: str, *, start, end, detail=None):
         """Record a construct's extent alongside the statements it spans.
 
         Returns the event, for the same reason a branch's is returned: a
@@ -679,7 +679,7 @@ class DecodeState:
         assert output is not None
         if output.event_log is None:
             output.event_log = EventLog()
-        return output.event_log.region(kind, start=start, end=end)
+        return output.event_log.region(kind, start=start, end=end, detail=detail)
 
     def branch(self, frame: str, *, template, target, address=None, cond=None):
         """Record a branch this handler recognised, and return the event.

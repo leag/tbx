@@ -74,6 +74,13 @@ class RegionEvent:
     kind: str
     start: int | None
     end: int | None
+    #: What the recognizer knew about this construct that its extent does not
+    #: capture, and that a pass rebuilding the construct would otherwise have
+    #: to re-derive: a `case_arm`'s guards, as the tuple of `CaseValue`,
+    #: `CaseRange` and `CaseIs` it matched on, and a `select`'s selector
+    #: expression. A `proc`, `fn` or `case_else` region has nothing to add --
+    #: the extent is the whole of what was recognised -- so it stays None.
+    detail: Any = None
 
 
 @dataclass(frozen=True)
@@ -274,13 +281,13 @@ class EventLog:
         return event
 
     def region(
-        self, kind: str, *, start: int | None, end: int | None
+        self, kind: str, *, start: int | None, end: int | None, detail: Any = None
     ) -> DecodedEvent:
         """Record a construct's extent. The statement list is not touched."""
         event = DecodedEvent(
             kind="region",
             address=start,
-            payload=RegionEvent(kind, start, end),
+            payload=RegionEvent(kind, start, end, detail),
             seq=len(self.events),
         )
         self.events.append(event)
