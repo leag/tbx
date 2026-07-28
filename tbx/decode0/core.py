@@ -400,21 +400,53 @@ class DecodeState:
         TBW73.INC:716).
         """
         with editing(self.stmts, "close_ifs"):
-            while self.ifs and addr == self.ifs[-1]["target"]:
+            while self.ifs and addr == self.frame_event(self.ifs[-1]).payload.target:
                 fr = self.ifs.pop()
+                opened = self.frame_event(fr)
                 self.flush_pending()
-                body = tuple(self.stmts[fr["idx"] :])
+                start = self.frame_start(fr)
+                body = tuple(self.stmts[start:])
                 if not body:
                     raise ValueError(f"empty inline-IF body at {addr:#x}")
-                for st, ad in zip(body, self.addrs[fr["idx"] :]):
+                for st, ad in zip(body, self.addrs[start:]):
                     if ad is not None:  # retain leaf/body addrs before they drop
-                        self.stmt_addr.claim(st, ad)  # the fold discards addrs[fr.idx:]
-                body = _fold_body_ifgotos(body, fr["target"], self.stmt_addr)  # AFTER the
+                        self.stmt_addr.claim(st, ad)  # the fold discards addrs[start:]
+                body = _fold_body_ifgotos(
+                    body, opened.payload.target, self.stmt_addr
+                )  # AFTER the
                 # addr retention: the fold nests the tail statements, and their (and
                 # the consumed IfGoto's) addrs must stay visible to the line table
-                del self.stmts[fr["idx"] :], self.addrs[fr["idx"] :]
-                self.stmts.append(ir.IfInline(fr["cond"], body))
-                self.addrs.append(fr["start"])
+                del self.stmts[start:], self.addrs[start:]
+                self.stmts.append(ir.IfInline(opened.payload.cond, body))
+                self.addrs.append(opened.address)
+
+    def frame_event(self, frame):
+        """The branch event an open frame is: the record, not a copy of it.
+
+        A frame is stored as the `seq` of the event that recognised it, so the
+        condition it folds, the address it starts at and the target it closes
+        on are all read from the log rather than carried alongside it.
+        """
+        return self.events[frame["seq"]]
+
+    def frame_start(self, frame) -> int:
+        """Where an open frame's body begins, derived from the record.
+
+        The list's length when the frame's branch was recognised, replayed
+        from the statement edits stamped up to that event. The walk also noted
+        the length at the time, and the two must agree -- the check is what
+        makes reading it from the record a fact rather than a hope, and it is
+        the comparison Chapter 7 removes once the walk stops noting it.
+        """
+        from tbx.decode0.control_graph import _length_at
+
+        start = _length_at(self.stmts.edits, frame["seq"])
+        if start != frame["idx"]:
+            raise ValueError(
+                f"fold region start {start} from the record disagrees with "
+                f"the frame's own {frame['idx']}"
+            )
+        return start
 
     def open_tail_if(self, target, cond) -> bool:
         """If `target` is the open procedure's own epilogue, open an inline-IF
@@ -457,18 +489,11 @@ class DecodeState:
         if target not in ends:
             return False
         self.flush_pending()
-        self.branch(
+        event = self.branch(
             "if", template="inline_if_target", target=target,
             address=self.cur, cond=cond,
         )
-        self.ifs.append(
-            {
-                "target": target,
-                "cond": cond,
-                "start": self.cur,
-                "idx": len(self.stmts),
-            }
-        )
+        self.ifs.append({"seq": event.seq, "idx": len(self.stmts)})
         self.cur = None
         return True
 
@@ -631,7 +656,7 @@ class DecodeState:
         assert output is not None
         if output.event_log is None:
             output.event_log = EventLog()
-        if self.ifs and address == self.ifs[-1]["target"]:
+        if self.ifs and address == self.frame_event(self.ifs[-1]).payload.target:
             # A trailing-';' PRINT closing the body is decoded before this
             # boundary but only materializes when something flushes it --
             # `close_ifs` itself, a line later. Flushing here puts it in the
@@ -650,18 +675,20 @@ class DecodeState:
             output.event_log = EventLog()
         output.event_log.region(kind, start=start, end=end)
 
-    def branch(self, frame: str, *, template, target, address=None, cond=None) -> None:
-        """Record a branch this handler recognised.
+    def branch(self, frame: str, *, template, target, address=None, cond=None):
+        """Record a branch this handler recognised, and return the event.
 
         Emitting is deliberately separate from committing: the statement list
         does not change, so no golden moves, but the control graph can now see
-        a decision the handler used to make invisibly.
+        a decision the handler used to make invisibly. The event is returned
+        because a frame that opens a body is now *identified* by it -- what
+        `close_ifs` folds comes from the record, not from a copy the walk keeps.
         """
         output = self.output
         assert output is not None
         if output.event_log is None:
             output.event_log = EventLog()
-        output.event_log.branch(
+        return output.event_log.branch(
             frame, template=template, target=target, address=address, cond=cond
         )
 
@@ -2444,24 +2471,21 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             # BinOp/Group tree as a bare truthiness condition: spelling it as
             # `expr = 0` changes both its polarity and TB's lowering.
             state.flush_pending()
-            state.branch(
-                "if", template="direct_flag_skip", target=nxt[2], address=c.cur
+            event = state.branch(
+                "if",
+                template="direct_flag_skip",
+                target=nxt[2],
+                address=c.cur,
+                # The direct flag use is itself evidence that the complete
+                # logical value was parenthesized in source; without this
+                # outer Group TB chooses its short-circuit IF template.
+                cond=(
+                    _logical_condition(m.ax) or m.ax
+                    if e.direct_bool_logical
+                    else m.ax if e.direct_bool_gate else ir.Group(m.ax)
+                ),
             )
-            c.ifs.append(
-                {
-                    "target": nxt[2],
-                    # The direct flag use is itself evidence that the complete
-                    # logical value was parenthesized in source; without this
-                    # outer Group TB chooses its short-circuit IF template.
-                    "cond": (
-                        _logical_condition(m.ax) or m.ax
-                        if e.direct_bool_logical
-                        else m.ax if e.direct_bool_gate else ir.Group(m.ax)
-                    ),
-                    "start": c.cur,
-                    "idx": len(out.stmts),
-                }
-            )
+            c.ifs.append({"seq": event.seq, "idx": len(out.stmts)})
             m.ax = None
             e.direct_bool_gate = False
             e.direct_bool_logical = False

@@ -246,18 +246,27 @@ def _find_jmps_back(ops, exit_addr) -> int | None:
     return None
 
 
-def _announce(branch, frame: str, template: str, target, address) -> None:
-    """Record a frame this lift opened, when the caller supplied a recorder.
+def _announce(branch, frame: str, template: str, target, address, cond=None):
+    """Record a frame this lift opened, and return the event.
 
     ``template`` is what was matched; ``frame`` is what this lift concluded
     from it. Both are recorded so the conclusion can be checked against the
     template table before the lift stops drawing it.
 
+    A frame that opens a *body* also records its condition, because the event
+    is what `close_ifs` folds from: an inline IF's condition is decided here,
+    at recognition, and the record has to carry it rather than leaving the
+    walk's own stack as the only copy.
+
     The lifts are also called with plain lists from unit tests, which have no
-    decode state to record into, so the recorder is optional.
+    decode state to record into, so the recorder is optional -- but a caller
+    that needs the event back has to supply one.
     """
-    if branch is not None:
-        branch(frame, template=template, target=target, address=address)
+    if branch is None:
+        return None
+    return branch(
+        frame, template=template, target=target, address=address, cond=cond
+    )
 
 
 def _lift_bool_tail(
@@ -407,15 +416,10 @@ def _lift_bool_tail(
             whiles.append({"test": final_start, "exit": f_jmp[2]})
         else:
             flush()
-            _announce(branch, "if", template, f_jmp[2], final_start)
-            ifs.append(
-                {
-                    "target": f_jmp[2],
-                    "cond": final_cond,
-                    "start": final_start,
-                    "idx": len(stmts),
-                }
+            event = _announce(
+                branch, "if", template, f_jmp[2], final_start, cond=final_cond
             )
+            ifs.append({"seq": event.seq, "idx": len(stmts)})
         return k + 6, None, None
 
 
@@ -581,10 +585,10 @@ def _lift_while(
                 # Compound conditions materialize either way, so only a plain
                 # RelOp counts.
                 block_ifs.add(cur)
-            _announce(branch, "if", "materialized_test_skip", exit_jmp[2], cur)
-            ifs.append(
-                {"target": exit_jmp[2], "cond": cond, "start": cur, "idx": len(stmts)}
+            event = _announce(
+                branch, "if", "materialized_test_skip", exit_jmp[2], cur, cond=cond
             )
+            ifs.append({"seq": event.seq, "idx": len(stmts)})
         else:
             raise ValueError(f"unhandled materialized test at {ops[k][0]:#x}")
         return k + len(want)

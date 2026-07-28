@@ -13,7 +13,7 @@ missing in the first place.
 
 from pathlib import Path
 
-from tbx import decode0
+from tbx import decode0, ir
 from tbx.decode0.control_graph import predict_fold_extents, predict_fold_starts
 
 CORPUS = Path(__file__).resolve().parents[1] / "fixtures" / "corpus"
@@ -128,6 +128,78 @@ def test_every_inline_if_fold_extent_in_the_corpus_is_located():
         f"{len(missed)} programs fold a region the record cannot size: "
         f"{missed[:3]}"
     )
+
+
+def test_the_fold_takes_its_condition_from_the_recorded_branch():
+    """What an inline IF folds into comes from the record.
+
+    The condition is decided at recognition, when the branch event is written.
+    The walk used to carry its own copy on the frame stack, so the record
+    could have drifted from what was folded and nothing would have said so.
+    """
+    prog = decode0.decode_user_code((CORPUS / "t1_ifin.exe").read_bytes())
+
+    recorded = [
+        e.payload.cond
+        for e in prog.events
+        if e.kind == "branch" and e.payload.frame == "if"
+    ]
+    # The fold's own output, before canonical renaming rewrites the variable
+    # names: the event holds what recognition decided, so the comparison has
+    # to be made on that side of the rename.
+    folded = [
+        edit.payload[0].cond
+        for edit in prog.statement_edits
+        if edit.origin == "close_ifs"
+        and edit.kind == "append"
+        and isinstance(edit.payload[0], ir.IfInline)
+    ]
+
+    assert folded, "fixture should fold an inline IF"
+    assert all(cond is not None for cond in recorded)
+    for cond in folded:
+        assert cond in recorded
+
+
+def test_an_open_frame_carries_nothing_the_record_already_has():
+    """The frame stack is an index into the log, not a second copy of it.
+
+    An open inline-IF frame is the `seq` of the branch event that recognised
+    it. `idx` rides along only as the cross-check that the region start read
+    back from the record is the one the walk saw, and Chapter 7 removes it.
+    A third key would be a fold input that the deferred pass cannot get.
+    """
+    import ast
+
+    root = Path(__file__).resolve().parents[2]
+    frames = []
+    for relpath in ("tbx/decode0/core.py", "tbx/decode0/lift.py"):
+        tree = ast.parse((root / relpath).read_text())
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "append"
+                and isinstance(node.func.value, ast.Attribute | ast.Name)
+                and (
+                    node.func.value.attr
+                    if isinstance(node.func.value, ast.Attribute)
+                    else node.func.value.id
+                )
+                == "ifs"
+                and node.args
+                and isinstance(node.args[0], ast.Dict)
+            ):
+                frames.append(
+                    (
+                        f"{relpath}:{node.lineno}",
+                        {k.value for k in node.args[0].keys},
+                    )
+                )
+
+    assert len(frames) == 4, f"expected four frame openers, found {frames}"
+    for where, keys in frames:
+        assert keys == {"seq", "idx"}, f"{where} carries {keys - {'seq', 'idx'}}"
 
 
 def test_a_body_ending_in_a_pending_print_is_inside_the_region():

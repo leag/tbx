@@ -344,7 +344,15 @@ def _length_at(edits, seq: int) -> int:
     Replaying rather than counting commits is what makes it exact: a count of
     committed statements misses that an earlier fold already shortened the
     list.
+
+    The walk stamps edits with a clock that only advances, so the edits up to
+    an event are a prefix -- found by bisection rather than by filtering the
+    whole log, which keeps this cheap enough to run inside the fold.
     """
+    from bisect import bisect_right
+
     from tbx.decode0.statement_log import replay
 
-    return len(replay([edit for edit in edits if edit.at_event <= seq]))
+    if not isinstance(edits, (list, tuple)):
+        edits = list(edits)  # the fold hands its own list; do not copy it
+    return len(replay(edits[: bisect_right(edits, seq, key=lambda e: e.at_event)]))
