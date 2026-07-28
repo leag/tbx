@@ -34,7 +34,7 @@ signal that something moved.
 | 4 recognition/mutation split | substantial, two families outstanding |
 | 5 event stream | **complete**: every statement has an event |
 | 6 control-flow extraction | folds record-driven; timing moved and green on `experimental/deferred-fold` |
-| 7 remove scaffolding | audit and measurement done; one deletion disputed |
+| 7 remove scaffolding | audit, measurement and docs done; one deletion disputed |
 
 ## What is proven, with numbers
 
@@ -384,6 +384,8 @@ a guard the corpus cannot replace.
    waiting on them. Then `SubDef`, which additionally needs the procedure's
    name and parameters recorded.
 3. **Chapter 4's two families**, independently of the above.
-4. **Chapter 7's remainder**: the architecture and replay-tool documentation.
-   Its audit and measurement are done, its deletion list came back empty, and
-   the one deletion it proposed should not happen -- see above.
+4. **Chapter 7 is done bar the dispute.** The audit found no obsolete state,
+   the measurement is recorded, and `docs/decoder-architecture.md` is the
+   architecture and replay-tool map, checked against the code by
+   `tests/tbx/test_architecture_doc.py` so it cannot drift. The one deletion
+   it proposed should not happen -- see above.

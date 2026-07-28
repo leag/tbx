@@ -18,6 +18,10 @@ Use `pip install '.[debug]'` for the iced-x86 CFG tools.
 
 ## Pipeline
 
+`docs/decoder-architecture.md` is the map: the pipeline, who owns which piece
+of decode state, how to read a failure report, and what the fixture corpus does
+not cover. Start there when a wild EXE fails.
+
 The decoder pipeline is EXE bytes → operation stream → typed IR → canonical
 BASIC source:
 
