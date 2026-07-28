@@ -1,13 +1,27 @@
 import pytest
 import json
 from pathlib import Path
-from types import SimpleNamespace
-
 from tbx import ir
+from tbx.decode0.core import DecodeState
 from tbx.decode0.handlers import arith
 from tbx.decode0.scan import _scan_direct2
 from tbx.tools import batch_probe
 from tbx.tools.compare_gap_reports import compare
+
+
+def _handler_state(**fields):
+    """A real ``DecodeState`` for exercising one handler in isolation.
+
+    These tests used to pass a ``SimpleNamespace``, which silently accepted
+    any field name. A real state carries the ownership views the handlers
+    read through, so a field that moved owners fails here instead of
+    quietly reading ``None``.
+    """
+    state = DecodeState()
+    for name, value in fields.items():
+        setattr(state, name, value)
+    return state
+
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -96,7 +110,7 @@ def test_deep_register_spill_store_and_restore():
     ]
 
     value = ir.Lit(7)
-    state = SimpleNamespace(di=value, cx=None, reg_spills={}, k=0)
+    state = _handler_state(di=value, cx=None, reg_spills={}, k=0)
     assert arith.int_alu(state, ops[0], 0, "spill_store")
     assert state.di is None and state.reg_spills == {0x7E: value}
     assert arith.int_alu(state, ops[1], 4, "spill_load")
@@ -111,7 +125,7 @@ def test_integer_call_argument_temp_staging():
     ops.append((3, "arg_push_temp"))  # a plain SUB CALL argument frame
 
     value = ir.Lit(9)
-    state = SimpleNamespace(
+    state = _handler_state(
         ax=value, pend_args=[], fn_args={}, si=None, cur=123, k=0, ops=ops
     )
     assert arith.int_alu(state, ops[0], 0, "movm_ax_temp")
@@ -138,7 +152,7 @@ def test_nested_fn_call_argument_temp_staging():
     assert ops == [(0, "movm_imm_temp", 3)]
     ops.append((5, "mov_bp_sp"))  # a nested DEF FN call's own frame
 
-    state = SimpleNamespace(
+    state = _handler_state(
         ax=None, pend_args=[], fn_args={}, si=2, cur=123, k=0, ops=ops
     )
     assert arith.int_alu(state, ops[0], 0, "movm_imm_temp")
@@ -150,7 +164,7 @@ def test_nested_fn_call_argument_temp_staging():
 def test_non_for_integer_add_immediate():
     var = ir.Var("A%")
     emitted = []
-    state = SimpleNamespace(
+    state = _handler_state(
         fors=[],
         loc=lambda _disp: var,
         put=lambda stmt, addr: emitted.append((stmt, addr)),
@@ -165,7 +179,7 @@ def test_non_for_integer_add_immediate():
 
 def test_non_for_memory_to_ax_integer_compare():
     lhs, rhs = ir.Var("A%"), ir.Var("B%")
-    state = SimpleNamespace(
+    state = _handler_state(
         ax=rhs,
         pend_cmp=None,
         loc=lambda _disp: lhs,
@@ -180,7 +194,7 @@ def test_non_for_memory_to_ax_integer_compare():
 def test_logical_value_chain_uses_combine_provenance_for_operand_order():
     a, b, c = ir.Var("A%"), ir.Var("B%"), ir.Var("C%")
     accumulated = ir.BinOp("AND", a, b)
-    state = SimpleNamespace(
+    state = _handler_state(
         ax=c,
         bx=accumulated,
         direct_bool_gate=False,
@@ -196,7 +210,7 @@ def test_logical_value_chain_uses_combine_provenance_for_operand_order():
 def test_logical_value_chain_does_not_reverse_independent_group():
     a, b, c = ir.Var("A%"), ir.Var("B%"), ir.Var("C%")
     independent = ir.BinOp("AND", a, b)
-    state = SimpleNamespace(
+    state = _handler_state(
         ax=c,
         bx=independent,
         direct_bool_gate=False,
@@ -211,7 +225,7 @@ def test_logical_value_chain_does_not_reverse_independent_group():
 def test_logical_value_chain_preserves_lower_precedence_right_group():
     a, b, c = ir.Var("A%"), ir.Var("B%"), ir.Var("C%")
     right_group = ir.BinOp("OR", b, c)
-    state = SimpleNamespace(
+    state = _handler_state(
         ax=a,
         bx=right_group,
         direct_bool_gate=False,
@@ -226,7 +240,7 @@ def test_logical_value_chain_preserves_lower_precedence_right_group():
 def test_equal_precedence_logical_value_chain_keeps_evaluation_order():
     a, b, c = ir.Var("A%"), ir.Var("B%"), ir.Var("C%")
     accumulated = ir.BinOp("OR", a, b)
-    state = SimpleNamespace(
+    state = _handler_state(
         ax=c,
         bx=accumulated,
         direct_bool_gate=False,

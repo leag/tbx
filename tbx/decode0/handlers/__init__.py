@@ -1,7 +1,14 @@
 """Opcode-family handlers for ``decode_user_code``'s dispatch loop.
 Each handler takes the shared :class:`~tbx.decode0.core.DecodeState`
 plus the current ``op``/``addr``/``kind`` and returns ``True`` when it consumed the
-op -- the loop then advances ``state.k`` inside the handler and ``continue``s.
+op -- the handler commits that consumption with ``state.advance`` (or
+``state.seek`` for a computed stop) and the loop ``continue``s.
+
+A handler reaches decode state through the ownership views bound at the top of
+its body: ``i``/``m``/``e``/``l``/``c``/``o`` for image, machine, expression,
+layout, control, and output. That alias line is the handler's declared read and
+write set. See :mod:`tbx.decode0.state_parts`; ``tests/tbx/test_migrated_modules``
+holds the migrated modules to it.
 
 Families gather branches that are each owned by a single op ``kind`` (mutually
 exclusive, order-independent per op), so consolidating their scattered branches

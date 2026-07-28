@@ -5,6 +5,7 @@ from typing import Any
 
 from tbx import ir
 from tbx.decode0.const import _JCC_RELOP_TRUE, _NEGATE_REL
+from tbx.decode0.matchers import match_bool_term1
 
 
 def _is_for_header(stmts, vdisp) -> bool:
@@ -324,68 +325,10 @@ def _same_code_offset(a: int, b: int) -> bool:
 
 
 def _match_bool_term1(ops, k):
-    """ops[k] = movax FFFF with a pending compare. Detect a compound-IF first
-    term: the materialization header whose closing jmp short-circuits INTO the
-    second term's tail -- AND (jnz dispatch) jumps to the commit after `and ax,bx`,
-    OR (jz) jumps to the tail's `or ax,ax` with ax still 0FFFFh.
-
-    Returns `(op, deferred)` -- `op` is "AND"/"OR", the combinator that will
-    fold this term with whatever comes next; `deferred` is True when the
-    matched term is NOT the very next one to materialize but a multi-term
-    inner GROUP further ahead (a differently-precedenced sub-expression,
-    e.g. `A OR B AND C` = `A OR (B AND C)`: A's own short-circuit lands on
-    the (B AND C) group's OWN convergence point, not on B directly -- wild
-    wb.exe/grdscn.exe/mcmurphy.exe, probes q_mixedbool5/q_mixedbool6).
-    Detected by another `movax 0FFFFh` materialization sitting strictly
-    between here and the match (register-shuffle ops before a DIRECT
-    combine never include one, since only a genuine extra TERM's own
-    self-test does -- t1_and3/wild number.exe's shuffle dance around
-    cmpax_m proves the shuffle alone is not a signal). The caller must
-    defer folding until that inner group resolves on its own (see
-    `_lift_bool_tail`'s `pend_outer`). Returns None if ops[k] isn't a
-    compound-IF first term at all (then it's a WHILE header; the address
-    equality disambiguates exactly)."""
-    if [o[1] for o in ops[k : k + 6]] != [
-        "movax",
-        "jcc",
-        "incax",
-        "orax",
-        "jcc",
-        "jmp",
-    ]:
-        return None
-    if (
-        ops[k + 1][3] != ops[k + 3][0]
-        or ops[k + 1][2] not in _JCC_RELOP_TRUE
-        or ops[k + 4][3] != ops[k + 5][0] + 3
-    ):
-        return None
-    pol, sc = ops[k + 4][2], ops[k + 5][2]
-    comb = {0x75: ("andaxbx", "AND"), 0x74: ("orax", "OR")}.get(pol)
-    if comb is None:
-        return None
-    other_comb = ("orax", "OR") if comb[0] == "andaxbx" else ("andaxbx", "AND")
-    seen_materialize = False
-    for j in range(k + 6, min(k + 36, len(ops) - 3)):
-        if ops[j][1] != "movax" or ops[j][2] != 0xFFFF:
-            continue
-        nxt3 = [o[1] for o in ops[j + 1 : j + 4]]
-        for candidate, cdelta in (
-            (comb, 2 if comb[1] == "AND" else 0),
-            (other_comb, 2 if other_comb[1] == "AND" else 0),
-        ):
-            if nxt3 == ["jcc", "incax", candidate[0]]:
-                tail_comb = ops[j + 3]
-                if _same_code_offset(sc, tail_comb[0] + cdelta):
-                    # term1's OWN polarity (comb[1]) is always how it joins
-                    # whatever was found -- candidate only describes the
-                    # SHAPE of that thing (a same-op cascade continuation,
-                    # comb, or a differently-precedenced inner GROUP,
-                    # other_comb), never the join operator itself.
-                    return comb[1], seen_materialize
-        seen_materialize = True
+    matched = match_bool_term1(ops, k)
+    if matched is not None:
+        return matched.operator, matched.deferred
     return None
-
 
 def _match_bool_bare_term1(ops, k) -> bool:
     """Sibling of `_match_bool_term1` for a BARE-VALUE (uncompared)

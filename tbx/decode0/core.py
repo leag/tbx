@@ -48,6 +48,18 @@ from tbx.decode0.lift import (
     _same_code_offset,
 )
 from tbx.decode0.rename import _slot, _str_lit, canonical_rename
+from tbx.decode0.cursor import DecodeDiagnostics, OpCursor
+from tbx.decode0.events import replay_events, statement_events
+from tbx.decode0.control_graph import ControlGraph
+from tbx.decode0.state_parts import (
+    STATE_VIEWS,
+    ControlState,
+    ExprState,
+    ImageState,
+    LayoutState,
+    MachineState,
+    OutputState,
+)
 
 # Word count `local_init` reserves for a LOCAL DYNAMIC array's descriptor
 # template -- a fixed size regardless of rank or element type (witnessed
@@ -98,6 +110,7 @@ class DecodeState:
     ax: Any = None
     bchk_subs: Any = None
     bchk_bp: Any = None
+    block_if_addrs: Any = None
     bx: Any = None
     cases: Any = None
     cc_hooks: Any = None
@@ -171,6 +184,7 @@ class DecodeState:
     proc_dbl_offs: Any = None
     proc_str_offs: Any = None
     reg_logical_results: Any = None
+    reg_spills: Any = None
     fp64_bridge: Any = None
     r_arrs: Any = None
     si: Any = None
@@ -186,6 +200,56 @@ class DecodeState:
     toggles: Any = None
     trace_tbl: Any = None
     whiles: Any = None
+    cursor: OpCursor | None = None
+    diagnostics: DecodeDiagnostics | None = None
+    image: ImageState | None = None
+    machine: MachineState | None = None
+    expr: ExprState | None = None
+    layout_state: LayoutState | None = None
+    control: ControlState | None = None
+    output: OutputState | None = None
+
+    def __post_init__(self) -> None:
+        for name, view in STATE_VIEWS.items():
+            setattr(self, name, view(self))
+
+    def advance(self, count: int = 1) -> None:
+        """Commit operation consumption through the compatibility cursor.
+
+        New handlers should use this instead of mutating ``k`` directly.  The
+        fallback keeps isolated handler tests and legacy construction of
+        ``DecodeState`` working until all callers initialize a cursor.
+        """
+        self.seek(self.k + count)
+
+    def seek(self, index: int) -> None:
+        """Commit consumption up to an absolute operation index.
+
+        The relative :meth:`advance` is the common case; a lookahead helper
+        that computes where it stopped reports that position here instead of
+        assigning ``k``, so the cursor still witnesses the whole window.
+        """
+        if self.cursor is None:
+            self.k = index
+            return
+        self.cursor.sync(self.k)
+        self.cursor.sync(index)
+        self.k = self.cursor.index
+
+    def error(self, message: str, *, component: str | None = None) -> ValueError:
+        """Create a fail-loud error enriched with the current decode context."""
+        if self.diagnostics is None:
+            return ValueError(message)
+        self.diagnostics.component = component
+        context = self.diagnostics.report()
+        return ValueError(f"{message} [{context}]")
+
+    def validate_ownership(self) -> None:
+        """Verify that compatibility views still alias this live state."""
+        for name in STATE_VIEWS:
+            view = getattr(self, name)
+            if view is None or view._owner is not self:
+                raise ValueError(f"decoder state view {name!r} is detached")
 
     def pool_lit(self, disp):
         raw = struct.unpack_from("<H", self.exe, self.dsd + disp)[0]
@@ -472,8 +536,10 @@ class DecodeState:
 
     def put(self, stmt, addr):
         self.flush_pending()
-        self.stmts.append(stmt)
-        self.addrs.append(addr)
+        output = self.output
+        assert output is not None
+        output.stmts.append(stmt)
+        output.addrs.append(addr)
 
     def _fread_target(self, ref: object) -> None:  # open INPUT# target chain
         assert self.pend_filein is not None
@@ -1636,11 +1702,19 @@ def _finalize(state: DecodeState, addr) -> Program:
             "pooled string literals left unattached after the "
             "fre_str sites were served (unsupported shape)"
         )
-    prog = Program(
-        canonical_rename(
-            _resolve_targets(state.stmts, state.addrs, state.stmt_addr)
-        )
+    graph = ControlGraph.from_statements(state.stmts, state.addrs, state.stmt_addr)
+    graph.validate_targets()
+    canonical = canonical_rename(
+        _resolve_targets(state.stmts, state.addrs, state.stmt_addr)
     )
+    events = statement_events(canonical, state.addrs)
+    prog = Program(replay_events(events))
+    prog.control_graph = graph
+    # The event stream is the first committed replay boundary. It is built
+    # from the final structured statements, after control-flow folds and
+    # canonical target resolution, so consumers never need decoder registers
+    # or mutable statement-side tables to inspect the result.
+    prog.events = events
     prog.metas = (
         tuple((0, m) for m in state.metas)
         + tuple((i, "$SEGMENT") for i in state.seg_metas)
@@ -2689,10 +2763,13 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     state.k += 1
 
 
-def decode_user_code(exe: bytes) -> list[Any]:
+def _decode_user_code(
+    exe: bytes, *, diagnostics: DecodeDiagnostics | None = None
+) -> list[Any]:
     """Decode from the prologue to (and including) END. Returns typed IR statements with
     canonical variable names and statement-index jump targets."""
-    state = DecodeState()
+    state = DecodeState(diagnostics=diagnostics)
+    state.validate_ownership()
     state.exe = exe
     state.start, state.dia = find_prologue(exe)
     state.metas = _meta_stmts(
@@ -3011,9 +3088,24 @@ def decode_user_code(exe: bytes) -> list[Any]:
                 ]
 
     state.k = 0
+    state.cursor = OpCursor(state.ops)
+    state.diagnostics = state.diagnostics or DecodeDiagnostics()
     while state.k < len(state.ops):
+        # Compatibility bridge: legacy handlers still advance ``state.k``
+        # directly.  Synchronizing here makes their committed consumption
+        # visible to the new cursor and diagnostic context without changing
+        # their semantics.  Migrated handlers can use ``state.cursor``
+        # directly and leave the same cursor at the next operation.
+        assert state.cursor is not None
+        state.cursor.sync(state.k)
         op = state.ops[state.k]
         addr, kind = op[0], op[1]
+        assert state.diagnostics is not None
+        state.diagnostics.observe(
+            state.cursor,
+            address=addr,
+            statement=state.cur,
+        )
         if kind == "nop":
             state.k += 1
             continue
@@ -5068,3 +5160,16 @@ def decode_user_code(exe: bytes) -> list[Any]:
 
         fp_dispatch(state, op, addr, kind)
     raise ValueError("op stream ended without the cleanup epilogue")
+
+
+def decode_user_code(exe: bytes) -> list[Any]:
+    """Decode user code and attach phase context to fail-loud errors."""
+
+    diagnostics = DecodeDiagnostics()
+    try:
+        return _decode_user_code(exe, diagnostics=diagnostics)
+    except ValueError as exc:
+        message = str(exc)
+        if "[phase=" in message:
+            raise
+        raise ValueError(f"{message} [{diagnostics.report()}]") from exc

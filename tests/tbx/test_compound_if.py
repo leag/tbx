@@ -26,6 +26,7 @@ def _exe(name):
 
 def test_compound_first_term_matches_wrapped_near_target():
     from tbx.decode0.lift import _loose_for_header, _match_bool_term1
+    from tbx.decode0.matchers import match_bool_term1
 
     # `electron.exe` reaches this ordinary AND template in a later 64 KiB
     # code window.  The scanner's canonical near-jump target is the same
@@ -43,6 +44,10 @@ def test_compound_first_term_matches_wrapped_near_target():
         (0x1EED8, "andaxbx"),
     ]
     assert _match_bool_term1(ops, 0) == ("AND", False)
+    typed = match_bool_term1(ops, 0)
+    assert typed is not None
+    assert typed.operator == "AND"
+    assert typed.deferred is False
 
     # The same program's SINGLE FOR header jumps to its negative comparison
     # branch at the canonical offset; its scanned second branch is 64 KiB

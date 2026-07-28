@@ -100,6 +100,9 @@ from tbx.decode0.lift import (
 )
 from tbx.decode0.rename import _slot, _str_lit, canonical_rename
 from tbx.decode0.core import decode_user_code
+from tbx.decode0.control_graph import ControlGraph
+from tbx.decode0.cursor import OpCursor
+from tbx.decode0.events import DecodedEvent, replay_events
 
 __all__ = [
     "ARR_BLOCK",
@@ -113,7 +116,11 @@ __all__ = [
     "TB11",
     "VAR_BASE",
     "canonical_rename",
+    "ControlGraph",
+    "DecodedEvent",
     "decode_user_code",
     "find_prologue",
+    "OpCursor",
+    "replay_events",
     "toggle_names",
 ]
