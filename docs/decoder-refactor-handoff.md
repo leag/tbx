@@ -33,7 +33,7 @@ signal that something moved.
 | 3 state ownership | **complete** |
 | 4 recognition/mutation split | substantial, two families outstanding |
 | 5 event stream | **complete**: every statement has an event |
-| 6 control-flow extraction | all three folds record-driven; timing not moved |
+| 6 control-flow extraction | folds record-driven; timing tried on `experimental/deferred-fold` |
 | 7 remove scaffolding | not started |
 
 ## What is proven, with numbers
@@ -187,10 +187,44 @@ So the remaining work is what a deferred pass still cannot reconstruct:
   `proc_names`/`proc_params`, keyed by address. The `proc` region says where
   the body is, not what to call it.
 
-## Why the timing is load-bearing
+## The timing move, attempted: `experimental/deferred-fold`
 
-Deferring `close_ifs` alone was attempted and **fails**: it breaks 92 tests in
-three classes.
+Branch `experimental/deferred-fold`, commit `5d12af7`, off this one. `close_ifs`
+queues its region at the arrival instead of folding, and `drain_folds` folds the
+queue when the construct that owns it closes — the arm snapshot, the procedure
+return, the end of the walk.
+
+**It does not land: 21 tests fail.** Seven are the shadow-pass tests reading
+`close_ifs`'s old edit shape, not regressions. The real damage is four fixtures
+(`t1_nestif2`, `t1_blkgoto`, `t1_iftailarm`, `t1_selarmblockif`, both dialects),
+the IR snapshot, and `ziptest`. Two mechanisms:
+
+- **`_lift_while` discriminates on the folded list.** Its tail-test leg tests
+  `exit_jmp[2] in addrs`, and an unfolded inline-IF body leaves its statements'
+  addresses there, so a plain body skip reads as a tail-test `DO...LOOP` — the
+  spurious `DO` in `t1_nestif2` and `t1_blkgoto`, and very likely the
+  "unhandled jmp short" in `horses.exe` and `ziptest.exe`. **This is the first
+  thing to move off the folded list.**
+- **An IF closing a CASE arm is still not folded before the snapshot.** The
+  drain at the arm does not catch it: `t1_iftailarm` loses its IF entirely and
+  `tbd73.exe` fails on `jump target 0xd367` — TBW73.INC:716, the exact wild
+  behaviour `_fold_arm`'s eager `close_ifs` was calibrated against.
+
+**The wild scan moves in both directions**, which is the result worth keeping:
+28 decode-ok becomes 27, but not by losing three. It loses `horses.exe`,
+`tbd73.exe` and `ziptest.exe` and **gains `state.exe` and `state87.exe`**, which
+have failed on `jump target 0xe179 is not a statement start` for this entire
+migration. Deferring keeps a jump target inside an inline-IF body visible, so
+that failure class is one the eager fold *causes*, not one it avoids.
+
+So the answer to "can the folds move" is no longer "no, 92 tests". It is: two
+named entanglements, one of which is a three-line discriminator, and a decoding
+gain waiting on the other side.
+
+## Why the eager timing was load-bearing
+
+The earlier attempt, deferring `close_ifs` alone with nothing else moved, broke
+92 tests in three classes.
 
 - **28 unresolved jump targets.** An inline IF that is the last statement of a
   SUB/DEF FN body skips to the epilogue, which is not a statement and never can
@@ -208,7 +242,17 @@ than to convenience.
 
 ## Next steps, in order
 
-1. **Record the loop lifts' regions**, the way the inline IF, the CASE arm and
+1. **Move `_lift_while`'s tail-test discriminator off the folded list.** It
+   tests `exit_jmp[2] in addrs`, which is only true because the fold has
+   already removed the body's addresses. The record has what it needs — the
+   branch event for the skip, and the arrival that closed it — so this is a
+   question the log can answer without the list. It is the single change
+   blocking most of `experimental/deferred-fold`.
+2. **Then re-run that branch.** Expect the arm-close case (`t1_iftailarm`,
+   `tbd73.exe` at `0xd367`) to be what remains, and check whether `state.exe`
+   and `state87.exe` still decode — a jump target inside an inline-IF body is
+   a failure class the eager fold creates.
+3. **Record the loop lifts' regions**, the way the inline IF, the CASE arm and
    the procedure body were recorded, and fold them in `fold_pass` — they are
    the only walk-time fold family left, and the three wild SELECT misses are
    waiting on them. Then `SubDef`, which additionally needs the procedure's
@@ -217,8 +261,8 @@ than to convenience.
    wild-corpus report, not on a green suite — this is the first change in the
    chapter that will move statements. Expect the epilogue-target and
    address-retention cases to decide whether it works.
-3. **Chapter 4's two families**, independently of the above.
-4. **Chapter 7**, only after the swap lands.
+4. **Chapter 4's two families**, independently of the above.
+5. **Chapter 7**, only after the swap lands.
 
 ## Tools
 

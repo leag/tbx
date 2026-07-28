@@ -883,6 +883,31 @@ collapsing them: a FOR header absorbs the assignment initialising its loop
 variable, and `lift_while` inserts a `Do` marker at an earlier position. An arm
 around either comes out holding statements the walk's arm does not.
 
+### The timing move, attempted
+
+Branch `experimental/deferred-fold` (`5d12af7`). `close_ifs` queues its region
+at the arrival rather than folding, and `drain_folds` folds the queue when the
+construct that owns it closes: the arm snapshot, the procedure return, the end
+of the walk.
+
+It does not land — 21 tests fail, seven of them the shadow-pass tests reading
+the old edit shape — and the two mechanisms are named rather than counted:
+
+- `_lift_while`'s tail-test leg tests `exit_jmp[2] in addrs`, which is only
+  true because the fold has already removed the body's addresses. An unfolded
+  body makes a plain skip read as a `DO...LOOP`. The record can answer that
+  question without the list; this is the next change.
+- An inline IF closing a CASE arm is still unfolded when the arm is
+  snapshotted, so `t1_iftailarm` loses its IF and tbd73.exe fails on
+  `jump target 0xd367` -- TBW73.INC:716, the behaviour `_fold_arm`'s eager
+  `close_ifs` was calibrated against.
+
+The wild scan is the part worth keeping: 28 decode-ok becomes 27, but by losing
+horses.exe, tbd73.exe and ziptest.exe while **gaining state.exe and
+state87.exe**, which have failed on `jump target 0xe179 is not a statement
+start` throughout this migration. A jump target inside an inline-IF body is a
+failure class the eager fold causes, not one it avoids.
+
 ### What remains
 
 Two things, in order:
