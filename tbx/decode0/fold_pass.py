@@ -46,6 +46,68 @@ class FoldRegion:
     target: int
 
 
+@dataclass(frozen=True)
+class ArmRegion:
+    """One CASE arm or CASE ELSE body, in commit coordinates, with its guards.
+
+    ``guards`` is empty for a CASE ELSE, which matches by exclusion and
+    records nothing to match on.
+    """
+
+    start: int
+    stop: int
+    guards: tuple
+    kind: str
+
+
+def _positions(program):
+    """A map from event ``seq`` to how many statements had been committed."""
+    commits = [event.seq for event in committed(program.events)]
+
+    def position(seq: int) -> int:
+        return bisect_left(commits, seq)
+
+    return position
+
+
+def arm_regions(program) -> tuple[ArmRegion, ...]:
+    """Every CASE arm body the record describes, in commit coordinates.
+
+    An arm ends where its arm-close jmp is reached, and that address owns no
+    statement -- it is glue. The moment is recorded instead: the region's end
+    is a wanted address, so decoding arriving there is an event, and the arm's
+    extent is the list length then. This is the same construction the inline-IF
+    extent uses, which is the point: an arm is a region like any other.
+
+    An arm whose close is never arrived at is skipped rather than guessed.
+    """
+    position = _positions(program)
+    arrivals: dict[int, int] = {}
+    for event in program.events:
+        if event.kind == "arrive":
+            arrivals.setdefault(event.payload.address, event.seq)
+
+    regions = []
+    for event in program.events:
+        if event.kind != "region" or event.payload.kind not in (
+            "case_arm",
+            "case_else",
+        ):
+            continue
+        arrival = arrivals.get(event.payload.end)
+        if arrival is None or arrival < event.seq:
+            continue
+        regions.append(
+            ArmRegion(
+                start=position(event.seq),
+                stop=position(arrival),
+                guards=event.payload.detail or (),
+                kind=event.payload.kind,
+            )
+        )
+    return tuple(regions)
+
+
 def fold_regions(program) -> tuple[FoldRegion, ...]:
     """Every inline-IF region the record describes, in the order to fold them.
 
@@ -53,12 +115,7 @@ def fold_regions(program) -> tuple[FoldRegion, ...]:
     and folding the enclosing one first would swallow the body the inner one
     still needs -- and by arrival otherwise.
     """
-    commits = [event.seq for event in committed(program.events)]
-
-    def position(seq: int) -> int:
-        """How many statements had been committed when event ``seq`` happened."""
-        return bisect_left(commits, seq)
-
+    position = _positions(program)
     arrivals: dict[int, int] = {}
     for event in program.events:
         if event.kind == "arrive":

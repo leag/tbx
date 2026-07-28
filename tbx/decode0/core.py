@@ -681,7 +681,9 @@ class DecodeState:
             output.event_log = EventLog()
         return output.event_log.region(kind, start=start, end=end, detail=detail)
 
-    def branch(self, frame: str, *, template, target, address=None, cond=None):
+    def branch(
+        self, frame: str, *, template, target, address=None, cond=None, block=False
+    ):
         """Record a branch this handler recognised, and return the event.
 
         Emitting is deliberately separate from committing: the statement list
@@ -695,7 +697,12 @@ class DecodeState:
         if output.event_log is None:
             output.event_log = EventLog()
         return output.event_log.branch(
-            frame, template=template, target=target, address=address, cond=cond
+            frame,
+            template=template,
+            target=target,
+            address=address,
+            cond=cond,
+            block=block,
         )
 
     @property

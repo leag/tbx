@@ -246,7 +246,9 @@ def _find_jmps_back(ops, exit_addr) -> int | None:
     return None
 
 
-def _announce(branch, frame: str, template: str, target, address, cond=None):
+def _announce(
+    branch, frame: str, template: str, target, address, cond=None, block=False
+):
     """Record a frame this lift opened, and return the event.
 
     ``template`` is what was matched; ``frame`` is what this lift concluded
@@ -265,7 +267,12 @@ def _announce(branch, frame: str, template: str, target, address, cond=None):
     if branch is None:
         return None
     return branch(
-        frame, template=template, target=target, address=address, cond=cond
+        frame,
+        template=template,
+        target=target,
+        address=address,
+        cond=cond,
+        block=block,
     )
 
 
@@ -567,6 +574,7 @@ def _lift_while(
             put(ir.Loop(loop_kind, cond), cur)
         elif exit_jcc[2] == 0x75:  # inline-IF (forward skip, by exclusion above)
             flush()
+            spelled_block = False
             if block_ifs is not None and isinstance(cond, ir.RelOp):
                 # A SIMPLE condition that reached here MATERIALIZED (this function
                 # consumes the movax-FFFF template), and a genuinely single-line
@@ -585,8 +593,15 @@ def _lift_while(
                 # Compound conditions materialize either way, so only a plain
                 # RelOp counts.
                 block_ifs.add(cur)
+                spelled_block = True
             event = _announce(
-                branch, "if", "materialized_test_skip", exit_jmp[2], cur, cond=cond
+                branch,
+                "if",
+                "materialized_test_skip",
+                exit_jmp[2],
+                cur,
+                cond=cond,
+                block=spelled_block,
             )
             ifs.append({"seq": event.seq, "idx": len(stmts)})
         else:

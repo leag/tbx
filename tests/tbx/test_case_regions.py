@@ -136,6 +136,62 @@ def test_every_select_in_the_corpus_records_its_guards():
     assert not missed, f"{len(missed)} programs mis-record their guards: {missed[:5]}"
 
 
+def test_the_record_locates_every_arm_body():
+    """Where each arm's body sits in the committed statement stream.
+
+    An arm ends at its arm-close jmp, which owns no statement -- it is glue --
+    so the end is a moment, recorded the same way an inline IF's is: the
+    region's end address is one the log waits for, and decoding arriving there
+    is an event. A pass folding afterwards sizes the arm from that.
+    """
+    from tbx.decode0.fold_pass import arm_regions
+
+    missed = []
+    for exe in sorted(CORPUS.glob("*.exe")):
+        try:
+            prog = decode0.decode_user_code(exe.read_bytes())
+        except ValueError:
+            continue
+        built = [
+            edit.payload[0]
+            for edit in prog.statement_edits
+            if edit.origin == "select_case"
+            and edit.payload
+            and isinstance(edit.payload[0], ir.SelectCase)
+        ]
+        if not built:
+            continue
+        arms = sum(len(s.arms) for s in built)
+        located = [r for r in arm_regions(prog) if r.kind == "case_arm"]
+        if len(located) != arms:
+            missed.append((exe.name, arms, len(located)))
+        if any(r.stop <= r.start for r in located):
+            missed.append((exe.name, "an arm region is empty"))
+
+    assert not missed, f"{len(missed)} programs' arms are not located: {missed[:5]}"
+
+
+def test_a_block_spelled_if_is_recorded_as_one():
+    """The bytes say which spelling the source used, and the log now says so.
+
+    A simple condition that materialized is positive evidence the source
+    spelled a multi-line block IF -- a single-line `IF <simple> THEN <stmt>`
+    compiles a bare dispatch pair instead. The fold needs that to choose the
+    block form, and it used to be readable only from `block_if_addrs`, which a
+    pass reading the log cannot see.
+    """
+    def flagged(stem):
+        prog = decode0.decode_user_code((CORPUS / f"{stem}.exe").read_bytes())
+        return [e for e in prog.events if e.kind == "branch" and e.payload.block]
+
+    # `20 IF A$ <> "Q" THEN` with its body on following lines.
+    assert len(flagged("t1_blkgoto")) == 1
+    # `20 IF A$ = "T" OR A$ = "t" THEN CLS: GOTO 60` -- single line, and
+    # `30 IF A > 1 AND B < 5 THEN C = 1: D = 2` likewise.
+    assert flagged("t1_ifgoto") == []
+    assert flagged("t1_ifin") == []
+
+
 def test_every_arm_in_the_corpus_is_recorded():
     """One region per arm, everywhere.
 

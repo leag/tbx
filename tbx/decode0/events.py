@@ -60,6 +60,13 @@ class BranchEvent:
     #: is only resolved once its arms close).
     target: int | None = None
     cond: Any = None
+    #: True when the bytes say the source spelled this IF as a multi-line
+    #: block. A simple condition that materialized is positive evidence of it
+    #: -- a single-line `IF <simple> THEN <stmt>` compiles a bare dispatch pair
+    #: instead -- and the fold needs it to choose the block form. The walk
+    #: keeps the same fact in `block_if_addrs`; recording it here is what lets
+    #: a pass reading only the log make the same choice.
+    block: bool = False
 
 
 @dataclass(frozen=True)
@@ -183,9 +190,9 @@ class EventLog:
     """Append-only record of committed statements, in emission order."""
 
     events: list[DecodedEvent] = field(default_factory=list)
-    #: Addresses a recorded branch targets, and those already arrived at.
-    #: Derived from the log's own contents -- an arrival is only interesting
-    #: where some branch is waiting for it.
+    #: Addresses something in the log is waiting for -- a branch's target, a
+    #: region's end -- and those already arrived at. Derived from the log's own
+    #: contents: an arrival is only interesting where something wants it.
     _wanted: set[int] = field(default_factory=set, repr=False, compare=False)
     _arrived: set[int] = field(default_factory=set, repr=False, compare=False)
 
@@ -207,12 +214,13 @@ class EventLog:
         target: int | None,
         address: int | None,
         cond: Any = None,
+        block: bool = False,
     ) -> DecodedEvent:
         """Record a recognised branch. The statement list is not touched."""
         event = DecodedEvent(
             kind="branch",
             address=address,
-            payload=BranchEvent(frame, template, target, cond),
+            payload=BranchEvent(frame, template, target, cond, block),
             seq=len(self.events),
         )
         self.events.append(event)
@@ -291,6 +299,13 @@ class EventLog:
             seq=len(self.events),
         )
         self.events.append(event)
+        if end is not None:
+            # A region ends at a moment, exactly as a branch's body does, and
+            # the moment is what sizes it: how long the statement list was when
+            # decoding got there. The end address is usually not a statement
+            # and never a branch target -- an arm-close jmp, a procedure
+            # epilogue -- so nothing else in the log would ask for it.
+            self._wanted.add(end)
         return event
 
     def frozen(self) -> tuple[DecodedEvent, ...]:
