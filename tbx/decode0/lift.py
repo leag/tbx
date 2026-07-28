@@ -704,7 +704,7 @@ def _fold_body(body, targets=frozenset(), stmt_addr=None, block_ifs=None):
                 if stmt_addr is not None:
                     a = stmt_addr.get(id(b))
                     if a is not None:
-                        stmt_addr[id(new_b)] = a
+                        stmt_addr.claim(new_b, a)
                 out.append(new_b)
             else:
                 out.append(b)
@@ -764,7 +764,7 @@ def _fold_body_ifgotos(body, end_addr, stmt_addr=None):
                 if stmt_addr is not None:
                     a = stmt_addr.get(id(b))
                     if a is not None:
-                        stmt_addr[id(new_node)] = a
+                        stmt_addr.claim(new_node, a)
                 return body[:j] + (new_node,)
         return body
 

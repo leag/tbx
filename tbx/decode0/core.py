@@ -54,6 +54,7 @@ from tbx.decode0.rename import _slot, _str_lit, canonical_rename
 from tbx.decode0.cursor import DecodeDiagnostics, OpCursor
 from tbx.decode0.events import DecodedEvent, EventLog, reconcile
 from tbx.decode0.statement_log import RecordedStatements, editing, replay
+from tbx.decode0.addresses import AddressOwnership
 from tbx.decode0.control_graph import ControlGraph
 from tbx.decode0.state_parts import (
     STATE_VIEWS,
@@ -407,7 +408,7 @@ class DecodeState:
                     raise ValueError(f"empty inline-IF body at {addr:#x}")
                 for st, ad in zip(body, self.addrs[fr["idx"] :]):
                     if ad is not None:  # retain leaf/body addrs before they drop
-                        self.stmt_addr[id(st)] = ad  # (the fold discards addrs[fr.idx:])
+                        self.stmt_addr.claim(st, ad)  # the fold discards addrs[fr.idx:]
                 body = _fold_body_ifgotos(body, fr["target"], self.stmt_addr)  # AFTER the
                 # addr retention: the fold nests the tail statements, and their (and
                 # the consumed IfGoto's) addrs must stay visible to the line table
@@ -887,7 +888,7 @@ def _respell_params(node, spell, stmt_addr=None):
     if stmt_addr is not None:
         a = stmt_addr.pop(id(node), None)
         if a is not None:
-            stmt_addr[id(new_node)] = a
+            stmt_addr.claim(new_node, a)
     return new_node
 
 
@@ -1044,7 +1045,7 @@ def _resolve_calls(
         if stmt_addr is not None and new is not s:
             a = stmt_addr.pop(id(s), None)
             if a is not None:
-                stmt_addr[id(new)] = a
+                stmt_addr.claim(new, a)
         return new
 
     def _fix(s):
@@ -2996,7 +2997,7 @@ def _decode_user_code(
     # stream it happened, so a branch's list position is recoverable.
     out.stmts.clock = lambda: len(state.events)
     out.addrs = []  # addrs[k] = first-op address of stmts[k]
-    out.stmt_addr = {}  # id(stmt) -> its op address, retained across the inline
+    out.stmt_addr = AddressOwnership()  # statement -> its op address, retained
     # fold (which drops body addrs) so the TRON lift can find
     # a region that ends INSIDE a block body (t1_troffin)
     c.cur = None  # start address of the statement being built
@@ -3692,7 +3693,7 @@ def _decode_user_code(
             body = tuple(out.stmts[c.proc_frame["idx"] :])
             for st, ad in zip(body, out.addrs[c.proc_frame["idx"] :]):
                 if ad is not None:  # keep body addrs: GOSUB targets a body
-                    out.stmt_addr[id(st)] = ad  # line (t1_subgsb)
+                    out.stmt_addr.claim(st, ad)  # line (t1_subgsb)
             with editing(out.stmts, "fold_proc_body"):
                 del (
                     out.stmts[c.proc_frame["idx"] :],
@@ -3911,7 +3912,7 @@ def _decode_user_code(
                 body = tuple(out.stmts[c.fn_frame["idx"] :])
                 for st, ad in zip(body, out.addrs[c.fn_frame["idx"] :]):
                     if ad is not None:  # keep body addrs (as in the SUB fold)
-                        out.stmt_addr[id(st)] = ad
+                        out.stmt_addr.claim(st, ad)
                 with editing(out.stmts, "fold_proc_body"):
                     del (
                         out.stmts[c.fn_frame["idx"] :],

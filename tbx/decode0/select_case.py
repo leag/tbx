@@ -204,7 +204,7 @@ def _keep_addrs(state, body, body_idx) -> None:
     o = state.output
     for st, ad in zip(body, o.addrs[body_idx:]):
         if ad is not None:
-            o.stmt_addr[id(st)] = ad
+            o.stmt_addr.claim(st, ad)
 
 
 def step(state):

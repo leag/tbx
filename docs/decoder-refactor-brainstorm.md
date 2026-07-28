@@ -681,14 +681,37 @@ model where a region stays open until its enclosing construct closes it, and
 should expect the epilogue-target and address-retention cases to be the two
 that decide whether it works.
 
+### Address ownership no longer rests on an id staying unique
+
+The chapter requires that "folding must update address ownership through graph
+operations rather than relying on object identity or hand-maintained side
+tables". The side table was `stmt_addr`: a plain dict keyed by
+`id(statement)`, holding no reference to the statement.
+
+Folding discards statements constantly and CPython reuses the ids of freed
+objects, so a statement created after a fold could land on a freed one's id and
+inherit its address. Pinning every committed statement alive and re-decoding
+the corpus changes no output, so nothing triggers it today — but that is a
+property of which objects happen to be alive, not of the design, and the
+symptom would be one wrong line number in one wild program.
+
+`addresses.AddressOwnership` keeps the statement alive alongside its address,
+so the id cannot be recycled while the claim stands. `pop` releases a claim
+when folding moves an address to a rebuilt statement, which is the point the
+id may safely be reused. Identity remains the key deliberately: two equal
+statements on different source lines own different addresses, and equality
+would merge them.
+
+Writing by raw id is refused rather than shimmed — a raw id cannot keep its
+statement alive, which is exactly the bug. Reads still accept one, since a
+read cannot create a claim that outlives its owner.
+
 ### What remains
 
-The swap, done as one move across those three folds rather than one at a time.
-Its gate is the goldens and the wild-corpus report. Everything it needs is
-recorded and verified: a complete branch record, an edit log with provenance,
-a shared clock and explicit nesting, a template table that reproduces every
-construct decision, a region predictor that reproduces every inline-IF fold,
-and now a measured account of what breaks if the folds move separately.
+The swap: handlers stop folding as they decode, and a pass over the graph
+folds afterwards, moving `close_ifs`, `_fold_arm` and the procedure-body fold
+together. The measured account above of what breaks when they move separately
+is the specification for that work.
 
 ## Chapter 7 — Remove the migration scaffolding
 
