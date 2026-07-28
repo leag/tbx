@@ -105,7 +105,8 @@ def _reconcile_line(name: str, program) -> str:
         f"matched={report.matched:6} ({pct:5.1f}%) "
         f"absorbed={len(report.absorbed):6} "
         f"rewritten={len(report.rewritten):6} "
-        f"synthesized={len(report.synthesized):6}"
+        f"synthesized={len(report.synthesized):6} "
+        f"reconstructed={len(report.reconstructed):6}"
     )
 
 

@@ -10,6 +10,13 @@ So the event log and the final program are *expected* to differ.
 reports is the input the control-flow extraction needs: which committed
 statements folding absorbed, and which program statements folding synthesized
 with no committed counterpart.
+
+Every way a statement can reach the program is an event kind. Most are
+committed by the walk; a revision supersedes one already committed, when a
+second runtime call completes it; a reconstruction is derived by finalization
+from a layout or pool fact, with no code behind it at all. A statement that
+arrives by none of these is a decision the log cannot account for, which is
+what the reconciliation exists to expose.
 """
 
 from __future__ import annotations
@@ -92,6 +99,25 @@ class PatchEvent:
 
 
 @dataclass(frozen=True)
+class ReconstructedEvent:
+    """A statement finalization derived rather than decoded.
+
+    DIM, DATA, OPTION BASE, COMMON and DEFtype are recovered from array
+    bookkeeping records, the data pool and the error-trap line table. No byte
+    pattern was decoded for them and none ever will be -- they own no code, so
+    they own no address either.
+
+    A reconstruction is not a commit. Finalization runs after folding, so the
+    position it inserts at describes the finished program, not the walk, and
+    replaying it into the walk's list would put it somewhere meaningless. What
+    the event provides is an account: the statement is in the program because
+    a layout fact says so, not because something is missing from the log.
+    """
+
+    statement: Any
+
+
+@dataclass(frozen=True)
 class ArrivalEvent:
     """Decoding reached an address that a recorded branch targets.
 
@@ -129,10 +155,19 @@ class EventReconciliation:
     rewritten: tuple[int, ...] = ()
     #: Statement indices folding synthesized with no committed counterpart.
     synthesized: tuple[int, ...] = ()
+    #: Statement indices finalization derived from a layout or pool fact. Told
+    #: apart from ``synthesized`` deliberately: a folded statement is built
+    #: out of committed ones, while a reconstructed one was never decoded at
+    #: all, and counting the two together makes both numbers meaningless.
+    reconstructed: tuple[int, ...] = ()
 
     @property
     def clean(self) -> bool:
-        """True when folding left every committed statement where it was."""
+        """True when folding left every committed statement where it was.
+
+        A reconstruction does not count against it: the program has that
+        statement because a layout fact says so, and an event says as much.
+        """
         return not (self.absorbed or self.rewritten or self.synthesized)
 
 
@@ -176,6 +211,17 @@ class EventLog:
         self.events.append(event)
         if target is not None:
             self._wanted.add(target)
+        return event
+
+    def reconstruct(self, statement: Any) -> DecodedEvent:
+        """Record a statement finalization derived from a layout fact."""
+        event = DecodedEvent(
+            kind="reconstruct",
+            address=None,  # codeless: it owns no code and borrows no address
+            payload=ReconstructedEvent(statement),
+            seq=len(self.events),
+        )
+        self.events.append(event)
         return event
 
     def supersede(self, previous: Any, statement: Any) -> DecodedEvent:
@@ -276,6 +322,8 @@ def committed(events: Iterable[DecodedEvent]) -> tuple[DecodedEvent, ...]:
     for event in events:
         if event.kind in ("branch", "region", "arrive"):
             continue  # carries no statement; the control pass consumes it
+        if event.kind == "reconstruct":
+            continue  # finalization's, not the walk's: it has no position here
         if event.kind == "patch":
             try:
                 target = root[event.payload.supersedes]
@@ -354,6 +402,8 @@ def reconcile(
     # no statement, and counting one would report a phantom rewrite. A
     # revision folds onto the commit it supersedes, so each committed
     # statement is one entry, in its final decoded form.
+    events = tuple(events)  # walked twice: once for reconstructions, once for commits
+    derived = _derived_counts(events)
     events = committed(events)
     statements = list(statements)
 
@@ -386,16 +436,40 @@ def reconcile(
     )
     absorbed_seqs = frozenset(absorbed)
     rewritten = tuple(e.seq for e in unmatched if e.seq not in absorbed_seqs)
-    synthesized = tuple(
-        index for index in range(len(statements)) if index not in matched_indices
-    )
+    # A statement no committed event matched is either something folding built
+    # out of committed statements, or something finalization derived. The
+    # reconstruction events say which, and are consumed one per statement so
+    # two DATA blocks with identical items cannot both claim one event.
+    synthesized, reconstructed = [], []
+    for index in range(len(statements)):
+        if index in matched_indices:
+            continue
+        statement = statements[index]
+        if _hashable(statement) and derived.get(statement):
+            derived[statement] -= 1
+            reconstructed.append(index)
+        else:
+            synthesized.append(index)
 
     return EventReconciliation(
         matched=len(events) - len(unmatched),
         absorbed=absorbed,
         rewritten=rewritten,
-        synthesized=synthesized,
+        synthesized=tuple(synthesized),
+        reconstructed=tuple(reconstructed),
     )
+
+
+def _derived_counts(events: Iterable[DecodedEvent]) -> dict[Any, int]:
+    """How many times finalization reconstructed each statement."""
+    counts: dict[Any, int] = {}
+    for event in events:
+        if event.kind != "reconstruct":
+            continue
+        statement = event.payload.statement
+        if _hashable(statement):
+            counts[statement] = counts.get(statement, 0) + 1
+    return counts
 
 
 def _hashable(value: Any) -> bool:

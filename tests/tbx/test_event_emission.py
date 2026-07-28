@@ -265,20 +265,64 @@ def test_no_decode_time_revision_is_lost_across_the_corpus():
     assert not missing, f"{len(missing)} revisions with no event: {missing[:5]}"
 
 
-def test_codeless_data_statements_are_synthesized_not_committed():
-    """A known gap: DATA never reaches the commit-time log.
+def test_codeless_data_statements_are_reconstructed_not_committed():
+    """DATA is derived, and the log now says so.
 
-    Codeless DATA statements are inserted by finalization from the data pool,
-    not committed through `put`, so no event describes them and reconciliation
-    reports them as synthesized. The event stream is therefore NOT yet
-    lossless -- this pins the gap so it fails when DATA moves onto the event
-    path, which Chapter 6 needs before replay can be authoritative.
+    Codeless DATA statements are built by finalization from the data pool, not
+    committed through `put`: no byte pattern was decoded for them, and none
+    ever will be. They used to arrive in the program with nothing accounting
+    for them at all, reported as synthesized alongside the statements folding
+    builds -- two different things under one name.
+
+    A reconstruction event says where they come from. It is deliberately not a
+    commit: finalization runs after folding, so the position it inserts at
+    means nothing in a replay of the walk.
     """
     from tbx import ir
 
     prog = decode0.decode_user_code(_exe("t1_dataorph.exe"))
+    report = prog.event_reconciliation
 
     data_indices = [i for i, s in enumerate(prog) if isinstance(s, ir.Data)]
     assert data_indices, "fixture should contain DATA statements"
-    assert not [e for e in prog.events if isinstance(e.payload, ir.Data)]
-    assert set(data_indices) <= set(prog.event_reconciliation.synthesized)
+    assert not [e for e in prog.events if e.kind == "statement" and isinstance(e.payload, ir.Data)]
+    assert set(data_indices) <= set(report.reconstructed)
+    assert not set(data_indices) & set(report.synthesized)
+
+
+def test_a_reconstruction_carries_no_statement_into_replay():
+    """Replay is the walk, and finalization is not part of it."""
+    from tbx import ir
+    from tbx.decode0.events import replay_events
+
+    prog = decode0.decode_user_code(_exe("t1_dataorph.exe"))
+
+    assert [e for e in prog.events if e.kind == "reconstruct"]
+    assert not [s for s in replay_events(prog.events) if isinstance(s, ir.Data)]
+
+
+def test_every_derived_declaration_in_the_corpus_is_accounted_for():
+    """Nothing codeless arrives in a program unexplained.
+
+    DIM, DATA, OPTION BASE, COMMON and DEFtype are reconstructed from array
+    bookkeeping, the data pool and the error-trap line table. Each is a
+    statement the program has and the walk never decoded, so each needs an
+    event saying where it came from -- otherwise `synthesized` mixes them in
+    with what folding builds, and neither number means anything.
+    """
+    from tbx import ir
+
+    derived = (ir.Dim, ir.Data, ir.OptionBase, ir.Common, ir.DefType)
+    unexplained = []
+    for exe in sorted(FIXTURES.glob("*.exe")):
+        try:
+            prog = decode0.decode_user_code(exe.read_bytes())
+        except ValueError:
+            continue
+        report = prog.event_reconciliation
+        for index in report.synthesized:
+            if isinstance(prog[index], derived):
+                unexplained.append((exe.name, type(prog[index]).__name__))
+    assert not unexplained, (
+        f"{len(unexplained)} derived statements with no event: {unexplained[:5]}"
+    )

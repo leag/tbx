@@ -582,6 +582,24 @@ class DecodeState:
             output.event_log = EventLog()
         output.event_log.commit(stmt, addr)
 
+    def reconstruct(self, index, stmt) -> None:
+        """Insert a statement finalization derived from a layout or pool fact.
+
+        DIM, DATA, OPTION BASE, COMMON and DEFtype own no code: they are
+        recovered from array bookkeeping, the data pool and the error-trap
+        line table, so nothing was decoded for them and their address is
+        `None`. Recording the reconstruction is what keeps them apart from the
+        statements folding builds -- both used to arrive in the program with
+        no event at all, under the one name "synthesized".
+        """
+        output = self.output
+        assert output is not None
+        output.stmts.insert(index, stmt)
+        output.addrs.insert(index, None)
+        if output.event_log is None:
+            output.event_log = EventLog()
+        output.event_log.reconstruct(stmt)
+
     def patch(self, index, stmt) -> None:
         """Revise an already-committed statement, recording the revision.
 
@@ -1583,8 +1601,8 @@ def _finalize(state: DecodeState, addr) -> Program:
                 ins = out.addrs.index(img.start + next(iter(offs)))
                 dim_lines = [ln for _, ln in data_orphan_lines]
                 data_orphan_lines = []  # consumed -- DATA recovery below won't fire
-        out.stmts[ins:ins] = dims
-        out.addrs[ins:ins] = [None] * len(dims)
+        for offset, declaration in enumerate(dims):
+            state.reconstruct(ins + offset, declaration)
         if dims:
             # `$SEGMENT` positions are recorded while scanning executable code;
             # recovered static DIMs are codeless and inserted afterwards.  Rebase
@@ -1622,8 +1640,7 @@ def _finalize(state: DecodeState, addr) -> Program:
                 # its own borrowed offset, in table order.
                 for off, ln in data_orphan_lines:
                     j = out.addrs.index(img.start + off)
-                    out.stmts.insert(j, ir.DefType())
-                    out.addrs.insert(j, None)
+                    state.reconstruct(j, ir.DefType())
                     deftype_lines.append(ln)
                 data_orphan_lines = []
             elif items:
@@ -1682,17 +1699,15 @@ def _finalize(state: DecodeState, addr) -> Program:
                     # where the compiler actually placed multiple clusters.
                     for s, (off, _) in zip(data_block, data_places):
                         j = out.addrs.index(img.start + off)
-                        out.stmts.insert(j, s)
-                        out.addrs.insert(j, None)
+                        state.reconstruct(j, s)
                 else:
-                    out.stmts[0:0] = data_block  # prepend: block pos = final index
-                    out.addrs[0:0] = [None] * len(data_block)
+                    for offset, s in enumerate(data_block):
+                        state.reconstruct(offset, s)  # prepend: block pos = final index
                 # Insert payload-free codeless declarations after DATA placement;
                 # when both borrow the same host offset this preserves table order.
                 for off, ln in deftype_places:
                     j = out.addrs.index(img.start + off)
-                    out.stmts.insert(j, ir.DefType())
-                    out.addrs.insert(j, None)
+                    state.reconstruct(j, ir.DefType())
                     deftype_lines.append(ln)
                 out.stmts[:] = [
                     (
@@ -1799,8 +1814,7 @@ def _finalize(state: DecodeState, addr) -> Program:
             if common_arrs:
                 while at < len(out.stmts) and isinstance(out.stmts[at], ir.Dim):
                     at += 1
-            out.stmts.insert(at, ir.Common(names))
-            out.addrs.insert(at, None)
+            state.reconstruct(at, ir.Common(names))
             out.seg_metas = [i + 1 if i >= at else i for i in out.seg_metas]
         # $EVENT regions: when trapping is in play the compiler emits a CC
         # poll hook before EVERY statement; $EVENT OFF..ON suppresses them
