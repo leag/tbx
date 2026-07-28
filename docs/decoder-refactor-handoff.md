@@ -106,6 +106,48 @@ a folding or lifting product — rebuilt SUB bodies, resolved CALLs, TRON/TROFF
 lifting, structured forms. 239 are reported as reconstructed, and 702 of 1030
 programs reconcile clean, up from 549.
 
+## Emitted source has to be source the compiler could have taken
+
+A gate this migration did not have, and the only one so far that needs no
+oracle. The Owner's Handbook fixes two editor limits: **248 characters** per
+line, and **64K** per source file, with `$INCLUDE` the documented way to
+compile anything larger. Output past either is not a formatting preference --
+it is provably not what the author wrote, because the compiler the program
+came out of could not have been handed it. `tests/tbx/test_emitted_source_width.py`
+reads that straight off the emitted text.
+
+It found eight wild programs and zero fixtures, which is the same shape as
+every other finding this chapter: the corpus is silent on anything that only
+manifests at scale. Three causes, all now fixed, each verified by the oracle
+rather than by argument:
+
+- **A reconstructed `DATA` or `COMMON` emitted as one statement.** Dividing it
+  costs nothing -- `ir.Common` already recorded that splitting across several
+  statements compiles identically (t1_common1), and DATA items enter the pool
+  in order either way. Fixed zip.exe (295), book.exe (396), baby.exe (6116).
+- **An inline IF whose folded body does not fit.** The block spelling fits, and
+  for the compound conditions these carry it compiles to the same bytes --
+  measured, not assumed: t1_ifin and t1_orrel compile byte-identically either
+  way and both match their EXE. A *simple* condition is not interchangeable
+  (its inline form does not materialize, which is what `block_ifs` turns on).
+  Fixed inv87/invoice (353) and state/state87 (265). Two of the four were
+  nested, so the emitter now carries the column a statement starts at.
+- **A line table with one distinct value.** metric.exe's is 1789 entries all
+  reading 0, and statements sharing a line number are grouped onto it, so the
+  whole program went out on one 43759-character line. Such a table is not the
+  source's numbering; it is treated as absent and the program renumbered.
+
+The oracle result is what makes these fixes rather than preferences. zip.exe
+and metric.exe could not previously be loaded into the editor at all, so there
+was nothing to compile and nothing to judge; both now compile. Neither is
+byte-exact yet (metric.exe is 1008 bytes out), but an unmeasurable failure has
+become a measurable one.
+
+**Six wild programs still exceed 64K of emitted source** -- banker, horses,
+inv87, invoice, state, state87. Their source was divided across `$INCLUDE`
+files the emitter does not reconstruct, so they cannot round-trip as one file
+however narrow their lines get. Pinned by size, and no fixture is near it.
+
 ## What is not proven
 
 **Chapter 4 has two families left.** The `shlsi` element-stride chain in
