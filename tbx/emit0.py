@@ -17,6 +17,55 @@ out-of-band.
 
 from tbx import ir
 
+#: "The Turbo Basic editor supports lines up to 248 characters wide" (Owner's
+#: Handbook, 1987). A wider physical line is not source the compiler could ever
+#: have been handed, so emitting one means the emitter has not produced source
+#: -- however well it would recompile in principle. Wild zip.exe is the
+#: witness: 295 characters of reconstructed DATA, and the oracle harness never
+#: got it into the editor to compile at all.
+LINE_LIMIT = 248
+
+
+def _split_list_statement(stmt, width: int):
+    """A DATA or COMMON whose items do not fit one line, as several statements.
+
+    Both are declarations of a list, and the compiler is lossy about how the
+    list was divided: `ir.Common`'s own note records that splitting across
+    several COMMON statements compiles identically (t1_common1), and DATA items
+    enter the constant pool in order, which several statements preserve exactly
+    as one does. So the division is the emitter's to choose, and it has to
+    choose one that fits.
+
+    Only the first statement is numbered by the caller; the rest are
+    continuation lines, which keeps a `RESTORE` targeting this DATA pointing at
+    the line it always did.
+
+    Returns None when the statement is not a list of this kind or already fits.
+    """
+    if isinstance(stmt, ir.Data):
+        items, rebuild = stmt.items, lambda part: ir.Data(tuple(part))
+    elif isinstance(stmt, ir.Common):
+        items, rebuild = stmt.names, lambda part: ir.Common(tuple(part))
+    else:
+        return None
+
+    lines, part = [], []
+    for item in items:
+        candidate = part + [item]
+        rendered = ir.unparse_stmt(rebuild(candidate))
+        # The number prefix rides on the first line only.
+        if part and len(rendered) + (width if not lines else 0) > LINE_LIMIT:
+            lines.append(ir.unparse_stmt(rebuild(part)))
+            part = [item]
+        else:
+            part = candidate
+    if part:
+        lines.append(ir.unparse_stmt(rebuild(part)))
+    # A single item too wide for a line on its own cannot be divided further;
+    # say so rather than emitting a line the editor would reject.
+    if len(lines) < 2:
+        return None
+    return "\n".join(lines)
 
 
 def _name_fn_results(body, name):
@@ -234,7 +283,16 @@ def emit(stmts) -> str:
                 for k, ln in enumerate(body[1:], 1)
             )
         else:
-            out.append(f"{line[i]} {text}\n")
+            prefix = f"{line[i]} "
+            if j == i + 1 and len(prefix) + len(text) > LINE_LIMIT:
+                # Too wide for the editor. A list declaration can be divided
+                # without changing what it compiles to; anything else has to
+                # go out as it is, since narrowing it would be a guess about
+                # source we did not recover.
+                divided = _split_list_statement(stmts[i], len(prefix))
+                if divided is not None:
+                    text = divided
+            out.append(f"{prefix}{text}\n")
         i = j
     if hooks:
         raise ValueError(f"{len(hooks)} trace-hook lines left unconsumed")

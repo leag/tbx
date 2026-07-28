@@ -7,13 +7,20 @@ this program came out of could not have taken it. That makes over-wide output
 a decoder defect detectable with no oracle at all, by reading the emitted text.
 
 It is also a class the fixture corpus cannot report: all 1030 fixtures emit
-inside the limit, and every violation is in a wild program. Two shapes, both
-in statements finalization *reconstructs* rather than decodes:
+inside the limit, and every violation is in a wild program. Three shapes:
 
 - a pooled `DATA` or `COMMON` list emitted as one statement, where the source
-  must have carried several (wild zip.exe at 295, book.exe at 396);
-- a program whose line table did not come back, so every statement lands on
-  one physical line 0 (wild metric.exe, 43759 characters; baby.exe, 6116).
+  must have carried several. `emit0._split_list_statement` now divides those,
+  which is free: the compiler is lossy about how such a list was divided.
+  Fixed wild zip.exe (295), book.exe (396) and baby.exe (6116) -- and zip.exe
+  went from failing to reach the compiler at all to compiling.
+- an inline IF whose folded body does not fit. Rendering it as a block IF
+  would fit, and for the compound conditions these all carry the bytes do not
+  distinguish the two spellings -- but that claim has no fixture witness yet,
+  and narrowing on a guess is what the calibration rule forbids.
+- a program whose line table did not come back, so every statement is grouped
+  onto one physical line 0 (wild metric.exe, 43759 characters). Not an
+  emitter problem: there are no line numbers to spread it over.
 
 Listed rather than counted, so the set cannot grow without someone saying why.
 """
@@ -34,14 +41,11 @@ CORPUS = Path(__file__).resolve().parents[1] / "fixtures" / "corpus"
 #: reconstruction or line-table work that fixes it -- recorded here so a new
 #: one is noticed the moment it appears.
 _OVER_WIDE = {
-    "baby.exe": 6116,
-    "book.exe": 396,
-    "inv87.exe": 353,
-    "invoice.exe": 353,
-    "metric.exe": 43759,
-    "state.exe": 265,
-    "state87.exe": 265,
-    "zip.exe": 295,
+    "inv87.exe": 353,  # inline IF, body does not fit
+    "invoice.exe": 353,  # inline IF
+    "metric.exe": 43759,  # no line table: the whole program on line 0
+    "state.exe": 265,  # inline IF
+    "state87.exe": 265,  # inline IF
 }
 
 
