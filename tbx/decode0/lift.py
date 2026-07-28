@@ -430,7 +430,17 @@ def _lift_bool_tail(
         return k + 6, None, None
 
 
-def _lift_do_tail(ops, k, pend_cmp, stmts, addrs, put, cur):
+def _noshift(index, delta):
+    """No queued fold regions to move -- what the eager fold always had.
+
+    A `DO` spliced in ahead of a body moves every list position after it,
+    including the ones a deferred fold region is recorded as. Under the eager
+    fold there were none to move: the region was one statement before any loop
+    lift ran. `shift` is how the walk tells the lifts otherwise.
+    """
+
+
+def _lift_do_tail(ops, k, pend_cmp, stmts, addrs, put, cur, shift=_noshift):
     """Tail-test DO ... LOOP WHILE/UNTIL: mov ax,0FFFF; Jcc(R) +1; inc ax; or ax,ax;
     <cc BACKWARD> where BACKWARD targets an earlier statement (the loop body start) --
     no trailing e9 (the conditional jcc IS the back-edge). Splice a bare `DO` before
@@ -452,11 +462,12 @@ def _lift_do_tail(ops, k, pend_cmp, stmts, addrs, put, cur):
         idx = addrs.index(back)  # splice `DO` before the body start
         stmts.insert(idx, ir.Do(None))
         addrs.insert(idx, None)
+        shift(idx, 1)
         put(ir.Loop(kind, cond), cur)
         return k + len(want)
 
 
-def _lift_bool_do_tail(ops, k, pend_cmp, pb, stmts, addrs, put):
+def _lift_bool_do_tail(ops, k, pend_cmp, pb, stmts, addrs, put, shift=_noshift):
     """Compound-IF second term ending in a tail-test DO ... LOOP WHILE/UNTIL:
     same shape as `_lift_do_tail` (materialization's Jcc IS the backward
     loop edge, no trailing jmp), except the combining op at index 3 is the
@@ -507,13 +518,14 @@ def _lift_bool_do_tail(ops, k, pend_cmp, pb, stmts, addrs, put):
         idx = addrs.index(back)  # splice `DO` before the body start
         stmts.insert(idx, ir.Do(None))
         addrs.insert(idx, None)
+        shift(idx, 1)
         put(ir.Loop(kind, cond), pb["start"])
         return nk
 
 
 def _lift_while(
     ops, k, pend_cmp, whiles, dos, ifs, stmts, addrs, put, flush, cur,
-    block_ifs=None, branch=None, folded_away=frozenset(),
+    block_ifs=None, branch=None, folded_away=frozenset(), shift=_noshift,
 ) -> int:
     """Consume the materialized loop test at ops[k] (mov ax,0FFFF):
     Jcc(R) +1; inc ax; or ax,ax; <cc> +3; e9 EXIT. With a loop-back before
@@ -575,6 +587,7 @@ def _lift_while(
             idx = addrs.index(exit_jmp[2])
             stmts.insert(idx, ir.Do(None))
             addrs.insert(idx, None)
+            shift(idx, 1)
             put(ir.Loop(loop_kind, cond), cur)
         elif exit_jcc[2] == 0x75:  # inline-IF (forward skip, by exclusion above)
             flush()

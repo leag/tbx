@@ -2436,6 +2436,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             with editing(out.stmts, "fold_loop_header"):
                 out.stmts.insert(idx, ir.Do(None))
             out.addrs.insert(idx, None)
+            state.shift_pending(idx, 1)
             state.put(ir.Loop(loop_kind, m.ax), c.cur)
             m.ax = None
             c.cur = None
