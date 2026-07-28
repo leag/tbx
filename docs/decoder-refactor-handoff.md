@@ -34,7 +34,7 @@ signal that something moved.
 | 4 recognition/mutation split | substantial, two families outstanding |
 | 5 event stream | **complete**: every statement has an event |
 | 6 control-flow extraction | folds record-driven; timing moved and green on `experimental/deferred-fold` |
-| 7 remove scaffolding | not started |
+| 7 remove scaffolding | audit and measurement done; one deletion disputed |
 
 ## What is proven, with numbers
 
@@ -320,6 +320,58 @@ So `close_ifs`, `_fold_arm` and the procedure-body fold have to move together.
 Each timing requirement traces to a calibrated wild-program behaviour rather
 than to convenience.
 
+## Chapter 7, measured
+
+Two of its deliverables are done, and both came back better than the plan
+assumed.
+
+**The field and call-site audit.** Of the 96 fields the ownership partition
+claims, **none** is written and never read. The least-used are down to a single
+read, which is the point -- they can be found and judged rather than suspected.
+So there are no obsolete mutable fields to delete: Chapter 3's partition has not
+rotted. Kept as `tests/tbx/test_state_audit.py` so the answer stays true instead
+of being a number in a document, with the surface size pinned so growing it is a
+decision.
+
+The rest of the chapter's deletion list is already empty or nearly so.
+`DecodeState` has one property, and it is an accessor rather than a forwarding
+alias. Direct `k` mutation is confined to the cursor's own implementation. No
+handler bypasses its views.
+
+**The performance measurement against Chapter 0.** Decoding the whole fixture
+corpus, best of three:
+
+| | total | per program |
+| --- | --- | --- |
+| baseline `36aa8a4` | 2.66s | 2.58 ms |
+| now | 3.23s | 3.14 ms |
+
+**+21%**, which is what the event stream, the statement-edit log and address
+ownership cost. The plan puts correctness and diagnostic reproducibility ahead
+of throughput during the migration, so this is the expected shape; it is
+recorded here so that a later regression is distinguishable from it.
+
+### The one deletion worth arguing about
+
+The plan has Chapter 7 remove the frames' `idx` cross-check -- `frame_start`
+raising when the region start read back from the record disagrees with the
+length the walk saw. It has never fired across either corpus, which is the
+usual reason to call something scaffolding.
+
+It should stay. What this chapter learned the hard way is that the fixture
+corpus is blind to position bookkeeping: two shift-arithmetic bugs, one in
+`drain_folds` and one in `fold_pass`, were live while all 1030 goldens were
+byte-identical, and only wild programs showed them. A wrong `frame_start` is
+exactly that class of error. The cross-check is a cheap invariant guarding
+something the goldens do not, and "it has never fired" is what a working guard
+looks like.
+
+Only the four inline-IF frame openers carry `idx` for the cross-check alone.
+The proc/fn frames need theirs (`_drop_local_descriptor_initializers` slices on
+it, and the `local_init` check reads it), and the FOR frames' `idx` indexes the
+header they patch. So the deletion was never 15 sites; it is four, and they buy
+a guard the corpus cannot replace.
+
 ## Next steps, in order
 
 1. **Merge `experimental/deferred-fold`.** It is green on every gate this
@@ -332,5 +384,6 @@ than to convenience.
    waiting on them. Then `SubDef`, which additionally needs the procedure's
    name and parameters recorded.
 3. **Chapter 4's two families**, independently of the above.
-4. **Chapter 7**, now unblocked by the swap: the frames' `idx` cross-check has
-   done its job and can go, along with the three guards Chapter 6 kept.
+4. **Chapter 7's remainder**: the architecture and replay-tool documentation.
+   Its audit and measurement are done, its deletion list came back empty, and
+   the one deletion it proposed should not happen -- see above.
