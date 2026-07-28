@@ -24,7 +24,8 @@ def _eager_folds(prog):
         edit.payload[0]
         for edit in prog.statement_edits
         if edit.origin == "close_ifs"
-        and edit.kind == "append"
+        and edit.kind in ("append", "splice")
+        and edit.payload
         and isinstance(edit.payload[0], ir.IfInline)
     ]
 

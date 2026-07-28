@@ -891,6 +891,10 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             c.cur,
             block_ifs=c.block_if_addrs,
             branch=state.branch,
+            # A backward jmp landing inside a body that is queued to be folded
+            # is not a retry edge: the fold would have taken that address out
+            # of the list before this question was asked.
+            folded_away=state.folded_away,
         ))
         e.pend_cmp = None
         c.cur = None

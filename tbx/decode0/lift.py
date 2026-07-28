@@ -513,7 +513,7 @@ def _lift_bool_do_tail(ops, k, pend_cmp, pb, stmts, addrs, put):
 
 def _lift_while(
     ops, k, pend_cmp, whiles, dos, ifs, stmts, addrs, put, flush, cur,
-    block_ifs=None, branch=None,
+    block_ifs=None, branch=None, folded_away=frozenset(),
 ) -> int:
     """Consume the materialized loop test at ops[k] (mov ax,0FFFF):
     Jcc(R) +1; inc ax; or ax,ax; <cc> +3; e9 EXIT. With a loop-back before
@@ -553,7 +553,11 @@ def _lift_while(
             kind = "WHILE" if exit_jcc[2] == 0x75 else "UNTIL"
             put(ir.Do(kind, cond), cur)
             dos.append({"test": cur, "exit": exit_jmp[2]})
-        elif exit_jmp[2] < ops[k][0] and exit_jmp[2] in addrs:
+        elif (
+            exit_jmp[2] < ops[k][0]
+            and exit_jmp[2] in addrs
+            and exit_jmp[2] not in folded_away
+        ):
             # Tail-test DO...LOOP WHILE/UNTIL: the retry edge is THIS
             # template's own trailing jmp (backward, landing on a real
             # statement), not a separate jmps elsewhere (e.g. the body ends

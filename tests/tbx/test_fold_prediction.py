@@ -151,7 +151,8 @@ def test_the_fold_takes_its_condition_from_the_recorded_branch():
         edit.payload[0].cond
         for edit in prog.statement_edits
         if edit.origin == "close_ifs"
-        and edit.kind == "append"
+        and edit.kind in ("append", "splice")
+        and edit.payload
         and isinstance(edit.payload[0], ir.IfInline)
     ]
 

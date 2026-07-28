@@ -406,9 +406,33 @@ class DecodeState:
             # The region is complete here and its extent is only knowable here
             # -- the list's length at this moment. Folding it is a separate
             # question, answered when the construct that owns it closes.
+            start = self.frame_start(fr)
             self.pending_ifs.append(
-                {"seq": fr["seq"], "start": self.frame_start(fr), "stop": len(self.stmts)}
+                {
+                    "seq": fr["seq"],
+                    "start": start,
+                    "stop": len(self.stmts),
+                    # The addresses the eager fold would have removed by now.
+                    # A later recognizer that asks "is this address a statement
+                    # start" means the folded list, and this is what it no
+                    # longer holds -- captured here because a body's addresses
+                    # are stable, while its indices are not.
+                    "addrs": frozenset(
+                        a for a in self.addrs[start:] if a is not None
+                    ),
+                }
             )
+
+    @property
+    def folded_away(self) -> frozenset:
+        """Addresses inside a region that is queued but not yet folded.
+
+        The eager fold had removed these from `addrs` by the time any later
+        recognizer looked. Deferring keeps them there, so a recognizer that
+        asks whether an address is a statement start has to be told which ones
+        only look like one because the fold has not run yet.
+        """
+        return frozenset().union(frozenset(), *(fr["addrs"] for fr in self.pending_ifs))
 
     def drain_folds(self, limit: int = 0) -> None:
         """Fold every queued inline-IF region that lies at or after ``limit``.
@@ -2999,7 +3023,11 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             if nxt is None or nxt[0] != f["exit"]:
                 raise ValueError(f"WEND exit mismatch at {addr:#x}")
             state.put(ir.Wend(), c.cur)
-        elif op[2] < addr and op[2] in out.addrs:  # bare backward jmps = infinite DO
+        elif (
+            op[2] < addr
+            and op[2] in out.addrs
+            and op[2] not in state.folded_away
+        ):  # bare backward jmps = infinite DO
             idx = out.addrs.index(op[2])  # splice `DO` before the body start
             with editing(out.stmts, "fold_loop_header"):
                 out.stmts.insert(idx, ir.Do(None))
@@ -3009,7 +3037,9 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             # skips it jumps to the LOOP back-edge (this jmps' addr). Fold at epilogue.
             if nxt is not None:
                 c.exit_folds.append((ir.ExitLoop(), addr, nxt[0]))
-        elif op[2] < addr and op[2] in out.stmt_addr.values():
+        elif op[2] < addr and (
+            op[2] in out.stmt_addr.values() or op[2] in state.folded_away
+        ):
             # short GOTO to a NUMBERED line inside an already-folded block-IF
             # body (TB allows jumping into a block interior when the interior
             # line carries a number -- witnessed t1_blkgoto / wild inv87.exe);
