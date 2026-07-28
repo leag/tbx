@@ -20,21 +20,29 @@ CORPUS = Path(__file__).resolve().parents[1] / "fixtures" / "corpus"
 
 
 def _actual_inline_if_starts(prog):
-    return [edit.index for edit in _fold_edits(prog)]
+    return [start for start, _ in _actual_inline_if_extents(prog)]
 
 
 def _actual_inline_if_extents(prog):
+    """Each inline-IF fold region, as the walk recorded it.
+
+    `prog.fold_regions` is that record: where the body began and how long the
+    list was when decoding reached the branch's target. The splice that later
+    removes the body is *not* the same pair of numbers -- folding is deferred,
+    so every fold applied in between has moved where this one lands -- and
+    reading the region off the edit would compare a prediction in one
+    coordinate system against an application in another.
+
+    Falling back to the splice keeps the guard alive on a decoder that folds
+    eagerly, where the two are the same by construction.
+    """
+    if prog.fold_regions:
+        return list(prog.fold_regions)
     return [(edit.index, edit.stop) for edit in _fold_edits(prog)]
 
 
 def _fold_edits(prog):
-    """Each inline-IF fold, as the splice that removed the body from the list.
-
-    The splice's own bounds are the region: `index` where the body began,
-    `stop` the list length when the fold ran. Reading the extent off the edit
-    rather than off the folded statement keeps the check independent of what
-    the fold built.
-    """
+    """Each inline-IF fold, as the splice that removed the body from the list."""
     return [
         edit
         for edit in prog.statement_edits

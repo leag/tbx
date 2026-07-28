@@ -148,6 +148,7 @@ class DecodeState:
     hook_seq: Any = None
     ifs: Any = None
     pending_ifs: Any = None
+    fold_plan: Any = None
     k: Any = None
     lay: Any = None
     local_dim_frame: dict[str, Any] | None = None
@@ -422,6 +423,12 @@ class DecodeState:
                     ),
                 }
             )
+            # The same region, kept past the fold that consumes it. What the
+            # splice records is where it *landed*, and once folding is deferred
+            # that is no longer where the walk saw it -- everything folded in
+            # between has moved it. This is the walk's own account, and the
+            # only one a prediction from the record can be checked against.
+            self.control.fold_plan.append((start, len(self.stmts)))
 
     @property
     def folded_away(self) -> frozenset:
@@ -2033,6 +2040,7 @@ def _finalize(state: DecodeState, addr) -> Program:
             if isinstance(out.stmts, RecordedStatements)
             else ()
         )
+        prog.fold_regions = tuple(c.fold_plan or ())
         prog.metas = (
             tuple((0, m) for m in out.metas)
             + tuple((i, "$SEGMENT") for i in out.seg_metas)
@@ -3298,6 +3306,7 @@ def _decode_user_code(
     e.pend_field = None  # open FIELD AS-entry chain
     c.ifs = []  # open inline-IF bodies
     c.pending_ifs = []  # regions whose extent is known, waiting to be folded
+    c.fold_plan = []  # every such region, kept after the fold consumes it
     c.block_if_addrs = set()  # statement addrs whose BYTES prove the
     # source spelled a multi-line block IF (see lift._lift_while)
     c.has_procs = any(

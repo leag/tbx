@@ -163,6 +163,7 @@ class ControlState(StateView):
             "k",
             "ifs",
             "pending_ifs",
+            "fold_plan",
             "fors",
             "whiles",
             "dos",
