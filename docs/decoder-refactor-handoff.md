@@ -9,12 +9,12 @@ Branch `release/0.1.0`. Baseline for "no behavior change" is commit `36aa8a4`.
 ## Verify the current state
 
 ```sh
-uv run pytest                 # 2698 pass
+uv run pytest                 # 2700 pass
 uv run ruff check             # clean
 uv run python -m tbx.tools.scan_wild wild/hits
 ```
 
-The wild scan must print `86 EXEs scanned: 28 TB decode-ok, 58 TB-but-fail`
+The wild scan must print `86 EXEs scanned: 32 TB decode-ok, 54 TB-but-fail`
 **and produce a byte-identical failure report to the baseline**. The tally
 alone is not the check — a refactor can move which programs fail while keeping
 the count. Diff the full output against a run at `36aa8a4`.
@@ -143,9 +143,23 @@ no decode state. Nothing calls it in the pipeline. Against what the walk did:
 | | folds | reproduced |
 | --- | --- | --- |
 | inline IFs, `tests/fixtures/corpus` | 80 | **76** |
-| inline IFs, `wild/hits` | 403 | **388** |
+| inline IFs, `wild/hits` | 771 | **755** |
 | SELECTs, `tests/fixtures/corpus` | 26 | **26** |
-| SELECTs, `wild/hits` | 16 | **13** |
+| SELECTs, `wild/hits` | 16 | **15** |
+
+Most of what used to sit in the miss column was the pass's own shift
+arithmetic, not a gap in the record. It keyed each fold's boundary on where
+the splice *landed* rather than on where the region *ended* — the same error
+`drain_folds` had — which deep in a program makes every earlier fold look as
+though it precedes every later region, nested ones included. Correcting it
+moved wild inline IFs 730 → 755 and wild SELECTs 13 → 15; `tbd73.exe` alone
+went 29 → 38 of 43 and 10 → 12 of 13.
+
+The corpus said nothing either way: 76/80 and 26/26 before and after. A
+fixture holds few enough statements that a boundary keyed on the wrong
+coordinate lands in the same place as one keyed on the right one. **The shift
+arithmetic has no small witness**, which is why the guard for it is a wild
+program.
 
 Constructs are folded in the order they *close* — whatever finishes first is
 innermost — which also settles the ties: an inline IF closing a CASE arm shares
@@ -156,12 +170,12 @@ all. Two behaviours of the walk had to be reproduced rather than read: a fold
 must claim its new statement's address, because `_fold_body` reconstructs an
 ELSE by looking one up for statements that are no longer top level.
 
-Every difference is another walk-time fold, not a gap in the record: 4 in each
-corpus fold a body holding a `SELECT CASE` the walk had already built (no
-`SelectCase` is ever committed, so the record offers the arm bodies flat), and
-11 wild ones sit in a list `select_case`, the procedure-body fold or a loop lift
-had already spliced. Commit coordinates and list coordinates agree until one of
-those runs.
+Every remaining difference is another walk-time fold, not a gap in the record:
+4 in the corpus fold a body holding a `SELECT CASE` the walk had already built
+(no `SelectCase` is ever committed, so the record offers the arm bodies flat),
+and 16 wild inline IFs across five programs plus the last `tbd73.exe` SELECT
+sit in a list a loop lift had already spliced. Commit coordinates and list
+coordinates agree until one of those runs.
 
 **A CASE arm is located too.** An arm ends at its arm-close jmp, which owns no
 statement, so its extent is a moment like an inline IF's: a region's end is now
@@ -177,9 +191,10 @@ So the remaining work is what a deferred pass still cannot reconstruct:
   as they go, exactly as the three folds above did, and in a way that moves
   list positions relative to the commit stream: a FOR header absorbs the
   assignment that initialises its loop variable, and `lift_while` *inserts* a
-  `Do` marker at an earlier position. All three wild SELECT misses turn on
-  that. They need the same treatment: record what they recognise, then fold
-  from it.
+  `Do` marker at an earlier position. They are what the pass's last 16 wild
+  inline-IF misses and its one SELECT miss turn on — a fifth of what the
+  earlier measurement blamed on them. They need the same treatment: record
+  what they recognise, then fold from it.
 - **`SelectCase` and `SubDef`/`DefFn` are never committed.** They are built by
   their fold from statements that were, so a pass cannot see inside one the
   walk has already built. This is what blocks the 4+4 inline-IF differences.
