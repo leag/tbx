@@ -84,12 +84,18 @@ class ControlGraph:
             ControlNode(event.seq, event.address) for event in events
         )
         known = {e.address for e in events if e.address is not None}
-        edges = tuple(
-            ControlEdge(event.seq, target, kind)
-            for event in events
-            for kind, target in _address_targets(event.payload)
-        )
-        return cls(nodes, edges, frozenset(known))
+        edges: list[ControlEdge] = []
+        for event in events:
+            if event.kind == "branch":
+                # A recognised branch names its target directly; there is no
+                # committed statement to walk for an ("addr", n) operand.
+                edges.append(
+                    ControlEdge(event.seq, event.payload.target, event.payload.frame)
+                )
+                continue
+            for kind, target in _address_targets(event.payload):
+                edges.append(ControlEdge(event.seq, target, kind))
+        return cls(nodes, tuple(edges), frozenset(known))
 
     def resolve(self, address: int | None) -> int | None:
         """The node owning ``address``, or None when no node does."""

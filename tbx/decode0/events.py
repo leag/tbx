@@ -35,6 +35,21 @@ class DecodedEvent:
 
 
 @dataclass(frozen=True)
+class BranchEvent:
+    """A branch a handler recognised, whether or not it committed a statement.
+
+    ``frame`` is the construct the handler opened -- "if", "loop", "case",
+    "proc". That it is recorded here at all is transitional: separating
+    recognition from the construct decision is what lets the control-flow pass
+    make that call instead, checked against these events.
+    """
+
+    frame: str
+    target: int
+    cond: Any = None
+
+
+@dataclass(frozen=True)
 class EventReconciliation:
     """How the committed event log relates to the folded statement list.
 
@@ -75,6 +90,19 @@ class EventLog:
         self.events.append(event)
         return event
 
+    def branch(
+        self, frame: str, *, target: int, address: int | None, cond: Any = None
+    ) -> DecodedEvent:
+        """Record a recognised branch. The statement list is not touched."""
+        event = DecodedEvent(
+            kind="branch",
+            address=address,
+            payload=BranchEvent(frame, target, cond),
+            seq=len(self.events),
+        )
+        self.events.append(event)
+        return event
+
     def frozen(self) -> tuple[DecodedEvent, ...]:
         return tuple(self.events)
 
@@ -101,6 +129,8 @@ def replay_events(events: Iterable[DecodedEvent]) -> tuple[Any, ...]:
 
     statements = []
     for event in events:
+        if event.kind == "branch":
+            continue  # carries no statement; the control pass consumes it
         if event.kind != "statement":
             raise ValueError(f"unknown decoded event kind: {event.kind!r}")
         statements.append(event.payload)
@@ -152,7 +182,9 @@ def reconcile(
     quadratic, and the largest wild programs commit several thousand
     statements.
     """
-    events = tuple(events)
+    # Only statement events relate to the statement list; a branch event has
+    # no statement, and counting one would report a phantom rewrite.
+    events = tuple(e for e in events if e.kind == "statement")
     statements = list(statements)
 
     positions: dict[Any, deque] = {}

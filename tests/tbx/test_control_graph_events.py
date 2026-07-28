@@ -102,21 +102,22 @@ def test_classify_attributes_a_folded_branch_to_the_pass_that_folded_it():
 
 
 def test_some_structure_is_built_from_branches_that_never_commit():
-    """A known gap, pinned deliberately.
+    """The remaining blind spot, pinned deliberately.
 
-    `t1_ifblockselect` ends up with a block IF and a SELECT CASE, yet its
-    commit log contains no branch at all: the handlers recognised and folded
-    those branches without ever committing one as a statement. The event log
-    therefore cannot yet drive control-flow recovery on its own.
+    Inline-IF frames, SELECT headers and head-tested loops now record a branch
+    event, which took the corpus from 103 fixtures the graph could not see
+    down to 40. `t1_fnblockif` is one of the 40: it ends up with structure and
+    uses `close_ifs`, yet records neither a committed branch nor a branch
+    event, so some frame still opens by a path that does not announce itself.
 
-    Chapter 6 requires expression handlers to emit branch events instead of
-    deciding the construct themselves. This test fails once they do, which is
-    the signal that the graph can take over.
+    This fails once that path is found, which is the signal the graph can
+    take over.
     """
-    prog = decode0.decode_user_code((CORPUS / "t1_ifblockselect.exe").read_bytes())
+    prog = decode0.decode_user_code((CORPUS / "t1_fnblockif.exe").read_bytes())
 
-    assert any(isinstance(s, (ir.IfBlock, ir.SelectCase)) for s in _walk(prog))
+    assert any(isinstance(s, (ir.IfBlock, ir.IfInline)) for s in _walk(prog))
     assert classify_branches(prog) == ()
+    assert not [e for e in prog.events if e.kind == "branch"]
 
 
 def _walk(statements):

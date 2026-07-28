@@ -541,26 +541,39 @@ folded, 39 absorbed, attributed to `close_ifs`, `fold_proc_body`,
 `select_case`, `lift_while`, `lift_next`, `apply_exit_folds`,
 `fold_loop_header` and `finalize`.
 
-### The gap that remains
+### The gap, and the first step into it
 
-The commit log does not contain every branch. 103 fixtures end up with
-structured control flow while committing **no branch statement at all** —
-`t1_ifblockselect` produces a block IF and a SELECT CASE from branches the
-handlers recognised and folded without ever committing one. The graph cannot
-show a decision that was never recorded.
+The commit log did not contain every branch. 103 of the 151 fixtures with
+structured control flow committed **no branch statement at all** — the
+handlers recognised and folded those branches without ever committing one, so
+the graph could not see a decision that was never recorded.
 
-That is precisely the change this chapter asks for and has not yet made:
-expression handlers must emit branch events instead of deciding whether a
-branch is an IF, a loop, a CASE arm, or a procedure boundary.
-`test_some_structure_is_built_from_branches_that_never_commit` pins the gap
-and fails once they do, which is the signal the graph can take over.
+Handlers now *emit* a branch event where they open a frame:
+`DecodeState.branch(frame, target=..., address=...)` records a `BranchEvent`
+in the same ordered log as the statements. Emitting is deliberately separate
+from committing — the statement list does not change, so no golden moves —
+and `ControlGraph.from_events` turns those events into edges directly.
 
-So the remaining work is now specific rather than architectural: make the
-handlers that currently fold in place — `close_ifs`, `select_case.step`, the
-inline-IF and loop-header paths — commit a branch first and fold second. Every
-transformation they perform is already recorded, named, and replayable, so
-each one can be moved and checked against the old behaviour edit by edit
-rather than by diffing final source.
+Instrumented so far: the inline-IF frame opener (`open_tail_if`), the
+direct-flag inline IF, the head-tested loop template, and both SELECT CASE
+headers. That takes the blind fixtures from 103 to 79.
+
+Reporting that honestly took a second measurement. The first suggested 103 to
+40, because the after-count used a narrower structure predicate than the
+before-count. Re-run with the identical predicate it is 103 to 79 — a real
+improvement, a quarter of the way rather than two thirds.
+
+The remaining 79 are frames that still open without announcing themselves:
+FOR and WHILE headers, and at least one block-IF path — `t1_fnblockif` ends up
+with structure and uses `close_ifs`, yet records neither a committed branch
+nor a branch event.
+`test_some_structure_is_built_from_branches_that_never_commit` pins that
+fixture and fails once the path is found.
+
+The second half of the separation is still ahead: handlers emit the branch,
+but they also still decide the construct. Moving that decision to the
+control-flow pass is what closes the chapter, and it can now be checked
+against these events rather than against final source.
 
 ## Chapter 7 — Remove the migration scaffolding
 

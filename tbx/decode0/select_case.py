@@ -278,6 +278,7 @@ def step(state):
             and _is_arm_header_at(state, c.k + 1)
             and _arm_temp_at(state, c.k + 1) == op[2]
         ):
+            state.branch("case", target=op[2], address=c.cur)
             c.cases.append(
                 {
                     "selector": e.stack.pop(),
@@ -315,6 +316,7 @@ def step(state):
                 or _is_str_arm_header_chr_at(state, _hdr, op[2])
             )
         ):
+            state.branch("case", target=op[2], address=c.cur)
             c.cases.append(
                 {
                     "selector": e.sstack.pop(),

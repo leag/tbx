@@ -456,6 +456,7 @@ class DecodeState:
         if target not in ends:
             return False
         self.flush_pending()
+        self.branch("if", target=target, address=self.cur, cond=cond)
         self.ifs.append(
             {
                 "target": target,
@@ -566,6 +567,21 @@ class DecodeState:
         if output.event_log is None:
             output.event_log = EventLog()
         output.event_log.commit(stmt, addr)
+
+    def branch(self, frame: str, *, target, address=None, cond=None) -> None:
+        """Record a branch this handler recognised.
+
+        Emitting is deliberately separate from committing: the statement list
+        does not change, so no golden moves, but the control graph can now see
+        a decision the handler used to make invisibly.
+        """
+        output = self.output
+        assert output is not None
+        if output.event_log is None:
+            output.event_log = EventLog()
+        output.event_log.branch(
+            frame, target=target, address=address, cond=cond
+        )
 
     @property
     def events(self) -> tuple[DecodedEvent, ...]:
@@ -2221,6 +2237,9 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 # empty-body busy-wait poll under active event trapping).
                 loop_kind = "WHILE" if nxt[2] == 0x75 else "UNTIL"
                 state.put(ir.Do(loop_kind, m.ax), c.cur)
+                state.branch(
+                    "loop", target=img.ops[c.k + 2][2], address=test_addr
+                )
                 c.dos.append(
                     {"test": test_addr, "exit": img.ops[c.k + 2][2]}
                 )
@@ -2346,6 +2365,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             # BinOp/Group tree as a bare truthiness condition: spelling it as
             # `expr = 0` changes both its polarity and TB's lowering.
             state.flush_pending()
+            state.branch("if", target=nxt[2], address=c.cur)
             c.ifs.append(
                 {
                     "target": nxt[2],
