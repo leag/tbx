@@ -814,14 +814,28 @@ of closing the gap:
 The swap has two halves — *what drives the fold* and *when it runs* — and they
 are worth separating, because only the first can be proven byte-exact.
 
-The first is done. An open inline-IF frame was a dict carrying the target, the
-condition, the start address and the list position the body began at; all four
-are in the log, so the frame is now the `seq` of the branch event that
-recognised it, and `close_ifs` reads the rest back out. The region start is
-derived by replaying the edits stamped up to that event, with the position the
-walk noted kept alongside purely as a cross-check: disagreeing raises, and
-across both corpora it never has. Chapter 7 deletes the check. Sabotaging the
-derivation by one fails three fold tests, so the guard is watched to fire.
+The first is done, for all three folds. Each construct that owns a body is
+identified by the event that recognised it, and the body's start position is
+the list length at that event, replayed from the edits:
+
+| fold | event | recorded where |
+| --- | --- | --- |
+| inline IF | branch, with its condition | `open_tail_if`, two lifts, one core site |
+| CASE arm / CASE ELSE | `case_arm` / `case_else` region | `_begin_body`, the else transition |
+| SUB / DEF FN body | `proc` / `fn` region | `proc_enter`, the DEF FN auto-open |
+
+The inline-IF frame goes furthest: it was a dict carrying the target, the
+condition, the start address and the list position, and all four are in the
+log, so it is now the branch event's `seq` and nothing else. A CASE arm's
+region is recorded in `_begin_body`, where the body's start and the arm-close
+jmp it runs to are both known and nowhere earlier. A DEF FN recorded nothing at
+all before this — it is recognised by exclusion, as the first op in the
+definition region with no frame open.
+
+Each frame keeps its old position purely as a cross-check: disagreeing raises,
+and across both corpora it never has. Chapter 7 deletes them. Sabotaging the
+derivation by one fails fold, SELECT and procedure tests, so all three guards
+are watched to fire.
 
 The second half is measured but not made. `fold_pass.fold_inline_ifs` folds
 every recorded region from the committed statement stream, in commit
@@ -848,10 +862,11 @@ fold has moved the list under it.
 
 Two things, in order:
 
-1. Give `select_case`'s arm snapshot and the procedure-body fold the same
-   treatment: record what they recognise, and build `SelectCase` and `SubDef`
-   from the record. Neither statement is ever committed today, which is exactly
-   why a deferred pass cannot see inside them.
+1. Record a CASE arm's guards, and commit `SelectCase`/`SubDef`. These are the
+   two things a deferred pass still cannot reconstruct: guards accumulate on
+   the frame and the region event carries only an extent, and neither construct
+   is ever committed, so the record offers a later pass their bodies flat with
+   nothing to fold them into.
 2. Then run all three after the walk, gated on the goldens and the wild-corpus
    report. The measured account of what breaks when they move separately is its
    specification.

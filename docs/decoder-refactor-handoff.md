@@ -9,7 +9,7 @@ Branch `release/0.1.0`. Baseline for "no behavior change" is commit `36aa8a4`.
 ## Verify the current state
 
 ```sh
-uv run pytest                 # 2685 pass
+uv run pytest                 # 2691 pass
 uv run ruff check             # clean
 uv run python -m tbx.tools.scan_wild wild/hits
 ```
@@ -33,7 +33,7 @@ signal that something moved.
 | 3 state ownership | **complete** |
 | 4 recognition/mutation split | substantial, two families outstanding |
 | 5 event stream | **complete**: every statement has an event |
-| 6 control-flow extraction | inline-IF fold record-driven; two folds to go |
+| 6 control-flow extraction | all three folds record-driven; timing not moved |
 | 7 remove scaffolding | not started |
 
 ## What is proven, with numbers
@@ -116,13 +116,24 @@ floating-point folds in `core.fp_dispatch` are likewise still mixed.
 
 ## The swap: half done, and the other half measured
 
-**The fold's inputs now come from the record.** An open inline-IF frame is the
-`seq` of the branch event that recognised it and nothing else — `close_ifs`
-reads the condition, the start address and the target back out of the log, and
-derives the region start by replaying the edits stamped up to that event. The
-frame keeps `idx` only as a cross-check: if the record's answer disagrees with
-the length the walk saw, decoding raises. It never has, across both corpora.
-Chapter 7 deletes the check.
+**All three folds now take their region from the record.** Each construct that
+owns a body is identified by the event that recognised it, and the body's start
+position is the list length at that event, replayed from the edits:
+
+| fold | event | recorded where |
+| --- | --- | --- |
+| inline IF | branch, with its condition | `open_tail_if`, two lifts, one core site |
+| CASE arm / CASE ELSE | `case_arm` / `case_else` region | `_begin_body`, the else transition |
+| SUB / DEF FN body | `proc` / `fn` region | `proc_enter`, the DEF FN auto-open |
+
+Each frame keeps its old `idx` purely as a cross-check: if the record's answer
+disagrees with the length the walk saw, decoding raises. It never has, across
+both corpora. Sabotaging the derivation by one fails fold, SELECT and procedure
+tests, so all three guards are watched to fire. Chapter 7 deletes them.
+
+The inline-IF frame goes further — it is the branch event's `seq` and nothing
+else, so `close_ifs` reads the condition, the start address and the target out
+of the log too.
 
 **The deferred pass exists and is measured.** `fold_pass.fold_inline_ifs`
 folds every recorded region from the commit stream, in commit coordinates,
@@ -141,8 +152,15 @@ corpus fold a body holding a `SELECT CASE` the walk had already built (no
 had already spliced. Commit coordinates and list coordinates agree until one of
 those runs.
 
-So the remaining work is exactly: move `select_case`'s arm snapshot and the
-procedure-body fold onto the same footing, then run all three after the walk.
+So the remaining work is what a deferred pass still cannot reconstruct:
+
+- **`SelectCase` and `SubDef`/`DefFn` are never committed.** They are built by
+  their fold from statements that were, so the record offers a later pass the
+  bodies flat and no statement to fold them into. Everything else about them is
+  now recorded; this is not.
+- **A CASE arm's guards are not in the record.** `CaseValue`, `CaseRange` and
+  `CaseIs` accumulate on the frame as the walk recognises them, and the region
+  event carries only the extent. A pass cannot build the arm without them.
 
 ## Why the timing is load-bearing
 
@@ -165,12 +183,11 @@ than to convenience.
 
 ## Next steps, in order
 
-1. **Defer the other two folds.** `select_case`'s arm snapshot and the
-   procedure-body fold are what the deferred inline-IF pass trips over, and the
-   19 differences name exactly where. Give each the same treatment the inline IF
-   got: record what it recognises, then build the statement from the record.
-   `SelectCase` and `SubDef` never being committed is the specific thing to fix
-   — until they are, no deferred pass can see inside them.
+1. **Record a CASE arm's guards, and commit `SelectCase`/`SubDef`.** The two
+   things a deferred pass still cannot reconstruct. Guards want a richer region
+   payload than `(kind, start, end)`; committing the constructs is the change
+   that lets `fold_pass` see inside them, and it is the one that will move
+   what `reconcile` reports.
 2. **Then run all three after the walk.** Gate on the goldens and the
    wild-corpus report, not on a green suite — this is the first change in the
    chapter that will move statements. Expect the epilogue-target and
