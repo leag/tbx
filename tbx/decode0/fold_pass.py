@@ -335,9 +335,12 @@ def fold_constructs(program) -> list:
             owned = arms.pop(operation.close, [])
             if not owned:
                 continue  # nothing recorded closed inside it; leave it alone
-            spans = [shifted(a.start) for a, _ in owned]
-            start = min(spans)
-            stop = start + sum(len(body) for _, body in owned)
+            # The span the arms occupy *now*, recomputed rather than summed:
+            # a construct folded inside one of them has already shortened it,
+            # and assuming the arms are still contiguous overwrites whatever
+            # sits between them -- a nested SELECT, in wild tbd73.exe.
+            start = min(shifted(a.start) for a, _ in owned)
+            stop = max(shifted(a.start) + len(body) for a, body in owned)
             case_else = next(
                 (body for a, body in owned if a.kind == "case_else"), None
             )

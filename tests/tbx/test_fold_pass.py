@@ -153,10 +153,13 @@ def test_the_pass_builds_every_select_in_the_corpus():
     selector recorded alongside them are enough to put the construct back
     together without the recognizer's frame.
 
-    All 26 in the corpus, and 13 of the 16 in wild `tbd73.exe`. The three that
-    differ hold a loop in an arm: `lift_while` and its siblings are a fourth
-    family of walk-time folds, and an arm whose body they rewrote cannot be
-    rebuilt from a stream where they have not run.
+    All 26 in the corpus, and 13 of the 16 in wild `tbd73.exe`. All three that
+    differ turn on the loop lifts, which are a fourth family of walk-time
+    folds: a FOR header absorbs the loop-variable assignment that precedes it,
+    and `lift_while` and its siblings *insert* a `Do` marker at an earlier
+    position. Both move list positions relative to the commit stream this pass
+    works in, so an arm around one comes out with statements the walk's arm
+    does not have.
     """
     from tbx.decode0.fold_pass import fold_constructs
 
