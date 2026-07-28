@@ -572,6 +572,14 @@ class DecodeState:
             output.event_log = EventLog()
         output.event_log.commit(stmt, addr)
 
+    def region(self, kind: str, *, start, end) -> None:
+        """Record a construct's extent alongside the statements it spans."""
+        output = self.output
+        assert output is not None
+        if output.event_log is None:
+            output.event_log = EventLog()
+        output.event_log.region(kind, start=start, end=end)
+
     def branch(self, frame: str, *, template, target, address=None, cond=None) -> None:
         """Record a branch this handler recognised.
 
@@ -3448,6 +3456,7 @@ def _decode_user_code(
                     f"SUB/DEF FN body at {addr:#x} has no proc_ret",
                     component="control",
                 )
+            state.region("proc", start=addr, end=body.exit_address)
             c.proc_frame = {
                 "entry": addr,
                 "idx": len(out.stmts),

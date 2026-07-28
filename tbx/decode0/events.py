@@ -56,6 +56,20 @@ class BranchEvent:
 
 
 @dataclass(frozen=True)
+class RegionEvent:
+    """The extent of a construct that owns a span of code.
+
+    A procedure's epilogue is a boundary no statement address describes --
+    `END SUB` carries no line number -- yet an inline IF closing a SUB body
+    folds up to exactly there. Recording the extent gives that boundary a name.
+    """
+
+    kind: str
+    start: int | None
+    end: int | None
+
+
+@dataclass(frozen=True)
 class EventReconciliation:
     """How the committed event log relates to the folded statement list.
 
@@ -115,6 +129,19 @@ class EventLog:
         self.events.append(event)
         return event
 
+    def region(
+        self, kind: str, *, start: int | None, end: int | None
+    ) -> DecodedEvent:
+        """Record a construct's extent. The statement list is not touched."""
+        event = DecodedEvent(
+            kind="region",
+            address=start,
+            payload=RegionEvent(kind, start, end),
+            seq=len(self.events),
+        )
+        self.events.append(event)
+        return event
+
     def frozen(self) -> tuple[DecodedEvent, ...]:
         return tuple(self.events)
 
@@ -141,7 +168,7 @@ def replay_events(events: Iterable[DecodedEvent]) -> tuple[Any, ...]:
 
     statements = []
     for event in events:
-        if event.kind == "branch":
+        if event.kind in ("branch", "region"):
             continue  # carries no statement; the control pass consumes it
         if event.kind != "statement":
             raise ValueError(f"unknown decoded event kind: {event.kind!r}")

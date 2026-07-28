@@ -706,12 +706,43 @@ Writing by raw id is refused rather than shimmed — a raw id cannot keep its
 statement alive, which is exactly the bug. Reads still accept one, since a
 read cannot create a claim that outlives its owner.
 
+### Region boundaries, and how far extents are recoverable
+
+The chapter asks the graph to carry "region boundaries" alongside nodes and
+branch edges. `RegionEvent` records a construct's extent in the same ordered
+log, emitted at `proc_enter` with the body extent `match_proc_body` already
+computes. The event stream now has three kinds — `statement`, `branch`,
+`region` — and replay skips the latter two, since neither carries a statement.
+
+That boundary matters because an inline IF closing a SUB body folds up to the
+epilogue, which is not a statement and never can be. Measuring how far a fold
+region is recoverable from the record:
+
+| | inline-IF folds |
+| --- | --- |
+| extent predicted from statement addresses | 39 / 62 |
+| end is a boundary no statement describes | 13 / 62 |
+| region end known but the naive rule is wrong | 10 / 62 |
+
+Region events took the unknown-end cases from 21 to 13. The remaining ones are
+not a missing address but a missing *moment*: a region's end is the list length
+when decoding reaches its boundary, and that instant is not derivable from
+statement addresses alone. The fix has the same shape as the shared clock that
+made fold starts exact — record when a region actually closes, rather than
+trying to infer it afterwards.
+
+Note this is the first measurement in the chapter that did not reach 100%. Fold
+*starts* are exact at 62/62; extents are not, and the gap is specific.
+
 ### What remains
 
-The swap: handlers stop folding as they decode, and a pass over the graph
-folds afterwards, moving `close_ifs`, `_fold_arm` and the procedure-body fold
-together. The measured account above of what breaks when they move separately
-is the specification for that work.
+Two things, in order:
+
+1. Record region closes, so a fold extent is read from the log rather than
+   inferred. Fold starts needed exactly this and became exact.
+2. The swap: `close_ifs`, `_fold_arm` and the procedure-body fold move
+   together, gated on the goldens and the wild-corpus report. The measured
+   account of what breaks when they move separately is its specification.
 
 ## Chapter 7 — Remove the migration scaffolding
 
