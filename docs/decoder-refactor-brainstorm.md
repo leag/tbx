@@ -877,9 +877,11 @@ Every difference is another walk-time fold rather than a gap in the record:
 Which is "the three folds have to move together", made quantitative and
 localized. A fold needs nothing from the walk except that no other fold has
 moved the list under it -- and the three wild SELECT misses say the same thing
-about a fourth family: `lift_while`, `lift_bool_do_tail` and the FOR/NEXT lifts
-rewrite the list as they go too, and every one of those misses is an arm
-holding a loop.
+about a fourth family. `lift_while`, `lift_bool_do_tail` and the FOR/NEXT lifts
+rewrite the list as they go too, and they move positions rather than only
+collapsing them: a FOR header absorbs the assignment initialising its loop
+variable, and `lift_while` inserts a `Do` marker at an earlier position. An arm
+around either comes out holding statements the walk's arm does not.
 
 ### What remains
 

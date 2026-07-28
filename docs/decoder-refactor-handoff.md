@@ -174,9 +174,12 @@ So the remaining work is what a deferred pass still cannot reconstruct:
 
 - **The loop lifts are a fourth family of walk-time folds.** `lift_while`,
   `lift_bool_do_tail`, `lift_do_tail` and the FOR/NEXT lifts rewrite the list
-  as they go, exactly as the three folds above did. All three wild SELECT
-  misses are an arm holding a loop. They need the same treatment: record what
-  they recognise, then fold from it.
+  as they go, exactly as the three folds above did, and in a way that moves
+  list positions relative to the commit stream: a FOR header absorbs the
+  assignment that initialises its loop variable, and `lift_while` *inserts* a
+  `Do` marker at an earlier position. All three wild SELECT misses turn on
+  that. They need the same treatment: record what they recognise, then fold
+  from it.
 - **`SelectCase` and `SubDef`/`DefFn` are never committed.** They are built by
   their fold from statements that were, so a pass cannot see inside one the
   walk has already built. This is what blocks the 4+4 inline-IF differences.
