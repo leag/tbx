@@ -694,7 +694,7 @@ def _fold_body(body, targets=frozenset(), stmt_addr=None, block_ifs=None):
                 and b.body[-1].target[0] == "addr"
             )
             addrs = [stmt_addr.get(id(b)) for b in body]
-            folded, _ = _fold_if(
+            folded, folded_addrs = _fold_if(
                 list(body),
                 addrs,
                 bound=marker,
@@ -702,6 +702,16 @@ def _fold_body(body, targets=frozenset(), stmt_addr=None, block_ifs=None):
                 stmt_addr=stmt_addr,
                 block_ifs=block_ifs,
             )
+            # `_fold_if` returns a rebuilt statement's address in its addrs
+            # list, which is how a TOP-LEVEL caller keeps it. A body has no
+            # address list, so the address has to be claimed here or it is
+            # lost with the node that owned it -- and a GOTO into this body
+            # can then never resolve (wild state.exe, `jump target 0xe179 is
+            # not a statement start`: a nested inline IF that is itself a
+            # jump target, rebuilt into a block by the ELSE reconstruction).
+            for statement, address in zip(folded, folded_addrs):
+                if address is not None:
+                    stmt_addr.claim(statement, address)
             body = tuple(folded)
         out = []
         for b in body:

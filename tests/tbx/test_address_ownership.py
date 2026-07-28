@@ -107,3 +107,27 @@ def test_assigning_by_raw_id_is_refused():
 
     with pytest.raises(TypeError, match="assign through claim"):
         owner[id(ir.End())] = 0x10
+
+
+def test_a_rebuilt_body_statement_keeps_the_address_it_owned():
+    """A body has no address list, so a rebuild there has to claim.
+
+    `_fold_body` delegates to `_fold_if` when a nested IF carries an else-skip
+    Goto, because that is where the ELSE reconstruction lives. `_fold_if`
+    returns each rebuilt statement's address in its addrs list, which is how a
+    top-level caller keeps it -- but a body has no such list, so the address
+    used to be discarded with it. A GOTO into that body could then never
+    resolve, since the node holding the claim no longer existed.
+
+    Four wild programs failed on exactly this: `state.exe` and `state87.exe`
+    on `jump target 0xe179`, `inv87.exe` and `invoice.exe` on `0xf1bf`. All
+    four are a nested inline IF that is itself a jump target and gets rebuilt
+    into a block.
+    """
+    from conftest import wild_hits_bytes
+
+    from tbx import decode0
+
+    for stem in ("state.exe", "inv87.exe"):
+        program = decode0.decode_user_code(wild_hits_bytes(stem))
+        assert len(program) > 2000, f"{stem} should decode in full"
