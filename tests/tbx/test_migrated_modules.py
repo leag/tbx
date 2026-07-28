@@ -19,6 +19,7 @@ from tbx.decode0.state_parts import STATE_VIEWS
 ROOT = Path(__file__).resolve().parents[2]
 
 MIGRATED = [
+    "tbx/decode0/core.py",
     "tbx/decode0/handlers/arith.py",
     "tbx/decode0/handlers/control.py",
     "tbx/decode0/handlers/dos_io.py",
@@ -53,7 +54,11 @@ def test_migrated_module_uses_ownership_views(relpath):
 
 @pytest.mark.parametrize("relpath", MIGRATED)
 def test_migrated_module_does_not_mutate_the_operation_index(relpath):
-    """Consumption is committed through ``state.advance`` and the cursor."""
+    """Consumption is committed through ``state.advance`` and the cursor.
+
+    ``self.k`` is exempt: inside ``DecodeState`` that is the owner writing its
+    own storage, which is what ``advance``/``seek`` are implemented in terms of.
+    """
     tree = ast.parse((ROOT / relpath).read_text())
     writes = [
         f"{Path(relpath).name}:{node.lineno}"
@@ -62,6 +67,8 @@ def test_migrated_module_does_not_mutate_the_operation_index(relpath):
         for target in (
             node.targets if isinstance(node, ast.Assign) else [node.target]
         )
-        if isinstance(target, ast.Attribute) and target.attr == "k"
+        if isinstance(target, ast.Attribute)
+        and target.attr == "k"
+        and not (isinstance(target.value, ast.Name) and target.value.id == "self")
     ]
     assert not writes, f"{relpath} writes the operation index directly: {writes}"

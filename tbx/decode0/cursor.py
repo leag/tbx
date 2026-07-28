@@ -1,9 +1,9 @@
 """Explicit operation consumption primitives used by the decoder migration.
 
-The legacy decoder still owns its position in ``DecodeState.k``.  ``OpCursor``
-is therefore deliberately an adapter for now: it observes that position,
-records the consumed window, and provides a safe API for newly migrated
-handlers.  It does not silently advance the legacy loop.
+``DecodeState.k`` remains the index the dispatch loop reads, but nothing
+writes it except ``advance``/``seek``, which drive it from this cursor. The
+cursor therefore sees every operation the decoder crosses, which is what makes
+the bounded history in a failure report trustworthy.
 """
 
 from __future__ import annotations

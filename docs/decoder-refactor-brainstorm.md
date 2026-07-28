@@ -222,23 +222,31 @@ the failure class this chapter exists to remove.
 
 ### Status
 
-Landed: the partition above, `ImageState`, the fail-loud view boundary,
-`DecodeState.seek` as the absolute-index sibling of `advance`, and migration
-of every handler module — `arith`, `control`, `dos_io`, `fileio`, `graphics` —
-plus `select_case.py`. They are listed in
+Complete. Every decoder module reaches state through its ownership views:
+`core.py` (setup, dispatch loop, `fp_dispatch`, `_finalize`), all five handler
+modules, and `select_case.py`. They are listed in
 `tests/tbx/test_migrated_modules.py`, which fails if one reaches around its
 views or writes the operation index directly.
 
-Two fields, `reg_spills` and `block_if_addrs`, were only ever assigned
-dynamically during setup and so had escaped the field inventory entirely. The
-partition test found them; both are now declared and owned.
+Consumption has a single committing path. `advance` takes a relative count,
+`seek` an absolute stop for lookahead helpers that compute where they landed,
+and `begin` installs stream, index, and cursor together so they cannot be
+established out of order. Nothing outside `DecodeState` writes `k`, so the
+cursor witnesses every operation the decoder crosses — which is what makes the
+bounded history in a failure report trustworthy.
 
-`tests/tbx/test_gap_tools.py` built its handler states as `SimpleNamespace`,
-which accepts any field name and would have kept passing while a handler read
-the wrong owner. Those tests now construct a real `DecodeState`.
+Three things the work surfaced that the plan did not anticipate:
 
-Remaining: the setup and dispatch blocks of `core.py`. Chapter 3 is not
-complete until they are migrated and listed.
+- `reg_spills` and `block_if_addrs` were only ever assigned dynamically during
+  setup and had escaped the field inventory entirely. The partition test found
+  them; both are now declared and owned.
+- `tests/tbx/test_gap_tools.py` built its handler states as `SimpleNamespace`,
+  which accepts any field name and would have kept passing while a handler read
+  the wrong owner. Those tests now construct a real `DecodeState`.
+- Three sites read `state.k += 4 if indirect else 3`. Any rewrite that treats
+  the increment as a literal silently turns the statement into a conditional
+  expression that does not advance. It cost 61 test failures to find; a
+  mechanical pass over this file has to match whole statements.
 
 ## Chapter 4 — Separate recognition from mutation
 
