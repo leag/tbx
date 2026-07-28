@@ -113,6 +113,61 @@ def test_an_arrival_is_not_a_statement_start():
     assert 0x200 not in graph.addresses
 
 
+def test_a_def_fn_records_its_extent_too():
+    """A DEF FN body has no `proc_enter` to announce it.
+
+    It is recognised by exclusion -- the first op in the definition region with
+    no frame open -- so nothing else in the log would say where its body
+    starts, and the fold that closes it needs exactly that.
+    """
+    prog = decode0.decode_user_code((CORPUS / "t1_fnblockif.exe").read_bytes())
+
+    fns = [
+        e.payload for e in prog.events if e.kind == "region" and e.payload.kind == "fn"
+    ]
+    assert fns
+    assert all(r.end is not None and r.end > r.start for r in fns)
+
+
+def test_every_procedure_body_in_the_corpus_is_recorded():
+    """One region per SUB or DEF FN whose body the walk accumulates.
+
+    `SUB name INLINE` and a fingerprinted opaque helper are complete in a
+    single operation -- they open no frame and accumulate no body -- so they
+    are the two that record nothing, and they are excluded by shape rather
+    than by name.
+    """
+    missed = []
+    for exe in sorted(CORPUS.glob("*.exe")):
+        try:
+            prog = decode0.decode_user_code(exe.read_bytes())
+        except ValueError:
+            continue
+        bodies = [
+            s
+            for s in prog
+            if isinstance(s, (ir.SubDef, ir.DefFn))
+            and not (
+                isinstance(s, ir.SubDef)
+                and len(s.body) == 1
+                and isinstance(s.body[0], (ir.Inline, ir.OpaqueHelper))
+            )
+        ]
+        if not bodies:
+            continue
+        recorded = [
+            e
+            for e in prog.events
+            if e.kind == "region" and e.payload.kind in ("proc", "fn")
+        ]
+        if len(recorded) != len(bodies):
+            missed.append((exe.name, len(bodies), len(recorded)))
+
+    assert not missed, (
+        f"{len(missed)} programs mis-record their procedure bodies: {missed[:5]}"
+    )
+
+
 def test_a_region_carries_no_statement():
     """Regions are observations, not commits.
 

@@ -3524,6 +3524,13 @@ def _decode_user_code(
         ):
             c.fn_frame = {
                 "entry": addr,
+                # A DEF FN body has no proc_enter to record its extent, so it
+                # records one here, where the frame opens (see proc_enter).
+                "seq": state.region(
+                    "fn",
+                    start=addr,
+                    end=next(o[0] for o in img.ops[c.k :] if o[1] == "fn_ret"),
+                ).seq,
                 "idx": len(out.stmts),
                 "result": None,
                 "param_offs": set(),  # bp offsets touched as a param read/
@@ -3555,9 +3562,12 @@ def _decode_user_code(
                     f"SUB/DEF FN body at {addr:#x} has no proc_ret",
                     component="control",
                 )
-            state.region("proc", start=addr, end=body.exit_address)
             c.proc_frame = {
                 "entry": addr,
+                # The body's own region, recorded before a statement of it is
+                # committed: the fold at proc_ret reads its start position back
+                # out of the log rather than off this frame.
+                "seq": state.region("proc", start=addr, end=body.exit_address).seq,
                 "idx": len(out.stmts),
                 "exit": body.ret_address,
                 "exit_entry": body.exit_address,
@@ -3789,7 +3799,7 @@ def _decode_user_code(
             # is snapshotted here and never revisited by that pass, so it has to
             # happen now or its IfInlines stay inline and the else-skip Goto
             # survives as a spurious statement (probe t1_dblhooksub).
-            i0 = c.proc_frame["idx"]
+            i0 = state.frame_start(c.proc_frame)
             with editing(out.stmts, "fold_proc_body"):
                 out.stmts[i0:], out.addrs[i0:] = _fold_if(
                     out.stmts[i0:],
@@ -3798,15 +3808,12 @@ def _decode_user_code(
                     stmt_addr=out.stmt_addr,
                     block_ifs=c.block_if_addrs,
                 )
-            body = tuple(out.stmts[c.proc_frame["idx"] :])
-            for st, ad in zip(body, out.addrs[c.proc_frame["idx"] :]):
+            body = tuple(out.stmts[i0:])
+            for st, ad in zip(body, out.addrs[i0:]):
                 if ad is not None:  # keep body addrs: GOSUB targets a body
                     out.stmt_addr.claim(st, ad)  # line (t1_subgsb)
             with editing(out.stmts, "fold_proc_body"):
-                del (
-                    out.stmts[c.proc_frame["idx"] :],
-                    out.addrs[c.proc_frame["idx"] :],
-                )
+                del out.stmts[i0:], out.addrs[i0:]
             locs = c.proc_frame["locals"]
             _retire_for_temps(c.proc_frame, locs)
             for d in c.proc_frame.get("hidden_locals") or ():
@@ -4008,7 +4015,7 @@ def _decode_user_code(
                 # movax-FFFF materialization template and an inline one a bare
                 # dispatch pair (t1_fnblockif). SUB bodies got this treatment
                 # with t1_dblhooksub; DEF FN bodies were never given it.
-                i0 = c.fn_frame["idx"]
+                i0 = state.frame_start(c.fn_frame)
                 with editing(out.stmts, "fold_proc_body"):
                     out.stmts[i0:], out.addrs[i0:] = _fold_if(
                         out.stmts[i0:],
@@ -4017,15 +4024,12 @@ def _decode_user_code(
                         stmt_addr=out.stmt_addr,
                         block_ifs=c.block_if_addrs,
                     )
-                body = tuple(out.stmts[c.fn_frame["idx"] :])
-                for st, ad in zip(body, out.addrs[c.fn_frame["idx"] :]):
+                body = tuple(out.stmts[i0:])
+                for st, ad in zip(body, out.addrs[i0:]):
                     if ad is not None:  # keep body addrs (as in the SUB fold)
                         out.stmt_addr.claim(st, ad)
                 with editing(out.stmts, "fold_proc_body"):
-                    del (
-                        out.stmts[c.fn_frame["idx"] :],
-                        out.addrs[c.fn_frame["idx"] :],
-                    )
+                    del out.stmts[i0:], out.addrs[i0:]
                 locs = c.fn_frame["locals"]
                 _retire_for_temps(c.fn_frame, locs)
                 for d in c.fn_frame.get("hidden_locals") or ():
@@ -4038,11 +4042,9 @@ def _decode_user_code(
                 expr = c.fn_frame["result"]
                 if expr is None:  # no FSTP [bp+0]: result left on stack
                     expr = e.stack.pop()
+                i0 = state.frame_start(c.fn_frame)
                 with editing(out.stmts, "fold_proc_body"):
-                    del (
-                        out.stmts[c.fn_frame["idx"] :],
-                        out.addrs[c.fn_frame["idx"] :],
-                    )
+                    del out.stmts[i0:], out.addrs[i0:]
                 out.stmts.append(ir.DefFn(name, params, expr))
             out.addrs.append(None)  # a DEF FN definition is never a jump target
             c.fn_frame = None
