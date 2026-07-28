@@ -650,17 +650,45 @@ common shape. The log therefore records the net effect of such a fold rather
 than its internal steps, which is the right granularity for reproducing
 behaviour and is why the observed nesting stays shallow.
 
+### The swap was attempted, and the eager timing is load-bearing
+
+With every input recorded and verified, the swap was tried directly: stop
+folding inline IFs in the dispatch loop and fold once at the end. If the eager
+timing were incidental, output would not move.
+
+It moves. 92 tests fail, in three distinct classes:
+
+- 28 unresolved jump targets. An inline IF that is the last statement of a
+  SUB/DEF FN body skips to the epilogue, which is not a statement and never
+  can be — `END SUB` carries no line number. The fold is what removes that
+  target; defer it and the target has nothing to resolve against.
+- ~100 output differences, from bodies that stayed open past the point a later
+  fold snapshotted them. `select_case._fold_arm` documents this exactly: it
+  calls `close_ifs` before snapshotting an arm because an inline IF closing an
+  arm skips to the arm-close jmp (wild tbd73.exe, TBW73.INC:716).
+- 6 trace-hook and line-table failures, where the fold's address retention into
+  `stmt_addr` is what keeps body lines visible.
+
+So `close_ifs` cannot be deferred on its own. Its two consumers —
+`_fold_arm` and the `proc_ret` path — each require inline-IF bodies closed at a
+precise point *during* decoding, and each requirement traces to a calibrated
+wild-program behaviour rather than to convenience. Deferring one fold without
+the others is not deferral but redistribution.
+
+This is a negative result, and it is the useful kind: the next attempt should
+move `close_ifs`, `_fold_arm` and the procedure-body fold together, against a
+model where a region stays open until its enclosing construct closes it, and
+should expect the epilogue-target and address-retention cases to be the two
+that decide whether it works.
+
 ### What remains
 
-The swap itself: handlers stop folding as they decode, and a pass over the
-graph folds afterwards. That is the change that will move statements, so its
-gate is the goldens and the wild-corpus report rather than a green suite.
-
-Everything it depends on is now recorded and verified: a complete branch
-record, an edit log with provenance, a shared clock and explicit nesting, a
-template table that reproduces every construct decision, and a region
-predictor that reproduces every inline-IF fold. The ordering that seemed the
-largest unknown turns out to be two cases.
+The swap, done as one move across those three folds rather than one at a time.
+Its gate is the goldens and the wild-corpus report. Everything it needs is
+recorded and verified: a complete branch record, an edit log with provenance,
+a shared clock and explicit nesting, a template table that reproduces every
+construct decision, a region predictor that reproduces every inline-IF fold,
+and now a measured account of what breaks if the folds move separately.
 
 ## Chapter 7 — Remove the migration scaffolding
 
