@@ -9,7 +9,7 @@ Branch `release/0.1.0`. Baseline for "no behavior change" is commit `36aa8a4`.
 ## Verify the current state
 
 ```sh
-uv run pytest                 # 2672 pass
+uv run pytest                 # 2679 pass
 uv run ruff check             # clean
 uv run python -m tbx.tools.scan_wild wild/hits
 ```
@@ -32,7 +32,7 @@ signal that something moved.
 | 2 `OpCursor` | done |
 | 3 state ownership | **complete** |
 | 4 recognition/mutation split | substantial, two families outstanding |
-| 5 event stream | **complete** for statement construction |
+| 5 event stream | **complete**: every statement has an event |
 | 6 control-flow extraction | regions exact, the swap not attempted |
 | 7 remove scaffolding | not started |
 
@@ -86,24 +86,27 @@ one past where it began, innermost-first), and a body ending in a pending chain
 is flushed at the arrival because it was decoded before the boundary (wild
 `be.exe`, the only program in either corpus with that shape).
 
+**Every statement is accounted for (ch. 5).** Three paths used to reach the
+program with nothing in the log describing them, and each is now an event kind:
+
+- `flush_pending` appended a closed chain directly — a trailing-`;` PRINT, an
+  INPUT#/READ target chain, a FIELD list. `commit` is the one way into the list
+  now, and the 51 corpus-wide appends record an event like any other statement.
+- Handlers revise a committed statement when a second runtime call completes it
+  (a LOCATE's cursor argument, a FOR's real step, a second DIM joining the
+  first). `PatchEvent` names the commit it supersedes rather than standing
+  alone; 36 revisions, four of them revisions of revisions.
+- DIM, DATA, OPTION BASE, COMMON and DEFtype are derived by finalization from
+  layout and pool facts. `ReconstructedEvent` says so; replay skips it, since
+  finalization runs after folding and its insert position means nothing in the
+  walk.
+
+Reconciliation: 436 synthesized statements, down from 756, and every one is now
+a folding or lifting product — rebuilt SUB bodies, resolved CALLs, TRON/TROFF
+lifting, structured forms. 239 are reported as reconstructed, and 702 of 1030
+programs reconcile clean, up from 549.
+
 ## What is not proven
-
-**The event stream is not lossless for statements.** 10764 of 11799 statement
-events survive as top-level statements; 549 of 1030 programs reconcile clean.
-The rest is folding and finalization, which is expected — but two classes are
-not:
-
-- Handlers patch already-committed statements in place (`stmt_addr[-1] =
-  ir.Locate(...)` when the cursor argument arrives, and the same for
-  INPUT/FIELD/PRINT chain targets), so the event holds a pre-patch statement.
-- `flush_pending` appends a closed chain straight to the list, so a
-  trailing-`;` PRINT or an INPUT#/READ/FIELD chain reaches the program with no
-  commit event at all. Wild `be.exe` shows what that costs: its folded body's
-  only statement arrives this way.
-- DIM and DATA are reconstructed at finalization from layout and pool facts and
-  never pass through `put`, so no event describes them.
-  `test_codeless_data_statements_are_synthesized_not_committed` pins this and
-  fails when it is fixed.
 
 **Chapter 4 has two families left.** The `shlsi` element-stride chain in
 `handlers/arith.py` recognises the array-operand template while *deleting*
@@ -133,21 +136,15 @@ than to convenience.
 
 ## Next steps, in order
 
-1. **Route in-place patches, pending-chain flushes and finalization
-   reconstruction through the commit path**, so the event stream becomes
-   lossless for statements too. Medium risk: changes what is committed, but not
-   the final list. `flush_pending` is the one to do first — it is the only
-   path that reaches the list with no event at all, and the fold model already
-   depends on its timing.
-2. **The swap.** Move the three folds together, against a model where a region
+1. **The swap.** Move the three folds together, against a model where a region
    stays open until its enclosing construct closes it. Starts and extents are
-   both exact now, so the pass has its regions; what is untested is folding
-   from them. Gate on the goldens and the wild-corpus report, not on a green
-   suite — this is the first change in the chapter that will move statements.
-   Expect the epilogue-target and address-retention cases to decide whether it
-   works.
-3. **Chapter 4's two families**, independently of the above.
-4. **Chapter 7**, only after the swap lands.
+   both exact and every statement is accounted for, so the pass has its inputs;
+   what is untested is folding from them. Gate on the goldens and the
+   wild-corpus report, not on a green suite — this is the first change in the
+   chapter that will move statements. Expect the epilogue-target and
+   address-retention cases to decide whether it works.
+2. **Chapter 4's two families**, independently of the above.
+3. **Chapter 7**, only after the swap lands.
 
 ## Tools
 

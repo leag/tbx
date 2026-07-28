@@ -392,8 +392,8 @@ equality in emission order and separates three outcomes — a committed
 statement folding *absorbed* into a body, one it *rewrote*, and a program
 statement it *synthesized* with no committed counterpart.
 
-That measurement is the point of the slice, and it says the event stream is
-not yet lossless:
+That measurement is the point of the slice, and it said the event stream was
+not yet lossless (closed below, "Every statement now has an event"):
 
 | corpus | events | matched | clean programs |
 | --- | --- | --- | --- |
@@ -443,6 +443,45 @@ Reconciliation costs 6–15% of decode time on the largest wild programs
 (12–95 ms); the edit recorder and its gate add nothing measurable on top. Kept
 eager per this plan's rule that reproducibility outranks throughput until
 Chapter 7; revisit it there with a real figure rather than a guess.
+
+### Every statement now has an event
+
+The two causes above are closed, and each turned out to be a different *kind*
+of arrival rather than a missing call to `put`:
+
+- **A chain closes late.** A trailing-`;` PRINT, an INPUT#/READ target chain
+  and a FIELD list have no flush vector, so `flush_pending` appended them
+  directly. `commit` is now the one way into the list — `put` closes any
+  pending chain and lands there, and `flush_pending` lands there too. 51
+  appends corpus-wide.
+- **A statement is revised after it is committed.** Two runtime calls make one
+  statement: a LOCATE's cursor or shape argument, a FOR's real step against its
+  provisional `Lit(1)`, a second DIM joining the first as a comma list.
+  `PatchEvent` names the commit it supersedes, since a revision replaces a
+  statement rather than adding one; the event it revises is found by identity,
+  scanning back, and revising something nothing committed raises. 36 revisions,
+  four of them revisions of revisions.
+- **A statement is derived, not decoded.** DIM, DATA, OPTION BASE, COMMON and
+  DEFtype come from array bookkeeping, the data pool and the error-trap line
+  table. `ReconstructedEvent` accounts for them; replay skips it, because
+  finalization runs after folding and the position it inserts at describes the
+  finished program rather than the walk.
+
+`committed` is the single place supersession is applied, and replay,
+reconciliation and the graph all read through it — so a target the decoder
+corrected is never read off the draft.
+
+| | before | after |
+| --- | --- | --- |
+| statement events | 11799 | 11850 |
+| synthesized | 756 | 436 |
+| reconstructed | — | 239 |
+| clean programs | 549/1030 | 702/1030 |
+
+The 436 left are folding and lifting products: rebuilt SUB bodies, resolved
+CALLs, TRON/TROFF lifting, and the structured forms. That divergence is what
+Chapter 6's swap moves, and it is now the *only* one — no statement reaches a
+decoded program without an event saying how it got there.
 
 ## Chapter 6 — Extract control-flow recovery
 
