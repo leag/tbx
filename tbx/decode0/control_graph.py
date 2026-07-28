@@ -88,10 +88,15 @@ class ControlGraph:
         for event in events:
             if event.kind == "branch":
                 # A recognised branch names its target directly; there is no
-                # committed statement to walk for an ("addr", n) operand.
-                edges.append(
-                    ControlEdge(event.seq, event.payload.target, event.payload.frame)
-                )
+                # committed statement to walk for an ("addr", n) operand. A
+                # frame whose exit is not yet known contributes a node but no
+                # edge -- inventing one would be a guessed target.
+                if event.payload.target is not None:
+                    edges.append(
+                        ControlEdge(
+                            event.seq, event.payload.target, event.payload.frame
+                        )
+                    )
                 continue
             for kind, target in _address_targets(event.payload):
                 edges.append(ControlEdge(event.seq, target, kind))
@@ -140,8 +145,10 @@ class BranchOutcome:
     address: int | None
     #: Physical address the branch targets.
     target: int
-    #: "raw" when the branch survives as a jump, "absorbed" when folding moved
-    #: it inside another statement's body, "folded" when folding rewrote it.
+    #: What became of the branch. "raw" when it survives as a jump statement,
+    #: "absorbed" when folding moved it inside another statement's body,
+    #: "folded" when folding rewrote it, and "frame" when the handler opened a
+    #: construct for it without ever committing a statement.
     outcome: str
     #: The pass responsible, from the statement edit log. None for a raw
     #: branch, which no pass touched.
@@ -163,10 +170,15 @@ def classify_branches(program) -> tuple[BranchOutcome, ...]:
     absorbed = frozenset(report.absorbed if report else ())
     rewritten = frozenset(report.rewritten if report else ())
 
+    frame_seqs = {e.seq for e in program.events if e.kind == "branch"}
     by_seq = {node.index: node for node in graph.nodes}
     outcomes = []
     for edge in graph.edges:
-        if edge.source in absorbed:
+        if edge.source in frame_seqs:
+            # A recognised frame: the handler decided the construct without
+            # committing a statement, so no statement edit can account for it.
+            outcome = "frame"
+        elif edge.source in absorbed:
             outcome = "absorbed"
         elif edge.source in rewritten:
             outcome = "folded"
@@ -179,7 +191,9 @@ def classify_branches(program) -> tuple[BranchOutcome, ...]:
                 target=edge.target,
                 outcome=outcome,
                 decided_by=(
-                    _deciding_pass(program, edge.source)
+                    edge.kind
+                    if outcome == "frame"
+                    else _deciding_pass(program, edge.source)
                     if outcome != "raw"
                     else None
                 ),

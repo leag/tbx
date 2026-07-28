@@ -2497,6 +2497,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 # loop variable in DGROUP (t1_fnlocalarrstr).
                 hidden = {d for d in (lim, stp) if d in frame["locals"]}
                 frame.setdefault("hidden_locals", set()).update(hidden)
+            state.branch("loop", target=img.ops[test_k][0], address=c.cur)
             c.fors.append(
                 {
                     "v": vdisp,
@@ -2515,6 +2516,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             del out.addrs[-3:]
             v = init_s.target
             state.put(ir.For(v, init_s.value, lim_s.value, stp_s.value), a)
+            state.branch("loop", target=t, address=c.cur)
             c.fors.append(
                 {
                     "v": state.vdisp(v),
@@ -2564,6 +2566,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 # LOCALs whenever the loop var is not the last one declared,
                 # t1_locstrafterforlit).
                 c.proc_frame["has_local_for"] = True
+            state.branch("loop", target=t, address=c.cur)
             c.fors.append(
                 {
                     "v": cmp_at_t[2],
@@ -2647,6 +2650,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 ir.For(init_s.target, init_s.value, limit, ir.Lit(1)),
                 a,
             )
+            state.branch("loop", target=t, address=c.cur)
             c.fors.append(
                 {
                     "v": nxt_t[2],
@@ -2704,6 +2708,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 ir.For(init_s.target, init_s.value, limit, ir.Lit(1)),
                 a,
             )
+            state.branch("loop", target=t, address=c.cur)
             c.fors.append(
                 {
                     "v": nxt_t[2],
@@ -2771,6 +2776,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 ir.For(init_s.target, init_s.value, ir.Lit(0), step_s.value),
                 a,
             )
+            state.branch("loop", target=t, address=c.cur)
             c.fors.append(
                 {
                     "v": state.vdisp(init_s.target),

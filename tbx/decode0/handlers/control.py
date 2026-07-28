@@ -640,6 +640,7 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
                     o.stmts,
                     state.flush_pending,
                     e.pend_bool_outer,
+                    branch=state.branch,
                 )  # a mid-chain segment keeps pend_bool open (t1_and3)
             e.pend_cmp = None
             c.cur = None
@@ -871,6 +872,7 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
                 state.flush_pending,
                 e.pend_bool_outer,
                 wrap_group=True,
+                branch=state.branch,
             )
             e.pend_cmp = None
             c.cur = None
@@ -888,6 +890,7 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             state.flush_pending,
             c.cur,
             block_ifs=c.block_if_addrs,
+            branch=state.branch,
         ))
         e.pend_cmp = None
         c.cur = None

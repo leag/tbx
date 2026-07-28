@@ -245,8 +245,19 @@ def _find_jmps_back(ops, exit_addr) -> int | None:
     return None
 
 
+def _announce(branch, frame: str, target, address) -> None:
+    """Record a frame this lift opened, when the caller supplied a recorder.
+
+    The lifts are also called with plain lists from unit tests, which have no
+    decode state to record into, so the recorder is optional.
+    """
+    if branch is not None:
+        branch(frame, target=target, address=address)
+
+
 def _lift_bool_tail(
-    ops, k, pend_cmp, pb, put, whiles, ifs, stmts, flush, pend_outer, wrap_group=False
+    ops, k, pend_cmp, pb, put, whiles, ifs, stmts, flush, pend_outer,
+    wrap_group=False, branch=None,
 ):
     """Consume the compound-IF second term at ops[k] (movax FFFF): dispatch 74 =
     THEN-line IfGoto; dispatch 75 = compound WHILE (jmps-back present)
@@ -377,9 +388,11 @@ def _lift_bool_tail(
             put(ir.IfGoto(final_cond, ("addr", f_jmp[2])), final_start)
         elif _has_jmps_back(ops, f_jmp[2], final_start):
             put(ir.While(final_cond), final_start)
+            _announce(branch, "loop", f_jmp[2], final_start)
             whiles.append({"test": final_start, "exit": f_jmp[2]})
         else:
             flush()
+            _announce(branch, "if", f_jmp[2], final_start)
             ifs.append(
                 {
                     "target": f_jmp[2],
@@ -474,7 +487,7 @@ def _lift_bool_do_tail(ops, k, pend_cmp, pb, stmts, addrs, put):
 
 def _lift_while(
     ops, k, pend_cmp, whiles, dos, ifs, stmts, addrs, put, flush, cur,
-    block_ifs=None,
+    block_ifs=None, branch=None,
 ) -> int:
     """Consume the materialized loop test at ops[k] (mov ax,0FFFF):
     Jcc(R) +1; inc ax; or ax,ax; <cc> +3; e9 EXIT. With a loop-back before
@@ -553,6 +566,7 @@ def _lift_while(
                 # Compound conditions materialize either way, so only a plain
                 # RelOp counts.
                 block_ifs.add(cur)
+            _announce(branch, "if", exit_jmp[2], cur)
             ifs.append(
                 {"target": exit_jmp[2], "cond": cond, "start": cur, "idx": len(stmts)}
             )

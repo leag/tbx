@@ -45,7 +45,10 @@ class BranchEvent:
     """
 
     frame: str
-    target: int
+    #: Physical address the branch goes to, or None when the construct's exit
+    #: is not yet known at recognition time (a SELECT header, whose END SELECT
+    #: is only resolved once its arms close).
+    target: int | None
     cond: Any = None
 
 
@@ -91,7 +94,12 @@ class EventLog:
         return event
 
     def branch(
-        self, frame: str, *, target: int, address: int | None, cond: Any = None
+        self,
+        frame: str,
+        *,
+        target: int | None,
+        address: int | None,
+        cond: Any = None,
     ) -> DecodedEvent:
         """Record a recognised branch. The statement list is not touched."""
         event = DecodedEvent(

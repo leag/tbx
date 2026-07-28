@@ -82,7 +82,9 @@ def test_classify_reports_a_branch_that_stayed_a_raw_jump():
     report = classify_branches(prog)
 
     assert report
-    assert all(b.outcome in ("raw", "folded", "absorbed") for b in report)
+    assert all(
+        b.outcome in ("raw", "folded", "absorbed", "frame") for b in report
+    )
     assert any(b.outcome == "raw" for b in report), (
         "t1_ifgoto's branch survives as an IfGoto, so it should classify raw"
     )
@@ -98,26 +100,40 @@ def test_classify_attributes_a_folded_branch_to_the_pass_that_folded_it():
     assert all(b.decided_by is not None for b in folded), (
         "a folded branch names the pass responsible, taken from the edit log"
     )
-    assert {b.decided_by for b in folded} == {"close_ifs"}
+    # Three distinct fates in one small program: a frame the handler opened, a
+    # branch folding absorbed, and a jump that survived untouched.
+    assert {b.outcome for b in report} == {"frame", "absorbed", "raw"}
 
 
-def test_some_structure_is_built_from_branches_that_never_commit():
-    """The remaining blind spot, pinned deliberately.
+def test_every_structured_program_records_a_branch():
+    """The gap this closed, kept closed.
 
-    Inline-IF frames, SELECT headers and head-tested loops now record a branch
-    event, which took the corpus from 103 fixtures the graph could not see
-    down to 40. `t1_fnblockif` is one of the 40: it ends up with structure and
-    uses `close_ifs`, yet records neither a committed branch nor a branch
-    event, so some frame still opens by a path that does not announce itself.
+    103 of the 151 fixtures with structured control flow used to record no
+    branch at all: handlers recognised and folded them invisibly. Now every
+    such fixture records one, so a new frame opener that does not announce
+    itself shows up here.
 
-    This fails once that path is found, which is the signal the graph can
-    take over.
+    A SELECT header contributes a node but no edge -- its END SELECT is not
+    known until the arms close, and inventing a target would be a guess -- so
+    the assertion is on branch events, not on edges.
     """
-    prog = decode0.decode_user_code((CORPUS / "t1_fnblockif.exe").read_bytes())
+    blind = []
+    for exe in sorted(CORPUS.glob("*.exe")):
+        try:
+            prog = decode0.decode_user_code(exe.read_bytes())
+        except ValueError:
+            continue
+        if not any(isinstance(s, _STRUCTURED) for s in _walk(prog)):
+            continue
+        committed = ControlGraph.from_events(prog.events).edges
+        recorded = [e for e in prog.events if e.kind == "branch"]
+        if not committed and not recorded:
+            blind.append(exe.name)
 
-    assert any(isinstance(s, (ir.IfBlock, ir.IfInline)) for s in _walk(prog))
-    assert classify_branches(prog) == ()
-    assert not [e for e in prog.events if e.kind == "branch"]
+    assert not blind, f"structure with no recorded branch: {blind[:5]}"
+
+
+_STRUCTURED = (ir.IfBlock, ir.IfInline, ir.SelectCase, ir.While, ir.For)
 
 
 def _walk(statements):

@@ -541,7 +541,7 @@ folded, 39 absorbed, attributed to `close_ifs`, `fold_proc_body`,
 `select_case`, `lift_while`, `lift_next`, `apply_exit_folds`,
 `fold_loop_header` and `finalize`.
 
-### The gap, and the first step into it
+### Every branch is now recorded
 
 The commit log did not contain every branch. 103 of the 151 fixtures with
 structured control flow committed **no branch statement at all** — the
@@ -552,28 +552,36 @@ Handlers now *emit* a branch event where they open a frame:
 `DecodeState.branch(frame, target=..., address=...)` records a `BranchEvent`
 in the same ordered log as the statements. Emitting is deliberately separate
 from committing — the statement list does not change, so no golden moves —
-and `ControlGraph.from_events` turns those events into edges directly.
+and `ControlGraph.from_events` turns those events into edges.
 
-Instrumented so far: the inline-IF frame opener (`open_tail_if`), the
-direct-flag inline IF, the head-tested loop template, and both SELECT CASE
-headers. That takes the blind fixtures from 103 to 79.
+Instrumented: `open_tail_if`, the direct-flag inline IF, the head-tested loop
+template, both SELECT CASE headers, all six FOR headers, and the two frames
+`_lift_bool_tail`/`_lift_while` open. The lifts take `ifs`/`whiles` as plain
+lists and cannot reach the decode state, so they take an optional `branch`
+recorder alongside the `put`/`flush` callbacks they already had — which is how
+the compound-boolean IF path was found at all.
 
-Reporting that honestly took a second measurement. The first suggested 103 to
-40, because the after-count used a narrower structure predicate than the
-before-count. Re-run with the identical predicate it is 103 to 79 — a real
-improvement, a quarter of the way rather than two thirds.
+Blind fixtures: **103 → 8**. Branch events across the corpus: 80 `if`, 90
+`loop`, 26 `case`.
 
-The remaining 79 are frames that still open without announcing themselves:
-FOR and WHILE headers, and at least one block-IF path — `t1_fnblockif` ends up
-with structure and uses `close_ifs`, yet records neither a committed branch
-nor a branch event.
-`test_some_structure_is_built_from_branches_that_never_commit` pins that
-fixture and fails once the path is found.
+The remaining 8 are SELECT-only programs. A SELECT header's END SELECT is not
+known when the header is recognised — the arms resolve it — so the event
+records `target=None` and contributes a node but no edge. The first version
+recorded the x87 temp displacement there instead, which the `--branches` dump
+exposed immediately as an unresolvable `0x5c`. A guessed target is worse than
+an absent one.
 
-The second half of the separation is still ahead: handlers emit the branch,
-but they also still decide the construct. Moving that decision to the
-control-flow pass is what closes the chapter, and it can now be checked
-against these events rather than against final source.
+Reporting the improvement honestly took three measurements. The first said 103
+to 40, because the after-count used a narrower structure predicate than the
+before-count; re-run with the identical predicate it was 103 to 79, and only
+after the lifts and FOR headers were instrumented did it reach 103 to 8.
+
+### What closes the chapter
+
+Handlers now emit the branch, but they still *decide* the construct — the
+frame kind is in the event because the handler chose it. Moving that decision
+into the control-flow pass is the remaining work, and it can now be checked
+against a complete branch record rather than against final source.
 
 ## Chapter 7 — Remove the migration scaffolding
 
