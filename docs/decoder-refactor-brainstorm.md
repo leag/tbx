@@ -629,20 +629,38 @@ branch was recognised" was unanswerable. `StatementEdit.at_event` now records
 how many events preceded each edit, which makes the interleaving exact and
 takes the prediction to 62 of 62.
 
+### Fold nesting, measured rather than feared
+
+The last unknown was the ordering between nested constructs -- an inline IF
+inside a CASE arm inside a SUB body. `StatementEdit.scope` now records the
+whole pass stack rather than only the innermost, so containment is explicit.
+
+Measured, that ordering is far simpler than it looked. Across the corpus only
+**two** distinct nested fold paths occur, over 20 edits in total:
+
+| nesting | edits |
+| --- | --- |
+| `select_case > close_ifs` | 12 |
+| `finalize > apply_exit_folds` | 8 |
+
+Nothing nests three deep. The reason is structural: slicing a
+`RecordedStatements` returns a plain `list`, and several folds take a slice,
+rebuild it, and splice the result back — `_fold_if(out.stmts[i0:], ...)` is the
+common shape. The log therefore records the net effect of such a fold rather
+than its internal steps, which is the right granularity for reproducing
+behaviour and is why the observed nesting stays shallow.
+
 ### What remains
 
 The swap itself: handlers stop folding as they decode, and a pass over the
-graph folds afterwards from the regions above. That is the change that will
-move statements, so it needs the goldens and the wild-corpus report as its
-gate rather than a green suite alone.
+graph folds afterwards. That is the change that will move statements, so its
+gate is the goldens and the wild-corpus report rather than a green suite.
 
 Everything it depends on is now recorded and verified: a complete branch
-record, an edit log with provenance and a shared clock, a template table that
-reproduces every construct decision, and a region predictor that reproduces
-every inline-IF fold. The remaining risk is in the ordering between constructs
-— an inline IF inside a CASE arm inside a SUB body folds in a particular
-sequence today — and that ordering is the next thing to record before it can
-be reproduced.
+record, an edit log with provenance, a shared clock and explicit nesting, a
+template table that reproduces every construct decision, and a region
+predictor that reproduces every inline-IF fold. The ordering that seemed the
+largest unknown turns out to be two cases.
 
 ## Chapter 7 — Remove the migration scaffolding
 

@@ -13,6 +13,12 @@ diverge, and the decode-time check says so.
 The log is deliberately about *what happened to the list*, not about what it
 means. Interpreting an edit as a fold, a patch, or a reconstruction is the
 control-flow pass's job.
+
+Note that slicing a `RecordedStatements` returns a plain `list`. Several folds
+take a slice, rebuild it, and splice the result back, so the log records the
+net effect of such a fold rather than its internal steps. That is the right
+granularity for reproducing behaviour -- and it is why recorded fold nesting
+is at most two deep.
 """
 
 from __future__ import annotations
@@ -36,6 +42,10 @@ class StatementEdit:
     stop: int | None = None
     payload: tuple[Any, ...] = ()
     origin: str | None = None
+    #: The whole pass stack, outermost first. `origin` is its innermost entry.
+    #: Containment is what a folding pass needs to reproduce the order the
+    #: handlers fold in -- an inline IF inside a CASE arm inside a SUB body.
+    scope: tuple[str, ...] = ()
     #: How many decoded events had been recorded when this edit was made.
     #: Without it the edit log and the event log cannot be interleaved, and
     #: "how long was the list when that branch was recognised" is unanswerable.
@@ -55,6 +65,7 @@ class RecordedStatements(list):
         super().__init__(initial)
         self.edits: list[StatementEdit] = []
         self.origin: str | None = None
+        self.scope: tuple[str, ...] = ()
         #: Supplies the current event count; the default keeps a bare list
         #: usable in unit tests that have no event log.
         self.clock = lambda: 0
@@ -106,7 +117,11 @@ class RecordedStatements(list):
     def _record(self, kind, **detail) -> None:
         self.edits.append(
             StatementEdit(
-                kind, origin=self.origin, at_event=self.clock(), **detail
+                kind,
+                origin=self.origin,
+                scope=self.scope,
+                at_event=self.clock(),
+                **detail,
             )
         )
 
@@ -133,12 +148,13 @@ def editing(statements, origin: str):
     if not isinstance(statements, RecordedStatements):
         yield
         return
-    previous = statements.origin
+    previous_origin, previous_scope = statements.origin, statements.scope
     statements.origin = origin
+    statements.scope = previous_scope + (origin,)
     try:
         yield
     finally:
-        statements.origin = previous
+        statements.origin, statements.scope = previous_origin, previous_scope
 
 
 def replay(edits) -> list:
