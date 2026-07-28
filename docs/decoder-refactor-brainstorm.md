@@ -809,13 +809,52 @@ of closing the gap:
   before the boundary and belongs inside the region. No fixture has this shape,
   and the wild corpus is the only reason it was found.
 
+### The fold now reads the record, and a deferred pass exists
+
+The swap has two halves — *what drives the fold* and *when it runs* — and they
+are worth separating, because only the first can be proven byte-exact.
+
+The first is done. An open inline-IF frame was a dict carrying the target, the
+condition, the start address and the list position the body began at; all four
+are in the log, so the frame is now the `seq` of the branch event that
+recognised it, and `close_ifs` reads the rest back out. The region start is
+derived by replaying the edits stamped up to that event, with the position the
+walk noted kept alongside purely as a cross-check: disagreeing raises, and
+across both corpora it never has. Chapter 7 deletes the check. Sabotaging the
+derivation by one fails three fold tests, so the guard is watched to fire.
+
+The second half is measured but not made. `fold_pass.fold_inline_ifs` folds
+every recorded region from the committed statement stream, in commit
+coordinates, touching no decode state; nothing calls it in the pipeline. It
+reproduces 76 of the fixture corpus's 80 folds and 388 of the wild corpus's 403
+— same conditions, same bodies, same nesting.
+
+Every difference is another walk-time fold rather than a gap in the record:
+
+- **4 in each corpus** fold a body that holds a `SELECT CASE`. The walk had
+  already collapsed that SELECT into one statement before closing the IF around
+  it, and no `SelectCase` is ever committed, so the record offers the deferred
+  pass the arm bodies flat. The region is right; the contents are a fold that
+  has not happened yet.
+- **11, wild only**, sit in a list that `select_case` (7), the procedure-body
+  fold (3) or a loop lift (1) had already spliced. Commit coordinates and list
+  coordinates agree until one of those runs.
+
+Which is "the three folds have to move together", made quantitative and
+localized. The inline-IF fold needs nothing from the walk except that no other
+fold has moved the list under it.
+
 ### What remains
 
-One thing:
+Two things, in order:
 
-1. The swap: `close_ifs`, `_fold_arm` and the procedure-body fold move
-   together, gated on the goldens and the wild-corpus report. The measured
-   account of what breaks when they move separately is its specification.
+1. Give `select_case`'s arm snapshot and the procedure-body fold the same
+   treatment: record what they recognise, and build `SelectCase` and `SubDef`
+   from the record. Neither statement is ever committed today, which is exactly
+   why a deferred pass cannot see inside them.
+2. Then run all three after the walk, gated on the goldens and the wild-corpus
+   report. The measured account of what breaks when they move separately is its
+   specification.
 
 ## Chapter 7 — Remove the migration scaffolding
 

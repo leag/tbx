@@ -9,7 +9,7 @@ Branch `release/0.1.0`. Baseline for "no behavior change" is commit `36aa8a4`.
 ## Verify the current state
 
 ```sh
-uv run pytest                 # 2679 pass
+uv run pytest                 # 2685 pass
 uv run ruff check             # clean
 uv run python -m tbx.tools.scan_wild wild/hits
 ```
@@ -33,7 +33,7 @@ signal that something moved.
 | 3 state ownership | **complete** |
 | 4 recognition/mutation split | substantial, two families outstanding |
 | 5 event stream | **complete**: every statement has an event |
-| 6 control-flow extraction | regions exact, the swap not attempted |
+| 6 control-flow extraction | inline-IF fold record-driven; two folds to go |
 | 7 remove scaffolding | not started |
 
 ## What is proven, with numbers
@@ -114,11 +114,40 @@ programs reconcile clean, up from 549.
 duplicated shape walk or a change to what the operation stream contains. The
 floating-point folds in `core.fp_dispatch` are likewise still mixed.
 
-## The swap, and why it has not been done
+## The swap: half done, and the other half measured
 
-Chapter 6's remaining work is to stop folding during decoding and fold
-afterwards from the graph. It was attempted and **fails**: deferring
-`close_ifs` alone breaks 92 tests in three classes.
+**The fold's inputs now come from the record.** An open inline-IF frame is the
+`seq` of the branch event that recognised it and nothing else — `close_ifs`
+reads the condition, the start address and the target back out of the log, and
+derives the region start by replaying the edits stamped up to that event. The
+frame keeps `idx` only as a cross-check: if the record's answer disagrees with
+the length the walk saw, decoding raises. It never has, across both corpora.
+Chapter 7 deletes the check.
+
+**The deferred pass exists and is measured.** `fold_pass.fold_inline_ifs`
+folds every recorded region from the commit stream, in commit coordinates,
+touching no decode state. Nothing calls it in the pipeline. Against what the
+walk actually did:
+
+| | folds | reproduced |
+| --- | --- | --- |
+| `tests/fixtures/corpus` | 80 | **76** |
+| `wild/hits` | 403 | **388** |
+
+Every difference is another walk-time fold, not a gap in the record: 4 in each
+corpus fold a body holding a `SELECT CASE` the walk had already built (no
+`SelectCase` is ever committed, so the record offers the arm bodies flat), and
+11 wild ones sit in a list `select_case`, the procedure-body fold or a loop lift
+had already spliced. Commit coordinates and list coordinates agree until one of
+those runs.
+
+So the remaining work is exactly: move `select_case`'s arm snapshot and the
+procedure-body fold onto the same footing, then run all three after the walk.
+
+## Why the timing is load-bearing
+
+Deferring `close_ifs` alone was attempted and **fails**: it breaks 92 tests in
+three classes.
 
 - **28 unresolved jump targets.** An inline IF that is the last statement of a
   SUB/DEF FN body skips to the epilogue, which is not a statement and never can
@@ -136,15 +165,18 @@ than to convenience.
 
 ## Next steps, in order
 
-1. **The swap.** Move the three folds together, against a model where a region
-   stays open until its enclosing construct closes it. Starts and extents are
-   both exact and every statement is accounted for, so the pass has its inputs;
-   what is untested is folding from them. Gate on the goldens and the
+1. **Defer the other two folds.** `select_case`'s arm snapshot and the
+   procedure-body fold are what the deferred inline-IF pass trips over, and the
+   19 differences name exactly where. Give each the same treatment the inline IF
+   got: record what it recognises, then build the statement from the record.
+   `SelectCase` and `SubDef` never being committed is the specific thing to fix
+   — until they are, no deferred pass can see inside them.
+2. **Then run all three after the walk.** Gate on the goldens and the
    wild-corpus report, not on a green suite — this is the first change in the
    chapter that will move statements. Expect the epilogue-target and
    address-retention cases to decide whether it works.
-2. **Chapter 4's two families**, independently of the above.
-3. **Chapter 7**, only after the swap lands.
+3. **Chapter 4's two families**, independently of the above.
+4. **Chapter 7**, only after the swap lands.
 
 ## Tools
 
