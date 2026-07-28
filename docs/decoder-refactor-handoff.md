@@ -33,7 +33,7 @@ signal that something moved.
 | 3 state ownership | **complete** |
 | 4 recognition/mutation split | substantial, two families outstanding |
 | 5 event stream | **complete**: every statement has an event |
-| 6 control-flow extraction | folds record-driven; timing tried on `experimental/deferred-fold` |
+| 6 control-flow extraction | folds record-driven; timing moved on `experimental/deferred-fold`, one divergence open |
 | 7 remove scaffolding | not started |
 
 ## What is proven, with numbers
@@ -187,39 +187,60 @@ So the remaining work is what a deferred pass still cannot reconstruct:
   `proc_names`/`proc_params`, keyed by address. The `proc` region says where
   the body is, not what to call it.
 
-## The timing move, attempted: `experimental/deferred-fold`
+## The timing move: `experimental/deferred-fold`
 
-Branch `experimental/deferred-fold`, commit `5d12af7`, off this one. `close_ifs`
+Branch `experimental/deferred-fold`, head `d8b622f`, off this one. `close_ifs`
 queues its region at the arrival instead of folding, and `drain_folds` folds the
-queue when the construct that owns it closes — the arm snapshot, the procedure
+queue when the construct that owns it closes -- the arm snapshot, the procedure
 return, the end of the walk.
 
-**It does not land: 21 tests fail.** Seven are the shadow-pass tests reading
-`close_ifs`'s old edit shape, not regressions. The real damage is four fixtures
-(`t1_nestif2`, `t1_blkgoto`, `t1_iftailarm`, `t1_selarmblockif`, both dialects),
-the IR snapshot, and `ziptest`. Two mechanisms:
+**It very nearly lands.** All 1030 corpus goldens and the IR snapshot are
+byte-identical under deferred folding, the wild scan decodes the same 32
+programs release does, and 2697 of 2699 tests pass. What the attempt cost was
+four entanglements, all of the same shape: a later recognizer asking a question
+about the statement list that the eager fold used to have already answered.
 
-- **`_lift_while` discriminates on the folded list.** Its tail-test leg tests
-  `exit_jmp[2] in addrs`, and an unfolded inline-IF body leaves its statements'
-  addresses there, so a plain body skip reads as a tail-test `DO...LOOP` — the
-  spurious `DO` in `t1_nestif2` and `t1_blkgoto`, and very likely the
-  "unhandled jmp short" in `horses.exe` and `ziptest.exe`. **This is the first
-  thing to move off the folded list.**
-- **An IF closing a CASE arm is still not folded before the snapshot.** The
-  drain at the arm does not catch it: `t1_iftailarm` loses its IF entirely and
-  `tbd73.exe` fails on `jump target 0xd367` — TBW73.INC:716, the exact wild
-  behaviour `_fold_arm`'s eager `close_ifs` was calibrated against.
+- **Three `jmps` discriminators, and `_lift_while`'s tail test, mean the folded
+  list.** "Is this backward jmp's target a statement start?" is true for
+  addresses a queued region is about to absorb, and false for the address the
+  region's `IfInline` will stand at. `DecodeState.statement_index` composes the
+  answer -- what is there now, minus `folded_away`, plus `fold_products` -- and
+  returns the position, which the infinite-DO leg needs. Wild `ziptest.exe` at
+  `0xa4bb` and `horses.exe` at `0x848a` are the witnesses.
+- **A `DO` spliced ahead of a loop body moves every queued region after it.**
+  Four sites do it; `shift_pending` is the bookkeeping, passed to the lifts as
+  a `shift` callback. Wild `horses.exe` again: its region drifted two
+  statements early and the IF swallowed the `INPUT` pair in front of it.
+- **`_fold_arm` needs both halves.** `state.close_ifs(merge)` is what *queues*
+  the frame -- the dispatch loop never reaches the arm-close address, because
+  `select_case.step` consumes the op first -- and the drain is what folds it.
+  Replacing the close with the drain folds nothing, and `t1_iftailarm` loses
+  its IF.
 
-**The wild scan moves in both directions**, which is the result worth keeping:
-28 decode-ok becomes 27, but not by losing three. It loses `horses.exe`,
-`tbd73.exe` and `ziptest.exe` and **gains `state.exe` and `state87.exe`**, which
-have failed on `jump target 0xe179 is not a statement start` for this entire
-migration. Deferring keeps a jump target inside an inline-IF body visible, so
-that failure class is one the eager fold *causes*, not one it avoids.
+**What is left is one divergence and two tests.**
 
-So the answer to "can the folds move" is no longer "no, 92 tests". It is: two
-named entanglements, one of which is a three-line discriminator, and a decoding
-gain waiting on the other side.
+Four wild programs -- `invoice.exe`, `inv87.exe`, `state.exe`, `state87.exe` --
+decode to a different shape. The regions themselves are *not* the problem: all
+99 inline-IF regions in `invoice.exe` agree across the two branches on IF
+address, body start address and statement count at close. Three of them
+nevertheless splice a longer body. The reproduction is the IF at `0xd316`
+closing at `0xd49a`: the same branch event (`seq=785`) on both branches, but
+release opens the frame at list index 620 and folds 8 statements, while
+deferral opens at 707 and folds 11. The three extra are a `Goto` and two
+`IfInline`s -- statements release had already folded *before* the frame opened,
+and deferral has not folded yet when it closes. Two more show the same pattern
+(`0xfc2b`: 130 against 215; `0x157c7`: 30 against 46).
+
+That is the last thing the record does not carry: not where a region is, but
+which of the statements inside it are themselves regions that have not run yet.
+
+`test_fold_prediction.py`'s two corpus guards fail, and the failure is a changed
+premise rather than a defect. Both read the actual region off the *applied*
+splice, whose `index` and `stop` are the coordinates the fold landed at. Under
+eager folding those are the region's own coordinates; under deferral everything
+folded in between has already moved them. The prediction still locates every
+region -- that was measured directly, 99 of 99 -- so what the tests need is an
+actual expressed in close coordinates, which nothing currently records.
 
 ## Why the eager timing was load-bearing
 
@@ -242,60 +263,20 @@ than to convenience.
 
 ## Next steps, in order
 
-1. **Move `_lift_while`'s tail-test discriminator off the folded list.** It
-   tests `exit_jmp[2] in addrs`, which is only true because the fold has
-   already removed the body's addresses. The record has what it needs — the
-   branch event for the skip, and the arrival that closed it — so this is a
-   question the log can answer without the list. It is the single change
-   blocking most of `experimental/deferred-fold`.
-2. **Then re-run that branch.** Expect the arm-close case (`t1_iftailarm`,
-   `tbd73.exe` at `0xd367`) to be what remains, and check whether `state.exe`
-   and `state87.exe` still decode — a jump target inside an inline-IF body is
-   a failure class the eager fold creates.
+1. **Find why a deferred region folds statements release had already folded.**
+   The reproduction is in the section above: wild `invoice.exe`, the IF at
+   `0xd316`, 8 statements against 11. Three regions in that program, two in
+   `state.exe`. Everything else about the timing move is done, and this is the
+   only thing between it and a clean swap.
+2. **Give the two prediction guards an actual in close coordinates.** They
+   compare against the applied splice, which deferral shifts. Recording the
+   region the walk computed -- `frame_start` and the list length at the
+   arrival -- is what they need, and it is a fact the deferred design has to
+   keep anyway.
 3. **Record the loop lifts' regions**, the way the inline IF, the CASE arm and
-   the procedure body were recorded, and fold them in `fold_pass` — they are
+   the procedure body were recorded, and fold them in `fold_pass` -- they are
    the only walk-time fold family left, and the three wild SELECT misses are
    waiting on them. Then `SubDef`, which additionally needs the procedure's
    name and parameters recorded.
-2. **Then run all three after the walk.** Gate on the goldens and the
-   wild-corpus report, not on a green suite — this is the first change in the
-   chapter that will move statements. Expect the epilogue-target and
-   address-retention cases to decide whether it works.
 4. **Chapter 4's two families**, independently of the above.
 5. **Chapter 7**, only after the swap lands.
-
-## Tools
-
-```sh
-python -m tbx.tools.dump_events PROGRAM.EXE              # commit-time events
-python -m tbx.tools.dump_events --branches PROGRAM.EXE   # each branch's fate
-python -m tbx.tools.dump_events --edits PROGRAM.EXE      # which pass made each edit
-python -m tbx.tools.dump_events --folds PROGRAM.EXE      # region predicted vs folded
-python -m tbx.tools.dump_events --reconcile wild/hits/*.exe
-```
-
-## Working notes
-
-Two habits earned their keep repeatedly and are worth keeping.
-
-**Watch the guard fail.** The losslessness gate was silently absent on its
-first wiring — a string anchor had not matched — and 2609 passing tests said
-nothing. Sabotaging `replay` to drop a statement proved it fired. The
-attribution test passed on two hand-picked fixtures while the corpus still had
-165 unattributed edits across eleven sites.
-
-**Measure before and after with the same predicate.** The branch-visibility
-improvement was first computed as 103 → 40 by comparing a narrower structure
-predicate after the change against a wider one before it. With the identical
-predicate it was 103 → 79, and only after further instrumentation 103 → 8.
-
-**Run a new predicate over the wild corpus too.** Fold extents reached 62/62 on
-the fixtures and 17/18 on the wild programs. The one miss was not noise: it was
-a fold whose whole body is a pending trailing-`;` PRINT, a shape no fixture has,
-and it named the flush timing the model actually needs.
-
-Several test premises in this work were wrong in ways the failure explained:
-`reconcile` matching by identity when folding rebuilds objects, DATA assumed to
-commit unaddressed when it does not commit at all, and a SELECT branch target
-that was actually an x87 temp displacement. The failing test was worth more
-than the passing one would have been each time.
