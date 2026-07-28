@@ -5,7 +5,8 @@ import struct
 from typing import Any
 
 from tbx.decode0.const import _TOGGLE_BITS, _TOGGLE_NAMES
-from tbx.decode0.events import DecodedEvent
+from tbx.decode0.events import DecodedEvent, EventReconciliation
+from tbx.decode0.statement_log import StatementEdit
 from tbx.decode0.control_graph import ControlGraph
 
 
@@ -34,6 +35,8 @@ class Program(list[Any]):
     # TRON: {stmt index -> traced physical-line count} for a mid-block TROFF
     trace_partial: dict[int, int]
     events: tuple[DecodedEvent, ...] = ()
+    event_reconciliation: EventReconciliation | None = None
+    statement_edits: tuple[StatementEdit, ...] = ()
     control_graph: ControlGraph | None = None
 
 

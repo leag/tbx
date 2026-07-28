@@ -52,7 +52,8 @@ from tbx.decode0.matchers import (
 )
 from tbx.decode0.rename import _slot, _str_lit, canonical_rename
 from tbx.decode0.cursor import DecodeDiagnostics, OpCursor
-from tbx.decode0.events import replay_events, statement_events
+from tbx.decode0.events import DecodedEvent, EventLog, reconcile
+from tbx.decode0.statement_log import RecordedStatements, editing, replay
 from tbx.decode0.control_graph import ControlGraph
 from tbx.decode0.state_parts import (
     STATE_VIEWS,
@@ -120,6 +121,7 @@ class DecodeState:
     cint_round: Any = None
     color_cells: Any = None
     commits: Any = None
+    event_log: Any = None
     cur: Any = None
     cx: Any = None
     desc_disps: Any = None
@@ -396,21 +398,22 @@ class DecodeState:
         otherwise be folded away with the IF's body still open (wild tbd73.exe,
         TBW73.INC:716).
         """
-        while self.ifs and addr == self.ifs[-1]["target"]:
-            fr = self.ifs.pop()
-            self.flush_pending()
-            body = tuple(self.stmts[fr["idx"] :])
-            if not body:
-                raise ValueError(f"empty inline-IF body at {addr:#x}")
-            for st, ad in zip(body, self.addrs[fr["idx"] :]):
-                if ad is not None:  # retain leaf/body addrs before they drop
-                    self.stmt_addr[id(st)] = ad  # (the fold discards addrs[fr.idx:])
-            body = _fold_body_ifgotos(body, fr["target"], self.stmt_addr)  # AFTER the
-            # addr retention: the fold nests the tail statements, and their (and
-            # the consumed IfGoto's) addrs must stay visible to the line table
-            del self.stmts[fr["idx"] :], self.addrs[fr["idx"] :]
-            self.stmts.append(ir.IfInline(fr["cond"], body))
-            self.addrs.append(fr["start"])
+        with editing(self.stmts, "close_ifs"):
+            while self.ifs and addr == self.ifs[-1]["target"]:
+                fr = self.ifs.pop()
+                self.flush_pending()
+                body = tuple(self.stmts[fr["idx"] :])
+                if not body:
+                    raise ValueError(f"empty inline-IF body at {addr:#x}")
+                for st, ad in zip(body, self.addrs[fr["idx"] :]):
+                    if ad is not None:  # retain leaf/body addrs before they drop
+                        self.stmt_addr[id(st)] = ad  # (the fold discards addrs[fr.idx:])
+                body = _fold_body_ifgotos(body, fr["target"], self.stmt_addr)  # AFTER the
+                # addr retention: the fold nests the tail statements, and their (and
+                # the consumed IfGoto's) addrs must stay visible to the line table
+                del self.stmts[fr["idx"] :], self.addrs[fr["idx"] :]
+                self.stmts.append(ir.IfInline(fr["cond"], body))
+                self.addrs.append(fr["start"])
 
     def open_tail_if(self, target, cond) -> bool:
         """If `target` is the open procedure's own epilogue, open an inline-IF
@@ -494,61 +497,62 @@ class DecodeState:
         INPUT# target chains end the same way: the last store has no
         terminator, so they too finalize on the next completed statement (with a
         forced flush at any [0060] store so adjacent statements never merge)."""
-        if self.pend_dataread is not None:
-            pr, self.pend_dataread = self.pend_dataread, None
-            if not pr["targets"]:
-                raise ValueError("READ chain closed without any stored target")
-            self.stmts.append(ir.Read(tuple(pr["targets"])))
-            self.addrs.append(pr["start"])
-        if self.pend_filein is not None:
-            pf, self.pend_filein = self.pend_filein, None
-            if not pf["targets"]:
-                raise ValueError("INPUT# chain closed without any stored target")
-            self.stmts.append(ir.InputFile(pf["num"], tuple(pf["targets"])))
-            self.addrs.append(pf["start"])
-            self.pend_fnum = None
-        if self.pend_field is not None:
-            pfd, self.pend_field = self.pend_field, None
-            if not pfd["fields"]:
-                raise ValueError("FIELD chain closed without any AS-entry")
-            self.stmts.append(ir.Field(pfd["fnum"], tuple(pfd["fields"])))
-            self.addrs.append(pfd["start"])
-        if self.pend_print is not None:
-            pp, self.pend_print = self.pend_print, None
-            if pp.get("mode") == "write":  # WRITE / WRITE# has no trailing-';' form:
-                self.stmts.append(ir.Write(tuple(pp["items"]), file=pp["file"]))
-            elif pp.get("mode") == "lprint":  # trailing-';' LPRINT: closed by
-                # the next completed statement, like console PRINT (witnessed
-                # t1_lpusing -- an LPRINT USING follows with no B9 between)
+        with editing(self.stmts, "flush_pending"):
+            if self.pend_dataread is not None:
+                pr, self.pend_dataread = self.pend_dataread, None
+                if not pr["targets"]:
+                    raise ValueError("READ chain closed without any stored target")
+                self.stmts.append(ir.Read(tuple(pr["targets"])))
+                self.addrs.append(pr["start"])
+            if self.pend_filein is not None:
+                pf, self.pend_filein = self.pend_filein, None
+                if not pf["targets"]:
+                    raise ValueError("INPUT# chain closed without any stored target")
+                self.stmts.append(ir.InputFile(pf["num"], tuple(pf["targets"])))
+                self.addrs.append(pf["start"])
+                self.pend_fnum = None
+            if self.pend_field is not None:
+                pfd, self.pend_field = self.pend_field, None
+                if not pfd["fields"]:
+                    raise ValueError("FIELD chain closed without any AS-entry")
+                self.stmts.append(ir.Field(pfd["fnum"], tuple(pfd["fields"])))
+                self.addrs.append(pfd["start"])
+            if self.pend_print is not None:
+                pp, self.pend_print = self.pend_print, None
+                if pp.get("mode") == "write":  # WRITE / WRITE# has no trailing-';' form:
+                    self.stmts.append(ir.Write(tuple(pp["items"]), file=pp["file"]))
+                elif pp.get("mode") == "lprint":  # trailing-';' LPRINT: closed by
+                    # the next completed statement, like console PRINT (witnessed
+                    # t1_lpusing -- an LPRINT USING follows with no B9 between)
+                    self.stmts.append(
+                        ir.Lprint(
+                            tuple(pp["items"]),
+                            newline=False,
+                            commas=_pp_commas(pp),
+                        )
+                    )
+                else:
+                    self.stmts.append(
+                        ir.Print(
+                            tuple(pp["items"]),
+                            newline=False,
+                            file=pp["file"],
+                            commas=_pp_commas(pp),
+                        )
+                    )
+                self.addrs.append(pp["start"])
+            if self.pend_using is not None:
+                pu, self.pend_using = self.pend_using, None
                 self.stmts.append(
-                    ir.Lprint(
-                        tuple(pp["items"]),
+                    ir.PrintUsing(
+                        pu["fmt"],
+                        tuple(pu["values"]),
+                        file=pu["file"],
                         newline=False,
-                        commas=_pp_commas(pp),
+                        lprint=pu.get("lprint", False),
                     )
                 )
-            else:
-                self.stmts.append(
-                    ir.Print(
-                        tuple(pp["items"]),
-                        newline=False,
-                        file=pp["file"],
-                        commas=_pp_commas(pp),
-                    )
-                )
-            self.addrs.append(pp["start"])
-        if self.pend_using is not None:
-            pu, self.pend_using = self.pend_using, None
-            self.stmts.append(
-                ir.PrintUsing(
-                    pu["fmt"],
-                    tuple(pu["values"]),
-                    file=pu["file"],
-                    newline=False,
-                    lprint=pu.get("lprint", False),
-                )
-            )
-            self.addrs.append(pu["start"])
+                self.addrs.append(pu["start"])
 
     def put(self, stmt, addr):
         self.flush_pending()
@@ -556,6 +560,18 @@ class DecodeState:
         assert output is not None
         output.stmts.append(stmt)
         output.addrs.append(addr)
+        # Record what was decided, with the address still unresolved. Folding
+        # rewrites `stmts` in place afterwards; the log is the only account of
+        # what the decoder actually committed.
+        if output.event_log is None:
+            output.event_log = EventLog()
+        output.event_log.commit(stmt, addr)
+
+    @property
+    def events(self) -> tuple[DecodedEvent, ...]:
+        """The commit-time event log, in emission order."""
+        log = self.output.event_log if self.output is not None else None
+        return () if log is None else log.frozen()
 
     def _fread_target(self, ref: object) -> None:  # open INPUT# target chain
         assert self.pend_filein is not None
@@ -670,7 +686,8 @@ def _drop_local_descriptor_initializers(state, frame, span, addr) -> None:
             and isinstance(stmt.value, ir.Lit)
         ):
             raise ValueError(f"used LOCAL array descriptor cells at {addr:#x}")
-    o.stmts[:] = [stmt for stmt, _ in kept]
+    with editing(o.stmts, "drop_local_descriptor_initializers"):
+        o.stmts[:] = [stmt for stmt, _ in kept]
     o.addrs[:] = [stmt_addr for _, stmt_addr in kept]
 
 
@@ -1258,574 +1275,597 @@ def _propagate_call_types(stmts, stmt_addr=None):
 def _finalize(state: DecodeState, addr) -> Program:
     """Program epilogue: static-DIM re-emit, control-flow folds, target
     resolution and canonical rename -> the finished Program."""
-    img, lyt, c, out = (state.image, state.layout_state,
-                        state.control, state.output)
-    out.stmts[:] = _resolve_calls(
-        out.stmts,
-        c.proc_names,
-        c.proc_params,
-        c.inline_procs,
-        c.proc_int_offs,
-        c.proc_long_offs,
-        c.proc_dbl_offs,
-        c.proc_str_offs,
-        out.stmt_addr,
-    )
-    # Error-trap line table, probed early -- before DATA/dims/COMMON/TRON
-    # synthesis below mutates out.addrs -- so a codeless DATA statement
-    # with no READ/RESTORE anywhere to trigger its recovery (wild
-    # vhfprop.exe) can still be found from its ORPHAN table entry (see
-    # `_line_table`'s docstring). out.stmt_addr is already fully
-    # populated by this point (decode_user_code's dispatch loop, which
-    # calls `_finalize` only once it's done). Gated the same as the final
-    # lookup below: only probe when the ops show error-trap evidence, else
-    # this linear EXE scan risks a spurious match in an unrelated program.
-    data_orphan_lines: list[tuple[int, int]] = []
-    orphan_offs: set[int] = set()  # every orphaned offset, independent of DATA/DIM
-    do_lines: list[int] = []  # genuine (kept) synthesized DOs' own lines, in order
-    table_active = False
-    if any(
-        o[1] in ("resume_pre", "on_error", "error_stmt")
-        or (o[1] == "movax_m" and o[2] in (0x72, 0x74))
-        for o in img.ops
-    ):
-        _early = _line_table(
-            img.exe,
-            img.start,
-            out.addrs,
-            addr,
-            extra_offs={a + 4 - img.start for a in out.trace_tbl}
-            | {a - img.start for a in out.stmt_addr.values() if a is not None},
+    with editing(state.output.stmts, "finalize"):
+        img, lyt, c, out = (state.image, state.layout_state,
+                            state.control, state.output)
+        out.stmts[:] = _resolve_calls(
+            out.stmts,
+            c.proc_names,
+            c.proc_params,
+            c.inline_procs,
+            c.proc_int_offs,
+            c.proc_long_offs,
+            c.proc_dbl_offs,
+            c.proc_str_offs,
+            out.stmt_addr,
         )
-        if _early is not None:
-            table_active = True
-            data_orphan_lines = _early[1]
-            orphan_offs = {o for o, _ in _early[1]}
-
-    # A bare backward jmps with no head-test frame is ALWAYS canonicalized
-    # to synthesized `DO ... LOOP` -- as a bare infinite `DO...LOOP` (core.py's
-    # dispatch loop, "bare backward jmps = infinite DO") or, via
-    # `_lift_do_tail`, as `DO...LOOP WHILE/UNTIL cond` -- since an explicit
-    # DO and a plain `<n> ... GOTO <n>` / `<n> ... IF cond THEN GOTO <n>`
-    # compile to byte-identical code and the decoder can't otherwise tell
-    # which the source used. But DO, like DATA/DIM, gets its OWN codeless
-    # line-table entry (probes q_do2/q_goto2/q_lt7: identical code either
-    # way, but only the DO form leaves an orphan entry sharing the loop
-    # body's offset) -- so once a table is active and shows NO orphan
-    # there, the DO spelling would recompile with an extra entry the
-    # original never had. wild vhfprop.exe: two such loops (one bare, one
-    # WHILE-tail-test), neither with orphan evidence -- both are plain
-    # GOTO/IfGoto loops. Un-synthesize them: drop the Do, retarget the
-    # paired Loop as a Goto (bare) or IfGoto (WHILE, same polarity as the
-    # tail test -- "continue if cond true" is exactly `IF cond THEN GOTO`;
-    # UNTIL would need De Morgan negation of a possibly-compound LogOp,
-    # unwitnessed, so it is left to raise below rather than guessed), all
-    # matched by nesting order (DO/LOOP pairs cannot cross in a
-    # well-formed program, so a stack pairs them correctly same as the
-    # loop's own runtime `c.dos` nesting would).
-    if table_active:
-        # Every Do (bare or head-test) is pushed, so a head-test DO's own
-        # closing (bare) Loop pops ITS Do and not some enclosing bare one --
-        # only a BARE Do's pairing is recorded for possible conversion.
-        do_stack: list[tuple[int, bool]] = []
-        do_to_loop: dict[int, int] = {}
-        for i, s in enumerate(out.stmts):
-            if isinstance(s, ir.Do):
-                do_stack.append((i, s.kind is None and s.cond is None))
-            elif isinstance(s, ir.Loop) and do_stack:
-                do_idx, is_bare = do_stack.pop()
-                if is_bare:
-                    do_to_loop[do_idx] = i
-        off_to_line = dict(data_orphan_lines)
-        drop: set[int] = set()
-        claimed_offs: set[int] = set()  # genuine DO's own orphan entry
-        do_idx_lines: dict[int, int] = {}  # do_idx -> its line, genuine DOs only
-        for do_idx, loop_idx in do_to_loop.items():
-            if out.addrs[do_idx] is not None:
-                continue  # a real (non-synthesized) Do -- untouched
-            host = out.addrs[do_idx + 1]
-            if host is None:
-                continue
-            host_off = host - img.start
-            if host_off in orphan_offs:
-                claimed_offs.add(host_off)  # a genuine DO -- not DATA/DIM's to see
-                do_idx_lines[do_idx] = off_to_line[host_off]
-                continue
-            loop_s = out.stmts[loop_idx]
-            assert isinstance(loop_s, ir.Loop)
-            if loop_s.kind == "UNTIL":
-                # A LOOP UNTIL conversion needs De Morgan negation of a
-                # possibly-compound LogOp. No fixture witnesses that source
-                # shape, so fail loud rather than guess its canonical form.
-                raise ValueError(
-                    "codeless DO...LOOP UNTIL (no orphan evidence) has no "
-                    "witnessed non-DO source construct to un-synthesize to"
-                )
-            if loop_s.kind == "WHILE":
-                # `IF cond THEN <body-line>` compiles to exactly the same
-                # materialize-and-back-jcc shape as `LOOP WHILE cond`, but
-                # has no codeless DO line-table entry (t1_iftailerr; wild
-                # vhfprop.exe). The condition polarity is already identical.
-                out.stmts[loop_idx] = ir.IfGoto(loop_s.cond, ("addr", host))
-                drop.add(do_idx)
-                continue
-            out.stmts[loop_idx] = ir.Goto(("addr", host))
-            drop.add(do_idx)
-        if drop:
-            keep = [i for i in range(len(out.stmts)) if i not in drop]
-            out.stmts[:] = [out.stmts[i] for i in keep]
-            out.addrs[:] = [out.addrs[i] for i in keep]
-        if claimed_offs:
-            data_orphan_lines = [
-                (o, ln) for o, ln in data_orphan_lines if o not in claimed_offs
-            ]
-        # Surviving genuine DOs' lines, in the order they'll be walked at
-        # the final prog.lines construction below (ascending do_idx, minus
-        # whatever `drop` removed ahead of them -- but drop only removes
-        # OTHER do_idx entries, never shifts a kept one out of relative
-        # order, so a plain sort by original do_idx matches final order).
-        do_lines = [do_idx_lines[i] for i in sorted(do_idx_lines)]
-
-    shared_subs, sub_local_arrays = _scope_procs(state)
-    ob = lyt.option_base if lyt.option_base is not None else 0
-    dims, local_dims, cur_ob = [], {}, 0  # BASIC default at program top
-    for a in reversed(lyt.arrs):
-        if ob == 1 and set(a["lo"]) == {0} and a.get("varacc") and not a.get("subful"):
-            # lo=0 record with SUB-FREE variable access in an OB1 program:
-            # only the OB0-PLAIN form compiles that shape --
-            # explicit `0:hi` is record-identical but sub-ful (t1_mix3).
-            # OPTION BASE may be re-issued mid-block (witness t1_ob3).
-            want, bounds = 0, tuple(a["hi"])
-        else:
-            want = ob if ob == 1 else cur_ob
-            bounds = tuple(
-                h if lo == ob else (lo, h) for lo, h in zip(a["lo"], a["hi"])
-            )
-        if a["name"] in sub_local_arrays:
-            # A SUB-local static array: its DIM belongs inside that body, and
-            # allocation order is preserved by emit0 keeping each SUB at its
-            # ORIGINAL position rather than hoisting it, so the recovered DIM
-            # lands on the same side of the main DIMs it started on. Static
-            # array data allocates DESCENDING in DIM order (first DIM = highest
-            # base; `lyt.arrs` is ascending by base, hence the reversed walk),
-            # and BOTH directions are now witnessed byte-exact:
-            #
-            #   t1_subad        SUB emitted FIRST  -> its array has the HIGHEST
-            #                                        base (0x1e0 vs main 0x1b0)
-            #   t1_sublocafter  SUB emitted AFTER  -> its array has the LOWEST
-            #                                        base (0x1f0 vs main 0x2c0,
-            #                                        0x2f0); wild tbd73.exe's
-            #                                        `SUB Showfile` is this
-            #                                        shape, and prtguide.exe too
-            #
-            # A guard used to sit here rejecting the second case (`if dims:
-            # raise`, reached in a descending walk exactly when the SUB-local
-            # array is the lowest-based one). It was a conservative guess -- its
-            # own message said "no witness" -- and it was backwards. Replacing
-            # it with the opposite inequality is equally wrong: that rejects
-            # t1_subad, which has always round-tripped byte-exact. There is no
-            # single direction to assert, because the answer depends on where
-            # the SUB sits, which emit0 already reproduces; so nothing is
-            # asserted here beyond the OPTION BASE invariant below.
-            if want != cur_ob:
-                raise ValueError(
-                    "OPTION BASE change around a SUB-local array (no witness)"
-                )
-            local_dims.setdefault(sub_local_arrays[a["name"]], []).append(
-                ir.Dim(a["name"], bounds)
-            )
-            continue
-        if want != cur_ob:
-            dims.append(ir.OptionBase(want))
-            cur_ob = want
-        dims.append(ir.Dim(a["name"], bounds))
-    if lyt.option_base == 1 and cur_ob != 1:  # runtime DIMs witness OB1
-        dims.append(ir.OptionBase(1))  # (lo-store order)
-    # Rebuild SUB bodies: SHARED declaration first, then local static DIMs,
-    # then the decoded body (canonical order; verified byte-exact against the
-    # t1_subsh/t1_subarr/t1_subad witnesses).
-    for i, s in enumerate(out.stmts):
-        if not isinstance(s, ir.SubDef):
-            continue
-        prefix = []
-        if i in shared_subs:
-            shared = shared_subs[i]
-            # Turbo Basic accepts only ten SHARED names in one source
-            # statement.  Keep the groups as actual body statements, rather
-            # than splitting them in emit0 after BodyLine targets have already
-            # been assigned: tbd73's Initmenus has forty names and branches
-            # immediately after the declarations.
-            prefix.extend(
-                ir.Shared(tuple(shared.names[j : j + 10]))
-                for j in range(0, len(shared.names), 10)
-            )
-        prefix.extend(local_dims.get(i, ()))
-        if prefix:
-            out.stmts[i] = ir.SubDef(s.name, s.params, tuple(prefix) + s.body)
-    ins = 0  # static DIMs follow any proc definitions
-    while ins < len(out.stmts) and isinstance(
-        out.stmts[ins], (ir.SubDef, ir.DefFn)
-    ):
-        ins += 1
-    dim_lines: list[int] | None = None
-    if dims and data_orphan_lines and len(dims) == len(data_orphan_lines):
-        # Static array DIM declarations are codeless too (recovered from
-        # array bookkeeping records, not a scanned op) and normally
-        # repositioned to this canonical spot -- but when the error-trap
-        # line table shows exactly len(dims) orphan (codeless-statement)
-        # entries in ONE cluster, that's independent evidence these DIMs
-        # actually compiled INLINE at their original position (wild
-        # vhfprop.exe: two static arrays, two orphan "500" entries; probe
-        # q_lt6). Reposition + reline them there instead. A count
-        # coincidence with an UNRELATED codeless construct (e.g. DATA) is
-        # possible in theory but unwitnessed; the single-cluster check
-        # below keeps this narrow.
-        offs = {o for o, _ in data_orphan_lines}
-        if len(offs) == 1:
-            ins = out.addrs.index(img.start + next(iter(offs)))
-            dim_lines = [ln for _, ln in data_orphan_lines]
-            data_orphan_lines = []  # consumed -- DATA recovery below won't fire
-    out.stmts[ins:ins] = dims
-    out.addrs[ins:ins] = [None] * len(dims)
-    if dims:
-        # `$SEGMENT` positions are recorded while scanning executable code;
-        # recovered static DIMs are codeless and inserted afterwards.  Rebase
-        # every following meta index so the directive remains before the same
-        # scanned statement (tbd73's four leading DIMs).
-        out.seg_metas = [
-            i + len(dims) if i >= ins else i for i in out.seg_metas
-        ]
-    # DATA is codeless: re-emit as a block at the very top. Recover the pool
-    # when the program consumes it (a READ/RESTORE) so a string-literal pool
-    # frame is never misread as DATA -- OR when the error-trap line table
-    # itself shows a codeless-statement (ORPHAN) entry, independent evidence
-    # a DATA statement compiled here even with no READ/RESTORE anywhere in
-    # the program to trigger recovery otherwise (wild vhfprop.exe; probes
-    # q_lt1/q_lt3 witnessed DATA's own orphan entry directly). Split into
-    # DATA stmts at item 0 and at every RESTORE <line> target item index, so
-    # the target maps to a real stmt.
-    data_lines: list[int] | None = None  # one line per data_block entry, if known
-    deftype_lines: list[int] = []  # one line per inserted DefType, in insertion order
-    deftype_places: list[tuple[int, int]] = []
-    data_places: list[tuple[int, int]] = []  # (borrowed offset, line) per DATA stmt
-    if any(isinstance(s, (ir.Read, ir.Restore)) for s in out.stmts) or data_orphan_lines:
-        items = lyt.data_items or _read_data_pool(img.exe)
-        if not items and data_orphan_lines:
-            # No DATA pool at all, yet orphan evidence remains: a DEFINT/
-            # DEFSTR/DEFSNG/DEFDBL default-type declaration.
-            # Confirmed via the oracle: DEFINT A-Z and DEFSTR S compile
-            # byte-IDENTICAL programs once every variable is explicitly
-            # suffixed (which tbx's own emitted source always is), so the
-            # original keyword/letter-range is unrecoverable but also
-            # inconsequential -- `ir.DefType` always renders as a fixed
-            # canonical `DEFSNG A-Z`. Each orphan is independent (unlike
-            # DATA's single-cluster item-split, a DEFxxx statement carries
-            # no payload to split), so insert one placeholder per orphan at
-            # its own borrowed offset, in table order.
-            for off, ln in data_orphan_lines:
-                j = out.addrs.index(img.start + off)
-                out.stmts.insert(j, ir.DefType())
-                out.addrs.insert(j, None)
-                deftype_lines.append(ln)
-            data_orphan_lines = []
-        elif items:
-            if data_orphan_lines:
-                # A codeless DATA statement has no READ to anchor a split
-                # point via RESTORE targets. `data_orphan_lines` (one entry
-                # per original DATA statement, in source order) tells us
-                # exactly how many statements to split into and each one's
-                # line -- but not the ITEM boundary between them, since the
-                # pool encodes items, not statement boundaries. Probe q_lt4
-                # confirmed the boundary is irrelevant to compiled bytes
-                # (`DATA 1: DATA 2,3,4` == `DATA 1,2: DATA 3,4` byte for
-                # byte): only the STATEMENT COUNT and each one's LINE are
-                # byte-significant. So give every statement but the last
-                # exactly one item; the last absorbs the remainder.
-                if any(
-                    isinstance(s, ir.Restore) and isinstance(s.target, int)
-                    for s in out.stmts
-                ):
-                    raise ValueError(
-                        "codeless DATA statement alongside a RESTORE split "
-                        "is unsupported (no witness)"
-                    )
-                # Every DATA statement needs at least one item. Any excess
-                # orphan entries are another payload-free codeless construct;
-                # canonicalize those to DefType. This also handles multiple
-                # DATA clusters (wild metric.exe) because each recovered DATA
-                # is inserted at its own borrowed offset below.
-                n = min(len(items), len(data_orphan_lines))
-                data_places = data_orphan_lines[:n]
-                deftype_places = data_orphan_lines[n:]
-                splits = set(range(n))
-                data_lines = [ln for _, ln in data_places]
-            else:
-                splits = {0} | {
-                    s.target
-                    for s in out.stmts
-                    if isinstance(s, ir.Restore) and isinstance(s.target, int)
-                }
-            data_block, item_to_stmt, pending = [], {}, []
-            for i, it in enumerate(items):
-                if i in splits:
-                    if pending:
-                        data_block.append(ir.Data(tuple(pending)))
-                        pending = []
-                    item_to_stmt[i] = len(data_block)  # this item opens block[len]
-                pending.append(it)
-            if pending:
-                data_block.append(ir.Data(tuple(pending)))
-            if data_lines is not None:
-                # DATA compiles in TEXTUAL/compile order, not pool order
-                # (probe q_lt3: prepending unconditionally byte-diffs the
-                # line table once the DATA statements' own lines are
-                # byte-significant) -- insert immediately before whatever
-                # statement shares each entry's borrowed offset, matching
-                # where the compiler actually placed multiple clusters.
-                for s, (off, _) in zip(data_block, data_places):
-                    j = out.addrs.index(img.start + off)
-                    out.stmts.insert(j, s)
-                    out.addrs.insert(j, None)
-            else:
-                out.stmts[0:0] = data_block  # prepend: block pos = final index
-                out.addrs[0:0] = [None] * len(data_block)
-            # Insert payload-free codeless declarations after DATA placement;
-            # when both borrow the same host offset this preserves table order.
-            for off, ln in deftype_places:
-                j = out.addrs.index(img.start + off)
-                out.stmts.insert(j, ir.DefType())
-                out.addrs.insert(j, None)
-                deftype_lines.append(ln)
-            out.stmts[:] = [
-                (
-                    ir.Restore(item_to_stmt[s.target])
-                    if isinstance(s, ir.Restore) and isinstance(s.target, int)
-                    else s
-                )
-                for s in out.stmts
-            ]
-    # EXIT FOR/LOOP folds (Task 3.1): rewrite the early-exit GOTO to the loop
-    # exit, then fold `IF c THEN <skip>` + EXIT into `IF negate(c) THEN EXIT`.
-    _apply_exit_folds(out.stmts, out.addrs, c.exit_folds)
-    out.stmts[:], out.addrs[:] = _fold_if(
-        out.stmts,
-        out.addrs,
-        targets=_jump_targets(out.stmts),
-        stmt_addr=out.stmt_addr,
-        block_ifs=c.block_if_addrs,
-    )  # multi-line IF blocks (Task 3.3)
-    fixed_lines = None
-    trace_partial: dict[int, int] = {}
-    _top_addrs = {a for a in out.addrs if a is not None}
-    orphans = {a: l for a, l in out.trace_tbl.items() if a not in _top_addrs}
-    traced_idx: set[int] = set()
-    # A fully-traced block's inner-body hooks are also "orphans" (folded away),
-    # but the normal path consumes them via hook_seq physical-line counting.
-    # The mid-body-TROFF signature is narrower: the REGION-END hook itself (the
-    # last, highest-address hook) stamps a body statement rather than a
-    # top-level statement start (t1_troffin) -- there is no post-block TROFF.
-    if out.trace_tbl and orphans and max(out.trace_tbl) not in _top_addrs:
-        # Region ends INSIDE a block body: the TROFF hook stamps a body
-        # statement, so it never surfaces as a top-level addr (t1_troffin).
-        out.stmts[:], out.addrs[:], fixed_lines, trace_partial = (
-            _lift_midblock_troff(
-                out.stmts,
+        # Error-trap line table, probed early -- before DATA/dims/COMMON/TRON
+        # synthesis below mutates out.addrs -- so a codeless DATA statement
+        # with no READ/RESTORE anywhere to trigger its recovery (wild
+        # vhfprop.exe) can still be found from its ORPHAN table entry (see
+        # `_line_table`'s docstring). out.stmt_addr is already fully
+        # populated by this point (decode_user_code's dispatch loop, which
+        # calls `_finalize` only once it's done). Gated the same as the final
+        # lookup below: only probe when the ops show error-trap evidence, else
+        # this linear EXE scan risks a spurious match in an unrelated program.
+        data_orphan_lines: list[tuple[int, int]] = []
+        orphan_offs: set[int] = set()  # every orphaned offset, independent of DATA/DIM
+        do_lines: list[int] = []  # genuine (kept) synthesized DOs' own lines, in order
+        table_active = False
+        if any(
+            o[1] in ("resume_pre", "on_error", "error_stmt")
+            or (o[1] == "movax_m" and o[2] in (0x72, 0x74))
+            for o in img.ops
+        ):
+            _early = _line_table(
+                img.exe,
+                img.start,
                 out.addrs,
-                out.trace_tbl,
-                orphans,
-                out.stmt_addr,
-                out.hook_seq,
+                addr,
+                extra_offs={a + 4 - img.start for a in out.trace_tbl}
+                | {a - img.start for a in out.stmt_addr.values() if a is not None},
             )
-        )
-        traced_idx = set(trace_partial)  # the block; floor pins are not traced
-    elif out.trace_tbl:
-        # TRON/TROFF lift: each hook paired with the statement that kept cur
-        # on it. TRON/TROFF themselves compile to no code, so both are
-        # synthesized per contiguous hook run (t1_tron2r2 has two): TRON
-        # before the run's first statement, and -- because TROFF's own line
-        # still carries a hook -- when unhooked statements follow the run,
-        # its LAST hook is TROFF's and the statement paired with it is
-        # really the first post-region statement (witnessed t1_tron2). A run
-        # reaching program end keeps the hook line on its last statement
-        # (TROFF-before-END is byte-invisible, t1_tron_troff).
-        hooked = [i for i, a in enumerate(out.addrs) if a in out.trace_tbl]
-        if not hooked:
-            raise ValueError("trace hooks present but paired with no statement")
-        runs: list[Any] = []
-        for i in hooked:
-            if runs and i == runs[-1][-1] + 1:
-                runs[-1].append(i)
-            else:
-                runs.append([i])
-        hookline = {i: out.trace_tbl[out.addrs[i]] for i in hooked}
-        starts = {r[0] for r in runs}
-        demote = {r[-1] for r in runs if r[-1] < len(out.stmts) - 1}
-        new_s, new_a, fixed_lines = [], [], {}
-        for i, (s, a) in enumerate(zip(out.stmts, out.addrs)):
-            if i in starts:
-                new_s.append(ir.Tron())  # TRON's own line is free
-                new_a.append(None)
-            if i in demote:
-                new_s.append(ir.Troff())  # TROFF takes the hook line;
-                new_a.append(None)  # the demoted statement's own
-                fixed_lines[len(new_s) - 1] = hookline.pop(i)  # line is free
-            new_s.append(s)
-            new_a.append(a)
-            if i in hookline:
-                fixed_lines[len(new_s) - 1] = hookline[i]
-        out.stmts[:], out.addrs[:] = new_s, new_a
-        traced_idx = set(fixed_lines)
-    # COMMON compiles to no ops -- only the DGROUP band stamps the layout
-    # solver recovered (see layout._bands_layout). Synthesize the canonical
-    # declaration as the first statement, named/typed via loc() like any
-    # other slot (witnessed t1_common1).
-    # A COMMON'd ARRAY leaves no scalar slot at all -- its 0x36 descriptor block
-    # simply sits in the band instead of the ordinary grid -- so its declaration
-    # is recovered from the block position and spelled with its rank, the way
-    # TB requires (`COMMON A(1)`, probe t1_commonarr; wild tbd73.exe).
-    common_arrs = [
-        lyt.r_arrs[b]["name"] + f"({img.exe[lyt.ds + b + 3]})"
-        for b in lyt.lay.get("common_arrs", ())
-        if b in lyt.r_arrs
-    ]
-    if lyt.lay.get("common_slots") or common_arrs:
-        if fixed_lines is not None:
-            raise ValueError("COMMON alongside TRON trace hooks is unsupported")
-        names = tuple(common_arrs) + tuple(
-            state.loc(d).name for d in lyt.lay.get("common_slots") or ()
-        )
-        # Scalar COMMON goes first (t1_common1), but a COMMON'd array has to be
-        # DIMmed before it is named -- TB compiles the two orders two bytes
-        # apart, and only DIM-then-COMMON reproduces the input.
-        at = 0
-        if common_arrs:
-            while at < len(out.stmts) and isinstance(out.stmts[at], ir.Dim):
-                at += 1
-        out.stmts.insert(at, ir.Common(names))
-        out.addrs.insert(at, None)
-        out.seg_metas = [i + 1 if i >= at else i for i in out.seg_metas]
-    # $EVENT regions: when trapping is in play the compiler emits a CC
-    # poll hook before EVERY statement; $EVENT OFF..ON suppresses them
-    # for a run of statements (witnessed t1_evreg), or everywhere when OFF
-    # precedes all statements (t1_evoff -- RETURN stays CB either way).
-    # Synthesize a pragma line at each hooked/unhooked transition.
-    ev_metas = []
-    if out.cc_hooks or any(o[1] in ("on_trap", "trap_ctl") for o in img.ops):
-        on = True  # compiler default: $EVENT ON
-        for i, a in enumerate(out.addrs):
-            if a is None:  # synthesized stmt: state persists
-                continue
-            if (a in out.cc_hooks) != on:
-                on = not on
-                ev_metas.append((i, f"$EVENT {'ON' if on else 'OFF'}"))
-    if lyt.discard_strs:
-        raise ValueError(
-            "pooled string literals left unattached after the "
-            "fre_str sites were served (unsupported shape)"
-        )
-    graph = ControlGraph.from_statements(out.stmts, out.addrs, out.stmt_addr)
-    graph.validate_targets()
-    canonical = canonical_rename(
-        _resolve_targets(out.stmts, out.addrs, out.stmt_addr)
-    )
-    events = statement_events(canonical, out.addrs)
-    prog = Program(replay_events(events))
-    prog.control_graph = graph
-    # The event stream is the first committed replay boundary. It is built
-    # from the final structured statements, after control-flow folds and
-    # canonical target resolution, so consumers never need decoder registers
-    # or mutable statement-side tables to inspect the result.
-    prog.events = events
-    prog.metas = (
-        tuple((0, m) for m in out.metas)
-        + tuple((i, "$SEGMENT") for i in out.seg_metas)
-        + tuple(ev_metas)
-    )
-    prog.toggles = out.toggles
-    if fixed_lines is not None:
-        prog.lines = _fill_lines(fixed_lines, len(prog))
-        # emit0 numbers one physical line per hook inside traced
-        # statements (block bodies in a TRON region carry their own
-        # hooks -- t1_tronif/t1_troncase)
-        prog.hook_seq = tuple(out.hook_seq)
-        prog.traced = tuple(sorted(traced_idx))
-        # A block whose region ends mid-body traces only a prefix of its
-        # physical lines (t1_troffin): {stmt index -> traced line count}.
-        prog.trace_partial = dict(trace_partial)
-    if any(
-        o[1] in ("resume_pre", "on_error", "error_stmt")
-        or (o[1] == "movax_m" and o[2] in (0x72, 0x74))
-        for o in img.ops
-    ):
-        _late = _line_table(
-            img.exe,
-            img.start,
-            out.addrs,
-            addr,
-            extra_offs={a + 4 - img.start for a in out.trace_tbl}
-            | {
-                a - img.start
-                for a in out.stmt_addr.values()
-                if a is not None
-            },  # folded-body statements have table entries too (wild vhfprop)
-        )
-        table = _late[0] if _late is not None else None
-        if fixed_lines is not None and table is not None:
-            # TRON + a line-needing error construct (bare RESUME, ERL):
-            # the table coexists with the hooks (t1_tronres), keyed by
-            # POST-hook offsets, and stores REAL lines -- including the
-            # true line of the statement demoted by the TROFF pairing
-            # (whose hook keeps TROFF's line). Table lines win; the
-            # synthesized TROFF keeps its hook line; TRON's is filled.
-            real = {}
-            for i, a in enumerate(out.addrs):
-                if a is None:
+            if _early is not None:
+                table_active = True
+                data_orphan_lines = _early[1]
+                orphan_offs = {o for o, _ in _early[1]}
+
+        # A bare backward jmps with no head-test frame is ALWAYS canonicalized
+        # to synthesized `DO ... LOOP` -- as a bare infinite `DO...LOOP` (core.py's
+        # dispatch loop, "bare backward jmps = infinite DO") or, via
+        # `_lift_do_tail`, as `DO...LOOP WHILE/UNTIL cond` -- since an explicit
+        # DO and a plain `<n> ... GOTO <n>` / `<n> ... IF cond THEN GOTO <n>`
+        # compile to byte-identical code and the decoder can't otherwise tell
+        # which the source used. But DO, like DATA/DIM, gets its OWN codeless
+        # line-table entry (probes q_do2/q_goto2/q_lt7: identical code either
+        # way, but only the DO form leaves an orphan entry sharing the loop
+        # body's offset) -- so once a table is active and shows NO orphan
+        # there, the DO spelling would recompile with an extra entry the
+        # original never had. wild vhfprop.exe: two such loops (one bare, one
+        # WHILE-tail-test), neither with orphan evidence -- both are plain
+        # GOTO/IfGoto loops. Un-synthesize them: drop the Do, retarget the
+        # paired Loop as a Goto (bare) or IfGoto (WHILE, same polarity as the
+        # tail test -- "continue if cond true" is exactly `IF cond THEN GOTO`;
+        # UNTIL would need De Morgan negation of a possibly-compound LogOp,
+        # unwitnessed, so it is left to raise below rather than guessed), all
+        # matched by nesting order (DO/LOOP pairs cannot cross in a
+        # well-formed program, so a stack pairs them correctly same as the
+        # loop's own runtime `c.dos` nesting would).
+        if table_active:
+            # Every Do (bare or head-test) is pushed, so a head-test DO's own
+            # closing (bare) Loop pops ITS Do and not some enclosing bare one --
+            # only a BARE Do's pairing is recorded for possible conversion.
+            do_stack: list[tuple[int, bool]] = []
+            do_to_loop: dict[int, int] = {}
+            for i, s in enumerate(out.stmts):
+                if isinstance(s, ir.Do):
+                    do_stack.append((i, s.kind is None and s.cond is None))
+                elif isinstance(s, ir.Loop) and do_stack:
+                    do_idx, is_bare = do_stack.pop()
+                    if is_bare:
+                        do_to_loop[do_idx] = i
+            off_to_line = dict(data_orphan_lines)
+            drop: set[int] = set()
+            claimed_offs: set[int] = set()  # genuine DO's own orphan entry
+            do_idx_lines: dict[int, int] = {}  # do_idx -> its line, genuine DOs only
+            for do_idx, loop_idx in do_to_loop.items():
+                if out.addrs[do_idx] is not None:
+                    continue  # a real (non-synthesized) Do -- untouched
+                host = out.addrs[do_idx + 1]
+                if host is None:
                     continue
-                off = a - img.start
-                line = table.get(off, table.get(off + 4))
-                if line is None:
+                host_off = host - img.start
+                if host_off in orphan_offs:
+                    claimed_offs.add(host_off)  # a genuine DO -- not DATA/DIM's to see
+                    do_idx_lines[do_idx] = off_to_line[host_off]
+                    continue
+                loop_s = out.stmts[loop_idx]
+                assert isinstance(loop_s, ir.Loop)
+                if loop_s.kind == "UNTIL":
+                    # A LOOP UNTIL conversion needs De Morgan negation of a
+                    # possibly-compound LogOp. No fixture witnesses that source
+                    # shape, so fail loud rather than guess its canonical form.
                     raise ValueError(
-                        "TRON-region statement missing from the error-trap "
-                        "line table (unsupported shape)"
+                        "codeless DO...LOOP UNTIL (no orphan evidence) has no "
+                        "witnessed non-DO source construct to un-synthesize to"
                     )
-                real[i] = line
-            real.update(
-                {i: ln for i, ln in fixed_lines.items() if out.addrs[i] is None}
-            )  # the demoted-TROFF pairing
-            prog.lines = _fill_lines(real, len(prog))
-        elif table is not None:
-            try:
-                pending_data_lines = iter(data_lines or ())
-                pending_dim_lines = iter(dim_lines or ())
-                pending_do_lines = iter(do_lines or ())
-                pending_deftype_lines = iter(deftype_lines)
-                lines = []
-                for s, a in zip(prog, out.addrs):
-                    queue = (
-                        pending_data_lines
-                        if isinstance(s, ir.Data)
-                        else pending_dim_lines
-                        if isinstance(s, (ir.Dim, ir.OptionBase))
-                        else pending_do_lines
-                        if isinstance(s, ir.Do)
-                        else pending_deftype_lines
-                        if isinstance(s, ir.DefType)
-                        else None
-                    )
-                    if a is None and queue is not None:
-                        ln = next(queue, None)
-                        if ln is None:
-                            raise TypeError  # falls through to the same
-                        lines.append(ln)  # unsupported-shape ValueError below
-                    else:
-                        lines.append(table[a - img.start])
-                prog.lines = lines
-            except (KeyError, TypeError):
-                raise ValueError(
-                    "error-trap line table present but statements don't map "
-                    "1:1 to its entries (multi-statement lines unsupported)"
+                if loop_s.kind == "WHILE":
+                    # `IF cond THEN <body-line>` compiles to exactly the same
+                    # materialize-and-back-jcc shape as `LOOP WHILE cond`, but
+                    # has no codeless DO line-table entry (t1_iftailerr; wild
+                    # vhfprop.exe). The condition polarity is already identical.
+                    out.stmts[loop_idx] = ir.IfGoto(loop_s.cond, ("addr", host))
+                    drop.add(do_idx)
+                    continue
+                out.stmts[loop_idx] = ir.Goto(("addr", host))
+                drop.add(do_idx)
+            if drop:
+                keep = [i for i in range(len(out.stmts)) if i not in drop]
+                out.stmts[:] = [out.stmts[i] for i in keep]
+                out.addrs[:] = [out.addrs[i] for i in keep]
+            if claimed_offs:
+                data_orphan_lines = [
+                    (o, ln) for o, ln in data_orphan_lines if o not in claimed_offs
+                ]
+            # Surviving genuine DOs' lines, in the order they'll be walked at
+            # the final prog.lines construction below (ascending do_idx, minus
+            # whatever `drop` removed ahead of them -- but drop only removes
+            # OTHER do_idx entries, never shifts a kept one out of relative
+            # order, so a plain sort by original do_idx matches final order).
+            do_lines = [do_idx_lines[i] for i in sorted(do_idx_lines)]
+
+        shared_subs, sub_local_arrays = _scope_procs(state)
+        ob = lyt.option_base if lyt.option_base is not None else 0
+        dims, local_dims, cur_ob = [], {}, 0  # BASIC default at program top
+        for a in reversed(lyt.arrs):
+            if ob == 1 and set(a["lo"]) == {0} and a.get("varacc") and not a.get("subful"):
+                # lo=0 record with SUB-FREE variable access in an OB1 program:
+                # only the OB0-PLAIN form compiles that shape --
+                # explicit `0:hi` is record-identical but sub-ful (t1_mix3).
+                # OPTION BASE may be re-issued mid-block (witness t1_ob3).
+                want, bounds = 0, tuple(a["hi"])
+            else:
+                want = ob if ob == 1 else cur_ob
+                bounds = tuple(
+                    h if lo == ob else (lo, h) for lo, h in zip(a["lo"], a["hi"])
                 )
-    return prog
+            if a["name"] in sub_local_arrays:
+                # A SUB-local static array: its DIM belongs inside that body, and
+                # allocation order is preserved by emit0 keeping each SUB at its
+                # ORIGINAL position rather than hoisting it, so the recovered DIM
+                # lands on the same side of the main DIMs it started on. Static
+                # array data allocates DESCENDING in DIM order (first DIM = highest
+                # base; `lyt.arrs` is ascending by base, hence the reversed walk),
+                # and BOTH directions are now witnessed byte-exact:
+                #
+                #   t1_subad        SUB emitted FIRST  -> its array has the HIGHEST
+                #                                        base (0x1e0 vs main 0x1b0)
+                #   t1_sublocafter  SUB emitted AFTER  -> its array has the LOWEST
+                #                                        base (0x1f0 vs main 0x2c0,
+                #                                        0x2f0); wild tbd73.exe's
+                #                                        `SUB Showfile` is this
+                #                                        shape, and prtguide.exe too
+                #
+                # A guard used to sit here rejecting the second case (`if dims:
+                # raise`, reached in a descending walk exactly when the SUB-local
+                # array is the lowest-based one). It was a conservative guess -- its
+                # own message said "no witness" -- and it was backwards. Replacing
+                # it with the opposite inequality is equally wrong: that rejects
+                # t1_subad, which has always round-tripped byte-exact. There is no
+                # single direction to assert, because the answer depends on where
+                # the SUB sits, which emit0 already reproduces; so nothing is
+                # asserted here beyond the OPTION BASE invariant below.
+                if want != cur_ob:
+                    raise ValueError(
+                        "OPTION BASE change around a SUB-local array (no witness)"
+                    )
+                local_dims.setdefault(sub_local_arrays[a["name"]], []).append(
+                    ir.Dim(a["name"], bounds)
+                )
+                continue
+            if want != cur_ob:
+                dims.append(ir.OptionBase(want))
+                cur_ob = want
+            dims.append(ir.Dim(a["name"], bounds))
+        if lyt.option_base == 1 and cur_ob != 1:  # runtime DIMs witness OB1
+            dims.append(ir.OptionBase(1))  # (lo-store order)
+        # Rebuild SUB bodies: SHARED declaration first, then local static DIMs,
+        # then the decoded body (canonical order; verified byte-exact against the
+        # t1_subsh/t1_subarr/t1_subad witnesses).
+        for i, s in enumerate(out.stmts):
+            if not isinstance(s, ir.SubDef):
+                continue
+            prefix = []
+            if i in shared_subs:
+                shared = shared_subs[i]
+                # Turbo Basic accepts only ten SHARED names in one source
+                # statement.  Keep the groups as actual body statements, rather
+                # than splitting them in emit0 after BodyLine targets have already
+                # been assigned: tbd73's Initmenus has forty names and branches
+                # immediately after the declarations.
+                prefix.extend(
+                    ir.Shared(tuple(shared.names[j : j + 10]))
+                    for j in range(0, len(shared.names), 10)
+                )
+            prefix.extend(local_dims.get(i, ()))
+            if prefix:
+                out.stmts[i] = ir.SubDef(s.name, s.params, tuple(prefix) + s.body)
+        ins = 0  # static DIMs follow any proc definitions
+        while ins < len(out.stmts) and isinstance(
+            out.stmts[ins], (ir.SubDef, ir.DefFn)
+        ):
+            ins += 1
+        dim_lines: list[int] | None = None
+        if dims and data_orphan_lines and len(dims) == len(data_orphan_lines):
+            # Static array DIM declarations are codeless too (recovered from
+            # array bookkeeping records, not a scanned op) and normally
+            # repositioned to this canonical spot -- but when the error-trap
+            # line table shows exactly len(dims) orphan (codeless-statement)
+            # entries in ONE cluster, that's independent evidence these DIMs
+            # actually compiled INLINE at their original position (wild
+            # vhfprop.exe: two static arrays, two orphan "500" entries; probe
+            # q_lt6). Reposition + reline them there instead. A count
+            # coincidence with an UNRELATED codeless construct (e.g. DATA) is
+            # possible in theory but unwitnessed; the single-cluster check
+            # below keeps this narrow.
+            offs = {o for o, _ in data_orphan_lines}
+            if len(offs) == 1:
+                ins = out.addrs.index(img.start + next(iter(offs)))
+                dim_lines = [ln for _, ln in data_orphan_lines]
+                data_orphan_lines = []  # consumed -- DATA recovery below won't fire
+        out.stmts[ins:ins] = dims
+        out.addrs[ins:ins] = [None] * len(dims)
+        if dims:
+            # `$SEGMENT` positions are recorded while scanning executable code;
+            # recovered static DIMs are codeless and inserted afterwards.  Rebase
+            # every following meta index so the directive remains before the same
+            # scanned statement (tbd73's four leading DIMs).
+            out.seg_metas = [
+                i + len(dims) if i >= ins else i for i in out.seg_metas
+            ]
+        # DATA is codeless: re-emit as a block at the very top. Recover the pool
+        # when the program consumes it (a READ/RESTORE) so a string-literal pool
+        # frame is never misread as DATA -- OR when the error-trap line table
+        # itself shows a codeless-statement (ORPHAN) entry, independent evidence
+        # a DATA statement compiled here even with no READ/RESTORE anywhere in
+        # the program to trigger recovery otherwise (wild vhfprop.exe; probes
+        # q_lt1/q_lt3 witnessed DATA's own orphan entry directly). Split into
+        # DATA stmts at item 0 and at every RESTORE <line> target item index, so
+        # the target maps to a real stmt.
+        data_lines: list[int] | None = None  # one line per data_block entry, if known
+        deftype_lines: list[int] = []  # one line per inserted DefType, in insertion order
+        deftype_places: list[tuple[int, int]] = []
+        data_places: list[tuple[int, int]] = []  # (borrowed offset, line) per DATA stmt
+        if any(isinstance(s, (ir.Read, ir.Restore)) for s in out.stmts) or data_orphan_lines:
+            items = lyt.data_items or _read_data_pool(img.exe)
+            if not items and data_orphan_lines:
+                # No DATA pool at all, yet orphan evidence remains: a DEFINT/
+                # DEFSTR/DEFSNG/DEFDBL default-type declaration.
+                # Confirmed via the oracle: DEFINT A-Z and DEFSTR S compile
+                # byte-IDENTICAL programs once every variable is explicitly
+                # suffixed (which tbx's own emitted source always is), so the
+                # original keyword/letter-range is unrecoverable but also
+                # inconsequential -- `ir.DefType` always renders as a fixed
+                # canonical `DEFSNG A-Z`. Each orphan is independent (unlike
+                # DATA's single-cluster item-split, a DEFxxx statement carries
+                # no payload to split), so insert one placeholder per orphan at
+                # its own borrowed offset, in table order.
+                for off, ln in data_orphan_lines:
+                    j = out.addrs.index(img.start + off)
+                    out.stmts.insert(j, ir.DefType())
+                    out.addrs.insert(j, None)
+                    deftype_lines.append(ln)
+                data_orphan_lines = []
+            elif items:
+                if data_orphan_lines:
+                    # A codeless DATA statement has no READ to anchor a split
+                    # point via RESTORE targets. `data_orphan_lines` (one entry
+                    # per original DATA statement, in source order) tells us
+                    # exactly how many statements to split into and each one's
+                    # line -- but not the ITEM boundary between them, since the
+                    # pool encodes items, not statement boundaries. Probe q_lt4
+                    # confirmed the boundary is irrelevant to compiled bytes
+                    # (`DATA 1: DATA 2,3,4` == `DATA 1,2: DATA 3,4` byte for
+                    # byte): only the STATEMENT COUNT and each one's LINE are
+                    # byte-significant. So give every statement but the last
+                    # exactly one item; the last absorbs the remainder.
+                    if any(
+                        isinstance(s, ir.Restore) and isinstance(s.target, int)
+                        for s in out.stmts
+                    ):
+                        raise ValueError(
+                            "codeless DATA statement alongside a RESTORE split "
+                            "is unsupported (no witness)"
+                        )
+                    # Every DATA statement needs at least one item. Any excess
+                    # orphan entries are another payload-free codeless construct;
+                    # canonicalize those to DefType. This also handles multiple
+                    # DATA clusters (wild metric.exe) because each recovered DATA
+                    # is inserted at its own borrowed offset below.
+                    n = min(len(items), len(data_orphan_lines))
+                    data_places = data_orphan_lines[:n]
+                    deftype_places = data_orphan_lines[n:]
+                    splits = set(range(n))
+                    data_lines = [ln for _, ln in data_places]
+                else:
+                    splits = {0} | {
+                        s.target
+                        for s in out.stmts
+                        if isinstance(s, ir.Restore) and isinstance(s.target, int)
+                    }
+                data_block, item_to_stmt, pending = [], {}, []
+                for i, it in enumerate(items):
+                    if i in splits:
+                        if pending:
+                            data_block.append(ir.Data(tuple(pending)))
+                            pending = []
+                        item_to_stmt[i] = len(data_block)  # this item opens block[len]
+                    pending.append(it)
+                if pending:
+                    data_block.append(ir.Data(tuple(pending)))
+                if data_lines is not None:
+                    # DATA compiles in TEXTUAL/compile order, not pool order
+                    # (probe q_lt3: prepending unconditionally byte-diffs the
+                    # line table once the DATA statements' own lines are
+                    # byte-significant) -- insert immediately before whatever
+                    # statement shares each entry's borrowed offset, matching
+                    # where the compiler actually placed multiple clusters.
+                    for s, (off, _) in zip(data_block, data_places):
+                        j = out.addrs.index(img.start + off)
+                        out.stmts.insert(j, s)
+                        out.addrs.insert(j, None)
+                else:
+                    out.stmts[0:0] = data_block  # prepend: block pos = final index
+                    out.addrs[0:0] = [None] * len(data_block)
+                # Insert payload-free codeless declarations after DATA placement;
+                # when both borrow the same host offset this preserves table order.
+                for off, ln in deftype_places:
+                    j = out.addrs.index(img.start + off)
+                    out.stmts.insert(j, ir.DefType())
+                    out.addrs.insert(j, None)
+                    deftype_lines.append(ln)
+                out.stmts[:] = [
+                    (
+                        ir.Restore(item_to_stmt[s.target])
+                        if isinstance(s, ir.Restore) and isinstance(s.target, int)
+                        else s
+                    )
+                    for s in out.stmts
+                ]
+        # EXIT FOR/LOOP folds (Task 3.1): rewrite the early-exit GOTO to the loop
+        # exit, then fold `IF c THEN <skip>` + EXIT into `IF negate(c) THEN EXIT`.
+        _apply_exit_folds(out.stmts, out.addrs, c.exit_folds)
+        out.stmts[:], out.addrs[:] = _fold_if(
+            out.stmts,
+            out.addrs,
+            targets=_jump_targets(out.stmts),
+            stmt_addr=out.stmt_addr,
+            block_ifs=c.block_if_addrs,
+        )  # multi-line IF blocks (Task 3.3)
+        fixed_lines = None
+        trace_partial: dict[int, int] = {}
+        _top_addrs = {a for a in out.addrs if a is not None}
+        orphans = {a: l for a, l in out.trace_tbl.items() if a not in _top_addrs}
+        traced_idx: set[int] = set()
+        # A fully-traced block's inner-body hooks are also "orphans" (folded away),
+        # but the normal path consumes them via hook_seq physical-line counting.
+        # The mid-body-TROFF signature is narrower: the REGION-END hook itself (the
+        # last, highest-address hook) stamps a body statement rather than a
+        # top-level statement start (t1_troffin) -- there is no post-block TROFF.
+        if out.trace_tbl and orphans and max(out.trace_tbl) not in _top_addrs:
+            # Region ends INSIDE a block body: the TROFF hook stamps a body
+            # statement, so it never surfaces as a top-level addr (t1_troffin).
+            out.stmts[:], out.addrs[:], fixed_lines, trace_partial = (
+                _lift_midblock_troff(
+                    out.stmts,
+                    out.addrs,
+                    out.trace_tbl,
+                    orphans,
+                    out.stmt_addr,
+                    out.hook_seq,
+                )
+            )
+            traced_idx = set(trace_partial)  # the block; floor pins are not traced
+        elif out.trace_tbl:
+            # TRON/TROFF lift: each hook paired with the statement that kept cur
+            # on it. TRON/TROFF themselves compile to no code, so both are
+            # synthesized per contiguous hook run (t1_tron2r2 has two): TRON
+            # before the run's first statement, and -- because TROFF's own line
+            # still carries a hook -- when unhooked statements follow the run,
+            # its LAST hook is TROFF's and the statement paired with it is
+            # really the first post-region statement (witnessed t1_tron2). A run
+            # reaching program end keeps the hook line on its last statement
+            # (TROFF-before-END is byte-invisible, t1_tron_troff).
+            hooked = [i for i, a in enumerate(out.addrs) if a in out.trace_tbl]
+            if not hooked:
+                raise ValueError("trace hooks present but paired with no statement")
+            runs: list[Any] = []
+            for i in hooked:
+                if runs and i == runs[-1][-1] + 1:
+                    runs[-1].append(i)
+                else:
+                    runs.append([i])
+            hookline = {i: out.trace_tbl[out.addrs[i]] for i in hooked}
+            starts = {r[0] for r in runs}
+            demote = {r[-1] for r in runs if r[-1] < len(out.stmts) - 1}
+            new_s, new_a, fixed_lines = [], [], {}
+            for i, (s, a) in enumerate(zip(out.stmts, out.addrs)):
+                if i in starts:
+                    new_s.append(ir.Tron())  # TRON's own line is free
+                    new_a.append(None)
+                if i in demote:
+                    new_s.append(ir.Troff())  # TROFF takes the hook line;
+                    new_a.append(None)  # the demoted statement's own
+                    fixed_lines[len(new_s) - 1] = hookline.pop(i)  # line is free
+                new_s.append(s)
+                new_a.append(a)
+                if i in hookline:
+                    fixed_lines[len(new_s) - 1] = hookline[i]
+            out.stmts[:], out.addrs[:] = new_s, new_a
+            traced_idx = set(fixed_lines)
+        # COMMON compiles to no ops -- only the DGROUP band stamps the layout
+        # solver recovered (see layout._bands_layout). Synthesize the canonical
+        # declaration as the first statement, named/typed via loc() like any
+        # other slot (witnessed t1_common1).
+        # A COMMON'd ARRAY leaves no scalar slot at all -- its 0x36 descriptor block
+        # simply sits in the band instead of the ordinary grid -- so its declaration
+        # is recovered from the block position and spelled with its rank, the way
+        # TB requires (`COMMON A(1)`, probe t1_commonarr; wild tbd73.exe).
+        common_arrs = [
+            lyt.r_arrs[b]["name"] + f"({img.exe[lyt.ds + b + 3]})"
+            for b in lyt.lay.get("common_arrs", ())
+            if b in lyt.r_arrs
+        ]
+        if lyt.lay.get("common_slots") or common_arrs:
+            if fixed_lines is not None:
+                raise ValueError("COMMON alongside TRON trace hooks is unsupported")
+            names = tuple(common_arrs) + tuple(
+                state.loc(d).name for d in lyt.lay.get("common_slots") or ()
+            )
+            # Scalar COMMON goes first (t1_common1), but a COMMON'd array has to be
+            # DIMmed before it is named -- TB compiles the two orders two bytes
+            # apart, and only DIM-then-COMMON reproduces the input.
+            at = 0
+            if common_arrs:
+                while at < len(out.stmts) and isinstance(out.stmts[at], ir.Dim):
+                    at += 1
+            out.stmts.insert(at, ir.Common(names))
+            out.addrs.insert(at, None)
+            out.seg_metas = [i + 1 if i >= at else i for i in out.seg_metas]
+        # $EVENT regions: when trapping is in play the compiler emits a CC
+        # poll hook before EVERY statement; $EVENT OFF..ON suppresses them
+        # for a run of statements (witnessed t1_evreg), or everywhere when OFF
+        # precedes all statements (t1_evoff -- RETURN stays CB either way).
+        # Synthesize a pragma line at each hooked/unhooked transition.
+        ev_metas = []
+        if out.cc_hooks or any(o[1] in ("on_trap", "trap_ctl") for o in img.ops):
+            on = True  # compiler default: $EVENT ON
+            for i, a in enumerate(out.addrs):
+                if a is None:  # synthesized stmt: state persists
+                    continue
+                if (a in out.cc_hooks) != on:
+                    on = not on
+                    ev_metas.append((i, f"$EVENT {'ON' if on else 'OFF'}"))
+        if lyt.discard_strs:
+            raise ValueError(
+                "pooled string literals left unattached after the "
+                "fre_str sites were served (unsupported shape)"
+            )
+        graph = ControlGraph.from_statements(out.stmts, out.addrs, out.stmt_addr)
+        graph.validate_targets()
+        # Reconcile against the folded-but-not-yet-canonical statements: this is
+        # the boundary where folding is done and renaming has not started, so a
+        # difference here is a fold and nothing else. Comparing against the final
+        # program would report every renamed variable as a lost statement.
+        if isinstance(out.stmts, RecordedStatements):
+            # Losslessness gate. An edit that bypassed the recorder shows up here
+            # as a divergence, at the point the list is final and before anything
+            # renames it.
+            rebuilt = replay(out.stmts.edits)
+            if rebuilt != list(out.stmts):
+                raise ValueError(
+                    "statement edit log does not rebuild the statement list "
+                    f"({len(rebuilt)} replayed vs {len(out.stmts)} final)"
+                )
+        events = state.events
+        reconciliation = reconcile(events, out.stmts)
+        canonical = canonical_rename(
+            _resolve_targets(out.stmts, out.addrs, out.stmt_addr)
+        )
+        prog = Program(canonical)
+        prog.control_graph = graph
+        # The event log is what the decoder committed, addresses unresolved, before
+        # control-flow folding rewrote the statement list. It runs alongside the
+        # existing path rather than feeding it: `event_reconciliation` measures how
+        # far the two have diverged, which is the input the control-flow extraction
+        # needs before replay can become authoritative.
+        prog.events = events
+        prog.event_reconciliation = reconciliation
+        prog.statement_edits = (
+            tuple(out.stmts.edits)
+            if isinstance(out.stmts, RecordedStatements)
+            else ()
+        )
+        prog.metas = (
+            tuple((0, m) for m in out.metas)
+            + tuple((i, "$SEGMENT") for i in out.seg_metas)
+            + tuple(ev_metas)
+        )
+        prog.toggles = out.toggles
+        if fixed_lines is not None:
+            prog.lines = _fill_lines(fixed_lines, len(prog))
+            # emit0 numbers one physical line per hook inside traced
+            # statements (block bodies in a TRON region carry their own
+            # hooks -- t1_tronif/t1_troncase)
+            prog.hook_seq = tuple(out.hook_seq)
+            prog.traced = tuple(sorted(traced_idx))
+            # A block whose region ends mid-body traces only a prefix of its
+            # physical lines (t1_troffin): {stmt index -> traced line count}.
+            prog.trace_partial = dict(trace_partial)
+        if any(
+            o[1] in ("resume_pre", "on_error", "error_stmt")
+            or (o[1] == "movax_m" and o[2] in (0x72, 0x74))
+            for o in img.ops
+        ):
+            _late = _line_table(
+                img.exe,
+                img.start,
+                out.addrs,
+                addr,
+                extra_offs={a + 4 - img.start for a in out.trace_tbl}
+                | {
+                    a - img.start
+                    for a in out.stmt_addr.values()
+                    if a is not None
+                },  # folded-body statements have table entries too (wild vhfprop)
+            )
+            table = _late[0] if _late is not None else None
+            if fixed_lines is not None and table is not None:
+                # TRON + a line-needing error construct (bare RESUME, ERL):
+                # the table coexists with the hooks (t1_tronres), keyed by
+                # POST-hook offsets, and stores REAL lines -- including the
+                # true line of the statement demoted by the TROFF pairing
+                # (whose hook keeps TROFF's line). Table lines win; the
+                # synthesized TROFF keeps its hook line; TRON's is filled.
+                real = {}
+                for i, a in enumerate(out.addrs):
+                    if a is None:
+                        continue
+                    off = a - img.start
+                    line = table.get(off, table.get(off + 4))
+                    if line is None:
+                        raise ValueError(
+                            "TRON-region statement missing from the error-trap "
+                            "line table (unsupported shape)"
+                        )
+                    real[i] = line
+                real.update(
+                    {i: ln for i, ln in fixed_lines.items() if out.addrs[i] is None}
+                )  # the demoted-TROFF pairing
+                prog.lines = _fill_lines(real, len(prog))
+            elif table is not None:
+                try:
+                    pending_data_lines = iter(data_lines or ())
+                    pending_dim_lines = iter(dim_lines or ())
+                    pending_do_lines = iter(do_lines or ())
+                    pending_deftype_lines = iter(deftype_lines)
+                    lines = []
+                    for s, a in zip(prog, out.addrs):
+                        queue = (
+                            pending_data_lines
+                            if isinstance(s, ir.Data)
+                            else pending_dim_lines
+                            if isinstance(s, (ir.Dim, ir.OptionBase))
+                            else pending_do_lines
+                            if isinstance(s, ir.Do)
+                            else pending_deftype_lines
+                            if isinstance(s, ir.DefType)
+                            else None
+                        )
+                        if a is None and queue is not None:
+                            ln = next(queue, None)
+                            if ln is None:
+                                raise TypeError  # falls through to the same
+                            lines.append(ln)  # unsupported-shape ValueError below
+                        else:
+                            lines.append(table[a - img.start])
+                    prog.lines = lines
+                except (KeyError, TypeError):
+                    raise ValueError(
+                        "error-trap line table present but statements don't map "
+                        "1:1 to its entries (multi-statement lines unsupported)"
+                    )
+        return prog
 
 
 def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
@@ -2152,7 +2192,8 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         ):
             loop_kind = "WHILE" if nxt[2] == 0x75 else "UNTIL"
             idx = out.addrs.index(nxt[3])
-            out.stmts.insert(idx, ir.Do(None))
+            with editing(out.stmts, "fold_loop_header"):
+                out.stmts.insert(idx, ir.Do(None))
             out.addrs.insert(idx, None)
             state.put(ir.Loop(loop_kind, m.ax), c.cur)
             m.ax = None
@@ -2424,7 +2465,8 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         if loose is not None:
             lim, stp, vdisp = loose.limit, loose.step, loose.var
             lim_s, stp_s, init_s = out.stmts[-3:]
-            del out.stmts[-3:]
+            with editing(out.stmts, "fold_for_header"):
+                del out.stmts[-3:]
             a = out.addrs[-3]
             del out.addrs[-3:]
             state.put(ir.For(init_s.target, init_s.value, lim_s.value, stp_s.value), a)
@@ -2482,7 +2524,8 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             # N% TO 23` compiles this same shape via movm_ax instead of
             # movm_imm, the init value just being whatever expression was in
             # ax (wild tamstart.exe, probe q_forvarinit).
-            init_s = out.stmts.pop()
+            with editing(out.stmts, "fold_for_header"):
+                init_s = out.stmts.pop()
             a = out.addrs.pop()
             state.put(
                 ir.For(init_s.target, init_s.value, ir.Lit(cmp_at_t[3]), ir.Lit(1)),
@@ -2534,7 +2577,8 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             # vdisp and loc_local's L-names already disambiguate uniformly,
             # same as the literal-step/variable-step LOCAL FOR cases above;
             # wild bmaster.exe/ifi.exe, probe q_locforvarlim).
-            init_s = out.stmts.pop()
+            with editing(out.stmts, "fold_for_header"):
+                init_s = out.stmts.pop()
             a = out.addrs.pop()
             limit = (
                 state.loc_local(cmp_at_t[2])
@@ -2547,7 +2591,8 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 and isinstance(out.stmts[-1].target, ir.Var)
                 and state.vdisp(out.stmts[-1].target) == cmp_at_t[2]
             ):
-                limit = out.stmts.pop().value
+                with editing(out.stmts, "fold_for_header"):
+                    limit = out.stmts.pop().value
                 a = out.addrs.pop()
             if cmp_at_t[1] == "movax_bp" and c.proc_frame is not None:
                 # A variable-limit FOR over a LOCAL reserves the SAME
@@ -2615,7 +2660,8 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             # step-temp + 2, same relationship as the pure-LOCAL case where
             # the loop var's own slot precedes them; wild bmaster.exe/
             # ifi.exe, probe q_byrefforvar).
-            init_s = out.stmts.pop()
+            with editing(out.stmts, "fold_for_header"):
+                init_s = out.stmts.pop()
             a = out.addrs.pop()
             limit = state.loc_local(cmp_at_t[2])
             if (
@@ -2624,7 +2670,8 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 and isinstance(out.stmts[-1].target, ir.Var)
                 and state.vdisp(out.stmts[-1].target) == cmp_at_t[2]
             ):
-                limit = out.stmts.pop().value
+                with editing(out.stmts, "fold_for_header"):
+                    limit = out.stmts.pop().value
                 a = out.addrs.pop()
             if c.proc_frame is not None:
                 # Step-temp rides the frame-tail retirement (see the movax_bp
@@ -2676,9 +2723,11 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             # and loc_local's L-names already disambiguate uniformly, same
             # as the literal-step LOCAL FOR above; wild ziptest.exe,
             # probe q_localvarstep).
-            init_s = out.stmts.pop()
+            with editing(out.stmts, "fold_for_header"):
+                init_s = out.stmts.pop()
             a = out.addrs.pop()
-            step_s = out.stmts.pop()
+            with editing(out.stmts, "fold_for_header"):
+                step_s = out.stmts.pop()
             out.addrs.pop()
             if img.ops[c.k - 1][1] == "movax_bp" and c.proc_frame is not None:
                 # A variable-STEP FOR over a LOCAL reserves a [limit-temp,
@@ -2760,7 +2809,8 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             state.put(ir.Wend(), c.cur)
         elif op[2] < addr and op[2] in out.addrs:  # bare backward jmps = infinite DO
             idx = out.addrs.index(op[2])  # splice `DO` before the body start
-            out.stmts.insert(idx, ir.Do(None))
+            with editing(out.stmts, "fold_loop_header"):
+                out.stmts.insert(idx, ir.Do(None))
             out.addrs.insert(idx, None)
             state.put(ir.Loop(None), c.cur)
             # EXIT LOOP: a GOTO past the LOOP (to nxt) is an exit; the conditional that
@@ -2897,7 +2947,7 @@ def _decode_user_code(
         if a.get("dbl") and not a["name"].endswith("#"):
             a["name"] += "#"  # double arrays (type 06, esz 8) render with `#`
     e.stack = []  # the emulated FP stack, as ir Expr nodes
-    out.stmts = []
+    out.stmts = RecordedStatements()
     out.addrs = []  # addrs[k] = first-op address of stmts[k]
     out.stmt_addr = {}  # id(stmt) -> its op address, retained across the inline
     # fold (which drops body addrs) so the TRON lift can find
@@ -3584,21 +3634,23 @@ def _decode_user_code(
             # happen now or its IfInlines stay inline and the else-skip Goto
             # survives as a spurious statement (probe t1_dblhooksub).
             i0 = c.proc_frame["idx"]
-            out.stmts[i0:], out.addrs[i0:] = _fold_if(
-                out.stmts[i0:],
-                out.addrs[i0:],
-                targets=_jump_targets(out.stmts),
-                stmt_addr=out.stmt_addr,
-                block_ifs=c.block_if_addrs,
-            )
+            with editing(out.stmts, "fold_proc_body"):
+                out.stmts[i0:], out.addrs[i0:] = _fold_if(
+                    out.stmts[i0:],
+                    out.addrs[i0:],
+                    targets=_jump_targets(out.stmts),
+                    stmt_addr=out.stmt_addr,
+                    block_ifs=c.block_if_addrs,
+                )
             body = tuple(out.stmts[c.proc_frame["idx"] :])
             for st, ad in zip(body, out.addrs[c.proc_frame["idx"] :]):
                 if ad is not None:  # keep body addrs: GOSUB targets a body
                     out.stmt_addr[id(st)] = ad  # line (t1_subgsb)
-            del (
-                out.stmts[c.proc_frame["idx"] :],
-                out.addrs[c.proc_frame["idx"] :],
-            )
+            with editing(out.stmts, "fold_proc_body"):
+                del (
+                    out.stmts[c.proc_frame["idx"] :],
+                    out.addrs[c.proc_frame["idx"] :],
+                )
             locs = c.proc_frame["locals"]
             _retire_for_temps(c.proc_frame, locs)
             for d in c.proc_frame.get("hidden_locals") or ():
@@ -3801,21 +3853,23 @@ def _decode_user_code(
                 # dispatch pair (t1_fnblockif). SUB bodies got this treatment
                 # with t1_dblhooksub; DEF FN bodies were never given it.
                 i0 = c.fn_frame["idx"]
-                out.stmts[i0:], out.addrs[i0:] = _fold_if(
-                    out.stmts[i0:],
-                    out.addrs[i0:],
-                    targets=_jump_targets(out.stmts),
-                    stmt_addr=out.stmt_addr,
-                    block_ifs=c.block_if_addrs,
-                )
+                with editing(out.stmts, "fold_proc_body"):
+                    out.stmts[i0:], out.addrs[i0:] = _fold_if(
+                        out.stmts[i0:],
+                        out.addrs[i0:],
+                        targets=_jump_targets(out.stmts),
+                        stmt_addr=out.stmt_addr,
+                        block_ifs=c.block_if_addrs,
+                    )
                 body = tuple(out.stmts[c.fn_frame["idx"] :])
                 for st, ad in zip(body, out.addrs[c.fn_frame["idx"] :]):
                     if ad is not None:  # keep body addrs (as in the SUB fold)
                         out.stmt_addr[id(st)] = ad
-                del (
-                    out.stmts[c.fn_frame["idx"] :],
-                    out.addrs[c.fn_frame["idx"] :],
-                )
+                with editing(out.stmts, "fold_proc_body"):
+                    del (
+                        out.stmts[c.fn_frame["idx"] :],
+                        out.addrs[c.fn_frame["idx"] :],
+                    )
                 locs = c.fn_frame["locals"]
                 _retire_for_temps(c.fn_frame, locs)
                 for d in c.fn_frame.get("hidden_locals") or ():
@@ -3828,10 +3882,11 @@ def _decode_user_code(
                 expr = c.fn_frame["result"]
                 if expr is None:  # no FSTP [bp+0]: result left on stack
                     expr = e.stack.pop()
-                del (
-                    out.stmts[c.fn_frame["idx"] :],
-                    out.addrs[c.fn_frame["idx"] :],
-                )
+                with editing(out.stmts, "fold_proc_body"):
+                    del (
+                        out.stmts[c.fn_frame["idx"] :],
+                        out.addrs[c.fn_frame["idx"] :],
+                    )
                 out.stmts.append(ir.DefFn(name, params, expr))
             out.addrs.append(None)  # a DEF FN definition is never a jump target
             c.fn_frame = None
@@ -4507,12 +4562,13 @@ def _decode_user_code(
                     and isinstance(out.stmts[-1], ir.Dim)
                 ):
                     prev = out.stmts[-1]  # no commit after the previous
-                    out.stmts[-1] = ir.Dim(
-                        prev.name,
-                        prev.bounds,  # allocate: same
-                        prev.also + ((name, bounds),),
-                        prev.dynamic,
-                    )  # comma list
+                    with editing(out.stmts, "dim_declaration"):
+                        out.stmts[-1] = ir.Dim(
+                            prev.name,
+                            prev.bounds,  # allocate: same
+                            prev.also + ((name, bounds),),
+                            prev.dynamic,
+                        )  # comma list
                 else:
                     state.put(
                         ir.Dim(

@@ -206,6 +206,7 @@ class OutputState(StateView):
             "hook_seq",
             "cc_hooks",
             "commits",
+            "event_log",
         }
     )
 

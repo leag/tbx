@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from tbx import ir
+from tbx.decode0.statement_log import editing
 from tbx.decode0.matchers import (
     match_array_param_type,
     match_fn_result_readback,
@@ -558,7 +559,8 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         if c.fors and c.fors[-1]["v"] == op[2]:
             f = c.fors[-1]
             old = o.stmts[f["idx"]]
-            o.stmts[f["idx"]] = ir.For(old.var, old.init, old.limit, ir.Lit(-1))
+            with editing(o.stmts, "patch_for_step"):
+                o.stmts[f["idx"]] = ir.For(old.var, old.init, old.limit, ir.Lit(-1))
             f["step"] = -1
             state.advance()
             return True
@@ -577,7 +579,8 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         if c.fors and c.fors[-1]["v"] == op[2]:
             f = c.fors[-1]
             old = o.stmts[f["idx"]]
-            o.stmts[f["idx"]] = ir.For(old.var, old.init, old.limit, ir.Lit(-1))
+            with editing(o.stmts, "patch_for_step"):
+                o.stmts[f["idx"]] = ir.For(old.var, old.init, old.limit, ir.Lit(-1))
             f["step"] = -1
             state.advance()
             return True
@@ -602,7 +605,8 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             return True
         f = c.fors[-1]
         old = o.stmts[f["idx"]]
-        o.stmts[f["idx"]] = ir.For(old.var, old.init, old.limit, ir.Lit(op[3]))
+        with editing(o.stmts, "patch_for_step"):
+            o.stmts[f["idx"]] = ir.For(old.var, old.init, old.limit, ir.Lit(op[3]))
         f["step"] = op[3]
         state.advance()
         return True

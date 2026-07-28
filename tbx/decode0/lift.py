@@ -5,6 +5,7 @@ from typing import Any
 
 from tbx import ir
 from tbx.decode0.const import _JCC_RELOP_TRUE, _NEGATE_REL
+from tbx.decode0.statement_log import editing
 
 
 def _lift_next(ops, k, fors, stmts, addrs, exit_folds) -> int:
@@ -12,94 +13,95 @@ def _lift_next(ops, k, fors, stmts, addrs, exit_folds) -> int:
     testw [step+2],8000h; 74 +3; e9 NEG; FLD lim; FCOMP v; fstsw; <73 BODY>; e9 EXIT;
     NEG: FLD lim; FCOMP v; fstsw; <76 BODY>.  Each <jcc BODY> is short, or the long
     form `jcc-inverse +3; e9 BODY` when the body is out of short reach."""
-    f = fors[-1]
-    v = f["v"]
-    lim, stp = f.get("lim", v - 4), f.get("stp", v - 8)
+    with editing(stmts, "lift_next"):
+        f = fors[-1]
+        v = f["v"]
+        lim, stp = f.get("lim", v - 4), f.get("stp", v - 8)
 
-    def expect(i, want):
-        if i + len(want) > len(ops):
-            raise ValueError("truncated NEXT template")
-        for j, w in enumerate(want):
-            got = ops[i + j]
-            if got[1] != w[0] or any(
-                a is not None and got[2 + n] != a for n, a in enumerate(w[1:])
+        def expect(i, want):
+            if i + len(want) > len(ops):
+                raise ValueError("truncated NEXT template")
+            for j, w in enumerate(want):
+                got = ops[i + j]
+                if got[1] != w[0] or any(
+                    a is not None and got[2 + n] != a for n, a in enumerate(w[1:])
+                ):
+                    raise ValueError(f"NEXT template mismatch at {got[0]:#x}: {got} != {w}")
+            return i + len(want)
+
+        def jcc_body(i, cc, inv):
+            o = ops[i]
+            if o[1] == "jcc" and o[2] == cc and o[3] == f["body"]:
+                return i + 1
+            if (
+                o[1] == "jcc"
+                and o[2] == inv
+                and o[3] == o[0] + 5
+                and i + 1 < len(ops)
+                and ops[i + 1][1] == "jmp"
+                and ops[i + 1][2] == f["body"]
             ):
-                raise ValueError(f"NEXT template mismatch at {got[0]:#x}: {got} != {w}")
-        return i + len(want)
+                return i + 2
+            raise ValueError(
+                f"NEXT template mismatch at {o[0]:#x}: {o} != jcc {cc:#x} BODY"
+            )
 
-    def jcc_body(i, cc, inv):
-        o = ops[i]
-        if o[1] == "jcc" and o[2] == cc and o[3] == f["body"]:
-            return i + 1
-        if (
-            o[1] == "jcc"
-            and o[2] == inv
-            and o[3] == o[0] + 5
-            and i + 1 < len(ops)
-            and ops[i + 1][1] == "jmp"
-            and ops[i + 1][2] == f["body"]
-        ):
-            return i + 2
-        raise ValueError(
-            f"NEXT template mismatch at {o[0]:#x}: {o} != jcc {cc:#x} BODY"
+        test_kind = ops[k][1]
+        wide = ops[k + 3][1] == "fld64"
+        i = expect(
+            k,
+            [
+                (test_kind, stp + (6 if wide else 2), 0x8000),
+                ("jcc", 0x74, None),
+                ("jmp", None),
+            ],
         )
+        fld_kind, cmp_kind = ops[i][1], ops[i + 1][1]
+        valid_pairs = {
+            ("fld", "fcomp"),
+            ("fld", "fcomp_bp"),
+            ("fld_bp", "fcomp"),
+            ("fld_bp", "fcomp_bp"),
+            ("fld64", "fcomp64"),
+        }
+        if (fld_kind, cmp_kind) not in valid_pairs:
+            raise ValueError(f"NEXT template: unexpected compare pair {ops[i:i + 2]}")
+        i = expect(i, [(fld_kind, lim), (cmp_kind, v), ("fstsw",)])
+        i = jcc_body(i, 0x73, 0x72)
+        i = expect(i, [("jmp", None)])  # EXIT
+        neg_start = i
+        i = expect(i, [(fld_kind, lim), (cmp_kind, v), ("fstsw",)])
+        i = jcc_body(i, 0x76, 0x77)
+        if not _same_code_offset(ops[k + 2][2], ops[neg_start][0]):
+            # e9 NEG must land on the second FLD
+            raise ValueError("NEXT template: bad negative-path target")
+        # the increment `v = v + step` was lifted as the preceding Assign -- fold it in
+        inc = stmts[-1]
 
-    test_kind = ops[k][1]
-    wide = ops[k + 3][1] == "fld64"
-    i = expect(
-        k,
-        [
-            (test_kind, stp + (6 if wide else 2), 0x8000),
-            ("jcc", 0x74, None),
-            ("jmp", None),
-        ],
-    )
-    fld_kind, cmp_kind = ops[i][1], ops[i + 1][1]
-    valid_pairs = {
-        ("fld", "fcomp"),
-        ("fld", "fcomp_bp"),
-        ("fld_bp", "fcomp"),
-        ("fld_bp", "fcomp_bp"),
-        ("fld64", "fcomp64"),
-    }
-    if (fld_kind, cmp_kind) not in valid_pairs:
-        raise ValueError(f"NEXT template: unexpected compare pair {ops[i:i + 2]}")
-    i = expect(i, [(fld_kind, lim), (cmp_kind, v), ("fstsw",)])
-    i = jcc_body(i, 0x73, 0x72)
-    i = expect(i, [("jmp", None)])  # EXIT
-    neg_start = i
-    i = expect(i, [(fld_kind, lim), (cmp_kind, v), ("fstsw",)])
-    i = jcc_body(i, 0x76, 0x77)
-    if not _same_code_offset(ops[k + 2][2], ops[neg_start][0]):
-        # e9 NEG must land on the second FLD
-        raise ValueError("NEXT template: bad negative-path target")
-    # the increment `v = v + step` was lifted as the preceding Assign -- fold it in
-    inc = stmts[-1]
+        def disp(x):
+            return int(x.name[1:].rstrip("%!#&"), 16)
 
-    def disp(x):
-        return int(x.name[1:].rstrip("%!#&"), 16)
-
-    if not (
-        isinstance(inc, ir.Assign)
-        and isinstance(inc.target, ir.Var)
-        and disp(inc.target) == v
-        and isinstance(inc.value, ir.BinOp)
-        and inc.value.op == "+"
-        and isinstance(inc.value.lhs, ir.Var)
-        and isinstance(inc.value.rhs, ir.Var)
-        and {disp(inc.value.lhs), disp(inc.value.rhs)} == {v, stp}
-    ):
-        raise ValueError(f"NEXT increment mismatch: {inc}")
-    a = addrs[-1]
-    del stmts[-1], addrs[-1]
-    stmts.append(ir.NextStmt(inc.target))
-    addrs.append(a)
-    fors.pop()
-    # EXIT FOR: a GOTO to the post-NEXT address (the op after this template) is an exit;
-    # the conditional that skips it jumps to the NEXT (this stmt's addr). Fold at epilogue.
-    if i < len(ops):
-        exit_folds.append((ir.ExitFor(), a, ops[i][0]))
-    return i
+        if not (
+            isinstance(inc, ir.Assign)
+            and isinstance(inc.target, ir.Var)
+            and disp(inc.target) == v
+            and isinstance(inc.value, ir.BinOp)
+            and inc.value.op == "+"
+            and isinstance(inc.value.lhs, ir.Var)
+            and isinstance(inc.value.rhs, ir.Var)
+            and {disp(inc.value.lhs), disp(inc.value.rhs)} == {v, stp}
+        ):
+            raise ValueError(f"NEXT increment mismatch: {inc}")
+        a = addrs[-1]
+        del stmts[-1], addrs[-1]
+        stmts.append(ir.NextStmt(inc.target))
+        addrs.append(a)
+        fors.pop()
+        # EXIT FOR: a GOTO to the post-NEXT address (the op after this template) is an exit;
+        # the conditional that skips it jumps to the NEXT (this stmt's addr). Fold at epilogue.
+        if i < len(ops):
+            exit_folds.append((ir.ExitFor(), a, ops[i][0]))
+        return i
 
 
 def _lift_var_step_next(ops, k, fors, stmts, addrs) -> int:
@@ -121,83 +123,84 @@ def _lift_var_step_next(ops, k, fors, stmts, addrs) -> int:
     correctly by loc/loc_local at header time) rather than reconstructed
     from the bp-offset/disp, since the two frames use different name
     schemes (V#### vs L##%)."""
-    f = fors[-1]
-    v = f["v"]
+    with editing(stmts, "lift_var_step_next"):
+        f = fors[-1]
+        v = f["v"]
 
-    def branch(i, wantcc, invcc):
-        o = ops[i] if i < len(ops) else None
-        if o is None or o[1] not in ("cmp_mi8", "cmp_mi16", "cmp_bpi8") or o[2] != v:
-            raise ValueError(f"FOR-STEP sign test: expected cmp [v] at index {i}")
-        lim = o[3]
-        nxt = ops[i + 1] if i + 1 < len(ops) else None
+        def branch(i, wantcc, invcc):
+            o = ops[i] if i < len(ops) else None
+            if o is None or o[1] not in ("cmp_mi8", "cmp_mi16", "cmp_bpi8") or o[2] != v:
+                raise ValueError(f"FOR-STEP sign test: expected cmp [v] at index {i}")
+            lim = o[3]
+            nxt = ops[i + 1] if i + 1 < len(ops) else None
+            if (
+                nxt is not None
+                and nxt[1] == "jcc"
+                and nxt[2] in wantcc
+                and nxt[3] == f["body"]
+            ):
+                return lim, i + 2
+            nxt2 = ops[i + 2] if i + 2 < len(ops) else None
+            if (
+                nxt is not None
+                and nxt[1] == "jcc"
+                and nxt[2] in invcc
+                and nxt2 is not None
+                and nxt2[1] == "jmp"
+                and nxt2[2] == f["body"]
+                and nxt[3] == nxt2[0] + 3
+            ):
+                return lim, i + 3
+            raise ValueError(f"FOR-STEP sign test: branch mismatch at {o[0]:#x}")
+
+        jns, jmp_desc = ops[k + 1], ops[k + 2]
         if (
-            nxt is not None
-            and nxt[1] == "jcc"
-            and nxt[2] in wantcc
-            and nxt[3] == f["body"]
+            jns[1] != "jcc"
+            or jns[2] != 0x79
+            or jmp_desc[1] != "jmp"
+            or jns[3] != jmp_desc[0] + 3
         ):
-            return lim, i + 2
-        nxt2 = ops[i + 2] if i + 2 < len(ops) else None
+            raise ValueError(f"FOR-STEP sign test: expected jns+jmp at {ops[k][0]:#x}")
+        asc_lim, i = branch(k + 3, (0x7E, 0x76), (0x7F, 0x77))
+        skip = ops[i] if i < len(ops) else None
         if (
-            nxt is not None
-            and nxt[1] == "jcc"
-            and nxt[2] in invcc
-            and nxt2 is not None
-            and nxt2[1] == "jmp"
-            and nxt2[2] == f["body"]
-            and nxt[3] == nxt2[0] + 3
+            skip is None
+            or skip[1] != "jmp"
+            or i + 1 >= len(ops)
+            or ops[i + 1][0] != jmp_desc[2]
         ):
-            return lim, i + 3
-        raise ValueError(f"FOR-STEP sign test: branch mismatch at {o[0]:#x}")
+            # `skip` jumps PAST the descending block to the loop exit (unrelated
+            # to jmp_desc's own target); the descending block must instead start
+            # right where the JNS's negative branch lands, at index i+1.
+            raise ValueError(
+                f"FOR-STEP sign test: expected skip-descending jmp at {ops[k][0]:#x}"
+            )
+        desc_lim, i = branch(i + 1, (0x7D,), (0x7C,))
+        if asc_lim != desc_lim:
+            raise ValueError(
+                f"FOR-STEP sign test: ascending/descending limit mismatch at {ops[k][0]:#x}"
+            )
 
-    jns, jmp_desc = ops[k + 1], ops[k + 2]
-    if (
-        jns[1] != "jcc"
-        or jns[2] != 0x79
-        or jmp_desc[1] != "jmp"
-        or jns[3] != jmp_desc[0] + 3
-    ):
-        raise ValueError(f"FOR-STEP sign test: expected jns+jmp at {ops[k][0]:#x}")
-    asc_lim, i = branch(k + 3, (0x7E, 0x76), (0x7F, 0x77))
-    skip = ops[i] if i < len(ops) else None
-    if (
-        skip is None
-        or skip[1] != "jmp"
-        or i + 1 >= len(ops)
-        or ops[i + 1][0] != jmp_desc[2]
-    ):
-        # `skip` jumps PAST the descending block to the loop exit (unrelated
-        # to jmp_desc's own target); the descending block must instead start
-        # right where the JNS's negative branch lands, at index i+1.
-        raise ValueError(
-            f"FOR-STEP sign test: expected skip-descending jmp at {ops[k][0]:#x}"
-        )
-    desc_lim, i = branch(i + 1, (0x7D,), (0x7C,))
-    if asc_lim != desc_lim:
-        raise ValueError(
-            f"FOR-STEP sign test: ascending/descending limit mismatch at {ops[k][0]:#x}"
-        )
+        inc = stmts[-1]
+        var = stmts[f["idx"]].var  # the FOR's own loop var name (V#### or L##%,
+        if not (  # already correctly resolved by loc/loc_local at header time)
+            isinstance(inc, ir.Assign)
+            and inc.target == var
+            and isinstance(inc.value, ir.BinOp)
+            and inc.value.op == "+"
+            and var in (inc.value.lhs, inc.value.rhs)
+        ):
+            raise ValueError(f"FOR-STEP NEXT increment mismatch: {inc}")
+        a = addrs[-1]
+        del stmts[-1], addrs[-1]
 
-    inc = stmts[-1]
-    var = stmts[f["idx"]].var  # the FOR's own loop var name (V#### or L##%,
-    if not (  # already correctly resolved by loc/loc_local at header time)
-        isinstance(inc, ir.Assign)
-        and inc.target == var
-        and isinstance(inc.value, ir.BinOp)
-        and inc.value.op == "+"
-        and var in (inc.value.lhs, inc.value.rhs)
-    ):
-        raise ValueError(f"FOR-STEP NEXT increment mismatch: {inc}")
-    a = addrs[-1]
-    del stmts[-1], addrs[-1]
+        old = stmts[f["idx"]]
+        stmts[f["idx"]] = ir.For(old.var, old.init, ir.Lit(asc_lim), old.step)
 
-    old = stmts[f["idx"]]
-    stmts[f["idx"]] = ir.For(old.var, old.init, ir.Lit(asc_lim), old.step)
-
-    stmts.append(ir.NextStmt(var))
-    addrs.append(a)
-    fors.pop()
-    return i
+        stmts.append(ir.NextStmt(var))
+        addrs.append(a)
+        fors.pop()
+        return i
 
 
 def _same_code_offset(a: int, b: int) -> bool:
@@ -278,113 +281,114 @@ def _lift_bool_tail(
 
     Returns (next op index, still-open pend_bool or None, pend_outer or
     None)."""
-    comb = "andaxbx" if pb["op"] == "AND" else "orax"
-    want = [o[1] for o in ops[k : k + 6]]
-    # A FAR exit target (segment-crossing THEN/exit, wild mf.exe) uses
-    # `jmpf` (5 bytes, EA) instead of the near `jmp` (3 bytes, E9) here --
-    # same op-kind breadth `direct_bool` already accepts for its own
-    # dispatch-tail jmp.
-    if want[:5] == ["movax", "jcc", "incax", comb, "jcc"] and want[5] in (
-        "jmp",
-        "jmpf",
-    ):
-        pass
-    else:
-        raise ValueError(f"compound-IF tail mismatch at {ops[k][0]:#x}")
-    if ops[k][2] != 0xFFFF:
-        raise ValueError(f"compound-IF tail mismatch at {ops[k][0]:#x}")
-    m_jcc, f_jcc, f_jmp = ops[k + 1], ops[k + 4], ops[k + 5]
-    if m_jcc[3] != ops[k + 3][0] or m_jcc[2] not in _JCC_RELOP_TRUE:
-        raise ValueError(f"compound-IF tail: bad Jcc skip at {m_jcc[0]:#x}")
-    jmp_len = 5 if f_jmp[1] == "jmpf" else 3
-    if f_jcc[2] not in (0x74, 0x75) or f_jcc[3] != f_jmp[0] + jmp_len:
-        raise ValueError(f"compound-IF tail: bad dispatch pair at {f_jcc[0]:#x}")
-    delta = 2 if pb["op"] == "AND" else 0
-    if not _same_code_offset(pb["sc"], ops[k + 3][0] + delta):
-        raise ValueError(
-            f"compound-IF: short-circuit target mismatch at {ops[k][0]:#x}"
-        )
-    r2 = ir.RelOp(_JCC_RELOP_TRUE[m_jcc[2]], *pend_cmp)
-    cond = ir.LogOp(pb["op"], pb["r1"], r2)
-    if wrap_group:
-        cond = ir.Group(cond)
-    # own_op -- how `cond` (just folded) joins whatever comes next -- is
-    # this segment's OWN dispatch polarity (f_jcc), a fact independent of
-    # pb["op"] (the operator that folded r1 with r2 to make `cond`): e.g.
-    # wild state.exe's (A AND B) joins C via OR even though A folded with B
-    # via AND. The candidate search below only LOCATES and shape-checks
-    # whatever sits at the short-circuit target -- own_comb for a same-op
-    # cascade continuation, alt_comb for a differently-operated segment/
-    # GROUP -- it never changes the join operator itself (a bug found via
-    # oracle probe q_mixedbool6: returning the ALT candidate's own label
-    # for a multi-term GROUP silently swapped AND/OR in the outer join).
-    own_op = {0x75: "AND", 0x74: "OR"}[f_jcc[2]]
-    own_comb = "andaxbx" if own_op == "AND" else "orax"
-    own_delta = 2 if own_op == "AND" else 0
-    alt_comb = "orax" if own_comb == "andaxbx" else "andaxbx"
-    alt_delta = 0 if own_delta == 2 else 2
-    seen_materialize = False
-    for j in range(k + 6, min(k + 36, len(ops) - 3)):
-        if ops[j][1] != "movax" or ops[j][2] != 0xFFFF:
-            continue
-        nxt3 = [o[1] for o in ops[j + 1 : j + 4]]
-        for candidate_comb, candidate_delta in (
-            (own_comb, own_delta),
-            (alt_comb, alt_delta),
+    with editing(stmts, "lift_bool_tail"):
+        comb = "andaxbx" if pb["op"] == "AND" else "orax"
+        want = [o[1] for o in ops[k : k + 6]]
+        # A FAR exit target (segment-crossing THEN/exit, wild mf.exe) uses
+        # `jmpf` (5 bytes, EA) instead of the near `jmp` (3 bytes, E9) here --
+        # same op-kind breadth `direct_bool` already accepts for its own
+        # dispatch-tail jmp.
+        if want[:5] == ["movax", "jcc", "incax", comb, "jcc"] and want[5] in (
+            "jmp",
+            "jmpf",
         ):
-            if (
-                nxt3 == ["jcc", "incax", candidate_comb]
-                and _same_code_offset(f_jmp[2], ops[j + 3][0] + candidate_delta)
+            pass
+        else:
+            raise ValueError(f"compound-IF tail mismatch at {ops[k][0]:#x}")
+        if ops[k][2] != 0xFFFF:
+            raise ValueError(f"compound-IF tail mismatch at {ops[k][0]:#x}")
+        m_jcc, f_jcc, f_jmp = ops[k + 1], ops[k + 4], ops[k + 5]
+        if m_jcc[3] != ops[k + 3][0] or m_jcc[2] not in _JCC_RELOP_TRUE:
+            raise ValueError(f"compound-IF tail: bad Jcc skip at {m_jcc[0]:#x}")
+        jmp_len = 5 if f_jmp[1] == "jmpf" else 3
+        if f_jcc[2] not in (0x74, 0x75) or f_jcc[3] != f_jmp[0] + jmp_len:
+            raise ValueError(f"compound-IF tail: bad dispatch pair at {f_jcc[0]:#x}")
+        delta = 2 if pb["op"] == "AND" else 0
+        if not _same_code_offset(pb["sc"], ops[k + 3][0] + delta):
+            raise ValueError(
+                f"compound-IF: short-circuit target mismatch at {ops[k][0]:#x}"
+            )
+        r2 = ir.RelOp(_JCC_RELOP_TRUE[m_jcc[2]], *pend_cmp)
+        cond = ir.LogOp(pb["op"], pb["r1"], r2)
+        if wrap_group:
+            cond = ir.Group(cond)
+        # own_op -- how `cond` (just folded) joins whatever comes next -- is
+        # this segment's OWN dispatch polarity (f_jcc), a fact independent of
+        # pb["op"] (the operator that folded r1 with r2 to make `cond`): e.g.
+        # wild state.exe's (A AND B) joins C via OR even though A folded with B
+        # via AND. The candidate search below only LOCATES and shape-checks
+        # whatever sits at the short-circuit target -- own_comb for a same-op
+        # cascade continuation, alt_comb for a differently-operated segment/
+        # GROUP -- it never changes the join operator itself (a bug found via
+        # oracle probe q_mixedbool6: returning the ALT candidate's own label
+        # for a multi-term GROUP silently swapped AND/OR in the outer join).
+        own_op = {0x75: "AND", 0x74: "OR"}[f_jcc[2]]
+        own_comb = "andaxbx" if own_op == "AND" else "orax"
+        own_delta = 2 if own_op == "AND" else 0
+        alt_comb = "orax" if own_comb == "andaxbx" else "andaxbx"
+        alt_delta = 0 if own_delta == 2 else 2
+        seen_materialize = False
+        for j in range(k + 6, min(k + 36, len(ops) - 3)):
+            if ops[j][1] != "movax" or ops[j][2] != 0xFFFF:
+                continue
+            nxt3 = [o[1] for o in ops[j + 1 : j + 4]]
+            for candidate_comb, candidate_delta in (
+                (own_comb, own_delta),
+                (alt_comb, alt_delta),
             ):
-                if not seen_materialize:  # immediately-next term: flat fold
+                if (
+                    nxt3 == ["jcc", "incax", candidate_comb]
+                    and _same_code_offset(f_jmp[2], ops[j + 3][0] + candidate_delta)
+                ):
+                    if not seen_materialize:  # immediately-next term: flat fold
+                        return (
+                            k + 6,
+                            {
+                                "r1": cond,
+                                "op": own_op,
+                                "sc": f_jmp[2],
+                                "start": pb["start"],
+                            },
+                            pend_outer,
+                        )
+                    # a multi-term inner GROUP starts at k+6 instead -- defer
+                    if pend_outer is not None:
+                        # Left-associative cascade of GROUPS (`(A AND B) OR
+                        # (C AND D) OR (E AND F)`, wild mcmurphy.exe, probe
+                        # q_mixedbool7): fold the prior deferred group into
+                        # `cond` now, the same left-fold every other cascade
+                        # here uses, then keep waiting -- own_op governs how
+                        # this new combined accumulator joins the NEXT group.
+                        cond = ir.LogOp(pend_outer["op"], pend_outer["r1"], cond)
+                        outer_start = pend_outer["start"]
+                    else:
+                        outer_start = pb["start"]
                     return (
                         k + 6,
-                        {
-                            "r1": cond,
-                            "op": own_op,
-                            "sc": f_jmp[2],
-                            "start": pb["start"],
-                        },
-                        pend_outer,
+                        None,
+                        {"r1": cond, "op": own_op, "start": outer_start},
                     )
-                # a multi-term inner GROUP starts at k+6 instead -- defer
-                if pend_outer is not None:
-                    # Left-associative cascade of GROUPS (`(A AND B) OR
-                    # (C AND D) OR (E AND F)`, wild mcmurphy.exe, probe
-                    # q_mixedbool7): fold the prior deferred group into
-                    # `cond` now, the same left-fold every other cascade
-                    # here uses, then keep waiting -- own_op governs how
-                    # this new combined accumulator joins the NEXT group.
-                    cond = ir.LogOp(pend_outer["op"], pend_outer["r1"], cond)
-                    outer_start = pend_outer["start"]
-                else:
-                    outer_start = pb["start"]
-                return (
-                    k + 6,
-                    None,
-                    {"r1": cond, "op": own_op, "start": outer_start},
-                )
-        seen_materialize = True
-    final_cond, final_start = cond, pb["start"]
-    if pend_outer is not None:
-        final_cond = ir.LogOp(pend_outer["op"], pend_outer["r1"], cond)
-        final_start = pend_outer["start"]
-    if f_jcc[2] == 0x74:
-        put(ir.IfGoto(final_cond, ("addr", f_jmp[2])), final_start)
-    elif _has_jmps_back(ops, f_jmp[2], final_start):
-        put(ir.While(final_cond), final_start)
-        whiles.append({"test": final_start, "exit": f_jmp[2]})
-    else:
-        flush()
-        ifs.append(
-            {
-                "target": f_jmp[2],
-                "cond": final_cond,
-                "start": final_start,
-                "idx": len(stmts),
-            }
-        )
-    return k + 6, None, None
+            seen_materialize = True
+        final_cond, final_start = cond, pb["start"]
+        if pend_outer is not None:
+            final_cond = ir.LogOp(pend_outer["op"], pend_outer["r1"], cond)
+            final_start = pend_outer["start"]
+        if f_jcc[2] == 0x74:
+            put(ir.IfGoto(final_cond, ("addr", f_jmp[2])), final_start)
+        elif _has_jmps_back(ops, f_jmp[2], final_start):
+            put(ir.While(final_cond), final_start)
+            whiles.append({"test": final_start, "exit": f_jmp[2]})
+        else:
+            flush()
+            ifs.append(
+                {
+                    "target": f_jmp[2],
+                    "cond": final_cond,
+                    "start": final_start,
+                    "idx": len(stmts),
+                }
+            )
+        return k + 6, None, None
 
 
 def _lift_do_tail(ops, k, pend_cmp, stmts, addrs, put, cur):
@@ -394,22 +398,23 @@ def _lift_do_tail(ops, k, pend_cmp, stmts, addrs, put, cur):
     the body and emit `LOOP WHILE/UNTIL cond` here. cc 75 = continue-if-true = WHILE;
     cc 74 = continue-if-false = UNTIL. Returns the next op index, or None if no match.
     """
-    want = ["movax", "jcc", "incax", "orax", "jcc"]
-    if k + len(want) > len(ops) or [o[1] for o in ops[k : k + len(want)]] != want:
-        return None
-    m_jcc, back_jcc = ops[k + 1], ops[k + 4]
-    if m_jcc[3] != ops[k + 3][0] or m_jcc[2] not in _JCC_RELOP_TRUE:
-        return None
-    back = back_jcc[3]
-    if back_jcc[2] not in (0x74, 0x75) or back >= ops[k][0] or back not in addrs:
-        return None
-    cond = ir.RelOp(_JCC_RELOP_TRUE[m_jcc[2]], *pend_cmp)
-    kind = "WHILE" if back_jcc[2] == 0x75 else "UNTIL"
-    idx = addrs.index(back)  # splice `DO` before the body start
-    stmts.insert(idx, ir.Do(None))
-    addrs.insert(idx, None)
-    put(ir.Loop(kind, cond), cur)
-    return k + len(want)
+    with editing(stmts, "lift_do_tail"):
+        want = ["movax", "jcc", "incax", "orax", "jcc"]
+        if k + len(want) > len(ops) or [o[1] for o in ops[k : k + len(want)]] != want:
+            return None
+        m_jcc, back_jcc = ops[k + 1], ops[k + 4]
+        if m_jcc[3] != ops[k + 3][0] or m_jcc[2] not in _JCC_RELOP_TRUE:
+            return None
+        back = back_jcc[3]
+        if back_jcc[2] not in (0x74, 0x75) or back >= ops[k][0] or back not in addrs:
+            return None
+        cond = ir.RelOp(_JCC_RELOP_TRUE[m_jcc[2]], *pend_cmp)
+        kind = "WHILE" if back_jcc[2] == 0x75 else "UNTIL"
+        idx = addrs.index(back)  # splice `DO` before the body start
+        stmts.insert(idx, ir.Do(None))
+        addrs.insert(idx, None)
+        put(ir.Loop(kind, cond), cur)
+        return k + len(want)
 
 
 def _lift_bool_do_tail(ops, k, pend_cmp, pb, stmts, addrs, put):
@@ -435,35 +440,36 @@ def _lift_bool_do_tail(ops, k, pend_cmp, pb, stmts, addrs, put):
     `LOOP UNTIL (ans$ = CHR$(13)) OR (ans$ = CHR$(27))` closing `SUB
     Makelmenu`'s `DO`, surfacing only as `jump target 0xd49b is not a statement
     start` from the IF on the line before it). Fixture t1_boolloopuntil."""
-    comb = "andaxbx" if pb["op"] == "AND" else "orax"
-    want = ["movax", "jcc", "incax", comb, "jcc"]
-    if k + len(want) > len(ops) or [o[1] for o in ops[k : k + len(want)]] != want:
-        return None
-    m_jcc, back_jcc = ops[k + 1], ops[k + 4]
-    if m_jcc[3] != ops[k + 3][0] or m_jcc[2] not in _JCC_RELOP_TRUE:
-        return None
-    if not _same_code_offset(pb["sc"], ops[k + 3][0] + (2 if pb["op"] == "AND" else 0)):
-        return None
-    if back_jcc[2] not in (0x74, 0x75):
-        return None
-    back, nk = back_jcc[3], k + len(want)
-    if back < ops[k][0] and back in addrs:  # the jcc itself retries
-        kind = "WHILE" if back_jcc[2] == 0x75 else "UNTIL"
-    else:  # ...or the trailing jmp does, with the jcc as the exit
-        jmp = ops[nk] if nk < len(ops) else None
-        if jmp is None or jmp[1] != "jmp" or back != jmp[0] + 3:
+    with editing(stmts, "lift_bool_do_tail"):
+        comb = "andaxbx" if pb["op"] == "AND" else "orax"
+        want = ["movax", "jcc", "incax", comb, "jcc"]
+        if k + len(want) > len(ops) or [o[1] for o in ops[k : k + len(want)]] != want:
             return None
-        back, nk = jmp[2], nk + 1
-        if back >= ops[k][0] or back not in addrs:
+        m_jcc, back_jcc = ops[k + 1], ops[k + 4]
+        if m_jcc[3] != ops[k + 3][0] or m_jcc[2] not in _JCC_RELOP_TRUE:
             return None
-        kind = "WHILE" if back_jcc[2] == 0x74 else "UNTIL"
-    r2 = ir.RelOp(_JCC_RELOP_TRUE[m_jcc[2]], *pend_cmp)
-    cond = ir.LogOp(pb["op"], pb["r1"], r2)
-    idx = addrs.index(back)  # splice `DO` before the body start
-    stmts.insert(idx, ir.Do(None))
-    addrs.insert(idx, None)
-    put(ir.Loop(kind, cond), pb["start"])
-    return nk
+        if not _same_code_offset(pb["sc"], ops[k + 3][0] + (2 if pb["op"] == "AND" else 0)):
+            return None
+        if back_jcc[2] not in (0x74, 0x75):
+            return None
+        back, nk = back_jcc[3], k + len(want)
+        if back < ops[k][0] and back in addrs:  # the jcc itself retries
+            kind = "WHILE" if back_jcc[2] == 0x75 else "UNTIL"
+        else:  # ...or the trailing jmp does, with the jcc as the exit
+            jmp = ops[nk] if nk < len(ops) else None
+            if jmp is None or jmp[1] != "jmp" or back != jmp[0] + 3:
+                return None
+            back, nk = jmp[2], nk + 1
+            if back >= ops[k][0] or back not in addrs:
+                return None
+            kind = "WHILE" if back_jcc[2] == 0x74 else "UNTIL"
+        r2 = ir.RelOp(_JCC_RELOP_TRUE[m_jcc[2]], *pend_cmp)
+        cond = ir.LogOp(pb["op"], pb["r1"], r2)
+        idx = addrs.index(back)  # splice `DO` before the body start
+        stmts.insert(idx, ir.Do(None))
+        addrs.insert(idx, None)
+        put(ir.Loop(kind, cond), pb["start"])
+        return nk
 
 
 def _lift_while(
@@ -484,74 +490,75 @@ def _lift_while(
     a numeric relop, so negating it takes a real `F7 D0 notax` between the
     materialization's `inc ax` and the `or ax,ax` self-test) inserts one extra
     op into the usual six; detected by probing for it before matching `want`."""
-    negate = k + 3 < len(ops) and ops[k + 3][1] == "notax"
-    off = 1 if negate else 0
-    want = ["movax", "jcc", "incax"] + (["notax"] if negate else []) + [
-        "orax",
-        "jcc",
-        "jmp",
-    ]
-    if k + len(want) > len(ops) or [o[1] for o in ops[k : k + len(want)]] != want:
-        raise ValueError(f"materialization template mismatch at {ops[k][0]:#x}")
-    m_jcc, exit_jcc, exit_jmp = ops[k + 1], ops[k + 4 + off], ops[k + 5 + off]
-    if m_jcc[3] != ops[k + 3][0]:  # Jcc +1 skips exactly the inc ax
-        raise ValueError("materialization: bad Jcc skip")
-    if m_jcc[2] not in _JCC_RELOP_TRUE:
-        raise ValueError(f"unhandled materialization jcc {m_jcc[2]:02x}")
-    if exit_jcc[2] not in (0x74, 0x75) or exit_jcc[3] != exit_jmp[0] + 3:
-        raise ValueError("DO/WHILE: bad exit pair")
-    cond = ir.RelOp(_JCC_RELOP_TRUE[m_jcc[2]], *pend_cmp)
-    if negate:
-        cond = ir.Not(cond)
-    if _has_jmps_back(ops, exit_jmp[2], cur):  # head-test DO loop
-        kind = "WHILE" if exit_jcc[2] == 0x75 else "UNTIL"
-        put(ir.Do(kind, cond), cur)
-        dos.append({"test": cur, "exit": exit_jmp[2]})
-    elif exit_jmp[2] < ops[k][0] and exit_jmp[2] in addrs:
-        # Tail-test DO...LOOP WHILE/UNTIL: the retry edge is THIS
-        # template's own trailing jmp (backward, landing on a real
-        # statement), not a separate jmps elsewhere (e.g. the body ends
-        # in a nested FOR...NEXT, which leaves no plain jmps-back for
-        # _has_jmps_back to find) -- the mirror image of _lift_do_tail's
-        # polarity, since here exit_jcc CAUSES the exit and falling
-        # through (to the jmp) retries, rather than the jcc itself being
-        # the retry edge. Checked BEFORE the inline-IF branch below,
-        # since a backward jmp can never be a genuine inline-IF's
-        # forward body-skip -- an UNTIL-form tail loop (cc 75) would
-        # otherwise be misclassified there. Confirmed against wild
-        # metric.exe (probe q_nestedfor: a DO...LOOP WHILE wrapping a
-        # FOR...NEXT, ending a GOSUB'd routine).
-        loop_kind = "WHILE" if exit_jcc[2] == 0x74 else "UNTIL"
-        idx = addrs.index(exit_jmp[2])
-        stmts.insert(idx, ir.Do(None))
-        addrs.insert(idx, None)
-        put(ir.Loop(loop_kind, cond), cur)
-    elif exit_jcc[2] == 0x75:  # inline-IF (forward skip, by exclusion above)
-        flush()
-        if block_ifs is not None and isinstance(cond, ir.RelOp):
-            # A SIMPLE condition that reached here MATERIALIZED (this function
-            # consumes the movax-FFFF template), and a genuinely single-line
-            # `IF <simple> THEN <stmt>` does NOT materialize -- it compiles a
-            # bare dispatch pair (zz_sub7/zz_mdeffn2: `jcc; jmp`, no movax
-            # FFFF, both byte-exact as inline). So this is positive evidence
-            # the SOURCE spelled a multi-line block IF. Measured on our own
-            # oracle: the two spellings of one two-statement body compile 71
-            # differing bytes, and rendering the block form inline loses 16 --
-            # the standing round-trip mismatch on zz_bif1/zz_bif4.
-            #
-            # Recorded as EVIDENCE for `_fold_if` rather than acted on here:
-            # the ELSE arms are reconstructed there, so building an IfBlock at
-            # this point would bypass that and drop the ELSE (t1_tronif /
-            # t1_tronerb, whose hooks then misalign with the physical lines).
-            # Compound conditions materialize either way, so only a plain
-            # RelOp counts.
-            block_ifs.add(cur)
-        ifs.append(
-            {"target": exit_jmp[2], "cond": cond, "start": cur, "idx": len(stmts)}
-        )
-    else:
-        raise ValueError(f"unhandled materialized test at {ops[k][0]:#x}")
-    return k + len(want)
+    with editing(stmts, "lift_while"):
+        negate = k + 3 < len(ops) and ops[k + 3][1] == "notax"
+        off = 1 if negate else 0
+        want = ["movax", "jcc", "incax"] + (["notax"] if negate else []) + [
+            "orax",
+            "jcc",
+            "jmp",
+        ]
+        if k + len(want) > len(ops) or [o[1] for o in ops[k : k + len(want)]] != want:
+            raise ValueError(f"materialization template mismatch at {ops[k][0]:#x}")
+        m_jcc, exit_jcc, exit_jmp = ops[k + 1], ops[k + 4 + off], ops[k + 5 + off]
+        if m_jcc[3] != ops[k + 3][0]:  # Jcc +1 skips exactly the inc ax
+            raise ValueError("materialization: bad Jcc skip")
+        if m_jcc[2] not in _JCC_RELOP_TRUE:
+            raise ValueError(f"unhandled materialization jcc {m_jcc[2]:02x}")
+        if exit_jcc[2] not in (0x74, 0x75) or exit_jcc[3] != exit_jmp[0] + 3:
+            raise ValueError("DO/WHILE: bad exit pair")
+        cond = ir.RelOp(_JCC_RELOP_TRUE[m_jcc[2]], *pend_cmp)
+        if negate:
+            cond = ir.Not(cond)
+        if _has_jmps_back(ops, exit_jmp[2], cur):  # head-test DO loop
+            kind = "WHILE" if exit_jcc[2] == 0x75 else "UNTIL"
+            put(ir.Do(kind, cond), cur)
+            dos.append({"test": cur, "exit": exit_jmp[2]})
+        elif exit_jmp[2] < ops[k][0] and exit_jmp[2] in addrs:
+            # Tail-test DO...LOOP WHILE/UNTIL: the retry edge is THIS
+            # template's own trailing jmp (backward, landing on a real
+            # statement), not a separate jmps elsewhere (e.g. the body ends
+            # in a nested FOR...NEXT, which leaves no plain jmps-back for
+            # _has_jmps_back to find) -- the mirror image of _lift_do_tail's
+            # polarity, since here exit_jcc CAUSES the exit and falling
+            # through (to the jmp) retries, rather than the jcc itself being
+            # the retry edge. Checked BEFORE the inline-IF branch below,
+            # since a backward jmp can never be a genuine inline-IF's
+            # forward body-skip -- an UNTIL-form tail loop (cc 75) would
+            # otherwise be misclassified there. Confirmed against wild
+            # metric.exe (probe q_nestedfor: a DO...LOOP WHILE wrapping a
+            # FOR...NEXT, ending a GOSUB'd routine).
+            loop_kind = "WHILE" if exit_jcc[2] == 0x74 else "UNTIL"
+            idx = addrs.index(exit_jmp[2])
+            stmts.insert(idx, ir.Do(None))
+            addrs.insert(idx, None)
+            put(ir.Loop(loop_kind, cond), cur)
+        elif exit_jcc[2] == 0x75:  # inline-IF (forward skip, by exclusion above)
+            flush()
+            if block_ifs is not None and isinstance(cond, ir.RelOp):
+                # A SIMPLE condition that reached here MATERIALIZED (this function
+                # consumes the movax-FFFF template), and a genuinely single-line
+                # `IF <simple> THEN <stmt>` does NOT materialize -- it compiles a
+                # bare dispatch pair (zz_sub7/zz_mdeffn2: `jcc; jmp`, no movax
+                # FFFF, both byte-exact as inline). So this is positive evidence
+                # the SOURCE spelled a multi-line block IF. Measured on our own
+                # oracle: the two spellings of one two-statement body compile 71
+                # differing bytes, and rendering the block form inline loses 16 --
+                # the standing round-trip mismatch on zz_bif1/zz_bif4.
+                #
+                # Recorded as EVIDENCE for `_fold_if` rather than acted on here:
+                # the ELSE arms are reconstructed there, so building an IfBlock at
+                # this point would bypass that and drop the ELSE (t1_tronif /
+                # t1_tronerb, whose hooks then misalign with the physical lines).
+                # Compound conditions materialize either way, so only a plain
+                # RelOp counts.
+                block_ifs.add(cur)
+            ifs.append(
+                {"target": exit_jmp[2], "cond": cond, "start": cur, "idx": len(stmts)}
+            )
+        else:
+            raise ValueError(f"unhandled materialized test at {ops[k][0]:#x}")
+        return k + len(want)
 
 
 def _inline_safe(body) -> bool:
@@ -608,95 +615,97 @@ def _fold_body(body, targets=frozenset(), stmt_addr=None, block_ifs=None):
     `stmt_addr` entry, the same transfer `_fold_body_ifgotos` already does
     when it discards a node; otherwise the address stays keyed to the
     discarded `ir.IfInline` and `_resolve_targets` can never find it."""
-    if stmt_addr is not None and any(
-        isinstance(b, ir.IfInline)
-        and b.body
-        and isinstance(b.body[-1], ir.Goto)
-        and isinstance(b.body[-1].target, tuple)
-        and b.body[-1].target[0] == "addr"
-        for b in body
-    ):
-        # A nested IF inside THIS body carries an else-skip Goto, so the body
-        # needs the full `_fold_if` treatment (its FIRST leg is what turns that
-        # Goto into an ELSE arm) -- not just the block-fold below. Delegating
-        # rather than duplicating keeps one implementation of the ELSE
-        # reconstruction. Guarded on the marker actually being present so no
-        # body without one changes shape (wild tbd73.exe: TBW73.INC's
-        # DEF FNCurdisplay nests block IF/ELSE four deep, and its ELSE arms
-        # were left as siblings with the skip-Goto surviving).
-        # The skip lands on the ENCLOSING structure's merge point, which is
-        # outside this body -- so pass it as `bound`, the parameter _fold_if
-        # already has for "else-skip to the region's merge", or its end_idx
-        # search finds nothing and the leg is skipped.
-        marker = next(
-            b.body[-1].target[1]
-            for b in body
-            if isinstance(b, ir.IfInline)
+    with editing(body, "fold_body"):
+        if stmt_addr is not None and any(
+            isinstance(b, ir.IfInline)
             and b.body
             and isinstance(b.body[-1], ir.Goto)
             and isinstance(b.body[-1].target, tuple)
             and b.body[-1].target[0] == "addr"
-        )
-        addrs = [stmt_addr.get(id(b)) for b in body]
-        folded, _ = _fold_if(
-            list(body),
-            addrs,
-            bound=marker,
-            targets=targets,
-            stmt_addr=stmt_addr,
-            block_ifs=block_ifs,
-        )
-        body = tuple(folded)
-    out = []
-    for b in body:
-        if isinstance(b, ir.IfInline) and (
-            not _inline_safe(b.body)
-            or _body_has_target(b.body, targets, stmt_addr)
-            # `_fold_if`'s third leg, applied recursively: the BYTES say this
-            # nested IF was spelled multi-line too (zz_bif4, a block IF whose
-            # own first body statement is another block IF).
-            or (
-                block_ifs is not None
-                and stmt_addr is not None
-                and stmt_addr.get(id(b)) in block_ifs
-            )
+            for b in body
         ):
-            new_b = ir.IfBlock(
-                ((b.cond, _fold_body(b.body, targets, stmt_addr, block_ifs)),), None
+            # A nested IF inside THIS body carries an else-skip Goto, so the body
+            # needs the full `_fold_if` treatment (its FIRST leg is what turns that
+            # Goto into an ELSE arm) -- not just the block-fold below. Delegating
+            # rather than duplicating keeps one implementation of the ELSE
+            # reconstruction. Guarded on the marker actually being present so no
+            # body without one changes shape (wild tbd73.exe: TBW73.INC's
+            # DEF FNCurdisplay nests block IF/ELSE four deep, and its ELSE arms
+            # were left as siblings with the skip-Goto surviving).
+            # The skip lands on the ENCLOSING structure's merge point, which is
+            # outside this body -- so pass it as `bound`, the parameter _fold_if
+            # already has for "else-skip to the region's merge", or its end_idx
+            # search finds nothing and the leg is skipped.
+            marker = next(
+                b.body[-1].target[1]
+                for b in body
+                if isinstance(b, ir.IfInline)
+                and b.body
+                and isinstance(b.body[-1], ir.Goto)
+                and isinstance(b.body[-1].target, tuple)
+                and b.body[-1].target[0] == "addr"
             )
-            if stmt_addr is not None:
-                a = stmt_addr.get(id(b))
-                if a is not None:
-                    stmt_addr[id(new_b)] = a
-            out.append(new_b)
-        else:
-            out.append(b)
-    return tuple(out)
+            addrs = [stmt_addr.get(id(b)) for b in body]
+            folded, _ = _fold_if(
+                list(body),
+                addrs,
+                bound=marker,
+                targets=targets,
+                stmt_addr=stmt_addr,
+                block_ifs=block_ifs,
+            )
+            body = tuple(folded)
+        out = []
+        for b in body:
+            if isinstance(b, ir.IfInline) and (
+                not _inline_safe(b.body)
+                or _body_has_target(b.body, targets, stmt_addr)
+                # `_fold_if`'s third leg, applied recursively: the BYTES say this
+                # nested IF was spelled multi-line too (zz_bif4, a block IF whose
+                # own first body statement is another block IF).
+                or (
+                    block_ifs is not None
+                    and stmt_addr is not None
+                    and stmt_addr.get(id(b)) in block_ifs
+                )
+            ):
+                new_b = ir.IfBlock(
+                    ((b.cond, _fold_body(b.body, targets, stmt_addr, block_ifs)),), None
+                )
+                if stmt_addr is not None:
+                    a = stmt_addr.get(id(b))
+                    if a is not None:
+                        stmt_addr[id(new_b)] = a
+                out.append(new_b)
+            else:
+                out.append(b)
+        return tuple(out)
 
 
 def _apply_exit_folds(stmts, addrs, exit_folds):
     """EXIT FOR/LOOP/SUB/DEF folds: rewrite the early-exit GOTO to the
     loop/proc exit, then fold `IF c THEN <skip>` + EXIT into `IF negate(c) THEN EXIT`.
     """
-    for exit_stmt, skip_addr, exit_addr in exit_folds:
-        for i, s in enumerate(stmts):
-            if isinstance(s, ir.Goto) and s.target == ("addr", exit_addr):
-                stmts[i] = exit_stmt
-        i = 0
-        while i + 1 < len(stmts):
-            if (
-                isinstance(stmts[i], ir.IfGoto)
-                and stmts[i].target == ("addr", skip_addr)
-                and stmts[i + 1] == exit_stmt
-            ):
-                c = stmts[i].cond
-                if not isinstance(c, ir.RelOp):
-                    raise ValueError(f"EXIT-IF fold: non-relational cond {c!r}")
-                stmts[i] = ir.IfInline(
-                    ir.RelOp(_NEGATE_REL[c.op], c.lhs, c.rhs), (exit_stmt,)
-                )
-                del stmts[i + 1], addrs[i + 1]
-            i += 1
+    with editing(stmts, "apply_exit_folds"):
+        for exit_stmt, skip_addr, exit_addr in exit_folds:
+            for i, s in enumerate(stmts):
+                if isinstance(s, ir.Goto) and s.target == ("addr", exit_addr):
+                    stmts[i] = exit_stmt
+            i = 0
+            while i + 1 < len(stmts):
+                if (
+                    isinstance(stmts[i], ir.IfGoto)
+                    and stmts[i].target == ("addr", skip_addr)
+                    and stmts[i + 1] == exit_stmt
+                ):
+                    c = stmts[i].cond
+                    if not isinstance(c, ir.RelOp):
+                        raise ValueError(f"EXIT-IF fold: non-relational cond {c!r}")
+                    stmts[i] = ir.IfInline(
+                        ir.RelOp(_NEGATE_REL[c.op], c.lhs, c.rhs), (exit_stmt,)
+                    )
+                    del stmts[i + 1], addrs[i + 1]
+                i += 1
 
 
 def _fold_body_ifgotos(body, end_addr, stmt_addr=None):
@@ -713,21 +722,22 @@ def _fold_body_ifgotos(body, end_addr, stmt_addr=None):
     interior line, wild inv87.exe) can never resolve, since the original
     node no longer exists anywhere in the tree (gap: the address stayed
     keyed to a discarded object)."""
-    for j, b in enumerate(body[:-1]):
-        if (
-            isinstance(b, ir.IfGoto)
-            and b.target == ("addr", end_addr)
-            and isinstance(b.cond, ir.RelOp)
-        ):
-            tail = _fold_body_ifgotos(body[j + 1 :], end_addr, stmt_addr)
-            c = b.cond
-            new_node = ir.IfInline(ir.RelOp(_NEGATE_REL[c.op], c.lhs, c.rhs), tail)
-            if stmt_addr is not None:
-                a = stmt_addr.get(id(b))
-                if a is not None:
-                    stmt_addr[id(new_node)] = a
-            return body[:j] + (new_node,)
-    return body
+    with editing(body, "fold_body_ifgotos"):
+        for j, b in enumerate(body[:-1]):
+            if (
+                isinstance(b, ir.IfGoto)
+                and b.target == ("addr", end_addr)
+                and isinstance(b.cond, ir.RelOp)
+            ):
+                tail = _fold_body_ifgotos(body[j + 1 :], end_addr, stmt_addr)
+                c = b.cond
+                new_node = ir.IfInline(ir.RelOp(_NEGATE_REL[c.op], c.lhs, c.rhs), tail)
+                if stmt_addr is not None:
+                    a = stmt_addr.get(id(b))
+                    if a is not None:
+                        stmt_addr[id(new_node)] = a
+                return body[:j] + (new_node,)
+        return body
 
 
 def _jump_targets(stmts) -> frozenset[int]:
@@ -801,73 +811,74 @@ def _fold_if(
     the source can only have spelled it as `IF c THEN ...: GOTO n` over separate
     lines -- witnessed q_ifgoto2/wild onelab87.exe); the fold is skipped and the
     trailing Goto stays in the inline body. Returns new (stmts, addrs) lists."""
-    out_s, out_a = [], []
-    i = 0
-    while i < len(stmts):
-        s, a = stmts[i], addrs[i]
-        if (
-            isinstance(s, ir.IfInline)
-            and s.body
-            and isinstance(s.body[-1], ir.Goto)
-            and isinstance(s.body[-1].target, tuple)
-            and s.body[-1].target[0] == "addr"
-            and a is not None
-            and s.body[-1].target[1] > a
-        ):
-            end = s.body[-1].target[1]
-            end_idx = next(
-                (j for j in range(i + 1, len(stmts)) if addrs[j] == end), None
-            )
-            if end_idx is None and end == bound:  # else-skip to the region's merge
-                end_idx = len(stmts)
-            if end_idx is not None and any(
-                t in targets for t in addrs[i + 1 : end_idx] if t is not None
+    with editing(stmts, "fold_if"):
+        out_s, out_a = [], []
+        i = 0
+        while i < len(stmts):
+            s, a = stmts[i], addrs[i]
+            if (
+                isinstance(s, ir.IfInline)
+                and s.body
+                and isinstance(s.body[-1], ir.Goto)
+                and isinstance(s.body[-1].target, tuple)
+                and s.body[-1].target[0] == "addr"
+                and a is not None
+                and s.body[-1].target[1] > a
             ):
-                end_idx = None  # targeted interior: not an ELSE region
-            if end_idx is not None:
-                arms = [(s.cond, _fold_body(s.body[:-1], targets, stmt_addr, block_ifs))]
-                else_s, _ = _fold_if(
-                    stmts[i + 1 : end_idx],
-                    addrs[i + 1 : end_idx],
-                    bound=end,
-                    targets=targets,
-                    stmt_addr=stmt_addr,
-                    block_ifs=block_ifs,
+                end = s.body[-1].target[1]
+                end_idx = next(
+                    (j for j in range(i + 1, len(stmts)) if addrs[j] == end), None
                 )
-                if len(else_s) == 1 and isinstance(else_s[0], ir.IfBlock):
-                    arms.extend(else_s[0].arms)  # ELSEIF flatten
-                    else_body = else_s[0].else_body
-                else:
-                    else_body = tuple(else_s) if else_s else None
-                out_s.append(ir.IfBlock(tuple(arms), else_body))
+                if end_idx is None and end == bound:  # else-skip to the region's merge
+                    end_idx = len(stmts)
+                if end_idx is not None and any(
+                    t in targets for t in addrs[i + 1 : end_idx] if t is not None
+                ):
+                    end_idx = None  # targeted interior: not an ELSE region
+                if end_idx is not None:
+                    arms = [(s.cond, _fold_body(s.body[:-1], targets, stmt_addr, block_ifs))]
+                    else_s, _ = _fold_if(
+                        stmts[i + 1 : end_idx],
+                        addrs[i + 1 : end_idx],
+                        bound=end,
+                        targets=targets,
+                        stmt_addr=stmt_addr,
+                        block_ifs=block_ifs,
+                    )
+                    if len(else_s) == 1 and isinstance(else_s[0], ir.IfBlock):
+                        arms.extend(else_s[0].arms)  # ELSEIF flatten
+                        else_body = else_s[0].else_body
+                    else:
+                        else_body = tuple(else_s) if else_s else None
+                    out_s.append(ir.IfBlock(tuple(arms), else_body))
+                    out_a.append(a)
+                    i = end_idx
+                    continue
+            if isinstance(s, ir.IfInline) and (
+                not _inline_safe(s.body)
+                or _body_has_target(s.body, targets, stmt_addr)
+                # Third leg: the BYTES say the source spelled this IF multi-line
+                # (see _lift_while's `block_ifs`). Checked after the ELSE leg
+                # above, so an IF with an ELSE still reconstructs its arms there.
+                or (block_ifs is not None and a is not None and a in block_ifs)
+            ):
+                # Second leg: a body statement is a jump target -- the source was
+                # a block IF with a NUMBERED interior line jumped into from
+                # outside (witnessed t1_blkgoto / wild inv87.exe); the block form
+                # lets emit0 number that physical line (ir.BodyLine).
+                out_s.append(
+                    ir.IfBlock(
+                        ((s.cond, _fold_body(s.body, targets, stmt_addr, block_ifs)),),
+                        None,
+                    )
+                )
                 out_a.append(a)
-                i = end_idx
+                i += 1
                 continue
-        if isinstance(s, ir.IfInline) and (
-            not _inline_safe(s.body)
-            or _body_has_target(s.body, targets, stmt_addr)
-            # Third leg: the BYTES say the source spelled this IF multi-line
-            # (see _lift_while's `block_ifs`). Checked after the ELSE leg
-            # above, so an IF with an ELSE still reconstructs its arms there.
-            or (block_ifs is not None and a is not None and a in block_ifs)
-        ):
-            # Second leg: a body statement is a jump target -- the source was
-            # a block IF with a NUMBERED interior line jumped into from
-            # outside (witnessed t1_blkgoto / wild inv87.exe); the block form
-            # lets emit0 number that physical line (ir.BodyLine).
-            out_s.append(
-                ir.IfBlock(
-                    ((s.cond, _fold_body(s.body, targets, stmt_addr, block_ifs)),),
-                    None,
-                )
-            )
+            out_s.append(s)
             out_a.append(a)
             i += 1
-            continue
-        out_s.append(s)
-        out_a.append(a)
-        i += 1
-    return out_s, out_a
+        return out_s, out_a
 
 
 def _lift_midblock_troff(stmts, addrs, trace_tbl, orphans, stmt_addr, hook_seq):
@@ -882,51 +893,52 @@ def _lift_midblock_troff(stmts, addrs, trace_tbl, orphans, stmt_addr, hook_seq):
     Returns (new_stmts, new_addrs, fixed_lines, partial). Only the witnessed shape
     is handled -- a lone traced block whose immediate leaf body owns every orphan
     hook; anything else raises loudly, in keeping with the fail-loud discipline."""
-    top_hooked = [i for i, a in enumerate(addrs) if a in trace_tbl]
-    blocks = [i for i in top_hooked if isinstance(stmts[i], (ir.IfInline, ir.IfBlock))]
-    if len(top_hooked) != 1 or len(blocks) != 1:
-        raise ValueError("TROFF inside a block: only a lone traced block is supported")
-    bi = blocks[0]
-    s = stmts[bi]
-    if isinstance(s, ir.IfInline):
-        cond, body = s.cond, list(s.body)
-    else:
-        if len(s.arms) != 1 or s.else_body is not None:
-            raise ValueError("TROFF inside a block: ELSE/ELSEIF unsupported")
-        cond, body = s.arms[0][0], list(s.arms[0][1])
-    body_addr = [stmt_addr.get(id(b)) for b in body]
-    if any(a is None for a in body_addr):
-        raise ValueError("TROFF inside a block: body address missing")
-    if not set(orphans) <= set(body_addr):
-        raise ValueError("TROFF inside a block: orphan hook not in the block body")
-    hooked_body = [j for j, a in enumerate(body_addr) if a in trace_tbl]
-    if hooked_body != list(range(len(hooked_body))):
-        raise ValueError("TROFF inside a block: non-prefix trace run")
-    if len(hook_seq) != 1 + len(hooked_body):
-        raise ValueError("TROFF inside a block: hooks unaccounted")
-    dem = hooked_body[-1]  # demoted body index: TROFF goes before it
-    if any(isinstance(body[j], (ir.IfInline, ir.IfBlock)) for j in hooked_body[:-1]):
-        raise ValueError("TROFF inside a block: nested traced block unsupported")
-    new_body = body[:dem] + [ir.Troff()] + body[dem:]
-    new_block = ir.IfBlock(((cond, tuple(new_body)),), None)
-    traced_phys = 1 + dem + 1  # IF header + traced leaves + TROFF line
-    floor = hook_seq[traced_phys - 1] + 10  # post-block free lines clear the hooks
-    new_s, new_a, fixed_lines, partial = [], [], {}, {}
-    for i, (st, a) in enumerate(zip(stmts, addrs)):
-        if i == bi:
-            new_s.append(ir.Tron())  # TRON's own line is free
-            new_a.append(None)
-            bidx = len(new_s)
-            fixed_lines[bidx] = trace_tbl[a]  # block's first physical line = first hook
-            partial[bidx] = traced_phys
-            new_s.append(new_block)
-            new_a.append(a)
+    with editing(stmts, "lift_midblock_troff"):
+        top_hooked = [i for i, a in enumerate(addrs) if a in trace_tbl]
+        blocks = [i for i in top_hooked if isinstance(stmts[i], (ir.IfInline, ir.IfBlock))]
+        if len(top_hooked) != 1 or len(blocks) != 1:
+            raise ValueError("TROFF inside a block: only a lone traced block is supported")
+        bi = blocks[0]
+        s = stmts[bi]
+        if isinstance(s, ir.IfInline):
+            cond, body = s.cond, list(s.body)
         else:
-            if i == bi + 1:
-                fixed_lines[len(new_s)] = floor  # first post-region statement
-            new_s.append(st)
-            new_a.append(a)
-    return new_s, new_a, fixed_lines, partial
+            if len(s.arms) != 1 or s.else_body is not None:
+                raise ValueError("TROFF inside a block: ELSE/ELSEIF unsupported")
+            cond, body = s.arms[0][0], list(s.arms[0][1])
+        body_addr = [stmt_addr.get(id(b)) for b in body]
+        if any(a is None for a in body_addr):
+            raise ValueError("TROFF inside a block: body address missing")
+        if not set(orphans) <= set(body_addr):
+            raise ValueError("TROFF inside a block: orphan hook not in the block body")
+        hooked_body = [j for j, a in enumerate(body_addr) if a in trace_tbl]
+        if hooked_body != list(range(len(hooked_body))):
+            raise ValueError("TROFF inside a block: non-prefix trace run")
+        if len(hook_seq) != 1 + len(hooked_body):
+            raise ValueError("TROFF inside a block: hooks unaccounted")
+        dem = hooked_body[-1]  # demoted body index: TROFF goes before it
+        if any(isinstance(body[j], (ir.IfInline, ir.IfBlock)) for j in hooked_body[:-1]):
+            raise ValueError("TROFF inside a block: nested traced block unsupported")
+        new_body = body[:dem] + [ir.Troff()] + body[dem:]
+        new_block = ir.IfBlock(((cond, tuple(new_body)),), None)
+        traced_phys = 1 + dem + 1  # IF header + traced leaves + TROFF line
+        floor = hook_seq[traced_phys - 1] + 10  # post-block free lines clear the hooks
+        new_s, new_a, fixed_lines, partial = [], [], {}, {}
+        for i, (st, a) in enumerate(zip(stmts, addrs)):
+            if i == bi:
+                new_s.append(ir.Tron())  # TRON's own line is free
+                new_a.append(None)
+                bidx = len(new_s)
+                fixed_lines[bidx] = trace_tbl[a]  # block's first physical line = first hook
+                partial[bidx] = traced_phys
+                new_s.append(new_block)
+                new_a.append(a)
+            else:
+                if i == bi + 1:
+                    fixed_lines[len(new_s)] = floor  # first post-region statement
+                new_s.append(st)
+                new_a.append(a)
+        return new_s, new_a, fixed_lines, partial
 
 
 def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:

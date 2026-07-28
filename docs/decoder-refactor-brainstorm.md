@@ -376,6 +376,74 @@ IR snapshots and emitted source are generated from replayed events, while the
 legacy path remains available for comparison. Replaying an ops golden reaches
 the same first failure and produces the same output as decoding the EXE.
 
+### Status
+
+The first seam recorded events in `_finalize`, built from the finished
+statements after folding and canonical renaming, and replayed them straight
+back into `Program`. That proved the schema round-tripped and nothing else.
+It has been replaced.
+
+Events are now recorded in `DecodeState.put`, at commit time, with the
+physical address still unresolved — the boundary this chapter actually asks
+for. They run *alongside* the existing path: folding is untouched and the
+program is still built the old way. `Program.event_reconciliation` measures
+how far the two have diverged, via `events.reconcile`, which matches by
+equality in emission order and separates three outcomes — a committed
+statement folding *absorbed* into a body, one it *rewrote*, and a program
+statement it *synthesized* with no committed counterpart.
+
+That measurement is the point of the slice, and it says the event stream is
+not yet lossless:
+
+| corpus | events | matched | clean programs |
+| --- | --- | --- | --- |
+| `tests/fixtures/corpus` (1030) | 11799 | 10764 (91.2%) | 549/1030 |
+| `wild/hits` (23 decodable) | 12217 | 1934 (15.8%) | — |
+
+Run it with `python -m tbx.tools.dump_events --reconcile <exes>`.
+
+Two causes, both found by writing the tests first:
+
+- **`put` is not the point a statement becomes final.** Several handlers patch
+  an already-committed statement in place — `stmts[-1] = ir.Locate(prev.row,
+  prev.col, ax)` when the cursor argument arrives, and the same shape for
+  INPUT/FIELD/PRINT chain targets. Pending chains flush straight into the list
+  without passing through `put` at all.
+- **Some statements are reconstructed at finalization, never committed.** DATA
+  comes from the data pool and DIM from layout facts, so no commit describes
+  them. Across the fixture corpus the synthesized statements are led by
+  `SubDef` (189), `Dim` (175), `CallStmt` (42), `Data` (36) and `Tron` (36).
+
+### Losslessness, and how it was reached
+
+Chasing those paths one call site at a time would have meant getting twenty of
+them right and keeping them right. Instead the statement list records itself:
+`statement_log.RecordedStatements` is a `list` that appends a `StatementEdit`
+for every append, insert, replace, delete, and splice, and `replay` rebuilds
+the list from those edits. Unsupported mutators raise rather than pass through
+unrecorded.
+
+`_finalize` runs `replay(out.stmts.edits) == list(out.stmts)` as a decode-time
+gate. It holds for all 1030 fixtures and all 28 decodable wild programs, so
+statement-list construction is now lossless by construction rather than by
+inspection — 16290 recorded edits across the fixture corpus (12213 append,
+3828 splice, 117 delete, 75 replace, 57 insert).
+
+The gate was verified to actually fail: sabotaging `replay` to drop one
+statement makes a clean fixture raise. A guard nobody has watched fail is not
+a guard, and this one had in fact been silently absent on its first wiring.
+
+The two logs answer different questions and both are on `Program`:
+`events` is what the decoder *decided*, with addresses unresolved;
+`statement_edits` is what *happened to the list*, complete. Interpreting an
+edit as a fold, a patch, or a reconstruction is Chapter 6's job — the log
+deliberately does not editorialize.
+
+Reconciliation costs 6–15% of decode time on the largest wild programs
+(12–95 ms); the edit recorder and its gate add nothing measurable on top. Kept
+eager per this plan's rule that reproducibility outranks throughput until
+Chapter 7; revisit it there with a real figure rather than a guess.
+
 ## Chapter 6 — Extract control-flow recovery
 
 Control-flow recovery is the largest structural change and should happen only
@@ -417,6 +485,57 @@ Structured IR is produced from the graph, and all current control-flow
 fixtures pass unchanged. The graph dump can explain the historical classes of
 failures where folding moved statements, dropped addresses, or misclassified
 an epilogue as a statement.
+
+### Status
+
+The first task Chapter 5 left was to classify the 3828 splices and 117 deletes
+in the edit log. They are now classified, and by the pass that made them rather
+than by guessing from their shape.
+
+`StatementEdit.origin` names the responsible pass. It is scoped, not passed:
+`statement_log.editing(stmts, "fold_if")` labels every edit made while that
+block runs, so a pass declares itself once at its own entry instead of every
+call site remembering to. Nesting reports the innermost pass, which is what
+makes a fold inside finalization read as a fold. A plain list is accepted and
+ignored, so lift helpers stay callable with one in unit tests.
+
+Attribution across the 1030-fixture corpus, 16290 edits:
+
+| origin | edits | what it is |
+| --- | --- | --- |
+| *(none)* | 11979 (73.5%) | ordinary decode-time commit through `put` |
+| `finalize` | 3234 (19.9%) | reconstruction from layout and pool facts |
+| `fold_proc_body` | 411 (2.5%) | SUB/DEF FN body folded into its definition |
+| `close_ifs` | 160 (1.0%) | inline IF bodies drained at their target |
+| `select_case` | 142 (0.9%) | CASE arm folding |
+| `fold_for_header` | 107 (0.7%) | three staged assigns collapsed into `ir.For` |
+| `lift_*` | 148 (0.9%) | the structured-control lifts |
+| `patch_for_step` / `patch_locate` | 20 (0.1%) | handler patching a committed statement |
+| `dim_declaration` | 16 (0.1%) | DIM from layout facts |
+
+Every non-commit edit is attributed;
+`test_every_structural_edit_in_the_corpus_is_attributed` enforces that over the
+whole corpus, so a pass added later that edits the list without declaring
+itself fails immediately. Two fixtures were not enough to find the gap — they
+missed 165 edits across eleven sites that only the full corpus caught, which
+is why the test sweeps rather than samples.
+
+`python -m tbx.tools.dump_events --edits <exe>` prints the classification in
+order. This is Chapter 6's "graph dump that explains why each branch became a
+structured construct or remained a raw jump", at the level the decoder
+actually operates: an unattributed append is a decoded statement, and
+everything else names the transformation and the pass behind it.
+
+### Remaining
+
+The graph itself is still `ControlGraph.from_statements`, which validates
+targets against the finished statement list. Building it from branch and
+boundary events — and moving folding behind it so expression handlers stop
+deciding whether a branch is an IF, a loop, a CASE arm, or a procedure
+boundary — is the rest of the chapter. What has changed is that the input now
+exists: every transformation the current folding performs is recorded, named,
+and replayable, so the new passes can be checked against the old ones edit by
+edit rather than by diffing final source.
 
 ## Chapter 7 — Remove the migration scaffolding
 

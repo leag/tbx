@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tbx import ir
+from tbx.decode0.statement_log import editing
 from tbx.decode0.const import (
     _LINEINPUTREAD,
     _TABSPC_VECS,
@@ -216,7 +217,8 @@ def graphics(state: DecodeState, op, addr, kind) -> bool:
             prev = o.stmts[-1]
             if prev.cursor is not None:
                 raise ValueError(f"duplicate LOCATE cursor call at {addr:#x}")
-            o.stmts[-1] = ir.Locate(prev.row, prev.col, m.ax)
+            with editing(o.stmts, "patch_locate"):
+                o.stmts[-1] = ir.Locate(prev.row, prev.col, m.ax)
         else:  # LOCATE ,,cursor: no row/column runtime call precedes it
             state.put(ir.Locate(None, None, m.ax), c.cur)
         m.ax = None
@@ -228,9 +230,10 @@ def graphics(state: DecodeState, op, addr, kind) -> bool:
             prev = o.stmts[-1]
             if prev.start is not None or prev.stop is not None:
                 raise ValueError(f"duplicate LOCATE cursor shape call at {addr:#x}")
-            o.stmts[-1] = ir.Locate(
-                prev.row, prev.col, prev.cursor, m.bx, m.ax
-            )
+            with editing(o.stmts, "patch_locate"):
+                o.stmts[-1] = ir.Locate(
+                    prev.row, prev.col, prev.cursor, m.bx, m.ax
+                )
         else:  # LOCATE ,,,start,stop: the shape call is the whole statement
             state.put(ir.Locate(None, None, None, m.bx, m.ax), c.cur)
         m.bx = m.ax = None
