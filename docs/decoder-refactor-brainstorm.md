@@ -608,19 +608,41 @@ from that same evidence and asks the table what it means. That is the
 separation this chapter asks for, at the one site where the choice was
 genuinely being made.
 
-### What remains
-
-The other emission sites are unconditional — a FOR header is always a loop, a
-SELECT header always a case — so their construct was never really a judgement,
-and the table now states it in one place rather than eight.
+### The record locates every fold region
 
 What is still coupled is *when* folding happens: handlers push onto `ifs`,
 `whiles`, `dos` and `cases` as they decode, and those frames drive folding
-immediately. Deferring that to a pass over the graph is the remaining
-structural work, and it is the part that will move statements, so it needs the
-byte-exact verification a semantic change requires. Every input it needs now
-exists: a complete branch record, a complete edit log with provenance, and a
-table that reproduces every construct decision.
+immediately. Deferring that to a pass over the graph means the pass must find
+the same regions from the record alone.
+
+It can. `control_graph.predict_fold_starts` locates each inline-IF frame's
+fold region by replaying the statement edits that preceded the branch in the
+event stream; the length of the resulting list is where its body begins. That
+matches the handlers' own `"idx": len(self.stmts)` bookkeeping on every one of
+the 62 corpus programs that fold an inline IF.
+
+Getting there needed one thing the record did not carry. A first predictor
+counted the statements committed before the branch and agreed on 55 of the 62
+— it missed the seven where an earlier fold had already shortened the list.
+The two logs had no shared ordering, so "how long was the list when that
+branch was recognised" was unanswerable. `StatementEdit.at_event` now records
+how many events preceded each edit, which makes the interleaving exact and
+takes the prediction to 62 of 62.
+
+### What remains
+
+The swap itself: handlers stop folding as they decode, and a pass over the
+graph folds afterwards from the regions above. That is the change that will
+move statements, so it needs the goldens and the wild-corpus report as its
+gate rather than a green suite alone.
+
+Everything it depends on is now recorded and verified: a complete branch
+record, an edit log with provenance and a shared clock, a template table that
+reproduces every construct decision, and a region predictor that reproduces
+every inline-IF fold. The remaining risk is in the ordering between constructs
+— an inline IF inside a CASE arm inside a SUB body folds in a particular
+sequence today — and that ordering is the next thing to record before it can
+be reproduced.
 
 ## Chapter 7 — Remove the migration scaffolding
 

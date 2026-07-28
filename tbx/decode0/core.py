@@ -2992,6 +2992,9 @@ def _decode_user_code(
             a["name"] += "#"  # double arrays (type 06, esz 8) render with `#`
     e.stack = []  # the emulated FP stack, as ir Expr nodes
     out.stmts = RecordedStatements()
+    # Interleave the two logs: an edit records where in the event
+    # stream it happened, so a branch's list position is recoverable.
+    out.stmts.clock = lambda: len(state.events)
     out.addrs = []  # addrs[k] = first-op address of stmts[k]
     out.stmt_addr = {}  # id(stmt) -> its op address, retained across the inline
     # fold (which drops body addrs) so the TRON lift can find

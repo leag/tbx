@@ -36,6 +36,10 @@ class StatementEdit:
     stop: int | None = None
     payload: tuple[Any, ...] = ()
     origin: str | None = None
+    #: How many decoded events had been recorded when this edit was made.
+    #: Without it the edit log and the event log cannot be interleaved, and
+    #: "how long was the list when that branch was recognised" is unanswerable.
+    at_event: int = 0
 
 
 class RecordedStatements(list):
@@ -51,6 +55,9 @@ class RecordedStatements(list):
         super().__init__(initial)
         self.edits: list[StatementEdit] = []
         self.origin: str | None = None
+        #: Supplies the current event count; the default keeps a bare list
+        #: usable in unit tests that have no event log.
+        self.clock = lambda: 0
         if initial:
             self.edits.append(StatementEdit("reset", payload=tuple(initial)))
 
@@ -97,7 +104,11 @@ class RecordedStatements(list):
             self.append(statement)
 
     def _record(self, kind, **detail) -> None:
-        self.edits.append(StatementEdit(kind, origin=self.origin, **detail))
+        self.edits.append(
+            StatementEdit(
+                kind, origin=self.origin, at_event=self.clock(), **detail
+            )
+        )
 
     def _absolute(self, index: int) -> int:
         return index + len(self) if index < 0 else index

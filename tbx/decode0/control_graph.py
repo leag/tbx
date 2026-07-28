@@ -249,3 +249,29 @@ def _deciding_pass(program, seq: int) -> str | None:
         elif edit.origin is not None and commits > seq:
             return edit.origin
     return None
+
+
+def predict_fold_starts(program) -> tuple[int, ...]:
+    """Where each recorded inline-IF frame's fold region begins.
+
+    The handlers locate this today with frame bookkeeping kept while decoding
+    (`"idx": len(self.stmts)` when the frame opens). The same position is
+    recoverable from the record: replay the statement edits that preceded the
+    branch in the event stream, and the length of the resulting list is where
+    its body starts.
+
+    Replaying rather than counting commits is what makes it exact. A count of
+    committed statements misses that an earlier fold already shortened the
+    list, which is wrong for seven of the sixty-two programs in the corpus
+    that fold an inline IF.
+    """
+    from tbx.decode0.statement_log import replay
+
+    edits = tuple(program.statement_edits)
+    starts = []
+    for event in program.events:
+        if event.kind != "branch" or event.payload.frame != "if":
+            continue
+        preceding = [edit for edit in edits if edit.at_event <= event.seq]
+        starts.append(len(replay(preceding)))
+    return tuple(starts)
