@@ -9,7 +9,7 @@ Branch `release/0.1.0`. Baseline for "no behavior change" is commit `36aa8a4`.
 ## Verify the current state
 
 ```sh
-uv run pytest                 # 2691 pass
+uv run pytest                 # 2696 pass
 uv run ruff check             # clean
 uv run python -m tbx.tools.scan_wild wild/hits
 ```
@@ -122,9 +122,10 @@ position is the list length at that event, replayed from the edits:
 
 | fold | event | recorded where |
 | --- | --- | --- |
-| inline IF | branch, with its condition | `open_tail_if`, two lifts, one core site |
-| CASE arm / CASE ELSE | `case_arm` / `case_else` region | `_begin_body`, the else transition |
+| inline IF | branch, with its condition and spelling | `open_tail_if`, two lifts, one core site |
+| CASE arm / CASE ELSE | `case_arm` / `case_else` region, with its guards | `_begin_body`, the else transition |
 | SUB / DEF FN body | `proc` / `fn` region | `proc_enter`, the DEF FN auto-open |
+| SELECT CASE | `select` region, with its selector | END SELECT, where both ends are known |
 
 Each frame keeps its old `idx` purely as a cross-check: if the record's answer
 disagrees with the length the walk saw, decoding raises. It never has, across
@@ -152,15 +153,22 @@ corpus fold a body holding a `SELECT CASE` the walk had already built (no
 had already spliced. Commit coordinates and list coordinates agree until one of
 those runs.
 
+**A CASE arm is located too.** An arm ends at its arm-close jmp, which owns no
+statement, so its extent is a moment like an inline IF's: a region's end is now
+an address the log waits for, and `fold_pass.arm_regions` sizes every arm from
+the arrival there — 35 of 35 in the corpus, 67 of 67 in wild `tbd73.exe`, none
+empty. With the guards and the selector recorded, everything a pass needs to
+*build* a `SelectCase` is in the log except the statements themselves.
+
 So the remaining work is what a deferred pass still cannot reconstruct:
 
 - **`SelectCase` and `SubDef`/`DefFn` are never committed.** They are built by
   their fold from statements that were, so the record offers a later pass the
-  bodies flat and no statement to fold them into. Everything else about them is
-  now recorded; this is not.
-- **A CASE arm's guards are not in the record.** `CaseValue`, `CaseRange` and
-  `CaseIs` accumulate on the frame as the walk recognises them, and the region
-  event carries only the extent. A pass cannot build the arm without them.
+  bodies flat and no statement to fold them into. This is what blocks the 4+4
+  fold-pass differences above.
+- **A procedure's name and parameters are not in the record.** They live in
+  `proc_names`/`proc_params`, keyed by address. The `proc` region says where
+  the body is, not what to call it.
 
 ## Why the timing is load-bearing
 
@@ -183,11 +191,13 @@ than to convenience.
 
 ## Next steps, in order
 
-1. **Record a CASE arm's guards, and commit `SelectCase`/`SubDef`.** The two
-   things a deferred pass still cannot reconstruct. Guards want a richer region
-   payload than `(kind, start, end)`; committing the constructs is the change
-   that lets `fold_pass` see inside them, and it is the one that will move
-   what `reconcile` reports.
+1. **Build `SelectCase` in `fold_pass`, from the regions and guards now
+   recorded, and measure it against what the walk builds** — the same shadow
+   comparison that measured the inline-IF fold. Expect `_fold_arm`'s use of
+   `stmt_addr` for address retention to be the awkward part, since a pass that
+   has not committed the statements cannot claim addresses for them.
+   Then the same for `SubDef`, which additionally needs the procedure's name
+   and parameters recorded.
 2. **Then run all three after the walk.** Gate on the goldens and the
    wild-corpus report, not on a green suite — this is the first change in the
    chapter that will move statements. Expect the epilogue-target and

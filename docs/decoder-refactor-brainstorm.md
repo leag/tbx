@@ -820,9 +820,10 @@ the list length at that event, replayed from the edits:
 
 | fold | event | recorded where |
 | --- | --- | --- |
-| inline IF | branch, with its condition | `open_tail_if`, two lifts, one core site |
-| CASE arm / CASE ELSE | `case_arm` / `case_else` region | `_begin_body`, the else transition |
+| inline IF | branch, with its condition and spelling | `open_tail_if`, two lifts, one core site |
+| CASE arm / CASE ELSE | `case_arm` / `case_else` region, with its guards | `_begin_body`, the else transition |
 | SUB / DEF FN body | `proc` / `fn` region | `proc_enter`, the DEF FN auto-open |
+| SELECT CASE | `select` region, with its selector | END SELECT, where both ends are known |
 
 The inline-IF frame goes furthest: it was a dict carrying the target, the
 condition, the start address and the list position, and all four are in the
@@ -831,6 +832,14 @@ region is recorded in `_begin_body`, where the body's start and the arm-close
 jmp it runs to are both known and nowhere earlier. A DEF FN recorded nothing at
 all before this — it is recognised by exclusion, as the first op in the
 definition region with no frame open.
+
+A CASE arm's guards, a SELECT's selector, and whether the bytes say an IF was
+spelled multi-line all ride along with the region or branch that recognised
+them -- each was decode state a pass reading the log could not see. An arm's
+own extent is a moment like an inline IF's, since its arm-close jmp owns no
+statement, so a region's end is now an address the log waits for and arriving
+there is an event: `fold_pass.arm_regions` sizes 35 of 35 corpus arms and 67 of
+67 in wild tbd73.exe from that alone.
 
 Each frame keeps its old position purely as a cross-check: disagreeing raises,
 and across both corpora it never has. Chapter 7 deletes them. Sabotaging the
@@ -862,11 +871,12 @@ fold has moved the list under it.
 
 Two things, in order:
 
-1. Record a CASE arm's guards, and commit `SelectCase`/`SubDef`. These are the
-   two things a deferred pass still cannot reconstruct: guards accumulate on
-   the frame and the region event carries only an extent, and neither construct
-   is ever committed, so the record offers a later pass their bodies flat with
-   nothing to fold them into.
+1. Build `SelectCase` in `fold_pass` from the regions and guards now recorded,
+   and measure it against what the walk builds -- the same shadow comparison
+   that measured the inline-IF fold. What is left after that is that neither
+   `SelectCase` nor `SubDef` is ever committed, so a pass cannot see inside one
+   that a fold has already built, and that a procedure's name and parameters
+   live in `proc_names`/`proc_params` rather than in the log.
 2. Then run all three after the walk, gated on the goldens and the wild-corpus
    report. The measured account of what breaks when they move separately is its
    specification.
