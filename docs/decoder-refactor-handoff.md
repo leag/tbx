@@ -9,7 +9,7 @@ Branch `release/0.1.0`. Baseline for "no behavior change" is commit `36aa8a4`.
 ## Verify the current state
 
 ```sh
-uv run pytest                 # 2696 pass
+uv run pytest                 # 2698 pass
 uv run ruff check             # clean
 uv run python -m tbx.tools.scan_wild wild/hits
 ```
@@ -136,15 +136,25 @@ The inline-IF frame goes further — it is the branch event's `seq` and nothing
 else, so `close_ifs` reads the condition, the start address and the target out
 of the log too.
 
-**The deferred pass exists and is measured.** `fold_pass.fold_inline_ifs`
-folds every recorded region from the commit stream, in commit coordinates,
-touching no decode state. Nothing calls it in the pipeline. Against what the
-walk actually did:
+**The deferred pass exists and is measured.** `fold_pass` folds inline IFs,
+CASE arms and SELECTs from the commit stream, in commit coordinates, touching
+no decode state. Nothing calls it in the pipeline. Against what the walk did:
 
 | | folds | reproduced |
 | --- | --- | --- |
-| `tests/fixtures/corpus` | 80 | **76** |
-| `wild/hits` | 403 | **388** |
+| inline IFs, `tests/fixtures/corpus` | 80 | **76** |
+| inline IFs, `wild/hits` | 403 | **388** |
+| SELECTs, `tests/fixtures/corpus` | 26 | **26** |
+| SELECTs, `wild/hits` | 16 | **13** |
+
+Constructs are folded in the order they *close* — whatever finishes first is
+innermost — which also settles the ties: an inline IF closing a CASE arm shares
+the arm's arrival and goes first, exactly as `_fold_arm` calls `close_ifs`
+before snapshotting, and a CASE ELSE goes after the arms, so a provisional else
+region that a real arm overwrote comes out empty and becomes no CASE ELSE at
+all. Two behaviours of the walk had to be reproduced rather than read: a fold
+must claim its new statement's address, because `_fold_body` reconstructs an
+ELSE by looking one up for statements that are no longer top level.
 
 Every difference is another walk-time fold, not a gap in the record: 4 in each
 corpus fold a body holding a `SELECT CASE` the walk had already built (no
@@ -162,10 +172,14 @@ empty. With the guards and the selector recorded, everything a pass needs to
 
 So the remaining work is what a deferred pass still cannot reconstruct:
 
+- **The loop lifts are a fourth family of walk-time folds.** `lift_while`,
+  `lift_bool_do_tail`, `lift_do_tail` and the FOR/NEXT lifts rewrite the list
+  as they go, exactly as the three folds above did. All three wild SELECT
+  misses are an arm holding a loop. They need the same treatment: record what
+  they recognise, then fold from it.
 - **`SelectCase` and `SubDef`/`DefFn` are never committed.** They are built by
-  their fold from statements that were, so the record offers a later pass the
-  bodies flat and no statement to fold them into. This is what blocks the 4+4
-  fold-pass differences above.
+  their fold from statements that were, so a pass cannot see inside one the
+  walk has already built. This is what blocks the 4+4 inline-IF differences.
 - **A procedure's name and parameters are not in the record.** They live in
   `proc_names`/`proc_params`, keyed by address. The `proc` region says where
   the body is, not what to call it.
@@ -191,13 +205,11 @@ than to convenience.
 
 ## Next steps, in order
 
-1. **Build `SelectCase` in `fold_pass`, from the regions and guards now
-   recorded, and measure it against what the walk builds** — the same shadow
-   comparison that measured the inline-IF fold. Expect `_fold_arm`'s use of
-   `stmt_addr` for address retention to be the awkward part, since a pass that
-   has not committed the statements cannot claim addresses for them.
-   Then the same for `SubDef`, which additionally needs the procedure's name
-   and parameters recorded.
+1. **Record the loop lifts' regions**, the way the inline IF, the CASE arm and
+   the procedure body were recorded, and fold them in `fold_pass` — they are
+   the only walk-time fold family left, and the three wild SELECT misses are
+   waiting on them. Then `SubDef`, which additionally needs the procedure's
+   name and parameters recorded.
 2. **Then run all three after the walk.** Gate on the goldens and the
    wild-corpus report, not on a green suite — this is the first change in the
    chapter that will move statements. Expect the epilogue-target and

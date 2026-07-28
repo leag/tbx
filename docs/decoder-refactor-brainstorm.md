@@ -846,11 +846,22 @@ and across both corpora it never has. Chapter 7 deletes them. Sabotaging the
 derivation by one fails fold, SELECT and procedure tests, so all three guards
 are watched to fire.
 
-The second half is measured but not made. `fold_pass.fold_inline_ifs` folds
-every recorded region from the committed statement stream, in commit
-coordinates, touching no decode state; nothing calls it in the pipeline. It
-reproduces 76 of the fixture corpus's 80 folds and 388 of the wild corpus's 403
-— same conditions, same bodies, same nesting.
+The second half is measured but not made. `fold_pass` folds inline IFs, CASE
+arms and SELECTs from the committed statement stream, in commit coordinates,
+touching no decode state; nothing calls it in the pipeline. It reproduces 76 of
+the fixture corpus's 80 inline-IF folds and 388 of the wild corpus's 403 — same
+conditions, same bodies, same nesting — and rebuilds all 26 corpus SELECTs and
+13 of wild tbd73.exe's 16, guards, selector, arms and CASE ELSE included.
+
+Constructs fold in the order they *close*: whatever finishes first is
+innermost. That settles the ties too — an inline IF closing a CASE arm shares
+the arm's arrival and goes first, which is what `_fold_arm` does by calling
+`close_ifs` before it snapshots, and a CASE ELSE goes after the arms, so a
+provisionally-opened else region that a real arm overwrote comes out empty and
+becomes no CASE ELSE at all. Two behaviours had to be reproduced rather than
+read: a fold must claim its new statement's address, since `_fold_body`
+reconstructs an ELSE arm by looking one up for statements that are no longer
+top level.
 
 Every difference is another walk-time fold rather than a gap in the record:
 
@@ -864,19 +875,23 @@ Every difference is another walk-time fold rather than a gap in the record:
   coordinates agree until one of those runs.
 
 Which is "the three folds have to move together", made quantitative and
-localized. The inline-IF fold needs nothing from the walk except that no other
-fold has moved the list under it.
+localized. A fold needs nothing from the walk except that no other fold has
+moved the list under it -- and the three wild SELECT misses say the same thing
+about a fourth family: `lift_while`, `lift_bool_do_tail` and the FOR/NEXT lifts
+rewrite the list as they go too, and every one of those misses is an arm
+holding a loop.
 
 ### What remains
 
 Two things, in order:
 
-1. Build `SelectCase` in `fold_pass` from the regions and guards now recorded,
-   and measure it against what the walk builds -- the same shadow comparison
-   that measured the inline-IF fold. What is left after that is that neither
-   `SelectCase` nor `SubDef` is ever committed, so a pass cannot see inside one
-   that a fold has already built, and that a procedure's name and parameters
-   live in `proc_names`/`proc_params` rather than in the log.
+1. Record the loop lifts' regions, the way the inline IF, the CASE arm and the
+   procedure body were recorded, and fold them in `fold_pass`. They are the
+   last walk-time fold family, and the three wild SELECT misses wait on them.
+   What is left after that is that neither `SelectCase` nor `SubDef` is ever
+   committed, so a pass cannot see inside one a fold has already built, and
+   that a procedure's name and parameters live in `proc_names`/`proc_params`
+   rather than in the log.
 2. Then run all three after the walk, gated on the goldens and the wild-corpus
    report. The measured account of what breaks when they move separately is its
    specification.
