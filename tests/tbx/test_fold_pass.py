@@ -124,6 +124,65 @@ def test_the_pass_reproduces_every_fold_it_can_see():
     assert deferred_blind == _BODIES_HOLDING_ANOTHER_FOLD
 
 
+def _walk_selects(prog):
+    """Every SELECT the walk built, in the order it built them."""
+    return [
+        edit.payload[0]
+        for edit in prog.statement_edits
+        if edit.origin == "select_case"
+        and edit.payload
+        and isinstance(edit.payload[0], ir.SelectCase)
+    ]
+
+
+def test_the_pass_builds_a_select_from_the_record():
+    from tbx.decode0.fold_pass import fold_constructs
+
+    prog = decode0.decode_user_code((CORPUS / "t1_selarmtarget.exe").read_bytes())
+
+    built = [s for s in _every_statement(fold_constructs(prog)) if isinstance(s, ir.SelectCase)]
+
+    assert built == _walk_selects(prog)
+
+
+def test_the_pass_builds_every_select_in_the_corpus():
+    """Guards, selector, arm bodies and CASE ELSE, all from the log.
+
+    The arms are the part that was never in doubt -- they are committed
+    statements. What this measures is whether the regions, the guards and the
+    selector recorded alongside them are enough to put the construct back
+    together without the recognizer's frame.
+
+    All 26 in the corpus, and 13 of the 16 in wild `tbd73.exe`. The three that
+    differ hold a loop in an arm: `lift_while` and its siblings are a fourth
+    family of walk-time folds, and an arm whose body they rewrote cannot be
+    rebuilt from a stream where they have not run.
+    """
+    from tbx.decode0.fold_pass import fold_constructs
+
+    missed = []
+    for exe in sorted(CORPUS.glob("*.exe")):
+        try:
+            prog = decode0.decode_user_code(exe.read_bytes())
+        except ValueError:
+            continue
+        walked = _walk_selects(prog)
+        if not walked:
+            continue
+        built = [
+            s
+            for s in _every_statement(fold_constructs(prog))
+            if isinstance(s, ir.SelectCase)
+        ]
+        for select in walked:
+            if select not in built:
+                missed.append((exe.name, str(select.selector)))
+
+    assert not missed, (
+        f"{len(missed)} SELECTs the deferred pass builds differently: {missed[:5]}"
+    )
+
+
 def test_a_program_with_no_inline_if_is_left_alone():
     prog = decode0.decode_user_code((CORPUS / "t1_print2.exe").read_bytes())
 
