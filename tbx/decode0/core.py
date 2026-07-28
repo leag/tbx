@@ -434,6 +434,53 @@ class DecodeState:
         """
         return frozenset().union(frozenset(), *(fr["addrs"] for fr in self.pending_ifs))
 
+    @property
+    def fold_products(self) -> frozenset:
+        """Addresses a queued region will carry once it folds.
+
+        The other half of `folded_away`: the fold replaces the body with one
+        `IfInline` standing at the branch's own address, so that address is a
+        statement start under the eager fold and is not in the list yet here.
+        """
+        return frozenset(
+            self.frame_event(fr).address
+            for fr in self.pending_ifs
+            if self.frame_event(fr).address is not None
+        )
+
+    def statement_index(self, address) -> int | None:
+        """Where `address` starts a statement once the queued folds have run.
+
+        The eager fold answered this by construction, and every recognizer
+        that asks -- "is this backward jmp's target a statement, and which
+        one?" -- means the folded list. Deferring leaves the list halfway
+        between the two states, so the answer is composed: what stands there
+        now, minus the bodies a queued region will absorb, plus the statements
+        those regions will leave behind.
+
+        A queued region's own position is a live one. Nothing below it has
+        folded yet, so its recorded `start` is where its `IfInline` lands.
+        """
+        for fr in self.pending_ifs:
+            if self.frame_event(fr).address == address:
+                return fr["start"]
+        if address in self.folded_away:
+            return None
+        return self.addrs.index(address) if address in self.addrs else None
+
+    def shift_pending(self, index: int, delta: int) -> None:
+        """Move queued fold regions across a splice at `index`.
+
+        A queued region is a pair of list positions, so a statement inserted
+        below one moves the body it names. The eager fold never had to know:
+        by the time a loop lift ran, the region was already a single statement.
+        """
+        for fr in self.pending_ifs:
+            if fr["start"] >= index:
+                fr["start"] += delta
+            if fr["stop"] >= index:
+                fr["stop"] += delta
+
     def drain_folds(self, limit: int = 0) -> None:
         """Fold every queued inline-IF region that lies at or after ``limit``.
 
@@ -3009,6 +3056,10 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         c.cur = None
     elif kind == "jmps":
         nxt = img.ops[c.k + 1] if c.k + 1 < len(img.ops) else None
+        # Asked once, against the list as the queued folds will leave it: every
+        # branch below means the folded list, which is what the eager fold
+        # handed them for free.
+        back_idx = state.statement_index(op[2])
         if (
             c.dos and op[2] == c.dos[-1]["test"]
         ):  # head-test DO ... LOOP back-edge
@@ -3023,15 +3074,12 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             if nxt is None or nxt[0] != f["exit"]:
                 raise ValueError(f"WEND exit mismatch at {addr:#x}")
             state.put(ir.Wend(), c.cur)
-        elif (
-            op[2] < addr
-            and op[2] in out.addrs
-            and op[2] not in state.folded_away
-        ):  # bare backward jmps = infinite DO
-            idx = out.addrs.index(op[2])  # splice `DO` before the body start
+        elif op[2] < addr and back_idx is not None:  # bare backward jmps = infinite DO
+            idx = back_idx  # splice `DO` before the body start
             with editing(out.stmts, "fold_loop_header"):
                 out.stmts.insert(idx, ir.Do(None))
             out.addrs.insert(idx, None)
+            state.shift_pending(idx, 1)
             state.put(ir.Loop(None), c.cur)
             # EXIT LOOP: a GOTO past the LOOP (to nxt) is an exit; the conditional that
             # skips it jumps to the LOOP back-edge (this jmps' addr). Fold at epilogue.
