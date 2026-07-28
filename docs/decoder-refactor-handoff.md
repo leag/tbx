@@ -33,7 +33,7 @@ signal that something moved.
 | 3 state ownership | **complete** |
 | 4 recognition/mutation split | substantial, two families outstanding |
 | 5 event stream | **complete**: every statement has an event |
-| 6 control-flow extraction | folds record-driven; timing moved on `experimental/deferred-fold`, one divergence open |
+| 6 control-flow extraction | folds record-driven; timing moved and green on `experimental/deferred-fold` |
 | 7 remove scaffolding | not started |
 
 ## What is proven, with numbers
@@ -187,60 +187,62 @@ So the remaining work is what a deferred pass still cannot reconstruct:
   `proc_names`/`proc_params`, keyed by address. The `proc` region says where
   the body is, not what to call it.
 
-## The timing move: `experimental/deferred-fold`
+## The timing move, done: `experimental/deferred-fold`
 
-Branch `experimental/deferred-fold`, head `d8b622f`, off this one. `close_ifs`
-queues its region at the arrival instead of folding, and `drain_folds` folds the
-queue when the construct that owns it closes -- the arm snapshot, the procedure
-return, the end of the walk.
+Branch `experimental/deferred-fold`, head `2d126e0`, off this one, **green and
+ready to merge**. `close_ifs` queues its region at the arrival instead of
+folding, and `drain_folds` folds the queue when the construct that owns it
+closes -- the arm snapshot, the procedure return, the end of the walk.
 
-**It very nearly lands.** All 1030 corpus goldens and the IR snapshot are
-byte-identical under deferred folding, the wild scan decodes the same 32
-programs release does, and 2697 of 2699 tests pass. What the attempt cost was
-four entanglements, all of the same shape: a later recognizer asking a question
-about the statement list that the eager fold used to have already answered.
+The gates it passes: 2699 tests, Ruff clean, all 1030 corpus goldens and the IR
+snapshot byte-identical, and a `scan_wild wild/hits` report byte-identical to
+this branch's across all 86 EXEs -- same 32 decode-ok, same statement counts.
 
-- **Three `jmps` discriminators, and `_lift_while`'s tail test, mean the folded
-  list.** "Is this backward jmp's target a statement start?" is true for
-  addresses a queued region is about to absorb, and false for the address the
-  region's `IfInline` will stand at. `DecodeState.statement_index` composes the
-  answer -- what is there now, minus `folded_away`, plus `fold_products` -- and
-  returns the position, which the infinite-DO leg needs. Wild `ziptest.exe` at
-  `0xa4bb` and `horses.exe` at `0x848a` are the witnesses.
+Six entanglements had to move, and they are all the same shape: a later
+recognizer asking a question about the statement list that the eager fold used
+to have already answered.
+
+- **Four discriminators mean the folded list.** "Is this backward jmp's target
+  a statement start?" is true for addresses a queued region is about to
+  absorb, and false for the address the region's `IfInline` will stand at.
+  `DecodeState.statement_index` composes the answer -- what is there now, minus
+  `folded_away`, plus `fold_products` -- and returns the position, which the
+  infinite-DO leg needs. Wild `ziptest.exe` at `0xa4bb` and `horses.exe` at
+  `0x848a`.
 - **A `DO` spliced ahead of a loop body moves every queued region after it.**
   Four sites do it; `shift_pending` is the bookkeeping, passed to the lifts as
-  a `shift` callback. Wild `horses.exe` again: its region drifted two
-  statements early and the IF swallowed the `INPUT` pair in front of it.
+  a `shift` callback. The bounds are half-open and move differently at their
+  own index: an insert at `start` pushes the body down, an insert at `stop`
+  lands outside and must not stretch it. Wild `horses.exe` for the first
+  (its region drifted two statements early), `state.exe`'s IF at `0xeaca` for
+  the second (its two statements became three, the extra being the `DO`).
 - **`_fold_arm` needs both halves.** `state.close_ifs(merge)` is what *queues*
   the frame -- the dispatch loop never reaches the arm-close address, because
   `select_case.step` consumes the op first -- and the drain is what folds it.
   Replacing the close with the drain folds nothing, and `t1_iftailarm` loses
   its IF.
+- **The drain's own shift arithmetic mixed two coordinate systems.** It keyed
+  each subtraction on where a splice *landed* rather than on where the region
+  *ended*. The two agree for the first fold in a batch and drift apart from
+  there, so late in a long batch every earlier fold looked as though it
+  preceded every later region -- including regions nested inside one still to
+  be folded, whose body then started too early. Wild `invoice.exe`, the IF at
+  `0xd316`: 11 statements folded where the walk saw 8.
 
-**What is left is one divergence and two tests.**
+Two things the swap changed rather than broke, both now recorded rather than
+worked around:
 
-Four wild programs -- `invoice.exe`, `inv87.exe`, `state.exe`, `state87.exe` --
-decode to a different shape. The regions themselves are *not* the problem: all
-99 inline-IF regions in `invoice.exe` agree across the two branches on IF
-address, body start address and statement count at close. Three of them
-nevertheless splice a longer body. The reproduction is the IF at `0xd316`
-closing at `0xd49a`: the same branch event (`seq=785`) on both branches, but
-release opens the frame at list index 620 and folds 8 statements, while
-deferral opens at 707 and folds 11. The three extra are a `Goto` and two
-`IfInline`s -- statements release had already folded *before* the frame opened,
-and deferral has not folded yet when it closes. Two more show the same pattern
-(`0xfc2b`: 130 against 215; `0x157c7`: 30 against 46).
-
-That is the last thing the record does not carry: not where a region is, but
-which of the statements inside it are themselves regions that have not run yet.
-
-`test_fold_prediction.py`'s two corpus guards fail, and the failure is a changed
-premise rather than a defect. Both read the actual region off the *applied*
-splice, whose `index` and `stop` are the coordinates the fold landed at. Under
-eager folding those are the region's own coordinates; under deferral everything
-folded in between has already moved them. The prediction still locates every
-region -- that was measured directly, 99 of 99 -- so what the tests need is an
-actual expressed in close coordinates, which nothing currently records.
+- **Where a fold lands is no longer where its region was.** Everything folded
+  in between has moved it. `Program.fold_regions` is the walk's own account of
+  the region -- where the body began, and the list length when decoding
+  reached the branch's target -- kept past the fold that consumes it. It is
+  what a prediction from the record can be checked against.
+- **`predict_fold_extents` no longer applies the collapse arithmetic.** Nested
+  frames sharing an arrival all end at that one moment. What the enclosing
+  region spans *after* the inner ones fold depends on the order the pass folds
+  in and on what else it has folded since, so it belongs to the pass. Leaving
+  it in the predictor made a reader of the record describe one particular
+  folding schedule.
 
 ## Why the eager timing was load-bearing
 
@@ -263,20 +265,15 @@ than to convenience.
 
 ## Next steps, in order
 
-1. **Find why a deferred region folds statements release had already folded.**
-   The reproduction is in the section above: wild `invoice.exe`, the IF at
-   `0xd316`, 8 statements against 11. Three regions in that program, two in
-   `state.exe`. Everything else about the timing move is done, and this is the
-   only thing between it and a clean swap.
-2. **Give the two prediction guards an actual in close coordinates.** They
-   compare against the applied splice, which deferral shifts. Recording the
-   region the walk computed -- `frame_start` and the list length at the
-   arrival -- is what they need, and it is a fact the deferred design has to
-   keep anyway.
-3. **Record the loop lifts' regions**, the way the inline IF, the CASE arm and
+1. **Merge `experimental/deferred-fold`.** It is green on every gate this
+   chapter uses. Worth running `docs/release-checklist.md`'s oracle sample
+   against it first: the goldens say the emitted source did not move, and the
+   oracle is what says it still recompiles byte-for-byte.
+2. **Record the loop lifts' regions**, the way the inline IF, the CASE arm and
    the procedure body were recorded, and fold them in `fold_pass` -- they are
    the only walk-time fold family left, and the three wild SELECT misses are
    waiting on them. Then `SubDef`, which additionally needs the procedure's
    name and parameters recorded.
-4. **Chapter 4's two families**, independently of the above.
-5. **Chapter 7**, only after the swap lands.
+3. **Chapter 4's two families**, independently of the above.
+4. **Chapter 7**, now unblocked by the swap: the frames' `idx` cross-check has
+   done its job and can go, along with the three guards Chapter 6 kept.
