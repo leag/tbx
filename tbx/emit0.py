@@ -129,6 +129,16 @@ def emit(stmts) -> str:
     # embeds the error-trap line table (decode0.Program.lines): its entries store
     # the real line numbers, so the originals must be preserved to round-trip.
     orig = getattr(stmts, "lines", None)
+    if orig is not None and len(orig) > 1 and len(set(orig)) <= 1:
+        # A table whose entries are all the same number distinguishes nothing,
+        # and cannot be the source's numbering: statements sharing a line are
+        # grouped onto it, and 1789 of them do not fit 248 characters. Reading
+        # it as real put the whole of wild metric.exe on one 43759-character
+        # line the editor could not load. Treated as absent, so the statements
+        # are renumbered the way a program carrying no table at all is -- which
+        # compiles, where the grouped spelling could not be compiled to be
+        # judged. All 52 corpus fixtures with a table have a real one.
+        orig = None
     if orig is not None:
         line = {i: ln for i, ln in enumerate(orig)}
     else:

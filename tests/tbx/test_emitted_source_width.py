@@ -20,11 +20,14 @@ inside the limit, and every violation is in a wild program. Three shapes:
   condition is not interchangeable -- its inline form does not materialize,
   which is what `decode0`'s `block_ifs` turns on -- so it is left alone.
   Fixed wild inv87/invoice (353) and state/state87 (265).
-- a program whose line table did not come back, so every statement is grouped
-  onto one physical line 0 (wild metric.exe, 43759 characters). Not an
-  emitter problem: there are no line numbers to spread it over.
+- a program whose recorded line table has one distinct value, so every
+  statement was grouped onto it. Such a table distinguishes nothing and cannot
+  be the source's numbering -- 1789 statements do not fit 248 characters -- so
+  `emit0` treats it as absent and renumbers. Fixed wild metric.exe (43759), the
+  last of them, and it now compiles where before it could not be loaded.
 
-Listed rather than counted, so the set cannot grow without someone saying why.
+No program in either corpus emits an over-wide line any more, so the guard is
+stated as the invariant rather than as a list of exceptions.
 """
 
 from pathlib import Path
@@ -56,13 +59,7 @@ _OVER_LONG = {
 
 CORPUS = Path(__file__).resolve().parents[1] / "fixtures" / "corpus"
 
-#: Wild programs known to emit a line the Turbo Basic editor would reject,
-#: with the width of the widest one. Real defects, each awaiting the
-#: reconstruction or line-table work that fixes it -- recorded here so a new
-#: one is noticed the moment it appears.
-_OVER_WIDE = {
-    "metric.exe": 43759,  # no line table: the whole program on line 0
-}
+
 
 
 def _widest(exe: bytes) -> int:
@@ -84,34 +81,38 @@ def test_no_fixture_emits_a_line_the_editor_would_reject():
     assert not over, f"{len(over)} fixtures emit an over-wide line: {over[:5]}"
 
 
-@pytest.mark.parametrize("name,widest", sorted(_OVER_WIDE.items()))
-def test_a_known_over_wide_program_has_not_got_worse(name, widest):
-    """Pinned, so a fix shows up as a failure rather than passing unnoticed.
-
-    Narrowing one of these is the intended direction; the assertion is on the
-    recorded width so it says so when it changes, either way.
-    """
-    from conftest import wild_hits_bytes
-
-    assert _widest(wild_hits_bytes(name)) == widest
-
-
-def test_no_other_wild_program_emits_an_over_wide_line():
-    """The set is closed: a ninth program appearing is a regression."""
+def test_no_wild_program_emits_an_over_wide_line():
+    """The wild corpus is where every one of these was found, and is now clean."""
     from conftest import wild_hits_bytes
 
     wild_hits_bytes("zip.exe")  # skip the whole check when the corpus is absent
     hits = Path(__file__).resolve().parents[2] / "wild" / "hits"
-    over = set()
+    over = []
     for exe in sorted(hits.glob("*.exe")):
         try:
             widest = _widest(exe.read_bytes())
         except Exception:
             continue
         if widest > EDITOR_LINE_LIMIT:
-            over.add(exe.name)
+            over.append((exe.name, widest))
 
-    assert over == set(_OVER_WIDE)
+    assert not over, f"{len(over)} wild programs emit an over-wide line: {over}"
+
+
+def test_a_line_table_that_distinguishes_nothing_is_not_used():
+    """The condition the metric.exe fix turns on, stated directly.
+
+    Grouping is driven by statements sharing a recorded line number. A table
+    with one distinct value groups the entire program onto one line, which no
+    source could have contained. Every corpus table has real numbers in it, so
+    this path is reached by no fixture.
+    """
+    from conftest import wild_hits_bytes
+
+    prog = decode0.decode_user_code(wild_hits_bytes("metric.exe"))
+
+    assert len(set(prog.lines)) == 1, "fixture drifted: table is no longer degenerate"
+    assert _widest(wild_hits_bytes("metric.exe")) <= EDITOR_LINE_LIMIT
 
 
 def _size(exe: bytes) -> int:
