@@ -14,6 +14,7 @@ from tbx.decode0.const import (
     _LINEINPUTREAD,
     _TABSPC_VECS,
 )
+from tbx.decode0.matchers import match_using_chain_continues
 
 if TYPE_CHECKING:
     from tbx.decode0.core import DecodeState
@@ -404,14 +405,7 @@ def console(state: DecodeState, op, addr, kind) -> bool:
             # TAB/SPC is an item inside a PRINT USING chain only when another
             # USING emit follows it. A trailing TAB starts the next statement
             # in existing wild output, so retain the old lazy flush there.
-            in_chain = False
-            for look in i.ops[c.k + 1 : c.k + 18]:
-                if look[1] == "rt" and look[2] in (0xCB, 0xCC):
-                    in_chain = True
-                    break
-                if look[1] == "rt" and look[2] in (0xCA, 0xB8, 0xB9):
-                    break
-            if in_chain:
+            if match_using_chain_continues(i.ops, c.k) is not None:
                 e.pend_using["values"].append(ir.Call(name, (m.ax,)))
                 m.ax = None
                 c.cur = None

@@ -290,6 +290,48 @@ The five families have no mixed recognition/mutation path in normal decoding.
 Their pure tests explain the accepted alternatives and rejection reasons, and
 all existing fixtures remain byte-exact.
 
+### Status
+
+`TemplateMatch` is the shared result: every match names its template and the
+operation range the claim rests on. That range is the *template's* extent, not
+what the applier consumes — a boolean header is six operations wide even when
+folding the expression runs much further. Family-specific subclasses add
+operands and polarity. Matchers take either `(ops, index)` or an `OpCursor`;
+the cursor form is read-only, and a test pins that matching leaves the index
+and history untouched.
+
+Migrated, each with accept and rejection tests over hand-built operation
+tuples (`tests/tbx/test_matchers.py`, 42 cases, no fixture dependency):
+
+1. compound booleans — `match_bool_term1`, `match_bool_bare_term1`,
+   `match_bool_outer_and_group`;
+2. array-parameter frames — `match_array_param_type`;
+3. procedure frames — `match_proc_body`, `match_fn_result_readback`;
+4. runtime-vector dispatch — `match_using_emit`,
+   `match_using_chain_continues`;
+5. materialized tests — `match_for_header`, `match_loose_for_header`.
+
+Two things worth recording:
+
+- `match_proc_body` replaces a bare `next()` that raised `StopIteration` when
+  no `proc_ret` closed a body. It is now a no-match the applier reports as a
+  fail-loud `ValueError`, which is the contract the rest of the decoder keeps.
+- `match_loose_for_header` returns None on a stream too short to hold the
+  template. The old code unpacked a three-operation slice and crashed. A
+  truncated window is not this template; saying so is not a guess.
+
+Not migrated, and why: the `shlsi` element-stride chain in `handlers/arith.py`
+recognizes the array-operand template while *deleting* `into` operations from
+the stream it is reading, so that every downstream offset in the handler stays
+valid. Recognition there mutates its own input, which is exactly what this
+chapter targets — but splitting it means either duplicating the shape walk or
+changing what the operation stream contains, and neither is worth doing
+without the byte-exact re-verification a semantic change requires. The
+floating-point folds in `core.fp_dispatch` are likewise still mixed. Family 2
+is therefore half migrated (parameter frames yes, element operands no) and
+family 5 half (materialized tests yes, folds no); Chapter 4 is not complete
+until both are done.
+
 ## Chapter 5 — Introduce a lossless decoded-event stream
 
 The decoder currently decodes operations and folds structured source at the

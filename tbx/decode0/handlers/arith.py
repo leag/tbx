@@ -10,6 +10,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from tbx import ir
+from tbx.decode0.matchers import (
+    match_array_param_type,
+    match_fn_result_readback,
+)
 from tbx.decode0.const import (
     ARR_BLOCK,
     _FREAD,
@@ -19,7 +23,6 @@ from tbx.decode0.const import (
     _PREC,
     _READDATA,
 )
-from tbx.decode0.lift import _arr_param_suffix_ahead
 from tbx.decode0.scan import _grp, _orient, _rgrp
 
 if TYPE_CHECKING:
@@ -308,13 +311,8 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         # reads the result). Skip that register-shuttle boilerplate, and
         # require an integer FnCall result to actually be waiting on the
         # stack, which is what makes the skip safe rather than a guess.
-        j = c.k - 1
-        while j >= 0 and img.ops[j][1] in ("movbxax", "movrr"):
-            j -= 1
         if (
-            op[2] == 0
-            and j >= 0
-            and img.ops[j][1] == "fn_call"
+            match_fn_result_readback(img.ops, c.k) is not None
             and expr_.stack
             and isinstance(expr_.stack[-1], ir.FnCall)
         ):
@@ -750,9 +748,9 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                 # ahead instead of by arrival order. Still no guessing: with no
                 # typed access anywhere, the SINGLE default stands exactly as
                 # before (t1_arrparmfwdfirst).
-                ahead = _arr_param_suffix_ahead(img.ops, c.k + ao, blk)
+                ahead = match_array_param_type(img.ops, c.k + ao, block=blk)
                 if ahead is not None:
-                    suffix = ahead
+                    suffix = ahead.suffix
             inferred = {
                 "name": f"P{blk:02X}{suffix}",
                 "rank": 1,

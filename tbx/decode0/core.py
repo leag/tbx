@@ -37,15 +37,18 @@ from tbx.decode0.lift import (
     _find_jmps_back,
     _fold_body_ifgotos,
     _fold_if,
-    _match_bool_bare_term1,
-    _is_for_header,
-    _loose_for_header,
     _jump_targets,
     _lift_midblock_troff,
     _lift_next,
     _lift_var_step_next,
     _resolve_targets,
     _same_code_offset,
+)
+from tbx.decode0.matchers import (
+    match_bool_bare_term1,
+    match_for_header,
+    match_loose_for_header,
+    match_proc_body,
 )
 from tbx.decode0.rename import _slot, _str_lit, canonical_rename
 from tbx.decode0.cursor import DecodeDiagnostics, OpCursor
@@ -2183,10 +2186,10 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 m.ax = None
                 state.advance(3)
                 return
-            if _match_bool_bare_term1(img.ops, c.k):
+            if match_bool_bare_term1(img.ops, c.k) is not None:
                 # A bare-value (uncompared) compound-AND first term (wild
                 # rsltest.exe: `PEEK(&H410) AND &H40 = 48`) -- stage it as
-                # e.pend_bool exactly as _match_bool_term1's caller
+                # e.pend_bool exactly as match_bool_term1's caller
                 # does for a comparison-based term1, so the ordinary
                 # movax_family dispatch (control.py) folds term2's own
                 # materialization into it once reached.
@@ -2210,7 +2213,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 # (ans1$ = CHR$(75) OR ans1$ = CHR$(77))`).
                 #
                 # `or ax,ax` self-tests the value WITHOUT destroying it, so
-                # unlike _match_bool_bare_term1's flat-chain case just above
+                # unlike match_bool_bare_term1's flat-chain case just above
                 # this must NOT clear ax: the very next `movbxax` banks it in
                 # bx, the group is then computed in ax (parking bx in cx
                 # meanwhile), and a final `andaxbx` folds the two. That whole
@@ -2228,7 +2231,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 # term's materialization, a group only after its own inner
                 # fold. Both agree the short-circuit lands two bytes past the
                 # outer `andaxbx`, so that is the anchor tested here. AND only
-                # (cc 75), matching _match_bool_bare_term1's own restriction:
+                # (cc 75), matching match_bool_bare_term1's own restriction:
                 # a bare-value OR term1 stays unwitnessed.
                 e.direct_bool_gate = True
                 state.advance(3)
@@ -2414,12 +2417,12 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         ):  # runtime-revision alias of FWAIT, already calibrated for the
             test_k += 2  # integer/FP conversion bridges (wild reformat.exe)
         loose = (
-            _loose_for_header(img.ops, test_k, out.stmts, state.vdisp)
+            match_loose_for_header(img.ops, test_k, out.stmts, state.vdisp)
             if test_k is not None
             else None
         )
         if loose is not None:
-            lim, stp, vdisp = loose
+            lim, stp, vdisp = loose.limit, loose.step, loose.var
             lim_s, stp_s, init_s = out.stmts[-3:]
             del out.stmts[-3:]
             a = out.addrs[-3]
@@ -2443,7 +2446,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                     else None,
                 }
             )
-        elif _is_for_header(out.stmts, state.vdisp):
+        elif match_for_header(out.stmts, state.vdisp) is not None:
             lim_s, stp_s, init_s = out.stmts[-3:]
             del out.stmts[-3:]
             a = out.addrs[-3]
@@ -3341,34 +3344,17 @@ def _decode_user_code(
             c.cur = None  # fall through to lift this op into the body
         if kind == "proc_enter":
             state.flush_pending()
-            _ret = next(
-                i for i, o in enumerate(img.ops[c.k :], c.k)
-                if o[1] == "proc_ret"
-            )
-            # A SUB with LOCAL string variables frees their descriptors in the
-            # epilogue, as a run of `arg_ref <disp>; str_temp_free` pairs ahead
-            # of the proc_ret (t1_localstr/t1_locstrafterfor). Both are no-ops
-            # to the lift, so the run produces no statement -- but it IS where
-            # an `EXIT SUB` jumps, so the frame's exit address has to name the
-            # FIRST pair, not the proc_ret. Recognizing only the proc_ret left
-            # the EXIT SUB decoded as a plain Goto to an address no statement
-            # owns (wild tbd73.exe, TBW73.INC:452: `EXIT SUB` inside
-            # `IF curntpos > itemcount THEN ... END IF` in `SUB Makevmenu`,
-            # whose two LOCAL strings `ans$, ans1$` make the epilogue start six
-            # bytes early -- `jump target 0xc2cc is not a statement start`).
-            # Fixture t1_exitsublocstr.
-            _epi = _ret
-            while (
-                _epi - 2 >= c.k
-                and img.ops[_epi - 1][1] == "str_temp_free"
-                and img.ops[_epi - 2][1] == "arg_ref"
-            ):
-                _epi -= 2
+            body = match_proc_body(img.ops, c.k)
+            if body is None:
+                raise state.error(
+                    f"SUB/DEF FN body at {addr:#x} has no proc_ret",
+                    component="control",
+                )
             c.proc_frame = {
                 "entry": addr,
                 "idx": len(out.stmts),
-                "exit": img.ops[_ret][0],
-                "exit_entry": img.ops[_epi][0],
+                "exit": body.ret_address,
+                "exit_entry": body.exit_address,
                 "locals": None,
                 "array_params": {},
             }

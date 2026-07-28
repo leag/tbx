@@ -19,14 +19,17 @@ from tbx.decode0.const import (
     _pp_commas,
 )
 from tbx.decode0.lift import (
-    _arr_param_suffix_ahead,
     _lift_bool_do_tail,
     _lift_bool_tail,
-    _match_bool_outer_and_group,
     _lift_do_tail,
     _lift_while,
 )
-from tbx.decode0.matchers import match_bool_term1
+from tbx.decode0.matchers import (
+    array_param_suffix,
+    match_bool_outer_and_group,
+    match_bool_term1,
+    match_using_emit,
+)
 
 if TYPE_CHECKING:
     from tbx.decode0.core import DecodeState
@@ -248,7 +251,7 @@ def cargs(state: DecodeState, op, addr, kind) -> bool:
         rec.setdefault(
             "name",
             f"P{op[2]:02X}"
-            + (_arr_param_suffix_ahead(i.ops, c.k, op[2]) or ""),
+            + array_param_suffix(i.ops, c.k, op[2]),
         )
         c.pend_args.append(ir.ArrayRef(rec["name"], ()))
         state.advance()
@@ -294,16 +297,12 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             # numeric off the FP stack, CC a string off the sstack (t1_using);
             # item vec BE = console, C0 = file, BF = printer (LPRINT USING,
             # witnessed t1_lpusing / wild vhfprop.exe)
-            nxt = i.ops[c.k + 1][1:] if c.k + 1 < len(i.ops) else None
-            if e.pend_using is None or nxt not in (
-                ("rt", 0xBE),
-                ("rt", 0xC0),
-                ("rt", 0xBF),
-            ):
+            emit = match_using_emit(i.ops, c.k)
+            if e.pend_using is None or emit is None:
                 raise ValueError(f"stray USING emit at {addr:#x}")
-            lp = nxt[1] == 0xBF
-            f = e.pend_fnum if nxt[1] == 0xC0 else None
-            if nxt[1] == 0xC0 and f is None:
+            lp = emit.leg == "printer"
+            f = e.pend_fnum if emit.leg == "file" else None
+            if emit.leg == "file" and f is None:
                 raise ValueError(f"file USING item without [0060] at {addr:#x}")
             if e.pend_using["values"] and (
                 e.pend_using["file"] != f
@@ -313,7 +312,7 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             e.pend_using["file"] = f
             e.pend_using["lprint"] = lp
             e.pend_using["values"].append(
-                e.sstack.pop() if vec == 0xCC else e.stack.pop()
+                e.stack.pop() if emit.numeric else e.sstack.pop()
             )
             c.cur = None
             state.advance(2)
@@ -656,7 +655,7 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
                 # `A OR B AND C`-shaped (wild wb.exe/grdscn.exe/mcmurphy.exe):
                 # B and C form their OWN group first; hold this term as the
                 # enclosing accumulator and let the ordinary dispatch loop
-                # re-enter _match_bool_term1 fresh at ops[k+6]. If an outer
+                # re-enter match_bool_term1 fresh at ops[k+6]. If an outer
                 # accumulator is already waiting (a left-associative cascade
                 # of GROUPS, `(A AND B) OR C AND D OR ...`, wild
                 # mcmurphy.exe, probe q_mixedbool7), fold it in now rather
@@ -678,7 +677,7 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             state.advance(6)
             return True
         if (
-            _match_bool_outer_and_group(i.ops, c.k)
+            match_bool_outer_and_group(i.ops, c.k) is not None
             and any(o[1] == "strcmp" for o in i.ops[c.k + 6 : c.k + 36])
         ):
             # The materialized left term of `A AND (B OR C)` is preserved
@@ -841,7 +840,7 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             # Group-wrapped BinOp for the generic FP/LONG-icomp value
             # fallback above, e.g. wild bmaster.exe's SECOND group, a
             # `far_icomp_si32` term -- both unwrapped to `_bx_term1`) -- feed
-            # it to `_lift_bool_tail` exactly as if `_match_bool_term1` had
+            # it to `_lift_bool_tail` exactly as if `match_bool_term1` had
             # matched it, with a synthetic short-circuit target (there is no
             # real one to cross-check: this group's first term never had its
             # own dispatch). `_lift_bool_tail`'s existing scan-ahead loop
