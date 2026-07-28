@@ -124,6 +124,38 @@ def test_the_pass_reproduces_every_fold_it_can_see():
     assert deferred_blind == _BODIES_HOLDING_ANOTHER_FOLD
 
 
+def test_the_pass_reproduces_a_wild_program_the_corpus_cannot_speak_for():
+    """The guard for shift arithmetic, which the fixture corpus cannot give.
+
+    Every fold moves the regions after it, and the bookkeeping for that is the
+    one part of this pass with no small witness: a fixture holds a handful of
+    statements, so a boundary keyed on the wrong coordinate lands in the same
+    place as one keyed on the right one, and all 1030 goldens agree either
+    way. Wild `tbd73.exe` folds 43 inline IFs and 13 SELECTs, deep enough for
+    the two to separate -- keying the shift on where a splice landed rather
+    than on where its region ended cost 9 IFs and 2 SELECTs here.
+
+    Pinned as counts rather than as "all", because the rest is real remaining
+    work: the loop lifts still fold during the walk, and a region sitting in a
+    list one of them has spliced comes out with statements the walk's does
+    not have.
+    """
+    from conftest import wild_hits_bytes
+
+    from tbx.decode0.fold_pass import fold_constructs
+
+    prog = decode0.decode_user_code(wild_hits_bytes("tbd73.exe"))
+
+    produced = list(_every_statement(fold_inline_ifs(prog)))
+    built = list(_every_statement(fold_constructs(prog)))
+    folds = _eager_folds(prog)
+    selects = _walk_selects(prog)
+
+    assert (len(folds), len(selects)) == (43, 13), "fixture drifted"
+    assert sum(s in produced for s in folds) >= 38
+    assert sum(s in built for s in selects) >= 12
+
+
 def _walk_selects(prog):
     """Every SELECT the walk built, in the order it built them."""
     return [

@@ -15,13 +15,19 @@ Positions here are *commit* coordinates: how many statements had been
 committed when an event was recorded. That is the coordinate system a deferred
 pass necessarily works in, since nothing has folded yet when it starts.
 
-Measured against the walk: 76 of the fixture corpus's 80 inline-IF folds come
-out identical, and 388 of the wild corpus's 403. Every difference is another
-walk-time fold, not a gap in the record — a body that holds a `SELECT CASE`
-the walk had already built (4 in each corpus), or a region sitting in a list
-that `select_case`, the procedure-body fold or a loop lift had spliced (11,
-wild only). Commit coordinates and list coordinates agree until one of those
-runs, which is the precise reason the three folds have to move together.
+Measured against the walk: 76 of the fixture corpus's 80 inline-IF folds and
+all 26 of its SELECTs come out identical, and 755 of the wild corpus's 771
+inline IFs and 15 of its 16 SELECTs. The corpus cannot speak for the shift
+arithmetic -- a fixture is too small for a boundary keyed on the wrong
+coordinate to land anywhere different -- so the wild numbers are the ones that
+move when this pass is wrong.
+
+The differences that remain are another walk-time fold, not a gap in the
+record: a body that holds a `SELECT CASE` the walk had already built (4 in the
+corpus), or a region sitting in a list a loop lift had spliced (16 wild inline
+IFs across five programs, and the last SELECT in tbd73.exe). Commit
+coordinates and list coordinates agree until one of those runs, which is the
+precise reason the folds have to move together.
 """
 
 from __future__ import annotations
@@ -198,6 +204,12 @@ def fold_inline_ifs(program) -> list:
     back by what it removed. A region nested inside a later one then lands
     exactly where the walk's own arithmetic put it -- one past where the inner
     body began.
+
+    Every position is in the commit coordinates the regions were read in, and
+    ``shifts`` is keyed the same way -- a fold's boundary is where its region
+    ended, not where its splice landed. The two agree for the first fold and
+    diverge from there, and mixing them makes a fold look as though it
+    precedes a region really nested inside it.
     """
     statements = list(replay_events(program.events))
     shifts: list[tuple[int, int]] = []
@@ -214,7 +226,7 @@ def fold_inline_ifs(program) -> list:
             )
         body = _fold_body_ifgotos(body, region.target)
         statements[start:stop] = [ir.IfInline(region.cond, body)]
-        shifts.append((stop, (stop - start) - 1))
+        shifts.append((region.stop, (stop - start) - 1))
     return statements
 
 
@@ -260,7 +272,7 @@ def fold_constructs(program) -> list:
     def shifted(position: int) -> int:
         return position - sum(size for at, size in shifts if position >= at)
 
-    def replace(start: int, stop: int, statement, address) -> None:
+    def replace(start: int, stop: int, statement, address, at: int) -> None:
         statements[start:stop] = [statement]
         addresses[start:stop] = [address]
         if address is not None:
@@ -270,7 +282,11 @@ def fold_constructs(program) -> list:
             # `stmt_addr.get(id(b))` for statements that are no longer top
             # level. The walk claims here for the same reason.
             stmt_addr.claim(statement, address)
-        shifts.append((stop, (stop - start) - 1))
+        # Keyed on where the region ended, never on where the splice landed:
+        # the two diverge after the first fold, and comparing an unshifted
+        # position against a shifted boundary makes a fold look as though it
+        # precedes a region nested inside it.
+        shifts.append((at, (stop - start) - 1))
 
     arms: dict[int, list] = {}  # SELECT close -> the arms it owns, in order
     selects = select_regions(program)
@@ -307,7 +323,13 @@ def fold_constructs(program) -> list:
                     f"empty inline-IF body for the branch at {operation.address:#x}"
                 )
             body = _fold_body_ifgotos(body, operation.target, stmt_addr)
-            replace(start, stop, ir.IfInline(operation.cond, body), operation.address)
+            replace(
+                start,
+                stop,
+                ir.IfInline(operation.cond, body),
+                operation.address,
+                operation.stop,
+            )
         elif isinstance(operation, ArmRegion):
             start, stop = shifted(operation.start), shifted(operation.stop)
             if operation.kind == "case_else":
@@ -327,7 +349,7 @@ def fold_constructs(program) -> list:
                 block_ifs=block_ifs,
             )
             statements[start:stop], addresses[start:stop] = folded, folded_addrs
-            shifts.append((stop, (stop - start) - len(folded)))
+            shifts.append((operation.stop, (stop - start) - len(folded)))
             arms.setdefault(owner(operation), []).append(
                 (operation, tuple(folded))
             )
@@ -357,5 +379,10 @@ def fold_constructs(program) -> list:
                     case_else or None,
                 ),
                 operation.start_address,
+                # In commit coordinates a SELECT ends where its last arm did.
+                # Its own `start`/`stop` above are already current positions,
+                # derived from the arms rather than from a recorded region, so
+                # they cannot key the shift.
+                max(a.stop for a, _ in owned),
             )
     return statements
