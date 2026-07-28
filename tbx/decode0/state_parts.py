@@ -162,6 +162,7 @@ class ControlState(StateView):
             "cur",
             "k",
             "ifs",
+            "pending_ifs",
             "fors",
             "whiles",
             "dos",

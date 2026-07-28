@@ -147,6 +147,7 @@ class DecodeState:
     have_fre: Any = None
     hook_seq: Any = None
     ifs: Any = None
+    pending_ifs: Any = None
     k: Any = None
     lay: Any = None
     local_dim_frame: dict[str, Any] | None = None
@@ -399,26 +400,58 @@ class DecodeState:
         otherwise be folded away with the IF's body still open (wild tbd73.exe,
         TBW73.INC:716).
         """
+        while self.ifs and addr == self.frame_event(self.ifs[-1]).payload.target:
+            fr = self.ifs.pop()
+            self.flush_pending()
+            # The region is complete here and its extent is only knowable here
+            # -- the list's length at this moment. Folding it is a separate
+            # question, answered when the construct that owns it closes.
+            self.pending_ifs.append(
+                {"seq": fr["seq"], "start": self.frame_start(fr), "stop": len(self.stmts)}
+            )
+
+    def drain_folds(self, limit: int = 0) -> None:
+        """Fold every queued inline-IF region that lies at or after ``limit``.
+
+        Called when a construct closes, so the regions inside it are folded
+        before it takes its snapshot: the arm close, the procedure return, and
+        the end of the walk. A region left open past its enclosing construct
+        would be snapshotted still flat, which is what the eager fold existed
+        to prevent.
+
+        Queue order is fold order. A region nested inside another closes first
+        and so is queued first, and two closing at the same address were queued
+        innermost-first by `close_ifs` -- both give the same rule. Each fold
+        collapses its region to one statement, so the regions still queued move
+        by what it removed.
+        """
         with editing(self.stmts, "close_ifs"):
-            while self.ifs and addr == self.frame_event(self.ifs[-1]).payload.target:
-                fr = self.ifs.pop()
+            draining = [fr for fr in self.pending_ifs if fr["start"] >= limit]
+            self.pending_ifs = [fr for fr in self.pending_ifs if fr["start"] < limit]
+            shifts: list[tuple[int, int]] = []
+
+            def shifted(position: int) -> int:
+                return position - sum(size for at, size in shifts if position >= at)
+
+            for fr in draining:
                 opened = self.frame_event(fr)
-                self.flush_pending()
-                start = self.frame_start(fr)
-                body = tuple(self.stmts[start:])
+                start, stop = shifted(fr["start"]), shifted(fr["stop"])
+                body = tuple(self.stmts[start:stop])
                 if not body:
-                    raise ValueError(f"empty inline-IF body at {addr:#x}")
-                for st, ad in zip(body, self.addrs[start:]):
+                    raise ValueError(
+                        f"empty inline-IF body at {opened.payload.target:#x}"
+                    )
+                for st, ad in zip(body, self.addrs[start:stop]):
                     if ad is not None:  # retain leaf/body addrs before they drop
-                        self.stmt_addr.claim(st, ad)  # the fold discards addrs[start:]
+                        self.stmt_addr.claim(st, ad)  # the fold discards them
                 body = _fold_body_ifgotos(
                     body, opened.payload.target, self.stmt_addr
                 )  # AFTER the
                 # addr retention: the fold nests the tail statements, and their (and
                 # the consumed IfGoto's) addrs must stay visible to the line table
-                del self.stmts[start:], self.addrs[start:]
-                self.stmts.append(ir.IfInline(opened.payload.cond, body))
-                self.addrs.append(opened.address)
+                self.stmts[start:stop] = [ir.IfInline(opened.payload.cond, body)]
+                self.addrs[start:stop] = [opened.address]
+                shifts.append((stop, (stop - start) - 1))
 
     def frame_event(self, frame):
         """The branch event an open frame is: the record, not a copy of it.
@@ -1413,6 +1446,9 @@ def _propagate_call_types(stmts, stmt_addr=None):
 def _finalize(state: DecodeState, addr) -> Program:
     """Program epilogue: static-DIM re-emit, control-flow folds, target
     resolution and canonical rename -> the finished Program."""
+    # Whatever regions are still queued belong to the main program, whose
+    # close is here: the walk is over and nothing else will snapshot them.
+    state.drain_folds()
     with editing(state.output.stmts, "finalize"):
         img, lyt, c, out = (state.image, state.layout_state,
                             state.control, state.output)
@@ -3166,6 +3202,7 @@ def _decode_user_code(
     e.pend_dataread = None  # open READ target chain
     e.pend_field = None  # open FIELD AS-entry chain
     c.ifs = []  # open inline-IF bodies
+    c.pending_ifs = []  # regions whose extent is known, waiting to be folded
     c.block_if_addrs = set()  # statement addrs whose BYTES prove the
     # source spelled a multi-line block IF (see lift._lift_while)
     c.has_procs = any(
@@ -3807,6 +3844,7 @@ def _decode_user_code(
             # happen now or its IfInlines stay inline and the else-skip Goto
             # survives as a spurious statement (probe t1_dblhooksub).
             i0 = state.frame_start(c.proc_frame)
+            state.drain_folds(i0)  # the body's own IFs, before it is snapshotted
             with editing(out.stmts, "fold_proc_body"):
                 out.stmts[i0:], out.addrs[i0:] = _fold_if(
                     out.stmts[i0:],
@@ -4023,6 +4061,7 @@ def _decode_user_code(
                 # dispatch pair (t1_fnblockif). SUB bodies got this treatment
                 # with t1_dblhooksub; DEF FN bodies were never given it.
                 i0 = state.frame_start(c.fn_frame)
+                state.drain_folds(i0)  # as proc_ret, before the snapshot
                 with editing(out.stmts, "fold_proc_body"):
                     out.stmts[i0:], out.addrs[i0:] = _fold_if(
                         out.stmts[i0:],
@@ -4050,6 +4089,8 @@ def _decode_user_code(
                 if expr is None:  # no FSTP [bp+0]: result left on stack
                     expr = e.stack.pop()
                 i0 = state.frame_start(c.fn_frame)
+                state.drain_folds(i0)  # nothing survives the discard, but the
+                # queue must not outlive the body it belongs to
                 with editing(out.stmts, "fold_proc_body"):
                     del out.stmts[i0:], out.addrs[i0:]
                 out.stmts.append(ir.DefFn(name, params, expr))
