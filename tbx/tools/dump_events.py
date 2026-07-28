@@ -69,6 +69,33 @@ def _dump_branches(name: str, program) -> None:
         )
 
 
+def _dump_folds(name: str, program) -> None:
+    """Each inline-IF fold region, as predicted from the record and as folded.
+
+    The two columns are the question deferring the fold turns on: a pass
+    reading only the event log has to size a region the same way the handler's
+    frame bookkeeping did. A `?` marks a region the record predicts but no
+    fold matches, which is where to look first when the two disagree.
+    """
+    from tbx.decode0.control_graph import predict_fold_extents
+
+    predicted = predict_fold_extents(program)
+    actual = [
+        (edit.index, edit.stop)
+        for edit in program.statement_edits
+        if edit.origin == "close_ifs" and edit.kind == "splice"
+    ]
+    if not predicted and not actual:
+        print(f"{name}: no inline-IF fold")
+        return
+    for start, stop in predicted:
+        mark = " " if (start, stop) in actual else "?"
+        print(f"{name:24} predicted [{start}:{stop}] {mark}")
+    for region in actual:
+        if region not in predicted:
+            print(f"{name:24} folded    [{region[0]}:{region[1]}] MISSING")
+
+
 def _reconcile_line(name: str, program) -> str:
     report = program.event_reconciliation
     events = len(program.events)
@@ -100,6 +127,11 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="dump the statement edit log: which pass made each change",
     )
+    parser.add_argument(
+        "--folds",
+        action="store_true",
+        help="dump each inline-IF fold region, predicted from the record vs folded",
+    )
     args = parser.parse_args(argv)
 
     decoded = failed = 0
@@ -119,6 +151,8 @@ def main(argv: list[str] | None = None) -> None:
             _dump_branches(path.name, program)
         elif args.edits:
             _dump_edits(program)
+        elif args.folds:
+            _dump_folds(path.name, program)
         else:
             _dump(program)
 

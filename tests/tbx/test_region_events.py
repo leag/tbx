@@ -12,7 +12,7 @@ the "region boundaries" the chapter asks the graph to carry.
 from pathlib import Path
 
 from tbx import decode0, ir
-from tbx.decode0.events import EventLog, RegionEvent
+from tbx.decode0.events import ArrivalEvent, EventLog, RegionEvent
 
 CORPUS = Path(__file__).resolve().parents[1] / "fixtures" / "corpus"
 
@@ -60,6 +60,59 @@ def test_the_recorded_end_is_where_exit_sub_jumps():
     assert region.end in targets or region.end > region.start
 
 
+def _branching_log(target):
+    log = EventLog()
+    log.branch("if", template="inline_if_target", target=target, address=0x100)
+    return log
+
+
+def test_an_arrival_records_reaching_an_address_a_branch_wants():
+    log = _branching_log(0x200)
+
+    log.arrive(0x200)
+
+    assert log.frozen()[-1].kind == "arrive"
+    assert log.frozen()[-1].payload == ArrivalEvent(0x200)
+
+
+def test_an_address_no_branch_wants_records_nothing():
+    """The log is a record of moments that matter, not a trace of the walk.
+
+    Every decoded operation passes an address here, so recording them all
+    would bury the events that mean something under thousands that do not.
+    What makes an address interesting is already in the log: some branch is
+    waiting for it.
+    """
+    log = _branching_log(0x200)
+
+    assert log.arrive(0x300) is None
+    assert log.arrive(None) is None
+    assert [e.kind for e in log.frozen()] == ["branch"]
+
+
+def test_an_address_is_arrived_at_once():
+    log = _branching_log(0x200)
+
+    log.arrive(0x200)
+    log.arrive(0x200)
+
+    assert [e.kind for e in log.frozen()] == ["branch", "arrive"]
+
+
+def test_an_arrival_is_not_a_statement_start():
+    """An arrival address is one that may own no statement -- that is the
+    point of recording it. Letting it into the graph's address set would make
+    the target validation accept a jump nothing owns."""
+    from tbx.decode0.control_graph import ControlGraph
+
+    log = _branching_log(0x200)
+    log.arrive(0x200)
+
+    graph = ControlGraph.from_events(log.frozen())
+
+    assert 0x200 not in graph.addresses
+
+
 def test_a_region_carries_no_statement():
     """Regions are observations, not commits.
 
@@ -72,4 +125,5 @@ def test_a_region_carries_no_statement():
 
     statements = [e for e in prog.events if e.kind == "statement"]
     assert [e for e in prog.events if e.kind == "region"]
+    assert [e for e in prog.events if e.kind == "arrive"]
     assert len(replay_events(prog.events)) == len(statements)

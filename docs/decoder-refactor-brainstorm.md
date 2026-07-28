@@ -734,13 +734,47 @@ trying to infer it afterwards.
 Note this is the first measurement in the chapter that did not reach 100%. Fold
 *starts* are exact at 62/62; extents are not, and the gap is specific.
 
+### Recording the moment a region closes
+
+The missing moment is now recorded. `ArrivalEvent` marks decoding reaching an
+address a recorded branch targets, emitted from the dispatch loop before any
+fold runs — including before `select_case.step`, which closes arms of its own.
+The log itself decides whether an address is worth an event: it already knows
+which addresses branches want, so nothing is taken from the handlers' frame
+bookkeeping, and the emission site survives the swap.
+
+An extent is then the statement list's length at that event, replayed from the
+edits stamped up to it — the same construction that made starts exact.
+Measured with one predicate before and after:
+
+| | inline-IF folds |
+| --- | --- |
+| extent from statement addresses (corpus) | 26 / 62 |
+| extent from the recorded arrival (corpus) | **62 / 62** |
+| extent from the recorded arrival (wild) | **18 / 18** |
+
+The 26 is the same address-only rule the 39 above reports; the difference is
+that 39 counted a region-described boundary as located without computing a
+position, and this predicate computes one for every fold. Two findings came out
+of closing the gap:
+
+- **Nested frames sharing an arrival need the fold's own arithmetic.** An
+  inner region collapses to the one statement replacing it, so its enclosing
+  region ends one past where the inner one began. They close innermost-first,
+  the order the frame stack pops in. This is what the pass *does*, not
+  something the record can be asked for.
+- **A body ending in a pending chain closes after its own boundary.** Wild
+  `be.exe` folds `IF ... THEN PRINT "Approximately ";` — a trailing-`;` PRINT
+  with no flush vector, materialized only when `close_ifs` flushes it, one line
+  after the arrival. So the arrival flushes first: the statement was decoded
+  before the boundary and belongs inside the region. No fixture has this shape,
+  and the wild corpus is the only reason it was found.
+
 ### What remains
 
-Two things, in order:
+One thing:
 
-1. Record region closes, so a fold extent is read from the log rather than
-   inferred. Fold starts needed exactly this and became exact.
-2. The swap: `close_ifs`, `_fold_arm` and the procedure-body fold move
+1. The swap: `close_ifs`, `_fold_arm` and the procedure-body fold move
    together, gated on the goldens and the wild-corpus report. The measured
    account of what breaks when they move separately is its specification.
 

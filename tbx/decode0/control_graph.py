@@ -83,9 +83,19 @@ class ControlGraph:
         nodes = tuple(
             ControlNode(event.seq, event.address) for event in events
         )
-        known = {e.address for e in events if e.address is not None}
+        # An arrival names an address precisely because it may own no
+        # statement -- a procedure epilogue, an arm-close jmp. Letting one into
+        # the address set would make `validate_targets` accept a target nothing
+        # owns, which is the check's whole point.
+        known = {
+            e.address
+            for e in events
+            if e.address is not None and e.kind != "arrive"
+        }
         edges: list[ControlEdge] = []
         for event in events:
+            if event.kind == "arrive":
+                continue  # a moment, not a node with successors
             if event.kind == "branch":
                 # A recognised branch names its target directly; there is no
                 # committed statement to walk for an ("addr", n) operand. A
@@ -265,13 +275,71 @@ def predict_fold_starts(program) -> tuple[int, ...]:
     list, which is wrong for seven of the sixty-two programs in the corpus
     that fold an inline IF.
     """
-    from tbx.decode0.statement_log import replay
-
     edits = tuple(program.statement_edits)
     starts = []
     for event in program.events:
         if event.kind != "branch" or event.payload.frame != "if":
             continue
-        preceding = [edit for edit in edits if edit.at_event <= event.seq]
-        starts.append(len(replay(preceding)))
+        starts.append(_length_at(edits, event.seq))
     return tuple(starts)
+
+
+def predict_fold_extents(program) -> tuple[tuple[int, int], ...]:
+    """Where each recorded inline-IF frame's fold region begins and ends.
+
+    The end is the harder half. A start can be counted, because it is a
+    position in a list that exists; an end is a moment -- the list's length
+    when decoding reaches the branch's target. Statement addresses cannot
+    supply it: the target is often a procedure epilogue or an arm-close jmp,
+    which own no statement, and when one does own it an earlier fold has
+    already moved where it sits. From statement addresses alone this reaches
+    26 of the 62 programs in the corpus that fold an inline IF.
+
+    So the moment is recorded. An arrival event marks decoding reaching an
+    address a branch wants, and the extent is the list length there, replayed
+    from the edits stamped up to that event. A frame whose target is never
+    arrived at yields nothing rather than a guessed end.
+
+    Frames sharing an arrival are nested, and folding one moves the end of the
+    next: an inner region collapses to the single statement that replaces it,
+    so the region enclosing it now ends one past where the inner one began.
+    They close innermost-first, the order the handlers' frame stack pops in.
+    That arithmetic is the folding pass's own -- it is what the pass does, not
+    something read from the record.
+
+    Returned in fold order: by arrival, and innermost first within one.
+    """
+    edits = tuple(program.statement_edits)
+    arrivals: dict[int, int] = {}
+    for event in program.events:
+        if event.kind == "arrive":
+            arrivals.setdefault(event.payload.address, event.seq)
+
+    opened: dict[int, list[int]] = {}
+    for event in program.events:
+        if event.kind != "branch" or event.payload.frame != "if":
+            continue
+        arrival = arrivals.get(event.payload.target)
+        if arrival is None or arrival < event.seq:
+            continue  # never reached, or reached before the branch opened
+        opened.setdefault(arrival, []).append(_length_at(edits, event.seq))
+
+    regions = []
+    for arrival in sorted(opened):
+        stop = _length_at(edits, arrival)
+        for start in reversed(opened[arrival]):
+            regions.append((start, stop))
+            stop = start + 1
+    return tuple(regions)
+
+
+def _length_at(edits, seq: int) -> int:
+    """The statement list's length at event ``seq``.
+
+    Replaying rather than counting commits is what makes it exact: a count of
+    committed statements misses that an earlier fold already shortened the
+    list.
+    """
+    from tbx.decode0.statement_log import replay
+
+    return len(replay([edit for edit in edits if edit.at_event <= seq]))

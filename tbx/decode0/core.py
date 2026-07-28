@@ -572,6 +572,29 @@ class DecodeState:
             output.event_log = EventLog()
         output.event_log.commit(stmt, addr)
 
+    def arrive(self, address) -> None:
+        """Record reaching `address`, when some recorded branch targets it.
+
+        Called from the dispatch loop rather than from the fold, on purpose:
+        the moment a region ends has to stay in the record once folding moves
+        out of the walk. The log decides whether the address is one a branch is
+        waiting for, so this stays a plain observation of where the walk is.
+        """
+        output = self.output
+        assert output is not None
+        if output.event_log is None:
+            output.event_log = EventLog()
+        if self.ifs and address == self.ifs[-1]["target"]:
+            # A trailing-';' PRINT closing the body is decoded before this
+            # boundary but only materializes when something flushes it --
+            # `close_ifs` itself, a line later. Flushing here puts it in the
+            # list before the arrival is stamped, so the recorded moment is the
+            # one the statement belongs to. Same call, same address, one line
+            # earlier: `close_ifs` re-flushes into an empty chain (wild be.exe,
+            # whose `IF ... THEN PRINT "Approximately ";` body is exactly this).
+            self.flush_pending()
+        output.event_log.arrive(address)
+
     def region(self, kind: str, *, start, end) -> None:
         """Record a construct's extent alongside the statements it spans."""
         output = self.output
@@ -3252,6 +3275,9 @@ def _decode_user_code(
             # spelling and no IR effect -- skip like "into" (witnessed q_stsub).
             state.advance()
             continue
+        # Before any fold runs -- select_case closes its arms here too -- so the
+        # list length at this event is the extent of every region ending here.
+        state.arrive(addr)
         if select_case.step(state):
             continue
         state.close_ifs(addr)

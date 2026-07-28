@@ -9,7 +9,7 @@ Branch `release/0.1.0`. Baseline for "no behavior change" is commit `36aa8a4`.
 ## Verify the current state
 
 ```sh
-uv run pytest                 # 2665 pass
+uv run pytest                 # 2672 pass
 uv run ruff check             # clean
 uv run python -m tbx.tools.scan_wild wild/hits
 ```
@@ -33,7 +33,7 @@ signal that something moved.
 | 3 state ownership | **complete** |
 | 4 recognition/mutation split | substantial, two families outstanding |
 | 5 event stream | **complete** for statement construction |
-| 6 control-flow extraction | inputs complete, the swap not attempted |
+| 6 control-flow extraction | regions exact, the swap not attempted |
 | 7 remove scaffolding | not started |
 
 ## What is proven, with numbers
@@ -75,15 +75,18 @@ Zero disagreements.
 **Fold starts are exact (ch. 6).** `predict_fold_starts` locates each inline-IF
 fold region's start from the record alone: 62 of 62 programs that fold one.
 
-## What is not proven
+**Fold extents are exact (ch. 6).** `predict_fold_extents` sizes each region
+from the record: **62 of 62** corpus programs and **18 of 18** decodable wild
+programs that fold an inline IF. An address-only rule gets 26 of 62 — the end
+is a moment, not an address, so `ArrivalEvent` records decoding reaching an
+address a branch wants and the extent is the list length there. Two things the
+closing turned up: nested frames sharing an arrival need the fold's own
+arithmetic (an inner region collapses to one statement, so its enclosure ends
+one past where it began, innermost-first), and a body ending in a pending chain
+is flushed at the arrival because it was decoded before the boundary (wild
+`be.exe`, the only program in either corpus with that shape).
 
-**Fold extents: 39 of 62.** The only measurement in this chapter that does not
-reach 100%. 13 folds end at a boundary no statement address describes; 10 more
-have a known region end that a naive rule places wrongly. The gap is a missing
-*moment*, not a missing address — a region's end is the list length when
-decoding reaches its boundary, and that instant is not derivable from statement
-addresses. Recording region *closes* is the fix, and has the same shape as the
-`at_event` clock that took fold starts from 55/62 to 62/62.
+## What is not proven
 
 **The event stream is not lossless for statements.** 10764 of 11799 statement
 events survive as top-level statements; 549 of 1030 programs reconcile clean.
@@ -93,6 +96,10 @@ not:
 - Handlers patch already-committed statements in place (`stmt_addr[-1] =
   ir.Locate(...)` when the cursor argument arrives, and the same for
   INPUT/FIELD/PRINT chain targets), so the event holds a pre-patch statement.
+- `flush_pending` appends a closed chain straight to the list, so a
+  trailing-`;` PRINT or an INPUT#/READ/FIELD chain reaches the program with no
+  commit event at all. Wild `be.exe` shows what that costs: its folded body's
+  only statement arrives this way.
 - DIM and DATA are reconstructed at finalization from layout and pool facts and
   never pass through `put`, so no event describes them.
   `test_codeless_data_statements_are_synthesized_not_committed` pins this and
@@ -126,20 +133,21 @@ than to convenience.
 
 ## Next steps, in order
 
-1. **Record region closes.** Emit an event when a region actually closes, so a
-   fold extent is read from the log rather than inferred. Expect this to take
-   extents from 39/62 to exact, as `at_event` did for starts. Low risk: purely
-   additive, no statement moves.
-2. **Route in-place patches and finalization reconstruction through the commit
-   path**, so the event stream becomes lossless for statements too. Medium
-   risk: changes what is committed, but not the final list.
-3. **The swap.** Move the three folds together, against a model where a region
-   stays open until its enclosing construct closes it. Gate on the goldens and
-   the wild-corpus report, not on a green suite — this is the first change in
-   the chapter that will move statements. Expect the epilogue-target and
-   address-retention cases to decide whether it works.
-4. **Chapter 4's two families**, independently of the above.
-5. **Chapter 7**, only after the swap lands.
+1. **Route in-place patches, pending-chain flushes and finalization
+   reconstruction through the commit path**, so the event stream becomes
+   lossless for statements too. Medium risk: changes what is committed, but not
+   the final list. `flush_pending` is the one to do first — it is the only
+   path that reaches the list with no event at all, and the fold model already
+   depends on its timing.
+2. **The swap.** Move the three folds together, against a model where a region
+   stays open until its enclosing construct closes it. Starts and extents are
+   both exact now, so the pass has its regions; what is untested is folding
+   from them. Gate on the goldens and the wild-corpus report, not on a green
+   suite — this is the first change in the chapter that will move statements.
+   Expect the epilogue-target and address-retention cases to decide whether it
+   works.
+3. **Chapter 4's two families**, independently of the above.
+4. **Chapter 7**, only after the swap lands.
 
 ## Tools
 
@@ -147,6 +155,7 @@ than to convenience.
 python -m tbx.tools.dump_events PROGRAM.EXE              # commit-time events
 python -m tbx.tools.dump_events --branches PROGRAM.EXE   # each branch's fate
 python -m tbx.tools.dump_events --edits PROGRAM.EXE      # which pass made each edit
+python -m tbx.tools.dump_events --folds PROGRAM.EXE      # region predicted vs folded
 python -m tbx.tools.dump_events --reconcile wild/hits/*.exe
 ```
 
@@ -164,6 +173,11 @@ attribution test passed on two hand-picked fixtures while the corpus still had
 improvement was first computed as 103 → 40 by comparing a narrower structure
 predicate after the change against a wider one before it. With the identical
 predicate it was 103 → 79, and only after further instrumentation 103 → 8.
+
+**Run a new predicate over the wild corpus too.** Fold extents reached 62/62 on
+the fixtures and 17/18 on the wild programs. The one miss was not noise: it was
+a fold whose whole body is a pending trailing-`;` PRINT, a shape no fixture has,
+and it named the flush timing the model actually needs.
 
 Several test premises in this work were wrong in ways the failure explained:
 `reconcile` matching by identity when folding rebuilds objects, DATA assumed to

@@ -70,6 +70,26 @@ class RegionEvent:
 
 
 @dataclass(frozen=True)
+class ArrivalEvent:
+    """Decoding reached an address that a recorded branch targets.
+
+    A region's start is a position and can be counted; its end is a *moment*.
+    Where an inline-IF body ends is the statement list's length when decoding
+    gets to the branch's target, and no address describes that instant -- the
+    target may be a procedure epilogue or an arm-close jmp, which own no
+    statement, and even when a statement does own it an earlier fold has
+    already moved where it sits.
+
+    Recording the arrival puts that instant in the same ordered log as the
+    edits, so the length is read rather than inferred. The address is one the
+    log already knows a branch wants; nothing here is taken from the frame
+    bookkeeping the handlers keep.
+    """
+
+    address: int
+
+
+@dataclass(frozen=True)
 class EventReconciliation:
     """How the committed event log relates to the folded statement list.
 
@@ -99,6 +119,11 @@ class EventLog:
     """Append-only record of committed statements, in emission order."""
 
     events: list[DecodedEvent] = field(default_factory=list)
+    #: Addresses a recorded branch targets, and those already arrived at.
+    #: Derived from the log's own contents -- an arrival is only interesting
+    #: where some branch is waiting for it.
+    _wanted: set[int] = field(default_factory=set, repr=False, compare=False)
+    _arrived: set[int] = field(default_factory=set, repr=False, compare=False)
 
     def commit(self, statement: Any, address: int | None) -> DecodedEvent:
         event = DecodedEvent(
@@ -124,6 +149,30 @@ class EventLog:
             kind="branch",
             address=address,
             payload=BranchEvent(frame, template, target, cond),
+            seq=len(self.events),
+        )
+        self.events.append(event)
+        if target is not None:
+            self._wanted.add(target)
+        return event
+
+    def arrive(self, address: int | None) -> DecodedEvent | None:
+        """Record that decoding reached ``address``, if a branch wants it.
+
+        Silent otherwise, and silent on a second visit: the log is a record of
+        moments that matter to some branch, not a trace of every address the
+        walk passes through. Returns the event, or None when nothing was
+        recorded.
+        """
+        if address is None or address not in self._wanted:
+            return None
+        if address in self._arrived:
+            return None
+        self._arrived.add(address)
+        event = DecodedEvent(
+            kind="arrive",
+            address=address,
+            payload=ArrivalEvent(address),
             seq=len(self.events),
         )
         self.events.append(event)
@@ -168,7 +217,7 @@ def replay_events(events: Iterable[DecodedEvent]) -> tuple[Any, ...]:
 
     statements = []
     for event in events:
-        if event.kind in ("branch", "region"):
+        if event.kind in ("branch", "region", "arrive"):
             continue  # carries no statement; the control pass consumes it
         if event.kind != "statement":
             raise ValueError(f"unknown decoded event kind: {event.kind!r}")
