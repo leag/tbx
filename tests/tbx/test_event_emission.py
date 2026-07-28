@@ -134,6 +134,57 @@ def test_a_block_if_absorbs_its_body_into_the_structured_form():
     assert report.clean is False
 
 
+def test_a_flushed_chain_records_its_commit_event():
+    """A chain closes late, but it is still a decoder decision.
+
+    A trailing-';' PRINT, an INPUT#/READ target chain and a FIELD list have no
+    flush vector: they finalize when the next statement completes, and reach
+    the list through `flush_pending` rather than `put`. Committing without an
+    event is the one way a statement can enter the program with nothing in the
+    log accounting for it -- and a fold whose whole body is such a chain then
+    has no record of its own body (wild be.exe).
+    """
+    prog = decode0.decode_user_code(_exe("t1_fori.exe"))
+
+    flushed = [
+        e.payload[0]
+        for e in prog.statement_edits
+        if e.origin == "flush_pending" and e.kind == "append"
+    ]
+    assert flushed, "fixture should flush a pending chain"
+    committed = [e.payload for e in prog.events if e.kind == "statement"]
+    for statement in flushed:
+        assert statement in committed
+
+
+def test_every_statement_in_the_list_comes_from_a_commit():
+    """No path reaches the statement list without recording an event.
+
+    Folding still rewrites the list afterwards, so the *program* and the log
+    differ by design. What must not differ is the set of statements the
+    decoder put there: an append the log never saw is a decision the
+    control-flow pass cannot replay.
+    """
+    from tbx.decode0.statement_log import replay
+
+    missing = []
+    for exe in sorted(FIXTURES.glob("*.exe")):
+        try:
+            prog = decode0.decode_user_code(exe.read_bytes())
+        except ValueError:
+            continue
+        committed = {
+            id(e.payload) for e in prog.events if e.kind == "statement"
+        }
+        for edit in prog.statement_edits:
+            if edit.kind != "append" or edit.origin != "flush_pending":
+                continue
+            if id(edit.payload[0]) not in committed:
+                missing.append((exe.name, type(edit.payload[0]).__name__))
+        assert replay(prog.statement_edits) is not None
+    assert not missing, f"{len(missing)} appends with no event: {missing[:5]}"
+
+
 def test_codeless_data_statements_are_synthesized_not_committed():
     """A known gap: DATA never reaches the commit-time log.
 

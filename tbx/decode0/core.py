@@ -501,73 +501,83 @@ class DecodeState:
         newline=False. (Consecutive same-leg prints merge -- byte-identical.)
         INPUT# target chains end the same way: the last store has no
         terminator, so they too finalize on the next completed statement (with a
-        forced flush at any [0060] store so adjacent statements never merge)."""
+        forced flush at any [0060] store so adjacent statements never merge).
+
+        A chain closes late but is still a decoder decision, so each one lands
+        through `commit` and records its event like any other statement."""
         with editing(self.stmts, "flush_pending"):
             if self.pend_dataread is not None:
                 pr, self.pend_dataread = self.pend_dataread, None
                 if not pr["targets"]:
                     raise ValueError("READ chain closed without any stored target")
-                self.stmts.append(ir.Read(tuple(pr["targets"])))
-                self.addrs.append(pr["start"])
+                self.commit(ir.Read(tuple(pr["targets"])), pr["start"])
             if self.pend_filein is not None:
                 pf, self.pend_filein = self.pend_filein, None
                 if not pf["targets"]:
                     raise ValueError("INPUT# chain closed without any stored target")
-                self.stmts.append(ir.InputFile(pf["num"], tuple(pf["targets"])))
-                self.addrs.append(pf["start"])
+                self.commit(
+                    ir.InputFile(pf["num"], tuple(pf["targets"])), pf["start"]
+                )
                 self.pend_fnum = None
             if self.pend_field is not None:
                 pfd, self.pend_field = self.pend_field, None
                 if not pfd["fields"]:
                     raise ValueError("FIELD chain closed without any AS-entry")
-                self.stmts.append(ir.Field(pfd["fnum"], tuple(pfd["fields"])))
-                self.addrs.append(pfd["start"])
+                self.commit(ir.Field(pfd["fnum"], tuple(pfd["fields"])), pfd["start"])
             if self.pend_print is not None:
                 pp, self.pend_print = self.pend_print, None
                 if pp.get("mode") == "write":  # WRITE / WRITE# has no trailing-';' form:
-                    self.stmts.append(ir.Write(tuple(pp["items"]), file=pp["file"]))
+                    stmt = ir.Write(tuple(pp["items"]), file=pp["file"])
                 elif pp.get("mode") == "lprint":  # trailing-';' LPRINT: closed by
                     # the next completed statement, like console PRINT (witnessed
                     # t1_lpusing -- an LPRINT USING follows with no B9 between)
-                    self.stmts.append(
-                        ir.Lprint(
-                            tuple(pp["items"]),
-                            newline=False,
-                            commas=_pp_commas(pp),
-                        )
+                    stmt = ir.Lprint(
+                        tuple(pp["items"]),
+                        newline=False,
+                        commas=_pp_commas(pp),
                     )
                 else:
-                    self.stmts.append(
-                        ir.Print(
-                            tuple(pp["items"]),
-                            newline=False,
-                            file=pp["file"],
-                            commas=_pp_commas(pp),
-                        )
+                    stmt = ir.Print(
+                        tuple(pp["items"]),
+                        newline=False,
+                        file=pp["file"],
+                        commas=_pp_commas(pp),
                     )
-                self.addrs.append(pp["start"])
+                self.commit(stmt, pp["start"])
             if self.pend_using is not None:
                 pu, self.pend_using = self.pend_using, None
-                self.stmts.append(
+                self.commit(
                     ir.PrintUsing(
                         pu["fmt"],
                         tuple(pu["values"]),
                         file=pu["file"],
                         newline=False,
                         lprint=pu.get("lprint", False),
-                    )
+                    ),
+                    pu["start"],
                 )
-                self.addrs.append(pu["start"])
 
     def put(self, stmt, addr):
         self.flush_pending()
+        self.commit(stmt, addr)
+
+    def commit(self, stmt, addr):
+        """Append a decided statement and record the event that says so.
+
+        The one way into the statement list. `put` closes any pending chain
+        first and lands here; `flush_pending` is what closes those chains, and
+        lands here too. A statement that reached the list any other way would
+        be a decision with nothing in the log accounting for it, which is
+        exactly what the control-flow pass cannot replay.
+
+        Record what was decided, with the address still unresolved. Folding
+        rewrites `stmts` in place afterwards; the log is the only account of
+        what the decoder actually committed.
+        """
         output = self.output
         assert output is not None
         output.stmts.append(stmt)
         output.addrs.append(addr)
-        # Record what was decided, with the address still unresolved. Folding
-        # rewrites `stmts` in place afterwards; the log is the only account of
-        # what the decoder actually committed.
         if output.event_log is None:
             output.event_log = EventLog()
         output.event_log.commit(stmt, addr)
