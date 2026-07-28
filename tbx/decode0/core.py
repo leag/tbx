@@ -456,7 +456,10 @@ class DecodeState:
         if target not in ends:
             return False
         self.flush_pending()
-        self.branch("if", target=target, address=self.cur, cond=cond)
+        self.branch(
+            "if", template="inline_if_target", target=target,
+            address=self.cur, cond=cond,
+        )
         self.ifs.append(
             {
                 "target": target,
@@ -568,7 +571,7 @@ class DecodeState:
             output.event_log = EventLog()
         output.event_log.commit(stmt, addr)
 
-    def branch(self, frame: str, *, target, address=None, cond=None) -> None:
+    def branch(self, frame: str, *, template, target, address=None, cond=None) -> None:
         """Record a branch this handler recognised.
 
         Emitting is deliberately separate from committing: the statement list
@@ -580,7 +583,7 @@ class DecodeState:
         if output.event_log is None:
             output.event_log = EventLog()
         output.event_log.branch(
-            frame, target=target, address=address, cond=cond
+            frame, template=template, target=target, address=address, cond=cond
         )
 
     @property
@@ -2238,7 +2241,8 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 loop_kind = "WHILE" if nxt[2] == 0x75 else "UNTIL"
                 state.put(ir.Do(loop_kind, m.ax), c.cur)
                 state.branch(
-                    "loop", target=img.ops[c.k + 2][2], address=test_addr
+                    "loop", template="poll_loop",
+                    target=img.ops[c.k + 2][2], address=test_addr,
                 )
                 c.dos.append(
                     {"test": test_addr, "exit": img.ops[c.k + 2][2]}
@@ -2365,7 +2369,9 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             # BinOp/Group tree as a bare truthiness condition: spelling it as
             # `expr = 0` changes both its polarity and TB's lowering.
             state.flush_pending()
-            state.branch("if", target=nxt[2], address=c.cur)
+            state.branch(
+                "if", template="direct_flag_skip", target=nxt[2], address=c.cur
+            )
             c.ifs.append(
                 {
                     "target": nxt[2],
@@ -2497,7 +2503,9 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 # loop variable in DGROUP (t1_fnlocalarrstr).
                 hidden = {d for d in (lim, stp) if d in frame["locals"]}
                 frame.setdefault("hidden_locals", set()).update(hidden)
-            state.branch("loop", target=img.ops[test_k][0], address=c.cur)
+            state.branch(
+                "loop", template="for_header", target=img.ops[test_k][0], address=c.cur
+            )
             c.fors.append(
                 {
                     "v": vdisp,
@@ -2516,7 +2524,9 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             del out.addrs[-3:]
             v = init_s.target
             state.put(ir.For(v, init_s.value, lim_s.value, stp_s.value), a)
-            state.branch("loop", target=t, address=c.cur)
+            state.branch(
+                "loop", template="for_header", target=t, address=c.cur
+            )
             c.fors.append(
                 {
                     "v": state.vdisp(v),
@@ -2566,7 +2576,9 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 # LOCALs whenever the loop var is not the last one declared,
                 # t1_locstrafterforlit).
                 c.proc_frame["has_local_for"] = True
-            state.branch("loop", target=t, address=c.cur)
+            state.branch(
+                "loop", template="for_header", target=t, address=c.cur
+            )
             c.fors.append(
                 {
                     "v": cmp_at_t[2],
@@ -2650,7 +2662,9 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 ir.For(init_s.target, init_s.value, limit, ir.Lit(1)),
                 a,
             )
-            state.branch("loop", target=t, address=c.cur)
+            state.branch(
+                "loop", template="for_header", target=t, address=c.cur
+            )
             c.fors.append(
                 {
                     "v": nxt_t[2],
@@ -2708,7 +2722,9 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 ir.For(init_s.target, init_s.value, limit, ir.Lit(1)),
                 a,
             )
-            state.branch("loop", target=t, address=c.cur)
+            state.branch(
+                "loop", template="for_header", target=t, address=c.cur
+            )
             c.fors.append(
                 {
                     "v": nxt_t[2],
@@ -2776,7 +2792,9 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 ir.For(init_s.target, init_s.value, ir.Lit(0), step_s.value),
                 a,
             )
-            state.branch("loop", target=t, address=c.cur)
+            state.branch(
+                "loop", template="for_header", target=t, address=c.cur
+            )
             c.fors.append(
                 {
                     "v": state.vdisp(init_s.target),

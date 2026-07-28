@@ -135,6 +135,36 @@ def _address_targets(value: Any) -> tuple[tuple[str, int], ...]:
     return tuple(found)
 
 
+#: Calibrated branch template -> the construct it denotes.
+#:
+#: This table is the judgement the handlers used to make individually. An
+#: inline IF and a head-tested loop are indistinguishable in the graph -- both
+#: branch forward with no condition -- so the construct cannot be recovered
+#: from shape. It follows from which template matched, and that is recorded.
+FRAME_BY_TEMPLATE: dict[str, str] = {
+    "inline_if_target": "if",
+    "direct_flag_skip": "if",
+    "bool_tail_skip": "if",
+    "materialized_test_skip": "if",
+    "bool_tail_loopback": "loop",
+    "poll_loop": "loop",
+    "for_header": "loop",
+    "select_header": "case",
+}
+
+
+def frame_for(template: str) -> str:
+    """The construct a calibrated branch template denotes.
+
+    Fail-loud on an unmapped template: a new branch template must state what
+    it means rather than defaulting to the commonest construct.
+    """
+    try:
+        return FRAME_BY_TEMPLATE[template]
+    except KeyError:
+        raise ValueError(f"unmapped branch template: {template!r}") from None
+
+
 @dataclass(frozen=True)
 class BranchOutcome:
     """What became of one committed branch, and which pass decided it."""

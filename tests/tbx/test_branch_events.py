@@ -22,19 +22,24 @@ CORPUS = Path(__file__).resolve().parents[1] / "fixtures" / "corpus"
 def test_the_log_records_a_branch_without_a_statement():
     log = EventLog()
 
-    log.branch("if", target=0x40, address=0x10, cond=ir.Lit(1))
+    log.branch(
+        "if", template="inline_if_target", target=0x40, address=0x10,
+        cond=ir.Lit(1),
+    )
 
     (event,) = log.frozen()
     assert event.kind == "branch"
     assert event.address == 0x10
-    assert event.payload == BranchEvent("if", 0x40, ir.Lit(1))
+    assert event.payload == BranchEvent(
+        "if", "inline_if_target", 0x40, ir.Lit(1)
+    )
 
 
 def test_branch_and_statement_events_share_one_ordering():
     log = EventLog()
 
     log.commit(ir.End(), 0x10)
-    log.branch("if", target=0x40, address=0x20)
+    log.branch("if", template="inline_if_target", target=0x40, address=0x20)
     log.commit(ir.Goto(1), 0x30)
 
     assert [e.seq for e in log.frozen()] == [0, 1, 2]

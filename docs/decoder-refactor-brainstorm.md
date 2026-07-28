@@ -576,12 +576,51 @@ to 40, because the after-count used a narrower structure predicate than the
 before-count; re-run with the identical predicate it was 103 to 79, and only
 after the lifts and FOR headers were instrumented did it reach 103 to 8.
 
-### What closes the chapter
+### The construct is a table, not a handler's judgement
 
-Handlers now emit the branch, but they still *decide* the construct — the
-frame kind is in the event because the handler chose it. Moving that decision
-into the control-flow pass is the remaining work, and it can now be checked
-against a complete branch record rather than against final source.
+Recording the branches exposed why the decision could not simply be moved: the
+graph does not carry enough to make it. An inline IF and a head-tested loop are
+indistinguishable as edges — both branch forward with no condition, 76 and 90
+times across the corpus. Nothing in the shape separates them.
+
+What separates them is evidence the handler computed and discarded: whether a
+jump back to the test address sits before the exit. So the branch event now
+records the *template* it matched, and `control_graph.FRAME_BY_TEMPLATE` maps
+templates to constructs in one place:
+
+| template | construct |
+| --- | --- |
+| `inline_if_target`, `direct_flag_skip`, `bool_tail_skip`, `materialized_test_skip` | `if` |
+| `bool_tail_loopback`, `poll_loop`, `for_header` | `loop` |
+| `select_header` | `case` |
+
+`frame_for` is fail-loud on an unmapped template: a new branch template must
+say what it denotes rather than defaulting to the commonest construct.
+
+`test_the_table_reproduces_every_handler_decision` derives the construct from
+the recorded template for every branch in the corpus and checks it against
+what the handler chose. Zero disagreements — which is the evidence that made
+the swap safe to attempt.
+
+`_lift_bool_tail` now performs it. It used to choose between `whiles.append`
+and `ifs.append` from `_has_jmps_back` directly; it now names the template
+from that same evidence and asks the table what it means. That is the
+separation this chapter asks for, at the one site where the choice was
+genuinely being made.
+
+### What remains
+
+The other emission sites are unconditional — a FOR header is always a loop, a
+SELECT header always a case — so their construct was never really a judgement,
+and the table now states it in one place rather than eight.
+
+What is still coupled is *when* folding happens: handlers push onto `ifs`,
+`whiles`, `dos` and `cases` as they decode, and those frames drive folding
+immediately. Deferring that to a pass over the graph is the remaining
+structural work, and it is the part that will move statements, so it needs the
+byte-exact verification a semantic change requires. Every input it needs now
+exists: a complete branch record, a complete edit log with provenance, and a
+table that reproduces every construct decision.
 
 ## Chapter 7 — Remove the migration scaffolding
 

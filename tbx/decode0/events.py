@@ -45,10 +45,13 @@ class BranchEvent:
     """
 
     frame: str
+    #: The calibrated template the handler matched. Recognition; the construct
+    #: is a separate judgement derived from it by `control_graph.frame_for`.
+    template: str = ""
     #: Physical address the branch goes to, or None when the construct's exit
     #: is not yet known at recognition time (a SELECT header, whose END SELECT
     #: is only resolved once its arms close).
-    target: int | None
+    target: int | None = None
     cond: Any = None
 
 
@@ -97,6 +100,7 @@ class EventLog:
         self,
         frame: str,
         *,
+        template: str,
         target: int | None,
         address: int | None,
         cond: Any = None,
@@ -105,7 +109,7 @@ class EventLog:
         event = DecodedEvent(
             kind="branch",
             address=address,
-            payload=BranchEvent(frame, target, cond),
+            payload=BranchEvent(frame, template, target, cond),
             seq=len(self.events),
         )
         self.events.append(event)

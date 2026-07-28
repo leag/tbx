@@ -5,6 +5,7 @@ from typing import Any
 
 from tbx import ir
 from tbx.decode0.const import _JCC_RELOP_TRUE, _NEGATE_REL
+from tbx.decode0.control_graph import frame_for
 from tbx.decode0.statement_log import editing
 
 
@@ -245,14 +246,18 @@ def _find_jmps_back(ops, exit_addr) -> int | None:
     return None
 
 
-def _announce(branch, frame: str, target, address) -> None:
+def _announce(branch, frame: str, template: str, target, address) -> None:
     """Record a frame this lift opened, when the caller supplied a recorder.
+
+    ``template`` is what was matched; ``frame`` is what this lift concluded
+    from it. Both are recorded so the conclusion can be checked against the
+    template table before the lift stops drawing it.
 
     The lifts are also called with plain lists from unit tests, which have no
     decode state to record into, so the recorder is optional.
     """
     if branch is not None:
-        branch(frame, target=target, address=address)
+        branch(frame, template=template, target=target, address=address)
 
 
 def _lift_bool_tail(
@@ -386,13 +391,23 @@ def _lift_bool_tail(
             final_start = pend_outer["start"]
         if f_jcc[2] == 0x74:
             put(ir.IfGoto(final_cond, ("addr", f_jmp[2])), final_start)
-        elif _has_jmps_back(ops, f_jmp[2], final_start):
+        elif frame_for(
+            template := (
+                "bool_tail_loopback"
+                if _has_jmps_back(ops, f_jmp[2], final_start)
+                else "bool_tail_skip"
+            )
+        ) == "loop":
+            # The lift recognises the template -- a jump back to the test
+            # address before the exit -- and the table says what it denotes.
+            # Which of the two it is used to be decided here, from the same
+            # evidence, which is the coupling this chapter removes.
             put(ir.While(final_cond), final_start)
-            _announce(branch, "loop", f_jmp[2], final_start)
+            _announce(branch, "loop", template, f_jmp[2], final_start)
             whiles.append({"test": final_start, "exit": f_jmp[2]})
         else:
             flush()
-            _announce(branch, "if", f_jmp[2], final_start)
+            _announce(branch, "if", template, f_jmp[2], final_start)
             ifs.append(
                 {
                     "target": f_jmp[2],
@@ -566,7 +581,7 @@ def _lift_while(
                 # Compound conditions materialize either way, so only a plain
                 # RelOp counts.
                 block_ifs.add(cur)
-            _announce(branch, "if", exit_jmp[2], cur)
+            _announce(branch, "if", "materialized_test_skip", exit_jmp[2], cur)
             ifs.append(
                 {"target": exit_jmp[2], "cond": cond, "start": cur, "idx": len(stmts)}
             )
