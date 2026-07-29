@@ -179,11 +179,13 @@ def _fold_arm(state, frame, merge):
     c, o = state.control, state.output
     # An inline IF closing this arm skips to the arm-close address, and
     # `select_case.step` runs BEFORE the dispatch loop's own close point -- so
-    # drain those bodies here or the arm folds away with one still open
-    # (TBW73.INC:716, via DecodeState.open_tail_if). It runs before the region
-    # is read back, since folding one shortens the list the position indexes.
+    # close those frames here, or the arm folds away with one still open
+    # (TBW73.INC:716, via DecodeState.open_tail_if). `close_ifs` only queues
+    # the region now, so drain immediately after: the arm must not be
+    # snapshotted around a region still waiting to fold.
     state.close_ifs(merge)
     body_idx = state.frame_start({"seq": frame["body_seq"], "idx": frame["body_idx"]})
+    state.drain_folds(body_idx)
     stmts, addrs = _fold_if(
         o.stmts[body_idx:],
         o.addrs[body_idx:],

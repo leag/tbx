@@ -37,6 +37,11 @@ class Program(list[Any]):
     events: tuple[DecodedEvent, ...] = ()
     event_reconciliation: EventReconciliation | None = None
     statement_edits: tuple[StatementEdit, ...] = ()
+    #: Every inline-IF fold region, in the coordinates the walk recorded it
+    #: in -- where the body began and how long the list was when decoding
+    #: reached the branch's target. Not where the splice landed: folding is
+    #: deferred, so anything folded in between has moved that.
+    fold_regions: tuple[tuple[int, int], ...] = ()
     control_graph: ControlGraph | None = None
 
 

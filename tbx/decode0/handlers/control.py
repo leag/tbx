@@ -624,6 +624,7 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
                 o.stmts,
                 o.addrs,
                 state.put,
+                shift=state.shift_pending,
             )  # compound DO..LOOP WHILE/UNTIL?
             if nk is not None:
                 state.seek(nk)
@@ -698,6 +699,7 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             o.addrs,
             state.put,
             c.cur,
+            shift=state.shift_pending,
         )  # DO..LOOP WHILE/UNTIL
         if nk is not None:
             state.seek(nk)
@@ -891,6 +893,13 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             c.cur,
             block_ifs=c.block_if_addrs,
             branch=state.branch,
+            # A backward jmp landing inside a body that is queued to be folded
+            # is not a retry edge: the fold would have taken that address out
+            # of the list before this question was asked.
+            folded_away=state.folded_away,
+            # And a `DO` spliced in ahead of a body moves every queued region
+            # after it -- positions the eager fold had already collapsed.
+            shift=state.shift_pending,
         ))
         e.pend_cmp = None
         c.cur = None

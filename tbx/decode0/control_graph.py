@@ -305,12 +305,12 @@ def predict_fold_extents(program) -> tuple[tuple[int, int], ...]:
     from the edits stamped up to that event. A frame whose target is never
     arrived at yields nothing rather than a guessed end.
 
-    Frames sharing an arrival are nested, and folding one moves the end of the
-    next: an inner region collapses to the single statement that replaces it,
-    so the region enclosing it now ends one past where the inner one began.
-    They close innermost-first, the order the handlers' frame stack pops in.
-    That arithmetic is the folding pass's own -- it is what the pass does, not
-    something read from the record.
+    Frames sharing an arrival are nested and all end at that one moment, so
+    they all end at the same length. What the enclosing region ends up
+    spanning once the inner ones have collapsed is the folding pass's own
+    arithmetic -- it depends on the order the pass folds in, and on what else
+    it has folded since. It is deliberately not applied here: this returns the
+    regions the record describes, which is what the walk itself records.
 
     Returned in fold order: by arrival, and innermost first within one.
     """
@@ -334,7 +334,6 @@ def predict_fold_extents(program) -> tuple[tuple[int, int], ...]:
         stop = _length_at(edits, arrival)
         for start in reversed(opened[arrival]):
             regions.append((start, stop))
-            stop = start + 1
     return tuple(regions)
 
 
