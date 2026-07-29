@@ -1093,121 +1093,63 @@ A probe needs event trapping on (so CC hooks are emitted at all) plus a
 codeless line ahead of an IF whose condition converts a by-ref integer
 parameter to double — that is what makes the run length 2.
 
-### The AND-as-truth-test family — reproduced in four lines, not yet mapped
+### The parenthesised `A OR (B AND C)` family — root cause found
 
 `unhandled jcc 74` (file.exe, grdscn.exe, hebrew.exe, pwinst.exe) and
 `unhandled materialized test` / `materialization template mismatch`
-(cal, cal87, football, varamort, kinder, kinetics, wb) are listed in the
-scan as separate signatures, but the failing op windows share one shape:
-an **`andaxbx`/`andax_m` whose result is tested directly by a conditional
-jump**, with no `orax` self-test between them. `_lift_while`'s template
-wants `movax, jcc, incax, orax, jcc, jmp`; here index 3 is the AND fold
-itself, which only `_lift_bool_do_tail` accepts and only when a compound
-tail is already open.
+(cal, cal87, football, varamort, kinder, kinetics, wb) are separate scan
+signatures over one construct. The failing windows all show an
+`andaxbx`/`andax_m` whose result is tested directly by a conditional jump,
+with no `orax` self-test between them.
 
-```
-pwinst.exe 0x8654  movax_m 502 / andax_m 504 / jcc 74 / jmp
-file.exe   0x98a5  movax FFFF / jcc 7f / incax / andaxbx / jcc 74 / jmp
-grdscn.exe 0xbbe3  (identical to file.exe)
-hebrew.exe 0xb4e0  str2num INSTR / andaxbx / jcc 74 / jmp
-```
+**The discriminator is an explicit parenthesis, and nothing else.** Four
+probes, differing only in parenthesisation and body form:
 
-**Reproduced**, which is the step the calibration rule asks for first --
-`wild/probes/probe_and_truthtest.bas`, four lines:
+| probe | source | result |
+| --- | --- | --- |
+| `A% = 9 OR B% = 15 AND C% = 1 THEN 70` | implicit precedence | **byte-exact** |
+| same, `THEN PRINT "Y"` | implicit precedence | **byte-exact** |
+| `A% = 9 OR (B% = 15 AND C% = 1) THEN 70` | parenthesised | **raises `unhandled jcc 74`** |
+| same, `THEN PRINT "Y"` | parenthesised | **silently wrong** |
 
-```
-10 A% = 3
-20 B% = 5
-30 IF A% AND B% THEN PRINT "Y"
-40 END
-```
+So `A OR B AND C` is calibrated and correct; `A OR (B AND C)` — the same
+expression, spelled with the redundant parentheses — is not. Turbo Basic
+compiles the parenthesised group with its own convergence/spill protocol
+rather than as a precedence cascade, and only the cascade is mapped.
 
-It compiles (TB 1.0) and fails as `unhandled jcc 75 at 0x70ce`, the same
-template at the opposite polarity. Its op window also shows what the
-construct really is:
+Both probes are stored, and both matter:
 
-```
-orax / jcc 75 -> 0x70ca / jmp 0x70ce     the left operand's own test
-andax_m 288 / jcc 75 -> body / jmp past  the AND, tested directly
-```
+- `wild/probes/probe_paren_or_and_goto.bas` fails **loudly**, with exactly
+  the wild corpus's own `unhandled jcc 74`. This is the four-program
+  signature reproduced in eight lines.
+- `wild/probes/probe_paren_or_and_inline.bas` **does not raise**. It
+  decodes `IF A% = 9 OR (B% = 15 AND C% = 1)` as
+  `IF ((C% = 1) AND B% = 15)` — outer OR term dropped, AND operands
+  reversed — and recompiling the emitted source gives a different image.
+  A silent wrong answer, which is the worse half and has no wild witness
+  because a wild program with an inline body simply decodes to something
+  plausible and nobody notices.
 
-so `IF A% AND B%` is compiled **short-circuit**: the left operand is
-tested first and the AND is only reached when it is non-zero. A mapping
-has to reproduce that shape rather than treat the AND as a plain
-bitwise operation, and it needs its own fixture and byte-exact
-verification before it is written. Not attempted here.
+**Where the term is lost.** `match_bool_term1` recognises the first term
+correctly even in the parenthesised form — called on the op index it
+returns `operator='OR', polarity=116, deferred=True`. But instrumenting
+the `andaxbx` combine in `handlers/arith.py` shows `pend_bool=None` there,
+with the two inner relations in AX/BX. The outer term is discarded before
+any compound machinery sees it, and the inner group's `andaxbx` is then
+taken by the generic logical-*value* combine, which has no outer term to
+fold in. That is why one spelling raises and the other does not: whether
+anything downstream notices depends on what the body needs, not on the
+condition being wrong.
 
-**Answered, and it is worse than a missing template: `A OR (B AND C)`
-decodes SILENTLY WRONG.**
-
-`match_bool_outer_and_group` handles `A AND (B OR C)` and requires its
-gate to be `0x75` (JNZ) -- "term1 true, so evaluate the group". grdscn's
-gate at `0xbbc4` is `0x74` (JZ), the inverted polarity, which is the
-*outer OR* form `A OR (B AND C)`: term1 false, so evaluate the group.
-The matcher's own docstring already names grdscn.exe, so the file was
-known; only the AND-outer half was implemented.
-
-`wild/probes/probe_outer_or_and_group.bas` pins it in five lines:
-
-```
-40 IF A% = 10 OR (A% = 18 AND A% = 28) THEN PRINT "Y"
-```
-
-It compiles (TB 1.1), reproduces grdscn's op window exactly
-(`movbxax` / ... / `movrr ax,bx` / `movbxax` / `movax FFFF` / `jcc` /
-`incax` / `andaxbx` / `jcc` / `jmp`), and **does not raise**. It decodes
-to
-
-```
-40 IF ((A% = 28) AND A% = 18) THEN PRINT "Y"
-```
-
-— the outer `OR A% = 10` term is dropped entirely and the AND's operands
-come out reversed. The round-trip proves it is a real miscompile rather
-than a spelling difference: **34784 bytes against 34816**.
-
-That reclassifies this family. A loud `unhandled jcc 74` on four programs
-is the *visible* part; the same shape decodes silently to wrong source
-wherever the surrounding context happens not to raise. In a decoder whose
-whole discipline is fail-loud, that is the more urgent half, and it
-should be made to raise before anything else is done with it.
-
-**Where it is lost, traced.** `match_bool_term1` *does* recognize the
-probe's first term -- called directly on the op index it returns
-`operator='OR', polarity=116, deferred=True`, exactly right. But
-instrumenting the `andaxbx` combine in `handlers/arith.py` shows
-`pend_bool=None` there, with `ax` and `bx` holding the two inner
-relations. So the outer term is discarded *before* any compound machinery
-sees it: nothing calls the matcher on this path, and the inner group's
-`andaxbx` is then consumed by the generic logical-*value* combine, which
-has no outer term to fold in and simply ANDs AX with BX.
-
-That is why the failure is silent rather than loud. The value combine is
-a legitimate handler doing its job on inputs that look complete. So the
-fail-loud guard belongs where the term1 match is not consumed -- a
-recognized compound first term whose partner combine arrives with
-`pend_bool` unset is a dropped operand, and that is checkable without
-knowing how to build the right IR yet. Making it raise is a smaller and
-safer first commit than the mapping, and it converts eleven wild programs
-plus an unknown number of silent wrong answers into one honest signal.
-
-**For the mapping itself, start from `t1_and`, which already passes and
-is nearly the same bytes.** `IF A > 1 AND B < 5 THEN 60` compiles to
-
-```
-movax FFFF / jcc / incax / orax / jcc / jmp   first term + its gate
-<second term> / movbxax / movax FFFF / jcc / incax / andaxbx / jcc 74 / jmp
-```
-
-— an `andaxbx; jcc 74; jmp` identical to the one file.exe dies on. So the
-combining tail is *already* handled; what differs is how the sequence is
-entered. file.exe has an extra `movrr ax,bx` immediately before its
-`movbxax`, and the question to answer first is whether the first term's
-short-circuit gate (`orax; jcc; jmp`) ran and left `pend_bool` set. If it
-did not, the tail is reached with no open compound and
-`_lift_bool_do_tail` declines it. That is a much narrower question than
-"map a new template", and it should be answered before any code is
-written.
+**A guard is free.** Measured statically across both corpora, the
+programs containing a deferred term1 are: **2 fixtures**
+(`t1_mixedbool2`, `v10_t1_mixedbool2`) which **decode correctly today**
+and are the unparenthesised form, and **10 wild programs** (bmaster,
+crossref, file, football, grdscn, hebrew, kinetics, mcmurphy, varamort,
+wb) **every one of which already fails**. So making the unconsumed-term1
+case raise costs **zero** newly-failing programs in either corpus, and
+converts the silent class into the loud one. That is the smallest safe
+first commit here, ahead of designing the mapping.
 
 ### `morcalc.exe` / `photo.exe` — the target is inside a statement, first look
 
