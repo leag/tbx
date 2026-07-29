@@ -1311,11 +1311,11 @@ def fp_math(state: DecodeState, op, addr, kind) -> bool:
             tgt = i.ops[c.k + 2 + n][2]
             if (
                 l.dim_frame is not None
-                and l.dim_frame["block"]
+                and l.dim_frame.base
                 <= tgt
-                < l.dim_frame["block"] + ARR_BLOCK
+                < l.dim_frame.base + ARR_BLOCK
             ):
-                l.dim_frame["cells"][tgt - l.dim_frame["block"]] = idx  # bound
+                l.dim_frame.cells[tgt - l.dim_frame.base] = idx  # bound
             elif tgt in (0x88, 0x94, 0xA0, 0xAC, 0xB8, 0xC4):  # COLOR/VIEW cell,
                 e.color_cells[tgt] = idx  # rounded via CINT (a non-integer arg)
             elif tgt in (0x8A, 0x96, 0xA2, 0xAE, 0xBA, 0xC6):  # same cell family,

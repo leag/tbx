@@ -56,7 +56,9 @@ from tbx.decode0.events import DecodedEvent, EventLog, reconcile
 from tbx.decode0.frames import (
     FnFrame,
     ForFrame,
+    DimFrame,
     IfFrame,
+    LoopFrame,
     PendingFold,
     ProcFrame,
 )
@@ -2500,7 +2502,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                     target=img.ops[c.k + 2][2], address=test_addr,
                 )
                 c.dos.append(
-                    {"test": test_addr, "exit": img.ops[c.k + 2][2]}
+                    LoopFrame(test=test_addr, exit=img.ops[c.k + 2][2])
                 )
                 m.ax = None
                 state.advance(3)
@@ -3070,17 +3072,17 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         # handed them for free.
         back_idx = state.statement_index(op[2])
         if (
-            c.dos and op[2] == c.dos[-1]["test"]
+            c.dos and op[2] == c.dos[-1].test
         ):  # head-test DO ... LOOP back-edge
             f = c.dos.pop()
-            if nxt is None or nxt[0] != f["exit"]:
+            if nxt is None or nxt[0] != f.exit:
                 raise ValueError(f"LOOP exit mismatch at {addr:#x}")
             state.put(ir.Loop(None), c.cur)
         elif (
-            c.whiles and op[2] == c.whiles[-1]["test"]
+            c.whiles and op[2] == c.whiles[-1].test
         ):  # legacy WHILE ... WEND
             f = c.whiles.pop()
-            if nxt is None or nxt[0] != f["exit"]:
+            if nxt is None or nxt[0] != f.exit:
                 raise ValueError(f"WEND exit mismatch at {addr:#x}")
             state.put(ir.Wend(), c.cur)
         elif op[2] < addr and back_idx is not None:  # bare backward jmps = infinite DO
@@ -3730,11 +3732,11 @@ def _decode_user_code(
             if c.proc_frame is None:  # DEF FN LOCAL arrays unwitnessed
                 raise ValueError(f"LOCAL DIM bracket outside a SUB body at {addr:#x}")
             disp = op[2] - 2
-            l.local_dim_frame = {
-                "disp": disp,
-                "cells": {2: ir.Lit(op[3]), 6: ir.Lit(img.ops[c.k + 1][3])},
-                "start": c.cur,
-            }
+            l.local_dim_frame = DimFrame(
+                base=disp,
+                cells={2: ir.Lit(op[3]), 6: ir.Lit(img.ops[c.k + 1][3])},
+                start=c.cur,
+            )
             c.cur = None
             state.advance(4)  # type write, esize write, far_ref_bp, dim_begin
             continue
@@ -3755,11 +3757,7 @@ def _decode_user_code(
             span = {disp + 2 * i for i in range(_LOCAL_ARR_WORDS)}
             if not span <= set(frame.locals):
                 raise ValueError(f"LOCAL DIM descriptor exceeds frame at {addr:#x}")
-            l.local_dim_frame = {
-                "disp": disp,
-                "cells": {},
-                "start": c.cur,
-            }
+            l.local_dim_frame = DimFrame(base=disp, start=c.cur)
             c.cur = None
             state.advance(2)
             continue
@@ -3779,11 +3777,11 @@ def _decode_user_code(
         if (
             kind == "mov_bp_imm"
             and l.local_dim_frame is not None
-            and l.local_dim_frame["disp"]
+            and l.local_dim_frame.base
             <= op[2]
-            < l.local_dim_frame["disp"] + ARR_BLOCK
+            < l.local_dim_frame.base + ARR_BLOCK
         ):  # LOCAL DYNAMIC array descriptor field write (type/size/bounds)
-            l.local_dim_frame["cells"][op[2] - l.local_dim_frame["disp"]] = (
+            l.local_dim_frame.cells[op[2] - l.local_dim_frame.base] = (
                 ir.Lit(op[3])
             )
             state.advance()
@@ -3791,16 +3789,16 @@ def _decode_user_code(
         if (
             kind == "movm_ax_bp"
             and l.local_dim_frame is not None
-            and l.local_dim_frame["disp"]
+            and l.local_dim_frame.base
             <= op[2]
-            < l.local_dim_frame["disp"] + ARR_BLOCK
+            < l.local_dim_frame.base + ARR_BLOCK
         ):  # computed LOCAL DIM descriptor cell, e.g. an upper bound loaded
             # from another BP-relative INTEGER local (t1_fnlocalarrstr;
             # wild cleanup.exe/reformat.exe).
             if m.ax is None:
                 raise ValueError(f"LOCAL DIM cell store without AX at {addr:#x}")
-            l.local_dim_frame["cells"][
-                op[2] - l.local_dim_frame["disp"]
+            l.local_dim_frame.cells[
+                op[2] - l.local_dim_frame.base
             ] = m.ax
             m.ax = None
             state.advance()
@@ -3809,9 +3807,9 @@ def _decode_user_code(
             img.ops[c.k + 1][1] == "dim_end"
         ):  # dim_end: finalize the LOCAL DYNAMIC array descriptor opened above
             disp = op[2]
-            if l.local_dim_frame is None or l.local_dim_frame["disp"] != disp:
+            if l.local_dim_frame is None or l.local_dim_frame.base != disp:
                 raise ValueError(f"unbalanced LOCAL DIM bracket at {addr:#x}")
-            cells = l.local_dim_frame["cells"]
+            cells = l.local_dim_frame.cells
             if 2 not in cells or 6 not in cells:
                 raise ValueError(
                     f"LOCAL DIM descriptor missing type/size fields at {addr:#x}"
@@ -3869,7 +3867,7 @@ def _decode_user_code(
             bounds = (lo.value, hi) if expl else hi
             state.put(
                 ir.Dim(name, (bounds,), dynamic=False),
-                l.local_dim_frame["start"],
+                l.local_dim_frame.start,
             )
             # Fold the whole reserved template out of the SUB's plain scalar
             # LOCAL slots (private array bookkeeping, not user variables --
@@ -4726,7 +4724,7 @@ def _decode_user_code(
         ):
             block = op[2]  # runtime-DIM bracket
             if img.ops[c.k + 3][1] == "dim_begin":
-                l.dim_frame = {"block": block, "cells": {}, "start": c.cur}
+                l.dim_frame = DimFrame(base=block, start=c.cur)
             elif img.ops[c.k + 3][1] == "erase":  # ERASE
                 rec = l.r_arrs.get(block)
                 if rec is not None:
@@ -4774,9 +4772,9 @@ def _decode_user_code(
                     raise ValueError(f"ERASE of unknown static slot at {addr:#x}")
                 state.put(ir.Erase(a["name"]), c.cur)
             else:
-                if l.dim_frame is None or l.dim_frame["block"] != block:
+                if l.dim_frame is None or l.dim_frame.base != block:
                     raise ValueError(f"unbalanced DIM bracket at {addr:#x}")
-                cells = l.dim_frame["cells"]
+                cells = l.dim_frame.cells
                 # bound cells per dim: (+08,+0A), (+0E,+10), (+14,+16) --
                 # rank-3 witnessed t1_dim3v
                 rank = 3 if 0x16 in cells else 2 if 0x10 in cells else 1
@@ -4869,7 +4867,7 @@ def _decode_user_code(
                                 for v in bounds
                             ),
                         ),
-                        l.dim_frame["start"],
+                        l.dim_frame.start,
                     )
                 l.prev_dim_end = img.ops[c.k + 3][0]
                 l.dim_frame = None
@@ -4919,10 +4917,10 @@ def _decode_user_code(
         if (
             kind in ("movm_imm", "movm_ax")
             and l.dim_frame is not None
-            and l.dim_frame["block"] <= op[2] < l.dim_frame["block"] + ARR_BLOCK
+            and l.dim_frame.base <= op[2] < l.dim_frame.base + ARR_BLOCK
         ):
             val = ir.Lit(op[3]) if kind == "movm_imm" else m.ax
-            l.dim_frame["cells"][op[2] - l.dim_frame["block"]] = val
+            l.dim_frame.cells[op[2] - l.dim_frame.base] = val
             if kind == "movm_ax":
                 m.ax = None
             state.advance()

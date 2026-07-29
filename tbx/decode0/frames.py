@@ -275,3 +275,42 @@ class PendingFold:
     #: from the list by now, so a recognizer asking "is this a statement
     #: start?" has to be told they are only there because the fold has not run.
     addrs: frozenset
+
+
+@dataclass
+class LoopFrame:
+    """One open head-tested loop -- `DO ... LOOP`, or a legacy `WHILE ... WEND`.
+
+    Two fields, and the pair is the whole recognition: the back edge closing
+    the loop must target `test`, and the operation after it must be at `exit`.
+    A jmp that satisfies the first but not the second is not this loop's
+    back edge, and the decoder says so rather than closing the frame.
+    """
+
+    #: Address the back edge jumps to: where the loop's test begins.
+    test: int
+    #: Address execution reaches once the loop is done.
+    exit: int
+
+
+@dataclass
+class DimFrame:
+    """An array declaration being assembled from its descriptor writes.
+
+    A `DIM` compiles to a run of writes into the array's descriptor block --
+    element size, bounds, one per dimension -- and the statement is only
+    complete once `dim_begin` closes the run. Until then the writes accumulate
+    in `cells`, keyed by their offset within the block.
+
+    `base` is where the block starts, and is the only difference between a
+    DGROUP array and a LOCAL one: a DGROUP block has a segment displacement, a
+    LOCAL block a bp displacement. Both are "where the descriptor lives", and
+    the recognizers differ in how they find it, not in what they do with it.
+    """
+
+    #: Start of the descriptor block, DGROUP or bp relative.
+    base: int
+    #: Offset within the block -> the value written there.
+    cells: dict = field(default_factory=dict)
+    #: Address of the statement being assembled.
+    start: int | None = None

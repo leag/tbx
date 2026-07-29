@@ -6,7 +6,7 @@ from typing import Any
 from tbx import ir
 from tbx.decode0.const import _JCC_RELOP_TRUE, _NEGATE_REL
 from tbx.decode0.control_graph import frame_for
-from tbx.decode0.frames import IfFrame
+from tbx.decode0.frames import IfFrame, LoopFrame
 from tbx.decode0.statement_log import editing
 
 
@@ -421,7 +421,7 @@ def _lift_bool_tail(
             # evidence, which is the coupling this chapter removes.
             put(ir.While(final_cond), final_start)
             _announce(branch, "loop", template, f_jmp[2], final_start)
-            whiles.append({"test": final_start, "exit": f_jmp[2]})
+            whiles.append(LoopFrame(test=final_start, exit=f_jmp[2]))
         else:
             flush()
             event = _announce(
@@ -565,7 +565,7 @@ def _lift_while(
         if _has_jmps_back(ops, exit_jmp[2], cur):  # head-test DO loop
             kind = "WHILE" if exit_jcc[2] == 0x75 else "UNTIL"
             put(ir.Do(kind, cond), cur)
-            dos.append({"test": cur, "exit": exit_jmp[2]})
+            dos.append(LoopFrame(test=cur, exit=exit_jmp[2]))
         elif (
             exit_jmp[2] < ops[k][0]
             and exit_jmp[2] in addrs
