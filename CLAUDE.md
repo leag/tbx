@@ -32,6 +32,35 @@ BASIC source:
   statements; `tbx.ir` is the shared immutable representation.
 - `emit0` emits source that must recompile byte-for-byte.
 
+## Writing a handler
+
+Use the migrated APIs; the older spellings they replaced are gone, so reaching
+for one is a sign of copying from an old commit.
+
+- **State** goes through its owning view -- `state.machine`, `state.expr`,
+  `state.layout_state`, `state.control`, `state.output`, `state.image`. Every
+  field has exactly one owner and writing an unowned name through a view
+  raises. `tests/tbx/test_state_parts.py` enforces the partition and
+  `test_state_audit.py` proves every field is still read somewhere.
+- **Operations** are consumed through `state.advance`/`state.seek`, never by
+  assigning the index. `OpCursor` records what was consumed, which is what a
+  failure report shows you as `recent=`.
+- **Recognition** belongs in a matcher (`decode0.matchers`) returning a
+  `TemplateMatch`; the applier mutates. A matcher must not touch decode state
+  or advance the cursor, and it is testable on hand-built operation tuples
+  with no fixture.
+- **Frames** -- anything the loop holds open across operations -- are
+  dataclasses in `decode0.frames`, never dicts. `tests/tbx/test_frames.py`
+  rejects a dict literal, a subscripted field, and an undocumented one. Put
+  the compiler convention behind a field in its comment: that is where a
+  reader will look for it.
+- **Committing a statement** goes through `state.put`/`state.commit` so it is
+  recorded. A statement that reaches the program without an event is invisible
+  to the control-flow pass, and `reconcile` will report it as synthesized.
+- **Recognising a branch or a region** records an event (`state.branch`,
+  `state.region`, `state.arrive`). Folding reads those back rather than
+  taking a second copy from the frame.
+
 ## Calibration rule
 
 The decoder is fail-loud. Unknown byte patterns must raise `ValueError`; never

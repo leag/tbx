@@ -3120,6 +3120,11 @@ def _decode_user_code(
     img, m, e, l, c, out = (state.image, state.machine, state.expr,
                             state.layout_state, state.control, state.output)
     state.validate_ownership()
+    # The phase a failure reports is set as the pipeline crosses into it, so
+    # "where did this go wrong" is answered before anything else has to be.
+    # It defaulted to "lift" and was never assigned, which meant every report
+    # claimed lift -- including the layout failures that say so in their text.
+    state.diagnostics.phase = "scan"
     img.exe = exe
     img.start, img.dia = find_prologue(exe)
     out.metas = _meta_stmts(
@@ -3137,6 +3142,7 @@ def _decode_user_code(
     # (END IF): they share the stamp address; trace_tbl keeps the LAST line for
     # the statement pin and hook_seq keeps ALL lines in order -- emit0 numbers
     # one physical line per hook inside traced statements.
+    state.diagnostics.phase = "layout"
     out.trace_tbl = {}  # hook stamp addr -> line number (last wins)
     out.hook_seq = []  # every hook line, in address order
     if any(o[1] == "trace_hook" for o in img.ops):
@@ -3443,6 +3449,7 @@ def _decode_user_code(
                 ]
 
     state.begin(img.ops)
+    state.diagnostics.phase = "lift"
     while c.k < len(img.ops):
         # Every handler now commits through ``state.advance``/``state.seek``,
         # so the cursor is already at ``c.k`` here.  The sync stays as the
@@ -4625,6 +4632,7 @@ def _decode_user_code(
         if handlers.int_alu(state, op, addr, kind):
             continue
         if kind == "epilogue":
+            state.diagnostics.phase = "finalize"
             return _finalize(state, addr)
 
         if kind == "end":
