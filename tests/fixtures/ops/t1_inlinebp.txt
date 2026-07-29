@@ -1,0 +1,9 @@
+# t1_inlinebp dialect=1.1 start=08700
+08703:movm_imm:288:1
+08709:far_call:34595
+0870E:end
+08711:segjmp:34592:2
+08720:jmp:34604
+08723:inline_sub:b'U\x8b\xec\xc4~\n]\xcb'
+0872C:epilogue
+# commits

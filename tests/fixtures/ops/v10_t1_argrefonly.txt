@@ -1,0 +1,21 @@
+# v10_t1_argrefonly dialect=1.0 start=070B0
+070B3:far_call:28862
+070B8:end
+070BB:jmp:28877
+070BE:proc_enter
+070C1:arg_push_ref:288
+070C6:far_call:28880
+070CB:proc_ret:0
+070CD:jmp:28909
+070D0:proc_enter
+070D3:movax:1
+070D6:arg_ref:6
+070D9:far_addm_ax_si
+070DC:arg_ref:6
+070DF:far_fild_si
+070E3:rt:187
+070E5:rt:184
+070E9:proc_ret:4
+070ED:epilogue
+# commits
+070E7

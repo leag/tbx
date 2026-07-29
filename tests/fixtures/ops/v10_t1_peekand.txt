@@ -1,0 +1,34 @@
+# v10_t1_peekand dialect=1.0 start=070B0
+070B3:fild:320
+070B8:fn_ax:PEEK
+070BB:orax
+070BF:jcc:117:28868
+070C1:jmp:28889
+070C4:movbxax
+070C6:movax:48
+070C9:cmpax_m:318
+070CD:movrr:ax:bx
+070CF:movbxax
+070D1:movax:65535
+070D4:jcc:116:28887
+070D6:incax
+070D7:andaxbx
+070D9:jcc:117:28894
+070DB:jmp:28907
+070DE:movsi:312
+070E1:rt:156
+070E3:movsi:288
+070E6:strassign
+070E8:jmp:28917
+070EB:movsi:308
+070EE:rt:156
+070F0:movsi:288
+070F3:strassign
+070F5:movsi:288
+070F8:rt:156
+070FA:rt:190
+070FC:rt:184
+070FE:end
+07101:epilogue
+# commits
+070BD

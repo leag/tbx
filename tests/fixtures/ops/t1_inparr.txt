@@ -1,0 +1,23 @@
+# t1_inparr dialect=1.1 start=08830
+08833:fild:356
+08838:fstp:342
+0883F:input:352:16384
+08846:read_num
+08849:fld:342
+0884E:fistp:44
+08853:fwait
+08855:movaxmem:44
+08858:movsiax
+0885A:shlsi
+0885C:shlsi
+0885E:addsi:368
+08862:fstp_si
+08867:fld:380
+0886C:rt:187
+0886E:rt:184
+08872:end
+08875:epilogue
+# commits
+0883D
+08865
+08870

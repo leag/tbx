@@ -1,0 +1,26 @@
+# v10_t1_whileinstat dialect=1.0 start=07230
+07233:trap_hook
+07234:fld1
+07237:on_trap:128:29282
+07240:trap_hook
+07241:trap_ctl:230
+07244:trap_hook
+07245:fn_ax0:INSTAT
+07248:notax
+0724A:orax
+0724C:jcc:117:29265
+0724E:jmp:29268
+07251:trap_hook
+07252:jmps:29253
+07254:trap_hook
+07255:movsi:292
+07258:rt:156
+0725A:rt:190
+0725C:rt:184
+0725E:trap_hook
+0725F:end
+07262:trap_hook
+07263:retf
+07264:epilogue
+# commits
+0723E

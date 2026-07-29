@@ -1,0 +1,6 @@
+# v10_t1_run2 dialect=1.0 start=0CE80
+0CE83:movsi:292
+0CE86:rt:156
+0CE88:run_file
+0CE8B:epilogue
+# commits

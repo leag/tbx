@@ -1,0 +1,3 @@
+10 A$ = COMMAND$
+20 PRINT A$
+30 END

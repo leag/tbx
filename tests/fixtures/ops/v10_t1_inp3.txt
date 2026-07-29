@@ -1,8 +1,8 @@
 # v10_t1_inp3 dialect=1.0 start=07100
-07103:line_input:304
+07103:line_input:304:False
 07109:movsi:292
 0710C:strassign
-0710E:line_input:308
+0710E:line_input:308:False
 07114:movsi:288
 07117:strassign
 07119:end

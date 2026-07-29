@@ -1,0 +1,28 @@
+# v10_t1_fnforward dialect=1.0 start=070B0
+070B3:push_bp
+070B4:mov_mem_sp:104
+070B8:sub_sp:8
+070BB:mov_bp_sp
+070BD:fild:294
+070C2:fstp_bp:4
+070C6:movm_imm:104:0
+070CE:fn_call:28907
+070D5:fld_bp:0
+070D9:fwait
+070DB:add_sp:8
+070DE:pop_bp
+070DF:rt:187
+070E1:rt:184
+070E5:end
+070E8:jmp:28932
+070EB:mov_bp_imm:0:0
+070F0:mov_bp_imm:2:0
+070F5:fld1
+070F8:fold_bp:+:4
+070FC:fstp_bp:0
+07102:fn_ret
+07104:epilogue
+# commits
+070CC
+070E3
+07100

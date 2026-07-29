@@ -1,0 +1,6 @@
+10 DIM A%(10)
+20 I = 3
+30 A%(I) = 42
+40 J = 3
+50 IF A%(J) = 42 THEN PRINT "YES" ELSE PRINT "NO"
+60 END

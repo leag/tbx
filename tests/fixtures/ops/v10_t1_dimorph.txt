@@ -1,0 +1,15 @@
+# v10_t1_dimorph dialect=1.0 start=070B0
+070B3:movax_m:116
+070B7:movm_ax:398
+070BB:movax_m:114
+070BF:movm_ax:396
+070C3:movsi:420
+070C6:rt:156
+070C8:movsi:400
+070CB:strassign
+070CD:fild:424
+070D2:fstp:468
+070D9:end
+070DC:epilogue
+# commits
+070D7

@@ -1,0 +1,9 @@
+SUB TEST
+LOCAL X!
+X! = 1.5
+X! = X! + 1
+PRINT X!
+END SUB
+
+CALL TEST
+END

@@ -6,7 +6,7 @@ module. Statement-level blocks (IfBlock/SelectCase/SubDef/DefFn) are emitted by
 """
 
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from tbx.ir.expr_nodes import Expr, Stmt
@@ -65,13 +65,36 @@ class NextStmt:
 
 
 @dataclass(frozen=True)
+class Incr:
+    """INCR var: TB's explicit increment-by-1 statement (bare `inc`, `48`/`FF
+    46 d8`). For a DGROUP-scalar target this is byte-identical to `var = var +
+    1` (normalized to that canonical spelling, see t1_incr1); for a LOCAL
+    (bp-relative) target the two spellings compile to DIFFERENT bytes (bare
+    INC vs a full load/add/store), so a LOCAL target keeps this its own
+    node -- wild bmaster.exe/ifi.exe, probe q_localincr3."""
+
+    var: object  # Var (always a LOCAL scalar; the DGROUP case normalizes away)
+
+
+@dataclass(frozen=True)
+class Decr:
+    """DECR var: the decrement-by-1 sibling of `Incr` (bare `dec`), same LOCAL-
+    only non-identity with `var = var - 1` -- wild horses.exe, probe
+    q_localdecr."""
+
+    var: object  # Var (always a LOCAL scalar; the DGROUP case normalizes away)
+
+
+@dataclass(frozen=True)
 class Gosub:
     target: object  # statement index (int); ("addr", a) sentinel pre-resolve
 
 
 @dataclass(frozen=True)
 class Return:
-    """RETURN (x86 `c3` ret near)."""
+    """RETURN, optionally followed by a line target."""
+
+    target: object = None  # None | statement index | ("addr", a) pre-resolve
 
 
 @dataclass(frozen=True)
@@ -155,7 +178,11 @@ class SelectCase:
 
 @dataclass(frozen=True)
 class Run:
-    """RUN — restart the program from the beginning (`eb` short jump to `start`)."""
+    """RUN — bare form restarts the program from the beginning (`eb`/`e9` jump
+    to `start`); RUN file$ loads and runs a different program (push + EC sub
+    C4), `file` is None for the bare form."""
+
+    file: object = None  # StrLit | Var ($) | None
 
 
 @dataclass(frozen=True)
@@ -169,6 +196,7 @@ class Dim:
     name: str
     bounds: tuple[Any, ...]  # int | Expr (1 or 2 entries)
     also: tuple[Any, ...] = ()  # (name, bounds) comma-list tail
+    dynamic: bool = field(default=False, repr=False)  # preserve explicit runtime allocation
 
 
 @dataclass(frozen=True)
@@ -187,6 +215,19 @@ class OptionBase:
 
 
 @dataclass(frozen=True)
+class DefType:
+    """DEFINT/DEFSTR/DEFSNG/DEFDBL <letter-range>: default-type declaration.
+    Emits no code at all (confirmed via the oracle: DEFINT A-Z and DEFSTR S
+    compile byte-IDENTICAL programs once every variable carries an explicit
+    type suffix, which tbx's own emitted source always does) -- so which
+    keyword/letter-range the original used is unrecoverable AND inconsequential
+    for a byte-exact recompile. Recovered only from an error-trap line-table
+    orphan with no DATA pool to explain it (wild metric.exe); always rendered
+    as the fixed canonical spelling `DEFSNG A-Z`, chosen arbitrarily since any
+    spelling recompiles identically."""
+
+
+@dataclass(frozen=True)
 class Print:
     """PRINT [#n,] item[; item...][;] -- item vectors (console: string BE / numeric BB;
     file: string C0 / numeric BD after [0060]=n), flush (B8/BA) only without a trailing
@@ -195,6 +236,12 @@ class Print:
     items: Any  # tuple[StrLit | numeric Expr, ...]; a single item is normalized below
     newline: bool = True
     file: object = None  # int | None
+    # zone-advance separators (INT C1, witnessed t1_pcomma/t1_pcomma2):
+    # None = all ';', else a gap-aligned tuple[int] of len(items)+1 comma
+    # counts -- slot 0 leads the first item (`PRINT ,,X`), slot i+1 follows
+    # item i (2 = a skipped zone), and the last slot is the trailing
+    # separator when newline=False
+    commas: Any = None
 
     def __post_init__(self):
         if not isinstance(self.items, tuple):
@@ -204,12 +251,14 @@ class Print:
 @dataclass(frozen=True)
 class PrintUsing:
     """PRINT [#n,] USING fmt; v[; v...] -- push fmt desc + CA begin, then per value
-    FLD + CB emit + the string item vector (BE console / C0 file)."""
+    FLD + CB emit + the string item vector (BE console / C0 file / BF printer,
+    the last spelling LPRINT USING, witnessed t1_lpusing)."""
 
     fmt: object  # StrLit | Var ($)
     values: tuple[Expr, ...]
     file: object = None  # int | None
     newline: bool = True
+    lprint: bool = False  # LPRINT USING (printer item vector BF)
 
 
 @dataclass(frozen=True)
@@ -480,10 +529,25 @@ class DefSeg:
 
 @dataclass(frozen=True)
 class Palette:
-    """PALETTE attr, color (INT ECh sub 88h) -- attr in bx, color in ax."""
+    """PALETTE attr, color (INT ECh sub 88h) -- attr in bx, color in ax.
 
-    attr: object  # Expr
-    color: object  # Expr
+    Bare PALETTE (reset to default, INT ECh sub 86h, zero operands) is
+    `Palette(None, None)`.
+    """
+
+    attr: object  # Expr | None
+    color: object  # Expr | None
+
+
+@dataclass(frozen=True)
+class PaletteUsing:
+    """PALETTE USING array%(index) (INT ECh sub 8Ah).
+
+    The operand identifies the first INTEGER-array element in the palette
+    table; the runtime consumes the following entries as well.
+    """
+
+    source: object  # ArrayRef
 
 
 @dataclass(frozen=True)
@@ -531,13 +595,16 @@ class Pset:
 
 @dataclass(frozen=True)
 class LineStmt:
-    """LINE [STEP] (x1,y1)-[STEP] (x2,y2)[, color][, B|BF][, style] (INT ECh sub
-    62h + flag: 40 base | 20 STEP on first point | 10 STEP on second | 08 color
-    in [00A0] | 04 B | 02 F | 01 style word in [00AC]). First pair FSTP'd into
-    [0088]/[0094], second pair left on the FP stack."""
+    """LINE [[STEP] (x1,y1)]-[STEP] (x2,y2)[, color][, B|BF][, style] (INT ECh
+    sub 62h + flag: 40 first point given explicitly | 20 STEP on first point |
+    10 STEP on second | 08 color in [00A0] | 04 B | 02 F | 01 style word in
+    [00AC]). When 40 is clear the first point is omitted entirely (`LINE
+    -(x2,y2)`, using the last graphics position) and x1/y1 are None -- wild
+    cal87.exe. When 40 is set, the first pair is FSTP'd into [0088]/[0094];
+    the second pair is always left on the FP stack."""
 
-    x1: object
-    y1: object
+    x1: object  # Expr | None (None = first point omitted)
+    y1: object  # Expr | None (None = first point omitted)
     x2: object
     y2: object
     color: object = None  # Expr | None
@@ -592,9 +659,15 @@ class Swap:
 
 @dataclass(frozen=True)
 class Width:
-    """WIDTH cols (INT ECh sub ECh) -- cols in ax (mov ax,imm)."""
+    """WIDTH cols (INT ECh sub ECh) -- cols in ax (mov ax,imm).
+    WIDTH device$, cols (INT ECh sub EEh) -- device string pushed first,
+    cols in ax (device is not None; witnessed t1_widthdev).
+    WIDTH #filenum, cols (INT ECh sub F0h) -- filenum staged in [0060],
+    cols in ax (file is not None; witnessed t1_widthfile)."""
 
     cols: object  # Expr
+    device: object = None  # Expr | None -- device$ in `WIDTH device$, cols`
+    file: int | None = None  # literal channel in `WIDTH #filenum, cols`
 
 
 @dataclass(frozen=True)
@@ -605,10 +678,25 @@ class Key:
 
 
 @dataclass(frozen=True)
+class KeyDef:
+    """KEY n, s$ (INT ECh sub 58h) -- define function-key macro n: n in ax,
+    the macro string pushed (witnessed t1_key)."""
+
+    num: object  # Lit
+    text: object  # string Expr
+
+
+@dataclass(frozen=True)
 class Screen:
-    """SCREEN mode (INT ECh sub C6h) -- mode stored to cell [0x88] (shared with COLOR fg)."""
+    """SCREEN mode[,burst][,apage][,vpage] (INT ECh sub C6h): the trailing tag
+    byte is a presence mask (08 mode / 04 burst / 02 apage / 01 vpage) and the
+    arguments ride in cells [88]/[94]/[A0]/[AC] (witnessed t1_screenb,
+    t1_screenp; [88] is shared with COLOR fg)."""
 
     mode: object  # Expr
+    burst: object = None  # Expr | None
+    apage: object = None  # Expr | None
+    vpage: object = None  # Expr | None
 
 
 @dataclass(frozen=True)
@@ -622,11 +710,15 @@ class Write:
 
 @dataclass(frozen=True)
 class Lprint:
-    """LPRINT [item[; item...]][;] (item vector BCh, flush B9h) -- printer output;
-    semicolon-separated item vector like PRINT."""
+    """LPRINT [item[;|, item...]][;|,] -- printer output.
+
+    Item vectors are BCh/BFh, flush is B9h, and C2h advances to the next
+    print zone. ``commas`` has the same gap-aligned representation as Print.
+    """
 
     items: tuple[Expr, ...]
     newline: bool = True
+    commas: Any = None
 
 
 @dataclass(frozen=True)
@@ -636,47 +728,75 @@ class Cls:
 
 @dataclass(frozen=True)
 class Locate:
-    """LOCATE row,col[,cursor] -- constant args marshaled through ax/bx; the cursor arg
-    is a separate trailing runtime call."""
+    """LOCATE [row][,col][,cursor[,start,stop]] -- omitted leading arguments
+    produce no row/column runtime call; cursor and shape are independent legs."""
 
-    row: object  # Expr (Lit)
-    col: object  # Expr (Lit)
+    row: object  # Expr (Lit) | None
+    col: object  # Expr (Lit) | None
     cursor: object = None  # Expr (Lit) | None
+    start: object = None  # Expr (Lit) | None
+    stop: object = None  # Expr (Lit) | None
 
 
 @dataclass(frozen=True)
 class Color:
-    """COLOR [fg][,bg] -- stores to fixed DGROUP cells + `cd ec 22 <mask>`."""
+    """COLOR [fg][,bg][,border] -- stores to fixed DGROUP cells + `cd ec 22 <mask>`."""
 
     fg: object = None  # Expr (Lit) | None
     bg: object = None  # Expr (Lit) | None
+    border: object = None  # Expr (Lit) | None
 
 
 @dataclass(frozen=True)
 class Input:
-    """INPUT ["prompt"{;|,}] var -- `cd ec 4e <prompt_desc> <flags>` + one read call;
-    flags: 0x4000 numeric target, 0x0040 comma separator (no "? ")."""
+    """INPUT [;] ["prompt"{;|,}] var[, var...] -- `cd ec 4e <prompt_desc> <flags>` +
+    one read call per target; flags: 0x0040 comma separator (no "? "), 0x0080
+    leading `INPUT;` (t1_inpsemi), low bits = extra-target count and
+    `0x4000 >> k` set = target k numeric (t1_inpmulti/t1_inpmixed)."""
 
     prompt: object  # StrLit | None
-    var: object  # Var
+    var: object  # Var | ArrayRef, or a tuple of them (multi-target)
     comma: bool = False  # prompt separator: True = ',' (suppresses "? ")
+    semi: bool = False  # leading `INPUT;`
 
 
 @dataclass(frozen=True)
 class LineInput:
-    """LINE INPUT ["prompt";] var$ -- `cd ec 64 <prompt_desc> 40` + strassign."""
+    """LINE INPUT [;] ["prompt";] var$ -- `cd ec 64 <prompt_desc> flags` +
+    strassign. Flag 80 is the leading semicolon (combined value C0), mirroring
+    INPUT's keep-cursor-on-line flag.
+
+    LINE INPUT #n, var$ (file variant) is `cd ec 66` (no operand; [0060]
+    carries the file number, same convention as OPEN/PRINT#/INPUT#) +
+    strassign -- no prompt, so `prompt` and `file` are mutually exclusive
+    (wild billadd.exe et al., probe q_lineinputf)."""
 
     prompt: object  # StrLit | None
     var: object  # Var ($)
+    file: object = None  # int | None
+    semi: bool = False
 
 
 @dataclass(frozen=True)
 class Open:
-    """OPEN "m",#n,file$ -- [0060]=n, push file + mode, ax=reclen 0x80, sub 82."""
+    """OPEN "m",#n,file$[,reclen] -- [0060]=n, push file + mode, ax=reclen, sub 82.
+
+    ax carries the record length; 0x80 is the compiler default and lifts to
+    reclen=None (an explicit ",128" is byte-identical, so it normalizes away;
+    witnessed q_open2 -> t1_open2 with reclen 64).
+
+    `OPEN file$ FOR mode AS #n` (for_as=True) compiles to genuinely different
+    bytes than the comma form -- the FOR-keyword desugars to a packed 1-char
+    string at a fixed scratch cell instead of a real pooled literal, and the
+    push order/[0060] placement differ too -- so it is NOT normalized away;
+    the emitter must reproduce the original spelling (wild nvginst.exe,
+    witnessed q_openfor)."""
 
     mode: object  # StrLit
     num: int  # file number
     file: object  # StrLit | Var ($)
+    reclen: object = None  # Lit | None (None = default 128)
+    for_as: bool = False  # `OPEN file$ FOR mode AS #n` vs `OPEN "m",#n,file$`
 
 
 @dataclass(frozen=True)
@@ -689,9 +809,12 @@ class InputFile:
 
 @dataclass(frozen=True)
 class Close:
-    """CLOSE #n -- ax=n, sub 18."""
+    """CLOSE #n -- ax=n, sub 18; bare CLOSE (all channels) is its own sub 16
+    and lifts to num=None (witnessed t1_close). n is usually a literal
+    (int) but can be a variable/expression too (wild metric.exe: `CLOSE
+    #N`, N an int variable -- probe q_closevar)."""
 
-    num: int  # file number
+    num: object = None  # int | Expr | None (None = close all)
 
 
 @dataclass(frozen=True)
@@ -701,9 +824,9 @@ class Reset:
 
 @dataclass(frozen=True)
 class Files:
-    """FILES spec$ -- directory listing; push spec + EC sub."""
+    """FILES [spec$] -- bare and filespec directory listings."""
 
-    spec: object  # StrLit | Var ($)
+    spec: object = None  # StrLit | Var ($) | None
 
 
 @dataclass(frozen=True)
@@ -723,6 +846,27 @@ class Get:
 
 
 @dataclass(frozen=True)
+class GetString:
+    """GET$ #n, count, string$ -- read a binary string."""
+
+    num: int
+    count: object
+    target: object
+
+
+@dataclass(frozen=True)
+class PutString:
+    """PUT$ #n, s$ -- write a binary string (INT ECh sub ACh): filenum via
+    the [0060] cell, s$ pushed (witnessed t1_putstr). The BINARY-mode
+    counterpart of GetString; found via the handbook's "GET$, PUT$, and
+    SEEK provide a low-level alternative" cross-reference while chasing
+    the shared filenum+string calling convention IOCTL also uses."""
+
+    num: int
+    text: object  # Expr (string)
+
+
+@dataclass(frozen=True)
 class Put:
     """PUT #n, rec -- write a random-access record."""
 
@@ -739,11 +883,23 @@ class Seek:
 
 
 @dataclass(frozen=True)
+class Ioctl:
+    """IOCTL #n, s$ -- send a string to a device driver (INT ECh sub 50h):
+    filenum via the [0060] cell, s$ pushed (witnessed t1_ioctl)."""
+
+    num: int  # file number
+    text: object  # Expr (string)
+
+
+@dataclass(frozen=True)
 class Bload:
-    """BLOAD f$, offset -- load a memory image."""
+    """BLOAD f$[, offset] -- load a memory image. offset=None: the bare
+    (no-offset) form, INT EC sub 04 -- a distinct compiled shape from the
+    sub-06 with-offset form, not merely a default argument (wild
+    varamort.exe/kinder.exe, probe q_bload)."""
 
     file: object  # StrLit | Var ($)
-    offset: object  # Expr
+    offset: object = None  # Expr | None
 
 
 @dataclass(frozen=True)
@@ -794,11 +950,84 @@ class MidAssign:
 @dataclass(frozen=True)
 class SubDef:
     """SUB name[(params)] ... END SUB -- procedure definition from the def region.
-    A block: header + indented body + END SUB. Params are name strings ('A', 'A$')."""
+    A block: header + indented body + END SUB. Params are name strings ('A', 'A$').
+
+    `SUB name INLINE ... END SUB` (raw embedded machine code, Appendix C of the
+    handbook) has no proc_enter/proc_ret framing at all -- the compiler copies
+    the $INLINE byte list verbatim with an auto-appended far RET, no params,
+    and no recoverable per-line split -- so it's `body == (Inline(data),)`
+    (params always empty); the emitter detects this shape and prints the
+    `INLINE` header keyword instead of a parameter list (probe q_shriek)."""
 
     name: str
     params: tuple[str, ...]
     body: tuple[Stmt, ...]
+
+
+@dataclass(frozen=True)
+class Inline:
+    """$INLINE byte, byte, ... -- raw machine code inside a SUB ... INLINE body,
+    copied verbatim into the compiled output (no BASIC semantics to recover)."""
+
+    data: bytes
+
+
+@dataclass(frozen=True)
+class OpaqueHelper:
+    """Coverage-only marker for a known framed machine-code helper.
+
+    Unlike ``Inline``, this was not recovered as a source-level ``$INLINE``
+    declaration.  The bytes are retained so the decoder can advance without
+    pretending it understands the helper's semantics.  Source emission makes
+    that limitation explicit and native C emission rejects the node.
+    """
+
+    data: bytes
+
+
+@dataclass(frozen=True)
+class Shared:
+    """SHARED v[, v(), ...] -- inside a SUB/DEF FN body, binds names to the main
+    program's slots instead of procedure-local statics. Synthesized by the decoder
+    for any slot a procedure body references that is also referenced outside it
+    (TB gives every other procedure variable its own local-static slot, so a
+    cross-region slot can only mean SHARED -- witnessed t1_subsh/t1_subarr).
+    Array names carry a '()' suffix."""
+
+    names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class Local:
+    """LOCAL v[, v...] -- inside a SUB body, declares true per-call stack
+    variables (unlike the SUB's own default scoping, which is local AND
+    static: see Shared). The compiler zero-fills them in the prologue right
+    after the frame is opened, every call (witnessed t1_local1)."""
+
+    names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class Common:
+    """COMMON v[, v...] -- declares variables passed across CHAIN in a
+    DGROUP band of their own at DS:0110, below the ordinary scalars. The
+    compiler is lossy about the declaration's shape: interleaving of numeric
+    and string names, numeric width mixes of equal total size, and splitting
+    across several COMMON statements all compile identically (witnessed
+    t1_common1), so the decoder emits one canonical statement: numeric
+    slots first, then strings, in band order."""
+
+    names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class BodyLine:
+    """A jump target INSIDE a SUB/DEF FN body: physical line `phys` (1-based,
+    counting the header as 0) of the block at top-level statement index `stmt`.
+    emit0 numbers that body line `line[stmt] + phys` (witnessed t1_subgsb)."""
+
+    stmt: int
+    phys: int
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,18 @@
+# v10_t1_cmppool dialect=1.0 start=070B0
+070B3:movsi:312
+070B6:rt:156
+070B8:movsi:288
+070BB:strassign
+070BD:movsi:288
+070C0:rt:156
+070C2:str2num:LEN
+070C5:cmpax_m:316
+070C9:jcc:116:28878
+070CB:jmp:28887
+070CE:movsi:308
+070D1:rt:156
+070D3:rt:190
+070D5:rt:184
+070D7:end
+070DA:epilogue
+# commits

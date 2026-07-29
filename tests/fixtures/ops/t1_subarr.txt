@@ -1,0 +1,18 @@
+# t1_subarr dialect=1.1 start=08700
+08703:jmp:34588
+08706:proc_enter
+08709:fild:358
+0870E:fold:+:372
+08713:fstp:376
+0871A:proc_ret:0
+0871C:fild:356
+08721:fstp:372
+08728:far_call:34566
+0872D:fld:376
+08732:rt:187
+08734:rt:184
+08738:epilogue
+# commits
+08718
+08726
+08736

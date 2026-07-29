@@ -1,0 +1,17 @@
+# v10_t1_lof dialect=1.0 start=07630
+07633:movsi:292
+07636:rt:156
+07638:movm_imm:46:20225
+0763E:shortstr
+07640:movm_imm:96:1
+07646:movax:128
+07649:open
+0764C:movax:1
+0764F:fn_axfp:LOF
+07652:rt:187
+07654:rt:184
+07656:movax:1
+07659:close
+0765C:end
+0765F:epilogue
+# commits

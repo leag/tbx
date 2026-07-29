@@ -1,0 +1,6 @@
+10 DATA "HELLO"
+20 DIM V0$(5)
+30 A% = 2
+40 READ V0$(A%)
+50 PRINT V0$(A%)
+60 END

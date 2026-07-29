@@ -1,0 +1,11 @@
+10 A = 1
+20 B = 2
+30 C = 3
+40 D = 4
+50 E = 5
+60 F = 6
+70 IF A = 1 AND B = 2 OR C = 3 AND D = 4 OR E = 5 AND F = 6 THEN 100
+80 PRINT "no"
+90 END
+100 PRINT "yes"
+110 END

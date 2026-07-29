@@ -1,0 +1,29 @@
+# v10_t1_miderr dialect=1.0 start=07150
+07153:on_error:29065
+0715A:movsi:312
+0715D:rt:156
+0715F:movax:2
+07162:movbxax
+07164:movax:3
+07167:strfn:MID$
+07169:movsi:288
+0716C:strassign
+0716E:movsi:288
+07171:rt:156
+07173:rt:190
+07175:rt:184
+07177:movax:5
+0717A:error_stmt
+0717D:movsi:308
+07180:rt:156
+07182:rt:190
+07184:rt:184
+07186:end
+07189:fild:116
+0718E:rt:187
+07190:rt:184
+07194:resume_pre
+07197:jmps:29062
+07199:epilogue
+# commits
+07192

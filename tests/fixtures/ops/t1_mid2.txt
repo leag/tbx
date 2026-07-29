@@ -1,0 +1,28 @@
+# t1_mid2 dialect=1.1 start=087A0
+087A3:movsi:308
+087A6:rt:156
+087A8:movsi:298
+087AB:strassign
+087AD:movm_imm:288:2
+087B3:movsi:298
+087B6:rt:156
+087B8:movax_m:288
+087BC:strfn:MID$2
+087BE:movsi:294
+087C1:strassign
+087C3:movsi:298
+087C6:rt:156
+087C8:movax:4
+087CB:strfn:MID$2
+087CD:movsi:290
+087D0:strassign
+087D2:movsi:294
+087D5:rt:156
+087D7:rt:190
+087D9:movsi:290
+087DC:rt:156
+087DE:rt:190
+087E0:rt:184
+087E2:end
+087E5:epilogue
+# commits

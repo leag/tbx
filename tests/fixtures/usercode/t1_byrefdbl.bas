@@ -1,0 +1,11 @@
+10 SUB SUB1(A#)
+  PRINT A#
+  A# = 1.5#
+  IF A# <> 1.5# THEN 15
+  PRINT "YES"
+15 PRINT "DONE"
+END SUB
+20 B# = 2.5#
+30 CALL SUB1(B#)
+40 PRINT B#
+50 END

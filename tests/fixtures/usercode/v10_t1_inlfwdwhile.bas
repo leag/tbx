@@ -1,0 +1,20 @@
+10 SUB SUB1 INLINE
+  $INLINE &H55, &H8B, &HEC, &HC4, &H7E, &H06, &H5D, &HCB
+END SUB
+20 SUB SUB2(A$, B%, C%)
+  CALL SUB1(A$)
+  IF B% <> 0 THEN 27
+  IF C% <> 0 THEN 26
+  B% = 1
+  GOTO 27
+26 B% = C%
+27 DO WHILE MID$(A$,B%,1) <> "1"
+  INCR B%
+  LOOP
+  PRINT B%
+END SUB
+30 D$ = "001"
+40 E% = 0
+50 F% = 2
+60 CALL SUB2(D$,E%,F%)
+70 END

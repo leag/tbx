@@ -1,0 +1,12 @@
+# t1_erasestatic dialect=1.1 start=088A0
+088A3:movsi:356
+088A6:rt:156
+088A8:movsi:372
+088AB:strassign
+088AD:movsi:288
+088B0:movdx:150
+088B3:movesdx
+088B5:erase_static
+088B8:end
+088BB:epilogue
+# commits

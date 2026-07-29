@@ -1,0 +1,22 @@
+# fst_t1_stsub dialect=1.1 start=08700
+08703:jmp:34600
+08706:proc_enter
+08709:arg_ref:6
+0870C:far_movax_si
+0870F:arg_ref:10
+08712:far_imulax_si
+08715:movm_ax:292
+08719:fild:292
+0871E:rt:187
+08720:rt:184
+08724:proc_ret:8
+08728:movm_imm:290:3
+0872E:movm_imm:288:4
+08734:stack_chk:526
+08740:arg_push_ref:290
+08745:arg_push_ref:288
+0874A:far_call:34566
+0874F:end
+08752:epilogue
+# commits
+08722

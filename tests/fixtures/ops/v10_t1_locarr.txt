@@ -1,0 +1,15 @@
+# v10_t1_locarr dialect=1.0 start=07160
+07163:movm_imm:396:1
+07169:movsim:396
+0716D:shlsi
+0716F:addsi:448
+07173:movax_si
+07175:movsim:396
+07179:shlsi
+0717B:addsi:416
+0717F:movbxax
+07181:movax_si
+07183:locate
+07185:end
+07188:epilogue
+# commits

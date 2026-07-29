@@ -1,0 +1,20 @@
+# v10_t1_localstr dialect=1.0 start=070B0
+070B3:sub_sp:4
+070B6:far_call:28865
+070BB:end
+070BE:jmp:28917
+070C1:proc_enter
+070C4:local_init:2:6
+070D8:movsi:292
+070DB:rt:156
+070DD:movsi:6
+070E0:strassign_bp
+070E2:movsi:6
+070E5:spush_bp
+070E7:rt:190
+070E9:rt:184
+070EB:arg_ref:6
+070EF:str_temp_free
+070F1:proc_ret:4
+070F5:epilogue
+# commits

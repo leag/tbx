@@ -1,0 +1,7 @@
+10 SUB F(A%)
+20 B% = (A% = 1)
+30 PRINT B%
+40 END SUB
+50 X% = 1
+60 CALL F(X%)
+70 END

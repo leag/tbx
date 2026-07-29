@@ -1,0 +1,9 @@
+10 DEF FNBar%
+20 FNBar% = 7
+30 END DEF
+40 DEF FNBaz%
+50 FNBaz% = 0
+60 IF FNBar% <> 7 THEN FNBaz% = 1
+70 END DEF
+80 PRINT FNBaz%
+90 END

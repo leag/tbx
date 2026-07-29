@@ -1,0 +1,24 @@
+# t1_byrefor dialect=1.1 start=08700
+08703:jmp:34615
+08706:proc_enter
+08709:local_init:1:10
+0871D:movax:5
+08720:arg_ref:6
+08723:far_orax_si
+08726:movm_ax_bp:10
+08729:fild_bp:10
+0872D:rt:187
+0872F:rt:184
+08733:proc_ret:6
+08737:movm_imm:288:7
+0873D:sub_sp:2
+08740:arg_push_ref:288
+08745:far_call:34566
+0874A:fild:288
+0874F:rt:187
+08751:rt:184
+08755:end
+08758:epilogue
+# commits
+08731
+08753

@@ -1,0 +1,8 @@
+# v10_t1_widthfile dialect=1.0 start=07140
+07143:movax:1
+07146:movm_ax:96
+0714A:movax:80
+0714D:width_file
+07150:end
+07153:epilogue
+# commits

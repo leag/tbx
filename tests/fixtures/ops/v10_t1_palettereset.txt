@@ -1,0 +1,9 @@
+# v10_t1_palettereset dialect=1.0 start=070B0
+070B3:movax:1
+070B6:movbxax
+070B8:movax:2
+070BB:palette
+070BE:palette_reset
+070C1:end
+070C4:epilogue
+# commits

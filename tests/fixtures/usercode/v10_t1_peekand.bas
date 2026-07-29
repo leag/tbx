@@ -1,0 +1,7 @@
+10 IF PEEK(1040) AND 64 = 48 THEN
+  A$ = "B & N"
+ELSE
+  A$ = "COLOR"
+END IF
+20 PRINT A$
+30 END

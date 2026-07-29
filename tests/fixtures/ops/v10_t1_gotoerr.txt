@@ -1,0 +1,10 @@
+# v10_t1_gotoerr dialect=1.0 start=070B0
+070B3:movax_m:116
+070B7:movm_ax:292
+070BB:movax_m:114
+070BF:movm_ax:290
+070C3:movm_imm:288:0
+070C9:inc_m:288
+070CD:jmps:28873
+070CF:epilogue
+# commits

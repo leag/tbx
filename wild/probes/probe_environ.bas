@@ -1,0 +1,2 @@
+10 A$ = ENVIRON$("PATH")
+20 PRINT A$

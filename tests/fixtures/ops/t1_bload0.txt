@@ -1,0 +1,10 @@
+# t1_bload0 dialect=1.1 start=08800
+08803:fild:296
+08808:defseg_set
+0880D:movsi:292
+08810:rt:156
+08812:bload0
+08815:end
+08818:epilogue
+# commits
+0880B

@@ -1,0 +1,7 @@
+# v10_t1_inline dialect=1.0 start=070B0
+070B3:jmp:28876
+070B6:inline_sub:b'\xba\x00\x07\xe4a$\xfc4\x02\xe6a\xb9@\x01\xe2\xfeJt\x02\xeb\xf2'
+070CC:far_call:28854
+070D1:end
+070D4:epilogue
+# commits

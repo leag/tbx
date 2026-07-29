@@ -1,0 +1,12 @@
+10 DIM V0$(10)
+20 DIM V1$(10)
+30 V0$(1) = "X"
+40 V1$(1) = "Y"
+50 CALL SUB1
+60 PRINT V0$(1); V1$(1)
+70 END
+80 SUB SUB1
+  DIM V2$(50)
+  V2$(1) = "HI"
+  PRINT V2$(1)
+END SUB

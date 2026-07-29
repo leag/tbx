@@ -38,3 +38,12 @@ def test_not_a_tb_exe(tmp_path, capsys):
     bogus.write_bytes(b"MZ" + b"\x00" * 64)
     assert cli.main([str(bogus)]) == 1
     assert "prologue" in capsys.readouterr().err
+
+
+def test_version(capsys):
+    import pytest
+
+    with pytest.raises(SystemExit) as e:
+        cli.main(["--version"])
+    assert e.value.code == 0
+    assert capsys.readouterr().out.startswith("tbx ")

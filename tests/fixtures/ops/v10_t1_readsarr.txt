@@ -1,0 +1,18 @@
+# v10_t1_readsarr dialect=1.0 start=07110
+07113:movm_imm:342:2
+07119:data_read_str
+0711C:movsim:342
+07120:shlsi
+07122:shlsi
+07124:addsi:368
+07128:strassign
+0712A:movsim:342
+0712E:shlsi
+07130:shlsi
+07132:addsi:368
+07136:rt:156
+07138:rt:190
+0713A:rt:184
+0713C:end
+0713F:epilogue
+# commits

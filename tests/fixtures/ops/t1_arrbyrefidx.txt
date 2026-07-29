@@ -1,0 +1,19 @@
+# t1_arrbyrefidx dialect=1.1 start=08700
+08703:movm_imm:372:42
+08709:movm_imm:342:2
+0870F:movsim:342
+08713:shlsi
+08715:addsi:368
+08719:movdx:152
+0871C:movesdx
+0871E:arg_push_arr
+08720:far_call:34603
+08725:end
+08728:jmp:34619
+0872B:proc_enter
+0872E:movax:1
+08731:arg_ref:6
+08734:far_addm_ax_si
+08737:proc_ret:4
+0873B:epilogue
+# commits

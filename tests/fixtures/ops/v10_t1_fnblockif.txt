@@ -1,0 +1,31 @@
+# v10_t1_fnblockif dialect=1.0 start=070B0
+070B3:jmp:28894
+070B6:mov_bp_imm:0:0
+070BB:movax:1
+070BE:cmpax_m:288
+070C2:movax:65535
+070C5:jcc:116:28872
+070C7:incax
+070C8:orax
+070CA:jcc:117:28879
+070CC:jmp:28887
+070CF:mov_bp_imm:0:4
+070D4:jmp:28892
+070D7:mov_bp_imm:0:0
+070DC:fn_ret
+070DE:movm_imm:288:1
+070E4:push_bp
+070E5:sub_sp:2
+070E8:mov_bp_sp
+070EA:fn_call:28854
+070F1:movax_bp:0
+070F4:add_sp:2
+070F7:pop_bp
+070F8:movmem_ax:44
+070FB:fild:44
+07100:rt:187
+07102:rt:184
+07106:end
+07109:epilogue
+# commits
+07104

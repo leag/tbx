@@ -1,0 +1,10 @@
+10 SUB SUB1
+  DIM V0$(10)
+  LOCAL A%
+  FOR A% = 1 TO 5
+  V0$(A%) = "X"
+  NEXT A%
+  PRINT V0$(3)
+END SUB
+20 CALL SUB1
+30 END

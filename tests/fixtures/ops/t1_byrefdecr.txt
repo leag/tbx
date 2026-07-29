@@ -1,0 +1,17 @@
+# t1_byrefdecr dialect=1.1 start=08700
+08703:jmp:34592
+08706:proc_enter
+08709:arg_ref:6
+0870C:far_dec_si
+0870F:arg_ref:6
+08712:far_fild_si
+08716:rt:187
+08718:rt:184
+0871C:proc_ret:4
+08720:movm_imm:288:5
+08726:arg_push_ref:288
+0872B:far_call:34566
+08730:end
+08733:epilogue
+# commits
+0871A

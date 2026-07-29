@@ -1,0 +1,30 @@
+# t1_poolrun dialect=1.1 start=08830
+08833:movsi:304
+08836:rt:156
+08838:movsi:300
+0883B:strassign
+0883D:movsi:308
+08840:rt:156
+08842:movsi:296
+08845:strassign
+08847:movsi:300
+0884A:rt:156
+0884C:movsi:296
+0884F:rt:156
+08851:strconcat
+08853:movsi:292
+08856:strassign
+08858:input:304:0
+0885F:read_str
+08862:movsi:288
+08865:strassign
+08867:movsi:292
+0886A:rt:156
+0886C:rt:190
+0886E:movsi:288
+08871:rt:156
+08873:rt:190
+08875:rt:184
+08877:end
+0887A:epilogue
+# commits

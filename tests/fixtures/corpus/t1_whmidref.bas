@@ -1,0 +1,9 @@
+10 SUB F(S$, X%)
+20 WHILE MID$(S$, X%, 1) <> "1"
+30 INCR X%
+40 WEND
+50 END SUB
+60 A$ = "001"
+70 B% = 1
+80 CALL F(A$, B%)
+90 END

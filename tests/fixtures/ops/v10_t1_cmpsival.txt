@@ -1,0 +1,19 @@
+# v10_t1_cmpsival dialect=1.0 start=070B0
+070B3:movm_imm:370:5
+070B9:movm_imm:344:1
+070BF:movax:5
+070C2:movsim:344
+070C6:shlsi
+070C8:addsi:368
+070CC:cmpax_si
+070CE:movax:65535
+070D1:jcc:116:28884
+070D3:incax
+070D4:movm_ax:342
+070D8:fild:342
+070DD:rt:187
+070DF:rt:184
+070E3:end
+070E6:epilogue
+# commits
+070E1

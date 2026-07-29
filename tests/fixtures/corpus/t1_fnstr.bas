@@ -1,0 +1,3 @@
+10 DEF FNG$(A$, N) = A$ + STR$(N)
+20 PRINT FNG$("X", 3)
+30 END

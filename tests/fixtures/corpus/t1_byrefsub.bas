@@ -1,0 +1,8 @@
+SUB TEST(N%)
+N% = N% - 3
+END SUB
+
+A% = 10
+CALL TEST(A%)
+PRINT A%
+END

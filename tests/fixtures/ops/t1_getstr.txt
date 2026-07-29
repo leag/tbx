@@ -1,0 +1,17 @@
+# t1_getstr dialect=1.1 start=08C50
+08C53:movsi:308
+08C56:rt:156
+08C58:movm_imm:46:16897
+08C5E:shortstr
+08C60:movm_imm:96:1
+08C66:movax:128
+08C69:open
+08C6C:movm_imm:288:4
+08C72:movm_imm:96:1
+08C78:movax_m:288
+08C7C:get_str
+08C7F:movsi:290
+08C82:strassign
+08C84:end
+08C87:epilogue
+# commits

@@ -1,0 +1,23 @@
+# t1_usingtab dialect=1.1 start=08C60
+08C63:fld1
+08C66:fstp:292
+08C6D:fild:314
+08C72:fstp:288
+08C79:movsi:308
+08C7C:rt:156
+08C7E:rt:202
+08C80:fld:292
+08C85:rt:203
+08C87:rt:190
+08C89:movax:5
+08C8C:tabspc:199
+08C8E:fld:288
+08C93:rt:203
+08C95:rt:190
+08C97:rt:184
+08C9B:end
+08C9E:epilogue
+# commits
+08C6B
+08C77
+08C99

@@ -1,0 +1,20 @@
+# t1_lpstr dialect=1.1 start=08700
+08703:movsi:316
+08706:rt:156
+08708:rt:191
+0870A:rt:185
+0870C:movsi:312
+0870F:rt:156
+08711:movsi:288
+08714:strassign
+08716:movsi:288
+08719:rt:156
+0871B:rt:191
+0871D:movsi:308
+08720:rt:156
+08722:rt:191
+08724:rt:185
+08726:rt:185
+08728:end
+0872B:epilogue
+# commits

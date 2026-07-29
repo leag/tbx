@@ -1,0 +1,8 @@
+10 DIM V0&(5)
+20 FOR A% = 1 TO 5
+30 V0&(A%) = A% * 1000000
+40 NEXT A%
+50 B% = 3
+60 IF V0&(B%) <= 5 THEN 80
+70 PRINT "Y"
+80 END

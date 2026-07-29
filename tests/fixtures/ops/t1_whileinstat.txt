@@ -1,0 +1,26 @@
+# t1_whileinstat dialect=1.1 start=08880
+08883:trap_hook
+08884:fld1
+08887:on_trap:128:34994
+08890:trap_hook
+08891:trap_ctl:230
+08894:trap_hook
+08895:fn_ax0:INSTAT
+08898:notax
+0889A:orax
+0889C:jcc:117:34977
+0889E:jmp:34980
+088A1:trap_hook
+088A2:jmps:34965
+088A4:trap_hook
+088A5:movsi:292
+088A8:rt:156
+088AA:rt:190
+088AC:rt:184
+088AE:trap_hook
+088AF:end
+088B2:trap_hook
+088B3:retf
+088B4:epilogue
+# commits
+0888E

@@ -1,0 +1,36 @@
+# t1_fnlocalint dialect=1.1 start=08700
+08703:jmp:34634
+08706:mov_bp_imm:0:0
+0870B:mov_bp_imm:2:0
+08710:local_init:1:8
+08724:movax_bp:6
+08727:imul_bp:4
+0872A:movm_ax_bp:8
+0872D:movax:100
+08730:cmpax_bp:8
+08733:jcc:124:34616
+08735:jmp:34622
+08738:movax:1
+0873B:addm_ax_bp:8
+0873E:fild_bp:8
+08742:fstp_bp:0
+08748:fn_ret
+0874A:push_bp
+0874B:mov_mem_sp:104
+0874F:sub_sp:10
+08752:mov_bp_sp
+08754:mov_bp_imm:4:3
+08759:mov_bp_imm:6:4
+0875E:movm_imm:104:0
+08764:fn_call:34566
+0876B:fld_bp:0
+0876F:fwait
+08771:add_sp:10
+08774:pop_bp
+08775:rt:187
+08777:rt:184
+0877B:end
+0877E:epilogue
+# commits
+08746
+08779

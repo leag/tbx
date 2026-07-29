@@ -1,0 +1,15 @@
+# t1_locarr dialect=1.1 start=087C0
+087C3:movm_imm:396:1
+087C9:movsim:396
+087CD:shlsi
+087CF:addsi:448
+087D3:movax_si
+087D5:movsim:396
+087D9:shlsi
+087DB:addsi:416
+087DF:movbxax
+087E1:movax_si
+087E3:locate
+087E5:end
+087E8:epilogue
+# commits

@@ -1,0 +1,21 @@
+# t1_putstr dialect=1.1 start=08CC0
+08CC3:movsi:296
+08CC6:rt:156
+08CC8:movm_imm:46:16897
+08CCE:shortstr
+08CD0:movm_imm:96:1
+08CD6:movax:128
+08CD9:open
+08CDC:movm_imm:96:1
+08CE2:fld1
+08CE5:seek
+08CEA:movm_imm:96:1
+08CF0:movsi:292
+08CF3:rt:156
+08CF5:put_str
+08CF8:movax:1
+08CFB:close
+08CFE:end
+08D01:epilogue
+# commits
+08CE8

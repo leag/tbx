@@ -1,0 +1,31 @@
+# v10_t1_boolflags dialect=1.0 start=070B0
+070B3:fldz
+070B6:fstp:292
+070BD:fld1
+070C0:fstp:288
+070C7:fldz
+070CA:fcomp:288
+070CF:fstsw
+070D1:movax:65535
+070D4:jcc:116:28887
+070D6:incax
+070D7:fldz
+070DA:fcomp:292
+070DF:fstsw
+070E1:movbxax
+070E3:movax:65535
+070E6:jcc:116:28905
+070E8:incax
+070E9:oraxbx
+070ED:jcc:117:28914
+070EF:jmp:28923
+070F2:movsi:308
+070F5:rt:156
+070F7:rt:190
+070F9:rt:184
+070FB:end
+070FE:epilogue
+# commits
+070BB
+070C5
+070EB

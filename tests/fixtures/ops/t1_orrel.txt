@@ -1,0 +1,27 @@
+# t1_orrel dialect=1.1 start=08700
+08703:movm_imm:292:1
+08709:movm_imm:290:2
+0870F:movm_imm:288:3
+08715:movax_m:290
+08719:cmpax_m:292
+0871D:movax:65535
+08720:jcc:124:34595
+08722:incax
+08723:orax
+08725:jcc:116:34602
+08727:jmp:34616
+0872A:movax_m:288
+0872E:cmpax_m:292
+08732:movax:65535
+08735:jcc:127:34616
+08737:incax
+08738:orax
+0873A:jcc:117:34623
+0873C:jmp:34632
+0873F:movsi:308
+08742:rt:156
+08744:rt:190
+08746:rt:184
+08748:end
+0874B:epilogue
+# commits

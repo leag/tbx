@@ -1,127 +1,115 @@
-# tbx — a byte-exact decompiler for Borland Turbo Basic 1.0/1.1
+# tbx — a byte-exact Borland Turbo Basic decompiler
 
-`tbx` recovers Turbo Basic source from 16-bit MS-DOS EXEs compiled by Borland
-Turbo Basic 1.0 or 1.1. Its correctness standard is unusual for a decompiler:
-a recovery counts only if **recompiling the emitted source in the original
-Borland toolchain reproduces the input EXE byte-for-byte**.
+[![CI](https://github.com/leag/tbx/actions/workflows/ci.yml/badge.svg)](https://github.com/leag/tbx/actions/workflows/ci.yml)
 
-```
+`tbx` recovers source from 16-bit MS-DOS executables compiled by Borland Turbo
+Basic 1.0 or 1.1. A recovery is considered correct only when recompiling the
+emitted source with the original Borland toolchain reproduces the input EXE
+byte-for-byte.
+
+## Quick start
+
+```sh
+pip install .
 tbx PROGRAM.EXE                 # recovered source on stdout
-tbx PROGRAM.EXE -o PROGRAM.BAS  # write to a file
-tbx PROGRAM.EXE --ops           # canonical op-stream dump (debugging)
+tbx PROGRAM.EXE -o PROGRAM.BAS  # write recovered source
+tbx PROGRAM.EXE --ops           # inspect the canonical op stream
 ```
 
-Python API:
+The core package has no runtime dependencies and requires Python 3.11 or
+newer. For development:
+
+```sh
+uv sync
+uv run pytest
+uv run ruff check
+```
+
+The optional `debug` extra installs [iced-x86](https://pypi.org/project/iced-x86/)
+for CFG/disassembly triage tools:
+
+```sh
+pip install '.[debug]'
+```
+
+Python callers can use the same pipeline directly:
 
 ```python
 from tbx import decode0, emit0
 
-source = emit0.emit(decode0.decode_user_code(open("PROGRAM.EXE", "rb").read()))
+exe = open("PROGRAM.EXE", "rb").read()
+source = emit0.emit(decode0.decode_user_code(exe))
 ```
 
-## Installation
+## What it recovers
 
-Requires Python 3.11+. The core decompiler has no runtime dependencies.
+Turbo Basic combines compact x86 templates with runtime-dispatch calls. The
+decoder recognizes the x87 emulation encoding, INT ECh/EDh/EEh statement
+sub-vectors, and raw x86 control flow. It automatically detects TB 1.0 versus
+1.1 and normalizes their dispatch-number differences.
 
-```
-pip install .
-```
+The pipeline is:
 
-The disassembly-based debugging tools (see below) need
-[iced-x86](https://pypi.org/project/iced-x86/), available via the `debug`
-extra:
+1. Scan the user-code region into a canonical operation stream.
+2. Solve DGROUP layout from code references and the executable's tail data.
+3. Lift operations into typed IR, folding structured control flow.
+4. Emit canonical BASIC with stable formatting and byte-significant line
+   numbers preserved where required.
 
-```
-pip install '.[debug]'
-```
+The corpus covers the handbook's statements, intrinsic functions, arrays,
+SUB/DEF FN procedures, graphics, files, events, error handling, and TRON
+regions across both compiler dialects.
 
-or, for development (with [uv](https://docs.astral.sh/uv/)):
+## Correctness model
 
-```
-uv sync
+The decoder is deliberately fail-loud: an uncalibrated byte pattern raises an
+error instead of being guessed. New syntax is admitted only after a compiled
+fixture witnesses its encoding and an oracle round trip verifies the result.
+Compiler losses are normalized only when the canonical spelling recompiles
+identically (for example, `STOP`/`SYSTEM` to `END`).
+
+The committed fixtures contain operation-stream, IR, and emitted-source
+goldens. Run the full regression suite with:
+
+```sh
 uv run pytest
 ```
 
-## How it works
+## Oracle verification
 
-Turbo Basic compiles to a thin threaded style over a runtime library: floating
-point uses the x87 *emulation* encoding (INT 34h+n in place of ESC opcodes),
-statements dispatch through INT ECh/EDh/EEh sub-vectors, and control flow is
-raw x86 interleaved with the INT stream. The decoder:
+The repository vendors the headless v86 harness and its patched emulator, but
+does **not** distribute Borland's proprietary `TB.EXE` or the compiler floppy
+images. Those ignored assets must be provisioned locally before calibration.
+The oracle is used for new fixtures and release checks, never at runtime.
+Install its Node dependencies and follow [the oracle guide](vendor/turbo_basic_oracle/README.tbx.md), then:
 
-1. **Scans** the user-code region into a canonical op stream (`decode0.scan`),
-   auto-detecting the compiler version from the program prologue and
-   normalizing TB 1.0's shifted INT numbering to 1.1's at scan time, so
-   everything downstream is dialect-blind.
-2. **Solves the DGROUP data layout** (`decode0.layout`) — scalar slots, array
-   slot records, the constant pool and string space — from the op stream's
-   memory evidence plus the image's tail structures.
-3. **Lifts** the op stream to a typed statement/expression IR (`decode0.core`,
-   `decode0.handlers`, `tbx.ir`), folding structured control flow
-   (FOR/WHILE/DO, block IF, SELECT CASE, SUB/DEF FN) from its compiled shapes.
-4. **Emits** canonical source (`emit0`): one statement per line, numbered
-   10, 20, …, variables renamed A, B, C… in first-use order — except where
-   original line numbers are byte-significant (error-trap line tables, TRON
-   trace hooks), in which case they are recovered exactly.
-
-## Coverage
-
-The full Turbo Basic handbook surface is implemented — statements, intrinsic
-functions, metastatements (`$STACK`/`$SOUND`/`$EVENT`), event trapping, error
-handling (including the compiled error line table), graphics/blit, and
-TRON/TROFF trace regions — plus their known interactions. Both compiler
-dialects are supported and auto-detected; the fixture corpus pairs constructs
-across TB 1.0 and 1.1.
-
-## Design
-
-- **Fail-loud.** Anything outside the calibrated vocabulary raises instead of
-  guessing. A byte pattern joins the vocabulary only after a fixture program
-  witnesses it and the byte-exact round trip passes.
-- **Canonical IR across dialects.** TB 1.0 and 1.1 differ systematically
-  (per-dispatch-table sub shifts, a vector shift, a handful of genuinely
-  different encodings — RESUME, RUN, DEF SEG=, the blit descriptor push).
-  `decode0` canonicalizes to 1.1 numbering at scan time.
-- **Known lossy spots are normalized, not guessed.** Aliases the compiler
-  makes indistinguishable are rendered as one canonical form that recompiles
-  byte-identically (STOP/SYSTEM ≡ END, INCR x ≡ x = x + 1, `PRESET (x,y),c`
-  ≡ PSET-with-color, …). DATA line grouping is physically discarded by the
-  compiler, so DATA re-emits as one normalized statement; original line
-  numbers are recovered exactly where they are byte-significant and
-  renumbered freely otherwise.
-
-## Testing
-
-```
-pytest
+```sh
+uv run python -m tbx.tools.verify_fixture \
+  t1_print t1_gosub t1_subsh t1_dim3v zz_sc3 v10_subdef tier1_expr
 ```
 
-The test suite decodes several hundred compiled fixture EXEs
-(`tests/fixtures/corpus/`) and checks their op streams and emitted source
-against committed golden files (`tests/fixtures/ops/`,
-`tests/fixtures/usercode/`). Every fixture was verified byte-exact against
-the real Turbo Basic 1.0/1.1 compilers when it was added; validating new
-recoveries end-to-end requires access to the original DOS toolchain (e.g.
-under an emulator), which this repository does not include or automate.
+Set `TBX_ORACLE` only when using another compatible v86 harness. See the
+[release checklist](docs/release-checklist.md) for the required sample and
+paper trail.
 
-## Debugging tools
+## Debugging a decode failure
 
-The decoder fails loudly by design: an unrecognized compiler template raises
-`ValueError` with the offending byte and file offset. These tools exist to
-triage those failures and to maintain the golden fixtures — none of them are
-part of the decompile pipeline:
+`tbx PROGRAM.EXE --ops` shows how far scanning progressed. For a missing raw
+instruction template, install the `debug` extra and use:
 
-- `tbx PROGRAM.EXE --ops` — dump the canonical op stream instead of source,
-  to see how far the statement scan got and what it recognized.
-- `python -m tbx.tools.cfgview PROGRAM.EXE [--out cfg.dot]` — disassemble
-  the user-code region as raw x86 (`tbx/tools/insns.py`, via iced-x86 from
-  the `debug` extra) and write a Graphviz CFG. This is the tool for
-  inspecting the bytes around an `unhandled byte ... at ...` error to work
-  out which compiler template the scanner is missing.
-- `python tbx/tools/dump_ops.py` and `python tbx/tools/dump_user_code.py` —
-  regenerate the golden fixtures under `tests/fixtures/ops/` and
-  `tests/fixtures/usercode/` from the corpus EXEs after an intended decoder
-  change.
+```sh
+python -m tbx.tools.cfgview PROGRAM.EXE [--out cfg.dot]
+```
+
+`dump_ops.py` and `dump_user_code.py` regenerate committed goldens after an
+intended decoder change. Wild-corpus probes belong in `wild/probes/` only after
+they compile successfully with the oracle and their first failure is recorded.
+
+## Experimental native backend
+
+The C recompiler and its runtime are maintained separately on the
+[`experimental/c0` branch](https://github.com/leag/tbx/tree/experimental/c0).
+They are not included in this decoder release.
 
 ## License
 

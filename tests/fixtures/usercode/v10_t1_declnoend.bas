@@ -1,0 +1,5 @@
+10 A% = 1
+20 SUB SUB1
+  PRINT "F"
+END SUB
+30 PRINT A%

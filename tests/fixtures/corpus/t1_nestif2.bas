@@ -1,0 +1,12 @@
+10 A$ = "X"
+20 B$ = "Y"
+30 IF A$ <> "Q" THEN
+40   IF B$ <> "R" THEN
+50     PRINT "A"
+60     PRINT "B"
+70   END IF
+80 END IF
+90 IF A$ = "X" THEN 110
+100 END
+110 A$ = "Q"
+120 GOTO 60

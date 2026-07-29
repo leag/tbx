@@ -1,0 +1,22 @@
+# v10_t1_fpcomma dialect=1.0 start=07700
+07703:movsi:308
+07706:rt:156
+07708:movm_imm:46:20225
+0770E:shortstr
+07710:movm_imm:96:1
+07716:movax:128
+07719:open
+0771C:fild:312
+07721:fstp:288
+07728:movm_imm:96:1
+0772E:rt:195
+07730:fld:288
+07735:rt:189
+07737:rt:186
+0773B:movax:1
+0773E:close
+07741:end
+07744:epilogue
+# commits
+07726
+07739

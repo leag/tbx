@@ -1,0 +1,10 @@
+10 DIM V0$(3)
+20 V0$(1) = "HI"
+30 CALL SUB1(V0$(),1)
+40 END
+50 SUB SUB1(A$(1), B%)
+  CALL SUB2(LEN(A$(B%)),A$(B%))
+END SUB
+60 SUB SUB2(C%, D$)
+  PRINT C%; D$
+END SUB

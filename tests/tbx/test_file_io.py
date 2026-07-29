@@ -38,6 +38,17 @@ def test_decode_t1_file2():
     assert decode0.decode_user_code(_exe("t1_file2.exe")) == want
 
 
+def test_decode_t1_open2():
+    # short-form OPEN's ax is the record length: 0x80 (the compiler default)
+    # lifts to reclen=None, anything else was spelled -- witnessed t1_open2
+    # (modes O/I/A default, R with reclen 64)
+    from tbx import decode0
+
+    prog = decode0.decode_user_code(_exe("t1_open2.exe"))
+    assert prog[0] == ir.Open(ir.StrLit("O"), 1, ir.StrLit("A.TXT"))
+    assert prog[8] == ir.Open(ir.StrLit("R"), 4, ir.StrLit("B.DAT"), ir.Lit(64))
+
+
 def test_dialect_invariant():
     from tbx import decode0
 
@@ -61,6 +72,7 @@ def test_emit_file_io():
 if __name__ == "__main__":
     test_decode_t1_file()
     test_decode_t1_file2()
+    test_decode_t1_open2()
     test_dialect_invariant()
     test_emit_file_io()
     print("ALL PASS")

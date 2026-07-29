@@ -1,0 +1,30 @@
+# v10_t1_fnintarith dialect=1.0 start=070B0
+070B3:jmp:28871
+070B6:mov_bp_imm:0:0
+070BB:movax:15
+070BE:andax_m:290
+070C2:movm_ax_bp:0
+070C5:fn_ret
+070C7:jmp:28921
+070CA:proc_enter
+070CD:movax:7
+070D0:push_bp
+070D1:sub_sp:2
+070D4:mov_bp_sp
+070D6:fn_call:28854
+070DD:movbxax
+070DF:movax_bp:0
+070E2:add_sp:2
+070E5:pop_bp
+070E6:subaxbx
+070E8:movm_ax:288
+070EC:fild:288
+070F1:rt:187
+070F3:rt:184
+070F7:proc_ret:0
+070F9:movm_imm:290:7
+070FF:far_call:28874
+07104:end
+07107:epilogue
+# commits
+070F5

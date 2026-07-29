@@ -1,0 +1,22 @@
+# v10_t1_colorfp dialect=1.0 start=071B0
+071B3:fld64:316
+071B8:fstp:292
+071BF:fld64:308
+071C4:fstp:288
+071CB:fld:292
+071D0:fistp:44
+071D5:fwait
+071D7:movaxmem:44
+071DA:movm_ax:136
+071DE:fld:288
+071E3:fistp:44
+071E8:fwait
+071EA:movaxmem:44
+071ED:movm_ax:148
+071F1:color_commit:6
+071F7:end
+071FA:epilogue
+# commits
+071BD
+071C9
+071F5

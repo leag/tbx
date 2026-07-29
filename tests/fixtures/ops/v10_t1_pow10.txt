@@ -1,0 +1,19 @@
+# v10_t1_pow10 dialect=1.0 start=07AB0
+07AB3:fld64:316
+07AB8:fstp:296
+07ABF:fld64:308
+07AC4:fstp:292
+07ACB:fld:292
+07AD0:fld:296
+07AD5:fpow
+07AD8:fstp:288
+07ADF:fld:288
+07AE4:rt:187
+07AE6:rt:184
+07AEA:end
+07AED:epilogue
+# commits
+07ABD
+07AC9
+07ADD
+07AE8

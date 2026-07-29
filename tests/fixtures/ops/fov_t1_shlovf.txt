@@ -1,0 +1,22 @@
+# fov_t1_shlovf dialect=1.1 start=08700
+08703:movm_imm:342:3
+08709:fild:356
+0870E:movsim:342
+08712:shlsi
+08714:into
+08715:shlsi
+08717:addsi:368
+0871B:fstp_si
+08720:movsim:342
+08724:shlsi
+08726:into
+08727:shlsi
+08729:addsi:368
+0872D:fld_si
+08730:rt:187
+08732:rt:184
+08736:end
+08739:epilogue
+# commits
+0871E
+08734

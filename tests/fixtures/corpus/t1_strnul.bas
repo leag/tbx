@@ -1,0 +1,10 @@
+10 A$ = MKI$(256)
+20 PRINT LEN(A$); CVI(A$)
+30 B$ = CHR$(0) + "X"
+40 PRINT LEN(B$); ASC(RIGHT$(B$, 1))
+50 C$ = ""
+60 FOR I = 1 TO 100
+70 C$ = C$ + "AB"
+80 NEXT I
+90 PRINT LEN(C$); INSTR(B$, CHR$(0))
+100 END

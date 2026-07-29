@@ -1,0 +1,16 @@
+# t1_ltab dialect=1.1 start=08700
+08703:movax:5
+08706:tabspc:200
+08708:movsi:296
+0870B:rt:156
+0870D:rt:191
+0870F:rt:185
+08711:movax:3
+08714:tabspc:197
+08716:movsi:292
+08719:rt:156
+0871B:rt:191
+0871D:rt:185
+0871F:end
+08722:epilogue
+# commits

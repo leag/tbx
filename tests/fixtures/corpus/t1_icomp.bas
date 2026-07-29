@@ -1,0 +1,4 @@
+10 X% = 5
+20 Y = 5.5
+30 IF X% > Y THEN PRINT "YES" ELSE PRINT "NO"
+40 END

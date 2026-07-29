@@ -1,0 +1,23 @@
+# v10_t1_icomp dialect=1.0 start=070B0
+070B3:movm_imm:292:5
+070B9:fld64:316
+070BE:fstp:288
+070C5:fld:288
+070CA:icomp:292
+070CF:fstsw
+070D3:jcc:114:28888
+070D5:jmp:28900
+070D8:movsi:312
+070DB:rt:156
+070DD:rt:190
+070DF:rt:184
+070E1:jmp:28909
+070E4:movsi:308
+070E7:rt:156
+070E9:rt:190
+070EB:rt:184
+070ED:end
+070F0:epilogue
+# commits
+070C3
+070D1

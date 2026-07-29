@@ -1,0 +1,21 @@
+# v10_t1_loc2 dialect=1.0 start=07610
+07613:movsi:308
+07616:rt:156
+07618:movm_imm:46:20225
+0761E:shortstr
+07620:movm_imm:96:1
+07626:movax:128
+07629:open
+0762C:movax:1
+0762F:fn_ax_ax:LOC
+07632:fstp:288
+07639:fld:288
+0763E:rt:187
+07640:rt:184
+07644:movax:1
+07647:close
+0764A:end
+0764D:epilogue
+# commits
+07637
+07642

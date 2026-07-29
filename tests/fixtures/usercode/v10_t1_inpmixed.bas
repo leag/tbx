@@ -1,0 +1,3 @@
+10 INPUT A$, B
+20 PRINT A$; B
+30 END

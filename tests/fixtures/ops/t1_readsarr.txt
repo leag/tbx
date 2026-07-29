@@ -1,0 +1,18 @@
+# t1_readsarr dialect=1.1 start=08760
+08763:movm_imm:342:2
+08769:data_read_str
+0876C:movsim:342
+08770:shlsi
+08772:shlsi
+08774:addsi:368
+08778:strassign
+0877A:movsim:342
+0877E:shlsi
+08780:shlsi
+08782:addsi:368
+08786:rt:156
+08788:rt:190
+0878A:rt:184
+0878C:end
+0878F:epilogue
+# commits

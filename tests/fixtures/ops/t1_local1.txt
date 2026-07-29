@@ -1,0 +1,18 @@
+# t1_local1 dialect=1.1 start=08700
+08703:jmp:34609
+08706:proc_enter
+08709:local_init:1:6
+0871D:movax:1
+08720:addm_ax_bp:6
+08723:fild_bp:6
+08727:rt:187
+08729:rt:184
+0872D:proc_ret:2
+08731:sub_sp:2
+08734:far_call:34566
+08739:sub_sp:2
+0873C:far_call:34566
+08741:end
+08744:epilogue
+# commits
+0872B

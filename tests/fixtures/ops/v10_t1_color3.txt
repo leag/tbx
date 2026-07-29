@@ -1,0 +1,8 @@
+# v10_t1_color3 dialect=1.0 start=071B0
+071B3:movm_imm:136:1
+071B9:movm_imm:148:2
+071BF:movm_imm:160:3
+071C5:color_commit:7
+071C9:end
+071CC:epilogue
+# commits

@@ -1,0 +1,12 @@
+10 DEF FNFN1(A%)
+  LOCAL B%
+  B% = A% * 2
+  FNFN1 = B%
+END DEF
+20 DEF FNFN2(C$, D%)
+  LOCAL E%
+  E% = LEN(C$) + D%
+  FNFN2 = E%
+END DEF
+30 PRINT FNFN2("text",FNFN1(3))
+40 END

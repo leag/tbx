@@ -1,0 +1,31 @@
+# t1_localarr dialect=1.1 start=08A40
+08A43:jmp:35512
+08A46:proc_enter
+08A49:local_init:30:6
+08A5D:mov_bp_imm:8:260
+08A62:mov_bp_imm:12:4
+08A67:far_ref_bp:6
+08A6E:dim_begin
+08A71:mov_bp_imm:8:260
+08A76:mov_bp_imm:12:4
+08A7B:mov_bp_imm:16:5
+08A80:mov_bp_imm:14:0
+08A85:far_ref_bp:6
+08A8C:dim_end
+08A8F:fild:292
+08A94:moves_bp:6
+08A97:far_fstp:8
+08A9F:moves_bp:6
+08AA2:far_fld:8
+08AA8:rt:187
+08AAA:rt:184
+08AAE:movsi:6
+08AB1:local_arr_free
+08AB4:proc_ret:60
+08AB8:sub_sp:60
+08ABB:far_call:35398
+08AC0:end
+08AC3:epilogue
+# commits
+08A9D
+08AAC

@@ -1,0 +1,8 @@
+10 DIM V0#(5)
+20 A = 2
+30 V0#(A) = 7
+40 B# = 9
+50 IF V0#(A) <= B# THEN 70
+60 PRINT "G"
+70 PRINT V0#(2)
+80 END

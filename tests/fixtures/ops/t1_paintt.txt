@@ -1,0 +1,13 @@
+# t1_paintt dialect=1.1 start=09390
+09393:movm_imm:136:1
+09399:screen:8
+0939D:fild:294
+093A2:fild:294
+093A7:movax:85
+093AA:strfn:CHR$
+093AC:movm_imm:148:1
+093B2:paint_tile:1
+093B8:end
+093BB:epilogue
+# commits
+093B6

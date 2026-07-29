@@ -1,0 +1,10 @@
+10 SUB F(N%)
+20 LOCAL I%, S$
+30 FOR I% = 1 TO N%
+40 S$ = "X"
+50 PRINT S$
+60 NEXT
+70 END SUB
+80 M% = 2
+90 CALL F(M%)
+100 END

@@ -98,3 +98,116 @@ def test_try_swap():
     bad = mov_xchg_mov(0x0120, 0x0124) + mov_xchg_mov(0x0130, 0x0134)
     assert decode0._try_swap(bad, 0) is None
     assert decode0._try_swap(good[:23], 0) is None  # truncated
+
+
+def test_try_inline_rescue():
+    # SUB ... INLINE: the body has NO proc-enter framing, and TB
+    # auto-appends a bare far RET (CB) after it (t1_inline/q_shriek).
+    exe = bytearray(30)
+    exe[10] = 0xBA  # first inline byte -- anything but 0x55 (push bp)
+    exe[19] = 0xCB  # target-1: a bare CB right before the jmp's target
+    ops = [(7, "jmp", 20)]
+    assert decode0._try_inline_rescue(bytes(exe), ops) == 20
+    assert ops == [(7, "jmp", 20), (10, "inline_sub", bytes(exe[10:19]))]
+
+    # False-positive guard (wild CVT2TB.EXE): a genuine `push bp; mov
+    # bp,sp; ...; pop bp; retf` procedure -- either mov-bp,sp encoding --
+    # legitimately ends in 5D CB, which also satisfies "byte before the
+    # target is CB". Must NOT be rescued; it's real proc-enter-shaped
+    # code the ordinary scan should keep failing loud on, not $INLINE.
+    for enc in (b"\x8b\xec", b"\x89\xe5"):
+        exe2 = bytearray(30)
+        exe2[10] = 0x55
+        exe2[11:13] = enc
+        exe2[18] = 0x5D
+        exe2[19] = 0xCB
+        ops2 = [(7, "jmp", 20)]
+        assert decode0._try_inline_rescue(bytes(exe2), ops2) is None
+        assert ops2 == [(7, "jmp", 20)]  # unchanged
+
+    # Exact framed helpers are classified before normal scanning, rather than
+    # being smuggled through this failure-driven INLINE rescue.
+    helper = decode0._OPAQUE_HELPER_BODY
+    from tbx.decode0 import opaque_helpers
+    from tbx.decode0.opaque import find_opaque_helpers
+
+    image = b"\x00" * 7 + b"\xe9" + len(helper).to_bytes(2, "little") + helper + b"\x00"
+    spec = opaque_helpers.OpaqueHelperSpec(helper, (0x1E,))
+    assert find_opaque_helpers(image, 0, (spec,)) == {
+        10: (10 + len(helper), helper, (0x1E,))
+    }
+
+    # Turbo Basic 1.0 omits the INT3 immediately before RETF in graphics
+    # helper variants 3-8 (wild bmaster/ifi). Each exact v1.0 body remains
+    # eligible for the same full-fingerprint rescue.
+    for helper10 in (
+        opaque_helpers._OPAQUE_HELPER_BODY_3_V10,
+        opaque_helpers._OPAQUE_HELPER_BODY_4_V10,
+        opaque_helpers._OPAQUE_HELPER_BODY_5_V10,
+        opaque_helpers._OPAQUE_HELPER_BODY_6_V10,
+        opaque_helpers._OPAQUE_HELPER_BODY_7_V10,
+        opaque_helpers._OPAQUE_HELPER_BODY_8_V10,
+    ):
+        image = b"\x00" * 7 + b"\xe9" + len(helper10).to_bytes(2, "little") + helper10
+        spec = opaque_helpers.OpaqueHelperSpec(helper10, (0x1E,))
+        assert find_opaque_helpers(image, 0, (spec,)) == {
+            10: (10 + len(helper10), helper10, (0x1E,))
+        }
+
+
+def test_scan_nop_padding():
+    from tbx.decode0.scan import _scan_direct
+
+    ops = []
+    assert _scan_direct(b"\x90", 0, 0x90, None, ops, 0) == 1
+    assert ops == [(0, "nop")]
+
+
+def test_string_selector_cleanup_runtime_alias():
+    from tbx.decode0.scan import _scan_direct2
+
+    body = bytes.fromhex(
+        "31 d2 31 f6 87 16 5c 00 87 36 5e 00 cd cc"
+    )
+    ops = []
+    assert _scan_direct2(body, 0, body[0], ops) == len(body)
+    assert ops == [(0, "str_free_temp")]
+
+
+def test_integer_divide_memory_template():
+    from tbx.decode0.scan import _scan_direct2
+
+    exe = bytes.fromhex("f7 3e 54 10")
+    ops = []
+    assert _scan_direct2(exe, 0, exe[0], ops) == 4
+    assert ops == [(0, "idiv_m", 0x1054)]
+
+
+def test_tb10_cvl_vector_alias():
+    from tbx.decode0.dialect import TB10
+    from tbx.decode0.scan import _scan_int
+
+    ops = []
+    vec = TB10.canon_vec(0xA9)
+    assert _scan_int(b"\xcd\xa9", 0, set(), TB10, ops, 0, vec) == 2
+    assert ops == [(0, "str2num", "CVL")]
+
+
+def test_scan_instr_with_start_dispatch():
+    from tbx import ir
+    from tbx.decode0.core import DecodeState, fp_dispatch
+    from tbx.decode0.dialect import TB11
+    from tbx.decode0.scan import _scan_int
+
+    ops = []
+    assert _scan_int(b"\xcd\xed\x1e", 0, set(), TB11, ops, 0, 0xED) == 3
+    assert ops == [(0, "instr3")]
+
+    state = DecodeState(
+        ax=ir.Lit(2), k=0, sstack=[ir.Var("A$"), ir.StrLit("C")]
+    )
+    fp_dispatch(state, ops[0], 0, "instr3")
+    assert state.ax == ir.Call(
+        "INSTR", (ir.Lit(2), ir.Var("A$"), ir.StrLit("C"))
+    )
+    assert state.sstack == []

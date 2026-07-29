@@ -1,0 +1,5 @@
+10 DIM V0$(5)
+20 A% = 2
+30 INPUT V0$(A%)
+40 PRINT V0$(A%)
+50 END

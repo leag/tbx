@@ -1,0 +1,15 @@
+# t1_declnoend dialect=1.1 start=08700
+08703:movm_imm:288:1
+08709:jmp:34586
+0870C:proc_enter
+0870F:movsi:308
+08712:rt:156
+08714:rt:190
+08716:rt:184
+08718:proc_ret:0
+0871A:fild:288
+0871F:rt:187
+08721:rt:184
+08725:epilogue
+# commits
+08723

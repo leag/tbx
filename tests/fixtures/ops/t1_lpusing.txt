@@ -1,0 +1,25 @@
+# t1_lpusing dialect=1.1 start=08C60
+08C63:movsi:312
+08C66:rt:156
+08C68:movsi:292
+08C6B:strassign
+08C6D:fld64:316
+08C72:fstp:288
+08C79:movsi:292
+08C7C:rt:156
+08C7E:rt:191
+08C80:movsi:308
+08C83:rt:156
+08C85:rt:202
+08C87:fld:288
+08C8C:rt:203
+08C8E:rt:191
+08C92:movsi:292
+08C95:rt:156
+08C97:rt:191
+08C99:rt:185
+08C9B:end
+08C9E:epilogue
+# commits
+08C77
+08C90

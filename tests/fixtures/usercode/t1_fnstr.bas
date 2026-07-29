@@ -1,0 +1,3 @@
+10 DEF FNFN1$(A$, B) = A$ + STR$(B)
+20 PRINT FNFN1$("X",3)
+30 END

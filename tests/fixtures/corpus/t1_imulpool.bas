@@ -1,0 +1,5 @@
+10 INPUT A
+20 B = 2
+30 C = B * 2 - 1 + 180 * (A > 0)
+40 PRINT C
+50 END

@@ -1,0 +1,30 @@
+# t1_arrfwd dialect=1.1 start=08700
+08703:fild:356
+08708:fstp:372
+0870F:movsi:288
+08712:arg_push_array
+08714:far_call:34591
+08719:end
+0871C:jmp:34619
+0871F:proc_enter
+08722:arg_push_array_bp:6
+0872D:movdx:154
+08730:movdsdx
+08732:far_call:34622
+08737:proc_ret:60
+0873B:jmp:34654
+0873E:proc_enter
+08741:movax:1
+08744:subax_bp:14
+08747:movsiax
+08749:shlsi
+0874B:shlsi
+0874D:moves_bp:6
+08750:far_fld_si
+08754:rt:187
+08756:rt:184
+0875A:proc_ret:60
+0875E:epilogue
+# commits
+0870D
+08758

@@ -1,0 +1,5 @@
+10 DEF FNH$(A$)
+20 FNH$ = A$ + "!"
+30 END DEF
+40 PRINT FNH$("HI")
+50 END

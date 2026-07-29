@@ -39,6 +39,31 @@ CASES = [
     ("fkb_t1_beep.exe", "K", "10 BEEP\n20 END\n"),
     ("fkb_t1_and.exe", "K", None),
     ("fov_t1_and.exe", "O", None),
+    (  # 0xCE (INTO) after an integer ADD fold under Overflow: no source
+        # spelling, skipped mid-expression without disturbing statement
+        # grouping
+        "fov_t1_ovfadd.exe",
+        "O",
+        "10 A% = 30000\n20 B% = 30000\n30 C% = A% + B%\n40 PRINT C%\n50 END\n",
+    ),
+    (
+        "v10_fov_t1_ovfadd.exe",
+        "O",
+        "10 A% = 30000\n20 B% = 30000\n30 C% = A% + B%\n40 PRINT C%\n50 END\n",
+    ),
+    (  # cmp sp/jae/mov ax,7/int EC 3C stack-room check at the CALL site under
+        # Stack test: no source spelling, skipped like INTO
+        "fst_t1_stsub.exe",
+        "S",
+        "10 SUB SUB1(A%, B%)\n  C% = A% * B%\n  PRINT C%\nEND SUB\n"
+        "20 D% = 3\n30 E% = 4\n40 CALL SUB1(D%,E%)\n50 END\n",
+    ),
+    (
+        "v10_fst_t1_stsub.exe",
+        "S",
+        "10 SUB SUB1(A%, B%)\n  C% = A% * B%\n  PRINT C%\nEND SUB\n"
+        "20 D% = 3\n30 E% = 4\n40 CALL SUB1(D%,E%)\n50 END\n",
+    ),
     (
         "fbd_t1_arr1.exe",
         "B",
@@ -58,6 +83,19 @@ CASES = [
     ("fbd_t1_sarr.exe", "B", None),  # string-array variable index (bchk covers it)
     ("fbd_t1_dimm.exe", "B", None),  # 2-D variable index (bchk_span, F3.5)
     ("v10_fkb_t1_beep.exe", "K", "10 BEEP\n20 END\n"),
+    (  # INTO after a shl-si element-address computation under Overflow: the
+        # position varies by dialect (1.1 between the two shl's; 1.0 after
+        # the last shl AND after addsi, right before the terminal consumer)
+        # but is always a semantic-free skip like the other INTO cases
+        "fov_t1_shlovf.exe",
+        "O",
+        "10 DIM V0(10)\n20 A% = 3\n30 V0(A%) = 5\n40 PRINT V0(A%)\n50 END\n",
+    ),
+    (
+        "v10_fov_t1_shlovf.exe",
+        "O",
+        "10 DIM V0(10)\n20 A% = 3\n30 V0(A%) = 5\n40 PRINT V0(A%)\n50 END\n",
+    ),
 ]
 
 

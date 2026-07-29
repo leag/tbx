@@ -27,14 +27,26 @@ from tbx.decode0.const import (
     _TRAP_GOSUB,
 )
 from tbx.decode0.dialect import Dialect, TB11, _try_swap
+from tbx.decode0.opaque import find_opaque_helpers
+from tbx.decode0.opaque_helpers import (
+    OPAQUE_HELPERS,
+)
 
 
 def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
     """Byte-dispatch family split out of _scan. Returns the new
     cursor when it decodes the op at ``p``, else None."""
+    if b == 0x90:  # NOP padding around compiler templates
+        ops.append((p, "nop"))
+        return p + 1
     if b == 0xE9:  # jmp near rel16 (GOTO / FOR glue)
         rel = struct.unpack_from("<h", exe, p + 1)[0]
-        target = p + 3 + rel
+        # A GOTO spanning more than 32KB of code wraps around the 64KB code
+        # segment (rel16 is signed): normalize the file-linear target back
+        # into [start, start+64K) -- the mapping is linear, so the wrap is
+        # exactly 0x10000 in file terms too (witnessed t1_bigjmp / wild
+        # inv87.exe, an early GOTO +53KB encoded as a negative rel).
+        target = start + ((p + 3 + rel - start) % 0x10000)
         if dia.name == "1.0" and target == start + 3:
             # TB 1.0 RUN: ALWAYS a near jmp to the first statement (start+3),
             # even at short-jmp range (v10_t1_run: e9 fd ff, rel -3) -- a GOTO
@@ -54,9 +66,19 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         ops.append((p, "testw", disp, imm))
         p += 6
         return p
-    if b == 0xE8:  # call near rel16 (GOSUB)
+    if b == 0xF7 and exe[p + 1] == 0x46:  # BP-relative SINGLE LOCAL
+        disp, imm = struct.unpack_from("<bH", exe, p + 2)
+        ops.append((p, "testw_bp", disp, imm))  # variable-STEP sign word
+        p += 5  # (ziptest/cleanup/crossref/reformat)
+        return p
+    if b == 0xF7 and exe[p + 1] == 0x86:  # same sign-word test for a LOCAL
+        disp, imm = struct.unpack_from("<HH", exe, p + 2)
+        ops.append((p, "testw_bp", disp, imm))
+        p += 6  # beyond disp8 range (wild cleanup/reformat)
+        return p
+    if b == 0xE8:  # call near rel16 (GOSUB); same 64KB wrap as jmp (t1_bigjmp)
         rel = struct.unpack_from("<h", exe, p + 1)[0]
-        ops.append((p, "call", p + 3 + rel))
+        ops.append((p, "call", start + ((p + 3 + rel - start) % 0x10000)))
         p += 3
         return p
     if b == 0xEB:  # jmp short rel8
@@ -93,11 +115,35 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         ops.append((p, "proc_ret", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4
         return p
+    if (
+        b == 0x51  # push cx; push di; mov ax,ss; mov es,ax; mov cx,<n>;
+        and exe[p + 1] == 0x57  # lea di,[bp+<disp16>]; xor ax,ax; cld; rep
+        and exe[p + 2 : p + 6] == b"\x8c\xd0\x8e\xc0"  # stosw; pop di; pop cx --
+        and exe[p + 6] == 0xB9  # LOCAL statement's zero-fill prologue, right
+        and exe[p + 9 : p + 11] == b"\x8d\xbe"  # after proc_enter (witnessed
+        and exe[p + 13 : p + 18] == b"\x31\xc0\xfc\xf3\xab"  # t1_local1)
+        and exe[p + 18 : p + 20] == b"\x5f\x59"
+    ):
+        cnt = struct.unpack_from("<H", exe, p + 7)[0]
+        disp = struct.unpack_from("<H", exe, p + 11)[0]
+        ops.append((p, "local_init", cnt, disp))
+        p += 20
+        return p
     # Function/temp-frame glue: semantic-free SP/BP frame setup &
     # teardown around DEF FN call sites; matched AFTER the proc_enter/proc_ret
     # combined forms above. The lifter skips these.
     if b == 0x55:  # push bp
         ops.append((p, "push_bp"))
+        p += 1
+        return p
+    if b == 0x06 and exe[p + 1] != 0x56:  # standalone push es frame glue
+        ops.append((p, "push_es"))
+        p += 1
+        return p
+    if b == 0x1E and not (
+        exe[p + 1] == 0xB8 and exe[p + 4] == 0x50
+    ):  # push ds (standalone frame glue)
+        ops.append((p, "push_ds"))
         p += 1
         return p
     if b == 0x5D:  # pop bp
@@ -108,16 +154,28 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         ops.append((p, "mov_bp_sp"))
         p += 2
         return p
+    if b == 0x89 and exe[p + 1] == 0xE5:  # mov bp,sp (alternate encoding)
+        ops.append((p, "mov_bp_sp"))
+        p += 2
+        return p
     if b == 0x9A:  # far call (proc entry; seg loader-relocated)
-        off = struct.unpack_from("<H", exe, p + 1)[0]
+        off, seg = struct.unpack_from("<HH", exe, p + 1)
         ops.append(
-            (p, "far_call", off + start)
-        )  # rebase segment-relative off to file offset
+            (p, "far_call", off + seg * 16 + start)
+        )  # rebase segment-relative off to file offset. The segment word is 0
+        # for every single-segment program (the whole corpus), so folding it in
+        # is a no-op there; under $SEGMENT the callee lives in a later segment
+        # and its offset restarts, so it is the only way to reach the right
+        # byte (probe t1_segment; wild tbd73.exe).
         p += 5
         return p
     if b == 0xC4 and exe[p + 1] == 0x76:  # les si,[bp+off8]: by-ref param access
         ops.append((p, "arg_ref", struct.unpack_from("<b", exe, p + 2)[0]))
         p += 3
+        return p
+    if b == 0xC4 and exe[p + 1] == 0xB6:  # les si,[bp+off16]: same, wide disp
+        ops.append((p, "arg_ref", struct.unpack_from("<h", exe, p + 2)[0]))
+        p += 4  # (string DEF FN param temp free -- t1_fnstr)
         return p
     if (
         b == 0x1E and exe[p + 1] == 0xB8 and exe[p + 4] == 0x50
@@ -125,6 +183,72 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         ops.append((p, "arg_push_ref", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 5
         return p
+    if (
+        b == 0x16
+        and exe[p + 1] == 0xB8
+        and exe[p + 4] == 0x03
+        and exe[p + 5] == 0xC5
+        and exe[p + 6] in (0x50, 0xCE)
+        and (exe[p + 6] == 0x50 or exe[p + 7] == 0x50)
+    ):  # push ss; mov ax,off; add ax,bp; push ax: the LOCAL-frame sibling of
+        # arg_push_ref -- forwards a LOCAL var's address as a by-ref CALL arg.
+        # With Overflow checking enabled, `INTO` sits between ADD and PUSH
+        # (wild CVT2TB.EXE); it has no source spelling and is handled here
+        # rather than leaving a fake instruction boundary in the call setup.
+        ops.append((p, "arg_push_ref_bp", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 8 if exe[p + 6] == 0xCE else 7
+        return p
+    if (
+        b == 0x8C
+        and exe[p + 1] == 0xD0
+        and exe[p + 2 : p + 4] == b"\x8e\xd8"
+        and exe[p + 4 : p + 6] == b"\x8b\xf5"
+        and exe[p + 6] == 0x83
+        and exe[p + 7] == 0xC6
+        and exe[p + 9] == 0xCD
+        and exe[p + 10] in (0xD4, 0xCE)  # 1.1 vector / TB 1.0's shifted one
+    ):  # mov ax,ss; mov ds,ax; mov si,bp; add si,d8; INT D4 -- forward a
+        # whole-array PARAMETER as a whole-array CALL argument. The plain
+        # `movsi <disp>; INT D4` form pushes a DGROUP array descriptor; a
+        # received array param's descriptor lives in the caller's frame
+        # instead, so DS has to point at the stack segment for the push (and
+        # is restored right after by the `mov dx,imm; mov ds,dx` pair, which
+        # already scans). Witnessed probe t1_arrfwd; wild tbd73.exe, whose
+        # TBW73.INC relays `item$(1)` on through Makehmenu.
+        ops.append((p, "arg_push_array_bp", exe[p + 8]))
+        p += 11
+        return p
+    if (
+        b == 0x8B
+        and exe[p + 1] == 0xF5
+        and exe[p + 2] == 0x83
+        and exe[p + 3] == 0xC6
+    ):  # mov si,bp; add si,d8; [into;] push ss; pop es: ES:SI = &LOCAL[d8]
+        # -- the LOCAL-frame sibling of movsi's DGROUP-disp form, feeding
+        # dim_begin/dim_end for a heap-allocated LOCAL DYNAMIC array
+        # declared via `LOCAL A()` (probe q_localarr). An Overflow-toggle
+        # INTO can land right after the `add si,d8` arithmetic, same as
+        # elsewhere in this arithmetic-adjacent family (wild cleanup.exe).
+        q = p + 5
+        if exe[q] == 0xCE:
+            q += 1
+        if exe[q] == 0x16 and exe[q + 1] == 0x07:
+            ops.append((p, "far_ref_bp", exe[p + 4]))
+            p = q + 2
+            return p
+    if (
+        b == 0x8B
+        and exe[p + 1] == 0xF5
+        and exe[p + 2] == 0x81
+        and exe[p + 3] == 0xC6
+    ):  # mov si,bp; add si,d16; [into;] push ss; pop es: the same LOCAL
+        q = p + 6  # dynamic-array descriptor when its offset exceeds 127
+        if exe[q] == 0xCE:
+            q += 1
+        if exe[q] == 0x16 and exe[q + 1] == 0x07:
+            ops.append((p, "far_ref_bp", struct.unpack_from("<H", exe, p + 4)[0]))
+            p = q + 2  # (wild cleanup.exe/reformat.exe)
+            return p
     # Literal-arg staging glue (positions SI at a stack temp, saves/restores SP).
     if b == 0x89 and exe[p + 1] == 0x26:  # mov [disp],sp (save cleanup SP)
         ops.append((p, "mov_mem_sp", struct.unpack_from("<H", exe, p + 2)[0]))
@@ -134,6 +258,14 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         ops.append((p, "mov_si_sp"))
         p += 2
         return p
+    if b == 0x89 and exe[p + 1] == 0xF2:  # mov dx,si: preserve a LOCAL-array
+        ops.append((p, "movrr", "dx", "si"))
+        p += 2  # index across string-param staging (cleanup/reformat)
+        return p
+    if b == 0x89 and exe[p + 1] == 0xD6:  # mov si,dx: restore that index
+        ops.append((p, "movrr", "si", "dx"))
+        p += 2  # (cleanup/reformat)
+        return p
     if b == 0x01 and exe[p + 1] == 0xE6:  # add si,sp
         ops.append((p, "add_si_sp"))
         p += 2
@@ -142,9 +274,24 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         ops.append((p, "sub_sp", exe[p + 2]))
         p += 3
         return p
+    if b == 0x81 and exe[p + 1] == 0xEC:  # sub sp,imm16: the same call-temp
+        ops.append((p, "sub_sp", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # allocation when its size exceeds 127 (wild cleanup/reformat)
+        return p
     if b == 0x83 and exe[p + 1] == 0xC4:  # add sp,imm8 (free temps)
         ops.append((p, "add_sp", exe[p + 2]))
         p += 3
+        return p
+    if (
+        b == 0xFF
+        and exe[p + 1] == 0x76
+        and exe[p + 3] == 0xFF
+        and exe[p + 4] == 0x76
+        and exe[p + 2] == exe[p + 5] + 2
+    ):  # push word [bp+d+2]; push word [bp+d]: forward the enclosing SUB's
+        # by-ref param (a far seg:off pair in its frame) as a CALL argument
+        ops.append((p, "arg_push_fwd", struct.unpack_from("<b", exe, p + 5)[0]))
+        p += 6  # (witnessed q_fwd)
         return p
     if b == 0x16 and exe[p + 1] == 0x56:  # push ss; push si (push far temp ptr arg)
         ops.append((p, "arg_push_temp"))
@@ -172,6 +319,20 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         ops.append((p, "incax"))
         p += 1
         return p
+    if b == 0xCE:  # into: Overflow-toggle check after arithmetic ('O' IDE
+        ops.append((p, "into"))  # Options toggle; no operand, no source
+        p += 1  # spelling (witnessed q_ovf)
+        return p
+    if (
+        b == 0x81
+        and exe[p + 1] == 0xFC  # cmp sp, imm16: Stack-test ('S') room check at
+        and exe[p + 4 : p + 11] == b"\x73\x06\xb8\x07\x00\xcd\xec"  # CALL site:
+        and dia.canon_sub(exe[p + 11], 0x28) == 0x3C  # jae skip / mov ax,7 /
+    ):  # int EC 3C (raise error 7). Threshold varies with the callee frame;
+        # semantic-free, recompiling with S regenerates it (witnessed q_stsub).
+        ops.append((p, "stack_chk", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 12
+        return p
     if b == 0x09 and exe[p + 1] == 0xC0:  # or ax, ax (materialization)
         ops.append((p, "orax"))
         p += 2
@@ -192,6 +353,10 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         ops.append((p, "movbxax"))
         p += 2
         return p
+    if b == 0x8B and exe[p + 1] == 0xD8:  # mov bx, ax: opposite-direction encoding
+        ops.append((p, "movbxax"))  # of the same instruction (SWAP of two array
+        p += 2  # elements; probe q_arrswap)
+        return p
     if b == 0xBA:  # mov dx, imm16 (relocated segment)
         ops.append((p, "movdx", struct.unpack_from("<H", exe, p + 1)[0]))
         p += 3
@@ -204,8 +369,34 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         ops.append((p, "movesdx"))
         p += 2
         return p
+    if b == 0x8E and exe[p + 1] == 0xDA:  # mov ds, dx (reverse array SWAP restore)
+        ops.append((p, "movdsdx"))
+        p += 2
+        return p
     if b == 0x8E and exe[p + 1] == 0x06:  # mov es, [disp16] (far array seg)
         ops.append((p, "moves_m", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4
+        return p
+    if b == 0x8E and exe[p + 1] == 0x46:  # mov es, [bp+d8]: the LOCAL-frame
+        # sibling of moves_m -- loads a LOCAL DYNAMIC array's heap segment
+        # from its handle cell (probe q_localarr)
+        ops.append((p, "moves_bp", exe[p + 2]))
+        p += 3
+        return p
+    if b == 0x8E and exe[p + 1] == 0x86:  # mov es,[bp+disp16]: the same
+        ops.append((p, "moves_bp", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # LOCAL DYNAMIC array beyond disp8 range (cleanup/reformat)
+        return p
+    if b == 0x8E and exe[p + 1] == 0x1E:  # mov ds, [disp16] (reverse array SWAP)
+        ops.append((p, "movds_m", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4
+        return p
+    if b == 0x8C and exe[p + 1] == 0x06:  # mov [disp16], es (VARPTR$ pointer temp)
+        ops.append((p, "movm_es", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4
+        return p
+    if b == 0x89 and exe[p + 1] == 0x36:  # mov [disp16], si (VARPTR$ pointer temp)
+        ops.append((p, "movm_si", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4
         return p
     if b == 0x2B and exe[p + 1] == 0x06:  # sub ax, [disp16] (far IDX)
@@ -228,10 +419,18 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         and exe[p + 2 : p + 4] == b"\x31\xf6"
         and exe[p + 4 : p + 6] == b"\x87\x16"
         and exe[p + 8 : p + 10] == b"\x87\x36"
-        and exe[p + 12 : p + 14] == b"\xcd\xd2"
-    ):  # string SELECT CASE selector-temp free
+        and exe[p + 12 : p + 14] in (b"\xcd\xd2", b"\xcd\xcc")
+    ):  # string SELECT CASE selector-temp free; CC is a runtime-revision alias
         ops.append((p, "str_free_temp"))
         p += 14
+        return p
+    if b == 0xB0 and exe[p + 2] == 0xE6:
+        # OUT with both operands in the byte range: Turbo Basic folds the
+        # general mov-AX/mov-DX/OUT-DX sequence into MOV AL,value;
+        # OUT port,AL. Keep the complete pair atomic so a stray MOV AL or
+        # immediate-port OUT remains fail-loud (wild zip.exe's tone SUBs).
+        ops.append((p, "out_imm", exe[p + 3], exe[p + 1]))
+        p += 4
         return p
     if b == 0x31 and exe[p + 1] == 0xC0:  # xor ax, ax (zero literal)
         ops.append((p, "xorax"))
@@ -261,6 +460,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "addax_m", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4
         return p
+    if b == 0x03 and exe[p + 1] == 0x86:  # add ax,[bp+disp16]: large LOCAL
+        ops.append((p, "addax_bp", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # integer left-fold (wild cleanup/reformat)
+        return p
     if b == 0xF7 and exe[p + 1] == 0xD8:  # neg ax (int subtraction)
         ops.append((p, "negax"))
         p += 2
@@ -268,6 +471,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
     if b == 0xF7 and exe[p + 1] == 0x2E:  # imul word [disp16]
         ops.append((p, "imul_m", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4
+        return p
+    if b == 0xF7 and exe[p + 1] == 0x6E:  # imul word [bp+disp8]: LOCAL int
+        ops.append((p, "imul_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # read as the right operand (witnessed t1_local2)
         return p
     if b == 0xC7 and exe[p + 1] == 0x06:  # mov word [disp16], imm16
         d16, v16 = struct.unpack_from("<Hh", exe, p + 2)
@@ -281,10 +488,68 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "mov_bp_imm", bp_off, v16))
         p += 5
         return p
+    if b == 0xC7 and exe[p + 1] == 0x86:  # mov word [bp+disp16], imm16:
+        bp_off, v16 = struct.unpack_from("<Hh", exe, p + 2)
+        ops.append((p, "mov_bp_imm", bp_off, v16))
+        p += 6  # LOCAL beyond disp8 range (wild cleanup/reformat)
+        return p
     if b == 0x89 and exe[p + 1] == 0x06:  # mov [disp16], ax (int store)
         ops.append((p, "movm_ax", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4
         return p
+    if b == 0x89 and exe[p + 1] == 0x3E:  # mov [disp16], di: deep spill
+        ops.append((p, "spill_store", "di", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4
+        return p
+    if b == 0x8B and exe[p + 1] == 0x0E:  # mov cx, [disp16]: restore spill
+        ops.append((p, "spill_load", "cx", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4
+        return p
+    if b == 0x8B and exe[p + 1] == 0x3E:  # mov di, [disp16]: restore spill
+        ops.append((p, "spill_load", "di", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4
+        return p
+    if b == 0x89 and exe[p + 1] == 0x04:  # mov [si], ax: the store half of a
+        ops.append((p, "movm_ax_si"))  # computed static int-array element
+        p += 2  # index chain (shl si/addsi), the write sibling of the
+        return p  # existing rt-0x9C read consumer (gap 32; wild number.exe)
+    if b == 0x36 and exe[p + 1 : p + 3] == b"\x89\x04":
+        ops.append((p, "movm_ax_temp"))  # mov ss:[si],ax: staged by-ref CALL arg
+        p += 3
+        return p
+    if b == 0x36 and exe[p + 1 : p + 3] == b"\xc7\x04":
+        # mov ss:[si],imm16: the literal-argument sibling of movm_ax_temp --
+        # a nested DEF FN call used as another call's own argument stages
+        # ITS OWN literal argument via SI+SP addressing (bp doesn't point at
+        # this temp frame yet), instead of going through ax first (witnessed
+        # t1_fnargcall: `FN Foo(A$, FN Bar(3))`).
+        ops.append((p, "movm_imm_temp", struct.unpack_from("<H", exe, p + 3)[0]))
+        p += 5
+        return p
+    if b == 0x01 and exe[p + 1] == 0x06:  # add [disp16], ax: int combine-store,
+        ops.append((p, "addm_ax", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # e.g. `X% = X% + <expr>` (disp16 sibling of addm_ax_bp,
+        return p  # witnessed q_addimm)
+    if b == 0x29 and exe[p + 1] == 0x06:  # sub [disp16], ax: int combine-store,
+        ops.append((p, "subm_ax", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # e.g. `X% = X% - <expr>` (subtract sibling of addm_ax;
+        return p  # wild number.exe)
+    if b == 0x89 and exe[p + 1] == 0x46:  # mov [bp+disp8], ax: LOCAL int store
+        ops.append((p, "movm_ax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # (witnessed t1_local2)
+        return p
+    if b == 0x89 and exe[p + 1] == 0x86:  # mov [bp+disp16],ax: large LOCAL
+        ops.append((p, "movm_ax_bp", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # store (wild cleanup/reformat)
+        return p
+    if b == 0x01 and exe[p + 1] == 0x46:  # add [bp+disp8], ax: LOCAL int
+        ops.append((p, "addm_ax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # combine-store, e.g. `X% = X% + 1` (witnessed t1_local1)
+        return p
+    if b == 0x29 and exe[p + 1] == 0x46:  # sub [bp+disp8], ax: LOCAL int
+        ops.append((p, "subm_ax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # combine-store, e.g. `X% = X% - <expr>` (subtract sibling
+        return p  # of addm_ax_bp; wild horses.exe)
     if b == 0xA3:  # mov [imm16], ax (scratch bridge)
         ops.append((p, "movmem_ax", struct.unpack_from("<H", exe, p + 1)[0]))
         p += 3
@@ -293,14 +558,45 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "movsim", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4
         return p
-    if b == 0xFF and exe[p + 1] == 0x06:  # inc word [disp16] (integer FOR)
+    if b == 0x8B and exe[p + 1] == 0x76:  # mov si, [bp+d8]: LOCAL int -> array
+        ops.append((p, "movsi_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # index (witnessed q_locidx)
+        return p
+    if b == 0xFF and exe[p + 1] == 0x06:  # inc word [disp16]: the integer FOR
         ops.append((p, "inc_m", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # step, OR a bare `X = X + 1` (INCR) outside a loop (t1_incr1)
+        return p
+    if b == 0xFF and exe[p + 1] == 0x46:  # inc word [bp+d8]: the LOCAL int
+        ops.append((p, "inc_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # FOR step (witnessed q_locidx)
+        return p
+    if b == 0xFF and exe[p + 1] == 0x4E:  # dec word [bp+d8]: the LOCAL int
+        ops.append((p, "dec_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # STEP -1 FOR-NEXT decrement, the descending sibling of
+        return p  # inc_bp (wild horses.exe, probe q_localforstepm1)
+    if b == 0x83 and exe[p + 1] == 0x7E:  # cmp word [bp+d8], imm8: the LOCAL
+        bp_off, i8 = struct.unpack_from("<bb", exe, p + 2)  # int FOR-NEXT
+        ops.append((p, "cmp_bpi8", bp_off, i8))  # limit test (q_locidx)
         p += 4
+        return p
+    if b == 0xFF and exe[p + 1] == 0x0E:  # dec word [disp16]: bare `X = X - 1`
+        ops.append((p, "dec_m", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # (DECR, witnessed t1_decr1)
         return p
     if b == 0x83 and exe[p + 1] == 0x3E:  # cmp word [disp16], imm8 (int FOR test)
         d16, i8 = struct.unpack_from("<Hb", exe, p + 2)
         ops.append((p, "cmp_mi8", d16, i8))
         p += 5
+        return p
+    if b == 0x81 and exe[p + 1] == 0x3E:  # cmp word [disp16], imm16: the int FOR
+        d16, i16 = struct.unpack_from("<Hh", exe, p + 2)  # test when the limit
+        ops.append((p, "cmp_mi16", d16, i16))  # doesn't fit a signed imm8
+        p += 6  # (witnessed q_forbig)
+        return p
+    if b == 0x83 and exe[p + 1] == 0x06:  # add word [disp16], imm8: the integer
+        d16, i8 = struct.unpack_from("<Hb", exe, p + 2)  # FOR-NEXT increment for
+        ops.append((p, "addm_i8", d16, i8))  # a literal STEP other than +-1
+        p += 5  # (+-1 use inc_m/dec_m instead; witnessed q_forstep)
         return p
     if b == 0x8B and exe[p + 1] == 0xD3:  # mov dx,bx (OUT port setup)
         ops.append((p, "movdxbx"))
@@ -334,6 +630,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "defseg"))  # mov [001C],ds: bare DEF SEG
         p += 4
         return p
+    if b == 0x8C and exe[p + 1] == 0x1E:  # mov [disp16], ds: DS spill ahead of a
+        ops.append((p, "movm_ds", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # near->far ES alias (SWAP of two array elements; probe q_arrswap)
+        return p
     if b == 0x99:  # cwd: sign-extend ax ahead of idiv
         ops.append((p, "cwd"))
         p += 1
@@ -341,6 +641,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
     if b == 0xF7 and exe[p + 1] == 0xFB:  # idiv bx: ax \ bx -> ax (rem in dx)
         ops.append((p, "idivbx"))
         p += 2
+        return p
+    if b == 0xF7 and exe[p + 1] == 0x3E:  # idiv word [disp16]
+        ops.append((p, "idiv_m", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4
         return p
     if b == 0xF7 and exe[p + 1] == 0xEB:  # imul bx (reg-reg combine)
         ops.append((p, "imulbx"))
@@ -398,6 +702,214 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "cmpax_m", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4
         return p
+    if b == 0x0B and exe[p + 1] == 0xC0:  # or ax,ax: sign test of a just-loaded
+        ops.append((p, "orax_self"))  # value with no memory write -- the
+        p += 2  # computed-STEP FOR-NEXT continuation gate (step's sign is
+        return p  # unknown at compile time, so both ascending/descending
+        # comparisons are emitted and this picks one at runtime;
+        # wild menu.exe/stat.exe, q_forvarstep)
+    if b == 0x03 and exe[p + 1] == 0x46:  # add ax, [bp+d8]: fold a LOCAL int
+        ops.append((p, "addax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # into ax (witnessed q_loccmp)
+        return p
+    if b == 0x2B and exe[p + 1] == 0x46:  # sub ax,[bp+d8]: normalize a
+        ops.append((p, "subax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # rank-1 whole-array SUB parameter by its lower-bound cell
+        return p  # (probe arrayparam6; wild zip.exe)
+    if b == 0x23 and exe[p + 1] == 0x46:  # and ax, [bp+d8]: bitwise fold of a
+        ops.append((p, "andax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # LOCAL int, the bp-relative sibling of andax_m (wild filepatc.exe)
+        return p
+    if b == 0x3B and exe[p + 1] == 0x46:  # cmp ax, [bp+d8]: relational value
+        ops.append((p, "cmpax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # against a LOCAL int (witnessed q_loccmp)
+        return p
+    if b == 0x3B and exe[p + 1] == 0x86:  # cmp ax,[bp+disp16]: large LOCAL
+        ops.append((p, "cmpax_bp", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # relational operand (wild cleanup/reformat)
+        return p
+    if b == 0x3B and exe[p + 1] == 0xC3:  # cmp ax, bx: integer relational where
+        ops.append((p, "cmpax_bx"))  # both sides are ax-computed -- source RHS
+        p += 2  # evaluates first and shuttles to bx (witnessed t1_cmpax)
+        return p
+    if b == 0x39 and exe[p + 1] == 0x06:  # cmp [disp16], ax: the integer FOR
+        ops.append((p, "cmpm_ax", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # test with a VARIABLE limit (witnessed t1_fori)
+        return p
+    if b == 0x39 and exe[p + 1] == 0x46:  # cmp [bp+d8], ax: the LOCAL-frame
+        ops.append((p, "cmpm_ax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # mirror of cmpm_ax (a LOCAL int FOR test with a VARIABLE
+        return p  # limit, wild bmaster.exe/ifi.exe)
+    if b == 0x26 and exe[p + 1] == 0x3B and exe[p + 2] == 0x04:  # cmp ax, es:[si]:
+        ops.append((p, "far_cmpax_si"))  # relational against a by-ref param
+        p += 3  # (witnessed t1_cmpfar)
+        return p
+    if b == 0x26 and exe[p + 1] == 0x89 and exe[p + 2] == 0x06:
+        # mov es:[disp16], ax: direct element store in a runtime array whose
+        # segment is loaded from the allocator's current-array cell.  The
+        # constant-bound `$DYNAMIC` form uses this topology (t1_dynconstnum);
+        # it is deliberately separate from the indexed ES:[SI] family.
+        ops.append((p, "far_movm_ax_disp", struct.unpack_from("<H", exe, p + 3)[0]))
+        p += 5
+        return p
+    if b == 0x3B and exe[p + 1] == 0x04:  # cmp ax, [si]: relational against a
+        ops.append((p, "cmpax_si"))  # computed static int-array element
+        p += 2  # (wild number.exe)
+        return p
+    if b == 0x26 and exe[p + 1] == 0x03 and exe[p + 2] == 0x04:  # add ax, es:[si]:
+        ops.append((p, "far_addax_si"))  # arithmetic fold of a by-ref int
+        p += 3  # param, e.g. `N% + 1` (witnessed t1_local2)
+        return p
+    if b == 0x26 and exe[p + 1] == 0x2B and exe[p + 2] == 0x04:  # sub ax, es:[si]:
+        ops.append((p, "far_subax_si"))  # subtractive fold of a by-ref int
+        p += 3  # param, mem on the right like subax_m (wild bmaster.exe/ifi.exe)
+        return p
+    if b == 0x03 and exe[p + 1] == 0x04:  # add ax, [si]: arithmetic fold of a
+        ops.append((p, "addax_si"))  # computed static int-array element
+        p += 2  # e.g. `ARRAY%(i) + 1` (wild number.exe)
+        return p
+    if b == 0x2B and exe[p + 1] == 0x04:  # sub ax, [si]: subtractive fold of
+        ops.append((p, "subax_si"))  # a computed static int-array element,
+        p += 2  # mem on the right like subax_m (wild hebrew.exe)
+        return p
+    if b == 0x26 and exe[p + 1] == 0xF7 and exe[p + 2] == 0x2C:  # imul word es:[si]:
+        ops.append((p, "far_imulax_si"))  # multiplicative fold of a by-ref
+        p += 3  # int param, e.g. `A% * B%` (witnessed q_byref_imul)
+        return p
+    if b == 0xF7 and exe[p + 1] == 0x2C:  # imul word [si]: multiplicative fold
+        ops.append((p, "imul_si"))  # of a computed static int-array element
+        p += 2  # e.g. `ARRAY1%(k) * ARRAY2%(i,j)` (wild grdscn.exe, q_imulsi2)
+        return p
+    if b == 0x26 and exe[p + 1] == 0x8B and exe[p + 2] == 0x04:  # mov ax, es:[si]:
+        ops.append((p, "far_movax_si"))  # plain read of a by-ref int param
+        p += 3  # into ax, e.g. as an expression's first term (t1_byref1)
+        return p
+    if b == 0x8B and exe[p + 1] == 0x04:  # mov ax, [si]: the read half of a
+        ops.append((p, "movax_si"))  # computed static int-array element
+        p += 2  # index chain (shl si/addsi), sibling of movm_ax_si's write
+        return p  # (wild number.exe)
+    if b == 0x26 and exe[p + 1] == 0x23 and exe[p + 2] == 0x04:  # and ax, es:[si]
+        ops.append((p, "far_andax_si"))  # bitwise fold of a by-ref int param
+        p += 3  # (t1_byref1)
+        return p
+    if b == 0x26 and exe[p + 1] == 0x0B and exe[p + 2] == 0x04:  # or ax, es:[si]
+        ops.append((p, "far_orax_si"))  # bitwise OR fold of a by-ref int
+        p += 3  # param, the OR sibling of far_andax_si (wild pwinst.exe)
+        return p
+    if b == 0x26 and exe[p + 1] == 0x01 and exe[p + 2] == 0x04:  # add es:[si], ax:
+        ops.append((p, "far_addm_ax_si"))  # compound-store add into a by-ref
+        p += 3  # int param, e.g. `A% = A% + 1` in the callee (witnessed q_fwd)
+        return p
+    if b == 0x26 and exe[p + 1] == 0x29 and exe[p + 2] == 0x04:  # sub es:[si], ax:
+        ops.append((p, "far_subm_ax_si"))  # compound-store subtract into a
+        p += 3  # by-ref int param, e.g. `A% = A% - <expr>` (wild bmaster.exe)
+        return p
+    if b == 0x26 and exe[p + 1] == 0x89 and exe[p + 2] == 0x04:  # mov es:[si], ax:
+        ops.append((p, "far_movm_ax_si"))  # write ax into a by-ref int param
+        p += 3  # (t1_byref1)
+        return p
+    if (
+        b == 0x26 and exe[p + 1] == 0xC7 and exe[p + 2] == 0x04
+    ):  # mov word es:[si], imm16: write a constant into a by-ref int param
+        ops.append((p, "far_movm_imm_si", struct.unpack_from("<h", exe, p + 3)[0]))
+        p += 5  # (t1_byref1)
+        return p
+    if b == 0x26 and exe[p + 1] == 0xFF and exe[p + 2] == 0x04:  # inc word es:[si]:
+        ops.append((p, "far_inc_si"))  # FOR-NEXT increment of a by-ref int
+        p += 3  # param used directly as the loop var (wild bmaster.exe/ifi.exe)
+        return p
+    if b == 0x26 and exe[p + 1] == 0xFF and exe[p + 2] == 0x0C:  # dec word es:[si]:
+        ops.append((p, "far_dec_si"))  # descending sibling of far_inc_si, the
+        p += 3  # STEP -1 FOR-NEXT decrement of a by-ref int loop var
+        return p  # (wild bmaster.exe/ifi.exe)
+    if b == 0x26 and exe[p + 1] == 0x39 and exe[p + 2] == 0x04:  # cmp es:[si], ax:
+        ops.append((p, "far_cmpm_ax_si"))  # the far mem-first sibling of
+        p += 3  # cmpm_ax/cmpm_ax_bp -- a by-ref int param's own FOR test with
+        return p  # a VARIABLE limit (wild bmaster.exe/ifi.exe)
+    if b == 0x8B and exe[p + 1] == 0x46:  # mov ax, [bp+disp8]: LOCAL int read
+        ops.append((p, "movax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        p += 3  # (t1_byref1)
+        return p
+    if b == 0x8B and exe[p + 1] == 0x86:  # mov ax,[bp+disp16]: large LOCAL
+        ops.append((p, "movax_bp", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # read (wild cleanup/reformat)
+        return p
+    if b == 0x26 and exe[p + 1] == 0x8B and exe[p + 2] == 0x07:  # mov ax, es:[bx]:
+        ops.append((p, "far_movax_bx"))  # SWAP-of-array-elements tail: read the
+        p += 3  # first elem via a near-array's ES-aliased address (q_arrswap)
+        return p
+    if b == 0x8B and exe[p + 1] == 0x07:  # mov ax, [bx]: reverse SWAP tail
+        ops.append((p, "movax_bx"))
+        p += 2
+        return p
+    if b == 0x87 and exe[p + 1] == 0x04:  # xchg ax, [si]: SWAP-of-array-elements
+        ops.append((p, "xchgsi"))  # tail, swap ax with the second (near) elem
+        p += 2  # (q_arrswap)
+        return p
+    if b == 0x26 and exe[p + 1] == 0x87 and exe[p + 2] == 0x04:
+        ops.append((p, "far_xchgsi"))
+        p += 3
+        return p
+    if b == 0x89 and exe[p + 1] == 0x07:  # mov [bx], ax: reverse SWAP tail
+        ops.append((p, "movm_ax_bx"))
+        p += 2
+        return p
+    if b == 0x8B and exe[p + 1] == 0x47 and exe[p + 2] == 2:
+        ops.append((p, "movax_bx2"))
+        p += 3
+        return p
+    if b == 0x26 and exe[p + 1] == 0x87 and exe[p + 2] == 0x44 and exe[p + 3] == 2:
+        ops.append((p, "far_xchgsi2"))
+        p += 4
+        return p
+    if b == 0x89 and exe[p + 1] == 0x47 and exe[p + 2] == 2:
+        ops.append((p, "movm_ax_bx2"))
+        p += 3
+        return p
+    if b == 0x8B and exe[p + 1] == 0x47 and exe[p + 2] == 4:
+        ops.append((p, "movax_bx4"))
+        p += 3
+        return p
+    if b == 0x26 and exe[p + 1] == 0x87 and exe[p + 2] == 0x44 and exe[p + 3] == 4:
+        ops.append((p, "far_xchgsi4"))
+        p += 4
+        return p
+    if b == 0x89 and exe[p + 1] == 0x47 and exe[p + 2] == 4:
+        ops.append((p, "movm_ax_bx4"))
+        p += 3
+        return p
+    if b == 0x8B and exe[p + 1] == 0x47 and exe[p + 2] == 6:
+        ops.append((p, "movax_bx6"))
+        p += 3
+        return p
+    if b == 0x26 and exe[p + 1] == 0x87 and exe[p + 2] == 0x44 and exe[p + 3] == 6:
+        ops.append((p, "far_xchgsi6"))
+        p += 4
+        return p
+    if b == 0x89 and exe[p + 1] == 0x47 and exe[p + 2] == 6:
+        ops.append((p, "movm_ax_bx6"))
+        p += 3
+        return p
+    if b == 0x26 and exe[p + 1] == 0x89 and exe[p + 2] == 0x07:  # mov es:[bx], ax:
+        ops.append((p, "far_movm_ax_bx"))  # SWAP-of-array-elements tail, store
+        p += 3  # the swapped value back into the first (ES-aliased) elem
+        return p  # (q_arrswap)
+    if (
+        b == 0x26 and exe[p + 1] == 0x8B and exe[p + 2] == 0x47 and exe[p + 3] == 2
+    ):  # mov ax, es:[bx+2]: SWAP-of-array-elements tail, high word of a
+        ops.append((p, "far_movax_bx2"))  # 4-byte (SINGLE) element -- second
+        p += 4  # word-swap round after the low-word one (wild number.exe)
+        return p
+    if b == 0x87 and exe[p + 1] == 0x44 and exe[p + 2] == 2:  # xchg ax, [si+2]:
+        ops.append((p, "xchgsi2"))  # high-word half of a 4-byte element swap
+        p += 3  # (wild number.exe)
+        return p
+    if (
+        b == 0x26 and exe[p + 1] == 0x89 and exe[p + 2] == 0x47 and exe[p + 3] == 2
+    ):  # mov es:[bx+2], ax: high-word store, closing a 4-byte element swap
+        ops.append((p, "far_movm_ax_bx2"))  # (wild number.exe)
+        p += 4
+        return p
     return None
 
 
@@ -436,6 +948,14 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
         ops.append((p, "bchk_idx", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4
         return p
+    if vec == 0x94:  # Bounds descriptor setup for a SUB-local dynamic array:
+        ops.append((p, "bchk_base_bp", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # BP-relative sibling of DGROUP vector 91
+        return p
+    if vec == 0x96:  # checked index + SI transfer for that LOCAL descriptor
+        ops.append((p, "bchk_idx_bp", struct.unpack_from("<H", exe, p + 2)[0]))
+        p += 4  # operand is descriptor base + 6 (cleanup/crossref/reformat)
+        return p
     if vec == 0x97:  # TRON trace hook: CD 97 <lineno u16>,
         ops.append(
             (
@@ -450,6 +970,25 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
         ops.append((p, "fstsw"))
         p += 2
         return p
+    if vec == 0x8C and exe[p + 2] in (0xE9, 0xEB):
+        # RETURN <line>: the runtime vector unwinds the active GOSUB/event
+        # frame, then a near jump selects the requested line
+        # (t1_returnline; wild baby/crossref/help/prtguide/readme).
+        if exe[p + 2] == 0xE9:
+            target = p + 5 + struct.unpack_from("<h", exe, p + 3)[0]
+            size = 5
+        else:
+            target = p + 4 + struct.unpack_from("<b", exe, p + 3)[0]
+            size = 4
+        ops.append((p, "return_to", target))
+        p += size
+        return p
+    if vec == 0xCD:  # short-string constructor: builds a 1-char string desc
+        ops.append((p, "shortstr"))  # from the packed (char<<8 | len=1) word
+        p += 2  # just stored at the fixed scratch cell [002E] -- the
+        return p  # compile-time-known mode keyword of `OPEN f$ FOR mode
+        # AS #n` (OUTPUT/INPUT/APPEND/RANDOM/BINARY desugar to a 1-char
+        # mode string this way; wild nvginst.exe et al., probe q_openfor)
     if vec == 0x3D:  # emulated FWAIT (IDX% idiom)
         ops.append((p, "fwait"))
         p += 2
@@ -464,8 +1003,13 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
         0xC0,
         0xCA,
         0xCB,  # file/USING legs
+        0xCC,  # USING string item (witnessed t1_using)
+        0xC1,  # PRINT comma zone advance (witnessed t1_pcomma)
+        0xC2,  # LPRINT comma zone advance (wild billadd/prtguide/rs)
+        0xC3,  # PRINT# comma zone advance (witnessed t1_fileint)
         0xBC,
         0xB9,
+        0xBF,  # LPRINT string item (witnessed t1_lpstr)
     ):  # LPRINT item / newline
         ops.append((p, "rt", vec))
         p += 2
@@ -490,6 +1034,18 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
         ops.append((p, "far_spush"))
         p += 2
         return p
+    if vec == 0x9E:  # push string at [bp+si]: DEF FN string param (t1_fnstr)
+        ops.append((p, "spush_bp"))
+        p += 2
+        return p
+    if vec == 0x9F:  # push a string FN call's result descriptor (t1_fnstr)
+        ops.append((p, "fnres_spush"))
+        p += 2
+        return p
+    if vec == 0xA2:  # pop string store to [bp+si]: FN result (si=0) or a
+        ops.append((p, "strassign_bp"))  # staged string call arg (t1_fnstr)
+        p += 2
+        return p
     if vec == 0xA1:  # far string element assign
         ops.append((p, "far_strassign"))
         p += 2
@@ -500,6 +1056,10 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
         return p
     if vec == 0xD3:  # free a string CALL-arg temp after the call
         ops.append((p, "str_temp_free"))
+        p += 2
+        return p
+    if vec == 0xD4:  # push a whole-array descriptor as a CALL argument
+        ops.append((p, "arg_push_array"))
         p += 2
         return p
     if vec == 0xA4:  # LSET target$ = source$
@@ -555,6 +1115,10 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
             ops.append((p, "fn_axfp", "FRE"))
             p += 3
             return p
+        if sub == 0x26:  # LOF(n): filenum in ax, FP-stack result (a file's
+            ops.append((p, "fn_axfp", "LOF"))  # length can exceed 16 bits,
+            p += 3  # unlike EOF's boolean; wild nvginst.exe, probe q_lof)
+            return p
         if sub == 0x16:  # FRE(s$): string arg, FP result
             ops.append((p, "fre_str"))
             p += 3
@@ -577,6 +1141,10 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
             ops.append((p, "str2num", _ED_STR_SUBS[sub]))
             p += 3
             return p
+        if sub == 0x1E:  # INSTR(start, haystack$, needle$): start in ax
+            ops.append((p, "instr3"))
+            p += 3
+            return p
         if sub in _FNAX2_SUBS:  # two-FP-arg ax intrinsic (POINT)
             ops.append((p, "fn_ax2", _FNAX2_SUBS[sub]))
             p += 3
@@ -597,6 +1165,10 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
             ops.append((p, "fn_screen"))
             p += 3
             return p
+        if sub == 0x44:  # SCREEN(row, col, color): row cx, col bx, color ax
+            ops.append((p, "fn_screen_color"))
+            p += 3
+            return p
         if sub not in _FNAX_SUBS:
             raise ValueError(f"unhandled INT ED sub {sub:02x} at {p:#x}")
         ops.append((p, "fn_ax", _FNAX_SUBS[sub]))
@@ -612,9 +1184,11 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
         p += 2
         return p
     if vec in (0x8D, 0x8E):  # value-returning FN call (single/multi-line)
-        off = struct.unpack_from("<H", exe, p + 3)[0]  # CD 8D <sub> <off16> <seg16>
+        off, seg = struct.unpack_from(  # CD 8D <sub> <off16> <seg16>
+            "<HH", exe, p + 3
+        )
         ops.append(
-            (p, "fn_call", off + start)
+            (p, "fn_call", off + seg * 16 + start)
         )  # seg-relative off rebased like far_call
         p += 7
         return p
@@ -626,6 +1200,10 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
         ops.append((p, "cursor"))
         p += 2
         return p
+    if vec == 0xCE:  # LOCATE's cursor start/stop args (bx, ax)
+        ops.append((p, "cursor_shape"))
+        p += 2
+        return p
     if (
         vec == 0x3C and exe[p + 2] == 0x59 and exe[p + 3] == 0x1C
     ):  # FSTP [ss:si]: stage literal arg
@@ -634,6 +1212,10 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
         return p
     if vec == 0x3E:  # transcendental dispatcher:
         sel = exe[p + 2]  # CD 3E <selector>, FP-stack unary
+        if sel == 0x14:  # ^ : TB 1.0's exponentiation (TB 1.1 uses ED sub
+            ops.append((p, "fpow"))  # 3A/fpow instead; same push order,
+            p += 3  # same "fpow" op kind -- wild banker.exe/kinetics.exe,
+            return p  # probe q_pow
         if sel not in _TRANSCEND:
             raise ValueError(f"unhandled INT 3E selector {sel:02x} at {p:#x}")
         ops.append((p, "fn", _TRANSCEND[sel]))
@@ -642,14 +1224,114 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
     return None
 
 
+def _try_inline_rescue(exe: bytes, ops: list[tuple[Any, ...]]) -> int | None:
+    """After a scan failure, check whether we're stuck inside opaque code.
+
+    The general case is a `SUB ... INLINE` body: the compiler copies
+    $INLINE's byte list verbatim with no
+    proc_enter framing at all, then auto-appends a bare far RET (CB) --
+    Appendix C of the handbook, confirmed byte-for-byte via the oracle
+    (probe q_shriek). The raw bytes are arbitrary and will often partially
+    match real opcodes before finally failing outright (q_shriek: `BA 00
+    07` legitimately scans as `mov dx,0700h` before `E4`, `IN AL,61h`, has
+    no TB equivalent) -- so this only fires once the ordinary scan has
+    already given up, keeping every other gap exactly as fail-loud as before.
+
+    Finds the MOST RECENT `jmp` op; if every op scanned since sits before
+    that jmp's target and the byte right before the target is a bare 0xCB,
+    treats [jmp_end, target-1) as one opaque `inline_sub` blob, truncates
+    the bogus partial-match ops back to just after the jmp, and returns the
+    resume position (the jmp's target). Returns None (no rescue -- the
+    original failure should propagate) otherwise. One fully fingerprinted
+    every other proc-enter-shaped body remains a hard failure. Exact framed
+    helpers are classified before normal scanning by ``find_opaque_helpers``."""
+    for i in range(len(ops) - 1, -1, -1):
+        if ops[i][1] != "jmp":
+            continue
+        target = ops[i][2]
+        if not all(o[0] < target for o in ops[i + 1 :]):
+            return None
+        if exe[target - 1] != 0xCB:
+            return None
+        body_start = ops[i][0] + 3  # jmp is always `e9 rel16`, 3 bytes
+        if exe[body_start] == 0x55 and exe[body_start + 1 : body_start + 3] in (
+            b"\x8b\xec",
+            b"\x89\xe5",
+        ):  # push bp; mov bp,sp (either encoding): a genuine proc-enter
+            j = target - 2
+            while j > body_start and exe[j] == 0xCC:
+                j -= 1  # event-trap poll hooks sit between the pop and the ret
+            if exe[j] == 0x5D and not (i and ops[i - 1][1] == "inline_sub"):
+                return None  # `pop bp; [hooks;] retf`: a COMPLETE framed
+                # procedure, not $INLINE -- false positives witnessed in wild
+                # CVT2TB.EXE (whose own unrelated gap-19 construct ends in a
+                # legitimate 5D CB that also satisfies the bare-CB check above)
+                # and, under event trapping where the epilogue is 5D CC CB, in
+                # wild phone.exe's seven gap-19-family framed helpers.
+                #
+                # This tail is genuinely ambiguous and cannot be resolved from
+                # the bytes: TB APPENDS the terminating CB, so a $INLINE list
+                # ending in a bare `pop bp` (TBWINDOW's Openbox does exactly
+                # that, leaning on the appended ret) produces the same 5D CB as
+                # a framed epilogue. What does separate them is the chain: an
+                # UNAMBIGUOUS inline body immediately before -- one whose own
+                # tail is not 5D, so it needed no adjudication -- means the
+                # declaration region is provably the user's, and the blobs its
+                # skip-jmps bracket are theirs too. TBWINDOW seeds that chain
+                # with Getftblptr, whose frame-table data ends C4 CB; phone.exe
+                # and CVT2TB.EXE have no such seed, so they stay loud.
+            # Anything else ending in the bare CB is an inline body that merely
+            # OPENS with the prologue shape. TB appends that CB itself, so a
+            # `$INLINE` list ending in its own `retf` gives `CB CB` and one
+            # ending in data gives `<data> CB`; neither can be a framed
+            # epilogue (`pop bp; retf N` ends with the immediate). Witnessed
+            # t1_inlinebp / t1_inlinedata, whose lists are the `push bp; mov
+            # bp,sp; les di,[bp+N]; pop bp; retf` shape TBWINDOW's Getftblptr
+            # uses, the second with the frame-table data that follows it inside
+            # the same SUB (wild tbd73.exe, confirmed against TBW73.INC).
+        del ops[i + 1 :]
+        ops.append((body_start, "inline_sub", exe[body_start : target - 1]))
+        return target
+    return None
+
+
 def _scan(
     exe: bytes, start: int, dia: Dialect = TB11, commits: set[int] | None = None
 ) -> list[tuple[Any, ...]]:
-    """Pass 1: pure instruction decode, prologue to END. Each op is (addr, kind, *args);
-    no DS knowledge needed. Raises on anything outside the calibrated vocabulary."""
+    """Pass 1 entry point: runs `_scan_pass`, rescuing explicitly recognized
+    opaque bodies (see `_try_inline_rescue`) and resuming instead of failing."""
     p = start + 3
     ops: list[tuple[Any, ...]] = []
+    opaque_helpers = find_opaque_helpers(exe, start, OPAQUE_HELPERS)
+    while True:
+        try:
+            return _scan_pass(exe, start, dia, commits, ops, p, opaque_helpers)
+        except ValueError:
+            resume = _try_inline_rescue(exe, ops)
+            if resume is None:
+                raise
+            p = resume
+
+
+def _scan_pass(
+    exe: bytes,
+    start: int,
+    dia: Dialect,
+    commits: set[int] | None,
+    ops: list[tuple[Any, ...]],
+    p: int,
+    opaque_helpers: dict[int, tuple[int, bytes, tuple[int, ...]]],
+) -> list[tuple[Any, ...]]:
+    """The actual linear decode, prologue to END. Each op is (addr, kind,
+    *args); no DS knowledge needed. Raises on anything outside the
+    calibrated vocabulary. `ops`/`p` are pre-seeded by `_scan` so a rescued
+    SUB...INLINE body can resume a failed pass instead of restarting it."""
     while p + 1 < len(exe):
+        if helper := opaque_helpers.get(p):
+            target, body, param_offsets = helper
+            ops.append((p, "opaque_helper", body, param_offsets))
+            p = target
+            continue
         b = exe[p]
         sw = _try_swap(exe, p)
         if sw is not None:
@@ -663,7 +1345,7 @@ def _scan(
 
         if b == 0x89 and (exe[p + 1] & 0xC0) == 0xC0:  # mov reg,reg: the far-index
             rm, rg = exe[p + 1] & 7, (exe[p + 1] >> 3) & 7  # spill protocol
-            names = {0: "ax", 1: "cx", 3: "bx", 6: "si"}
+            names = {0: "ax", 1: "cx", 3: "bx", 6: "si", 7: "di"}
             if rm in names and rg in names:
                 ops.append((p, "movrr", names[rm], names[rg]))
                 p += 2
@@ -671,6 +1353,30 @@ def _scan(
         np = _scan_direct2(exe, p, b, ops)
         if np is not None:
             p = np
+            continue
+
+        if b == 0xEA:  # far JMP ptr16:16; segment-relative code target
+            off, seg = struct.unpack_from("<HH", exe, p + 1)
+            if off == 0 and seg == 0:
+                # Fixed runtime handoff used by the legacy cleanup/event tail.
+                ops.append((p, "epilogue"))
+                return ops
+            if off == 0:
+                # $SEGMENT: the metacommand closes the current code segment and
+                # continues the program in the next paragraph-aligned one, which
+                # the compiler reaches with a far jump to its offset 0. Code, not
+                # a handoff -- scanning has to follow it or everything the
+                # metacommand moved (TBWINDOW puts every SUB there) is silently
+                # dropped (probe t1_segment; wild tbd73.exe).
+                ops.append((p, "segjmp", start + seg * 16, seg))
+                p = start + seg * 16
+                continue
+            # Segment-zero calls use the user-code origin; relocated code
+            # segments use the preceding byte as their logical origin (the
+            # same one-byte convention seen in wild far-call targets).
+            target = (start if seg == 0 else start - 1) + off
+            ops.append((p, "jmpf", target, seg, off))
+            p += 5
             continue
 
         if b == 0x9B and 0xD8 <= exe[p + 1] <= 0xDF:
@@ -710,8 +1416,16 @@ def _scan(
                 ops.append((p, "defseg_set"))
                 p += 3
                 continue
+            if sub == 0x86:  # PALETTE (bare form: reset to default palette,
+                ops.append((p, "palette_reset"))  # zero operands; wild
+                p += 3  # rsltest.exe `7020 PALETTE`)
+                continue
             if sub == 0x88:  # PALETTE attr(bx), color(ax)
                 ops.append((p, "palette"))
+                p += 3
+                continue
+            if sub == 0x8A:  # PALETTE USING integer-array element at ES:SI
+                ops.append((p, "palette_using"))
                 p += 3
                 continue
             if sub == 0xEA:  # VIEW commit (+ flag byte)
@@ -767,14 +1481,19 @@ def _scan(
                 ops.append((p, "data_read_str"))
                 p += 3
                 continue
-            if sub == 0x64:  # LINE INPUT <prompt_desc> 40
+            if sub == 0x64:  # LINE INPUT <prompt_desc> flags
                 d16 = struct.unpack_from("<H", exe, p + 3)[0]
-                if exe[p + 5] != 0x40:
+                flags = exe[p + 5]
+                if flags not in (0x40, 0xC0):
                     raise ValueError(
-                        f"LINE INPUT trailing byte {exe[p + 5]:02x} at {p:#x}"
+                        f"LINE INPUT trailing byte {flags:02x} at {p:#x}"
                     )
-                ops.append((p, "line_input", d16))
+                ops.append((p, "line_input", d16, flags == 0xC0))
                 p += 6
+                continue
+            if sub == 0x66:  # LINE INPUT #n, var$: no prompt, [0060]=n
+                ops.append((p, "line_input_file"))
+                p += 3
                 continue
             if sub == 0x82:  # OPEN
                 ops.append((p, "open"))
@@ -792,6 +1511,10 @@ def _scan(
                 ops.append((p, "close"))
                 p += 3
                 continue
+            if sub == 0x16:  # bare CLOSE: close all channels (witnessed t1_close)
+                ops.append((p, "close_all"))
+                p += 3
+                continue
             if sub == 0x2C:  # runtime DIM: begin bracket
                 ops.append((p, "dim_begin"))
                 p += 3
@@ -800,8 +1523,24 @@ def _scan(
                 ops.append((p, "dim_end"))
                 p += 3
                 continue
-            if sub == 0x36:  # ERASE (DIM-style prefix)
-                ops.append((p, "erase"))
+            if sub in (0x36, 0x38):  # ERASE (DIM-style prefix). 0x36 frees a
+                # DYNAMIC array's heap block; 0x38 is the STATIC-array routine,
+                # which re-initializes in place -- the compiler picks the vector
+                # from the array's own declaration (a variable bound makes it
+                # dynamic, a literal one static), so both lift to the same
+                # ir.Erase and the emitted DIM regenerates the right one
+                # (probe t1_erasestatic; wild tbd73.exe's `ERASE recarr$` after
+                # `DIM recarr$(5000)`, and gap 33's catalog/football/refund/
+                # varamort group).
+                ops.append((p, "erase" if sub == 0x36 else "erase_static"))
+                p += 3  # kept distinct because only the DYNAMIC form's movsi
+                # target is a runtime slot block -- the static form's is an
+                # ordinary static array slot, and layout keys on that.
+                continue
+            if sub == 0x3A:  # implicit free of a LOCAL DYNAMIC array's heap
+                # block at SUB exit (movsi <handle disp> precedes, no BASIC
+                # source spelling -- probe q_localarr)
+                ops.append((p, "local_arr_free"))
                 p += 3
                 continue
             if sub == 0x60:  # KILL file$
@@ -814,6 +1553,10 @@ def _scan(
                 continue
             if sub == 0x44:  # FILES f$ (pops spec string)
                 ops.append((p, "files"))
+                p += 3
+                continue
+            if sub == 0x42:  # bare FILES (no string operand)
+                ops.append((p, "files_bare"))
                 p += 3
                 continue
             if sub == 0x6E:  # NAME a$ AS b$ (pops two strings)
@@ -838,6 +1581,11 @@ def _scan(
                 continue
             if sub == 0xC2:  # RMDIR p$ (pops pushed path)
                 ops.append((p, "rmdir"))
+                p += 3
+                continue
+            if sub == 0xC4:  # RUN file$ (pops pushed name; distinct from bare
+                # RUN's raw jmp -- loads and runs a different program)
+                ops.append((p, "run_file"))
                 p += 3
                 continue
             if sub == 0xCE:  # SHELL cmd$ (pops pushed cmd; empty = bare)
@@ -882,18 +1630,38 @@ def _scan(
                 ops.append((p, "width"))
                 p += 3
                 continue
+            if sub == 0xEE:  # WIDTH device$, n: device string pushed, n in ax
+                # (t1_widthdev; wild cal.exe/cal87.exe/kinetics.exe)
+                ops.append((p, "width_dev"))
+                p += 3
+                continue
+            if sub == 0xF0:  # WIDTH #filenum,n: [0060] channel, n in ax
+                ops.append((p, "width_file"))  # (t1_widthfile; wild
+                p += 3  # cleanup.exe/reformat.exe)
+                continue
             if sub == 0x54:  # KEY ON
                 ops.append((p, "key_on"))
+                p += 3
+                continue
+            if sub == 0x58:  # KEY n, s$: n in ax, macro on sstack (t1_key)
+                ops.append((p, "key_macro"))
                 p += 3
                 continue
             if sub == 0x52:  # KEY OFF
                 ops.append((p, "key_off"))
                 p += 3
                 continue
-            if sub == 0xC6:  # SCREEN n (fixed tag 0x08; mode from [0x88])
-                if p + 3 >= len(exe) or exe[p + 3] != 0x08:
+            if sub == 0xC6:  # SCREEN m[,b][,a][,v]: trailing presence mask
+                # 08 mode / 04 burst / 02 apage / 01 vpage (t1_screenb/p)
+                if p + 3 >= len(exe) or exe[p + 3] not in (
+                    0x03,  # SCREEN ,,apage,vpage (cleanup/reformat)
+                    0x08,
+                    0x0C,
+                    0x0E,
+                    0x0F,
+                ):
                     raise ValueError(f"SCREEN bad tag at {p:#x}")
-                ops.append((p, "screen"))
+                ops.append((p, "screen", exe[p + 3]))
                 p += 4
                 continue
             if sub == 0xF4:  # WRITE numeric item
@@ -920,9 +1688,17 @@ def _scan(
                 ops.append((p, "get"))
                 p += 3
                 continue
+            if sub == 0x4C:  # GET$ #n, count, string$
+                ops.append((p, "get_str"))
+                p += 3
+                continue
             if sub == 0xA8:  # PUT #n, rec
                 ops.append((p, "put"))
                 p += 3
+                continue
+            if sub == 0xDC:  # PAINT tile variant: tile$ on sstack + flag byte
+                ops.append((p, "paint_tile", exe[p + 3]))  # (witnessed t1_paintt)
+                p += 4
                 continue
             if sub == 0xCA:  # SEEK #n, pos
                 ops.append((p, "seek"))
@@ -931,6 +1707,10 @@ def _scan(
             if sub == 0x06:  # BLOAD f$, offset
                 ops.append((p, "bload"))
                 p += 3
+                continue
+            if sub == 0x04:  # BLOAD f$: the bare, no-offset form (distinct
+                ops.append((p, "bload0"))  # compiled shape, not merely a
+                p += 3  # default arg; wild varamort.exe, probe q_bload)
                 continue
             if sub == 0x08:  # BSAVE f$, offset, length
                 ops.append((p, "bsave"))
@@ -1010,6 +1790,14 @@ def _scan(
                 ops.append((p, "timeset"))
                 p += 3
                 continue
+            if sub == 0x50:  # IOCTL #n, s$: filenum via the [0060] cell,
+                ops.append((p, "ioctl"))  # string pushed (t1_ioctl)
+                p += 3
+                continue
+            if sub == 0xAC:  # PUT$ #n, s$: filenum via the [0060] cell,
+                ops.append((p, "put_str"))  # string pushed (t1_putstr)
+                p += 3
+                continue
             raise ValueError(f"unhandled INT EC sub {sub:02x} at {p:#x}")
         vec = dia.canon_vec(vec)
         np = _scan_int(exe, p, commits, dia, ops, start, vec)
@@ -1054,6 +1842,10 @@ def _scan(
                 ops.append((p, "frndint"))
                 p = mo + 1
                 continue
+            if esc == 0xDE and modrm == 0xD9:  # FCOMPP: both sides FP-computed
+                ops.append((p, "fcompp"))  # (witnessed t1_fcmp)
+                p = mo + 1
+                continue
             if esc == 0xDE and modrm in _POP_OPS_N:  # non-R FSUBP/FDIVP
                 ops.append((p, "popop_n", _POP_OPS_N[modrm]))
                 p = mo + 1
@@ -1067,11 +1859,23 @@ def _scan(
                     (0xD9, 0): "fld_si",
                     (0xD9, 3): "fstp_si",
                     (0xD8, 3): "fcomp_si",
+                    (0xDC, 3): "fcomp_si64",  # m64 compare (double array elem)
+                    (0xDA, 3): "icomp_si32",  # m32 long-int compare: a computed
+                    # LONG (`&`) array element vs. an FP-stack value (mixed-type
+                    # IF/loop test, e.g. `IF A&(J%) > 5 THEN`; the [si] sibling
+                    # of icomp's disp16 scalar form; wild bmaster.exe/ifi.exe,
+                    # probe q_licomp)
                     (0xDD, 0): "fld_si64",
                     (0xDD, 3): "fstp_si64",
                     (0xDB, 0): "fild_si32",
                     (0xDB, 3): "fstp_si32",
-                }.get((esc, reg))
+                    (0xDF, 0): "fild_si",  # m16 int onto the FP stack, e.g. a
+                    (0xDE, 1): "imulax_si",  # FIMUL m16 by-ref integer
+                    (0xDE, 3): "icomp_si",  # m16 int compare: a computed
+                    # int-array element vs. an FP-stack value (mixed-type
+                    # IF/loop test; the [si] sibling of icomp's disp16 form
+                    # and icomp_si32's LONG form, wild hebrew.exe)
+                }.get((esc, reg))  # by-ref int param for PRINT (t1_byref1)
                 if kind:
                     ops.append((p, pre + kind))
                     p = mo + 1
@@ -1080,8 +1884,24 @@ def _scan(
                     ops.append((p, pre + "fold_si", _FOLD_OPS[reg]))
                     p = mo + 1
                     continue
+                if esc == 0xDC and reg in _FOLD_OPS:
+                    ops.append((p, pre + "fold64_si", _FOLD_OPS[reg]))
+                    p = mo + 1
+                    continue
+                if esc == 0xDC and reg in _FOLD_OPS_N:
+                    ops.append((p, pre + "fold_n64_si", _FOLD_OPS_N[reg]))
+                    p = mo + 1
+                    continue
                 if esc == 0xD8 and reg in _FOLD_OPS_N:
                     ops.append((p, pre + "fold_n_si", _FOLD_OPS_N[reg]))
+                    p = mo + 1
+                    continue
+                if esc == 0xDE and reg in _FOLD_OPS:  # int var/pool-literal
+                    ops.append((p, pre + "ifold_si", _FOLD_OPS[reg]))  # fold
+                    p = mo + 1  # LEFT via a computed index (wild filepatc.exe)
+                    continue
+                if esc == 0xDE and reg in _FOLD_OPS_N:
+                    ops.append((p, pre + "ifold_n_si", _FOLD_OPS_N[reg]))
                     p = mo + 1
                     continue
             if mod == 0 and rm == 6:  # [disp16] operand
@@ -1092,6 +1912,15 @@ def _scan(
                     (0xD9, 0): "fld",  # m32 scalar read
                     (0xD9, 3): "fstp",  # m32 scalar store (assignment)
                     (0xD8, 3): "fcomp",  # m32 compare (IF / loop tests)
+                    (0xDE, 3): "icomp",  # m16 int compare: int var or pool
+                    # literal vs. an FP-stack value (mixed-type IF/loop
+                    # test, e.g. `IF X% > Y THEN`; wild grdscn.exe et al.,
+                    # probe q_icomp)
+                    (0xDA, 3): "icomp32",  # m32 long-int compare: a plain
+                    # LONG (`&`) scalar var or pooled literal vs. an
+                    # FP-stack value (`IF X& > 5.5 THEN`) -- the disp16
+                    # sibling of icomp_si32's [si] form; wild stat.exe,
+                    # probe q_icomp32
                     (0xDD, 0): "fld64",  # m64 load (SELECT CASE selector temp)
                     (0xDD, 3): "fstp64",  # m64 store (SELECT CASE selector temp)
                     (0xDC, 3): "fcomp64",  # m64 compare (SELECT CASE arm test)
@@ -1142,9 +1971,24 @@ def _scan(
                     (0xD9, 0): "fld_bp",
                     (0xD9, 3): "fstp_bp",
                     (0xD8, 3): "fcomp_bp",
-                }.get((esc, reg))
+                    (0xDF, 0): "fild_bp",  # LOCAL int read onto the FP stack
+                    (0xDE, 3): "icomp_bp",  # LOCAL int compare (mixed-type
+                    # IF/loop test against an FP-stack value; the bp-relative
+                    # sibling of icomp/icomp_si32, wild bmaster.exe/ifi.exe)
+                    (0xDD, 0): "fld_bp64",  # DOUBLE LOCAL read (the m64
+                    (0xDD, 3): "fstp_bp64",  # sibling of fld_bp/fstp_bp's
+                    (0xDC, 3): "fcomp_bp64",  # SINGLE m32 forms; fcomp_bp64
+                    # is fcomp_bp's DOUBLE sibling too, wild filepatc.exe)
+                }.get((esc, reg))  # (PRINT of a local int, witnessed t1_local1)
                 if kind:
                     ops.append((p, pre + kind, bp_off))
+                    p = mo + 2
+                    continue
+                if esc == 0xDE and reg in _FOLD_OPS:  # FIADD/FIMUL/FISUB/FIDIV
+                    # m16 [bp+d8]:
+                    # integer BP-frame operand folded as the left side of a
+                    # floating expression (FIMUL: probe_fimul_bp; both: CVT2TB).
+                    ops.append((p, pre + "ifold_bp", _FOLD_OPS[reg], bp_off))
                     p = mo + 2
                     continue
                 if esc == 0xD8 and reg in _FOLD_OPS:
@@ -1155,6 +1999,39 @@ def _scan(
                     ops.append((p, pre + "fold_n_bp", _FOLD_OPS_N[reg], bp_off))
                     p = mo + 2
                     continue
+                if esc == 0xDC and reg in _FOLD_OPS:
+                    # m64 arithmetic fold, LOCAL DOUBLE operand LEFT (the
+                    # DOUBLE sibling of fold_bp's SINGLE m32 form, wild
+                    # filepatc.exe).
+                    ops.append((p, pre + "fold_bp64", _FOLD_OPS[reg], bp_off))
+                    p = mo + 2
+                    continue
+                if esc == 0xDC and reg in _FOLD_OPS_N:
+                    ops.append((p, pre + "fold_n_bp64", _FOLD_OPS_N[reg], bp_off))
+                    p = mo + 2
+                    continue
+            if mod == 2 and rm == 6 and (esc, reg) in ((0xD9, 0), (0xD9, 3)):
+                # fld/fstp dword [bp+disp16]: SINGLE LOCAL beyond the signed
+                # disp8 range (both forms witnessed by cleanup.exe/reformat.exe).
+                bp_off = struct.unpack_from("<H", exe, mo + 1)[0]
+                kind = "fld_bp" if reg == 0 else "fstp_bp"
+                ops.append((p, pre + kind, bp_off))
+                p = mo + 3
+                continue
+            if mod == 2 and rm == 6 and (esc, reg) == (0xD8, 0):
+                # fadd dword [bp+disp16]: large SINGLE LOCAL as the left
+                # operand (wild cleanup.exe/reformat.exe).
+                bp_off = struct.unpack_from("<H", exe, mo + 1)[0]
+                ops.append((p, pre + "fold_bp", "+", bp_off))
+                p = mo + 3
+                continue
+            if mod == 2 and rm == 6 and (esc, reg) == (0xD8, 3):
+                # fcomp dword [bp+disp16]: compare against a large SINGLE
+                # LOCAL (wild cleanup.exe/reformat.exe variable-step FOR).
+                bp_off = struct.unpack_from("<H", exe, mo + 1)[0]
+                ops.append((p, pre + "fcomp_bp", bp_off))
+                p = mo + 3
+                continue
             raise ValueError(
                 f"unhandled FP op esc={esc:02x} modrm={modrm:02x} at {p:#x}"
             )

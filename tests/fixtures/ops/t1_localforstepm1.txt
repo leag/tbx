@@ -1,0 +1,19 @@
+# t1_localforstepm1 dialect=1.1 start=08700
+08703:jmp:34620
+08706:proc_enter
+08709:local_init:3:6
+0871D:mov_bp_imm:6:5
+08722:jmp:34610
+08725:fild_bp:6
+08729:rt:187
+0872B:rt:184
+0872F:dec_bp:6
+08732:cmp_bpi8:6:1
+08736:jcc:125:34597
+08738:proc_ret:6
+0873C:sub_sp:6
+0873F:far_call:34566
+08744:end
+08747:epilogue
+# commits
+0872D

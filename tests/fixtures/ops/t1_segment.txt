@@ -1,0 +1,14 @@
+# t1_segment dialect=1.1 start=08700
+08703:movm_imm:288:1
+08709:far_call:34595
+0870E:end
+08711:segjmp:34592:2
+08720:jmp:34609
+08723:proc_enter
+08726:movsi:308
+08729:rt:156
+0872B:rt:190
+0872D:rt:184
+0872F:proc_ret:0
+08731:epilogue
+# commits

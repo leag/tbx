@@ -1,0 +1,8 @@
+10 OPEN "O", #1, "T.DAT"
+20 PRINT #1, 5, 7
+30 CLOSE
+40 OPEN "I", #1, "T.DAT"
+50 INPUT #1, A%, B%
+60 CLOSE
+70 PRINT A% + B%
+80 END

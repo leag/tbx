@@ -1,0 +1,8 @@
+10 DIM V0$(3,3)
+20 DIM V1%(3,3)
+30 OPEN "TEST.DAT" FOR INPUT AS #1
+40 A% = 1
+50 B% = 1
+60 INPUT #1, V0$(A%,B%), V1%(A%,B%)
+70 CLOSE #1
+80 END

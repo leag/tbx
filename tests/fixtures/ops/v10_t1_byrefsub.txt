@@ -1,0 +1,17 @@
+# v10_t1_byrefsub dialect=1.0 start=070B0
+070B3:jmp:28870
+070B6:proc_enter
+070B9:movax:3
+070BC:arg_ref:6
+070BF:far_subm_ax_si
+070C2:proc_ret:4
+070C6:movm_imm:288:10
+070CC:arg_push_ref:288
+070D1:far_call:28854
+070D6:fild:288
+070DB:rt:187
+070DD:rt:184
+070E1:end
+070E4:epilogue
+# commits
+070DF

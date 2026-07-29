@@ -1,0 +1,2 @@
+10 DEF FNF(A%)=A%*1.5
+20 PRINT FNF(2)

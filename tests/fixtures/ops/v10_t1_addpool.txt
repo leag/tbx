@@ -1,0 +1,20 @@
+# v10_t1_addpool dialect=1.0 start=07160
+07163:movsi:312
+07166:rt:156
+07168:movsi:288
+0716B:strassign
+0716D:movax:1
+07170:movsi:288
+07173:rt:156
+07175:movbxax
+07177:str2num:LEN
+0717A:negax
+0717C:addax_m:316
+07180:locate
+07182:movsi:308
+07185:rt:156
+07187:rt:190
+07189:rt:184
+0718B:end
+0718E:epilogue
+# commits

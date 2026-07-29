@@ -1,0 +1,14 @@
+# t1_varptrs_scalar dialect=1.1 start=08700
+08703:movm_imm:288:1
+08709:movsi:288
+0870C:movdx:150
+0870F:movesdx
+08711:movm_imm:46:517
+08717:movm_es:50
+0871B:movm_si:48
+0871F:shortstr
+08721:movsi:290
+08724:strassign
+08726:end
+08729:epilogue
+# commits

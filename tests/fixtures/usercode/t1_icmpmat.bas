@@ -1,0 +1,6 @@
+10 INPUT A$
+20 B = 0
+30 IF LEN(A$) > 2 AND LEN(A$) < 9 THEN B = 1
+40 IF LEN(A$) >= 3 OR LEN(A$) <= 1 THEN B = 2
+50 PRINT B
+60 END

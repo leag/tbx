@@ -39,10 +39,43 @@ def test_decode_t1_scr2():
     assert decode0.decode_user_code(_exe("t1_scr2.exe")) == want
 
 
+def test_screen_optional_args():
+    # SCREEN's trailing tag byte is a presence mask (08 mode / 04 burst /
+    # 02 apage / 01 vpage) with args in cells [88]/[94]/[A0]/[AC] --
+    # witnessed t1_screenb (2-arg) and t1_screenp (3- and 4-arg), the
+    # top gap in the PC-SIG wild scan (8 programs)
+    from tbx import decode0
+
+    L = ir.Lit
+    prog = decode0.decode_user_code(_exe("t1_screenb.exe"))
+    assert prog[0] == ir.Screen(L(1), L(0))
+    assert prog[2] == ir.Screen(L(2), L(1))
+    prog = decode0.decode_user_code(_exe("t1_screenp.exe"))
+    assert prog[0] == ir.Screen(L(1), L(0), L(0))
+    assert prog[2] == ir.Screen(L(2), L(1), L(0), L(0))
+
+
+def test_decode_t1_colorfp():
+    # COLOR fg,bg with a NON-integer (single) argument: the FP->int assign
+    # bridge (FISTP [2C]; FWAIT; MOV AX,[2C]; MOV [tgt],AX) targets one of the
+    # VIEW/COLOR system cells (0x88/0x94/0xA0/0xAC/0xB8/0xC4) instead of an
+    # ordinary scalar/array slot -- previously only ever reached with a plain
+    # immediate or ax-computed value (`fistp`'s sibling `fstp` path already
+    # special-cased these cells for the FP leg), so `state.loc()` rejected the
+    # disp outright. Also surfaced a pre-existing, previously-unreachable gap
+    # in canonical_rename: ir.Color's fg/bg fields were never walked at all
+    # (every other graphics statement is), invisible before because COLOR's
+    # args were always Lit/None, never a Var needing re-lettering.
+    from tbx import decode0
+
+    prog = decode0.decode_user_code(_exe("t1_colorfp.exe"))
+    assert prog[2] == ir.Color(fg=ir.Var("A"), bg=ir.Var("B"))
+
+
 def test_dialect_invariant():
     from tbx import decode0
 
-    for name in ("t1_scr", "t1_scr2"):
+    for name in ("t1_scr", "t1_scr2", "t1_colorfp"):
         assert decode0.decode_user_code(
             _exe(f"v10_{name}.exe")
         ) == decode0.decode_user_code(_exe(f"{name}.exe")), name
@@ -60,9 +93,36 @@ def test_emit_screen():
     )
 
 
+def test_emit_locate_array_operands():
+    # LOCATE whose row AND column are both variable-indexed array elements:
+    # the row, already read out of the first element, is shuttled into bx one
+    # op ahead of the column element's own read (the index chain needs ax as
+    # scratch), so the element-access terminal walk has to step over that
+    # interposed movbxax instead of treating it as the terminal. Near/static
+    # (t1_locarr) and far/COMMON (t1_locarrcom) compile to different address
+    # templates -- addsi vs moves_m -- and the COMMON one is wild tbd73.exe's
+    # exact shape (TBWINDOW `SUB Closewin`: `LOCATE wlstx(idx), wlsty(idx)`),
+    # which also restores ax from bx mid-chain via movrr.
+    from tbx import decode0, emit0
+
+    assert emit0.emit(decode0.decode_user_code(_exe("t1_locarr.exe"))) == (
+        "10 DIM V0%(10)\n20 DIM V1%(10)\n30 A% = 1\n"
+        "40 LOCATE V0%(A%),V1%(A%)\n50 END\n"
+    )
+    assert emit0.emit(decode0.decode_user_code(_exe("t1_locarrcom.exe"))) == (
+        "10 DIM V0%(10), V1%(10)\n20 COMMON V0%(1), V1%(1)\n30 A% = 1\n"
+        "40 LOCATE V0%(A%),V1%(A%)\n50 END\n"
+    )
+    for name in ("t1_locarr", "t1_locarrcom"):  # dialect-blind
+        assert decode0.decode_user_code(
+            _exe(f"v10_{name}.exe")
+        ) == decode0.decode_user_code(_exe(f"{name}.exe")), name
+
+
 if __name__ == "__main__":
     test_decode_t1_scr()
     test_decode_t1_scr2()
+    test_decode_t1_colorfp()
     test_dialect_invariant()
     test_emit_screen()
     print("ALL PASS")

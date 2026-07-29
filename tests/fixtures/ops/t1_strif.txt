@@ -1,0 +1,34 @@
+# t1_strif dialect=1.1 start=08700
+08703:movsi:320
+08706:rt:156
+08708:movsi:292
+0870B:strassign
+0870D:movsi:320
+08710:rt:156
+08712:movsi:288
+08715:strassign
+08717:movsi:292
+0871A:rt:156
+0871C:movsi:288
+0871F:rt:156
+08721:strcmp
+08723:jcc:116:34600
+08725:jmp:34609
+08728:movsi:316
+0872B:rt:156
+0872D:rt:190
+0872F:rt:184
+08731:movsi:292
+08734:rt:156
+08736:movsi:312
+08739:rt:156
+0873B:strcmp
+0873D:jcc:114:34626
+0873F:jmp:34635
+08742:movsi:308
+08745:rt:156
+08747:rt:190
+08749:rt:184
+0874B:end
+0874E:epilogue
+# commits

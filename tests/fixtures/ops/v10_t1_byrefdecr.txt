@@ -1,0 +1,17 @@
+# v10_t1_byrefdecr dialect=1.0 start=070B0
+070B3:jmp:28880
+070B6:proc_enter
+070B9:arg_ref:6
+070BC:far_dec_si
+070BF:arg_ref:6
+070C2:far_fild_si
+070C6:rt:187
+070C8:rt:184
+070CC:proc_ret:4
+070D0:movm_imm:288:5
+070D6:arg_push_ref:288
+070DB:far_call:28854
+070E0:end
+070E3:epilogue
+# commits
+070CA

@@ -1,0 +1,36 @@
+# v10_t1_arrparmmixlast dialect=1.0 start=070B0
+070B3:movsi:356
+070B6:rt:156
+070B8:movsi:372
+070BB:strassign
+070BD:mov_mem_sp:102
+070C1:sub_sp:2
+070C4:movax:1
+070C7:mov_si_sp
+070C9:movm_ax_temp
+070CC:arg_push_temp
+070CE:movsi:288
+070D1:arg_push_array
+070D3:movm_imm:102:0
+070D9:far_call:28903
+070DE:add_sp:2
+070E1:end
+070E4:jmp:28945
+070E7:proc_enter
+070EA:arg_ref:66
+070ED:far_fild_si
+070F1:rt:187
+070F3:arg_ref:66
+070F6:far_movax_si
+070F9:subax_bp:14
+070FC:movsiax
+070FE:shlsi
+07100:shlsi
+07102:moves_bp:6
+07105:far_spush
+07107:rt:190
+07109:rt:184
+0710D:proc_ret:64
+07111:epilogue
+# commits
+0710B

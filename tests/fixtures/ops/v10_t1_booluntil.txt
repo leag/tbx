@@ -1,0 +1,31 @@
+# v10_t1_booluntil dialect=1.0 start=071E0
+071E3:input:304:16384
+071EA:read_num
+071ED:fstp:288
+071F4:fldz
+071F7:fcomp:288
+071FC:fstsw
+071FE:movax:65535
+07201:jcc:118:29188
+07203:incax
+07204:orax
+07208:jcc:117:29197
+0720A:jmp:29217
+0720D:fld1
+07210:fcomp:288
+07215:fstsw
+07217:movbxax
+07219:movax:65535
+0721C:jcc:115:29215
+0721E:incax
+0721F:andaxbx
+07223:jcc:116:29155
+07225:fld:288
+0722A:rt:187
+0722C:rt:184
+07230:epilogue
+# commits
+071F2
+07206
+07221
+0722E

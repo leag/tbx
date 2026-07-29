@@ -1,0 +1,35 @@
+# t1_commonarrsubstatic dialect=1.1 start=088A0
+088A3:movsi:272
+088A6:movdx:154
+088A9:movesdx
+088AB:dim_begin
+088AE:movm_imm:282:10
+088B4:movm_imm:280:0
+088BA:movsi:272
+088BD:movdx:154
+088C0:movesdx
+088C2:dim_end
+088C5:fild:424
+088CA:movax:1
+088CD:subax_m:280
+088D1:movsiax
+088D3:shlsi
+088D5:shlsi
+088D7:moves_m:272
+088DB:far_fstp_si
+088E1:far_call:35052
+088E6:end
+088E9:jmp:35076
+088EC:proc_enter
+088EF:movsi:420
+088F2:rt:156
+088F4:movsi:436
+088F7:strassign
+088F9:movsi:436
+088FC:rt:156
+088FE:rt:190
+08900:rt:184
+08902:proc_ret:0
+08904:epilogue
+# commits
+088DF

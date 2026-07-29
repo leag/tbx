@@ -1,0 +1,24 @@
+# v10_t1_forvarstep dialect=1.0 start=070B0
+070B3:movm_imm:294:2
+070B9:movax_m:294
+070BD:movm_ax:288
+070C1:movm_imm:292:1
+070C7:movax_m:288
+070CB:jmp:28897
+070CE:fild:292
+070D3:rt:187
+070D5:rt:184
+070D9:movax_m:288
+070DD:addm_ax:292
+070E1:orax_self
+070E3:jcc:121:28904
+070E5:jmp:28914
+070E8:cmp_mi8:292:10
+070ED:jcc:126:28878
+070EF:jmp:28921
+070F2:cmp_mi8:292:10
+070F7:jcc:125:28878
+070F9:end
+070FC:epilogue
+# commits
+070D7

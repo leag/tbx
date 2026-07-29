@@ -1,0 +1,28 @@
+# t1_fnforward dialect=1.1 start=08700
+08703:push_bp
+08704:mov_mem_sp:104
+08708:sub_sp:8
+0870B:mov_bp_sp
+0870D:fild:294
+08712:fstp_bp:4
+08716:movm_imm:104:0
+0871E:fn_call:34619
+08725:fld_bp:0
+08729:fwait
+0872B:add_sp:8
+0872E:pop_bp
+0872F:rt:187
+08731:rt:184
+08735:end
+08738:jmp:34644
+0873B:mov_bp_imm:0:0
+08740:mov_bp_imm:2:0
+08745:fld1
+08748:fold_bp:+:4
+0874C:fstp_bp:0
+08752:fn_ret
+08754:epilogue
+# commits
+0871C
+08733
+08750

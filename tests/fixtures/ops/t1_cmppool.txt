@@ -1,0 +1,18 @@
+# t1_cmppool dialect=1.1 start=08700
+08703:movsi:312
+08706:rt:156
+08708:movsi:288
+0870B:strassign
+0870D:movsi:288
+08710:rt:156
+08712:str2num:LEN
+08715:cmpax_m:316
+08719:jcc:116:34590
+0871B:jmp:34599
+0871E:movsi:308
+08721:rt:156
+08723:rt:190
+08725:rt:184
+08727:end
+0872A:epilogue
+# commits

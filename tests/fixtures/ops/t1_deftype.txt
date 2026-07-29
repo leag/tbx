@@ -1,0 +1,19 @@
+# t1_deftype dialect=1.1 start=08750
+08753:on_error:34681
+0875A:xorax
+0875C:strfn:INKEY$
+0875F:movbxax
+08761:str2num:LEN
+08764:cmpax_bx
+08766:jcc:116:34650
+08768:xorax
+0876A:strfn:INKEY$
+0876D:movbxax
+0876F:str2num:LEN
+08772:cmpax_bx
+08774:jcc:116:34664
+08776:end
+08779:resume_pre
+0877C:resume_next
+0877F:epilogue
+# commits

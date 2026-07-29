@@ -1,0 +1,19 @@
+# v10_t1_arrbyrefidx dialect=1.0 start=070B0
+070B3:movm_imm:372:42
+070B9:movm_imm:342:2
+070BF:movsim:342
+070C3:shlsi
+070C5:addsi:368
+070C9:movdx:152
+070CC:movesdx
+070CE:arg_push_arr
+070D0:far_call:28891
+070D5:end
+070D8:jmp:28907
+070DB:proc_enter
+070DE:movax:1
+070E1:arg_ref:6
+070E4:far_addm_ax_si
+070E7:proc_ret:4
+070EB:epilogue
+# commits

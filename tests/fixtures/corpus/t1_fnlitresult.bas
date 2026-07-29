@@ -1,0 +1,9 @@
+10 DEF FNBar%
+20 FNBar% = 7
+30 END DEF
+40 SUB Foo
+50 A% = FNBar% - 7
+60 PRINT A%
+70 END SUB
+80 CALL Foo
+90 END

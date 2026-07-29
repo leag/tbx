@@ -1,0 +1,7 @@
+10 DIM A(10)
+20 COMMON A(1)
+30 DIM B(5)
+40 A(1) = 5
+50 B(1) = 6
+60 PRINT A(1); B(1)
+70 END

@@ -1,0 +1,12 @@
+# t1_inpsemi dialect=1.1 start=08830
+08833:input:308:16512
+0883A:read_num
+0883D:fstp:288
+08844:fld:288
+08849:rt:187
+0884B:rt:184
+0884F:end
+08852:epilogue
+# commits
+08842
+0884D

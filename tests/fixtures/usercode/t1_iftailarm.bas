@@ -1,0 +1,13 @@
+10 SUB SUB1(A%, B%, C$)
+  SELECT CASE C$
+  CASE "a"
+    IF A% <> B% THEN PRINT "x"
+  CASE ELSE
+    PRINT "z"
+  END SELECT
+END SUB
+20 D% = 1
+30 E% = 2
+40 F$ = "a"
+50 CALL SUB1(D%,E%,F$)
+60 END

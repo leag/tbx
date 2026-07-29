@@ -1,0 +1,10 @@
+10 SUB SUB1
+20   LOCAL A%, B%
+30   A% = 3
+40   B% = 9
+50   IF A% = 0 THEN PRINT "Z"
+60   IF A% < B% + 1 THEN PRINT "W"
+70   PRINT A%
+80 END SUB
+90 CALL SUB1
+100 END

@@ -1,0 +1,31 @@
+# t1_booluntil dialect=1.1 start=08830
+08833:input:304:16384
+0883A:read_num
+0883D:fstp:288
+08844:fldz
+08847:fcomp:288
+0884C:fstsw
+0884E:movax:65535
+08851:jcc:118:34900
+08853:incax
+08854:orax
+08858:jcc:117:34909
+0885A:jmp:34929
+0885D:fld1
+08860:fcomp:288
+08865:fstsw
+08867:movbxax
+08869:movax:65535
+0886C:jcc:115:34927
+0886E:incax
+0886F:andaxbx
+08873:jcc:116:34867
+08875:fld:288
+0887A:rt:187
+0887C:rt:184
+08880:epilogue
+# commits
+08842
+08856
+08871
+0887E

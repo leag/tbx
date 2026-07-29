@@ -1,0 +1,6 @@
+10 A$ = "K"
+20 F% = -1
+30 IF F% AND (A$ = CHR$(75) OR A$ = CHR$(77)) THEN
+40 PRINT "YES"
+50 END IF
+60 END

@@ -1,0 +1,11 @@
+10 DEF FNFN1
+  REG 1, 3840
+  CALL INTERRUPT 16
+  FNFN1 = REG(1) AND 15
+END DEF
+20 IF A% <> 0 THEN 40
+30 B$ = "MONO"
+40 C$ = STR$(FNFN1)
+50 B$ = B$ + " monitor in video mode " + C$
+60 PRINT B$
+70 END

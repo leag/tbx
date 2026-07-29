@@ -1,0 +1,9 @@
+10 DEF FNFN1(A%, B%)
+  LOCAL C%
+  C% = A% * B%
+  IF C% <= 100 THEN 15
+  C% = C% + 1
+15 FNFN1 = C%
+END DEF
+20 PRINT FNFN1(3,4)
+30 END

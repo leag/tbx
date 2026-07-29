@@ -1,0 +1,19 @@
+# t1_suberr dialect=1.1 start=08700
+08703:jmp:34584
+08706:proc_enter
+08709:on_error:34592
+08710:movax:5
+08713:error_stmt
+08716:proc_ret:0
+08718:far_call:34566
+0871D:end
+08720:movsi:292
+08723:rt:156
+08725:rt:190
+08727:fild:116
+0872C:rt:187
+0872E:rt:184
+08732:end
+08735:epilogue
+# commits
+08730

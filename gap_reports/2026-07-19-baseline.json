@@ -1,0 +1,806 @@
+{
+  "schema_version": 1,
+  "generator": "tbx.tools.scan_wild",
+  "root": "wild/hits",
+  "corpus_fingerprint": "2043f80bf6bf929b0a8058ebb0b83e3ec6b63664855e4428b4781db63c4924a3",
+  "totals": {
+    "executables": 84,
+    "decode_ok": 14,
+    "decode_failed": 70,
+    "not_turbo_basic": 0
+  },
+  "hits": [
+    {
+      "name": "wild/hits/autonum.exe",
+      "dialect": "1.0",
+      "statements": 144
+    },
+    {
+      "name": "wild/hits/book.exe",
+      "dialect": "1.0",
+      "statements": 488
+    },
+    {
+      "name": "wild/hits/ck.exe",
+      "dialect": "1.1",
+      "statements": 2
+    },
+    {
+      "name": "wild/hits/inv87.exe",
+      "dialect": "1.1",
+      "statements": 2786
+    },
+    {
+      "name": "wild/hits/invoice.exe",
+      "dialect": "1.1",
+      "statements": 2786
+    },
+    {
+      "name": "wild/hits/metric.exe",
+      "dialect": "1.1",
+      "statements": 1789
+    },
+    {
+      "name": "wild/hits/mm.exe",
+      "dialect": "1.1",
+      "statements": 33
+    },
+    {
+      "name": "wild/hits/onelab87.exe",
+      "dialect": "1.1",
+      "statements": 88
+    },
+    {
+      "name": "wild/hits/onelabel.exe",
+      "dialect": "1.1",
+      "statements": 88
+    },
+    {
+      "name": "wild/hits/r.exe",
+      "dialect": "1.1",
+      "statements": 616
+    },
+    {
+      "name": "wild/hits/rev.exe",
+      "dialect": "1.0",
+      "statements": 78
+    },
+    {
+      "name": "wild/hits/schart.exe",
+      "dialect": "1.1",
+      "statements": 593
+    },
+    {
+      "name": "wild/hits/startup.exe",
+      "dialect": "1.0",
+      "statements": 24
+    },
+    {
+      "name": "wild/hits/strpfind.exe",
+      "dialect": "1.0",
+      "statements": 38
+    }
+  ],
+  "failures": [
+    {
+      "name": "wild/hits/CVT2TB.EXE",
+      "dialect": "1.1",
+      "message": "unhandled byte 89 at 0xa286",
+      "signature": "unhandled byte 89"
+    },
+    {
+      "name": "wild/hits/baby.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT 8c at 0x9c3f",
+      "signature": "unhandled INT 8c"
+    },
+    {
+      "name": "wild/hits/banker.exe",
+      "dialect": "1.0",
+      "message": "numeric INPUT read without FSTP at 0xd5b4",
+      "signature": "numeric INPUT read without FSTP"
+    },
+    {
+      "name": "wild/hits/be.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT ED sub 1e at 0x7eee",
+      "signature": "unhandled INT ED sub 1e"
+    },
+    {
+      "name": "wild/hits/bill.exe",
+      "dialect": "1.1",
+      "message": "store to unknown system cell 0x8a at 0xe786",
+      "signature": "store to unknown system cell 0x8a"
+    },
+    {
+      "name": "wild/hits/billadd.exe",
+      "dialect": "1.1",
+      "message": "unhandled INT c2 at 0x111b1",
+      "signature": "unhandled INT c2"
+    },
+    {
+      "name": "wild/hits/bm1_dsk2.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte 18 at 0x45a30",
+      "signature": "unhandled byte 18"
+    },
+    {
+      "name": "wild/hits/bmaster.exe",
+      "dialect": "1.0",
+      "message": "unhandled FP op esc=da modrm=1c at 0x8f21",
+      "signature": "unhandled FP op esc=da modrm=1c"
+    },
+    {
+      "name": "wild/hits/cal.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte 90 at 0xbdb5",
+      "signature": "unhandled byte 90"
+    },
+    {
+      "name": "wild/hits/cal87.exe",
+      "dialect": "1.1",
+      "message": "LINE INPUT trailing byte c0 at 0x14cb8",
+      "signature": "LINE INPUT trailing byte c0"
+    },
+    {
+      "name": "wild/hits/catalog.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte 89 at 0x8be7",
+      "signature": "unhandled byte 89"
+    },
+    {
+      "name": "wild/hits/cleanup.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte 8b at 0xa55c",
+      "signature": "unhandled byte 8b"
+    },
+    {
+      "name": "wild/hits/color.exe",
+      "dialect": "1.1",
+      "message": "store to unknown system cell 0x8a at 0x8ef6",
+      "signature": "store to unknown system cell 0x8a"
+    },
+    {
+      "name": "wild/hits/crossref.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte 90 at 0xa6bd",
+      "signature": "unhandled byte 90"
+    },
+    {
+      "name": "wild/hits/elec87.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte ea at 0x10a82",
+      "signature": "unhandled byte ea"
+    },
+    {
+      "name": "wild/hits/electron.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte 90 at 0xbda3",
+      "signature": "unhandled byte 90"
+    },
+    {
+      "name": "wild/hits/file.exe",
+      "dialect": "1.0",
+      "message": "LINE INPUT # template mismatch at 0x9557",
+      "signature": "LINE INPUT # template mismatch"
+    },
+    {
+      "name": "wild/hits/filepatc.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte 06 at 0x8873",
+      "signature": "unhandled byte 06"
+    },
+    {
+      "name": "wild/hits/football.exe",
+      "dialect": "1.1",
+      "message": "unhandled INT EC sub 38 at 0x9e6c",
+      "signature": "unhandled INT EC sub 38"
+    },
+    {
+      "name": "wild/hits/grdscn.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte f7 at 0x10d91",
+      "signature": "unhandled byte f7"
+    },
+    {
+      "name": "wild/hits/hebrew.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte 36 at 0xaebc",
+      "signature": "unhandled byte 36"
+    },
+    {
+      "name": "wild/hits/help.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT 8c at 0x7a20",
+      "signature": "unhandled INT 8c"
+    },
+    {
+      "name": "wild/hits/hfprop.exe",
+      "dialect": "1.1",
+      "message": "unhandled jcc 75 at 0x9db8",
+      "signature": "unhandled jcc 75"
+    },
+    {
+      "name": "wild/hits/horses.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte ff at 0x8460",
+      "signature": "unhandled byte ff"
+    },
+    {
+      "name": "wild/hits/ifi.exe",
+      "dialect": "1.0",
+      "message": "unhandled FP op esc=da modrm=1c at 0x8f21",
+      "signature": "unhandled FP op esc=da modrm=1c"
+    },
+    {
+      "name": "wild/hits/invent.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT ED sub 1e at 0x8dee",
+      "signature": "unhandled INT ED sub 1e"
+    },
+    {
+      "name": "wild/hits/kinder.exe",
+      "dialect": "1.0",
+      "message": "materialization template mismatch at 0x84d5",
+      "signature": "materialization template mismatch"
+    },
+    {
+      "name": "wild/hits/kinetics.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT EC sub ee at 0xdd25",
+      "signature": "unhandled INT EC sub ee"
+    },
+    {
+      "name": "wild/hits/lmaster.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte 38 at 0x2bdd2",
+      "signature": "unhandled byte 38"
+    },
+    {
+      "name": "wild/hits/mcmurphy.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte ea at 0x1846e",
+      "signature": "unhandled byte ea"
+    },
+    {
+      "name": "wild/hits/mdb.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte 8c at 0x10bae",
+      "signature": "unhandled byte 8c"
+    },
+    {
+      "name": "wild/hits/mdb87.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte 8c at 0x10bae",
+      "signature": "unhandled byte 8c"
+    },
+    {
+      "name": "wild/hits/menu.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte 0b at 0xff11",
+      "signature": "unhandled byte 0b"
+    },
+    {
+      "name": "wild/hits/mf.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte ea at 0xef89",
+      "signature": "unhandled byte ea"
+    },
+    {
+      "name": "wild/hits/morcalc.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte 06 at 0x9013",
+      "signature": "unhandled byte 06"
+    },
+    {
+      "name": "wild/hits/mymenu.exe",
+      "dialect": "1.0",
+      "message": "displacement 0x3a6 is neither scalar nor array element",
+      "signature": "displacement 0x3a6 is neither scalar nor array element"
+    },
+    {
+      "name": "wild/hits/night.exe",
+      "dialect": "1.1",
+      "message": "DGROUP layout not solvable from the calibrated rules",
+      "signature": "DGROUP layout not solvable from the calibrated rules"
+    },
+    {
+      "name": "wild/hits/number.exe",
+      "dialect": "1.0",
+      "message": "int compound relational jcc 7f at 0x8bb1",
+      "signature": "int compound relational jcc 7f"
+    },
+    {
+      "name": "wild/hits/nvg.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte 1e at 0xa199",
+      "signature": "unhandled byte 1e"
+    },
+    {
+      "name": "wild/hits/nvginst.exe",
+      "dialect": "1.1",
+      "message": "unhandled INT EC sub ac at 0xaa00",
+      "signature": "unhandled INT EC sub ac"
+    },
+    {
+      "name": "wild/hits/pcdcfile.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte 21 at 0xae75",
+      "signature": "unhandled byte 21"
+    },
+    {
+      "name": "wild/hits/pfl.exe",
+      "dialect": "1.1",
+      "message": "int compound relational jcc 7f at 0xa352",
+      "signature": "int compound relational jcc 7f"
+    },
+    {
+      "name": "wild/hits/phone.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte 1e at 0xa2dd",
+      "signature": "unhandled byte 1e"
+    },
+    {
+      "name": "wild/hits/photo.exe",
+      "dialect": "1.1",
+      "message": "unhandled INT af at 0xad18",
+      "signature": "unhandled INT af"
+    },
+    {
+      "name": "wild/hits/process.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte 89 at 0x8994",
+      "signature": "unhandled byte 89"
+    },
+    {
+      "name": "wild/hits/prtguide.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT 8c at 0x792f",
+      "signature": "unhandled INT 8c"
+    },
+    {
+      "name": "wild/hits/pw.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte 06 at 0x95c6",
+      "signature": "unhandled byte 06"
+    },
+    {
+      "name": "wild/hits/pwinst.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT af at 0x86af",
+      "signature": "unhandled INT af"
+    },
+    {
+      "name": "wild/hits/pz.exe",
+      "dialect": "1.0",
+      "message": "cursor call without open LOCATE at 0x7cb8",
+      "signature": "cursor call without open LOCATE"
+    },
+    {
+      "name": "wild/hits/readme.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte 90 at 0x77fe",
+      "signature": "unhandled byte 90"
+    },
+    {
+      "name": "wild/hits/reformat.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte 8b at 0xa555",
+      "signature": "unhandled byte 8b"
+    },
+    {
+      "name": "wild/hits/refund.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT EC sub 38 at 0x8f16",
+      "signature": "unhandled INT EC sub 38"
+    },
+    {
+      "name": "wild/hits/resume.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte 16 at 0x9f10",
+      "signature": "unhandled byte 16"
+    },
+    {
+      "name": "wild/hits/rs.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT c2 at 0xa1e0",
+      "signature": "unhandled INT c2"
+    },
+    {
+      "name": "wild/hits/rstprint.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte 90 at 0x8b20",
+      "signature": "unhandled byte 90"
+    },
+    {
+      "name": "wild/hits/sabpcv3.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte ea at 0xa3f3",
+      "signature": "unhandled byte ea"
+    },
+    {
+      "name": "wild/hits/secure.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT EC sub ac at 0x8703",
+      "signature": "unhandled INT EC sub ac"
+    },
+    {
+      "name": "wild/hits/sprogh.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte 90 at 0xb5a5",
+      "signature": "unhandled byte 90"
+    },
+    {
+      "name": "wild/hits/stat.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte 0b at 0xcb6e",
+      "signature": "unhandled byte 0b"
+    },
+    {
+      "name": "wild/hits/state.exe",
+      "dialect": "1.1",
+      "message": "unhandled FP op esc=dc modrm=04 at 0xb28a",
+      "signature": "unhandled FP op esc=dc modrm=04"
+    },
+    {
+      "name": "wild/hits/state87.exe",
+      "dialect": "1.1",
+      "message": "unhandled FP op esc=dc modrm=04 at 0xb28a",
+      "signature": "unhandled FP op esc=dc modrm=04"
+    },
+    {
+      "name": "wild/hits/styled.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT EC sub 42 at 0x846c",
+      "signature": "unhandled INT EC sub 42"
+    },
+    {
+      "name": "wild/hits/styllist.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT EC sub 42 at 0x8400",
+      "signature": "unhandled INT EC sub 42"
+    },
+    {
+      "name": "wild/hits/swbb.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte ea at 0xa0df",
+      "signature": "unhandled byte ea"
+    },
+    {
+      "name": "wild/hits/tamstart.exe",
+      "dialect": "1.1",
+      "message": "store to unknown system cell 0x110 at 0xefc9",
+      "signature": "store to unknown system cell 0x110"
+    },
+    {
+      "name": "wild/hits/varamort.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT EC sub 38 at 0x9893",
+      "signature": "unhandled INT EC sub 38"
+    },
+    {
+      "name": "wild/hits/vhfprop.exe",
+      "dialect": "1.1",
+      "message": "codeless DO...LOOP WHILE/UNTIL (no orphan evidence) has no witnessed non-DO source construct to un-synthesize to",
+      "signature": "codeless DO...LOOP WHILE/UNTIL (no orphan evidence) has no witnessed non-DO source construct to un-synthesize to"
+    },
+    {
+      "name": "wild/hits/wb.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte ea at 0xbc80",
+      "signature": "unhandled byte ea"
+    },
+    {
+      "name": "wild/hits/zip.exe",
+      "dialect": "1.1",
+      "message": "unhandled INT d4 at 0x8b70",
+      "signature": "unhandled INT d4"
+    },
+    {
+      "name": "wild/hits/ziptest.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte f7 at 0xa5c6",
+      "signature": "unhandled byte f7"
+    }
+  ],
+  "groups": [
+    {
+      "signature": "unhandled byte 90",
+      "count": 6,
+      "files": [
+        "wild/hits/cal.exe",
+        "wild/hits/crossref.exe",
+        "wild/hits/electron.exe",
+        "wild/hits/readme.exe",
+        "wild/hits/rstprint.exe",
+        "wild/hits/sprogh.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte ea",
+      "count": 6,
+      "files": [
+        "wild/hits/elec87.exe",
+        "wild/hits/mcmurphy.exe",
+        "wild/hits/mf.exe",
+        "wild/hits/sabpcv3.exe",
+        "wild/hits/swbb.exe",
+        "wild/hits/wb.exe"
+      ]
+    },
+    {
+      "signature": "unhandled INT 8c",
+      "count": 3,
+      "files": [
+        "wild/hits/baby.exe",
+        "wild/hits/help.exe",
+        "wild/hits/prtguide.exe"
+      ]
+    },
+    {
+      "signature": "unhandled INT EC sub 38",
+      "count": 3,
+      "files": [
+        "wild/hits/football.exe",
+        "wild/hits/refund.exe",
+        "wild/hits/varamort.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 06",
+      "count": 3,
+      "files": [
+        "wild/hits/filepatc.exe",
+        "wild/hits/morcalc.exe",
+        "wild/hits/pw.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 89",
+      "count": 3,
+      "files": [
+        "wild/hits/CVT2TB.EXE",
+        "wild/hits/catalog.exe",
+        "wild/hits/process.exe"
+      ]
+    },
+    {
+      "signature": "int compound relational jcc 7f",
+      "count": 2,
+      "files": [
+        "wild/hits/number.exe",
+        "wild/hits/pfl.exe"
+      ]
+    },
+    {
+      "signature": "store to unknown system cell 0x8a",
+      "count": 2,
+      "files": [
+        "wild/hits/bill.exe",
+        "wild/hits/color.exe"
+      ]
+    },
+    {
+      "signature": "unhandled FP op esc=da modrm=1c",
+      "count": 2,
+      "files": [
+        "wild/hits/bmaster.exe",
+        "wild/hits/ifi.exe"
+      ]
+    },
+    {
+      "signature": "unhandled FP op esc=dc modrm=04",
+      "count": 2,
+      "files": [
+        "wild/hits/state.exe",
+        "wild/hits/state87.exe"
+      ]
+    },
+    {
+      "signature": "unhandled INT EC sub 42",
+      "count": 2,
+      "files": [
+        "wild/hits/styled.exe",
+        "wild/hits/styllist.exe"
+      ]
+    },
+    {
+      "signature": "unhandled INT EC sub ac",
+      "count": 2,
+      "files": [
+        "wild/hits/nvginst.exe",
+        "wild/hits/secure.exe"
+      ]
+    },
+    {
+      "signature": "unhandled INT ED sub 1e",
+      "count": 2,
+      "files": [
+        "wild/hits/be.exe",
+        "wild/hits/invent.exe"
+      ]
+    },
+    {
+      "signature": "unhandled INT af",
+      "count": 2,
+      "files": [
+        "wild/hits/photo.exe",
+        "wild/hits/pwinst.exe"
+      ]
+    },
+    {
+      "signature": "unhandled INT c2",
+      "count": 2,
+      "files": [
+        "wild/hits/billadd.exe",
+        "wild/hits/rs.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 0b",
+      "count": 2,
+      "files": [
+        "wild/hits/menu.exe",
+        "wild/hits/stat.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 1e",
+      "count": 2,
+      "files": [
+        "wild/hits/nvg.exe",
+        "wild/hits/phone.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 8b",
+      "count": 2,
+      "files": [
+        "wild/hits/cleanup.exe",
+        "wild/hits/reformat.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 8c",
+      "count": 2,
+      "files": [
+        "wild/hits/mdb.exe",
+        "wild/hits/mdb87.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte f7",
+      "count": 2,
+      "files": [
+        "wild/hits/grdscn.exe",
+        "wild/hits/ziptest.exe"
+      ]
+    },
+    {
+      "signature": "DGROUP layout not solvable from the calibrated rules",
+      "count": 1,
+      "files": [
+        "wild/hits/night.exe"
+      ]
+    },
+    {
+      "signature": "LINE INPUT # template mismatch",
+      "count": 1,
+      "files": [
+        "wild/hits/file.exe"
+      ]
+    },
+    {
+      "signature": "LINE INPUT trailing byte c0",
+      "count": 1,
+      "files": [
+        "wild/hits/cal87.exe"
+      ]
+    },
+    {
+      "signature": "codeless DO...LOOP WHILE/UNTIL (no orphan evidence) has no witnessed non-DO source construct to un-synthesize to",
+      "count": 1,
+      "files": [
+        "wild/hits/vhfprop.exe"
+      ]
+    },
+    {
+      "signature": "cursor call without open LOCATE",
+      "count": 1,
+      "files": [
+        "wild/hits/pz.exe"
+      ]
+    },
+    {
+      "signature": "displacement 0x3a6 is neither scalar nor array element",
+      "count": 1,
+      "files": [
+        "wild/hits/mymenu.exe"
+      ]
+    },
+    {
+      "signature": "materialization template mismatch",
+      "count": 1,
+      "files": [
+        "wild/hits/kinder.exe"
+      ]
+    },
+    {
+      "signature": "numeric INPUT read without FSTP",
+      "count": 1,
+      "files": [
+        "wild/hits/banker.exe"
+      ]
+    },
+    {
+      "signature": "store to unknown system cell 0x110",
+      "count": 1,
+      "files": [
+        "wild/hits/tamstart.exe"
+      ]
+    },
+    {
+      "signature": "unhandled INT EC sub ee",
+      "count": 1,
+      "files": [
+        "wild/hits/kinetics.exe"
+      ]
+    },
+    {
+      "signature": "unhandled INT d4",
+      "count": 1,
+      "files": [
+        "wild/hits/zip.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 16",
+      "count": 1,
+      "files": [
+        "wild/hits/resume.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 18",
+      "count": 1,
+      "files": [
+        "wild/hits/bm1_dsk2.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 21",
+      "count": 1,
+      "files": [
+        "wild/hits/pcdcfile.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 36",
+      "count": 1,
+      "files": [
+        "wild/hits/hebrew.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 38",
+      "count": 1,
+      "files": [
+        "wild/hits/lmaster.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte ff",
+      "count": 1,
+      "files": [
+        "wild/hits/horses.exe"
+      ]
+    },
+    {
+      "signature": "unhandled jcc 75",
+      "count": 1,
+      "files": [
+        "wild/hits/hfprop.exe"
+      ]
+    }
+  ]
+}

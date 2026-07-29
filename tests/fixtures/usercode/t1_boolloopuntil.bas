@@ -1,0 +1,26 @@
+10 A$ = ""
+20 DO
+30 A$ = INKEY$
+40 PRINT "line 1"
+50 PRINT "line 2"
+60 PRINT "line 3"
+70 PRINT "line 4"
+80 PRINT "line 5"
+90 PRINT "line 6"
+100 PRINT "line 7"
+110 PRINT "line 8"
+120 PRINT "line 9"
+130 PRINT "line 10"
+140 PRINT "line 11"
+150 PRINT "line 12"
+160 PRINT "line 13"
+170 PRINT "line 14"
+180 PRINT "line 15"
+190 PRINT "line 16"
+200 PRINT "line 17"
+210 PRINT "line 18"
+220 PRINT "line 19"
+230 PRINT "line 20"
+240 LOOP UNTIL A$ = CHR$(13) OR A$ = CHR$(27)
+250 PRINT "done"
+260 END

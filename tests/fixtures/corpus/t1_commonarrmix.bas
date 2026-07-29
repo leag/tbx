@@ -1,0 +1,6 @@
+10 DIM A(10)
+20 COMMON A(1), C%
+30 A(1) = 5
+40 C% = 7
+50 PRINT A(1); C%
+60 END

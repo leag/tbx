@@ -1,0 +1,31 @@
+# t1_sublocafter dialect=1.1 start=08700
+08703:movsi:476
+08706:rt:156
+08708:movsi:756
+0870B:strassign
+0870D:movsi:472
+08710:rt:156
+08712:movsi:708
+08715:strassign
+08717:far_call:34610
+0871C:movsi:756
+0871F:rt:156
+08721:rt:190
+08723:movsi:708
+08726:rt:156
+08728:rt:190
+0872A:rt:184
+0872C:end
+0872F:jmp:34634
+08732:proc_enter
+08735:movsi:468
+08738:rt:156
+0873A:movsi:500
+0873D:strassign
+0873F:movsi:500
+08742:rt:156
+08744:rt:190
+08746:rt:184
+08748:proc_ret:0
+0874A:epilogue
+# commits
