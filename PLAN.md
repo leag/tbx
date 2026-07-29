@@ -1172,6 +1172,25 @@ wherever the surrounding context happens not to raise. In a decoder whose
 whole discipline is fail-loud, that is the more urgent half, and it
 should be made to raise before anything else is done with it.
 
+**Where it is lost, traced.** `match_bool_term1` *does* recognize the
+probe's first term -- called directly on the op index it returns
+`operator='OR', polarity=116, deferred=True`, exactly right. But
+instrumenting the `andaxbx` combine in `handlers/arith.py` shows
+`pend_bool=None` there, with `ax` and `bx` holding the two inner
+relations. So the outer term is discarded *before* any compound machinery
+sees it: nothing calls the matcher on this path, and the inner group's
+`andaxbx` is then consumed by the generic logical-*value* combine, which
+has no outer term to fold in and simply ANDs AX with BX.
+
+That is why the failure is silent rather than loud. The value combine is
+a legitimate handler doing its job on inputs that look complete. So the
+fail-loud guard belongs where the term1 match is not consumed -- a
+recognized compound first term whose partner combine arrives with
+`pend_bool` unset is a dropped operand, and that is checkable without
+knowing how to build the right IR yet. Making it raise is a smaller and
+safer first commit than the mapping, and it converts eleven wild programs
+plus an unknown number of silent wrong answers into one honest signal.
+
 **For the mapping itself, start from `t1_and`, which already passes and
 is nearly the same bytes.** `IF A > 1 AND B < 5 THEN 60` compiles to
 
