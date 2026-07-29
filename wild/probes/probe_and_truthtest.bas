@@ -1,0 +1,4 @@
+10 A% = 3
+20 B% = 5
+30 IF A% AND B% THEN PRINT "Y"
+40 END

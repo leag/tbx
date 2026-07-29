@@ -1093,6 +1093,50 @@ A probe needs event trapping on (so CC hooks are emitted at all) plus a
 codeless line ahead of an IF whose condition converts a by-ref integer
 parameter to double — that is what makes the run length 2.
 
+### The AND-as-truth-test family — reproduced in four lines, not yet mapped
+
+`unhandled jcc 74` (file.exe, grdscn.exe, hebrew.exe, pwinst.exe) and
+`unhandled materialized test` / `materialization template mismatch`
+(cal, cal87, football, varamort, kinder, kinetics, wb) are listed in the
+scan as separate signatures, but the failing op windows share one shape:
+an **`andaxbx`/`andax_m` whose result is tested directly by a conditional
+jump**, with no `orax` self-test between them. `_lift_while`'s template
+wants `movax, jcc, incax, orax, jcc, jmp`; here index 3 is the AND fold
+itself, which only `_lift_bool_do_tail` accepts and only when a compound
+tail is already open.
+
+```
+pwinst.exe 0x8654  movax_m 502 / andax_m 504 / jcc 74 / jmp
+file.exe   0x98a5  movax FFFF / jcc 7f / incax / andaxbx / jcc 74 / jmp
+grdscn.exe 0xbbe3  (identical to file.exe)
+hebrew.exe 0xb4e0  str2num INSTR / andaxbx / jcc 74 / jmp
+```
+
+**Reproduced**, which is the step the calibration rule asks for first --
+`wild/probes/probe_and_truthtest.bas`, four lines:
+
+```
+10 A% = 3
+20 B% = 5
+30 IF A% AND B% THEN PRINT "Y"
+40 END
+```
+
+It compiles (TB 1.0) and fails as `unhandled jcc 75 at 0x70ce`, the same
+template at the opposite polarity. Its op window also shows what the
+construct really is:
+
+```
+orax / jcc 75 -> 0x70ca / jmp 0x70ce     the left operand's own test
+andax_m 288 / jcc 75 -> body / jmp past  the AND, tested directly
+```
+
+so `IF A% AND B%` is compiled **short-circuit**: the left operand is
+tested first and the AND is only reached when it is non-zero. A mapping
+has to reproduce that shape rather than treat the AND as a plain
+bitwise operation, and it needs its own fixture and byte-exact
+verification before it is written. Not attempted here.
+
 ### `morcalc.exe` / `photo.exe` — the target is inside a statement, first look
 
 Both are an `IfGoto` whose target lands **between two consecutive owned
