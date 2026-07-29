@@ -1093,6 +1093,40 @@ A probe needs event trapping on (so CC hooks are emitted at all) plus a
 codeless line ahead of an IF whose condition converts a by-ref integer
 parameter to double — that is what makes the run length 2.
 
+### The SUB-epilogue shape — cause found, fix written, blocked on the width gate
+
+`help.exe`, `resume.exe` and `rsltest.exe` all now fail the same way: a
+`Goto` **inside a SubDef body** targeting that SUB's own epilogue. That is
+an `EXIT SUB`, and `core.py`'s jmp handler already recognises one — but
+only when the target equals `frame.exit` or `frame.teardown_entry`. Under
+event trapping the epilogue is fronted by a run of CC hooks (`END SUB` is
+a code-less line), and the compiler jumps to the **run**, not to the
+`proc_ret`. So the comparison misses and the jump falls through to a
+plain unresolvable `Goto`.
+
+The fix is a third address meaning the same place, exactly as
+`teardown_entry` already is: a `BodyFrame.exit_hooks` field holding the
+first address of the hook run ahead of the return, computed by walking
+back over `trap_hook`s from `ret_address`, and accepted alongside the
+other two. Written and measured: **`help.exe` decodes with it.**
+
+**It is not committed, because it fails a gate rather than passing one.**
+`help.exe` then emits a 364-character line — `490 ON L% GOSUB 1663, 1853,
+...`, a 44-target `ON ... GOSUB` — and
+`test_no_wild_program_emits_an_over_wide_line` asserts the wild corpus is
+clean, with no allowlist. That gate was hard-won and weakening it to land
+a decode is the wrong trade.
+
+The line is an artifact of **renumbering**, not of the source: 44 targets
+at the author's own line numbers would fit inside 248 characters, and the
+program obviously compiled. So the real prerequisite is compact
+renumbering (or emitting the original line table where one exists), and
+the epilogue fix should land after it, not before. `resume.exe` and
+`rsltest.exe` need one further step beyond that: their remaining jump is
+the `jcc`-skip + `jmp` conditional form, which the inline-IF machinery
+consumes before the jmp handler ever sees it, so it never gets exit-fold
+treatment at all.
+
 **A separate, silent bug found while calibrating the ELSE fix.** Probe
 `t1_blkgotoelse2` (a backward `GOTO` into an ELSE **body**, rather than
 into the arm) does not raise — it decodes to *invalid* source, splicing
