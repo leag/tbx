@@ -1883,6 +1883,59 @@ def _finalize(state: DecodeState, addr) -> Program:
                     j = out.addrs.index(img.start + off)
                     state.reconstruct(j, ir.DefType())
                     deftype_lines.append(ln)
+                unplaced = sorted(
+                    {
+                        s.target
+                        for s in out.stmts
+                        if isinstance(s, ir.Restore) and isinstance(s.target, int)
+                    }
+                    - set(item_to_stmt)
+                )
+                if unplaced:
+                    # A RESTORE <line> naming an item index past everything the
+                    # pool recovery found. `data_items` infers DATA items by
+                    # EXCLUSION -- pool descriptors that no code site
+                    # references -- and the compiler emits ONE descriptor for
+                    # one piece of text, so a DATA item whose text is identical
+                    # to a string literal used in code shares its descriptor,
+                    # counts as code-referenced, and drops out of the item list.
+                    # Every later index then shifts down and the highest targets
+                    # fall off the end. Reproduced in seven lines by probe
+                    # q_datadup (`DATA ONE` / `DATA TWO` / `PRINT "ONE"` /
+                    # `RESTORE 20`): 'ONE' is shared, one item is recovered
+                    # instead of two, and target 1 has nowhere to land.
+                    #
+                    # Which index space would place them is NOT yet determined,
+                    # so this refuses rather than guessing (see PLAN.md for the
+                    # two rules tested and eliminated). Until then it must raise
+                    # HERE: this used to be a bare `KeyError`, which escaped
+                    # `decode_user_code`'s ValueError wrapper entirely and left
+                    # the scan reporting the bare index as its whole signature
+                    # (wild styled.exe/styllist.exe, both `87`).
+                    # Everything triage keys on goes BEFORE the ` at 0x...`:
+                    # `scan_wild.failure_signature` collapses a message from
+                    # that marker to the end, which is how a family stays one
+                    # group across programs. Carrying the address is the same
+                    # convention every other fail-loud message here follows --
+                    # without it the whole `[phase=...]` trailer survives into
+                    # the key and each witness reads as its own singleton.
+                    at = next(
+                        (
+                            a
+                            for s, a in zip(out.stmts, out.addrs)
+                            if isinstance(s, ir.Restore)
+                            and s.target in unplaced
+                            and a is not None
+                        ),
+                        img.start,
+                    )
+                    raise ValueError(
+                        f"RESTORE item index {unplaced[0]} is past the "
+                        f"{len(items)} recovered DATA items (a DATA item "
+                        "sharing a descriptor with a code string literal is "
+                        "dropped by exclusion-based pool recovery) "
+                        f"at {at:#x}"
+                    )
                 out.stmts[:] = [
                     (
                         ir.Restore(item_to_stmt[s.target])

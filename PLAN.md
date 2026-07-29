@@ -1483,6 +1483,73 @@ fixing the intra-inline-IF gap above will also close it.
 
 ---
 
+### 2026-07-29 — a DATA item sharing a descriptor with a code literal, DIAGNOSED + GUARDED, mapping OPEN (styled.exe/styllist.exe)
+
+The signature `87` — literally that, the whole message — was a bare `KeyError`.
+`item_to_stmt[s.target]` is keyed only by indices below the recovered item
+count, and a `KeyError` is not a `ValueError`, so it escaped
+`decode_user_code`'s wrapper without collecting any phase context at all. The
+scan reported the raw dictionary key as the program's entire failure signature.
+Now a `ValueError` naming the mechanism, with the normal phase/offset/op trail.
+
+**Root cause, reproduced in seven lines** (`wild/probes/probe_datadup.bas`:
+`DATA ONE` / `DATA TWO` / `PRINT "ONE"` / `RESTORE 20` → `KeyError: 1`).
+`data_items` recovers DATA by EXCLUSION — pool descriptors that no code site
+references (`d not in l.desc_disps`, core.py ~3455). The compiler emits ONE
+descriptor per distinct piece of text, so a DATA item whose text is identical to
+a string literal used in code **shares that descriptor**, is classified as
+code-referenced, and never reaches the item list. Every later item index shifts
+down and the highest `RESTORE <line>` targets fall off the end.
+
+The encoding itself is not in doubt: `t1_restoreline` (`DATA 7` / `DATA 8,9` /
+`RESTORE 20` → item 1) pins target == imm/2 over **source item order**.
+
+**Two candidate index-space rules tested against styled.exe, BOTH ELIMINATED**
+(221 pool descriptors: 135 code-referenced, 86 recovered as DATA; RESTORE
+targets {0, 48, 61, 87}; the ref/unref pattern by ascending descriptor disp is
+`R×24 u×30 R×14 u×56 R×97`):
+
+1. *The unreferenced descriptors span one contiguous DATA run, shared items
+   included.* Arithmetically it fits — the span is exactly 100 descriptors with
+   the 14 shared ones inside it, and all four targets land in range. But the
+   target at item 61 then resolves to `'     1st/last before/after pn    '`, and
+   those 14 shared entries read as PRINT-layout strings throughout
+   (`' Structure words '`, `'    All others'`, `' Forms of TO BE '`) — a DATA
+   statement is implausible as the thing that opens with one. It also fails
+   outright on the probe, whose only shared item sits at the TOP of the run and
+   therefore outside the unref span entirely.
+2. *The index counts every pool descriptor down from the highest disp.* Works on
+   the probe and agrees with `t1_restoreline`, but on styled.exe it puts item 0
+   inside the trailing 97-descriptor run of code-only literals.
+
+So nothing was landed: a rule that fails on our own probe is exactly the
+speculative fallback the calibration rule forbids.
+
+**Next step is probe-driven, and cheap.** The open question is only *which
+descriptors are DATA*, so vary one thing at a time against the oracle: a DATA
+item shared with a code literal at the FIRST source position, at the LAST, and
+in the middle; then the same with two DATA clusters, reading each time how the
+descriptor table orders them and where `desc_disps` lands.
+
+**`data_orphan_lines` is NOT the second signal here** — checked, and it is
+EMPTY for both witnesses. That table only carries codeless-statement entries,
+and these programs trigger pool recovery through their `READ`/`RESTORE`
+instead, so it contributes no independent statement count to cross-check the
+item count against. Some third signal is needed, or the boundary has to come
+out of the descriptor structure itself.
+
+Also noted while tracing, unrelated and not chased: one entry in styled.exe's
+`desc_disps` (0x260) is not on the descriptor table's 4-byte grid and so matches
+no walked descriptor. Harmless to the item count (it excludes nothing), but it
+means some code site resolves a string through a disp that is not a descriptor
+start.
+
+**Gates.** 2802 tests, Ruff clean, goldens untouched, wild scan steady at
+33 / 53. `tests/tbx/test_restore_shared_item.py` pins the guard, the phase
+context, the shared signature, and that `t1_restoreline` still resolves.
+
+---
+
 ### 2026-07-29 — a head-test DO loop's retry edge in its NEAR form, CLOSED (varamort.exe/football.exe)
 
 Closed `unhandled materialized test` for the two of its four witnesses that
