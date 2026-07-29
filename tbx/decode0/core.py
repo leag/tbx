@@ -53,6 +53,7 @@ from tbx.decode0.matchers import (
 from tbx.decode0.rename import _slot, _str_lit, canonical_rename
 from tbx.decode0.cursor import DecodeDiagnostics, OpCursor
 from tbx.decode0.events import DecodedEvent, EventLog, reconcile
+from tbx.decode0.frames import ForFrame
 from tbx.decode0.statement_log import RecordedStatements, editing, replay
 from tbx.decode0.addresses import AddressOwnership
 from tbx.decode0.control_graph import ControlGraph
@@ -2750,17 +2751,13 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             state.branch(
                 "loop", template="for_header", target=img.ops[test_k][0], address=c.cur
             )
-            c.fors.append(
-                {
-                    "v": vdisp,
-                    "lim": lim,
-                    "stp": stp,
-                    "test": img.ops[test_k][0],
-                    "body": img.ops[c.k + 1][0]
-                    if c.k + 1 < len(img.ops)
-                    else None,
-                }
-            )
+            c.fors.append(ForFrame(
+                v=vdisp,
+                lim=lim,
+                stp=stp,
+                test=img.ops[test_k][0],
+                body=img.ops[c.k + 1][0] if c.k + 1 < len(img.ops) else None,
+            ))
         elif match_for_header(out.stmts, state.vdisp) is not None:
             lim_s, stp_s, init_s = out.stmts[-3:]
             del out.stmts[-3:]
@@ -2771,15 +2768,11 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             state.branch(
                 "loop", template="for_header", target=t, address=c.cur
             )
-            c.fors.append(
-                {
-                    "v": state.vdisp(v),
-                    "test": t,
-                    "body": img.ops[c.k + 1][0]
-                    if c.k + 1 < len(img.ops)
-                    else None,
-                }
-            )
+            c.fors.append(ForFrame(
+                v=state.vdisp(v),
+                test=t,
+                body=img.ops[c.k + 1][0] if c.k + 1 < len(img.ops) else None,
+            ))
         elif (
             cmp_at_t is not None
             and cmp_at_t[1] in ("cmp_mi8", "cmp_mi16", "cmp_bpi8")
@@ -2823,17 +2816,13 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             state.branch(
                 "loop", template="for_header", target=t, address=c.cur
             )
-            c.fors.append(
-                {
-                    "v": cmp_at_t[2],
-                    "test": t,
-                    "idx": len(out.stmts) - 1,
-                    "step": 1,
-                    "body": img.ops[c.k + 1][0]
-                    if c.k + 1 < len(img.ops)
-                    else None,
-                }
-            )
+            c.fors.append(ForFrame(
+                v=cmp_at_t[2],
+                test=t,
+                idx=len(out.stmts) - 1,
+                step=1,
+                body=img.ops[c.k + 1][0] if c.k + 1 < len(img.ops) else None,
+            ))
         elif (
             cmp_at_t is not None
             and cmp_at_t[1] in ("movax_m", "movax_bp")
@@ -2909,16 +2898,12 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             state.branch(
                 "loop", template="for_header", target=t, address=c.cur
             )
-            c.fors.append(
-                {
-                    "v": nxt_t[2],
-                    "test": t,
-                    "idx": len(out.stmts) - 1,
-                    "body": img.ops[c.k + 1][0]
-                    if c.k + 1 < len(img.ops)
-                    else None,
-                }
-            )
+            c.fors.append(ForFrame(
+                v=nxt_t[2],
+                test=t,
+                idx=len(out.stmts) - 1,
+                body=img.ops[c.k + 1][0] if c.k + 1 < len(img.ops) else None,
+            ))
         elif (
             cmp_at_t is not None
             and cmp_at_t[1] == "movax_bp"
@@ -2969,16 +2954,12 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             state.branch(
                 "loop", template="for_header", target=t, address=c.cur
             )
-            c.fors.append(
-                {
-                    "v": nxt_t[2],
-                    "test": t,
-                    "idx": len(out.stmts) - 1,
-                    "body": img.ops[c.k + 1][0]
-                    if c.k + 1 < len(img.ops)
-                    else None,
-                }
-            )
+            c.fors.append(ForFrame(
+                v=nxt_t[2],
+                test=t,
+                idx=len(out.stmts) - 1,
+                body=img.ops[c.k + 1][0] if c.k + 1 < len(img.ops) else None,
+            ))
         elif (
             cmp_at_t is not None
             and cmp_at_t[1] == "orax_self"
@@ -3039,17 +3020,13 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             state.branch(
                 "loop", template="for_header", target=t, address=c.cur
             )
-            c.fors.append(
-                {
-                    "v": state.vdisp(init_s.target),
-                    "test": t,
-                    "idx": len(out.stmts) - 1,
-                    "var_step": True,
-                    "body": img.ops[c.k + 1][0]
-                    if c.k + 1 < len(img.ops)
-                    else None,
-                }
-            )
+            c.fors.append(ForFrame(
+                v=state.vdisp(init_s.target),
+                test=t,
+                idx=len(out.stmts) - 1,
+                var_step=True,
+                body=img.ops[c.k + 1][0] if c.k + 1 < len(img.ops) else None,
+            ))
         elif frame is not None and t in (
             frame["exit"],
             frame.get("exit_entry", frame["exit"]),
@@ -4422,7 +4399,7 @@ def _decode_user_code(
                 # spelling for a by-ref param, so it decodes as its own
                 # `ir.Incr` node (wild bmaster.exe/ifi.exe, probe
                 # q_byrefincr).
-                if c.fors and c.fors[-1]["v"] == c.pend_arg:
+                if c.fors and c.fors[-1].v == c.pend_arg:
                     pass
                 else:
                     argvar = ir.Var(f"P{c.pend_arg:02X}%")
@@ -4441,13 +4418,13 @@ def _decode_user_code(
                 # node (wild bmaster.exe/ifi.exe for the FOR leg;
                 # t1_byrefdecr / wild tbd73.exe's TBWINDOW `SUB Makevmenu`,
                 # `CASE CHR$(72) : DECR curntpos`, for the bare leg).
-                if c.fors and c.fors[-1]["v"] == c.pend_arg:
+                if c.fors and c.fors[-1].v == c.pend_arg:
                     f = c.fors[-1]
-                    old = out.stmts[f["idx"]]
-                    out.stmts[f["idx"]] = ir.For(
+                    old = out.stmts[f.idx]
+                    out.stmts[f.idx] = ir.For(
                         old.var, old.init, old.limit, ir.Lit(-1)
                     )
-                    f["step"] = -1
+                    f.step = -1
                 else:
                     argvar = ir.Var(f"P{c.pend_arg:02X}%")
                     c.proc_int_offs.add(c.pend_arg)
@@ -4501,7 +4478,7 @@ def _decode_user_code(
         if (
             kind in ("testw", "testw_bp")
             and c.fors
-            and addr == c.fors[-1]["test"]
+            and addr == c.fors[-1].test
         ):
             state.seek(_lift_next(
                 img.ops,
@@ -4516,8 +4493,8 @@ def _decode_user_code(
         if (
             kind == "orax_self"
             and c.fors
-            and addr == c.fors[-1]["test"]
-            and c.fors[-1].get("var_step")
+            and addr == c.fors[-1].test
+            and c.fors[-1].var_step
         ):
             state.seek(_lift_var_step_next(
                 img.ops, c.k, c.fors, out.stmts, out.addrs
@@ -4527,10 +4504,10 @@ def _decode_user_code(
         if (
             kind == "movax_m"
             and c.fors
-            and addr == c.fors[-1]["test"]
+            and addr == c.fors[-1].test
             and c.k + 2 < len(img.ops)
             and img.ops[c.k + 1][1] == "cmpm_ax"
-            and img.ops[c.k + 1][2] == c.fors[-1]["v"]
+            and img.ops[c.k + 1][2] == c.fors[-1].v
         ):
             # Variable-limit integer NEXT: `mov ax,[limit]; cmp [I%],ax; jle body`
             # (t1_fori; inc_m was consumed, step is always 1 until a NEXT-
@@ -4541,20 +4518,20 @@ def _decode_user_code(
             # handles, wild pwinst.exe).
             f = c.fors[-1]
             jcc = img.ops[c.k + 2]
-            wantcc = (0x7D,) if f.get("step", 1) < 0 else (0x7E, 0x76)
-            invcc = (0x7C,) if f.get("step", 1) < 0 else (0x7F, 0x77)
-            direct = jcc[1] == "jcc" and jcc[2] in wantcc and jcc[3] == f["body"]
+            wantcc = (0x7D,) if f.step < 0 else (0x7E, 0x76)
+            invcc = (0x7C,) if f.step < 0 else (0x7F, 0x77)
+            direct = jcc[1] == "jcc" and jcc[2] in wantcc and jcc[3] == f.body
             indirect = (
                 c.k + 3 < len(img.ops)
                 and jcc[1] == "jcc"
                 and jcc[2] in invcc
                 and img.ops[c.k + 3][1] == "jmp"
-                and img.ops[c.k + 3][2] == f["body"]
+                and img.ops[c.k + 3][2] == f.body
                 and jcc[3] == img.ops[c.k + 3][0] + 3
             )
             if not (direct or indirect):
                 raise ValueError(f"int NEXT (var limit): expected JLE to body at {addr:#x}")
-            state.put(ir.NextStmt(state.loc(f["v"])), c.cur)
+            state.put(ir.NextStmt(state.loc(f.v)), c.cur)
             c.fors.pop()
             c.cur = None
             state.advance(4 if indirect else 3)
@@ -4562,10 +4539,10 @@ def _decode_user_code(
         if (
             kind == "movax_bp"
             and c.fors
-            and addr == c.fors[-1]["test"]
+            and addr == c.fors[-1].test
             and c.k + 2 < len(img.ops)
             and img.ops[c.k + 1][1] == "cmpm_ax_bp"
-            and img.ops[c.k + 1][2] == c.fors[-1]["v"]
+            and img.ops[c.k + 1][2] == c.fors[-1].v
         ):
             # Variable-limit integer NEXT, LOCAL loop var: the bp-relative
             # mirror of the movax_m/cmpm_ax case just above (wild
@@ -4578,19 +4555,19 @@ def _decode_user_code(
             f = c.fors[-1]
             jcc = img.ops[c.k + 2]
             direct = (
-                jcc[1] == "jcc" and jcc[2] in (0x7E, 0x76) and jcc[3] == f["body"]
+                jcc[1] == "jcc" and jcc[2] in (0x7E, 0x76) and jcc[3] == f.body
             )
             indirect = (
                 c.k + 3 < len(img.ops)
                 and jcc[1] == "jcc"
                 and jcc[2] in (0x7F, 0x77)
                 and img.ops[c.k + 3][1] == "jmp"
-                and img.ops[c.k + 3][2] == f["body"]
+                and img.ops[c.k + 3][2] == f.body
                 and jcc[3] == img.ops[c.k + 3][0] + 3
             )
             if not (direct or indirect):
                 raise ValueError(f"int NEXT (var limit): expected JLE to body at {addr:#x}")
-            state.put(ir.NextStmt(state.loc_local(f["v"])), c.cur)
+            state.put(ir.NextStmt(state.loc_local(f.v)), c.cur)
             c.fors.pop()
             c.cur = None
             state.advance(4 if indirect else 3)
@@ -4598,10 +4575,10 @@ def _decode_user_code(
         if (
             kind == "movax_bp"
             and c.fors
-            and addr == c.fors[-1]["test"]
+            and addr == c.fors[-1].test
             and c.k + 3 < len(img.ops)
             and img.ops[c.k + 1][1] == "arg_ref"
-            and img.ops[c.k + 1][2] == c.fors[-1]["v"]
+            and img.ops[c.k + 1][2] == c.fors[-1].v
             and img.ops[c.k + 2][1] == "far_cmpm_ax_si"
         ):
             # Variable-limit integer NEXT, BY-REF PARAM loop var: the
@@ -4611,9 +4588,9 @@ def _decode_user_code(
             # q_byrefforvar).
             f = c.fors[-1]
             jcc = img.ops[c.k + 3]
-            if jcc[1] != "jcc" or jcc[2] not in (0x7E, 0x76) or jcc[3] != f["body"]:
+            if jcc[1] != "jcc" or jcc[2] not in (0x7E, 0x76) or jcc[3] != f.body:
                 raise ValueError(f"int NEXT (var limit): expected JLE to body at {addr:#x}")
-            state.put(ir.NextStmt(ir.Var(f"P{f['v']:02X}%")), c.cur)
+            state.put(ir.NextStmt(ir.Var(f"P{f.v:02X}%")), c.cur)
             c.fors.pop()
             c.cur = None
             state.advance(4)
@@ -4621,7 +4598,7 @@ def _decode_user_code(
         if (
             kind in ("cmp_mi8", "cmp_mi16", "cmp_bpi8")
             and c.fors
-            and addr == c.fors[-1]["test"]
+            and addr == c.fors[-1].test
         ):
             # Integer FOR-test guard: the cmp at the open FOR's test address is the
             # integer NEXT template (`inc_m`/`addm_i8` was consumed; cmp_mi16 when
@@ -4630,25 +4607,25 @@ def _decode_user_code(
             # steps (addm_i8 with a negative imm8) test JGE, its signed mirror
             # (q_forstepneg).
             f = c.fors[-1]
-            if op[2] != f["v"]:
+            if op[2] != f.v:
                 raise ValueError(f"int NEXT: cmp disp mismatch at {addr:#x}")
-            wantcc = (0x7D,) if f.get("step", 1) < 0 else (0x7E, 0x76)
+            wantcc = (0x7D,) if f.step < 0 else (0x7E, 0x76)
             direct = (
                 c.k + 1 < len(img.ops)
                 and img.ops[c.k + 1][1] == "jcc"
                 and img.ops[c.k + 1][2] in wantcc
-                and img.ops[c.k + 1][3] == f["body"]
+                and img.ops[c.k + 1][3] == f.body
             )
             # A body beyond short-jump range uses the inverse short condition
             # over a near JMP back to the body: JG/JA skip; JMP body. Wild
             # number.exe witnesses the ascending signed JG form.
-            invcc = (0x7C,) if f.get("step", 1) < 0 else (0x7F, 0x77)
+            invcc = (0x7C,) if f.step < 0 else (0x7F, 0x77)
             indirect = (
                 c.k + 2 < len(img.ops)
                 and img.ops[c.k + 1][1] == "jcc"
                 and img.ops[c.k + 1][2] in invcc
                 and img.ops[c.k + 2][1] == "jmp"
-                and img.ops[c.k + 2][2] == f["body"]
+                and img.ops[c.k + 2][2] == f.body
                 and img.ops[c.k + 1][3]
                 == img.ops[c.k + 2][0] + 3
             )
@@ -4656,7 +4633,7 @@ def _decode_user_code(
                 raise ValueError(f"int NEXT: expected JLE/JBE/JGE to body at {addr:#x}")
             state.put(
                 ir.NextStmt(
-                    state.loc_local(f["v"]) if kind == "cmp_bpi8" else state.loc(f["v"])
+                    state.loc_local(f.v) if kind == "cmp_bpi8" else state.loc(f.v)
                 ),
                 c.cur,
             )

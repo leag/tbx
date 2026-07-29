@@ -16,8 +16,8 @@ def _lift_next(ops, k, fors, stmts, addrs, exit_folds) -> int:
     form `jcc-inverse +3; e9 BODY` when the body is out of short reach."""
     with editing(stmts, "lift_next"):
         f = fors[-1]
-        v = f["v"]
-        lim, stp = f.get("lim", v - 4), f.get("stp", v - 8)
+        v = f.v
+        lim, stp = f.lim, f.stp  # defaulted from `v` by ForFrame
 
         def expect(i, want):
             if i + len(want) > len(ops):
@@ -32,7 +32,7 @@ def _lift_next(ops, k, fors, stmts, addrs, exit_folds) -> int:
 
         def jcc_body(i, cc, inv):
             o = ops[i]
-            if o[1] == "jcc" and o[2] == cc and o[3] == f["body"]:
+            if o[1] == "jcc" and o[2] == cc and o[3] == f.body:
                 return i + 1
             if (
                 o[1] == "jcc"
@@ -40,7 +40,7 @@ def _lift_next(ops, k, fors, stmts, addrs, exit_folds) -> int:
                 and o[3] == o[0] + 5
                 and i + 1 < len(ops)
                 and ops[i + 1][1] == "jmp"
-                and ops[i + 1][2] == f["body"]
+                and ops[i + 1][2] == f.body
             ):
                 return i + 2
             raise ValueError(
@@ -126,7 +126,7 @@ def _lift_var_step_next(ops, k, fors, stmts, addrs) -> int:
     schemes (V#### vs L##%)."""
     with editing(stmts, "lift_var_step_next"):
         f = fors[-1]
-        v = f["v"]
+        v = f.v
 
         def branch(i, wantcc, invcc):
             o = ops[i] if i < len(ops) else None
@@ -138,7 +138,7 @@ def _lift_var_step_next(ops, k, fors, stmts, addrs) -> int:
                 nxt is not None
                 and nxt[1] == "jcc"
                 and nxt[2] in wantcc
-                and nxt[3] == f["body"]
+                and nxt[3] == f.body
             ):
                 return lim, i + 2
             nxt2 = ops[i + 2] if i + 2 < len(ops) else None
@@ -148,7 +148,7 @@ def _lift_var_step_next(ops, k, fors, stmts, addrs) -> int:
                 and nxt[2] in invcc
                 and nxt2 is not None
                 and nxt2[1] == "jmp"
-                and nxt2[2] == f["body"]
+                and nxt2[2] == f.body
                 and nxt[3] == nxt2[0] + 3
             ):
                 return lim, i + 3
@@ -183,7 +183,7 @@ def _lift_var_step_next(ops, k, fors, stmts, addrs) -> int:
             )
 
         inc = stmts[-1]
-        var = stmts[f["idx"]].var  # the FOR's own loop var name (V#### or L##%,
+        var = stmts[f.idx].var  # the FOR's own loop var name (V#### or L##%,
         if not (  # already correctly resolved by loc/loc_local at header time)
             isinstance(inc, ir.Assign)
             and inc.target == var
@@ -195,8 +195,8 @@ def _lift_var_step_next(ops, k, fors, stmts, addrs) -> int:
         a = addrs[-1]
         del stmts[-1], addrs[-1]
 
-        old = stmts[f["idx"]]
-        stmts[f["idx"]] = ir.For(old.var, old.init, ir.Lit(asc_lim), old.step)
+        old = stmts[f.idx]
+        stmts[f.idx] = ir.For(old.var, old.init, ir.Lit(asc_lim), old.step)
 
         stmts.append(ir.NextStmt(var))
         addrs.append(a)

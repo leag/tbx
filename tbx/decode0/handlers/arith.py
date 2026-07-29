@@ -521,7 +521,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         state.advance()
         return True
     if kind == "inc_m":
-        if c.fors and c.fors[-1]["v"] == op[2]:
+        if c.fors and c.fors[-1].v == op[2]:
             # Integer FOR-NEXT increment -- implicit in BASIC; consume
             # silently (the NEXT stmt is emitted on the cmp_mi8 guard above).
             state.advance()
@@ -540,7 +540,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         # target, so a bare INCR statement decodes as its own `ir.Incr` node
         # rather than normalizing to an Assign (wild bmaster.exe/ifi.exe,
         # probe q_localincr3).
-        if c.fors and c.fors[-1]["v"] == op[2]:
+        if c.fors and c.fors[-1].v == op[2]:
             state.advance()
             return True
         state.put(ir.Incr(state.loc_local(op[2])), c.cur)
@@ -556,14 +556,14 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         # to `LOCAL X% = X% - 1` (a generic subtract) the way the DGROUP
         # case's two spellings are -- decodes as its own `ir.Decr` node
         # (wild horses.exe, probe q_localdecr).
-        if c.fors and c.fors[-1]["v"] == op[2]:
+        if c.fors and c.fors[-1].v == op[2]:
             f = c.fors[-1]
-            old = o.stmts[f["idx"]]
+            old = o.stmts[f.idx]
             with editing(o.stmts, "patch_for_step"):
                 state.patch(
-                    f["idx"], ir.For(old.var, old.init, old.limit, ir.Lit(-1))
+                    f.idx, ir.For(old.var, old.init, old.limit, ir.Lit(-1))
                 )
-            f["step"] = -1
+            f.step = -1
             state.advance()
             return True
         state.put(ir.Decr(state.loc_local(op[2])), c.cur)
@@ -578,14 +578,14 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         # placeholder-patch as addm_i8: the header folded a provisional
         # Lit(1) step before this NEXT-side evidence was available (wild
         # bill.exe).
-        if c.fors and c.fors[-1]["v"] == op[2]:
+        if c.fors and c.fors[-1].v == op[2]:
             f = c.fors[-1]
-            old = o.stmts[f["idx"]]
+            old = o.stmts[f.idx]
             with editing(o.stmts, "patch_for_step"):
                 state.patch(
-                    f["idx"], ir.For(old.var, old.init, old.limit, ir.Lit(-1))
+                    f.idx, ir.For(old.var, old.init, old.limit, ir.Lit(-1))
                 )
-            f["step"] = -1
+            f.step = -1
             state.advance()
             return True
         var = state.loc(op[2])
@@ -601,19 +601,19 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         # before this NEXT-side evidence was available (q_forstep/
         # q_forstepneg). Outside a FOR this is the multi-unit sibling of
         # inc_m: `X% = X% + literal` (wild number.exe).
-        if not (c.fors and c.fors[-1]["v"] == op[2]):
+        if not (c.fors and c.fors[-1].v == op[2]):
             var = state.loc(op[2])
             state.put(ir.Assign(var, ir.BinOp("+", var, ir.Lit(op[3]))), c.cur)
             c.cur = None
             state.advance()
             return True
         f = c.fors[-1]
-        old = o.stmts[f["idx"]]
+        old = o.stmts[f.idx]
         with editing(o.stmts, "patch_for_step"):
             state.patch(
-                f["idx"], ir.For(old.var, old.init, old.limit, ir.Lit(op[3]))
+                f.idx, ir.For(old.var, old.init, old.limit, ir.Lit(op[3]))
             )
-        f["step"] = op[3]
+        f.step = op[3]
         state.advance()
         return True
     if kind == "negax":  # subtraction setup
