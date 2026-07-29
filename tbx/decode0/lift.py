@@ -424,7 +424,7 @@ def _lift_bool_tail(
             event = _announce(
                 branch, "if", template, f_jmp[2], final_start, cond=final_cond
             )
-            ifs.append(IfFrame(seq=event.seq, idx=len(stmts)))
+            ifs.append(IfFrame(seq=event.seq))
         return k + 6, None, None
 
 
@@ -618,7 +618,7 @@ def _lift_while(
                 cond=cond,
                 block=spelled_block,
             )
-            ifs.append(IfFrame(seq=event.seq, idx=len(stmts)))
+            ifs.append(IfFrame(seq=event.seq))
         else:
             raise ValueError(f"unhandled materialized test at {ops[k][0]:#x}")
         return k + len(want)

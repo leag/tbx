@@ -417,7 +417,7 @@ class DecodeState:
             # The region is complete here and its extent is only knowable here
             # -- the list's length at this moment. Folding it is a separate
             # question, answered when the construct that owns it closes.
-            start = self.frame_start(fr.seq, fr.idx)
+            start = self.frame_start(fr.seq)
             self.pending_ifs.append(
                 PendingFold(
                     seq=fr.seq,
@@ -564,27 +564,20 @@ class DecodeState:
         """
         return self.events[frame.seq]
 
-    def frame_start(self, seq: int, idx: int) -> int:
+    def frame_start(self, seq: int) -> int:
         """Where a body that opened at event ``seq`` begins, from the record.
 
-        The list's length when that event was recorded, replayed from the
-        statement edits stamped up to it. The walk also noted the length at
-        the time -- ``idx`` -- and the two must agree; the check is what makes
-        reading it from the record a fact rather than a hope.
+        The statement list's length when that event was recorded, replayed
+        from the edits stamped up to it.
 
-        Taken as two numbers rather than as a frame because the callers no
-        longer share a type: an inline IF's frame is still a dict, a
-        procedure's and a SELECT arm's are not.
+        The walk used to note the same length on the frame and this compared
+        the two, which is how the derivation was shown to be right rather than
+        merely plausible. It never disagreed, across both corpora and every
+        construct that folds, and the frames no longer carry the note.
         """
         from tbx.decode0.control_graph import _length_at
 
-        start = _length_at(self.stmts.edits, seq)
-        if start != idx:
-            raise ValueError(
-                f"fold region start {start} from the record disagrees with "
-                f"the frame's own {idx}"
-            )
-        return start
+        return _length_at(self.stmts.edits, seq)
 
     def open_tail_if(self, target, cond) -> bool:
         """If `target` is the open procedure's own epilogue, open an inline-IF
@@ -631,7 +624,7 @@ class DecodeState:
             "if", template="inline_if_target", target=target,
             address=self.cur, cond=cond,
         )
-        self.ifs.append(IfFrame(seq=event.seq, idx=len(self.stmts)))
+        self.ifs.append(IfFrame(seq=event.seq))
         self.cur = None
         return True
 
@@ -2641,7 +2634,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                     else m.ax if e.direct_bool_gate else ir.Group(m.ax)
                 ),
             )
-            c.ifs.append(IfFrame(seq=event.seq, idx=len(out.stmts)))
+            c.ifs.append(IfFrame(seq=event.seq))
             m.ax = None
             e.direct_bool_gate = False
             e.direct_bool_logical = False
@@ -3906,7 +3899,7 @@ def _decode_user_code(
             # is snapshotted here and never revisited by that pass, so it has to
             # happen now or its IfInlines stay inline and the else-skip Goto
             # survives as a spurious statement (probe t1_dblhooksub).
-            i0 = state.frame_start(c.proc_frame.seq, c.proc_frame.idx)
+            i0 = state.frame_start(c.proc_frame.seq)
             state.drain_folds(i0)  # the body's own IFs, before it is snapshotted
             with editing(out.stmts, "fold_proc_body"):
                 out.stmts[i0:], out.addrs[i0:] = _fold_if(
@@ -4129,7 +4122,7 @@ def _decode_user_code(
                 # movax-FFFF materialization template and an inline one a bare
                 # dispatch pair (t1_fnblockif). SUB bodies got this treatment
                 # with t1_dblhooksub; DEF FN bodies were never given it.
-                i0 = state.frame_start(c.fn_frame.seq, c.fn_frame.idx)
+                i0 = state.frame_start(c.fn_frame.seq)
                 state.drain_folds(i0)  # as proc_ret, before the snapshot
                 with editing(out.stmts, "fold_proc_body"):
                     out.stmts[i0:], out.addrs[i0:] = _fold_if(
@@ -4157,7 +4150,7 @@ def _decode_user_code(
                 expr = c.fn_frame.result
                 if expr is None:  # no FSTP [bp+0]: result left on stack
                     expr = e.stack.pop()
-                i0 = state.frame_start(c.fn_frame.seq, c.fn_frame.idx)
+                i0 = state.frame_start(c.fn_frame.seq)
                 state.drain_folds(i0)  # nothing survives the discard, but the
                 # queue must not outlive the body it belongs to
                 with editing(out.stmts, "fold_proc_body"):

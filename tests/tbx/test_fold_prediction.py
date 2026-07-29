@@ -174,19 +174,19 @@ def test_an_open_frame_carries_nothing_the_record_already_has():
     """The frame stack is an index into the log, not a second copy of it.
 
     An open inline-IF frame is the `seq` of the branch event that recognised
-    it. `idx` rides along only as the cross-check that the region start read
-    back from the record is the one the walk saw. A third field would be a
-    fold input the deferred pass cannot get, so the field list is the check.
+    it, and nothing else. Anything more would be a fold input the record does
+    not carry, so the field list is the check.
 
-    This used to parse the four construction sites looking for dict literals
-    with the right keys. A dataclass makes that unnecessary: the fields are
-    declared once and no site can add one.
+    It held an `idx` too until Chapter 7 -- the list length the walk saw,
+    compared against the position derived from the record. That comparison is
+    how the derivation was demonstrated rather than assumed; it never
+    disagreed, and the demonstration is finished.
     """
     import ast
 
     from tbx.decode0.frames import IfFrame
 
-    assert set(IfFrame.__dataclass_fields__) == {"seq", "idx"}
+    assert set(IfFrame.__dataclass_fields__) == {"seq"}
 
     # And every opener really does build one, rather than some other record
     # that happens to have those two names on it.

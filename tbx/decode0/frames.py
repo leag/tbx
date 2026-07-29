@@ -238,15 +238,14 @@ class IfFrame:
     through `seq`, so this cannot drift from the record the way a second copy
     would.
 
-    `idx` is not a fold input. It is the walk's own note of the list length at
-    recognition, kept only so `frame_start` can check the position it derives
-    from the record against what the walk saw. It has never disagreed.
+    It carried an `idx` as well until Chapter 7 -- the list length the walk
+    saw at recognition, compared against the position derived from the record
+    so the derivation was demonstrated rather than assumed. It never
+    disagreed, and a frame that is one field is the point of the exercise.
     """
 
     #: `seq` of the branch event that recognised this IF.
     seq: int
-    #: List length when it was recognised; the cross-check, not an input.
-    idx: int
 
 
 @dataclass
