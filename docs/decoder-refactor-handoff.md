@@ -185,7 +185,7 @@ no decode state. Nothing calls it in the pipeline. Against what the walk did:
 | | folds | reproduced |
 | --- | --- | --- |
 | inline IFs, `tests/fixtures/corpus` | 80 | **76** |
-| inline IFs, `wild/hits` | 771 | **755** |
+| inline IFs, `wild/hits` | 771 | **752** |
 | SELECTs, `tests/fixtures/corpus` | 26 | **26** |
 | SELECTs, `wild/hits` | 16 | **15** |
 
@@ -195,7 +195,9 @@ the splice *landed* rather than on where the region *ended* — the same error
 `drain_folds` had — which deep in a program makes every earlier fold look as
 though it precedes every later region, nested ones included. Correcting it
 moved wild inline IFs 730 → 755 and wild SELECTs 13 → 15; `tbd73.exe` alone
-went 29 → 38 of 43 and 10 → 12 of 13.
+went 29 → 38 of 43 and 10 → 12 of 13. (755 became 752 when the timing move
+merged: three folds the eager walk shaped one way the deferred walk shapes
+another, both self-consistent.)
 
 The corpus said nothing either way: 76/80 and 26/26 before and after. A
 fixture holds few enough statements that a boundary keyed on the wrong
@@ -384,9 +386,26 @@ a guard the corpus cannot replace.
 
 1. **Wire `fold_pass`.** The timing move is merged, so folding happens after
    the walk -- but from coordinates the walk computed, not from the record.
-   `fold_pass` reads only the record and reproduces 755 of 771 wild inline IFs
-   and 15 of 16 SELECTs. Wiring it is Chapter 6's actual exit criterion, and
-   it waits on the loop lifts below.
+   `fold_pass` reads only the record and reproduces 752 of 771 wild inline IFs
+   and 15 of 16 SELECTs. Wiring it is Chapter 6's actual exit criterion.
+
+   **Tried and rejected: recording the loop lifts' spliced `DO`.** The
+   reasoning looked sound. A lift splices a `DO` in front of a body without
+   committing it, so it has no event, and a pass working in commit coordinates
+   cannot see it -- and the correlation was striking: of 533 folds the pass
+   reproduces, *none* holds a lift product; of the 15 it misses, 10 do.
+
+   It made no difference. A `lift` event, anchored to the commit it precedes
+   (an index is useless -- folding has moved the indices by then) and reported
+   under that commit's `seq` so the clock stays sorted, left the score exactly
+   where it was: 752 of 771, the same 15 missed, the same 10 holding a lift
+   product. Breaking those 15 down by what they hold says why: `Loop` 11, `Do`
+   4, `NextStmt` 2, `For` 1. **`Loop` dominates, and `Loop` is already
+   committed.** The unrecorded `DO` was never the thing.
+
+   So the blocker is not that the lifts' inserts are missing from the log. The
+   next person should start from that breakdown rather than from the
+   correlation, which is real and misleading.
 2. **Record the loop lifts' regions**, the way the inline IF, the CASE arm and
    the procedure body were recorded, and fold them in `fold_pass` -- they are
    the only walk-time fold family left, and the three wild SELECT misses are
