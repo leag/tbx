@@ -6,6 +6,7 @@ from typing import Any
 from tbx import ir
 from tbx.decode0.const import _JCC_RELOP_TRUE, _NEGATE_REL
 from tbx.decode0.control_graph import frame_for
+from tbx.decode0.frames import IfFrame
 from tbx.decode0.statement_log import editing
 
 
@@ -426,7 +427,7 @@ def _lift_bool_tail(
             event = _announce(
                 branch, "if", template, f_jmp[2], final_start, cond=final_cond
             )
-            ifs.append({"seq": event.seq, "idx": len(stmts)})
+            ifs.append(IfFrame(seq=event.seq, idx=len(stmts)))
         return k + 6, None, None
 
 
@@ -620,7 +621,7 @@ def _lift_while(
                 cond=cond,
                 block=spelled_block,
             )
-            ifs.append({"seq": event.seq, "idx": len(stmts)})
+            ifs.append(IfFrame(seq=event.seq, idx=len(stmts)))
         else:
             raise ValueError(f"unhandled materialized test at {ops[k][0]:#x}")
         return k + len(want)

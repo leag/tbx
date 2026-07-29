@@ -226,3 +226,52 @@ class FnFrame(BodyFrame):
     #: *is* the parameter list: not every parameter uses the same byte stride,
     #: so the offsets are what identifies them.
     param_offs: set = field(default_factory=set)
+
+
+@dataclass
+class IfFrame:
+    """One inline IF, recognised and waiting for decoding to reach its target.
+
+    Deliberately the smallest frame in the decoder: an index into the event
+    log, and nothing else that the log already holds. The condition it folds,
+    the address it starts at and the target it closes on are all read back
+    through `seq`, so this cannot drift from the record the way a second copy
+    would.
+
+    `idx` is not a fold input. It is the walk's own note of the list length at
+    recognition, kept only so `frame_start` can check the position it derives
+    from the record against what the walk saw. It has never disagreed.
+    """
+
+    #: `seq` of the branch event that recognised this IF.
+    seq: int
+    #: List length when it was recognised; the cross-check, not an input.
+    idx: int
+
+
+@dataclass
+class PendingFold:
+    """An inline-IF region whose extent is known, queued until it can fold.
+
+    What `IfFrame` becomes when decoding reaches its target. Folding does not
+    happen there any more -- the enclosing construct has to close first, or a
+    CASE arm and a procedure body would be snapshotted around a body still
+    flat -- so the region waits here in between.
+
+    `start` and `stop` are list positions and they move: a `DO` spliced in
+    ahead of the body by a loop lift displaces them, which is what
+    `DecodeState.shift_pending` is for. `addrs` does not move, which is why
+    the addresses are what later recognizers are told about rather than the
+    positions.
+    """
+
+    #: `seq` of the branch event, as on the `IfFrame` this came from.
+    seq: int
+    #: Where the body begins in the statement list.
+    start: int
+    #: Where it ends: the list's length when decoding reached the target.
+    stop: int
+    #: Addresses of the statements inside it. The eager fold had removed these
+    #: from the list by now, so a recognizer asking "is this a statement
+    #: start?" has to be told they are only there because the fold has not run.
+    addrs: frozenset

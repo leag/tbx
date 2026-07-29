@@ -53,7 +53,13 @@ from tbx.decode0.matchers import (
 from tbx.decode0.rename import _slot, _str_lit, canonical_rename
 from tbx.decode0.cursor import DecodeDiagnostics, OpCursor
 from tbx.decode0.events import DecodedEvent, EventLog, reconcile
-from tbx.decode0.frames import FnFrame, ForFrame, ProcFrame
+from tbx.decode0.frames import (
+    FnFrame,
+    ForFrame,
+    IfFrame,
+    PendingFold,
+    ProcFrame,
+)
 from tbx.decode0.statement_log import RecordedStatements, editing, replay
 from tbx.decode0.addresses import AddressOwnership
 from tbx.decode0.control_graph import ControlGraph
@@ -408,21 +414,19 @@ class DecodeState:
             # The region is complete here and its extent is only knowable here
             # -- the list's length at this moment. Folding it is a separate
             # question, answered when the construct that owns it closes.
-            start = self.frame_start(fr["seq"], fr["idx"])
+            start = self.frame_start(fr.seq, fr.idx)
             self.pending_ifs.append(
-                {
-                    "seq": fr["seq"],
-                    "start": start,
-                    "stop": len(self.stmts),
+                PendingFold(
+                    seq=fr.seq,
+                    start=start,
+                    stop=len(self.stmts),
                     # The addresses the eager fold would have removed by now.
                     # A later recognizer that asks "is this address a statement
                     # start" means the folded list, and this is what it no
                     # longer holds -- captured here because a body's addresses
                     # are stable, while its indices are not.
-                    "addrs": frozenset(
-                        a for a in self.addrs[start:] if a is not None
-                    ),
-                }
+                    addrs=frozenset(a for a in self.addrs[start:] if a is not None),
+                )
             )
             # The same region, kept past the fold that consumes it. What the
             # splice records is where it *landed*, and once folding is deferred
@@ -440,7 +444,7 @@ class DecodeState:
         asks whether an address is a statement start has to be told which ones
         only look like one because the fold has not run yet.
         """
-        return frozenset().union(frozenset(), *(fr["addrs"] for fr in self.pending_ifs))
+        return frozenset().union(frozenset(), *(fr.addrs for fr in self.pending_ifs))
 
     @property
     def fold_products(self) -> frozenset:
@@ -471,7 +475,7 @@ class DecodeState:
         """
         for fr in self.pending_ifs:
             if self.frame_event(fr).address == address:
-                return fr["start"]
+                return fr.start
         if address in self.folded_away:
             return None
         return self.addrs.index(address) if address in self.addrs else None
@@ -491,10 +495,10 @@ class DecodeState:
         (wild state.exe, the IF at 0xeaca, whose body took in the `DO`).
         """
         for fr in self.pending_ifs:
-            if fr["start"] >= index:
-                fr["start"] += delta
-            if fr["stop"] > index:
-                fr["stop"] += delta
+            if fr.start >= index:
+                fr.start += delta
+            if fr.stop > index:
+                fr.stop += delta
 
     def drain_folds(self, limit: int = 0) -> None:
         """Fold every queued inline-IF region that lies at or after ``limit``.
@@ -521,8 +525,8 @@ class DecodeState:
         8, the three extra being the ones its own inner regions had taken).
         """
         with editing(self.stmts, "close_ifs"):
-            draining = [fr for fr in self.pending_ifs if fr["start"] >= limit]
-            self.pending_ifs = [fr for fr in self.pending_ifs if fr["start"] < limit]
+            draining = [fr for fr in self.pending_ifs if fr.start >= limit]
+            self.pending_ifs = [fr for fr in self.pending_ifs if fr.start < limit]
             shifts: list[tuple[int, int]] = []
 
             def shifted(position: int) -> int:
@@ -530,7 +534,7 @@ class DecodeState:
 
             for fr in draining:
                 opened = self.frame_event(fr)
-                start, stop = shifted(fr["start"]), shifted(fr["stop"])
+                start, stop = shifted(fr.start), shifted(fr.stop)
                 body = tuple(self.stmts[start:stop])
                 if not body:
                     raise ValueError(
@@ -546,7 +550,7 @@ class DecodeState:
                 # the consumed IfGoto's) addrs must stay visible to the line table
                 self.stmts[start:stop] = [ir.IfInline(opened.payload.cond, body)]
                 self.addrs[start:stop] = [opened.address]
-                shifts.append((fr["stop"], (stop - start) - 1))
+                shifts.append((fr.stop, (stop - start) - 1))
 
     def frame_event(self, frame):
         """The branch event an open frame is: the record, not a copy of it.
@@ -555,7 +559,7 @@ class DecodeState:
         condition it folds, the address it starts at and the target it closes
         on are all read from the log rather than carried alongside it.
         """
-        return self.events[frame["seq"]]
+        return self.events[frame.seq]
 
     def frame_start(self, seq: int, idx: int) -> int:
         """Where a body that opened at event ``seq`` begins, from the record.
@@ -624,7 +628,7 @@ class DecodeState:
             "if", template="inline_if_target", target=target,
             address=self.cur, cond=cond,
         )
-        self.ifs.append({"seq": event.seq, "idx": len(self.stmts)})
+        self.ifs.append(IfFrame(seq=event.seq, idx=len(self.stmts)))
         self.cur = None
         return True
 
@@ -2634,7 +2638,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                     else m.ax if e.direct_bool_gate else ir.Group(m.ax)
                 ),
             )
-            c.ifs.append({"seq": event.seq, "idx": len(out.stmts)})
+            c.ifs.append(IfFrame(seq=event.seq, idx=len(out.stmts)))
             m.ax = None
             e.direct_bool_gate = False
             e.direct_bool_logical = False

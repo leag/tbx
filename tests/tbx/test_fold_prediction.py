@@ -175,13 +175,23 @@ def test_an_open_frame_carries_nothing_the_record_already_has():
 
     An open inline-IF frame is the `seq` of the branch event that recognised
     it. `idx` rides along only as the cross-check that the region start read
-    back from the record is the one the walk saw, and Chapter 7 removes it.
-    A third key would be a fold input that the deferred pass cannot get.
+    back from the record is the one the walk saw. A third field would be a
+    fold input the deferred pass cannot get, so the field list is the check.
+
+    This used to parse the four construction sites looking for dict literals
+    with the right keys. A dataclass makes that unnecessary: the fields are
+    declared once and no site can add one.
     """
     import ast
 
+    from tbx.decode0.frames import IfFrame
+
+    assert set(IfFrame.__dataclass_fields__) == {"seq", "idx"}
+
+    # And every opener really does build one, rather than some other record
+    # that happens to have those two names on it.
     root = Path(__file__).resolve().parents[2]
-    frames = []
+    built = []
     for relpath in ("tbx/decode0/core.py", "tbx/decode0/lift.py"):
         tree = ast.parse((root / relpath).read_text())
         for node in ast.walk(tree):
@@ -197,18 +207,14 @@ def test_an_open_frame_carries_nothing_the_record_already_has():
                 )
                 == "ifs"
                 and node.args
-                and isinstance(node.args[0], ast.Dict)
             ):
-                frames.append(
-                    (
-                        f"{relpath}:{node.lineno}",
-                        {k.value for k in node.args[0].keys},
-                    )
-                )
+                built.append((f"{relpath}:{node.lineno}", node.args[0]))
 
-    assert len(frames) == 4, f"expected four frame openers, found {frames}"
-    for where, keys in frames:
-        assert keys == {"seq", "idx"}, f"{where} carries {keys - {'seq', 'idx'}}"
+    assert len(built) == 4, f"expected four frame openers, found {built}"
+    for where, arg in built:
+        assert isinstance(arg, ast.Call) and getattr(arg.func, "id", None) == "IfFrame", (
+            f"{where} appends something other than an IfFrame"
+        )
 
 
 def test_a_body_ending_in_a_pending_print_is_inside_the_region():
