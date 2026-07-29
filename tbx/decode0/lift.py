@@ -6,7 +6,7 @@ from typing import Any
 from tbx import ir
 from tbx.decode0.const import _JCC_RELOP_TRUE, _NEGATE_REL
 from tbx.decode0.control_graph import frame_for
-from tbx.decode0.frames import IfFrame, LoopFrame
+from tbx.decode0.frames import BoolTerm, IfFrame, LoopFrame
 from tbx.decode0.statement_log import editing
 
 
@@ -290,7 +290,7 @@ def _lift_bool_tail(
 
     `wrap_group=True` (an explicitly-parenthesized AND-group used as one
     operand of an outer OR, e.g. `(A AND B) OR (C AND D)`, wild bmaster.exe/
-    ifi.exe, probe q_orofands) wraps just THIS call's own `pb["r1"], r2` fold
+    ifi.exe, probe q_orofands) wraps just THIS call's own `pb.r1, r2` fold
     in `ir.Group` -- the parens are byte-significant (recompiling the
     unparenthesized-but-equivalent-precedence spelling produces different
     bytes). Only the immediate fold is wrapped, never any later outer-join
@@ -308,14 +308,14 @@ def _lift_bool_tail(
     re-enters `_match_bool_term1` at `ops[k+6]` as if it were a brand new
     top-level compound-IF, and THAT group's own eventual close (in a later
     call here, `pend_outer` threaded through unchanged) folds
-    `LogOp(pend_outer["op"], pend_outer["r1"], <inner group's cond>)` instead
-    of emitting directly, using `pend_outer["start"]` as the statement's
+    `LogOp(pend_outer.op, pend_outer.r1, <inner group's cond>)` instead
+    of emitting directly, using `pend_outer.start` as the statement's
     address. Only one level of deferral is verified; a second one raises.
 
     Returns (next op index, still-open pend_bool or None, pend_outer or
     None)."""
     with editing(stmts, "lift_bool_tail"):
-        comb = "andaxbx" if pb["op"] == "AND" else "orax"
+        comb = "andaxbx" if pb.op == "AND" else "orax"
         want = [o[1] for o in ops[k : k + 6]]
         # A FAR exit target (segment-crossing THEN/exit, wild mf.exe) uses
         # `jmpf` (5 bytes, EA) instead of the near `jmp` (3 bytes, E9) here --
@@ -336,18 +336,18 @@ def _lift_bool_tail(
         jmp_len = 5 if f_jmp[1] == "jmpf" else 3
         if f_jcc[2] not in (0x74, 0x75) or f_jcc[3] != f_jmp[0] + jmp_len:
             raise ValueError(f"compound-IF tail: bad dispatch pair at {f_jcc[0]:#x}")
-        delta = 2 if pb["op"] == "AND" else 0
-        if not _same_code_offset(pb["sc"], ops[k + 3][0] + delta):
+        delta = 2 if pb.op == "AND" else 0
+        if not _same_code_offset(pb.sc, ops[k + 3][0] + delta):
             raise ValueError(
                 f"compound-IF: short-circuit target mismatch at {ops[k][0]:#x}"
             )
         r2 = ir.RelOp(_JCC_RELOP_TRUE[m_jcc[2]], *pend_cmp)
-        cond = ir.LogOp(pb["op"], pb["r1"], r2)
+        cond = ir.LogOp(pb.op, pb.r1, r2)
         if wrap_group:
             cond = ir.Group(cond)
         # own_op -- how `cond` (just folded) joins whatever comes next -- is
         # this segment's OWN dispatch polarity (f_jcc), a fact independent of
-        # pb["op"] (the operator that folded r1 with r2 to make `cond`): e.g.
+        # pb.op (the operator that folded r1 with r2 to make `cond`): e.g.
         # wild state.exe's (A AND B) joins C via OR even though A folded with B
         # via AND. The candidate search below only LOCATES and shape-checks
         # whatever sits at the short-circuit target -- own_comb for a same-op
@@ -376,12 +376,9 @@ def _lift_bool_tail(
                     if not seen_materialize:  # immediately-next term: flat fold
                         return (
                             k + 6,
-                            {
-                                "r1": cond,
-                                "op": own_op,
-                                "sc": f_jmp[2],
-                                "start": pb["start"],
-                            },
+                            BoolTerm(
+                                r1=cond, op=own_op, sc=f_jmp[2], start=pb.start
+                            ),
                             pend_outer,
                         )
                     # a multi-term inner GROUP starts at k+6 instead -- defer
@@ -392,20 +389,20 @@ def _lift_bool_tail(
                         # `cond` now, the same left-fold every other cascade
                         # here uses, then keep waiting -- own_op governs how
                         # this new combined accumulator joins the NEXT group.
-                        cond = ir.LogOp(pend_outer["op"], pend_outer["r1"], cond)
-                        outer_start = pend_outer["start"]
+                        cond = ir.LogOp(pend_outer.op, pend_outer.r1, cond)
+                        outer_start = pend_outer.start
                     else:
-                        outer_start = pb["start"]
+                        outer_start = pb.start
                     return (
                         k + 6,
                         None,
-                        {"r1": cond, "op": own_op, "start": outer_start},
+                        BoolTerm(r1=cond, op=own_op, start=outer_start),
                     )
             seen_materialize = True
-        final_cond, final_start = cond, pb["start"]
+        final_cond, final_start = cond, pb.start
         if pend_outer is not None:
-            final_cond = ir.LogOp(pend_outer["op"], pend_outer["r1"], cond)
-            final_start = pend_outer["start"]
+            final_cond = ir.LogOp(pend_outer.op, pend_outer.r1, cond)
+            final_start = pend_outer.start
         if f_jcc[2] == 0x74:
             put(ir.IfGoto(final_cond, ("addr", f_jmp[2])), final_start)
         elif frame_for(
@@ -492,14 +489,14 @@ def _lift_bool_do_tail(ops, k, pend_cmp, pb, stmts, addrs, put, shift=_noshift):
     Makelmenu`'s `DO`, surfacing only as `jump target 0xd49b is not a statement
     start` from the IF on the line before it). Fixture t1_boolloopuntil."""
     with editing(stmts, "lift_bool_do_tail"):
-        comb = "andaxbx" if pb["op"] == "AND" else "orax"
+        comb = "andaxbx" if pb.op == "AND" else "orax"
         want = ["movax", "jcc", "incax", comb, "jcc"]
         if k + len(want) > len(ops) or [o[1] for o in ops[k : k + len(want)]] != want:
             return None
         m_jcc, back_jcc = ops[k + 1], ops[k + 4]
         if m_jcc[3] != ops[k + 3][0] or m_jcc[2] not in _JCC_RELOP_TRUE:
             return None
-        if not _same_code_offset(pb["sc"], ops[k + 3][0] + (2 if pb["op"] == "AND" else 0)):
+        if not _same_code_offset(pb.sc, ops[k + 3][0] + (2 if pb.op == "AND" else 0)):
             return None
         if back_jcc[2] not in (0x74, 0x75):
             return None
@@ -515,12 +512,12 @@ def _lift_bool_do_tail(ops, k, pend_cmp, pb, stmts, addrs, put, shift=_noshift):
                 return None
             kind = "WHILE" if back_jcc[2] == 0x74 else "UNTIL"
         r2 = ir.RelOp(_JCC_RELOP_TRUE[m_jcc[2]], *pend_cmp)
-        cond = ir.LogOp(pb["op"], pb["r1"], r2)
+        cond = ir.LogOp(pb.op, pb.r1, r2)
         idx = addrs.index(back)  # splice `DO` before the body start
         stmts.insert(idx, ir.Do(None))
         addrs.insert(idx, None)
         shift(idx, 1)
-        put(ir.Loop(kind, cond), pb["start"])
+        put(ir.Loop(kind, cond), pb.start)
         return nk
 
 

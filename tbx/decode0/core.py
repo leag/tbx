@@ -54,6 +54,7 @@ from tbx.decode0.rename import _slot, _str_lit, canonical_rename
 from tbx.decode0.cursor import DecodeDiagnostics, OpCursor
 from tbx.decode0.events import DecodedEvent, EventLog, reconcile
 from tbx.decode0.frames import (
+    BoolTerm,
     FnFrame,
     ForFrame,
     DimFrame,
@@ -2514,12 +2515,12 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 # does for a comparison-based term1, so the ordinary
                 # movax_family dispatch (control.py) folds term2's own
                 # materialization into it once reached.
-                e.pend_bool = {
-                    "r1": m.ax,
-                    "op": "AND",
-                    "sc": img.ops[c.k + 2][2],
-                    "start": c.cur,
-                }
+                e.pend_bool = BoolTerm(
+                    r1=m.ax,
+                    op="AND",
+                    sc=img.ops[c.k + 2][2],
+                    start=c.cur,
+                )
                 m.ax = None
                 state.advance(3)
                 return

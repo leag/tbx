@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tbx import ir
+from tbx.decode0.frames import BoolTerm
 from tbx.decode0.const import (
     _JCC_RELOP_STR_TRUE,
     _JCC_RELOP_TRUE,
@@ -663,18 +664,18 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
                 # mcmurphy.exe, probe q_mixedbool7), fold it in now rather
                 # than stacking a second level.
                 if e.pend_bool_outer is not None:
-                    r1 = ir.LogOp(e.pend_bool_outer["op"], e.pend_bool_outer["r1"], r1)
-                    start = e.pend_bool_outer["start"]
+                    r1 = ir.LogOp(e.pend_bool_outer.op, e.pend_bool_outer.r1, r1)
+                    start = e.pend_bool_outer.start
                 else:
                     start = c.cur
-                e.pend_bool_outer = {"r1": r1, "op": op, "start": start}
+                e.pend_bool_outer = BoolTerm(r1=r1, op=op, start=start)
             else:
-                e.pend_bool = {
-                    "r1": r1,
-                    "op": op,
-                    "sc": i.ops[c.k + 5][2],
-                    "start": c.cur,
-                }
+                e.pend_bool = BoolTerm(
+                    r1=r1,
+                    op=op,
+                    sc=i.ops[c.k + 5][2],
+                    start=c.cur,
+                )
             e.pend_cmp = None
             state.advance(6)
             return True
@@ -855,12 +856,12 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
                 if isinstance(_bx_term1, ir.RelOp)
                 else ir.RelOp(_bx_term1.op, _bx_term1.lhs, _bx_term1.rhs)
             )
-            pb = {
-                "r1": r1,
-                "op": "AND",
-                "sc": i.ops[c.k + 3][0] + 2,
-                "start": c.cur,
-            }
+            pb = BoolTerm(
+                r1=r1,
+                op="AND",
+                sc=i.ops[c.k + 3][0] + 2,
+                start=c.cur,
+            )
             m.bx = None
             c.k, e.pend_bool, e.pend_bool_outer = _lift_bool_tail(
                 i.ops,

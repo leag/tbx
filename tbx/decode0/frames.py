@@ -314,3 +314,56 @@ class DimFrame:
     cells: dict = field(default_factory=dict)
     #: Address of the statement being assembled.
     start: int | None = None
+
+
+@dataclass
+class BoolTerm:
+    """One open term of a compound condition, waiting for its second half.
+
+    `A AND B` compiles to code for A, a short-circuit branch, then code for B.
+    The decoder recognises the first half and parks it here until the second
+    arrives; `sc` is the short-circuit target, and matching it against where
+    the second half actually starts is what proves the two belong together.
+
+    An *outer* group -- the `AND` in `(a OR b) AND c` -- has no short-circuit
+    of its own, so `sc` is None there. That was previously expressed by the
+    key simply being absent from one of the two dicts.
+    """
+
+    #: The condition recognised so far.
+    r1: object
+    #: "AND" or "OR".
+    op: str
+    #: Address the whole condition's statement starts at.
+    start: int | None = None
+    #: Short-circuit target; None for an outer group, which has none.
+    sc: int | None = None
+
+
+@dataclass
+class PrintChain:
+    """An open PRINT / LPRINT / PRINT# / WRITE#, collecting its items.
+
+    Turbo Basic compiles each printed item as its own runtime call, so a
+    statement is recognised piecewise and only closed by something that cannot
+    be part of it. Eight sites open one of these -- ordinary PRINT, LPRINT,
+    PRINT USING's fallback, WRITE#, and the graphics text calls.
+
+    `mode` being None is not "unset": it is the plain PRINT form. It used to
+    be written `**({"mode": "lprint"} if want_lprint else {})`, a key whose
+    existence depended on a runtime condition, and read back as
+    `.get("mode") != "lprint"` -- so the absence carried the meaning.
+    """
+
+    #: Items printed so far, in order.
+    items: list = field(default_factory=list)
+    #: File number for PRINT#/WRITE#; None for console output.
+    file: object = None
+    #: Address of the statement.
+    start: int | None = None
+    #: "lprint", "write", or None for plain PRINT.
+    mode: str | None = None
+    #: Separator counts, keyed by gap index, filled in as commas are seen.
+    #: None until one is: every separator defaulting to ';' is the common case
+    #: and renders as no `commas` at all (see `ir.Print.commas`).
+    commas: dict | None = None
