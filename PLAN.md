@@ -1117,11 +1117,39 @@ other two. Written and measured: **`help.exe` decodes with it.**
 clean, with no allowlist. That gate was hard-won and weakening it to land
 a decode is the wrong trade.
 
-The line is an artifact of **renumbering**, not of the source: 44 targets
-at the author's own line numbers would fit inside 248 characters, and the
-program obviously compiled. So the real prerequisite is compact
-renumbering (or emitting the original line table where one exists), and
-the epilogue fix should land after it, not before. `resume.exe` and
+The line is an artifact of **numbering**, not of the source: the program
+obviously compiled, so the author's own spelling fit. But "renumber more
+tightly" is not enough, and the arithmetic settles it rather than
+leaving it to judgement.
+
+The statement is `ON L% GOSUB` with **56** targets and a 15-character
+prefix, in a program of 1308 statements. Emitted widths:
+
+| numbering | width | |
+| --- | --- | --- |
+| stride 10 (today) | 364 | over |
+| stride 1 | 311 | over |
+| every target 3 digits | 293 | over |
+| every target 2 digits | 237 | fits |
+| targets numbered 1..56 | 228 | fits |
+
+A stride of 1 over 1308 statements necessarily reaches four digits, so
+**no stride fits.** The line fits only if the targeted lines carry
+two-digit numbers, and that is only possible if the emitter numbers *only
+the lines that are jump targets* — 56 of them — rather than every
+statement. Turbo Basic allows unnumbered lines, so that is legitimate
+source, and the emitter already emits unnumbered lines inside bodies.
+
+Tried and reverted: a `compact=True` stride-1 renumbering in `emit0`,
+applied only when the default overflows. It is both insufficient (311)
+and, with the epilogue fix reverted, unreachable — no program in either
+corpus emits an over-wide line without it — so it would be untested
+machinery, which is what this decoder does not keep. The real
+prerequisite is number-only-targeted-lines, which is a much larger
+change: every top-level statement is numbered today, so all 1030
+`usercode` goldens move and each needs re-verifying.
+
+`resume.exe` and
 `rsltest.exe` need one further step beyond that: their remaining jump is
 the `jcc`-skip + `jmp` conditional form, which the inline-IF machinery
 consumes before the jmp handler ever sees it, so it never gets exit-fold
