@@ -1,0 +1,783 @@
+{
+  "schema_version": 1,
+  "generator": "tbx.tools.scan_wild",
+  "root": "wild/hits",
+  "corpus_fingerprint": "76135b5ef491e01c9370bd91d7d244a09c68ccefa00664ae6dd300b0127bfd49",
+  "totals": {
+    "executables": 86,
+    "decode_ok": 33,
+    "decode_failed": 53,
+    "not_turbo_basic": 0
+  },
+  "hits": [
+    {
+      "name": "wild/hits/autonum.exe",
+      "dialect": "1.0",
+      "statements": 144
+    },
+    {
+      "name": "wild/hits/baby.exe",
+      "dialect": "1.0",
+      "statements": 1051
+    },
+    {
+      "name": "wild/hits/banker.exe",
+      "dialect": "1.0",
+      "statements": 3029
+    },
+    {
+      "name": "wild/hits/be.exe",
+      "dialect": "1.0",
+      "statements": 173
+    },
+    {
+      "name": "wild/hits/bill.exe",
+      "dialect": "1.1",
+      "statements": 22
+    },
+    {
+      "name": "wild/hits/book.exe",
+      "dialect": "1.0",
+      "statements": 488
+    },
+    {
+      "name": "wild/hits/ck.exe",
+      "dialect": "1.1",
+      "statements": 2
+    },
+    {
+      "name": "wild/hits/color.exe",
+      "dialect": "1.1",
+      "statements": 41
+    },
+    {
+      "name": "wild/hits/horses.exe",
+      "dialect": "1.0",
+      "statements": 193
+    },
+    {
+      "name": "wild/hits/inv87.exe",
+      "dialect": "1.1",
+      "statements": 2794
+    },
+    {
+      "name": "wild/hits/invent.exe",
+      "dialect": "1.0",
+      "statements": 206
+    },
+    {
+      "name": "wild/hits/invoice.exe",
+      "dialect": "1.1",
+      "statements": 2794
+    },
+    {
+      "name": "wild/hits/metric.exe",
+      "dialect": "1.1",
+      "statements": 1789
+    },
+    {
+      "name": "wild/hits/mm.exe",
+      "dialect": "1.1",
+      "statements": 33
+    },
+    {
+      "name": "wild/hits/mymenu.exe",
+      "dialect": "1.0",
+      "statements": 212
+    },
+    {
+      "name": "wild/hits/onelab87.exe",
+      "dialect": "1.1",
+      "statements": 88
+    },
+    {
+      "name": "wild/hits/onelabel.exe",
+      "dialect": "1.1",
+      "statements": 88
+    },
+    {
+      "name": "wild/hits/pz.exe",
+      "dialect": "1.0",
+      "statements": 146
+    },
+    {
+      "name": "wild/hits/r.exe",
+      "dialect": "1.1",
+      "statements": 616
+    },
+    {
+      "name": "wild/hits/readme.exe",
+      "dialect": "1.0",
+      "statements": 129
+    },
+    {
+      "name": "wild/hits/rev.exe",
+      "dialect": "1.0",
+      "statements": 78
+    },
+    {
+      "name": "wild/hits/rstprint.exe",
+      "dialect": "1.1",
+      "statements": 58
+    },
+    {
+      "name": "wild/hits/schart.exe",
+      "dialect": "1.1",
+      "statements": 595
+    },
+    {
+      "name": "wild/hits/secure.exe",
+      "dialect": "1.0",
+      "statements": 212
+    },
+    {
+      "name": "wild/hits/startup.exe",
+      "dialect": "1.0",
+      "statements": 24
+    },
+    {
+      "name": "wild/hits/state.exe",
+      "dialect": "1.1",
+      "statements": 2229
+    },
+    {
+      "name": "wild/hits/state87.exe",
+      "dialect": "1.1",
+      "statements": 2229
+    },
+    {
+      "name": "wild/hits/strpfind.exe",
+      "dialect": "1.0",
+      "statements": 38
+    },
+    {
+      "name": "wild/hits/tamstart.exe",
+      "dialect": "1.1",
+      "statements": 436
+    },
+    {
+      "name": "wild/hits/tbd73.exe",
+      "dialect": "1.1",
+      "statements": 73
+    },
+    {
+      "name": "wild/hits/vhfprop.exe",
+      "dialect": "1.1",
+      "statements": 715
+    },
+    {
+      "name": "wild/hits/zip.exe",
+      "dialect": "1.1",
+      "statements": 96
+    },
+    {
+      "name": "wild/hits/ziptest.exe",
+      "dialect": "1.1",
+      "statements": 309
+    }
+  ],
+  "roundtrips": [],
+  "failures": [
+    {
+      "name": "wild/hits/CVT2TB.EXE",
+      "dialect": "1.1",
+      "message": "[bp+6] outside the open LOCAL frame [phase=lift, offset=0xabd1, op=439, statement=0xabc1, recent=[(43942, 'movsi', 8), (43945, 'add_si_sp'), (43947, 'movm_ax_temp'), (43950, 'arg_push_temp'), (43952, 'movm_imm', 102, 0), (43958, 'far_call', 43388), (43963, 'add_sp', 2), (43966, 'into'), (43967, 'jmps', 43852), (43969, 'movax_bp', 10), (43972, 'movbxax'), (43974, 'movax', 64), (43977, 'addax_bp', 12), (43980, 'into'), (43981, 'strfn', 'CHR$'), (43983, 'movrr', 'ax', 'bx')]]",
+      "signature": "[bp+6] outside the open LOCAL frame [phase=lift, offset=0xabd1, op=439, statement=0xabc1, recent=[(43942, 'movsi', 8), (43945, 'add_si_sp'), (43947, 'movm_ax_temp'), (43950, 'arg_push_temp'), (43952, 'movm_imm', 102, 0), (43958, 'far_call', 43388), (43963, 'add_sp', 2), (43966, 'into'), (43967, 'jmps', 43852), (43969, 'movax_bp', 10), (43972, 'movbxax'), (43974, 'movax', 64), (43977, 'addax_bp', 12), (43980, 'into'), (43981, 'strfn', 'CHR$'), (43983, 'movrr', 'ax', 'bx')]]"
+    },
+    {
+      "name": "wild/hits/billadd.exe",
+      "dialect": "1.1",
+      "message": "displacement 0x76 is neither scalar nor array element [phase=lift, offset=0xfbe9, op=1875, recent=[(64417, 'movax', 1), (64420, 'strfn', 'RIGHT$'), (64422, 'movsi', 1070), (64425, 'movdx', 2177), (64428, 'movesdx'), (64430, 'lset'), (64432, 'movm_imm', 96, 2), (64438, 'fild', 604), (64443, 'put'), (64448, 'movsi', 954), (64451, 'rt', 156), (64453, 'movsi', 982), (64456, 'strassign'), (64458, 'jmp', 62000), (64461, 'movm_imm', 96, 1), (64467, 'fild', 596)]]",
+      "signature": "displacement 0x76 is neither scalar nor array element [phase=lift, offset=0xfbe9, op=1875, recent=[(64417, 'movax', 1), (64420, 'strfn', 'RIGHT$'), (64422, 'movsi', 1070), (64425, 'movdx', 2177), (64428, 'movesdx'), (64430, 'lset'), (64432, 'movm_imm', 96, 2), (64438, 'fild', 604), (64443, 'put'), (64448, 'movsi', 954), (64451, 'rt', 156), (64453, 'movsi', 982), (64456, 'strassign'), (64458, 'jmp', 62000), (64461, 'movm_imm', 96, 1), (64467, 'fild', 596)]]"
+    },
+    {
+      "name": "wild/hits/bm1_dsk2.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte 18 at 0x45a30 [phase=scan]",
+      "signature": "unhandled byte 18"
+    },
+    {
+      "name": "wild/hits/bmaster.exe",
+      "dialect": "1.0",
+      "message": "forwarded arg to unknown callee params at 0x9391 [phase=lift, offset=0x9391, op=973, statement=0x9358, recent=[(37711, 'orax'), (37715, 'jcc', 117, 37720), (37717, 'jmp', 38386), (37720, 'mov_mem_sp', 102), (37724, 'sub_sp', 8), (37727, 'arg_push_ref_bp', 48), (37734, 'arg_push_fwd', 6), (37740, 'arg_push_ref_bp', 52), (37747, 'arg_push_fwd', 42), (37753, 'arg_push_fwd', 38), (37759, 'xorax'), (37761, 'movsi', 26), (37764, 'add_si_sp'), (37766, 'movm_ax_temp'), (37769, 'arg_push_temp'), (37771, 'movm_imm', 102, 0)]]",
+      "signature": "forwarded arg to unknown callee params"
+    },
+    {
+      "name": "wild/hits/cal.exe",
+      "dialect": "1.1",
+      "message": "unhandled materialized test at 0x15eed [phase=lift, offset=0x15eed, op=13912, statement=0x15eb0, recent=[(89791, 'movaxmem', 44), (89794, 'movsiax'), (89796, 'shlsi'), (89798, 'shlsi'), (89800, 'addsi', 4608), (89804, 'fld_si'), (89807, 'fld', 834), (89812, 'fistp', 44), (89817, 'fwait'), (89819, 'movaxmem', 44), (89822, 'movsiax'), (89824, 'shlsi'), (89826, 'shlsi'), (89828, 'addsi', 4608), (89832, 'fcomp_si'), (89835, 'fstsw')]]",
+      "signature": "unhandled materialized test"
+    },
+    {
+      "name": "wild/hits/cal87.exe",
+      "dialect": "1.1",
+      "message": "unhandled materialized test at 0x15eed [phase=lift, offset=0x15eed, op=13866, statement=0x15eb0, recent=[(89791, 'movaxmem', 44), (89794, 'movsiax'), (89796, 'shlsi'), (89798, 'shlsi'), (89800, 'addsi', 4608), (89804, 'fld_si'), (89807, 'fld', 834), (89812, 'fistp', 44), (89817, 'fwait'), (89819, 'movaxmem', 44), (89822, 'movsiax'), (89824, 'shlsi'), (89826, 'shlsi'), (89828, 'addsi', 4608), (89832, 'fcomp_si'), (89835, 'fstsw')]]",
+      "signature": "unhandled materialized test"
+    },
+    {
+      "name": "wild/hits/catalog.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT EC sub a6 at 0xc35d [phase=scan]",
+      "signature": "unhandled INT EC sub a6"
+    },
+    {
+      "name": "wild/hits/cleanup.exe",
+      "dialect": "1.1",
+      "message": "LOCAL zero-fill outside a fresh SUB/DEF FN body at 0xd0ca [phase=lift, offset=0xd0ca, op=4082, recent=[(53200, 'strfn', 'UCASE$'), (53203, 'movsi', 1112), (53206, 'rt', 156), (53208, 'strcmp'), (53210, 'jcc', 116, 53215), (53212, 'jmp', 53259), (53215, 'trap_hook'), (53216, 'movsi', 592), (53219, 'rt', 156), (53221, 'movsi', 588), (53224, 'rt', 156), (53226, 'strconcat'), (53228, 'kill'), (53231, 'trap_hook'), (53232, 'movsi', 592), (53235, 'rt', 156)]]",
+      "signature": "LOCAL zero-fill outside a fresh SUB/DEF FN body"
+    },
+    {
+      "name": "wild/hits/crossref.exe",
+      "dialect": "1.1",
+      "message": "string BP push outside DEF FN at 0xb081 [phase=lift, offset=0xb081, op=1306, statement=0xb080, recent=[(45148, 'trap_hook'), (45149, 'movsi', 852), (45152, 'rt', 156), (45154, 'movsi', 2816), (45157, 'rt', 156), (45159, 'strconcat'), (45161, 'kill'), (45164, 'trap_hook'), (45165, 'ret'), (45167, 'trap_hook'), (45168, 'ret'), (45170, 'trap_hook'), (45171, 'jmp', 45332), (45174, 'mov_bp_imm', 0, 0), (45179, 'mov_bp_imm', 2, 0), (45184, 'trap_hook')]]",
+      "signature": "string BP push outside DEF FN"
+    },
+    {
+      "name": "wild/hits/elec87.exe",
+      "dialect": "1.1",
+      "message": "jump target 0xd387 is not a statement start [phase=finalize, offset=0x1f1c6, op=16934, recent=[(127378, 'fldz'), (127381, 'fstp64', 328), (127388, 'movsi', 1280), (127391, 'rt', 156), (127393, 'movsi', 1178), (127396, 'strassign'), (127398, 'fldz'), (127401, 'fstp64', 320), (127408, 'movsi', 1242), (127411, 'rt', 156), (127413, 'movsi', 4484), (127416, 'rt', 156), (127418, 'strcmp'), (127420, 'jcc', 117, 127425), (127422, 'jmp', 55182), (127425, 'jmpf', 66501, 0, 18213)]]",
+      "signature": "jump target 0xd387 is not a statement start [phase=finalize, offset=0x1f1c6, op=16934, recent=[(127378, 'fldz'), (127381, 'fstp64', 328), (127388, 'movsi', 1280), (127391, 'rt', 156), (127393, 'movsi', 1178), (127396, 'strassign'), (127398, 'fldz'), (127401, 'fstp64', 320), (127408, 'movsi', 1242), (127411, 'rt', 156), (127413, 'movsi', 4484), (127416, 'rt', 156), (127418, 'strcmp'), (127420, 'jcc', 117, 127425), (127422, 'jmp', 55182), (127425, 'jmpf', 66501, 0, 18213)]]"
+    },
+    {
+      "name": "wild/hits/electron.exe",
+      "dialect": "1.1",
+      "message": "jump target 0xd387 is not a statement start [phase=finalize, offset=0x1f1c6, op=16978, recent=[(127378, 'fldz'), (127381, 'fstp64', 328), (127388, 'movsi', 1280), (127391, 'rt', 156), (127393, 'movsi', 1178), (127396, 'strassign'), (127398, 'fldz'), (127401, 'fstp64', 320), (127408, 'movsi', 1242), (127411, 'rt', 156), (127413, 'movsi', 4484), (127416, 'rt', 156), (127418, 'strcmp'), (127420, 'jcc', 117, 127425), (127422, 'jmp', 55182), (127425, 'jmpf', 66501, 0, 18213)]]",
+      "signature": "jump target 0xd387 is not a statement start [phase=finalize, offset=0x1f1c6, op=16978, recent=[(127378, 'fldz'), (127381, 'fstp64', 328), (127388, 'movsi', 1280), (127391, 'rt', 156), (127393, 'movsi', 1178), (127396, 'strassign'), (127398, 'fldz'), (127401, 'fstp64', 320), (127408, 'movsi', 1242), (127411, 'rt', 156), (127413, 'movsi', 4484), (127416, 'rt', 156), (127418, 'strcmp'), (127420, 'jcc', 117, 127425), (127422, 'jmp', 55182), (127425, 'jmpf', 66501, 0, 18213)]]"
+    },
+    {
+      "name": "wild/hits/file.exe",
+      "dialect": "1.0",
+      "message": "unhandled jcc 74 at 0x98ad [phase=lift, offset=0x98ad, op=2252, statement=0x9876, recent=[(39046, 'jcc', 116, 39051), (39048, 'jmp', 39085), (39051, 'movax', 21), (39054, 'cmpax_m', 498), (39058, 'movax', 65535), (39061, 'jcc', 127, 39064), (39063, 'incax'), (39064, 'movbxax'), (39066, 'movax', 8000), (39069, 'cmpax_m', 498), (39073, 'movrr', 'ax', 'bx'), (39075, 'movbxax'), (39077, 'movax', 65535), (39080, 'jcc', 127, 39083), (39082, 'incax'), (39083, 'andaxbx')]]",
+      "signature": "unhandled jcc 74"
+    },
+    {
+      "name": "wild/hits/filepatc.exe",
+      "dialect": "1.0",
+      "message": "displacement 0x1054 is neither scalar nor array element [phase=lift, offset=0x8c7e, op=309, statement=0x8c72, recent=[(35932, 'movbxax'), (35934, 'movax_bp', 4), (35937, 'cwd'), (35938, 'idivbx'), (35940, 'movrr', 'bx', 'cx'), (35942, 'addax_m', 3990), (35946, 'cwd'), (35947, 'idivbx'), (35949, 'movaxdx'), (35951, 'movm_ax_bp', 6), (35954, 'movax', 32), (35957, 'movbxax'), (35959, 'movax_bp', 4), (35962, 'cwd'), (35963, 'idivbx'), (35965, 'cwd')]]",
+      "signature": "displacement 0x1054 is neither scalar nor array element [phase=lift, offset=0x8c7e, op=309, statement=0x8c72, recent=[(35932, 'movbxax'), (35934, 'movax_bp', 4), (35937, 'cwd'), (35938, 'idivbx'), (35940, 'movrr', 'bx', 'cx'), (35942, 'addax_m', 3990), (35946, 'cwd'), (35947, 'idivbx'), (35949, 'movaxdx'), (35951, 'movm_ax_bp', 6), (35954, 'movax', 32), (35957, 'movbxax'), (35959, 'movax_bp', 4), (35962, 'cwd'), (35963, 'idivbx'), (35965, 'cwd')]]"
+    },
+    {
+      "name": "wild/hits/football.exe",
+      "dialect": "1.1",
+      "message": "unhandled materialized test at 0xb95a [phase=lift, offset=0xb95a, op=2818, statement=0xb94e, recent=[(47399, 'movsi', 1612), (47402, 'movdx', 2586), (47405, 'movesdx'), (47407, 'field_as'), (47410, 'movm_imm', 1540, 42), (47416, 'movm_imm', 1542, 5), (47422, 'movm_imm', 1420, 0), (47428, 'movax', 5), (47431, 'movbxax'), (47433, 'movax', 42), (47436, 'locate'), (47438, 'movsi', 1664), (47441, 'rt', 156), (47443, 'movsi', 1792), (47446, 'rt', 156), (47448, 'strcmp')]]",
+      "signature": "unhandled materialized test"
+    },
+    {
+      "name": "wild/hits/grdscn.exe",
+      "dialect": "1.1",
+      "message": "unhandled jcc 74 at 0xbbeb [phase=lift, offset=0xbbeb, op=2675, statement=0xbbb5, recent=[(48068, 'jcc', 116, 48073), (48070, 'jmp', 48107), (48073, 'movax', 18), (48076, 'cmpax_m', 1136), (48080, 'movax', 65535), (48083, 'jcc', 124, 48086), (48085, 'incax'), (48086, 'movbxax'), (48088, 'movax', 28), (48091, 'cmpax_m', 1136), (48095, 'movrr', 'ax', 'bx'), (48097, 'movbxax'), (48099, 'movax', 65535), (48102, 'jcc', 127, 48105), (48104, 'incax'), (48105, 'andaxbx')]]",
+      "signature": "unhandled jcc 74"
+    },
+    {
+      "name": "wild/hits/hebrew.exe",
+      "dialect": "1.0",
+      "message": "unhandled jcc 74 at 0xb4e5 [phase=lift, offset=0xb4e5, op=831, statement=0xb483, recent=[(46269, 'imul_m', 300), (46273, 'movsiax'), (46275, 'movrr', 'ax', 'bx'), (46277, 'movbxax'), (46279, 'movax_m', 718), (46283, 'addsiax'), (46285, 'movrr', 'ax', 'bx'), (46287, 'shlsi'), (46289, 'shlsi'), (46291, 'addsi', 2368), (46295, 'rt', 156), (46297, 'movsi', 762), (46300, 'rt', 156), (46302, 'movbxax'), (46304, 'str2num', 'INSTR'), (46307, 'andaxbx')]]",
+      "signature": "unhandled jcc 74"
+    },
+    {
+      "name": "wild/hits/help.exe",
+      "dialect": "1.0",
+      "message": "jump target 0x8b06 is not a statement start [phase=finalize, offset=0xb89c, op=5738, recent=[(47195, 'movsi', 3224), (47198, 'strassign'), (47200, 'movsi', 736), (47203, 'rt', 156), (47205, 'movsi', 3228), (47208, 'strassign'), (47210, 'movm_imm', 3202, 2), (47216, 'movm_imm', 3204, 4), (47222, 'movm_imm', 3206, 6), (47228, 'movm_imm', 3208, 9), (47234, 'movm_imm', 3210, 18), (47240, 'fild', 3006), (47245, 'delay_init'), (47248, 'delay_poll'), (47253, 'jcc', 117, 47248), (47255, 'return_to', 30904)]]",
+      "signature": "jump target 0x8b06 is not a statement start [phase=finalize, offset=0xb89c, op=5738, recent=[(47195, 'movsi', 3224), (47198, 'strassign'), (47200, 'movsi', 736), (47203, 'rt', 156), (47205, 'movsi', 3228), (47208, 'strassign'), (47210, 'movm_imm', 3202, 2), (47216, 'movm_imm', 3204, 4), (47222, 'movm_imm', 3206, 6), (47228, 'movm_imm', 3208, 9), (47234, 'movm_imm', 3210, 18), (47240, 'fild', 3006), (47245, 'delay_init'), (47248, 'delay_poll'), (47253, 'jcc', 117, 47248), (47255, 'return_to', 30904)]]"
+    },
+    {
+      "name": "wild/hits/hfprop.exe",
+      "dialect": "1.1",
+      "message": "ax,bx combine with empty regs at 0xac80 [phase=lift, offset=0xac80, op=1517, statement=0xac56, recent=[(44121, 'fcomp', 820), (44126, 'fstsw'), (44128, 'movbxax'), (44130, 'movax', 65535), (44133, 'jcc', 116, 44136), (44135, 'incax'), (44136, 'fldz'), (44139, 'fcomp', 816), (44144, 'fstsw'), (44146, 'movrr', 'cx', 'bx'), (44148, 'movbxax'), (44150, 'movax', 65535), (44153, 'jcc', 116, 44156), (44155, 'incax'), (44156, 'oraxbx'), (44158, 'movrr', 'bx', 'cx')]]",
+      "signature": "ax,bx combine with empty regs"
+    },
+    {
+      "name": "wild/hits/ifi.exe",
+      "dialect": "1.0",
+      "message": "unhandled INT 8c at 0x19bd2 [phase=scan]",
+      "signature": "unhandled INT 8c"
+    },
+    {
+      "name": "wild/hits/kinder.exe",
+      "dialect": "1.0",
+      "message": "materialization template mismatch at 0xa354 [phase=lift, offset=0xa354, op=2602, statement=0xa343, recent=[(41773, 'movbxax'), (41775, 'movax', 18), (41778, 'locate'), (41780, 'movsi', 1588), (41783, 'rt', 156), (41785, 'rt', 190), (41787, 'strfn', 'INKEY$'), (41790, 'movsi', 780), (41793, 'strassign'), (41795, 'movsi', 780), (41798, 'rt', 156), (41800, 'movax', 1), (41803, 'strfn', 'RIGHT$'), (41805, 'movax', 77), (41808, 'strfn', 'CHR$'), (41810, 'strcmp')]]",
+      "signature": "materialization template mismatch"
+    },
+    {
+      "name": "wild/hits/kinetics.exe",
+      "dialect": "1.0",
+      "message": "materialization template mismatch at 0xc3d2 [phase=lift, offset=0xc3d2, op=3952, statement=0xc3c4, recent=[(50080, 'andaxbx'), (50084, 'jcc', 117, 50089), (50086, 'jmp', 49827), (50089, 'fild', 4734), (50094, 'fcomp', 854), (50099, 'fstsw'), (50101, 'movax', 65535), (50104, 'jcc', 119, 50107), (50106, 'incax'), (50107, 'orax'), (50111, 'jcc', 117, 50116), (50113, 'jmp', 50190), (50116, 'fild', 4734), (50121, 'fcomp', 842), (50126, 'fstsw'), (50128, 'movbxax')]]",
+      "signature": "materialization template mismatch"
+    },
+    {
+      "name": "wild/hits/lmaster.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte 38 at 0x2bdd2 [phase=scan]",
+      "signature": "unhandled byte 38"
+    },
+    {
+      "name": "wild/hits/mcmurphy.exe",
+      "dialect": "1.1",
+      "message": "NEXT template mismatch at 0x19ce0: (105696, 'jcc', 114, 105701) != jcc 0x73 BODY [phase=lift, offset=0x19cc5, op=21056, recent=[(105227, 'movsi', 1520), (105230, 'rt', 156), (105232, 'movsi', 1394), (105235, 'strassign'), (105237, 'fld1'), (105240, 'fstp', 1296), (105247, 'ret'), (105249, 'movax', 1), (105252, 'cmpax_m', 1266), (105256, 'jcc', 116, 105261), (105258, 'jmp', 39791), (105261, 'movsi', 1394), (105264, 'rt', 156), (105266, 'movsi', 1520), (105269, 'rt', 156), (105271, 'strcmp')]]",
+      "signature": "NEXT template mismatch"
+    },
+    {
+      "name": "wild/hits/mdb.exe",
+      "dialect": "1.1",
+      "message": "jump target 0x1991f is not a statement start [phase=finalize, offset=0x19926, op=20817, recent=[(104686, 'movm_ax', 148), (104690, 'color_commit', 6), (104696, 'fld1'), (104699, 'fcomp', 1256), (104704, 'fstsw'), (104708, 'jcc', 116, 104713), (104710, 'jmp', 104735), (104713, 'fldz'), (104716, 'fstp', 1256), (104723, 'call', 44547), (104726, 'add_sp', 2), (104729, 'jmp', 46326), (104732, 'jmp', 104741), (104735, 'add_sp', 2), (104738, 'jmp', 52652), (104741, 'ret')]]",
+      "signature": "jump target 0x1991f is not a statement start [phase=finalize, offset=0x19926, op=20817, recent=[(104686, 'movm_ax', 148), (104690, 'color_commit', 6), (104696, 'fld1'), (104699, 'fcomp', 1256), (104704, 'fstsw'), (104708, 'jcc', 116, 104713), (104710, 'jmp', 104735), (104713, 'fldz'), (104716, 'fstp', 1256), (104723, 'call', 44547), (104726, 'add_sp', 2), (104729, 'jmp', 46326), (104732, 'jmp', 104741), (104735, 'add_sp', 2), (104738, 'jmp', 52652), (104741, 'ret')]]"
+    },
+    {
+      "name": "wild/hits/mdb87.exe",
+      "dialect": "1.1",
+      "message": "jump target 0x1991f is not a statement start [phase=finalize, offset=0x19926, op=20817, recent=[(104686, 'movm_ax', 148), (104690, 'color_commit', 6), (104696, 'fld1'), (104699, 'fcomp', 1256), (104704, 'fstsw'), (104708, 'jcc', 116, 104713), (104710, 'jmp', 104735), (104713, 'fldz'), (104716, 'fstp', 1256), (104723, 'call', 44547), (104726, 'add_sp', 2), (104729, 'jmp', 46326), (104732, 'jmp', 104741), (104735, 'add_sp', 2), (104738, 'jmp', 52652), (104741, 'ret')]]",
+      "signature": "jump target 0x1991f is not a statement start [phase=finalize, offset=0x19926, op=20817, recent=[(104686, 'movm_ax', 148), (104690, 'color_commit', 6), (104696, 'fld1'), (104699, 'fcomp', 1256), (104704, 'fstsw'), (104708, 'jcc', 116, 104713), (104710, 'jmp', 104735), (104713, 'fldz'), (104716, 'fstp', 1256), (104723, 'call', 44547), (104726, 'add_sp', 2), (104729, 'jmp', 46326), (104732, 'jmp', 104741), (104735, 'add_sp', 2), (104738, 'jmp', 52652), (104741, 'ret')]]"
+    },
+    {
+      "name": "wild/hits/menu.exe",
+      "dialect": "1.0",
+      "message": "DGROUP layout not solvable from the calibrated rules [phase=layout]",
+      "signature": "DGROUP layout not solvable from the calibrated rules [phase=layout]"
+    },
+    {
+      "name": "wild/hits/mf.exe",
+      "dialect": "1.1",
+      "message": "bad string descriptor at [0x05a0]: 0x01b8 [phase=lift, offset=0x11e0a, op=4797, recent=[(73173, 'fld', 1272), (73178, 'fistp', 44), (73183, 'fwait'), (73185, 'movaxmem', 44), (73188, 'movm_ax', 148), (73192, 'color_commit', 6), (73198, 'jmp', 68002), (73201, 'cls'), (73204, 'far_call', 125742), (73209, 'movax', 12), (73212, 'movbxax'), (73214, 'movax', 12), (73217, 'locate'), (73219, 'movsi', 3292), (73222, 'rt', 156), (73224, 'rt', 190)]]",
+      "signature": "bad string descriptor at [0x05a0]: 0x01b8 [phase=lift, offset=0x11e0a, op=4797, recent=[(73173, 'fld', 1272), (73178, 'fistp', 44), (73183, 'fwait'), (73185, 'movaxmem', 44), (73188, 'movm_ax', 148), (73192, 'color_commit', 6), (73198, 'jmp', 68002), (73201, 'cls'), (73204, 'far_call', 125742), (73209, 'movax', 12), (73212, 'movbxax'), (73214, 'movax', 12), (73217, 'locate'), (73219, 'movsi', 3292), (73222, 'rt', 156), (73224, 'rt', 190)]]"
+    },
+    {
+      "name": "wild/hits/morcalc.exe",
+      "dialect": "1.0",
+      "message": "jump target 0xd63e is not a statement start [phase=finalize, offset=0x1396d, op=15488, recent=[(80188, 'movsi', 860), (80191, 'strassign'), (80193, 'xorax'), (80195, 'cursor'), (80197, 'movsi', 860), (80200, 'rt', 156), (80202, 'movsi', 928), (80205, 'rt', 156), (80207, 'strcmp'), (80209, 'jcc', 116, 80185), (80211, 'movm_imm', 136, 7), (80217, 'movm_imm', 148, 0), (80223, 'movm_imm', 160, 0), (80229, 'color_commit', 7), (80233, 'cls'), (80236, 'ret')]]",
+      "signature": "jump target 0xd63e is not a statement start [phase=finalize, offset=0x1396d, op=15488, recent=[(80188, 'movsi', 860), (80191, 'strassign'), (80193, 'xorax'), (80195, 'cursor'), (80197, 'movsi', 860), (80200, 'rt', 156), (80202, 'movsi', 928), (80205, 'rt', 156), (80207, 'strcmp'), (80209, 'jcc', 116, 80185), (80211, 'movm_imm', 136, 7), (80217, 'movm_imm', 148, 0), (80223, 'movm_imm', 160, 0), (80229, 'color_commit', 7), (80233, 'cls'), (80236, 'ret')]]"
+    },
+    {
+      "name": "wild/hits/night.exe",
+      "dialect": "1.1",
+      "message": "DGROUP layout not solvable from the calibrated rules [phase=layout]",
+      "signature": "DGROUP layout not solvable from the calibrated rules [phase=layout]"
+    },
+    {
+      "name": "wild/hits/number.exe",
+      "dialect": "1.0",
+      "message": "ax,bx combine with empty regs at 0xb07e [phase=lift, offset=0xb07e, op=4089, statement=0xb04e, recent=[(45147, 'movax', 65535), (45150, 'jcc', 116, 45153), (45152, 'incax'), (45153, 'movrr', 'cx', 'bx'), (45155, 'movbxax'), (45157, 'movax', 9), (45160, 'cmpax_m', 866), (45164, 'movrr', 'ax', 'bx'), (45166, 'movrr', 'bx', 'cx'), (45168, 'movrr', 'cx', 'bx'), (45170, 'movbxax'), (45172, 'movax', 65535), (45175, 'jcc', 116, 45178), (45177, 'incax'), (45178, 'oraxbx'), (45180, 'movrr', 'bx', 'cx')]]",
+      "signature": "ax,bx combine with empty regs"
+    },
+    {
+      "name": "wild/hits/nvg.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte ad at 0xa19e [phase=scan]",
+      "signature": "unhandled byte ad"
+    },
+    {
+      "name": "wild/hits/nvginst.exe",
+      "dialect": "1.1",
+      "message": "SELECT CASE string arm: unexpected jcc 76 at 0xa60f [phase=lift, offset=0xa60f, op=876, recent=[(42470, 'strfn', 'UCASE$'), (42473, 'movsi', 624), (42476, 'strassign'), (42478, 'movsi', 624), (42481, 'rt', 156), (42483, 'movsi', 92), (42486, 'strassign'), (42488, 'movax', 27), (42491, 'strfn', 'CHR$'), (42493, 'movsi', 92), (42496, 'rt', 156), (42498, 'strcmp'), (42500, 'jcc', 116, 42505), (42502, 'jmp', 42511), (42505, 'jmp', 40300), (42508, 'jmp', 42570)]]",
+      "signature": "SELECT CASE string arm: unexpected jcc 76"
+    },
+    {
+      "name": "wild/hits/pcdcfile.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte 21 at 0xae75 [phase=scan]",
+      "signature": "unhandled byte 21"
+    },
+    {
+      "name": "wild/hits/pfl.exe",
+      "dialect": "1.1",
+      "message": "element access: unexpected op movrr at 0x12d42 [phase=lift, offset=0x12d3c, op=12220, statement=0x12d1a, recent=[(77069, 'movm_ax', 1978), (77073, 'movm_imm', 2036, 1), (77079, 'jmp', 77179), (77082, 'xorax'), (77084, 'movbxax'), (77086, 'xorax'), (77088, 'imul_m', 1116), (77092, 'movsiax'), (77094, 'movrr', 'ax', 'bx'), (77096, 'movbxax'), (77098, 'movax_m', 2030), (77102, 'imul_m', 1110), (77106, 'addsiax'), (77108, 'movrr', 'ax', 'bx'), (77110, 'movrr', 'bx', 'si'), (77112, 'movsim', 2036)]]",
+      "signature": "element access: unexpected op movrr"
+    },
+    {
+      "name": "wild/hits/phone.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte 33 at 0xa9ae [phase=scan]",
+      "signature": "unhandled byte 33"
+    },
+    {
+      "name": "wild/hits/photo.exe",
+      "dialect": "1.1",
+      "message": "jump target 0xad1c is not a statement start [phase=finalize, offset=0xb91e, op=3073, recent=[(47341, 'cmpax_m', 116), (47345, 'movax', 65535), (47348, 'jcc', 116, 47351), (47350, 'incax'), (47351, 'orax'), (47353, 'jcc', 117, 47358), (47355, 'jmp', 47383), (47358, 'rt', 184), (47360, 'rt', 184), (47362, 'input', 596, 64), (47369, 'read_str'), (47372, 'movsi', 488), (47375, 'strassign'), (47377, 'resume_pre'), (47380, 'resume_bare'), (47383, 'on_error', None)]]",
+      "signature": "jump target 0xad1c is not a statement start [phase=finalize, offset=0xb91e, op=3073, recent=[(47341, 'cmpax_m', 116), (47345, 'movax', 65535), (47348, 'jcc', 116, 47351), (47350, 'incax'), (47351, 'orax'), (47353, 'jcc', 117, 47358), (47355, 'jmp', 47383), (47358, 'rt', 184), (47360, 'rt', 184), (47362, 'input', 596, 64), (47369, 'read_str'), (47372, 'movsi', 488), (47375, 'strassign'), (47377, 'resume_pre'), (47380, 'resume_bare'), (47383, 'on_error', None)]]"
+    },
+    {
+      "name": "wild/hits/process.exe",
+      "dialect": "1.0",
+      "message": "empty di spill at 0x8994 [phase=lift, offset=0x8994, op=616, statement=0x8961, recent=[(35182, 'far_movax_si'), (35185, 'cmpax_m', 596), (35189, 'movrr', 'ax', 'bx'), (35191, 'movrr', 'bx', 'cx'), (35193, 'movrr', 'cx', 'bx'), (35195, 'movbxax'), (35197, 'movax', 65535), (35200, 'jcc', 125, 35203), (35202, 'incax'), (35203, 'movrr', 'di', 'cx'), (35205, 'movrr', 'cx', 'bx'), (35207, 'movbxax'), (35209, 'arg_ref', 46), (35212, 'far_movax_si'), (35215, 'arg_ref', 14), (35218, 'far_spush')]]",
+      "signature": "empty di spill"
+    },
+    {
+      "name": "wild/hits/prtguide.exe",
+      "dialect": "1.0",
+      "message": "jump target 0x80bc is not a statement start [phase=finalize, offset=0xa18e, op=4080, recent=[(41306, 'strassign'), (41308, 'movm_imm', 406, 24), (41314, 'inc_m', 404), (41318, 'movsi', 2624), (41321, 'rt', 156), (41323, 'rt', 191), (41325, 'fild', 404), (41330, 'rt', 188), (41332, 'rt', 185), (41336, 'sub_sp', 6), (41339, 'far_call', 32959), (41344, 'movax', 12), (41347, 'strfn', 'CHR$'), (41349, 'rt', 191), (41351, 'rt', 185), (41353, 'return_to', 30502)]]",
+      "signature": "jump target 0x80bc is not a statement start [phase=finalize, offset=0xa18e, op=4080, recent=[(41306, 'strassign'), (41308, 'movm_imm', 406, 24), (41314, 'inc_m', 404), (41318, 'movsi', 2624), (41321, 'rt', 156), (41323, 'rt', 191), (41325, 'fild', 404), (41330, 'rt', 188), (41332, 'rt', 185), (41336, 'sub_sp', 6), (41339, 'far_call', 32959), (41344, 'movax', 12), (41347, 'strfn', 'CHR$'), (41349, 'rt', 191), (41351, 'rt', 185), (41353, 'return_to', 30502)]]"
+    },
+    {
+      "name": "wild/hits/pw.exe",
+      "dialect": "1.0",
+      "message": "unhandled byte c4 at 0x9c6a [phase=scan]",
+      "signature": "unhandled byte c4"
+    },
+    {
+      "name": "wild/hits/pwinst.exe",
+      "dialect": "1.0",
+      "message": "unhandled jcc 74 at 0x865c [phase=lift, offset=0x865c, op=511, statement=0x8654, recent=[(34352, 'movax', 2), (34355, 'locate'), (34357, 'movsi', 664), (34360, 'rt', 156), (34362, 'rt', 190), (34364, 'push_bp'), (34365, 'sub_sp', 8), (34368, 'mov_bp_sp'), (34370, 'fn_call', 42357), (34377, 'fnres_spush'), (34379, 'add_sp', 8), (34382, 'pop_bp'), (34383, 'movsi', 664), (34386, 'strassign'), (34388, 'movax_m', 502), (34392, 'andax_m', 504)]]",
+      "signature": "unhandled jcc 74"
+    },
+    {
+      "name": "wild/hits/reformat.exe",
+      "dialect": "1.1",
+      "message": "LOCAL zero-fill outside a fresh SUB/DEF FN body at 0xd455 [phase=lift, offset=0xd455, op=4426, recent=[(54073, 'rt', 190), (54075, 'fre_str'), (54078, 'rt', 187), (54080, 'rt', 193), (54082, 'movax', 1), (54085, 'negax'), (54087, 'into'), (54088, 'fn_axfp', 'FRE'), (54091, 'rt', 187), (54093, 'rt', 193), (54095, 'movax', 2), (54098, 'negax'), (54100, 'into'), (54101, 'fn_axfp', 'FRE'), (54104, 'rt', 187), (54106, 'rt', 184)]]",
+      "signature": "LOCAL zero-fill outside a fresh SUB/DEF FN body"
+    },
+    {
+      "name": "wild/hits/refund.exe",
+      "dialect": "1.0",
+      "message": "SCREEN bad tag at 0x91e2 [phase=scan]",
+      "signature": "SCREEN bad tag"
+    },
+    {
+      "name": "wild/hits/resume.exe",
+      "dialect": "1.1",
+      "message": "jump target 0xa1cb is not a statement start [phase=finalize, offset=0x15b35, op=17471, recent=[(88841, 'far_call', 45814), (88846, 'mov_bx_sp'), (88848, 'les_si_ss_bx'), (88852, 'str_temp_free'), (88854, 'add_sp', 6), (88857, 'strfn', 'INKEY$'), (88860, 'movsi', 1308), (88863, 'strassign'), (88865, 'movsi', 1308), (88868, 'rt', 156), (88870, 'movsi', 1568), (88873, 'rt', 156), (88875, 'strcmp'), (88877, 'jcc', 116, 88857), (88879, 'resume_pre'), (88882, 'jmp', 46801)]]",
+      "signature": "jump target 0xa1cb is not a statement start [phase=finalize, offset=0x15b35, op=17471, recent=[(88841, 'far_call', 45814), (88846, 'mov_bx_sp'), (88848, 'les_si_ss_bx'), (88852, 'str_temp_free'), (88854, 'add_sp', 6), (88857, 'strfn', 'INKEY$'), (88860, 'movsi', 1308), (88863, 'strassign'), (88865, 'movsi', 1308), (88868, 'rt', 156), (88870, 'movsi', 1568), (88873, 'rt', 156), (88875, 'strcmp'), (88877, 'jcc', 116, 88857), (88879, 'resume_pre'), (88882, 'jmp', 46801)]]"
+    },
+    {
+      "name": "wild/hits/rs.exe",
+      "dialect": "1.0",
+      "message": "numeric INPUT read without FSTP at 0xbb1a [phase=lift, offset=0xbb1a, op=3886, statement=0xbb13, recent=[(47848, 'rt', 156), (47850, 'rt', 190), (47852, 'fld64', 2816), (47857, 'fistp', 44), (47862, 'fwait'), (47864, 'movaxmem', 44), (47867, 'movsiax'), (47869, 'shlsi'), (47871, 'shlsi'), (47873, 'shlsi'), (47875, 'moves_m', 1962), (47879, 'far_fld_si64'), (47883, 'rt', 187), (47885, 'rt', 184), (47889, 'rt', 184), (47891, 'input', 3708, 16448)]]",
+      "signature": "numeric INPUT read without FSTP"
+    },
+    {
+      "name": "wild/hits/rsltest.exe",
+      "dialect": "1.1",
+      "message": "jump target 0xac2e is not a statement start [phase=finalize, offset=0x11aa4, op=10653, recent=[(72317, 'trap_hook'), (72318, 'fild', 116), (72323, 'rt', 187), (72325, 'rt', 193), (72327, 'fild', 114), (72332, 'rt', 187), (72334, 'rt', 184), (72338, 'trap_hook'), (72339, 'end'), (72342, 'trap_hook'), (72343, 'movsi', 1220), (72346, 'rt', 156), (72348, 'rt', 190), (72350, 'rt', 184), (72352, 'trap_hook'), (72353, 'end')]]",
+      "signature": "jump target 0xac2e is not a statement start [phase=finalize, offset=0x11aa4, op=10653, recent=[(72317, 'trap_hook'), (72318, 'fild', 116), (72323, 'rt', 187), (72325, 'rt', 193), (72327, 'fild', 114), (72332, 'rt', 187), (72334, 'rt', 184), (72338, 'trap_hook'), (72339, 'end'), (72342, 'trap_hook'), (72343, 'movsi', 1220), (72346, 'rt', 156), (72348, 'rt', 190), (72350, 'rt', 184), (72352, 'trap_hook'), (72353, 'end')]]"
+    },
+    {
+      "name": "wild/hits/sabpcv3.exe",
+      "dialect": "1.1",
+      "message": "unhandled byte 51 at 0xd30b [phase=scan]",
+      "signature": "unhandled byte 51"
+    },
+    {
+      "name": "wild/hits/sprogh.exe",
+      "dialect": "1.1",
+      "message": "DGROUP layout not solvable from the calibrated rules [phase=layout]",
+      "signature": "DGROUP layout not solvable from the calibrated rules [phase=layout]"
+    },
+    {
+      "name": "wild/hits/stat.exe",
+      "dialect": "1.1",
+      "message": "runtime blocks are not 0x36-contiguous after statics [phase=layout]",
+      "signature": "runtime blocks are not 0x36-contiguous after statics [phase=layout]"
+    },
+    {
+      "name": "wild/hits/styled.exe",
+      "dialect": "1.0",
+      "message": "87",
+      "signature": "87"
+    },
+    {
+      "name": "wild/hits/styllist.exe",
+      "dialect": "1.0",
+      "message": "87",
+      "signature": "87"
+    },
+    {
+      "name": "wild/hits/swbb.exe",
+      "dialect": "1.0",
+      "message": "DGROUP layout not solvable from the calibrated rules [phase=layout]",
+      "signature": "DGROUP layout not solvable from the calibrated rules [phase=layout]"
+    },
+    {
+      "name": "wild/hits/varamort.exe",
+      "dialect": "1.0",
+      "message": "unhandled materialized test at 0xa4f9 [phase=lift, offset=0xa4f9, op=1670, statement=0xa4ed, recent=[(42174, 'movm_imm', 136, 0), (42180, 'movm_imm', 148, 1), (42186, 'movm_imm', 160, 1), (42192, 'movm_imm', 172, 1), (42198, 'screen', 15), (42202, 'call', 61918), (42205, 'movsi', 1248), (42208, 'rt', 156), (42210, 'movsi', 994), (42213, 'strassign'), (42215, 'movm_imm', 816, 1), (42221, 'movsi', 994), (42224, 'rt', 156), (42226, 'movsi', 1656), (42229, 'rt', 156), (42231, 'strcmp')]]",
+      "signature": "unhandled materialized test"
+    },
+    {
+      "name": "wild/hits/wb.exe",
+      "dialect": "1.1",
+      "message": "materialization template mismatch at 0xb933 [phase=lift, offset=0xb933, op=1435, statement=0xb8e9, recent=[(47369, 'oraxbx'), (47371, 'movbxax'), (47373, 'movax', 76), (47376, 'cmpax_m', 116), (47380, 'movrr', 'ax', 'bx'), (47382, 'movbxax'), (47384, 'movax', 65535), (47387, 'jcc', 116, 47390), (47389, 'incax'), (47390, 'oraxbx'), (47392, 'jcc', 117, 47397), (47394, 'jmp', 47419), (47397, 'fild', 3430), (47402, 'fcomp', 1170), (47407, 'fstsw'), (47409, 'movbxax')]]",
+      "signature": "materialization template mismatch"
+    }
+  ],
+  "groups": [
+    {
+      "signature": "DGROUP layout not solvable from the calibrated rules [phase=layout]",
+      "count": 4,
+      "files": [
+        "wild/hits/menu.exe",
+        "wild/hits/night.exe",
+        "wild/hits/sprogh.exe",
+        "wild/hits/swbb.exe"
+      ]
+    },
+    {
+      "signature": "unhandled jcc 74",
+      "count": 4,
+      "files": [
+        "wild/hits/file.exe",
+        "wild/hits/grdscn.exe",
+        "wild/hits/hebrew.exe",
+        "wild/hits/pwinst.exe"
+      ]
+    },
+    {
+      "signature": "unhandled materialized test",
+      "count": 4,
+      "files": [
+        "wild/hits/cal.exe",
+        "wild/hits/cal87.exe",
+        "wild/hits/football.exe",
+        "wild/hits/varamort.exe"
+      ]
+    },
+    {
+      "signature": "materialization template mismatch",
+      "count": 3,
+      "files": [
+        "wild/hits/kinder.exe",
+        "wild/hits/kinetics.exe",
+        "wild/hits/wb.exe"
+      ]
+    },
+    {
+      "signature": "87",
+      "count": 2,
+      "files": [
+        "wild/hits/styled.exe",
+        "wild/hits/styllist.exe"
+      ]
+    },
+    {
+      "signature": "LOCAL zero-fill outside a fresh SUB/DEF FN body",
+      "count": 2,
+      "files": [
+        "wild/hits/cleanup.exe",
+        "wild/hits/reformat.exe"
+      ]
+    },
+    {
+      "signature": "ax,bx combine with empty regs",
+      "count": 2,
+      "files": [
+        "wild/hits/hfprop.exe",
+        "wild/hits/number.exe"
+      ]
+    },
+    {
+      "signature": "jump target 0x1991f is not a statement start [phase=finalize, offset=0x19926, op=20817, recent=[(104686, 'movm_ax', 148), (104690, 'color_commit', 6), (104696, 'fld1'), (104699, 'fcomp', 1256), (104704, 'fstsw'), (104708, 'jcc', 116, 104713), (104710, 'jmp', 104735), (104713, 'fldz'), (104716, 'fstp', 1256), (104723, 'call', 44547), (104726, 'add_sp', 2), (104729, 'jmp', 46326), (104732, 'jmp', 104741), (104735, 'add_sp', 2), (104738, 'jmp', 52652), (104741, 'ret')]]",
+      "count": 2,
+      "files": [
+        "wild/hits/mdb.exe",
+        "wild/hits/mdb87.exe"
+      ]
+    },
+    {
+      "signature": "NEXT template mismatch",
+      "count": 1,
+      "files": [
+        "wild/hits/mcmurphy.exe"
+      ]
+    },
+    {
+      "signature": "SCREEN bad tag",
+      "count": 1,
+      "files": [
+        "wild/hits/refund.exe"
+      ]
+    },
+    {
+      "signature": "SELECT CASE string arm: unexpected jcc 76",
+      "count": 1,
+      "files": [
+        "wild/hits/nvginst.exe"
+      ]
+    },
+    {
+      "signature": "[bp+6] outside the open LOCAL frame [phase=lift, offset=0xabd1, op=439, statement=0xabc1, recent=[(43942, 'movsi', 8), (43945, 'add_si_sp'), (43947, 'movm_ax_temp'), (43950, 'arg_push_temp'), (43952, 'movm_imm', 102, 0), (43958, 'far_call', 43388), (43963, 'add_sp', 2), (43966, 'into'), (43967, 'jmps', 43852), (43969, 'movax_bp', 10), (43972, 'movbxax'), (43974, 'movax', 64), (43977, 'addax_bp', 12), (43980, 'into'), (43981, 'strfn', 'CHR$'), (43983, 'movrr', 'ax', 'bx')]]",
+      "count": 1,
+      "files": [
+        "wild/hits/CVT2TB.EXE"
+      ]
+    },
+    {
+      "signature": "bad string descriptor at [0x05a0]: 0x01b8 [phase=lift, offset=0x11e0a, op=4797, recent=[(73173, 'fld', 1272), (73178, 'fistp', 44), (73183, 'fwait'), (73185, 'movaxmem', 44), (73188, 'movm_ax', 148), (73192, 'color_commit', 6), (73198, 'jmp', 68002), (73201, 'cls'), (73204, 'far_call', 125742), (73209, 'movax', 12), (73212, 'movbxax'), (73214, 'movax', 12), (73217, 'locate'), (73219, 'movsi', 3292), (73222, 'rt', 156), (73224, 'rt', 190)]]",
+      "count": 1,
+      "files": [
+        "wild/hits/mf.exe"
+      ]
+    },
+    {
+      "signature": "displacement 0x1054 is neither scalar nor array element [phase=lift, offset=0x8c7e, op=309, statement=0x8c72, recent=[(35932, 'movbxax'), (35934, 'movax_bp', 4), (35937, 'cwd'), (35938, 'idivbx'), (35940, 'movrr', 'bx', 'cx'), (35942, 'addax_m', 3990), (35946, 'cwd'), (35947, 'idivbx'), (35949, 'movaxdx'), (35951, 'movm_ax_bp', 6), (35954, 'movax', 32), (35957, 'movbxax'), (35959, 'movax_bp', 4), (35962, 'cwd'), (35963, 'idivbx'), (35965, 'cwd')]]",
+      "count": 1,
+      "files": [
+        "wild/hits/filepatc.exe"
+      ]
+    },
+    {
+      "signature": "displacement 0x76 is neither scalar nor array element [phase=lift, offset=0xfbe9, op=1875, recent=[(64417, 'movax', 1), (64420, 'strfn', 'RIGHT$'), (64422, 'movsi', 1070), (64425, 'movdx', 2177), (64428, 'movesdx'), (64430, 'lset'), (64432, 'movm_imm', 96, 2), (64438, 'fild', 604), (64443, 'put'), (64448, 'movsi', 954), (64451, 'rt', 156), (64453, 'movsi', 982), (64456, 'strassign'), (64458, 'jmp', 62000), (64461, 'movm_imm', 96, 1), (64467, 'fild', 596)]]",
+      "count": 1,
+      "files": [
+        "wild/hits/billadd.exe"
+      ]
+    },
+    {
+      "signature": "element access: unexpected op movrr",
+      "count": 1,
+      "files": [
+        "wild/hits/pfl.exe"
+      ]
+    },
+    {
+      "signature": "empty di spill",
+      "count": 1,
+      "files": [
+        "wild/hits/process.exe"
+      ]
+    },
+    {
+      "signature": "forwarded arg to unknown callee params",
+      "count": 1,
+      "files": [
+        "wild/hits/bmaster.exe"
+      ]
+    },
+    {
+      "signature": "jump target 0x80bc is not a statement start [phase=finalize, offset=0xa18e, op=4080, recent=[(41306, 'strassign'), (41308, 'movm_imm', 406, 24), (41314, 'inc_m', 404), (41318, 'movsi', 2624), (41321, 'rt', 156), (41323, 'rt', 191), (41325, 'fild', 404), (41330, 'rt', 188), (41332, 'rt', 185), (41336, 'sub_sp', 6), (41339, 'far_call', 32959), (41344, 'movax', 12), (41347, 'strfn', 'CHR$'), (41349, 'rt', 191), (41351, 'rt', 185), (41353, 'return_to', 30502)]]",
+      "count": 1,
+      "files": [
+        "wild/hits/prtguide.exe"
+      ]
+    },
+    {
+      "signature": "jump target 0x8b06 is not a statement start [phase=finalize, offset=0xb89c, op=5738, recent=[(47195, 'movsi', 3224), (47198, 'strassign'), (47200, 'movsi', 736), (47203, 'rt', 156), (47205, 'movsi', 3228), (47208, 'strassign'), (47210, 'movm_imm', 3202, 2), (47216, 'movm_imm', 3204, 4), (47222, 'movm_imm', 3206, 6), (47228, 'movm_imm', 3208, 9), (47234, 'movm_imm', 3210, 18), (47240, 'fild', 3006), (47245, 'delay_init'), (47248, 'delay_poll'), (47253, 'jcc', 117, 47248), (47255, 'return_to', 30904)]]",
+      "count": 1,
+      "files": [
+        "wild/hits/help.exe"
+      ]
+    },
+    {
+      "signature": "jump target 0xa1cb is not a statement start [phase=finalize, offset=0x15b35, op=17471, recent=[(88841, 'far_call', 45814), (88846, 'mov_bx_sp'), (88848, 'les_si_ss_bx'), (88852, 'str_temp_free'), (88854, 'add_sp', 6), (88857, 'strfn', 'INKEY$'), (88860, 'movsi', 1308), (88863, 'strassign'), (88865, 'movsi', 1308), (88868, 'rt', 156), (88870, 'movsi', 1568), (88873, 'rt', 156), (88875, 'strcmp'), (88877, 'jcc', 116, 88857), (88879, 'resume_pre'), (88882, 'jmp', 46801)]]",
+      "count": 1,
+      "files": [
+        "wild/hits/resume.exe"
+      ]
+    },
+    {
+      "signature": "jump target 0xac2e is not a statement start [phase=finalize, offset=0x11aa4, op=10653, recent=[(72317, 'trap_hook'), (72318, 'fild', 116), (72323, 'rt', 187), (72325, 'rt', 193), (72327, 'fild', 114), (72332, 'rt', 187), (72334, 'rt', 184), (72338, 'trap_hook'), (72339, 'end'), (72342, 'trap_hook'), (72343, 'movsi', 1220), (72346, 'rt', 156), (72348, 'rt', 190), (72350, 'rt', 184), (72352, 'trap_hook'), (72353, 'end')]]",
+      "count": 1,
+      "files": [
+        "wild/hits/rsltest.exe"
+      ]
+    },
+    {
+      "signature": "jump target 0xad1c is not a statement start [phase=finalize, offset=0xb91e, op=3073, recent=[(47341, 'cmpax_m', 116), (47345, 'movax', 65535), (47348, 'jcc', 116, 47351), (47350, 'incax'), (47351, 'orax'), (47353, 'jcc', 117, 47358), (47355, 'jmp', 47383), (47358, 'rt', 184), (47360, 'rt', 184), (47362, 'input', 596, 64), (47369, 'read_str'), (47372, 'movsi', 488), (47375, 'strassign'), (47377, 'resume_pre'), (47380, 'resume_bare'), (47383, 'on_error', None)]]",
+      "count": 1,
+      "files": [
+        "wild/hits/photo.exe"
+      ]
+    },
+    {
+      "signature": "jump target 0xd387 is not a statement start [phase=finalize, offset=0x1f1c6, op=16934, recent=[(127378, 'fldz'), (127381, 'fstp64', 328), (127388, 'movsi', 1280), (127391, 'rt', 156), (127393, 'movsi', 1178), (127396, 'strassign'), (127398, 'fldz'), (127401, 'fstp64', 320), (127408, 'movsi', 1242), (127411, 'rt', 156), (127413, 'movsi', 4484), (127416, 'rt', 156), (127418, 'strcmp'), (127420, 'jcc', 117, 127425), (127422, 'jmp', 55182), (127425, 'jmpf', 66501, 0, 18213)]]",
+      "count": 1,
+      "files": [
+        "wild/hits/elec87.exe"
+      ]
+    },
+    {
+      "signature": "jump target 0xd387 is not a statement start [phase=finalize, offset=0x1f1c6, op=16978, recent=[(127378, 'fldz'), (127381, 'fstp64', 328), (127388, 'movsi', 1280), (127391, 'rt', 156), (127393, 'movsi', 1178), (127396, 'strassign'), (127398, 'fldz'), (127401, 'fstp64', 320), (127408, 'movsi', 1242), (127411, 'rt', 156), (127413, 'movsi', 4484), (127416, 'rt', 156), (127418, 'strcmp'), (127420, 'jcc', 117, 127425), (127422, 'jmp', 55182), (127425, 'jmpf', 66501, 0, 18213)]]",
+      "count": 1,
+      "files": [
+        "wild/hits/electron.exe"
+      ]
+    },
+    {
+      "signature": "jump target 0xd63e is not a statement start [phase=finalize, offset=0x1396d, op=15488, recent=[(80188, 'movsi', 860), (80191, 'strassign'), (80193, 'xorax'), (80195, 'cursor'), (80197, 'movsi', 860), (80200, 'rt', 156), (80202, 'movsi', 928), (80205, 'rt', 156), (80207, 'strcmp'), (80209, 'jcc', 116, 80185), (80211, 'movm_imm', 136, 7), (80217, 'movm_imm', 148, 0), (80223, 'movm_imm', 160, 0), (80229, 'color_commit', 7), (80233, 'cls'), (80236, 'ret')]]",
+      "count": 1,
+      "files": [
+        "wild/hits/morcalc.exe"
+      ]
+    },
+    {
+      "signature": "numeric INPUT read without FSTP",
+      "count": 1,
+      "files": [
+        "wild/hits/rs.exe"
+      ]
+    },
+    {
+      "signature": "runtime blocks are not 0x36-contiguous after statics [phase=layout]",
+      "count": 1,
+      "files": [
+        "wild/hits/stat.exe"
+      ]
+    },
+    {
+      "signature": "string BP push outside DEF FN",
+      "count": 1,
+      "files": [
+        "wild/hits/crossref.exe"
+      ]
+    },
+    {
+      "signature": "unhandled INT 8c",
+      "count": 1,
+      "files": [
+        "wild/hits/ifi.exe"
+      ]
+    },
+    {
+      "signature": "unhandled INT EC sub a6",
+      "count": 1,
+      "files": [
+        "wild/hits/catalog.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 18",
+      "count": 1,
+      "files": [
+        "wild/hits/bm1_dsk2.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 21",
+      "count": 1,
+      "files": [
+        "wild/hits/pcdcfile.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 33",
+      "count": 1,
+      "files": [
+        "wild/hits/phone.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 38",
+      "count": 1,
+      "files": [
+        "wild/hits/lmaster.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte 51",
+      "count": 1,
+      "files": [
+        "wild/hits/sabpcv3.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte ad",
+      "count": 1,
+      "files": [
+        "wild/hits/nvg.exe"
+      ]
+    },
+    {
+      "signature": "unhandled byte c4",
+      "count": 1,
+      "files": [
+        "wild/hits/pw.exe"
+      ]
+    }
+  ]
+}

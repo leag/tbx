@@ -966,6 +966,52 @@ mechanism, none of the three candidates guessed below. `secure.exe`
 still fails on the same error message at a different target and was
 NOT re-traced — do not assume it shares this fix's cause.
 
+**`secure.exe` RESOLVED 2026-07-29, and the caution above was right: it
+did not share the cause.** More importantly, the triage that closed it
+shows this error message is *not one gap*. Two different checks raise
+it, and they mean opposite things:
+
+- `ControlGraph.validate_targets` accepts an address owned by
+  **anything** — top level or any `stmt_addr` entry. It raising means
+  nothing in the program owns the address at all.
+- `_resolve_targets` needs the address reachable as a top-level index or
+  a `BodyLine`. It raising means something owns it but the tree cannot
+  address it. This is the only one Part II's framing describes.
+
+Of the 11 wild failures carrying this message, **10 raise at
+`validate_targets`** — nothing owns the address — and only `secure.exe`
+raised at `_resolve_targets`. Its cause was narrow: the target was owned
+by arm 0 of a top-level `IfBlock` with an **ELSE**, and the top-level
+dispatch mapped a block's interior only when it had exactly one arm and
+no ELSE, though `map_body`'s own nested-block recursion already counted
+arms and ELSE correctly. Both now share one `map_if_block` helper.
+Calibrated by `t1_blkgotoelse` (target in the arm) and `t1_blkgotoelif`
+(target in an ELSEIF arm), both byte-exact; wild scan 32 → 33 decode-ok
+with the report otherwise byte-identical.
+
+The remaining 10 are **at least five distinct shapes**, by the ops at
+each target — do not treat them as one:
+
+| programs | target sits on | shape |
+| --- | --- | --- |
+| resume, rsltest | `trap_hook` after `far_call` | statement after a forwarded-arg call |
+| prtguide | `jmp` after `proc_ret` | inter-definition glue (the spec's own "out of scope" case) |
+| help | `trap_hook` before `proc_ret` | procedure epilogue |
+| morcalc, photo | op right after `str2num CVL` | statement boundary the scan did not commit |
+| mdb, mdb87 | `add_sp 2` after a `jmp` | call-sequence tail |
+| elec87, electron | **no op starts there at all**, yet the scan recorded a commit | anomaly of its own |
+
+**A separate, silent bug found while calibrating this.** Probe
+`t1_blkgotoelse2` (a backward `GOTO` into an ELSE **body**, rather than
+into the arm) does not raise — it decodes to *invalid* source, splicing
+a `DO` inside the ELSE arm and closing `LOOP` at top level, i.e. crossed
+block nesting. The backward `jmps` is being taken for an infinite-`DO`
+back-edge (`core.py:3082`). Confirmed present **before** this fix and
+unchanged by it, so it is independent. It is not promoted to the corpus
+(the calibration rule forbids promoting a shape whose output is wrong);
+the `.bas` is worth re-authoring when that bug is taken on, because a
+silent wrong answer is worse than the loud one this section is about.
+
 Original status: 2026-07-22, investigation-only — no code changes yet. This
 supersedes the "SUB/DEF FN body" framing in `Part III`'s `6f1a9fb`
 diagnosis commit, which was **factually wrong about the mechanism**

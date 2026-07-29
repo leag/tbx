@@ -1034,6 +1034,32 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
 
     if stmt_addr:
 
+        def map_if_block(top_idx, block, phys):
+            """A block IF's interior, counted the way emit0 renders it.
+
+            ``phys`` is the block header's own physical line; the value
+            returned is the line after its END IF. emit0 renders one header
+            line per arm, then that arm's body, then an optional "ELSE" line
+            and its body, then "END IF" -- so the block is fully accounted and
+            flat counting can safely continue past it (unlike the generic
+            multi-line cases in `map_body`, whose width is not known).
+
+            Shared by the two places a block IF is reached, which is the point:
+            nested inside a body (probe t1_dblhooksub, a block IF/ELSEIF/ELSE
+            inside a SUB body whose first post-block statement is a jump
+            target) and standing at top level (t1_blkgoto, and t1_blkgotoelse
+            once the block has an ELSE). The top-level dispatch used to accept
+            only a single-arm, no-ELSE block and silently map nothing
+            otherwise, so a GOTO into the arm of an ELSE-bearing block reached
+            `fix` unresolved and raised (wild secure.exe, target 0x82fe, whose
+            owner is arm 0's fourth statement).
+            """
+            for _cond, arm_body in block.arms:
+                phys = map_body(top_idx, arm_body, phys + 1)
+            if block.else_body is not None:
+                phys = map_body(top_idx, block.else_body, phys + 1)
+            return phys + 1  # "END IF"
+
         def map_body(top_idx, body, phys):
             multi = False
             for b in body:
@@ -1046,20 +1072,7 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
                         )
                     index[a] = ir.BodyLine(top_idx, phys)
                 if isinstance(b, ir.IfBlock):
-                    # Header (already counted as `phys` above) + body
-                    # (recursed, exact) + END IF -- a fully-accounted block, so
-                    # flat counting can safely continue past it (unlike the
-                    # generic multi-line cases below, whose width isn't known).
-                    # ELSEIF/ELSE arms extend the same accounting: emit0.py
-                    # renders one header line per arm, then that arm's body,
-                    # then an optional "ELSE" line + body, then "END IF"
-                    # (probe t1_dblhooksub, a block IF/ELSEIF/ELSE inside a SUB
-                    # body whose first post-block statement is a jump target).
-                    for _cond, arm_body in b.arms:
-                        phys = map_body(top_idx, arm_body, phys + 1)
-                    if b.else_body is not None:
-                        phys = map_body(top_idx, b.else_body, phys + 1)
-                    phys += 1  # "END IF"
+                    phys = map_if_block(top_idx, b, phys)
                 elif isinstance(b, ir.SelectCase):
                     # Fully accounted like the single-arm IfBlock above:
                     # emit0.py's own SelectCase rendering is a deterministic
@@ -1084,23 +1097,19 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
 
         for i, s in enumerate(stmts):
             if isinstance(s, ir.IfBlock):
-                # A single-arm block IF's interior is addressable when the
-                # source numbered the line (t1_blkgoto): phys k+1 counts from
-                # the IF header exactly like a SUB body counts from SUB.
-                # Multi-arm/ELSE interiors are unwitnessed -- their targets
-                # stay unresolved and raise below.
-                body = (
-                    s.arms[0][1]
-                    if len(s.arms) == 1 and s.else_body is None
-                    else ()
-                )
-            else:
-                body = (
-                    s.body
-                    if isinstance(s, ir.SubDef)
-                    or (isinstance(s, ir.DefFn) and s.is_block)
-                    else ()
-                )
+                # A block IF's interior is addressable when the source numbered
+                # the line (t1_blkgoto): phys k+1 counts from the IF header
+                # exactly like a SUB body counts from SUB. Counted by the same
+                # helper the nested case uses, so an ELSE or an ELSEIF arm is
+                # accounted here identically to the way it is one level down.
+                map_if_block(i, s, 0)
+                continue
+            body = (
+                s.body
+                if isinstance(s, ir.SubDef)
+                or (isinstance(s, ir.DefFn) and s.is_block)
+                else ()
+            )
             map_body(i, body, 1)
 
     def fix(s):

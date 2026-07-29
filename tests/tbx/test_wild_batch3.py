@@ -2190,6 +2190,56 @@ def test_decode_t1_blkgoto():
     )
 
 
+def test_decode_t1_blkgotoelse():
+    # The same jump-into-a-block-interior as t1_blkgoto, but the block has an
+    # ELSE. `_resolve_targets` used to map a block IF's interior only when the
+    # block had exactly one arm and no ELSE, so the target never entered the
+    # index and finalization raised `jump target ... is not a statement start`
+    # -- wild secure.exe, target 0x82fe, owned by arm 0's fourth statement.
+    # An ELSE changes nothing about how emit0 numbers the arm's own lines.
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_blkgotoelse.exe")))
+    assert src == (
+        '10 A$ = "X"\n'
+        '20 IF A$ <> "Q" THEN\n'
+        '  PRINT "A"\n'
+        '22 PRINT "B"\n'
+        "ELSE\n"
+        '  PRINT "C"\n'
+        "END IF\n"
+        '30 IF A$ = "X" THEN 50\n'
+        "40 END\n"
+        '50 A$ = "Q"\n'
+        "60 GOTO 22\n"
+    )
+
+
+def test_decode_t1_blkgotoelif():
+    # An ELSEIF arm's interior is addressable on the same terms, and pins the
+    # physical-line accounting the fix shares with the nested case: the target
+    # is in the SECOND arm, so its `BodyLine` phys has to count arm 0's header
+    # line, arm 0's body, and the ELSEIF header before reaching it.
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_blkgotoelif.exe")))
+    assert src == (
+        '10 A$ = "X"\n'
+        '20 IF A$ = "Q" THEN\n'
+        '  PRINT "A"\n'
+        'ELSEIF A$ = "X" THEN\n'
+        '  PRINT "B"\n'
+        '24 PRINT "C"\n'
+        "ELSE\n"
+        '  PRINT "D"\n'
+        "END IF\n"
+        '30 IF A$ = "X" THEN 50\n'
+        "40 END\n"
+        '50 A$ = "Q"\n'
+        "60 GOTO 24\n"
+    )
+
+
 def test_decode_t1_miderr():
     # 3-arg MID$ decode clobbered DecodeState.start (`state.start = state.bx`
     # instead of a local), so any program that later needs the error-trap

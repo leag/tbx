@@ -3113,6 +3113,22 @@ End()
 Assign(target=Var(name='A$'), value=StrLit(value='Q'))
 Goto(target=BodyLine(stmt=1, phys=2))
 
+## t1_blkgotoelif
+Assign(target=Var(name='A$'), value=StrLit(value='X'))
+IfBlock(arms=((RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='Q')), (Print(items=(StrLit(value='A'),), newline=True, file=None, commas=None),)), (RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='X')), (Print(items=(StrLit(value='B'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='C'),), newline=True, file=None, commas=None)))), else_body=(Print(items=(StrLit(value='D'),), newline=True, file=None, commas=None),))
+IfGoto(cond=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='X')), target=4)
+End()
+Assign(target=Var(name='A$'), value=StrLit(value='Q'))
+Goto(target=BodyLine(stmt=1, phys=4))
+
+## t1_blkgotoelse
+Assign(target=Var(name='A$'), value=StrLit(value='X'))
+IfBlock(arms=((RelOp(op='<>', lhs=Var(name='A$'), rhs=StrLit(value='Q')), (Print(items=(StrLit(value='A'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='B'),), newline=True, file=None, commas=None))),), else_body=(Print(items=(StrLit(value='C'),), newline=True, file=None, commas=None),))
+IfGoto(cond=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='X')), target=4)
+End()
+Assign(target=Var(name='A$'), value=StrLit(value='Q'))
+Goto(target=BodyLine(stmt=1, phys=2))
+
 ## t1_bload
 Bload(file=StrLit(value='X.IMG'), offset=Lit(value=0))
 End()
