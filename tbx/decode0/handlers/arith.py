@@ -1186,6 +1186,55 @@ def int_bitwise_m(state: DecodeState, op, addr, kind) -> bool:
     return False
 
 
+def _reject_dropped_bool_term(state: DecodeState, addr: int) -> None:
+    """Refuse to fold an AND whose outer compound term was never picked up.
+
+    A parenthesised group -- `A OR (B AND C)`, where the parentheses are
+    redundant because AND binds tighter anyway -- is compiled with its own
+    convergence protocol rather than as the precedence cascade
+    `A OR B AND C`. Only the cascade is calibrated. `match_bool_term1` does
+    recognise the outer term in both spellings, but on the parenthesised path
+    nothing consumes the match, so the group's `and ax,bx` arrives here with
+    `pend_bool` unset and the generic logical-*value* combine folds AX with BX
+    as though the whole condition were those two relations.
+
+    That is a wrong answer rather than a missing one, and it was silent: the
+    outer term is dropped and the operands come out reversed, and whether
+    anything downstream notices depends only on what the body needs. A
+    `THEN <line>` body raises `unhandled jcc 74` afterwards (wild file.exe,
+    grdscn.exe, hebrew.exe, pwinst.exe); an inline body does not, and decodes
+    to plausible-looking source that recompiles to a different image
+    (`wild/probes/probe_paren_or_and_inline.bas`).
+
+    So the drop is rejected where it happens. The three `t1_mixedbool*`
+    fixtures -- the calibrated cascade -- never reach this combine at all,
+    being folded by the compound-IF machinery instead, so this costs them
+    nothing. Measured over both corpora: the only programs holding a deferred
+    `bool_term1` are those two fixtures (correct today) and ten wild programs
+    that already fail, so no program that decodes today stops.
+    """
+    from tbx.decode0.lift import _same_code_offset
+    from tbx.decode0.matchers import match_bool_term1
+
+    ops, k = state.image.ops, state.control.k
+    for j in range(max(0, k - 40), k):
+        if ops[j][1] != "movax" or ops[j][2] != 0xFFFF:
+            continue
+        match = match_bool_term1(ops, j)
+        # `+ 2` is the AND delta `match_bool_term1` itself applies when it
+        # pairs a first term's short circuit with a combining `andaxbx`.
+        if (
+            match is not None
+            and match.deferred
+            and _same_code_offset(match.short_circuit, addr + 2)
+        ):
+            raise ValueError(
+                f"parenthesised compound group at {addr:#x}: outer "
+                f"{match.operator} term at {ops[j][0]:#x} was recognised but "
+                "never combined"
+            )
+
+
 def int_bitwise_bx(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: andaxbx, oraxbx, xoraxbx, addaxbx, subaxbx, imulbx."""
     m, e = state.machine, state.expr
@@ -1202,6 +1251,8 @@ def int_bitwise_bx(state: DecodeState, op, addr, kind) -> bool:
         }[kind]
         if m.ax is None or m.bx is None:
             raise ValueError(f"ax,bx combine with empty regs at {addr:#x}")
+        if kind == "andaxbx" and e.pend_bool is None:
+            _reject_dropped_bool_term(state, addr)
         if (
             kind == "addaxbx"
             and isinstance(m.ax, ir.Neg)

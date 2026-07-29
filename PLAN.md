@@ -1141,7 +1141,24 @@ fold in. That is why one spelling raises and the other does not: whether
 anything downstream notices depends on what the body needs, not on the
 condition being wrong.
 
-**A guard is free.** Measured statically across both corpora, the
+**The guard is in** (`_reject_dropped_bool_term`, `handlers/arith.py`).
+The drop is rejected where it happens, and the report now names the
+recognised-but-uncombined term instead of the downstream jcc:
+`parenthesised compound group at 0x98ab: outer OR term at 0x987e was
+recognised but never combined`. Gates: 2784 tests, Ruff clean, fixture
+goldens untouched, and the wild scan holds at 33 decode-ok / 53 failing
+with **no program changing status** -- `file.exe` and `grdscn.exe` simply
+report the true cause now. `hebrew.exe` and `pwinst.exe` keep their
+`unhandled jcc 74`, correctly: their shapes are `str2num INSTR; andaxbx`
+and `andax_m` respectively, so the guard does not claim them and the two
+groups stay separable. `tests/tbx/test_paren_compound_group.py` pins both
+halves.
+
+What remains is the mapping itself -- what `A OR (B AND C)` should decode
+*to* -- which still needs a fixture and byte-exact verification. The
+difference now is that getting it wrong cannot be silent.
+
+**Why the guard was free.** Measured statically across both corpora, the
 programs containing a deferred term1 are: **2 fixtures**
 (`t1_mixedbool2`, `v10_t1_mixedbool2`) which **decode correctly today**
 and are the unparenthesised form, and **10 wild programs** (bmaster,
