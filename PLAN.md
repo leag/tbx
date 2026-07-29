@@ -1163,7 +1163,37 @@ the lines that are jump targets* — 56 of them — rather than every
 statement. Turbo Basic allows unnumbered lines, so that is legitimate
 source, and the emitter already emits unnumbered lines inside bodies.
 
-Tried and reverted: a `compact=True` stride-1 renumbering in `emit0`,
+**Number-only-targeted-lines: built, verified on a sample, reverted for
+scale.** The change itself is small — collect the top-level statements
+something targets (the `_ONE`/`_MANY` type lists mirroring
+`_resolve_targets`'s own `fix`, plus each `BodyLine`'s host), assign
+numbers to only those, and let the render loop emit no prefix for the
+rest. It works: `t1_blkgoto` comes out as `A$ = "X"` / `10 IF ...` /
+`12 PRINT "B"` / `GOTO 12`.
+
+Two things were established that the next attempt should not have to
+rediscover:
+
+1. **Dropping a line number is byte-free.** Tested directly before
+   touching the emitter, by de-numbering the untargeted lines of already
+   passing fixtures and recompiling: `t1_blkgoto`, `t1_ifgoto`,
+   `t1_print2`, `t1_subgsb`, `t1_selarmtarget` all still byte-exact.
+2. **The change holds under the oracle.** With it applied,
+   `verify_fixture` is `ok` on sixteen diverse stems, deliberately
+   including the ones that ride on line numbers -- `t1_tronif`,
+   `t1_troncase` and `t1_dblhook`/`t1_dblhooksub` (trace hooks), and
+   `t1_suberr` (the error-trap line table, where numbering is *not* the
+   emitter's to choose and correctly stays untouched).
+
+What stopped it is scale, not doubt: it moves **1159 tests** -- all 1030
+`usercode` goldens plus roughly a hundred hand-written assertions that
+spell the expected source out in full. Those hand-written tests are the
+strongest regression guards this decoder has, and rewriting them in bulk
+to match new output is regenerating the oracle that is supposed to catch
+the regression. Doing this properly means a full-corpus `verify_fixture`
+run and a reviewed diff, not a mass accept.
+
+Tried and reverted first: a `compact=True` stride-1 renumbering in `emit0`,
 applied only when the default overflows. It is both insufficient (311)
 and, with the epilogue fix reverted, unreachable — no program in either
 corpus emits an over-wide line without it — so it would be untested
