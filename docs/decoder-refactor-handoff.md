@@ -476,11 +476,56 @@ fixtures the timing move touches (`t1_selarmblockif`, `t1_nestif2`,
    So the blocker is not that the lifts' inserts are missing from the log. The
    next person should start from that breakdown rather than from the
    correlation, which is real and misleading.
-2. **Record the loop lifts' regions**, the way the inline IF, the CASE arm and
-   the procedure body were recorded, and fold them in `fold_pass` -- they are
-   the only walk-time fold family left, and the three wild SELECT misses are
-   waiting on them. Then `SubDef`, which additionally needs the procedure's
-   name and parameters recorded.
+
+   **The breakdown was followed, and it led somewhere else again.** Counting
+   what a missed body *holds* is one step too far from the failure. Diffing
+   the walk's body against the pass's, statement by statement, splits the 19
+   wild misses into two families, and neither is a loop lift recording its
+   region:
+
+   - **Three are one statement rewritten**: the walk's body has `EXIT LOOP`
+     where the pass's has the `GOTO` it came from. `_apply_exit_folds` did
+     that, and it runs *during* the walk -- at each procedure epilogue
+     (`core.py:3900`, `core.py:4120`), not only at finalize. In wild
+     `ziptest.exe` the rewrite is edit 420 and the `close_ifs` that folds the
+     body around it is edit 421.
+   - **The rest are a region off by one statement at its start**, or a body
+     the pass leaves longer because a construct inside it has not been folded
+     yet (the known `SelectCase`/`SubDef` case).
+
+   **Replaying the exit folds does not fix the first family, and the reason
+   generalises.** `_apply_exit_folds` rewrites by value, over the whole list,
+   so a pass could replay it with no coordinate at all -- except that it scans
+   only *top level*, and by epilogue time the walk has already folded some
+   statements into bodies where the scan cannot see them. The pass's list is
+   flat, so it matches more: in `state.exe` the walk rewrote 6 and a flat
+   replay rewrites **12**, in `horses.exe` 4 against 16. Measured end to end
+   the idea is worth +1 wild fold (752 -> 753) and a regression in `state.exe`,
+   which is not a trade worth making.
+
+   So `apply_exit_folds` is **fold-order dependent**: what it rewrites is a
+   function of what has already been folded. That is the same shape as the six
+   entanglements the timing move had to break, and it is a third family
+   alongside the lifts rather than an instance of them.
+2. **The remaining families all read a partly-folded list.** That is the
+   sharper statement of what blocks Chapter 6's exit criterion, and it names
+   three passes rather than one:
+
+   - `apply_exit_folds`, which scans top level only (above).
+   - the loop lifts, which `insert` a `Do` and so move every list position
+     after it relative to the commit stream.
+   - `fold_for_header`, which `delete`s the assignment a FOR header absorbs --
+     75 deletes corpus-wide -- and so moves them the other way.
+
+   Withholding the fold edits from the replay and folding in the resulting
+   post-lift coordinates was tried, on the theory that the edit log already
+   holds that list. It does not compose: the lifts' recorded indices are in
+   the coordinates of the list *including* the folds, so dropping the folds
+   makes every later index stale. Wild inline IFs go 752 -> **247**. The corpus
+   stays at 76/80 throughout, which is one more thing it cannot witness.
+
+   Recording the loop lifts' regions -- the plan this step used to carry -- is
+   still necessary and is no longer sufficient. It addresses one of the three.
 3. **Chapter 4's two families**, independently of the above.
 4. **Chapter 7 is complete.** What is left of the migration is Chapter 6's
    exit criterion -- `fold_pass` reads only the record and reproduces 752 of
