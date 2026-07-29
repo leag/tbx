@@ -997,7 +997,7 @@ each target — do not treat them as one:
 | resume, rsltest | `trap_hook` after `far_call` | statement after a forwarded-arg call |
 | prtguide | `jmp` after `proc_ret` | inter-definition glue (the spec's own "out of scope" case) |
 | help | `trap_hook` before `proc_ret` | procedure epilogue |
-| morcalc, photo | op right after `str2num CVL` | statement boundary the scan did not commit |
+| morcalc, photo | op right after `str2num CVL` | target lands mid-span of a merged statement — see below |
 | mdb, mdb87 | `add_sp 2` after a `jmp` | call-sequence tail |
 | elec87, electron | **no op starts there at all**, yet the scan recorded a commit | anomaly of its own |
 
@@ -1092,6 +1092,29 @@ after the hooks the compiler emits for its own line, which is the thing
 A probe needs event trapping on (so CC hooks are emitted at all) plus a
 codeless line ahead of an IF whose condition converts a by-ref integer
 parameter to double — that is what makes the run length 2.
+
+### `morcalc.exe` / `photo.exe` — the target is inside a statement, first look
+
+Both are an `IfGoto` whose target lands **between two consecutive owned
+addresses**, not past the end of the program and not on glue:
+
+- morcalc: `IfGoto(V0286% <> -1, 0xd63e)` at `0xd619`. The owned addresses
+  either side are `0xd627` (a `Print`) and `0xd651`, so `0xd63e` is inside
+  the span the `Print` was given.
+- photo: `IfGoto(MID$(...) <> ..., 0xad1c)` at `0xacce`, between `0xacf7`
+  (a `NextStmt`) and `0xad5e`.
+
+In both the target is the op immediately after a `str2num CVL`, and in
+morcalc the span `0xd627..0xd650` holds a `PRINT MID$(...)` *and* a CVL
+conversion *and* the `movsi/rt` pair the jump targets — more than one
+source statement's worth of code under one address. So the reading to
+test first is that the decoder **merged several statements into one**,
+and the unresolvable target is the symptom rather than the fault. That is
+a different failure from the other four shapes in the table, all of which
+are a target that no statement could own; here a statement plausibly
+should own it.
+
+Not traced further than this.
 
 ### The SUB-epilogue shape — cause found, fix written, blocked on the width gate
 
