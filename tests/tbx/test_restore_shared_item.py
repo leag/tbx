@@ -13,21 +13,23 @@ recovered instead of two, and `RESTORE 20`'s target -- item index 1, the
 calibrated encoding being imm/2 over source item order, as `t1_restoreline`
 pins -- is past the end.
 
-**Why this is a guard and not a mapping.** Which index space WOULD place those
-targets is not determined. Two rules were tested against wild styled.exe (221
-pool descriptors, 135 code-referenced, 86 recovered as DATA, targets
-{0, 48, 61, 87}) and both were eliminated:
+**Why this is a guard and not yet a mapping.** Exclusion is the wrong mechanism
+outright, and `probe_datamid` shows why: with `DATA AAA` / `PRINT "MIDDLE"` /
+`DATA BBB`, the code-only literal 'MIDDLE' lands at descriptor index 1, BETWEEN
+'AAA' (2) and 'BBB' (0). The pool is in source first-appearance order and
+interleaves DATA items with code literals, so DATA descriptors are not
+contiguous and `RESTORE` cannot be indexing the pool at all.
 
-- *The unreferenced descriptors span one contiguous run, shared items
-  included.* Arithmetically it fits -- the span is exactly 100 descriptors with
-  14 shared ones inside it, and all four targets land in range -- but the
-  target at item 61 then resolves to `'     1st/last before/after pn    '`, a
-  PRINT-layout string, and a DATA statement is implausible as the thing that
-  opens with it. It also fails outright on the probe, whose only shared item
-  sits at the TOP of the run and so outside the unref span entirely.
-- *The index counts every pool descriptor down from the highest disp.* This
-  works on the probe and agrees with `t1_restoreline`, but on styled.exe it
-  puts item 0 inside the trailing 97-descriptor run of code-only literals.
+The runtime carries an explicit DATA pointer table instead -- a word per DATA
+item, in source order, holding its descriptor disp, skipping code-only literals
+and including shared ones. It has been located in all three witnesses (94
+entries for wild styled.exe against the 86 recovered by exclusion, 8 of them
+shared; its four RESTORE splits resolve to 'ACCORDINGLY', 'UNLESS', 'AM',
+'ING', matching the four word categories that program prints headers for).
+Reading it is the real fix; what is missing is only a principled way to FIND
+it, since its DGROUP disp is neither fixed nor at a constant offset from
+`pool_base`. The search that located it -- longest run of valid descriptor disps
+-- is a heuristic a coincidental run could win, so it is not landed.
 
 So the decoder refuses. What this test fixes is that it refuses *loudly*: the
 failure used to be a bare `KeyError`, which is not a `ValueError` and so
@@ -122,3 +124,45 @@ def test_the_two_witnesses_share_one_triage_signature():
 
     assert len(signatures) == 1, signatures
     assert "0x" not in signatures.pop()
+
+
+def test_a_code_only_literal_sits_between_two_data_items():
+    """The structural fact that rules out every pool-order index rule.
+
+    `probe_datamid` is `DATA AAA` / `PRINT "MIDDLE"` / `DATA BBB`. 'MIDDLE' is
+    never a DATA item, yet its descriptor lands between the two that are -- so
+    the pool is in source first-appearance order and DATA is not a contiguous
+    run in it. Pinned because re-deriving it costs an oracle compile, and
+    because any future "the DATA items are the span from X to Y" idea has to
+    fail this test first.
+
+    Exclusion still gets the ITEMS right here (nothing is shared), which is why
+    this probe decodes: the bug needs a shared descriptor, not merely an
+    interleaved one.
+    """
+    exe = (_ROOT / "wild" / "probes" / "probe_datamid.exe").read_bytes()
+
+    source = "\n".join(str(s) for s in decode0.decode_user_code(exe))
+
+    assert "'AAA'" in source and "'BBB'" in source, source
+    # MIDDLE is a PRINT operand, never a DataItem.
+    assert "DataItem(text='MIDDLE'" not in source, source
+
+
+def test_two_data_statements_without_a_restore_collapse_into_one():
+    """A separate, still-open gap, recorded here because the probe shows it.
+
+    Statement boundaries come only from RESTORE targets or from
+    `data_orphan_lines`. With a READ present and no `RESTORE <line>` there is
+    neither, so `splits` collapses to {0} and both source DATA statements merge
+    into one. The DATA statement count and each one's line ARE byte-significant
+    (probes q_lt3/q_lt4), so this probe recompiles 14 bytes different and is
+    therefore NOT promoted to the corpus. The pointer table above would not fix
+    it either -- that recovers items, not boundaries.
+    """
+    exe = (_ROOT / "wild" / "probes" / "probe_datamid.exe").read_bytes()
+
+    datas = [s for s in decode0.decode_user_code(exe) if type(s).__name__ == "Data"]
+
+    assert len(datas) == 1, datas  # source had two, at lines 10 and 30
+    assert len(datas[0].items) == 2, datas

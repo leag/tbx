@@ -1483,7 +1483,7 @@ fixing the intra-inline-IF gap above will also close it.
 
 ---
 
-### 2026-07-29 — a DATA item sharing a descriptor with a code literal, DIAGNOSED + GUARDED, mapping OPEN (styled.exe/styllist.exe)
+### 2026-07-29 — a DATA item sharing a descriptor with a code literal, GUARDED; the authoritative DATA pointer table FOUND, locator OPEN (styled.exe/styllist.exe)
 
 The signature `87` — literally that, the whole message — was a bare `KeyError`.
 `item_to_stmt[s.target]` is keyed only by indices below the recovered item
@@ -1504,39 +1504,58 @@ down and the highest `RESTORE <line>` targets fall off the end.
 The encoding itself is not in doubt: `t1_restoreline` (`DATA 7` / `DATA 8,9` /
 `RESTORE 20` → item 1) pins target == imm/2 over **source item order**.
 
-**Two candidate index-space rules tested against styled.exe, BOTH ELIMINATED**
-(221 pool descriptors: 135 code-referenced, 86 recovered as DATA; RESTORE
-targets {0, 48, 61, 87}; the ref/unref pattern by ascending descriptor disp is
-`R×24 u×30 R×14 u×56 R×97`):
+**Inference by exclusion is the wrong mechanism entirely — there is a physical
+DATA POINTER TABLE, and it was found.** Probe `probe_datamid` (`DATA AAA` /
+`PRINT "MIDDLE"` / `DATA BBB`) settles the structure: the code-only literal
+'MIDDLE' lands at descriptor index 1, BETWEEN 'AAA' (index 2) and 'BBB'
+(index 0). So the descriptor pool is in source first-appearance order and
+interleaves DATA items with code literals freely — DATA descriptors are **not**
+contiguous. Which means `RESTORE` cannot be indexing the descriptor pool at
+all, and the runtime must carry an explicit list. It does:
 
-1. *The unreferenced descriptors span one contiguous DATA run, shared items
-   included.* Arithmetically it fits — the span is exactly 100 descriptors with
-   the 14 shared ones inside it, and all four targets land in range. But the
-   target at item 61 then resolves to `'     1st/last before/after pn    '`, and
-   those 14 shared entries read as PRINT-layout strings throughout
-   (`' Structure words '`, `'    All others'`, `' Forms of TO BE '`) — a DATA
-   statement is implausible as the thing that opens with one. It also fails
-   outright on the probe, whose only shared item sits at the TOP of the run and
-   therefore outside the unref span entirely.
-2. *The index counts every pool descriptor down from the highest disp.* Works on
-   the probe and agrees with `t1_restoreline`, but on styled.exe it puts item 0
-   inside the trailing 97-descriptor run of code-only literals.
+- `probe_datamid`: a 2-entry word table `[0x13c, 0x134]` = AAA, BBB — it SKIPS
+  MIDDLE at 0x138.
+- `probe_datadup`: `[0x138, 0x134]` = ONE, TWO — it INCLUDES the shared item
+  'ONE' that exclusion-based recovery drops.
+- wild styled.exe: **94 entries, 8 of them shared**, against the 86 the old
+  rule recovers. Target 87 is comfortably in range. The four RESTORE splits
+  {0, 48, 61, 87} resolve to 'ACCORDINGLY', 'UNLESS', 'AM', 'ING' — exactly the
+  four word categories the program prints headers for (transitionals, forms of
+  TO BE, suffixes that bury action). Item 93, the last, is a shared `'xxx'`
+  sentinel: the classic `READ W$: IF W$ = "xxx"` idiom is *precisely why* these
+  two programs share a descriptor at all.
 
-So nothing was landed: a rule that fails on our own probe is exactly the
-speculative fallback the calibration rule forbids.
+Compare the contiguous-run hypothesis this replaces, which put item 61 at
+`'     1st/last before/after pn    '`. The table's reading is not just more
+plausible, it is independently corroborated by the program's own headers.
 
-**Next step is probe-driven, and cheap.** The open question is only *which
-descriptors are DATA*, so vary one thing at a time against the oracle: a DATA
-item shared with a code literal at the FIRST source position, at the LAST, and
-in the middle; then the same with two DATA clusters, reading each time how the
-descriptor table orders them and where `desc_disps` lands.
+**What is still missing is only a locator.** The table's DGROUP disp is not
+fixed and not at a constant offset from `pool_base`: probes 0x100 against
+pool_base 0x134; styled.exe 0x180 against 0x264; styllist.exe 0x140 against
+0x224 (gaps from table end to pool_base: 0x30, 0x28, 0x28). It was found here
+by taking the longest run of words that are all valid descriptor disps, which
+is a heuristic and must NOT be landed as one — a coincidental run could win it.
+The real anchor is presumably reachable from how the runtime finds the table:
+`RESTORE` writes the byte offset into system cell 0x78 and `data_read_*` indexes
+through it, so the base is either another fixed cell or a link-time constant in
+the runtime — read it out of the runtime's own DATA-read code and calibrate the
+locator against that. Everything else is already in hand.
 
-**`data_orphan_lines` is NOT the second signal here** — checked, and it is
+**`data_orphan_lines` is NOT a usable second signal here** — checked, and it is
 EMPTY for both witnesses. That table only carries codeless-statement entries,
 and these programs trigger pool recovery through their `READ`/`RESTORE`
-instead, so it contributes no independent statement count to cross-check the
-item count against. Some third signal is needed, or the boundary has to come
-out of the descriptor structure itself.
+instead.
+
+**Separate gap found in passing: multiple DATA statements with no RESTORE
+collapse into one, and that is NOT byte-exact.** `probe_datamid` decodes to a
+single `10 DATA "AAA","BBB"` where the source had `DATA AAA` at 10 and
+`DATA BBB` at 30, and recompiles **14 bytes different** — the DATA statement
+COUNT and each one's LINE are byte-significant (already established by probes
+q_lt3/q_lt4). Statement boundaries come only from RESTORE targets or from
+`data_orphan_lines`, and with a `READ` present and no `RESTORE <line>` there is
+neither, so `splits` collapses to `{0}`. The pointer table above does not fix
+this by itself — it recovers ITEMS, not statement boundaries. Kept as a probe
+rather than promoted for exactly that reason: it does not round-trip.
 
 Also noted while tracing, unrelated and not chased: one entry in styled.exe's
 `desc_disps` (0x260) is not on the descriptor table's 4-byte grid and so matches

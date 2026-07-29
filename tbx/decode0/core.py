@@ -1905,13 +1905,29 @@ def _finalize(state: DecodeState, addr) -> Program:
                     # `RESTORE 20`): 'ONE' is shared, one item is recovered
                     # instead of two, and target 1 has nowhere to land.
                     #
-                    # Which index space would place them is NOT yet determined,
-                    # so this refuses rather than guessing (see PLAN.md for the
-                    # two rules tested and eliminated). Until then it must raise
-                    # HERE: this used to be a bare `KeyError`, which escaped
-                    # `decode_user_code`'s ValueError wrapper entirely and left
-                    # the scan reporting the bare index as its whole signature
-                    # (wild styled.exe/styllist.exe, both `87`).
+                    # Exclusion is the wrong mechanism outright: the pool is in
+                    # source first-appearance order and INTERLEAVES DATA items
+                    # with code literals (probe_datamid puts a PRINT-only
+                    # literal between two DATA items), so RESTORE cannot be
+                    # indexing the pool at all. The runtime carries an explicit
+                    # DATA POINTER TABLE -- a word per DATA item, in source
+                    # order, holding its descriptor disp, skipping code-only
+                    # literals and INCLUDING shared ones. It has been located in
+                    # all three witnesses (94 entries for styled.exe against the
+                    # 86 recovered here, 8 shared), and reading it is the real
+                    # fix. What is missing is only a principled way to FIND it:
+                    # its DGROUP disp is neither fixed nor at a constant offset
+                    # from pool_base, and the search that found it -- longest
+                    # run of valid descriptor disps -- is a heuristic a
+                    # coincidental run could win, so it is not landed. See
+                    # PLAN.md for the locator lead (the runtime reaches the
+                    # table through system cell 0x78).
+                    #
+                    # Until then it must raise HERE: this used to be a bare
+                    # `KeyError`, which escaped `decode_user_code`'s ValueError
+                    # wrapper entirely and left the scan reporting the bare
+                    # index as its whole signature (wild styled.exe/
+                    # styllist.exe, both `87`).
                     # Everything triage keys on goes BEFORE the ` at 0x...`:
                     # `scan_wild.failure_signature` collapses a message from
                     # that marker to the end, which is how a family stays one
