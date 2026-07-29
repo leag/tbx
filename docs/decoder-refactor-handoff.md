@@ -33,7 +33,7 @@ signal that something moved.
 | 3 state ownership | **complete** |
 | 4 recognition/mutation split | substantial, two families outstanding |
 | 5 event stream | **complete**: every statement has an event |
-| 6 control-flow extraction | folds record-driven; timing moved and green on `experimental/deferred-fold` |
+| 6 control-flow extraction | folds record-driven; the timing move is **merged**; `fold_pass` not yet wired |
 | 7 remove scaffolding | audit, measurement and docs done; one deletion disputed |
 
 ## What is proven, with numbers
@@ -244,16 +244,24 @@ So the remaining work is what a deferred pass still cannot reconstruct:
   `proc_names`/`proc_params`, keyed by address. The `proc` region says where
   the body is, not what to call it.
 
-## The timing move, done: `experimental/deferred-fold`
+## The timing move, merged
 
-Branch `experimental/deferred-fold`, head `2d126e0`, off this one, **green and
-ready to merge**. `close_ifs` queues its region at the arrival instead of
+Merged from `experimental/deferred-fold` (head `2d126e0`). `close_ifs` queues its region at the arrival instead of
 folding, and `drain_folds` folds the queue when the construct that owns it
 closes -- the arm snapshot, the procedure return, the end of the walk.
 
-The gates it passes: 2699 tests, Ruff clean, all 1030 corpus goldens and the IR
-snapshot byte-identical, and a `scan_wild wild/hits` report byte-identical to
-this branch's across all 86 EXEs -- same 32 decode-ok, same statement counts.
+The gates it passed at merge: 2754 tests, Ruff clean, all 1030 corpus goldens
+and the IR snapshot byte-identical, and a `scan_wild wild/hits` report
+byte-identical across all 86 EXEs.
+
+**It also fixed a wild program, which the goldens could not have told us.**
+`ziptest.exe`'s emitted source changed by two bytes, and the wild-subset guard
+caught it. The eager fold had been emitting `LOOP` inside an `ELSE` arm while
+closing a `DO` opened outside the `IF` -- crossed block nesting, which is not
+valid source, and which is why ziptest.exe was a round-trip COMPILE-FAIL. The
+deferred fold emits `EXIT LOOP` and closes the loop at the right level. It now
+compiles, 224 bytes out. Deferring is not only behaviour-preserving here; it
+is more correct.
 
 Six entanglements had to move, and they are all the same shape: a later
 recognizer asking a question about the statement list that the eager fold used
@@ -374,10 +382,11 @@ a guard the corpus cannot replace.
 
 ## Next steps, in order
 
-1. **Merge `experimental/deferred-fold`.** It is green on every gate this
-   chapter uses. Worth running `docs/release-checklist.md`'s oracle sample
-   against it first: the goldens say the emitted source did not move, and the
-   oracle is what says it still recompiles byte-for-byte.
+1. **Wire `fold_pass`.** The timing move is merged, so folding happens after
+   the walk -- but from coordinates the walk computed, not from the record.
+   `fold_pass` reads only the record and reproduces 755 of 771 wild inline IFs
+   and 15 of 16 SELECTs. Wiring it is Chapter 6's actual exit criterion, and
+   it waits on the loop lifts below.
 2. **Record the loop lifts' regions**, the way the inline IF, the CASE arm and
    the procedure body were recorded, and fold them in `fold_pass` -- they are
    the only walk-time fold family left, and the three wild SELECT misses are

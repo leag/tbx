@@ -378,12 +378,13 @@
    "sha256": "7a4247264a1becbfb57d45d0754d6a32eb075839bf1ce1d3edf861ddd5831732",
    "bytes": 44370,
    "statements": 309,
-   "source_bytes": 8830,
+   "source_bytes": 8829,
    "toggles": "",
    "build_match": 99,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
-   "excluded": null
+   "roundtrip": "code-or-metadata",
+   "delta": 224,
+   "excluded": null,
+   "note": "source shrank by 2 bytes when folding moved: the eager fold emitted LOOP inside an ELSE arm while closing a DO opened outside the IF, which is crossed block nesting and not valid source. The deferred fold emits EXIT LOOP instead. It compiles now; it did not before."
   }
  ]
 }

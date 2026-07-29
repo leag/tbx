@@ -45,7 +45,7 @@ before the failure, and a template mismatch is nearly always visible in it.
 
 ## State ownership
 
-`DecodeState` holds 96 persistent fields. They are partitioned across six
+`DecodeState` holds 98 persistent fields. They are partitioned across six
 views -- **total and disjoint**, enforced by `tests/tbx/test_state_parts.py`,
 which fails if a field gains a second owner or none. A view is an alias, not a
 copy, and writing an unowned name through one raises rather than shadowing it.
@@ -74,10 +74,10 @@ read somewhere, so nothing in the list is decoration.
 
     `arrs`, `data_items`, `desc_disps`, `dim_frame`, `discard_strs`, `ds`, `dsd`, `have_fre`, `lay`, `local_dim_frame`, `n_local_arrs`, `option_base`, `prev_dim_end`, `r_arrs`, `slot_info`, `ss_base`
 
-**`state.control`** (ControlState, 28 fields)
+**`state.control`** (ControlState, 30 fields)
 : Statement cursor and open structured-control/procedure frames.
 
-    `block_if_addrs`, `cases`, `cur`, `dos`, `exit_folds`, `fn_args`, `fn_args_stack`, `fn_frame`, `fors`, `fwd_inline_offs`, `has_procs`, `ifs`, `inline_procs`, `k`, `nfn`, `nsub`, `pend_arg`, `pend_args`, `proc_dbl_offs`, `proc_frame`, `proc_int_offs`, `proc_long_offs`, `proc_names`, `proc_params`, `proc_str_offs`, `sp_save_cell`, `sp_save_stack`, `whiles`
+    `block_if_addrs`, `cases`, `cur`, `dos`, `exit_folds`, `fn_args`, `fn_args_stack`, `fn_frame`, `fold_plan`, `fors`, `fwd_inline_offs`, `has_procs`, `ifs`, `inline_procs`, `k`, `nfn`, `nsub`, `pend_arg`, `pend_args`, `pending_ifs`, `proc_dbl_offs`, `proc_frame`, `proc_int_offs`, `proc_long_offs`, `proc_names`, `proc_params`, `proc_str_offs`, `sp_save_cell`, `sp_save_stack`, `whiles`
 
 **`state.output`** (OutputState, 11 fields)
 : Emitted statements, physical addresses, and output metadata.
