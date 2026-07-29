@@ -1001,7 +1001,39 @@ each target — do not treat them as one:
 | mdb, mdb87 | `add_sp 2` after a `jmp` | call-sequence tail |
 | elec87, electron | **no op starts there at all**, yet the scan recorded a commit | anomaly of its own |
 
-### `resume.exe` / `rsltest.exe` — traced 2026-07-29, not fixed
+### `resume.exe` / `rsltest.exe` — first shape FIXED 2026-07-29
+
+**Resolved**, and the trace below records how. The cause was `fstp64`'s
+`fp64_bridge` leg in `core.py`: a promote-once/compare-many scratch cell
+commits **no statement**, but cleared `c.cur` anyway. Under event
+trapping the address `c.cur` was holding is the run-first hook of the
+code-less lines (ELSE, END IF) preceding the promote — and that is
+exactly what a block IF's arm-tail jump targets. Clearing it dropped the
+address, and the statement re-anchored on the *next* hook, leaving the
+target owned by nothing. `c.cur` is now cleared only on the leg that
+actually commits.
+
+Both files advance past it. They now stop at `0xa3d7` / `0xae3a`, which
+is a **different shape** — a hook run immediately before `proc_ret`, i.e.
+a jump to the SUB's own epilogue, the same family as `help.exe` in the
+table above.
+
+**Calibration caveat, stated rather than glossed.** This change has **no
+fixture**. All 1032 corpus goldens and the IR snapshot are byte-identical
+under it, which is the point — it changes nothing already witnessed — and
+the wild report is byte-identical bar the two intended advances. But
+authored probes did not reproduce the codegen: `ON TIMER`/`TIMER ON` plus
+a codeless-line run ahead of an FP compare of a by-ref integer parameter
+reproduces the *op sequence* (`trap_hook, trap_hook, arg_ref, far_fild_si,
+fstp64, trap_hook, fld1, fcomp64`, probe `pd`/`pe`) but the compiler
+targets a real variable, not a low scratch cell, so it takes the
+committing leg and decodes fine either way. What produces a scratch-cell
+promote is still unknown; `IF X% <> 1`, a compound FP condition, a second
+comparison, and a double-typed parameter were each tried and none did.
+Until one is found, the guard for this is the two wild files' recorded
+first failures, not a fixture.
+
+### The original trace (kept: it is what located the fix)
 
 The first of the five shapes above, taken as far as a diagnosis. Both
 files carry the same `$INCLUDE` library (identical `SUB1` with the same

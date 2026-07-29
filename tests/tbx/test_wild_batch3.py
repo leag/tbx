@@ -400,13 +400,21 @@ def test_wild_rsltest_argref_advances():
     # that gap (MakeWindow, the callee, is already decoded by the time
     # this call is reached, so this exercises the immediate-resolution
     # path rather than test_decode_t1_argrefonly's forward-reference one).
+    # It then stopped at 0xac2e, the tail jump of a block IF arm landing on
+    # the code-less-line hooks ahead of an FP promote-to-scratch. The promote
+    # commits no statement, but cleared `c.cur` anyway, so that hook's address
+    # was dropped and the statement re-anchored on the next hook (fixed in
+    # core.fstp64's fp64_bridge leg). It now reaches 0xae3a, which is a
+    # different shape: a run of hooks immediately before `proc_ret`, i.e. a
+    # jump to the SUB's own epilogue, which owns no statement. Same family as
+    # help.exe -- see PLAN.md Part II's table.
     import pytest
 
     from tbx import decode0
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(ValueError, match=r"jump target 0xac2e is not a statement start"):
+    with pytest.raises(ValueError, match=r"jump target 0xae3a is not a statement start"):
         decode0.decode_user_code(wild_hits_bytes("rsltest.exe"))
 
 

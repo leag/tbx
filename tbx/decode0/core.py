@@ -2172,10 +2172,22 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             # Transient promote-once/compare-many scratch cell (see
             # m.fp64_bridge's own comment) -- invisible in the source,
             # not a real variable.
+            #
+            # `c.cur` is deliberately NOT cleared here: no statement was
+            # committed, so the address it holds still belongs to the
+            # statement the bridged value is about to be used by. The
+            # compiler can emit the promote ahead of that statement's own
+            # trace hook, and under event trapping the hook `c.cur` is
+            # holding may be the one a jump targets -- clearing it dropped
+            # the address entirely and the statement re-anchored on the
+            # NEXT hook, leaving the target owned by nothing (wild
+            # resume.exe 0xa1cb and rsltest.exe 0xac2e, both the tail jump
+            # of a block IF arm landing on the run of code-less-line hooks
+            # that precedes the promote).
             m.fp64_bridge[op[2]] = v
         else:
             state.put(ir.Assign(state.loc(op[2]), v), c.cur)
-        c.cur = None
+            c.cur = None
     elif kind == "fold64":  # m64 arithmetic, mem LEFT
         e.stack.append(_orient(op[2], state.fpval64(op[3]), e.stack.pop()))
     elif kind == "fold_n64":  # m64 non-R: mem RIGHT
