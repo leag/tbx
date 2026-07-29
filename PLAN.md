@@ -1137,6 +1137,24 @@ has to reproduce that shape rather than treat the AND as a plain
 bitwise operation, and it needs its own fixture and byte-exact
 verification before it is written. Not attempted here.
 
+**Start from `t1_and`, which already passes and is nearly the same
+bytes.** `IF A > 1 AND B < 5 THEN 60` compiles to
+
+```
+movax FFFF / jcc / incax / orax / jcc / jmp   first term + its gate
+<second term> / movbxax / movax FFFF / jcc / incax / andaxbx / jcc 74 / jmp
+```
+
+— an `andaxbx; jcc 74; jmp` identical to the one file.exe dies on. So the
+combining tail is *already* handled; what differs is how the sequence is
+entered. file.exe has an extra `movrr ax,bx` immediately before its
+`movbxax`, and the question to answer first is whether the first term's
+short-circuit gate (`orax; jcc; jmp`) ran and left `pend_bool` set. If it
+did not, the tail is reached with no open compound and
+`_lift_bool_do_tail` declines it. That is a much narrower question than
+"map a new template", and it should be answered before any code is
+written.
+
 ### `morcalc.exe` / `photo.exe` — the target is inside a statement, first look
 
 Both are an `IfGoto` whose target lands **between two consecutive owned
