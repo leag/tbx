@@ -2748,7 +2748,31 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             if test_k is not None
             else None
         )
-        if loose is not None:
+        if (
+            c.dos
+            and t == c.dos[-1].test
+            and (nxt_op := img.ops[c.k + 1] if c.k + 1 < len(img.ops) else None)
+            is not None
+            and nxt_op[0] == c.dos[-1].exit
+        ):
+            # Head-test DO...LOOP back-edge in its NEAR form -- the `jmps`
+            # sibling of this case, which reach alone decides between: a body
+            # longer than rel8 spans closes with `E9` instead of `EB`. Without
+            # this the LOOP was emitted as `GOTO <the DO's own line>`, leaving
+            # the frame open (fixtures t1_dofarback / v10_t1_dofarback; the
+            # same wild varamort.exe/football.exe loops `_has_jmps_back` needed
+            # widening to recognise in the first place).
+            #
+            # Unlike the `jmps` sibling, the exit adjacency is a CONDITION here
+            # rather than an assertion after popping the frame. In this position
+            # a near jmp to the test address is genuinely ambiguous -- that is
+            # also exactly what a source `GOTO <that line>` from inside the body
+            # compiles to -- so adjacency is what distinguishes the retry edge,
+            # not a property already known to hold. Failing that test means the
+            # branch is a GOTO and falls through to the GOTO case unchanged.
+            c.dos.pop()
+            state.put(ir.Loop(None), c.cur)
+        elif loose is not None:
             lim, stp, vdisp = loose.limit, loose.step, loose.var
             lim_s, stp_s, init_s = out.stmts[-3:]
             with editing(out.stmts, "fold_for_header"):

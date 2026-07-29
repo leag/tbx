@@ -1483,6 +1483,72 @@ fixing the intra-inline-IF gap above will also close it.
 
 ---
 
+### 2026-07-29 — a head-test DO loop's retry edge in its NEAR form, CLOSED (varamort.exe/football.exe)
+
+Closed `unhandled materialized test` for the two of its four witnesses that
+were one construct: a head-test `DO UNTIL <string compare>` whose body outgrew
+short-jump reach. Tally 4 -> 2; `cal.exe`/`cal87.exe` keep the signature and
+are a genuinely different sub-case (their exit target is not preceded by a
+retry edge at all — already pinned by `test_strings_input.py`).
+
+**Root cause.** `_has_jmps_back` is what separates a head-test
+`DO WHILE/UNTIL` from an inline-IF body skip: both compile the same
+`movax FFFF; jcc; inc ax; or ax,ax; jcc; jmp` materialization, and the loop is
+the one whose body ends by branching back to the test. It looked for that edge
+as op kind `jmps` only — `EB`, short rel8. Which encoding the compiler picks is
+decided by **reach, not construct**: past rel8 the same edge is emitted `E9`
+(`jmp`, near rel16). So the loop stopped being recognised for no reason visible
+in the source, and fell through to the raise.
+
+Only a **string** condition reaches this path: a numeric relop branches on its
+own flags and never materializes, so `DO UNTIL A >= 3` is unaffected at any
+body length. That cost a probe to learn — the first spelling tried decoded
+fine — and is why both wild witnesses compare strings.
+
+**The near form is admitted at cc 74 ONLY, and that asymmetry is the finding.**
+At cc 75 the inline/block-IF branch is a live competing reading, and the two
+are *not distinguishable*: measured on our own oracle, `DO WHILE c` ... `LOOP`
+and `IF c THEN` ... `GOTO <that line>` ... `END IF` over one 20-statement body
+compile to **byte-identical EXEs, 0 bytes differ**. Either spelling round-trips,
+so nothing about the bytes prefers the loop. Widening cc 75 too was tried first
+and moved 124 statements in `state.exe` (plus `state87`/`inv87`/`invoice`, two
+such sites each) — swapping one byte-exact reading for another equally valid
+one, churning four pinned programs to no gain. At cc 74 no IF reading exists —
+that branch takes 75 only — so the loop is the only reading and the near form
+must be admitted for it to be reached.
+
+**Two halves.** Widening recognition only got `DO UNTIL` emitted; the retry
+edge still came out as `GOTO <the DO's own line>` with the frame left open,
+because `core.py`'s LOOP-close lives in the `jmps` dispatch. The `jmp` branch
+got the mirror case — with exit adjacency as a *condition* rather than an
+assertion after popping, unlike its `jmps` sibling, since in that position a
+near jmp to the test address is genuinely also what a source `GOTO` compiles
+to, so failing the check means it IS a GOTO and must fall through unchanged.
+
+`_has_jmps_back` also now anchors its search on that adjacency instead of
+scanning forward for the first branch targeting the test: with the near form
+admitted, an unrelated `GOTO <test line>` would have been taken as the answer
+and returned False, hiding the real edge further down.
+
+**Gates.** 2797 tests (2784 + 13), Ruff clean, every pre-existing golden
+untouched (ops, usercode, `ir_snapshot` +56/-0 — additions only), fixtures
+`t1_dofarback` + `v10_t1_dofarback` both `verify_fixture: ok` byte-exact, DOS
+output golden captured. Wild scan 33 decode-ok / 53 failing, unchanged as a
+*count*: both witnesses advance past this gap onto deeper independent gaps
+(`varamort.exe` 0xa4f9 -> `materialization template mismatch` at 0xaff3;
+`football.exe` 0xb95a -> `unhandled jcc 74` at 0xd9bf, a compound AND of two
+materialized relations). `tests/tbx/test_far_loop_back.py` pins both halves,
+the fixture's own body length, and — deliberately — that `state.exe` keeps its
+block-IF reading, so a future widening has to argue with that test rather than
+regenerate past it.
+
+**Still open, unwitnessed.** `_find_jmps_back` (core.py's bare-value head-test
+branch) and `_has_jmps_back`'s caller at `lift.py`'s bool-tail loop decision
+carry the identical short-only assumption. No program witnesses either, so
+neither was widened — same reasoning as the `89 E5` mov encoding below.
+
+---
+
 ### 2026-07-23 — DELAY under active event trapping; wild/hits CI safety net
 
 Closed `DELAY without poll op` (`prtguide.exe`/`readme.exe`, both under

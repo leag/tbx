@@ -215,16 +215,33 @@ def _same_code_offset(a: int, b: int) -> bool:
     return (a - b) % 0x10000 == 0
 
 
-def _has_jmps_back(ops, exit_addr, test_addr) -> bool:
-    """True iff a short `jmp test` sits immediately before the exit address -- the
+def _has_jmps_back(ops, exit_addr, test_addr, near: bool = False) -> bool:
+    """True iff a `jmp test` sits immediately before the exit address -- the
     WHILE loop-back; its absence marks an inline-IF body skip. Checked
-    structurally (the op FOLLOWING the jmps starts the exit) rather than at
-    exit_addr-2: trace-hook stripping re-stamps the jmps onto its hook's address
-    (t1_tronwh), so byte positions shift while adjacency survives."""
-    for i, o in enumerate(ops):
-        if o[1] == "jmps" and o[2] == test_addr:
-            nxt = ops[i + 1] if i + 1 < len(ops) else None
-            return nxt is not None and nxt[0] == exit_addr
+    structurally (the op FOLLOWING the branch starts the exit) rather than at
+    exit_addr-2: trace-hook stripping re-stamps the branch onto its hook's
+    address (t1_tronwh), so byte positions shift while adjacency survives.
+
+    `near` additionally admits `E9` (op kind `jmp`, near rel16) as that edge,
+    not just `EB` (`jmps`, short rel8). Reach, not construct, decides which one
+    the compiler emits: a body longer than rel8 spans closes with the near
+    form. It is off by default because the two encodings are NOT equally
+    decisive here -- see `_lift_while`, which is the only caller that asks for
+    it, and only where the alternative reading does not exist.
+
+    The search anchors on adjacency rather than scanning forward for the first
+    branch that targets the test, which is what it used to do. Once the near
+    form is admitted the target alone no longer identifies the edge -- a near
+    jmp to a loop's test address is also what a source `GOTO <that line>`
+    compiles to from anywhere in the program -- so the old shape would have
+    taken such a GOTO as its answer and returned False on its failed adjacency
+    check, hiding the real edge further down. No short-form decision in the
+    corpus changes under the reformulation (whole fixture sweep, goldens
+    untouched; both new matches in wild state.exe are near-form)."""
+    kinds = ("jmps", "jmp") if near else ("jmps",)
+    for i, o in enumerate(ops[:-1]):
+        if ops[i + 1][0] == exit_addr and o[1] in kinds and o[2] == test_addr:
+            return True
     return False
 
 
@@ -559,7 +576,27 @@ def _lift_while(
         cond = ir.RelOp(_JCC_RELOP_TRUE[m_jcc[2]], *pend_cmp)
         if negate:
             cond = ir.Not(cond)
-        if _has_jmps_back(ops, exit_jmp[2], cur):  # head-test DO loop
+        # The retry edge in its short form decides this outright. Its NEAR form
+        # (a body past rel8 reach) only decides it at cc 74, because at cc 75
+        # the inline/block-IF branch below is a live competing reading and the
+        # two are not distinguishable: measured on our own oracle, `DO WHILE c`
+        # ... `LOOP` and `IF c THEN` ... `GOTO <that line>` ... `END IF` over
+        # one 20-statement body compile to BYTE-IDENTICAL EXEs (0 bytes differ).
+        # So at cc 75 either spelling round-trips and the corpus is already
+        # calibrated on the IF reading -- admitting the near form there only
+        # churns it (wild state.exe/state87.exe/inv87.exe/invoice.exe each
+        # carry two such sites). At cc 74 no IF reading exists at all: the
+        # branch below takes 75 only, which is why these fell through to
+        # `unhandled materialized test` (wild varamort.exe at 0xa4f9,
+        # football.exe at 0xb95a; fixtures t1_dofarback / v10_t1_dofarback).
+        #
+        # Only a STRING condition reaches any of this: a numeric relop branches
+        # on its own flags and never materializes, so `DO UNTIL A >= 3` is
+        # unaffected however long its body grows.
+        if _has_jmps_back(ops, exit_jmp[2], cur) or (
+            exit_jcc[2] == 0x74
+            and _has_jmps_back(ops, exit_jmp[2], cur, near=True)
+        ):  # head-test DO loop
             kind = "WHILE" if exit_jcc[2] == 0x75 else "UNTIL"
             put(ir.Do(kind, cond), cur)
             dos.append(LoopFrame(test=cur, exit=exit_jmp[2]))
