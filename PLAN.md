@@ -1137,8 +1137,43 @@ has to reproduce that shape rather than treat the AND as a plain
 bitwise operation, and it needs its own fixture and byte-exact
 verification before it is written. Not attempted here.
 
-**Start from `t1_and`, which already passes and is nearly the same
-bytes.** `IF A > 1 AND B < 5 THEN 60` compiles to
+**Answered, and it is worse than a missing template: `A OR (B AND C)`
+decodes SILENTLY WRONG.**
+
+`match_bool_outer_and_group` handles `A AND (B OR C)` and requires its
+gate to be `0x75` (JNZ) -- "term1 true, so evaluate the group". grdscn's
+gate at `0xbbc4` is `0x74` (JZ), the inverted polarity, which is the
+*outer OR* form `A OR (B AND C)`: term1 false, so evaluate the group.
+The matcher's own docstring already names grdscn.exe, so the file was
+known; only the AND-outer half was implemented.
+
+`wild/probes/probe_outer_or_and_group.bas` pins it in five lines:
+
+```
+40 IF A% = 10 OR (A% = 18 AND A% = 28) THEN PRINT "Y"
+```
+
+It compiles (TB 1.1), reproduces grdscn's op window exactly
+(`movbxax` / ... / `movrr ax,bx` / `movbxax` / `movax FFFF` / `jcc` /
+`incax` / `andaxbx` / `jcc` / `jmp`), and **does not raise**. It decodes
+to
+
+```
+40 IF ((A% = 28) AND A% = 18) THEN PRINT "Y"
+```
+
+— the outer `OR A% = 10` term is dropped entirely and the AND's operands
+come out reversed. The round-trip proves it is a real miscompile rather
+than a spelling difference: **34784 bytes against 34816**.
+
+That reclassifies this family. A loud `unhandled jcc 74` on four programs
+is the *visible* part; the same shape decodes silently to wrong source
+wherever the surrounding context happens not to raise. In a decoder whose
+whole discipline is fail-loud, that is the more urgent half, and it
+should be made to raise before anything else is done with it.
+
+**For the mapping itself, start from `t1_and`, which already passes and
+is nearly the same bytes.** `IF A > 1 AND B < 5 THEN 60` compiles to
 
 ```
 movax FFFF / jcc / incax / orax / jcc / jmp   first term + its gate
