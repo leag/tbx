@@ -598,7 +598,7 @@ class DecodeState:
 
         The same reasoning covers a SELECT CASE arm: an IF closing an arm skips
         to the arm's trailing `jmp END SELECT`, which is glue, not a statement.
-        `cases[-1]["body_jmp"]` is that address while the arm is open (and equals
+        `cases[-1].body_jmp` is that address while the arm is open (and equals
         the END SELECT for a flow-through final arm).
 
         Witnessed by wild tbd73.exe: TBW73.INC:634 (`IF numrecs - recpos + 1 < i
@@ -612,8 +612,8 @@ class DecodeState:
         if frame is not None:
             ends.add(frame["exit"])
             ends.add(frame.get("exit_entry", frame["exit"]))
-        if self.cases and self.cases[-1]["body_jmp"] is not None:
-            ends.add(self.cases[-1]["body_jmp"])
+        if self.cases and self.cases[-1].body_jmp is not None:
+            ends.add(self.cases[-1].body_jmp)
         if target not in ends:
             return False
         self.flush_pending()

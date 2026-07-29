@@ -21,7 +21,7 @@ written down rather than inferred from an arithmetic default at a call site.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -63,3 +63,70 @@ class ForFrame:
             self.lim = self.v - 4
         if self.stp is None:
             self.stp = self.v - 8
+
+
+@dataclass
+class SelectFrame:
+    """One open SELECT CASE, from its header until END SELECT.
+
+    The recognizer is a state machine and this is its state. Reading the
+    fields in the order the machine moves through them is the fastest way to
+    understand it:
+
+    *At the header* the selector expression and the compiler's scratch cell
+    holding it are known, and nothing else is. `end_select` is 0 because where
+    the construct ends genuinely is not known yet -- it is learned from the
+    first arm's trailing jmp.
+
+    *While matching an arm's guards*, each recognised `CASE` value, range or
+    `IS` comparison is appended to `cur_guards`. A range arrives as two
+    compares, so `pending_range_lo` holds the low bound between them.
+
+    *When the body starts*, `_begin_body` fills in where it begins and the jmp
+    that closes it, and records the region -- `body_seq` -- so the snapshot can
+    read its own extent back out of the log rather than off this frame.
+
+    *When the arm closes*, its statements are folded into a `CaseArm`, appended
+    to `arms`, and `cur_guards`/`body_jmp` are cleared for the next one.
+
+    *At END SELECT* the arms become one `ir.SelectCase` standing at `start`.
+
+    So most fields are empty for most of the frame's life. As a dict that was
+    invisible: `body_seq` did not exist at all until `_begin_body` created it,
+    and nothing said which of the twelve keys were meaningful when.
+    """
+
+    #: The expression being switched on, popped from the numeric or string
+    #: stack at the header.
+    selector: object
+    #: Displacement of the compiler's scratch cell holding the selector, which
+    #: every arm header compares against.
+    temp: int
+    #: Whether this is the string form. The two differ in which stack the
+    #: selector came from and which arm-header templates match.
+    is_string: bool
+    #: Address of the SELECT header, which the finished statement stands at.
+    start: int | None = None
+    #: Address of END SELECT. 0 until an arm's trailing jmp reveals it -- the
+    #: header itself carries no forward reference to it.
+    end_select: int = 0
+    #: Arms closed so far.
+    arms: list = field(default_factory=list)
+    #: Guards matched for the arm currently being recognised, cleared as each
+    #: arm closes.
+    cur_guards: list = field(default_factory=list)
+    #: Low bound of a `CASE lo TO hi`, held between its two compares.
+    pending_range_lo: object = None
+    #: Where the current arm's body begins in the statement list.
+    body_idx: int = 0
+    #: `seq` of the `case_arm` or `case_else` region event for the current
+    #: body. Absent until the body starts, which is the first moment the
+    #: extent is knowable.
+    body_seq: int | None = None
+    #: Address of the jmp that closes the current arm; None between arms, and
+    #: therefore also the flag for "a body is open".
+    body_jmp: int | None = None
+    #: Address of the next arm's header test.
+    next_test: int = 0
+    #: Whether the body currently open is the CASE ELSE.
+    in_else: bool = False
