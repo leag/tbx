@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from tbx import ir
+from tbx.decode0.frames import PrintChain
 from tbx.decode0.const import (
     _FREAD,
     _INPUTREAD,
@@ -98,19 +99,19 @@ def file_write(state: DecodeState, op, addr, kind) -> bool:
     if kind in ("write_file_num", "write_file_str"):  # WRITE# item
         item = e.stack.pop() if kind == "write_file_num" else e.sstack.pop()
         if e.pend_print is not None and (
-            e.pend_print.get("mode") != "write" or e.pend_print["file"] is None
+            e.pend_print.mode != "write" or e.pend_print.file is None
         ):
             raise ValueError(f"WRITE# item into non-WRITE# chain at {addr:#x}")
         if e.pend_print is None:
             if e.pend_fnum is None:
                 raise ValueError(f"WRITE# without file number at {addr:#x}")
-            e.pend_print = {
-                "items": [],
-                "file": e.pend_fnum,
-                "start": c.cur,
-                "mode": "write",
-            }
-        e.pend_print["items"].append(item)
+            e.pend_print = PrintChain(
+                items= [],
+                file= e.pend_fnum,
+                start= c.cur,
+                mode= "write",
+            )
+        e.pend_print.items.append(item)
         c.cur = None
         state.advance()
         return True
@@ -257,30 +258,30 @@ def write_ops(state: DecodeState, op, addr, kind) -> bool:
     if kind == "write_file_sep":  # WRITE# item separator
         if (
             e.pend_print is None
-            or e.pend_print.get("mode") != "write"
-            or e.pend_print["file"] is None
+            or e.pend_print.mode != "write"
+            or e.pend_print.file is None
         ):
             raise ValueError(f"WRITE# separator without open chain at {addr:#x}")
         state.advance()
         return True
     if kind == "write_item":  # WRITE numeric item (FP stack)
         item = e.stack.pop()
-        if e.pend_print is not None and e.pend_print.get("mode") != "write":
+        if e.pend_print is not None and e.pend_print.mode != "write":
             state.flush_pending()
         if e.pend_print is None:
-            e.pend_print = {
-                "items": [],
-                "file": None,
-                "start": c.cur,
-                "mode": "write",
-            }
+            e.pend_print = PrintChain(
+                items= [],
+                file= None,
+                start= c.cur,
+                mode= "write",
+            )
         assert e.pend_print is not None  # just established above
-        e.pend_print["items"].append(item)
+        e.pend_print.items.append(item)
         c.cur = None
         state.advance()
         return True
     if kind == "write_sep":  # WRITE comma separator
-        if e.pend_print is None or e.pend_print.get("mode") != "write":
+        if e.pend_print is None or e.pend_print.mode != "write":
             raise ValueError(f"WRITE separator without open WRITE chain at {addr:#x}")
         state.advance()
         return True

@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tbx import ir
+from tbx.decode0.frames import PrintChain
 from tbx.decode0.statement_log import editing
 from tbx.decode0.const import (
     _LINEINPUTREAD,
@@ -418,26 +419,26 @@ def console(state: DecodeState, op, addr, kind) -> bool:
         if leg == "lprint":  # printer leg joins/opens an LPRINT chain (t1_ltab)
             if (
                 e.pend_print is not None
-                and e.pend_print.get("mode") != "lprint"
+                and e.pend_print.mode != "lprint"
             ):
                 state.flush_pending()
             if e.pend_print is None:
-                e.pend_print = {
-                    "items": [],
-                    "file": None,
-                    "start": c.cur,
-                    "mode": "lprint",
-                }
+                e.pend_print = PrintChain(
+                    items= [],
+                    file= None,
+                    start= c.cur,
+                    mode= "lprint",
+                )
         else:
             f = e.pend_fnum if leg else None
             if leg and f is None:
                 raise ValueError(f"file {name} without [0060] at {addr:#x}")
-            if e.pend_print is not None and e.pend_print["file"] != f:
+            if e.pend_print is not None and e.pend_print.file != f:
                 state.flush_pending()  # console/file leg change = new stmt
             if e.pend_print is None:
-                e.pend_print = {"items": [], "file": f, "start": c.cur}
+                e.pend_print = PrintChain(file=f, start=c.cur)
         assert e.pend_print is not None  # just established above
-        e.pend_print["items"].append(ir.Call(name, (m.ax,)))
+        e.pend_print.items.append(ir.Call(name, (m.ax,)))
         m.ax = None
         c.cur = None
         state.advance()

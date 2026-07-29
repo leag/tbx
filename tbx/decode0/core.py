@@ -689,24 +689,24 @@ class DecodeState:
                 self.commit(ir.Field(pfd["fnum"], tuple(pfd["fields"])), pfd["start"])
             if self.pend_print is not None:
                 pp, self.pend_print = self.pend_print, None
-                if pp.get("mode") == "write":  # WRITE / WRITE# has no trailing-';' form:
-                    stmt = ir.Write(tuple(pp["items"]), file=pp["file"])
-                elif pp.get("mode") == "lprint":  # trailing-';' LPRINT: closed by
+                if pp.mode == "write":  # WRITE / WRITE# has no trailing-';' form:
+                    stmt = ir.Write(tuple(pp.items), file=pp.file)
+                elif pp.mode == "lprint":  # trailing-';' LPRINT: closed by
                     # the next completed statement, like console PRINT (witnessed
                     # t1_lpusing -- an LPRINT USING follows with no B9 between)
                     stmt = ir.Lprint(
-                        tuple(pp["items"]),
+                        tuple(pp.items),
                         newline=False,
                         commas=_pp_commas(pp),
                     )
                 else:
                     stmt = ir.Print(
-                        tuple(pp["items"]),
+                        tuple(pp.items),
                         newline=False,
-                        file=pp["file"],
+                        file=pp.file,
                         commas=_pp_commas(pp),
                     )
-                self.commit(stmt, pp["start"])
+                self.commit(stmt, pp.start)
             if self.pend_using is not None:
                 pu, self.pend_using = self.pend_using, None
                 self.commit(

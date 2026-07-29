@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tbx import ir
-from tbx.decode0.frames import BoolTerm
+from tbx.decode0.frames import BoolTerm, PrintChain
 from tbx.decode0.const import (
     _JCC_RELOP_STR_TRUE,
     _JCC_RELOP_TRUE,
@@ -327,28 +327,28 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             want_file = vec == 0xC3
             want_lprint = vec == 0xC2
             if e.pend_print is None and not want_file:
-                e.pend_print = {
-                    "items": [],
-                    "file": None,
-                    "start": c.cur,
-                    **({"mode": "lprint"} if want_lprint else {}),
-                }
+                e.pend_print = PrintChain(
+                    items= [],
+                    file= None,
+                    start= c.cur,
+                    mode="lprint" if want_lprint else None,
+                )
             elif e.pend_print is None and want_file:
-                e.pend_print = {
-                    "items": [],
-                    "file": e.pend_fnum,
-                    "start": c.cur,
-                }
+                e.pend_print = PrintChain(
+                    items= [],
+                    file= e.pend_fnum,
+                    start= c.cur,
+                )
             if (
                 e.pend_print is None
-                or e.pend_print.get("mode") != (
+                or e.pend_print.mode != (
                     "lprint" if want_lprint else None
                 )
-                or (e.pend_print["file"] is not None) != want_file
+                or (e.pend_print.file is not None) != want_file
             ):
                 raise ValueError(f"comma separator without print item at {addr:#x}")
-            cs = e.pend_print.setdefault("commas", {})
-            gap = len(e.pend_print["items"])
+            cs = e.pend_print.commas
+            gap = len(e.pend_print.items)
             cs[gap] = cs.get(gap, 0) + 1
             c.cur = None
             state.advance()
@@ -359,11 +359,11 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             f = e.pend_fnum if vec in (0xBD, 0xC0) else None
             if vec in (0xBD, 0xC0) and f is None:
                 raise ValueError(f"file print item without [0060] at {addr:#x}")
-            if e.pend_print is not None and e.pend_print["file"] != f:
+            if e.pend_print is not None and e.pend_print.file != f:
                 state.flush_pending()  # console/file leg change = new stmt
             if e.pend_print is None:
-                e.pend_print = {"items": [], "file": f, "start": c.cur}
-            e.pend_print["items"].append(
+                e.pend_print = PrintChain(file=f, start=c.cur)
+            e.pend_print.items.append(
                 e.sstack.pop() if vec in (0xBE, 0xC0) else e.stack.pop()
             )
             c.cur = None
@@ -376,17 +376,17 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
                 state.flush_pending()
             if (
                 e.pend_print is not None
-                and e.pend_print.get("mode") != "lprint"
+                and e.pend_print.mode != "lprint"
             ):
                 state.flush_pending()
             if e.pend_print is None:
-                e.pend_print = {
-                    "items": [],
-                    "file": None,
-                    "start": c.cur,
-                    "mode": "lprint",
-                }
-            e.pend_print["items"].append(item)
+                e.pend_print = PrintChain(
+                    items= [],
+                    file= None,
+                    start= c.cur,
+                    mode= "lprint",
+                )
+            e.pend_print.items.append(item)
             c.cur = None
             state.advance()
             return True
@@ -412,12 +412,12 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
                 c.cur = None
                 state.advance()
                 return True
-            if e.pend_print.get("mode") != "lprint":
+            if e.pend_print.mode != "lprint":
                 raise ValueError(f"b9 flush without open LPRINT chain at {addr:#x}")
             pp, e.pend_print = e.pend_print, None
             state.put(
-                ir.Lprint(tuple(pp["items"]), commas=_pp_commas(pp)),
-                pp["start"],
+                ir.Lprint(tuple(pp.items), commas=_pp_commas(pp)),
+                pp.start,
             )
             c.cur = None
             state.advance()
@@ -439,20 +439,20 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
                 )
             elif e.pend_print is not None:
                 pp, e.pend_print = e.pend_print, None
-                if (pp["file"] is not None) != want_file:
+                if (pp.file is not None) != want_file:
                     raise ValueError(f"print flush leg mismatch at {addr:#x}")
-                if pp.get("mode") == "write":
+                if pp.mode == "write":
                     state.put(
-                        ir.Write(tuple(pp["items"]), file=pp["file"]), pp["start"]
+                        ir.Write(tuple(pp.items), file=pp.file), pp.start
                     )
                 else:
                     state.put(
                         ir.Print(
-                            tuple(pp["items"]),
-                            file=pp["file"],
+                            tuple(pp.items),
+                            file=pp.file,
                             commas=_pp_commas(pp),
                         ),
-                        pp["start"],
+                        pp.start,
                     )
             elif not want_file:
                 state.put(ir.Print(()), c.cur)  # bare PRINT (blank line)

@@ -364,6 +364,8 @@ class PrintChain:
     #: "lprint", "write", or None for plain PRINT.
     mode: str | None = None
     #: Separator counts, keyed by gap index, filled in as commas are seen.
-    #: None until one is: every separator defaulting to ';' is the common case
-    #: and renders as no `commas` at all (see `ir.Print.commas`).
-    commas: dict | None = None
+    #: Empty is the common case -- every separator defaulting to ';' renders
+    #: as no `commas` at all (see `ir.Print.commas`) -- and empty is exactly
+    #: what the reader already tests for, so there is no need for this to be
+    #: absent as well as empty. It used to be both, via `setdefault`.
+    commas: dict = field(default_factory=dict)
