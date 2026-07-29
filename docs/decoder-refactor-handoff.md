@@ -330,6 +330,49 @@ So `close_ifs`, `_fold_arm` and the procedure-body fold have to move together.
 Each timing requirement traces to a calibrated wild-program behaviour rather
 than to convenience.
 
+## Frames: the state that was actually hard to hold
+
+The ownership partition (ch. 3) split `DecodeState`'s 98 fields across six
+views, and this migration credited that with making the decoder tractable. It
+did not, because that was never the problem: one object holding everything is
+fine to reason about. What was hard was the *frames* -- the record the
+dispatch loop keeps for each construct it has recognised but not yet closed.
+
+They were dicts, built at a recognition site and read somewhere else entirely.
+Thirteen shapes, and what a dict cannot say turned out to be exactly what a
+reader needs:
+
+- **What is in one.** `c.fors` held five different key sets across six
+  recognition sites. Nothing could tell you what a FOR frame contained without
+  finding all six.
+- **What an absence means.** `frame_words` was read `.get("frame_words", 0)`
+  in one caller and `.get("frame_words", len(locs or ()))` in another, so
+  "not set" meant different things depending on who asked. `exit_entry` was
+  set only on a SUB but fetched from both bodies. `mode` absent meant "plain
+  PRINT". `sc` absent meant "an outer group has no short-circuit".
+- **When a field exists.** A SELECT frame gained `body_seq` when its body
+  started; no construction site mentioned it. One PRINT site wrote
+  `**({"mode": "lprint"} if want_lprint else {})` -- a key whose existence
+  depended on a runtime condition.
+
+`tbx/decode0/frames.py` is now the complete inventory: 16 records, one per
+frame, each field carrying the compiler convention behind it. Thirteen shapes
+became sixteen records because three were two things wearing one shape, or one
+thing wearing two -- `DimFrame` covers the DGROUP and LOCAL array descriptors,
+which differed only in calling the same number "block" or "disp";
+`ProcFrame`/`FnFrame` share a `BodyFrame` base, which `local_init` had been
+relying on informally all along.
+
+Every conversion was gated on byte-identical goldens and a byte-identical wild
+scan, and every one of them needed two to four rounds of chasing access sites
+the first pass missed -- including two subscripts hiding inside f-strings that
+a double-quote search never saw. That is the argument for the types rather
+than against them: a mistyped attribute raises where it is written, a mistyped
+`.get` returns None somewhere else entirely.
+
+`tests/tbx/test_frames.py` keeps it: no frame may be a dict literal, no frame
+field may be reached by subscript, and every field must carry a comment.
+
 ## Chapter 7, measured
 
 Two of its deliverables are done, and both came back better than the plan

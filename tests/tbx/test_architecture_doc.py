@@ -93,9 +93,12 @@ def test_the_diagnostic_fields_it_tells_you_to_read_are_the_real_ones():
         history=[(1, "movax", 2)],
     ).report()
     emitted = set(re.findall(r"(\w+)=", report))
+    # Scoped to the failure-reading section: other tables in the document use
+    # the same row shape, and a frame named `start` is not a diagnostic field.
+    table = TEXT.split("## Reading a failure", 1)[1].split("\n## ", 1)[0]
     documented = {
         a
-        for pair in re.findall(r"^\| `(\w+)`(?: / `(\w+)`)? \|", TEXT, re.M)
+        for pair in re.findall(r"^\| `(\w+)`(?: / `(\w+)`)? \|", table, re.M)
         for a in pair
         if a
     }

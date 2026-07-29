@@ -87,6 +87,45 @@ read somewhere, so nothing in the list is decoration.
 Ownership was assigned from observed reads and writes, not from names --
 `state_parts.py` records the three calls where the name misleads.
 
+## Frames: what the walk is in the middle of
+
+`DecodeState` holds the fields above for the whole decode. Alongside them the
+dispatch loop keeps a *frame* for every construct it has recognised but not
+yet closed, and those are in `tbx/decode0/frames.py` -- one dataclass each,
+which is the complete inventory of transient decoder state.
+
+| frame | fields | what it is |
+| --- | --- | --- |
+| `BodyFrame` | 10 | What an open SUB and an open DEF FN body have in common |
+| `BoolTerm` | 4 | One open term of a compound condition, waiting for its second half |
+| `DimFrame` | 3 | An array declaration being assembled from its descriptor writes |
+| `FieldChain` | 3 | An open `FIELD #n`, collecting its `width AS var$` entries |
+| `FnFrame` | 17 | An open DEF FN body |
+| `ForFrame` | 8 | One open FOR, from its header until `_lift_next` consumes its NEXT |
+| `IfFrame` | 2 | One inline IF, recognised and waiting for decoding to reach its target |
+| `InputChain` | 5 | An open `INPUT`, collecting its targets |
+| `LineInputChain` | 4 | An open `LINE INPUT` or `LINE INPUT #n`, waiting for its target |
+| `LoopFrame` | 2 | One open head-tested loop -- `DO ... LOOP`, or a legacy `WHILE ... WEND` |
+| `PendingFold` | 4 | An inline-IF region whose extent is known, queued until it can fold |
+| `PrintChain` | 5 | An open PRINT / LPRINT / PRINT# / WRITE#, collecting its items |
+| `ProcFrame` | 12 | An open SUB body |
+| `ReadChain` | 3 | An open `READ` or `INPUT #n`, waiting for the stores that name targets |
+| `SelectFrame` | 13 | One open SELECT CASE, from its header until END SELECT |
+| `UsingChain` | 5 | An open `PRINT USING` / `LPRINT USING`, collecting its values |
+
+They were dicts until recently, and the reason they are not is worth knowing
+when reading old commits: a dict cannot say what is in it. `c.fors` held five
+different key sets across six recognition sites; a SELECT frame gained
+`body_seq` partway through its life and no construction site mentioned it;
+`frame_words` was read with two different defaults, so what "not set" meant
+depended on the caller; and one key's *existence* was conditional
+(`**({"mode": "lprint"} if want_lprint else {})`). All of that read as
+ordinary code and none of it was visible from the definition.
+
+`tests/tbx/test_frames.py` keeps them that way: no frame may be a dict
+literal, no frame field may be reached by subscript, and every field carries a
+comment where the compiler convention behind it can be written down.
+
 ## The record
 
 Two logs run alongside the statement list, and between them they answer

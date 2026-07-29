@@ -867,7 +867,7 @@ class DecodeState:
         bit = 0x4000 >> k
         if bool(pi.flags & bit) == is_str:
             raise ValueError(
-                f"INPUT target {k} type bit mismatch (flags {pi['flags']:#06x})"
+                f"INPUT target {k} type bit mismatch (flags {pi.flags:#06x})"
             )
         pi.targets.append(ref)
         if len(pi.targets) == pi.want:
