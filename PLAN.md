@@ -1001,7 +1001,67 @@ each target — do not treat them as one:
 | mdb, mdb87 | `add_sp 2` after a `jmp` | call-sequence tail |
 | elec87, electron | **no op starts there at all**, yet the scan recorded a commit | anomaly of its own |
 
-**A separate, silent bug found while calibrating this.** Probe
+### `resume.exe` / `rsltest.exe` — traced 2026-07-29, not fixed
+
+The first of the five shapes above, taken as far as a diagnosis. Both
+files carry the same `$INCLUDE` library (identical `SUB1` with the same
+eight-parameter signature, identical `SUB2`/`SUB3`), so this is one cause
+in two programs.
+
+What wants the target: the **last statement of a block IF's single arm**,
+`Goto(("addr", 0xa1cb))` owned by `0xa19d` — the compiler's arm-tail jump
+past the construct. What is at the target:
+
+```
+0xa1c6 far_call 43928
+0xa1cb trap_hook      <- the GOTO's target
+0xa1cc trap_hook
+0xa1cd arg_ref 10     \
+0xa1d0 far_fild_si     |  by-ref int param -> double, into temp [bp+82]
+0xa1d4 fstp64 82      /
+0xa1db trap_hook
+0xa1dc fld1
+0xa1df fcomp64 82     -- compared against 1.0
+0xa1e8 jcc / 0xa1ea jmp
+```
+
+`0xa1cb`/`0xa1cc` are a two-hook run: a codeless source line (ELSE, END
+IF) still gets its own per-statement CC hook, which is what
+`core.py:3184`'s normalization is about. **That normalization is not the
+problem here** — the GOTO already targets position 0 of the run, so
+neither `hook_alias` nor `entry_hook` has anything to do. Confirmed by
+enumerating the runs: resume.exe has 252 (244 of length 1, 7 of 2, 1 of
+3) and the target sits at position 0 of a length-2 run; rsltest.exe the
+same at `0xac2e`.
+
+The fault is on the *statement* side. Everything from `0xa1cd` to
+`0xa1da` is the operand conversion for the condition that the `IfGoto` at
+`0xa1db` tests, so one statement spans the whole span — and per
+`core.py:3176`'s own stated design ("`c.cur` takes the FIRST hook of such
+a run and keeps it, so that is the statement's address") it should own
+`0xa1cb`. It owns `0xa1db` instead. The owned addresses in the range are
+exactly `0xa19d`, `0xa1a1`, `0xa1db`, `0xa1ed` — nothing at `0xa1cb`,
+`0xa1cc` or `0xa1cd`.
+
+So `c.cur` is being cleared, or never taken, across the FP operand
+prologue, and the statement re-anchors on the *next* hook. The remaining
+work is to find that site: `c.cur = addr` is not a single top-of-loop
+assignment but a general fallback at `core.py:4216` plus a scatter of
+defensive `if c.cur is None` guards inside individual handlers, so an op
+handled by a family dispatched before the fallback never takes it. The
+`arg_ref` / `far_fild_si` / `fstp64` trio is the span to instrument.
+
+**Do not fix this by aliasing the target onto `0xa1db`.** That inverts the
+design the surrounding code states and would put the statement's address
+after the hooks the compiler emits for its own line, which is the thing
+`cc_hooks` and the `$EVENT` metadata recovery depend on (see
+`handlers/control.py:148`, `t1_fargosub`).
+
+A probe needs event trapping on (so CC hooks are emitted at all) plus a
+codeless line ahead of an IF whose condition converts a by-ref integer
+parameter to double — that is what makes the run length 2.
+
+**A separate, silent bug found while calibrating the ELSE fix.** Probe
 `t1_blkgotoelse2` (a backward `GOTO` into an ELSE **body**, rather than
 into the arm) does not raise — it decodes to *invalid* source, splicing
 a `DO` inside the ELSE arm and closing `LOOP` at top level, i.e. crossed
