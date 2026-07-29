@@ -130,3 +130,99 @@ class SelectFrame:
     next_test: int = 0
     #: Whether the body currently open is the CASE ELSE.
     in_else: bool = False
+
+
+@dataclass
+class BodyFrame:
+    """What an open SUB and an open DEF FN body have in common.
+
+    `local_init` handles the two interchangeably -- a LOCAL declaration reads
+    and fills the same fields whichever body it is in -- so the shared part is
+    a base rather than a coincidence of two dicts having similar keys.
+
+    Everything below `exit` is filled in as the body is decoded, not at
+    `proc_enter`. As dicts these keys did not exist until something created
+    them, and their absence was then read as a value: `.get("has_local_for")`
+    meaning False, `.get("hidden_locals") or ()` meaning empty. Worse,
+    `frame_words` was read with *two different defaults* in two places -- 0 in
+    one, `len(locs)` in the other -- so what "not set" meant depended on who
+    was asking. Here it is None, and each caller says what it wants.
+    """
+
+    #: Address of the body's entry (`proc_enter`, or the DEF FN header).
+    entry: int
+    #: `seq` of the `proc`/`fn` region event, recorded before any statement of
+    #: the body is committed, so the fold at the return reads its start
+    #: position out of the log rather than off this frame.
+    seq: int
+    #: Statement-list position the body begins at.
+    idx: int
+    #: Address of the return.
+    exit: int
+    #: The body's LOCAL declaration: bp offset -> name. None until a
+    #: `local_init` is seen, and None means "no LOCAL statement", not "empty".
+    locals: dict | None = None
+    #: `(disp, count)` of the LOCAL zero-fill, which is how the frame tail --
+    #: where a LOCAL FOR's temp words live -- is found.
+    local_span: tuple | None = None
+    #: bp offsets that are compiler temporaries rather than declared LOCALs.
+    hidden_locals: set = field(default_factory=set)
+    #: bp offsets read or written as ordinary variables, which is the evidence
+    #: that a hidden offset is *not* a temp after all.
+    touched: set = field(default_factory=set)
+    #: Whether a FOR inside this body uses LOCAL loop cells.
+    has_local_for: bool = False
+    #: Entry of the LOCAL-string teardown, when the body has one. An EXIT
+    #: jumps here rather than to `exit`; see `teardown_entry`.
+    exit_entry: int | None = None
+
+    @property
+    def teardown_entry(self) -> int:
+        """Where an EXIT SUB / EXIT DEF lands.
+
+        The LOCAL-string teardown when the body has one, the plain return
+        otherwise. Two call sites spelled this `.get("exit_entry", f["exit"])`;
+        it is one question and belongs in one place.
+        """
+        return self.exit if self.exit_entry is None else self.exit_entry
+
+
+@dataclass
+class ProcFrame(BodyFrame):
+    """An open SUB body."""
+
+    #: Array parameters, by descriptor block: shape facts recovered from how
+    #: the body indexes them.
+    array_params: dict = field(default_factory=dict)
+    #: Words the LOCAL zero-fill reserved, which the `retf` pop arithmetic
+    #: needs. None means no LOCAL statement was seen -- callers differ on what
+    #: to assume then, so none of them may assume it here.
+    frame_words: int | None = None
+
+
+@dataclass
+class FnFrame(BodyFrame):
+    """An open DEF FN body."""
+
+    #: A multi-statement DEF FN (`DEF FN... : ... : END DEF`) rather than the
+    #: single-expression form.
+    block: bool = False
+    #: A string-valued FN, whose result is stored via INT A2.
+    str_result: bool = False
+    #: An INTEGER-valued FN, whose result goes through the ax path. An
+    #: unsuffixed FN name is SINGLE to Turbo Basic, so the `%` has to be
+    #: recovered or the recompile widens the result and every reference to it
+    #: (probe t1_fnintcall: 32 bytes larger without it).
+    int_result: bool = False
+    #: bp offsets of string parameters (INT 9E).
+    str_offs: set = field(default_factory=set)
+    #: bp offsets of INTEGER parameters, read through the ax path. The source
+    #: needs the explicit `%` suffix to recompile byte-exact, mirroring SUB's
+    #: `proc_int_offs`.
+    int_offs: set = field(default_factory=set)
+    #: The result expression, once the body stores one.
+    result: object = None
+    #: bp offsets touched as a parameter read, fold or result. The actual set
+    #: *is* the parameter list: not every parameter uses the same byte stride,
+    #: so the offsets are what identifies them.
+    param_offs: set = field(default_factory=set)

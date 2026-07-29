@@ -496,7 +496,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             or img.ops[j + 1][2] + 8 != op[2]
         ):
             raise ValueError(f"subax_bp array-parameter shape mismatch at {addr:#x}")
-        rec = c.proc_frame["array_params"].setdefault(
+        rec = c.proc_frame.array_params.setdefault(
             img.ops[j + 1][2], {"rank": 1}
         )
         rec.setdefault("lo_off", op[2])  # `setdefault` on the DICT alone leaves
@@ -698,7 +698,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                     f"base at {addr:#x}"
                 )
         param_rec = (
-            c.proc_frame["array_params"].get(blk)
+            c.proc_frame.array_params.get(blk)
             if c.proc_frame is not None
             and img.ops[c.k + ao][1] == "moves_bp"
             else None
@@ -1439,8 +1439,8 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
         for frame in (c.proc_frame, c.fn_frame):
             if (
                 frame is not None
-                and frame["locals"] is not None
-                and bp_off in frame["locals"]
+                and frame.locals is not None
+                and bp_off in frame.locals
             ):
                 local_frame = frame
                 break
@@ -1452,7 +1452,7 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
             # DOUBLE (fld_bp64/fstp_bp64/fold_bp64/fold_n_bp64, m64) is the
             # same first-touch convention over FOUR words instead of two
             # (wild filepatc.exe).
-            locs = local_frame["locals"] or {}
+            locs = local_frame.locals or {}
             if bp_off in locs and locs[bp_off].endswith("%"):
                 locs[bp_off] = locs[bp_off][:-1] + ("#" if is64 else "!")
                 extra = (2, 4, 6) if is64 else (2,)
@@ -1479,20 +1479,20 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
             raise ValueError(f"DOUBLE LOCAL {kind} outside a LOCAL frame at {addr:#x}")
         if c.fn_frame is not None:  # DEF FN body: param read / result / fold
             if bp_off != 0:  # bp+0 is the result cell, not a param
-                c.fn_frame["param_offs"].add(bp_off)
+                c.fn_frame.param_offs.add(bp_off)
                 if kind == "ifold_bp":
-                    c.fn_frame["int_offs"].add(bp_off)
+                    c.fn_frame.int_offs.add(bp_off)
             pvar = ir.Var(f"P{bp_off:02X}" + ("%" if kind == "ifold_bp" else ""))
             if kind == "fld_bp":
                 expr_.stack.append(pvar)
             elif kind == "fstp_bp":
                 if bp_off != 0:
                     raise ValueError(f"FSTP [bp+{bp_off}] in DEF FN body at {addr:#x}")
-                if c.fn_frame["block"]:  # multi-line: `FN = expr` result statement
+                if c.fn_frame.block:  # multi-line: `FN = expr` result statement
                     state.put(ir.FnResult(expr_.stack.pop()), c.cur)
                     c.cur = None
                 else:  # single-line: inline result expr
-                    c.fn_frame["result"] = expr_.stack.pop()
+                    c.fn_frame.result = expr_.stack.pop()
             elif kind in ("fold_bp", "ifold_bp"):  # param as LEFT operand
                 expr_.stack.append(_orient(op[2], pvar, expr_.stack.pop()))
             elif kind == "fold_n_bp":  # non-R: param is the RIGHT operand

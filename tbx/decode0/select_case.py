@@ -185,7 +185,7 @@ def _fold_arm(state, frame, merge):
     # the region now, so drain immediately after: the arm must not be
     # snapshotted around a region still waiting to fold.
     state.close_ifs(merge)
-    body_idx = state.frame_start({"seq": frame.body_seq, "idx": frame.body_idx})
+    body_idx = state.frame_start(frame.body_seq, frame.body_idx)
     state.drain_folds(body_idx)
     stmts, addrs = _fold_if(
         o.stmts[body_idx:],

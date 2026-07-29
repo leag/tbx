@@ -53,7 +53,7 @@ from tbx.decode0.matchers import (
 from tbx.decode0.rename import _slot, _str_lit, canonical_rename
 from tbx.decode0.cursor import DecodeDiagnostics, OpCursor
 from tbx.decode0.events import DecodedEvent, EventLog, reconcile
-from tbx.decode0.frames import ForFrame
+from tbx.decode0.frames import FnFrame, ForFrame, ProcFrame
 from tbx.decode0.statement_log import RecordedStatements, editing, replay
 from tbx.decode0.addresses import AddressOwnership
 from tbx.decode0.control_graph import ControlGraph
@@ -354,13 +354,13 @@ class DecodeState:
         t1_local1). Every slot in the zero-filled range is a 2-byte int for
         now (no fixture has witnessed a mixed-type LOCAL declaration yet)."""
         if self.proc_frame is not None:
-            locs = self.proc_frame["locals"]
+            locs = self.proc_frame.locals
             if locs is None or bp_off not in locs:
                 raise ValueError(f"[bp+{bp_off}] outside the open LOCAL frame")
             self.touch_local(bp_off)
             return ir.Var(locs[bp_off])
         if self.fn_frame is not None:
-            locs = self.fn_frame["locals"]
+            locs = self.fn_frame.locals
             if locs is not None and bp_off in locs:
                 self.touch_local(bp_off)
                 return ir.Var(locs[bp_off])
@@ -369,8 +369,8 @@ class DecodeState:
             # params aren't always the fixed 4-byte-stride slots a
             # float-only FN uses; an all-integer param list packs 2 bytes
             # apiece starting right after the result cell (wild resume.exe).
-            self.fn_frame["param_offs"].add(bp_off)
-            self.fn_frame["int_offs"].add(bp_off)
+            self.fn_frame.param_offs.add(bp_off)
+            self.fn_frame.int_offs.add(bp_off)
             return ir.Var(f"P{bp_off:02X}%")  # suffix must match the `params`
             # tuple's own spelling below, or rename.py sees two "different"
             # variables for the one param (byte-exact needs the declared
@@ -389,7 +389,7 @@ class DecodeState:
         """
         frame = self.proc_frame if self.proc_frame is not None else self.fn_frame
         if frame is not None:
-            frame.setdefault("touched", set()).add(bp_off)
+            frame.touched.add(bp_off)
 
     def close_ifs(self, addr) -> None:
         """Close every open inline-IF body whose skip target is `addr`, folding
@@ -408,7 +408,7 @@ class DecodeState:
             # The region is complete here and its extent is only knowable here
             # -- the list's length at this moment. Folding it is a separate
             # question, answered when the construct that owns it closes.
-            start = self.frame_start(fr)
+            start = self.frame_start(fr["seq"], fr["idx"])
             self.pending_ifs.append(
                 {
                     "seq": fr["seq"],
@@ -557,22 +557,25 @@ class DecodeState:
         """
         return self.events[frame["seq"]]
 
-    def frame_start(self, frame) -> int:
-        """Where an open frame's body begins, derived from the record.
+    def frame_start(self, seq: int, idx: int) -> int:
+        """Where a body that opened at event ``seq`` begins, from the record.
 
-        The list's length when the frame's branch was recognised, replayed
-        from the statement edits stamped up to that event. The walk also noted
-        the length at the time, and the two must agree -- the check is what
-        makes reading it from the record a fact rather than a hope, and it is
-        the comparison Chapter 7 removes once the walk stops noting it.
+        The list's length when that event was recorded, replayed from the
+        statement edits stamped up to it. The walk also noted the length at
+        the time -- ``idx`` -- and the two must agree; the check is what makes
+        reading it from the record a fact rather than a hope.
+
+        Taken as two numbers rather than as a frame because the callers no
+        longer share a type: an inline IF's frame is still a dict, a
+        procedure's and a SELECT arm's are not.
         """
         from tbx.decode0.control_graph import _length_at
 
-        start = _length_at(self.stmts.edits, frame["seq"])
-        if start != frame["idx"]:
+        start = _length_at(self.stmts.edits, seq)
+        if start != idx:
             raise ValueError(
                 f"fold region start {start} from the record disagrees with "
-                f"the frame's own {frame['idx']}"
+                f"the frame's own {idx}"
             )
         return start
 
@@ -610,8 +613,8 @@ class DecodeState:
         frame = self.proc_frame if self.proc_frame is not None else self.fn_frame
         ends = set()
         if frame is not None:
-            ends.add(frame["exit"])
-            ends.add(frame.get("exit_entry", frame["exit"]))
+            ends.add(frame.exit)
+            ends.add(frame.teardown_entry)
         if self.cases and self.cases[-1].body_jmp is not None:
             ends.add(self.cases[-1].body_jmp)
         if target not in ends:
@@ -635,7 +638,7 @@ class DecodeState:
         frame = self.proc_frame if self.proc_frame is not None else self.fn_frame
         if frame is None:
             raise ValueError(f"string [bp+{bp_off}] outside an open local frame")
-        locs = frame["locals"]
+        locs = frame.locals
         if locs is None or bp_off not in locs:
             raise ValueError(f"string [bp+{bp_off}] outside the open LOCAL frame")
         self.touch_local(bp_off)
@@ -935,10 +938,10 @@ def _region_refs(node) -> tuple[list[str], list[str]]:
 def _drop_local_descriptor_initializers(state, frame, span, addr) -> None:
     """Remove compiler metadata writes that preceded a LOCAL DIM bracket."""
     o = state.output
-    locs = frame["locals"]
+    locs = frame.locals
     assert locs is not None
     cell_names = {locs[x] for x in span}
-    start = frame["idx"]
+    start = frame.idx
     kept = list(zip(o.stmts[:start], o.addrs[:start]))
     for stmt, stmt_addr in zip(o.stmts[start:], o.addrs[start:]):
         refs, _ = _region_refs(stmt)
@@ -1068,14 +1071,14 @@ def _retire_for_temps(frame, locs) -> None:
     is reloaded by movax_bp at every test, so it is always touched and must be
     retired regardless.
     """
-    if locs is None or not frame.get("has_local_for"):
+    if locs is None or not frame.has_local_for:
         return
-    span = frame.get("local_span")
+    span = frame.local_span
     if span is None:
         return
     disp, cnt = span
-    touched = frame.get("touched") or set()
-    hidden = frame.get("hidden_locals") or set()
+    touched = frame.touched
+    hidden = frame.hidden_locals
     for i in range(cnt - 1, -1, -1):  # tail-first; stop at the first word the
         d = disp + 2 * i  # body actually used -- everything below it is
         if d in hidden or d not in locs:
@@ -2741,13 +2744,13 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             a = out.addrs[-3]
             del out.addrs[-3:]
             state.put(ir.For(init_s.target, init_s.value, lim_s.value, stp_s.value), a)
-            if frame is not None and frame["locals"] is not None:
+            if frame is not None and frame.locals is not None:
                 # BP-relative limit/step cells are compiler FOR temporaries,
                 # not declarations from the source LOCAL statement. Mixed
                 # block-DEF-FN loops may use those cells while keeping the
                 # loop variable in DGROUP (t1_fnlocalarrstr).
-                hidden = {d for d in (lim, stp) if d in frame["locals"]}
-                frame.setdefault("hidden_locals", set()).update(hidden)
+                hidden = {d for d in (lim, stp) if d in frame.locals}
+                frame.hidden_locals.update(hidden)
             state.branch(
                 "loop", template="for_header", target=img.ops[test_k][0], address=c.cur
             )
@@ -2812,7 +2815,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 # temps at the frame TAIL, so `v+2`/`v+4` are real declared
                 # LOCALs whenever the loop var is not the last one declared,
                 # t1_locstrafterforlit).
-                c.proc_frame["has_local_for"] = True
+                c.proc_frame.has_local_for = True
             state.branch(
                 "loop", template="for_header", target=t, address=c.cur
             )
@@ -2887,8 +2890,8 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 # rides the frame-tail retirement instead of being deleted
                 # here; the limit-temp IS anchored (movax_bp names it) and so
                 # stays unconditional.
-                c.proc_frame["has_local_for"] = True
-                c.proc_frame.setdefault("hidden_locals", set()).add(
+                c.proc_frame.has_local_for = True
+                c.proc_frame.hidden_locals.add(
                     cmp_at_t[2]
                 )
             state.put(
@@ -2943,8 +2946,8 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             if c.proc_frame is not None:
                 # Step-temp rides the frame-tail retirement (see the movax_bp
                 # sibling above); limit-temp is anchored by cmp_at_t itself.
-                c.proc_frame["has_local_for"] = True
-                c.proc_frame.setdefault("hidden_locals", set()).add(
+                c.proc_frame.has_local_for = True
+                c.proc_frame.hidden_locals.add(
                     cmp_at_t[2]
                 )
             state.put(
@@ -3010,7 +3013,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 # and strip them from the LOCAL statement's name list only
                 # once the SUB body is fully decoded (proc_ret).
                 step_disp = state.vdisp(step_s.target)
-                c.proc_frame.setdefault("hidden_locals", set()).update(
+                c.proc_frame.hidden_locals.update(
                     (step_disp, step_disp + 2)
                 )
             state.put(
@@ -3028,8 +3031,8 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 body=img.ops[c.k + 1][0] if c.k + 1 < len(img.ops) else None,
             ))
         elif frame is not None and t in (
-            frame["exit"],
-            frame.get("exit_entry", frame["exit"]),
+            frame.exit,
+            frame.teardown_entry,
         ):  # jmp to ProcRet/FnRet (or its LOCAL-string teardown) = EXIT SUB/DEF
             exit_stmt = ir.ExitSub() if c.proc_frame is not None else ir.ExitDef()
             if (
@@ -3647,37 +3650,15 @@ def _decode_user_code(
             and addr < img.main_start
             and kind != "proc_enter"
         ):
-            c.fn_frame = {
-                "entry": addr,
+            fn_exit = next(o[0] for o in img.ops[c.k :] if o[1] == "fn_ret")
+            c.fn_frame = FnFrame(
+                entry=addr,
                 # A DEF FN body has no proc_enter to record its extent, so it
                 # records one here, where the frame opens (see proc_enter).
-                "seq": state.region(
-                    "fn",
-                    start=addr,
-                    end=next(o[0] for o in img.ops[c.k :] if o[1] == "fn_ret"),
-                ).seq,
-                "idx": len(out.stmts),
-                "result": None,
-                "param_offs": set(),  # bp offsets touched as a param read/
-                # fold/result -- the actual set IS the param list (not every
-                # param uses the same byte stride: an all-FP or all-string
-                # param list packs 4 bytes apiece, an all-integer one packs 2
-                # -- wild resume.exe, probe_d)
-                "exit": next(o[0] for o in img.ops[c.k :] if o[1] == "fn_ret"),
-                "block": False,
-                "str": False,  # string-valued FN (result stored via INT A2)
-                "int": False,  # INTEGER-valued FN (result stored via the
-                # ax path, movm_ax_bp at bp+0). An unsuffixed FN name is
-                # SINGLE to TB, so the `%` has to be recovered or the
-                # recompile widens the result and every reference to it
-                # (probe t1_fnintcall: 32 bytes larger without it).
-                "str_offs": set(),  # bp offsets of string params (INT 9E)
-                "int_offs": set(),  # bp offsets of INTEGER params (ax-path
-                # reads, e.g. movax_bp/imul_bp/fild_bp -- the source needs
-                # the explicit `%` suffix to recompile byte-exact, mirroring
-                # SUB's proc_int_offs)
-                "locals": None,  # a DEF FN body's own LOCAL declaration, if any
-            }
+                seq=state.region("fn", start=addr, end=fn_exit).seq,
+                idx=len(out.stmts),
+                exit=fn_exit,
+            )
             c.cur = None  # fall through to lift this op into the body
         if kind == "proc_enter":
             state.flush_pending()
@@ -3687,18 +3668,16 @@ def _decode_user_code(
                     f"SUB/DEF FN body at {addr:#x} has no proc_ret",
                     component="control",
                 )
-            c.proc_frame = {
-                "entry": addr,
+            c.proc_frame = ProcFrame(
+                entry=addr,
                 # The body's own region, recorded before a statement of it is
                 # committed: the fold at proc_ret reads its start position back
                 # out of the log rather than off this frame.
-                "seq": state.region("proc", start=addr, end=body.exit_address).seq,
-                "idx": len(out.stmts),
-                "exit": body.ret_address,
-                "exit_entry": body.exit_address,
-                "locals": None,
-                "array_params": {},
-            }
+                seq=state.region("proc", start=addr, end=body.exit_address).seq,
+                idx=len(out.stmts),
+                exit=body.ret_address,
+                exit_entry=body.exit_address,
+            )
             c.proc_str_offs = set()
             c.proc_int_offs = set()
             c.proc_long_offs = set()
@@ -3710,19 +3689,19 @@ def _decode_user_code(
             frame = (
                 c.proc_frame if c.proc_frame is not None else c.fn_frame
             )
-            if frame is None or len(out.stmts) != frame["idx"]:
+            if frame is None or len(out.stmts) != frame.idx:
                 raise ValueError(
                     f"LOCAL zero-fill outside a fresh SUB/DEF FN body at {addr:#x}"
                 )
             cnt, disp = op[2], op[3]
-            frame["locals"] = {
+            frame.locals = {
                 disp + 2 * i: f"L{disp + 2 * i:02X}%" for i in range(cnt)
             }
-            frame["local_span"] = (disp, cnt)  # _retire_for_temps needs the
+            frame.local_span = (disp, cnt)  # _retire_for_temps needs the
             # zero-filled extent to find the frame TAIL, where a LOCAL FOR's
             # temp words actually live
             if c.proc_frame is not None:
-                c.proc_frame["frame_words"] = cnt  # retf pop math needs the
+                c.proc_frame.frame_words = cnt  # retf pop math needs the
                 # full zero-filled span even after FOR temp words are dropped
                 # from the dict (q_locidx) -- a SUB-only concern: DEF FN's
                 # fn_ret closing has no analogous pop-count computation
@@ -3766,11 +3745,11 @@ def _decode_user_code(
             frame = (
                 c.proc_frame if c.proc_frame is not None else c.fn_frame
             )
-            if frame is None or frame["locals"] is None:
+            if frame is None or frame.locals is None:
                 raise ValueError(f"LOCAL DIM bracket outside a LOCAL frame at {addr:#x}")
             disp = op[2]
             span = {disp + 2 * i for i in range(_LOCAL_ARR_WORDS)}
-            if not span <= set(frame["locals"]):
+            if not span <= set(frame.locals):
                 raise ValueError(f"LOCAL DIM descriptor exceeds frame at {addr:#x}")
             l.local_dim_frame = {
                 "disp": disp,
@@ -3898,16 +3877,16 @@ def _decode_user_code(
             frame = (
                 c.proc_frame if c.proc_frame is not None else c.fn_frame
             )
-            if frame is None or not frame["locals"]:
+            if frame is None or not frame.locals:
                 raise ValueError(f"LOCAL DIM without a LOCAL declaration at {addr:#x}")
             span = {disp + 2 * i for i in range(_LOCAL_ARR_WORDS)}
-            if not span <= set(frame["locals"]):
+            if not span <= set(frame.locals):
                 raise ValueError(f"LOCAL DIM descriptor exceeds frame at {addr:#x}")
             _drop_local_descriptor_initializers(state, frame, span, addr)
-            frame.setdefault("hidden_locals", set()).update(
+            frame.hidden_locals.update(
                 disp + 2 * i for i in range(1, _LOCAL_ARR_WORDS)
             )
-            frame["locals"][disp] = f"{name}()"
+            frame.locals[disp] = f"{name}()"
             l.local_dim_frame = None
             c.cur = None
             state.advance(2)
@@ -3924,7 +3903,7 @@ def _decode_user_code(
             # is snapshotted here and never revisited by that pass, so it has to
             # happen now or its IfInlines stay inline and the else-skip Goto
             # survives as a spurious statement (probe t1_dblhooksub).
-            i0 = state.frame_start(c.proc_frame)
+            i0 = state.frame_start(c.proc_frame.seq, c.proc_frame.idx)
             state.drain_folds(i0)  # the body's own IFs, before it is snapshotted
             with editing(out.stmts, "fold_proc_body"):
                 out.stmts[i0:], out.addrs[i0:] = _fold_if(
@@ -3940,9 +3919,9 @@ def _decode_user_code(
                     out.stmt_addr.claim(st, ad)  # line (t1_subgsb)
             with editing(out.stmts, "fold_proc_body"):
                 del out.stmts[i0:], out.addrs[i0:]
-            locs = c.proc_frame["locals"]
+            locs = c.proc_frame.locals
             _retire_for_temps(c.proc_frame, locs)
-            for d in c.proc_frame.get("hidden_locals") or ():
+            for d in c.proc_frame.hidden_locals:
                 if locs is not None:
                     locs.pop(d, None)  # var-STEP FOR temps (see above): never
             if locs:  # declared LOCALs, just deferred out of the dict
@@ -3953,11 +3932,11 @@ def _decode_user_code(
                 body = (ir.Local(tuple(locs.values())),) + body
             c.nsub += 1
             name = f"SUB{c.nsub}"
-            c.proc_names[c.proc_frame["entry"]] = name
+            c.proc_names[c.proc_frame.entry] = name
             # retf pop bytes = 4 x nargs, PLUS the LOCAL frame's own span: the
             # locals' stack space is caller-allocated too, so retf pops it
             # right along with the params (witnessed t1_local2)
-            array_params = c.proc_frame["array_params"]
+            array_params = c.proc_frame.array_params
             if array_params:
                 # Runtime vector D4 copies a rank-1 DESCRIPTOR (0x3C bytes) for
                 # each whole-array parameter, rather than passing it as
@@ -3965,7 +3944,7 @@ def _decode_user_code(
                 # the two: `SUB One(X$(1), N%)` (t1_arrparmmix; TBWINDOW's
                 # `Makevmenu(item$(1), liveitem$, itemcount, ...)` is the same
                 # shape with nine scalars).
-                fw = 2 * c.proc_frame.get("frame_words", 0)
+                fw = 2 * (c.proc_frame.frame_words or 0)
                 scalar_bytes = op[2] - fw - 0x3C * len(array_params)
                 if scalar_bytes < 0 or scalar_bytes % 4:
                     raise ValueError(
@@ -3998,13 +3977,19 @@ def _decode_user_code(
                 params = tuple(reversed(slots))
             else:
                 nparams = (
-                    op[2] - 2 * c.proc_frame.get("frame_words", len(locs or ()))
+                    op[2]
+                    - 2
+                    * (
+                        len(locs or ())
+                        if c.proc_frame.frame_words is None
+                        else c.proc_frame.frame_words
+                    )
                 ) // 4
                 params = tuple(
                     _scalar_param_name(state, off)
                     for off in (6 + 4 * (nparams - 1 - i) for i in range(nparams))
                 )
-            c.proc_params[c.proc_frame["entry"]] = params
+            c.proc_params[c.proc_frame.entry] = params
             if c.fwd_inline_offs:
                 # An argument forwarded to a SUB ... INLINE was spelled before
                 # this frame's param types were settled (see handlers.control).
@@ -4053,7 +4038,7 @@ def _decode_user_code(
             # only the [bp+0] init marks the multi-line form (t1_fnstr).
             frame = c.proc_frame if c.proc_frame is not None else c.fn_frame
             if (
-                frame is not None and (frame["locals"] or {}).get(op[2]) is not None
+                frame is not None and (frame.locals or {}).get(op[2]) is not None
             ):  # LOCAL int var = constant, e.g. a FOR init (q_locidx) -- same
                 # shape whether the LOCAL lives in a SUB or a DEF FN body
                 # (wild resume.exe: `LOCAL B% ... B% = 5` inside a DEF FN);
@@ -4070,7 +4055,7 @@ def _decode_user_code(
                 continue
             if c.fn_frame is not None:
                 if op[2] == 0:
-                    if c.fn_frame["block"]:
+                    if c.fn_frame.block:
                         # A LITERAL result assignment -- `FNCurdisplay = 4`
                         # (wild tbd73.exe, TBW73.INC:314-357) -- NOT the
                         # prologue's result-slot init. Identical op, identical
@@ -4090,14 +4075,14 @@ def _decode_user_code(
                         # to (`jump target 0xa637 is not a statement start`).
                         # Mirrors movm_ax_bp's bp+0 branch, the computed-result
                         # sibling of this literal one.
-                        c.fn_frame["int"] = True  # a WORD store to bp+0:
+                        c.fn_frame.int_result = True  # a WORD store to bp+0:
                         # a SINGLE-valued FN stores its result via fstp instead
                         if c.cur is None:
                             c.cur = addr
                         state.put(ir.FnResult(ir.Lit(op[3])), c.cur)
                         c.cur = None
                     else:
-                        c.fn_frame["block"] = True
+                        c.fn_frame.block = True
                 elif op[2] != 2:
                     raise ValueError(f"[bp+{op[2]}] init in DEF FN body at {addr:#x}")
             elif op[3] != 0:  # caller: literal-int FN-call arg staging (wild
@@ -4115,20 +4100,20 @@ def _decode_user_code(
             # resume.exe, probe_d) -- no fixed stride can be assumed.
             params = tuple(
                 f"P{off:02X}$"
-                if off in c.fn_frame["str_offs"]
+                if off in c.fn_frame.str_offs
                 else (
-                    f"P{off:02X}%" if off in c.fn_frame["int_offs"] else f"P{off:02X}"
+                    f"P{off:02X}%" if off in c.fn_frame.int_offs else f"P{off:02X}"
                 )
-                for off in sorted(c.fn_frame["param_offs"])
+                for off in sorted(c.fn_frame.param_offs)
             )
             c.nfn += 1
             name = f"FNFN{c.nfn}" + (
-                "$" if c.fn_frame["str"]
-                else "%" if c.fn_frame["int"]
+                "$" if c.fn_frame.str_result
+                else "%" if c.fn_frame.int_result
                 else ""
             )
-            c.proc_names[c.fn_frame["entry"]] = name
-            if c.fn_frame["block"]:  # multi-line DEF FN ... END DEF
+            c.proc_names[c.fn_frame.entry] = name
+            if c.fn_frame.block:  # multi-line DEF FN ... END DEF
                 _apply_exit_folds(
                     out.stmts, out.addrs, c.exit_folds
                 )  # EXIT DEF fold (body-local)
@@ -4141,7 +4126,7 @@ def _decode_user_code(
                 # movax-FFFF materialization template and an inline one a bare
                 # dispatch pair (t1_fnblockif). SUB bodies got this treatment
                 # with t1_dblhooksub; DEF FN bodies were never given it.
-                i0 = state.frame_start(c.fn_frame)
+                i0 = state.frame_start(c.fn_frame.seq, c.fn_frame.idx)
                 state.drain_folds(i0)  # as proc_ret, before the snapshot
                 with editing(out.stmts, "fold_proc_body"):
                     out.stmts[i0:], out.addrs[i0:] = _fold_if(
@@ -4157,19 +4142,19 @@ def _decode_user_code(
                         out.stmt_addr.claim(st, ad)
                 with editing(out.stmts, "fold_proc_body"):
                     del out.stmts[i0:], out.addrs[i0:]
-                locs = c.fn_frame["locals"]
+                locs = c.fn_frame.locals
                 _retire_for_temps(c.fn_frame, locs)
-                for d in c.fn_frame.get("hidden_locals") or ():
+                for d in c.fn_frame.hidden_locals:
                     if locs is not None:
                         locs.pop(d, None)
                 if locs:  # declared LOCALs (wild resume.exe), mirroring
                     body = (ir.Local(tuple(locs.values())),) + body  # proc_ret
                 out.stmts.append(ir.DefFn(name, params, body, True))
             else:  # single-line DEF FN = expr
-                expr = c.fn_frame["result"]
+                expr = c.fn_frame.result
                 if expr is None:  # no FSTP [bp+0]: result left on stack
                     expr = e.stack.pop()
-                i0 = state.frame_start(c.fn_frame)
+                i0 = state.frame_start(c.fn_frame.seq, c.fn_frame.idx)
                 state.drain_folds(i0)  # nothing survives the discard, but the
                 # queue must not outlive the body it belongs to
                 with editing(out.stmts, "fold_proc_body"):
@@ -5082,12 +5067,12 @@ def _decode_user_code(
             # case (bp+0 is the frame-link word in a SUB, never a real LOCAL,
             # so this can only mean the FN result there; wild resume.exe).
             if c.fn_frame is not None and op[2] == 0:
-                c.fn_frame["int"] = True  # integer-typed result
-                if c.fn_frame["block"]:
+                c.fn_frame.int_result = True  # integer-typed result
+                if c.fn_frame.block:
                     state.put(ir.FnResult(m.ax), c.cur)
                     c.cur = None
                 else:
-                    c.fn_frame["result"] = m.ax
+                    c.fn_frame.result = m.ax
                 m.ax = None
                 state.advance()
                 continue
@@ -5200,7 +5185,7 @@ def _decode_user_code(
                         if c.proc_frame is not None
                         else c.fn_frame
                     )
-                    locs = frame["locals"] if frame is not None else None
+                    locs = frame.locals if frame is not None else None
                     span = {d + 2 * i for i in range(_LOCAL_ARR_WORDS)}
                     if locs is None or not span <= set(locs):
                         raise ValueError(
@@ -5217,7 +5202,7 @@ def _decode_user_code(
                         f"V{l.lay['n_static'] + len(l.lay['rt_blocks']) + l.n_local_arrs}"
                     )
                     l.n_local_arrs += 1
-                    frame.setdefault("hidden_locals", set()).update(span - {d})
+                    frame.hidden_locals.update(span - {d})
                     locs[d] = f"{name}()"
                 state.advance(2)
                 continue
@@ -5240,8 +5225,8 @@ def _decode_user_code(
                 )
                 if (
                     frame is not None
-                    and frame["locals"] is not None
-                    and d in frame["locals"]
+                    and frame.locals is not None
+                    and d in frame.locals
                 ):
                     e.sstack.append(state.loc_local_str(d))
                 elif c.fn_frame is None:
@@ -5249,8 +5234,8 @@ def _decode_user_code(
                         f"string BP push outside DEF FN at {addr:#x}"
                     )
                 else:
-                    c.fn_frame["param_offs"].add(d)
-                    c.fn_frame["str_offs"].add(d)
+                    c.fn_frame.param_offs.add(d)
+                    c.fn_frame.str_offs.add(d)
                     e.sstack.append(ir.Var(f"P{d:02X}$"))
                 state.advance(2)
                 continue
@@ -5262,8 +5247,8 @@ def _decode_user_code(
                 )
                 if (
                     frame is not None
-                    and frame["locals"] is not None
-                    and d in frame["locals"]
+                    and frame.locals is not None
+                    and d in frame.locals
                 ):
                     ref = state.loc_local_str(d)
                     if e.pend_input is not None:
@@ -5290,12 +5275,12 @@ def _decode_user_code(
                         raise ValueError(
                             f"string store to [bp+{d}] in DEF FN body at {addr:#x}"
                         )
-                    c.fn_frame["str"] = True
-                    if c.fn_frame["block"]:  # FNx$ = expr statement
+                    c.fn_frame.str_result = True
+                    if c.fn_frame.block:  # FNx$ = expr statement
                         state.put(ir.FnResult(e.sstack.pop()), c.cur)
                         c.cur = None
                     else:  # single-line body expr
-                        c.fn_frame["result"] = e.sstack.pop()
+                        c.fn_frame.result = e.sstack.pop()
                 else:  # caller: stage a string FN-call arg
                     if not e.sstack:
                         raise ValueError(

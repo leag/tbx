@@ -239,7 +239,7 @@ def cargs(state: DecodeState, op, addr, kind) -> bool:
             # outgoing area first, so the array push, not `sub sp,N`, is the
             # statement's first op (t1_ifbeforecall: an inline IF whose skip
             # target is the CALL that follows it).
-        rec = c.proc_frame["array_params"].setdefault(op[2], {"rank": 1})
+        rec = c.proc_frame.array_params.setdefault(op[2], {"rank": 1})
         # A pure relay carries no element-type evidence, but the SAME procedure
         # may also index the array -- and then the type IS knowable and the
         # spelling matters: for a STRING array `A$()` and `A()` are different
