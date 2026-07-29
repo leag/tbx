@@ -34,7 +34,7 @@ signal that something moved.
 | 4 recognition/mutation split | substantial, two families outstanding |
 | 5 event stream | **complete**: every statement has an event |
 | 6 control-flow extraction | folds record-driven; the timing move is **merged**; `fold_pass` not yet wired |
-| 7 remove scaffolding | audit, measurement and docs done; one deletion disputed |
+| 7 remove scaffolding | **complete** |
 
 ## What is proven, with numbers
 
@@ -373,10 +373,11 @@ than against them: a mistyped attribute raises where it is written, a mistyped
 `tests/tbx/test_frames.py` keeps it: no frame may be a dict literal, no frame
 field may be reached by subscript, and every field must carry a comment.
 
-## Chapter 7, measured
+## Chapter 7, done
 
-Two of its deliverables are done, and both came back better than the plan
-assumed.
+Its deliverables came back better than the plan assumed, and the one deletion
+it proposed turned out to be justified after all -- by a guard that did not
+exist when the objection was written.
 
 **The field and call-site audit.** Of the 96 fields the ownership partition
 claims, **none** is written and never read. The least-used are down to a single
@@ -404,26 +405,52 @@ ownership cost. The plan puts correctness and diagnostic reproducibility ahead
 of throughput during the migration, so this is the expected shape; it is
 recorded here so that a later regression is distinguishable from it.
 
-### The one deletion worth arguing about
+### The deletion, argued and then measured
 
-The plan has Chapter 7 remove the frames' `idx` cross-check -- `frame_start`
-raising when the region start read back from the record disagrees with the
-length the walk saw. It has never fired across either corpus, which is the
-usual reason to call something scaffolding.
+The plan had Chapter 7 remove the frames' `idx` cross-check: `frame_start`
+raising when the region start read back from the record disagreed with the
+length the walk saw. It never fired, across both corpora and every construct
+that folds.
 
-It should stay. What this chapter learned the hard way is that the fixture
-corpus is blind to position bookkeeping: two shift-arithmetic bugs, one in
-`drain_folds` and one in `fold_pass`, were live while all 1030 goldens were
-byte-identical, and only wild programs showed them. A wrong `frame_start` is
-exactly that class of error. The cross-check is a cheap invariant guarding
-something the goldens do not, and "it has never fired" is what a working guard
-looks like.
+I argued it should stay. The reasoning was that this chapter kept getting
+caught by position bookkeeping -- two shift-arithmetic bugs were live while all
+1030 goldens were byte-identical -- and "it has never fired" is what a working
+guard looks like.
 
-Only the four inline-IF frame openers carry `idx` for the cross-check alone.
-The proc/fn frames need theirs (`_drop_local_descriptor_initializers` slices on
-it, and the `local_init` check reads it), and the FOR frames' `idx` indexes the
-header they patch. So the deletion was never 15 sites; it is four, and they buy
-a guard the corpus cannot replace.
+The wild-subset manifest, added after that argument, changes the answer, and
+the honest way to settle it was to break the derivation and see. With
+`frame_start` returning one too many: the first test file alone fails, and all
+10 comparable wild programs fail their recorded shape. A wrong derivation is
+loud without the raise.
+
+So it is gone, and `IfFrame` is a single field -- an open inline IF is an index
+into the event log and nothing else. The other frames keep their `idx`: a
+FOR's indexes the header it patches, a procedure's is sliced on by the
+LOCAL-descriptor cleanup, a SELECT arm's bounds its own snapshot. Only the
+inline IF's existed solely to be compared.
+
+### What the exit criteria actually said
+
+> a failure report identifies the first diverging pass, the owning state
+> component, the rejected template, and whether the change is in scan, layout,
+> lift, control recovery, or rendering
+
+The first and last of those were **not** met, and not for want of machinery:
+`DecodeDiagnostics.phase` was declared, printed, and never assigned, so every
+report claimed `lift` -- including the DGROUP layout failures whose own text
+says otherwise. It is set per stage now, and across the wild corpus it
+discriminates: 10 `scan`, 5 `layout`, 25 `lift`, 11 `finalize`.
+
+`component` is honestly still thin: four raise sites out of roughly two
+hundred name one. Backfilling it would be guesswork about which view owns an
+arbitrary template mismatch, so the architecture map says what to use instead
+-- the module the failure came from, and `recent`.
+
+The full gates pass: 2772 tests, Ruff, goldens and IR snapshot byte-identical,
+the wild report unchanged bar the phase word, and the release checklist's
+oracle sample byte-exact on ten stems including the three fold-sensitive
+fixtures the timing move touches (`t1_selarmblockif`, `t1_nestif2`,
+`t1_iftailarm`).
 
 ## Next steps, in order
 
@@ -455,8 +482,8 @@ a guard the corpus cannot replace.
    waiting on them. Then `SubDef`, which additionally needs the procedure's
    name and parameters recorded.
 3. **Chapter 4's two families**, independently of the above.
-4. **Chapter 7 is done bar the dispute.** The audit found no obsolete state,
-   the measurement is recorded, and `docs/decoder-architecture.md` is the
-   architecture and replay-tool map, checked against the code by
-   `tests/tbx/test_architecture_doc.py` so it cannot drift. The one deletion
-   it proposed should not happen -- see above.
+4. **Chapter 7 is complete.** What is left of the migration is Chapter 6's
+   exit criterion -- `fold_pass` reads only the record and reproduces 752 of
+   771 wild inline IFs, but nothing calls it -- and Chapter 4's two families,
+   which may not be finishable without a semantic change. Neither is
+   scaffolding, so neither belongs here.
