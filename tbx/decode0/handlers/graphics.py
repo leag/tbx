@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tbx import ir
-from tbx.decode0.frames import PrintChain
+from tbx.decode0.frames import InputChain, LineInputChain, PrintChain
 from tbx.decode0.statement_log import editing
 from tbx.decode0.const import (
     _LINEINPUTREAD,
@@ -327,13 +327,9 @@ def console(state: DecodeState, op, addr, kind) -> bool:
             raise ValueError(
                 f"INPUT flags {flags:#06x} with {count + 1} targets at {addr:#x}"
             )
-        e.pend_input = {
-            "prompt": prompt,
-            "flags": flags,
-            "targets": [],
-            "want": count + 1,
-            "start": c.cur,
-        }
+        e.pend_input = InputChain(
+            prompt=prompt, flags=flags, want=count + 1, start=c.cur
+        )
         state.advance()
         return True
     if kind == "line_input":  # LINE INPUT
@@ -345,9 +341,9 @@ def console(state: DecodeState, op, addr, kind) -> bool:
             # computation runs between the read and the element store, so
             # the store (the shlsi element-access handler's strassign
             # branch) names the target.
-            e.pend_line_input = {
-                "prompt": prompt, "semi": op[3], "start": c.cur, "file": None
-            }
+            e.pend_line_input = LineInputChain(
+                prompt=prompt, semi=op[3], start=c.cur
+            )
             e.sstack.append(_LINEINPUTREAD)
             state.advance()
             return True
@@ -373,12 +369,7 @@ def console(state: DecodeState, op, addr, kind) -> bool:
             # what names the target. Stage it the same way, carrying the file
             # number through so _lineinput_target can rebuild the `#n` form
             # (t1_lineinparr).
-            e.pend_line_input = {
-                "prompt": None,
-                "semi": False,
-                "start": c.cur,
-                "file": e.pend_fnum,
-            }
+            e.pend_line_input = LineInputChain(start=c.cur, file=e.pend_fnum)
             e.sstack.append(_LINEINPUTREAD)
             e.pend_fnum = None
             state.advance()
@@ -410,7 +401,7 @@ def console(state: DecodeState, op, addr, kind) -> bool:
             # USING emit follows it. A trailing TAB starts the next statement
             # in existing wild output, so retain the old lazy flush there.
             if match_using_chain_continues(i.ops, c.k) is not None:
-                e.pend_using["values"].append(ir.Call(name, (m.ax,)))
+                e.pend_using.values.append(ir.Call(name, (m.ax,)))
                 m.ax = None
                 c.cur = None
                 state.advance()

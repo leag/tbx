@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from tbx import ir
-from tbx.decode0.frames import PrintChain
+from tbx.decode0.frames import FieldChain, PrintChain, ReadChain
 from tbx.decode0.const import (
     _FREAD,
     _INPUTREAD,
@@ -70,7 +70,7 @@ def fileio(state: DecodeState, op, addr, kind) -> bool:
         # a time and flush_pending emits the ir.Field once the FIELD chain
         # is proven closed by the next statement, same lazy-close
         # convention as READ/INPUT#/PRINT chains.
-        e.pend_field = {"fnum": e.pend_fnum, "fields": [], "start": c.cur}
+        e.pend_field = FieldChain(fnum=e.pend_fnum, start=c.cur)
         e.pend_fnum = None
         state.advance()
         return True
@@ -125,11 +125,9 @@ def file_read(state: DecodeState, op, addr, kind) -> bool:
         if e.pend_fnum is None:  # parse a value onto the FP/string
             raise ValueError(f"INPUT# read without file number at {addr:#x}")
         if e.pend_filein is None:  # stack; the consuming store (near
-            e.pend_filein = {
-                "num": e.pend_fnum,  # or far) names the target
-                "targets": [],
-                "start": c.cur,
-            }
+            e.pend_filein = ReadChain(  # or far) names the target
+                num=e.pend_fnum, start=c.cur
+            )
         (e.stack if kind == "read_file_num" else e.sstack).append(_FREAD)
         state.advance()
         return True
@@ -240,10 +238,7 @@ def data_read2(state: DecodeState, op, addr, kind) -> bool:
     e, c = state.expr, state.control
     if kind in ("data_read_num", "data_read_str"):  # READ <var>: next DATA
         if e.pend_dataread is None:  # item -> FP/string stack; the
-            e.pend_dataread = {
-                "targets": [],
-                "start": c.cur,
-            }  # consuming store names the
+            e.pend_dataread = ReadChain(start=c.cur)  # consuming store names
         (e.stack if kind == "data_read_num" else e.sstack).append(
             _READDATA
         )  # target

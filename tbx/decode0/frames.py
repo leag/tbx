@@ -369,3 +369,97 @@ class PrintChain:
     #: what the reader already tests for, so there is no need for this to be
     #: absent as well as empty. It used to be both, via `setdefault`.
     commas: dict = field(default_factory=dict)
+
+
+@dataclass
+class InputChain:
+    """An open `INPUT`, collecting its targets.
+
+    The runtime call names how many values to read and how the prompt is
+    spelled; the *targets* are named by the stores that follow, one per value.
+    So the statement is complete when `len(targets) == want`, and `want` is
+    the only reason this has to be a frame rather than a running list.
+    """
+
+    #: How the prompt was spelled, or None for a bare `INPUT`.
+    prompt: object = None
+    #: The runtime's prompt/semicolon flag word, kept verbatim: it decides
+    #: `INPUT;` and whether the trailing `?` is suppressed.
+    flags: int = 0
+    #: Targets named so far by the stores following the call.
+    targets: list = field(default_factory=list)
+    #: How many the runtime call said to expect.
+    want: int = 0
+    #: Address of the statement.
+    start: int | None = None
+
+
+@dataclass
+class LineInputChain:
+    """An open `LINE INPUT` or `LINE INPUT #n`, waiting for its target.
+
+    One value, so unlike `InputChain` there is nothing to count: the next
+    store names the target and closes it.
+    """
+
+    #: Prompt string, or None for the `#n` form which has none.
+    prompt: object = None
+    #: Whether the prompt was followed by `;` rather than `,`.
+    semi: bool = False
+    #: File number for the `#n` form; None for console input.
+    file: object = None
+    #: Address of the statement.
+    start: int | None = None
+
+
+@dataclass
+class UsingChain:
+    """An open `PRINT USING` / `LPRINT USING`, collecting its values.
+
+    The format string is known at the start -- it is popped from the string
+    stack by the USING call itself -- and the values arrive afterwards, each
+    as its own runtime call, exactly as a plain PRINT's items do.
+    """
+
+    #: The format string.
+    fmt: object = None
+    #: Values printed so far.
+    values: list = field(default_factory=list)
+    #: File number for the `#n` form; None for console output.
+    file: object = None
+    #: Whether this is `LPRINT USING` rather than `PRINT USING`. Read with a
+    #: `False` default before it was a field, which is the same thing said
+    #: less clearly.
+    lprint: bool = False
+    #: Address of the statement.
+    start: int | None = None
+
+
+@dataclass
+class FieldChain:
+    """An open `FIELD #n`, collecting its `width AS var$` entries."""
+
+    #: File number the FIELD applies to.
+    fnum: object = None
+    #: Entries recognised so far.
+    fields: list = field(default_factory=list)
+    #: Address of the statement.
+    start: int | None = None
+
+
+@dataclass
+class ReadChain:
+    """An open `READ` or `INPUT #n`, waiting for the stores that name targets.
+
+    Both push a sentinel onto the value stack per item read and are closed by
+    the next statement rather than by anything of their own -- the same lazy
+    convention the PRINT chain uses. `num` is the file number for `INPUT #n`
+    and None for `READ`, which reads from the DATA pool.
+    """
+
+    #: Targets named so far by the consuming stores.
+    targets: list = field(default_factory=list)
+    #: Address of the statement.
+    start: int | None = None
+    #: File number for `INPUT #n`; None for `READ`.
+    num: object = None

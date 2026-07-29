@@ -671,22 +671,22 @@ class DecodeState:
         with editing(self.stmts, "flush_pending"):
             if self.pend_dataread is not None:
                 pr, self.pend_dataread = self.pend_dataread, None
-                if not pr["targets"]:
+                if not pr.targets:
                     raise ValueError("READ chain closed without any stored target")
-                self.commit(ir.Read(tuple(pr["targets"])), pr["start"])
+                self.commit(ir.Read(tuple(pr.targets)), pr.start)
             if self.pend_filein is not None:
                 pf, self.pend_filein = self.pend_filein, None
-                if not pf["targets"]:
+                if not pf.targets:
                     raise ValueError("INPUT# chain closed without any stored target")
                 self.commit(
-                    ir.InputFile(pf["num"], tuple(pf["targets"])), pf["start"]
+                    ir.InputFile(pf.num, tuple(pf.targets)), pf.start
                 )
                 self.pend_fnum = None
             if self.pend_field is not None:
                 pfd, self.pend_field = self.pend_field, None
-                if not pfd["fields"]:
+                if not pfd.fields:
                     raise ValueError("FIELD chain closed without any AS-entry")
-                self.commit(ir.Field(pfd["fnum"], tuple(pfd["fields"])), pfd["start"])
+                self.commit(ir.Field(pfd.fnum, tuple(pfd.fields)), pfd.start)
             if self.pend_print is not None:
                 pp, self.pend_print = self.pend_print, None
                 if pp.mode == "write":  # WRITE / WRITE# has no trailing-';' form:
@@ -711,13 +711,13 @@ class DecodeState:
                 pu, self.pend_using = self.pend_using, None
                 self.commit(
                     ir.PrintUsing(
-                        pu["fmt"],
-                        tuple(pu["values"]),
-                        file=pu["file"],
+                        pu.fmt,
+                        tuple(pu.values),
+                        file=pu.file,
                         newline=False,
-                        lprint=pu.get("lprint", False),
+                        lprint=pu.lprint,
                     ),
-                    pu["start"],
+                    pu.start,
                 )
 
     def put(self, stmt, addr):
@@ -851,11 +851,11 @@ class DecodeState:
 
     def _fread_target(self, ref: object) -> None:  # open INPUT# target chain
         assert self.pend_filein is not None
-        self.pend_filein["targets"].append(ref)
+        self.pend_filein.targets.append(ref)
 
     def _readdata_target(self, ref: object) -> None:  # open READ target chain
         assert self.pend_dataread is not None
-        self.pend_dataread["targets"].append(ref)
+        self.pend_dataread.targets.append(ref)
 
     def _input_target(self, ref: object, is_str: bool) -> None:
         """Append a console-INPUT target; validate its per-position type bit
@@ -863,23 +863,23 @@ class DecodeState:
         emit the Input statement once every target has arrived."""
         pi = self.pend_input
         assert pi is not None
-        k = len(pi["targets"])
+        k = len(pi.targets)
         bit = 0x4000 >> k
-        if bool(pi["flags"] & bit) == is_str:
+        if bool(pi.flags & bit) == is_str:
             raise ValueError(
                 f"INPUT target {k} type bit mismatch (flags {pi['flags']:#06x})"
             )
-        pi["targets"].append(ref)
-        if len(pi["targets"]) == pi["want"]:
-            var = pi["targets"][0] if pi["want"] == 1 else tuple(pi["targets"])
+        pi.targets.append(ref)
+        if len(pi.targets) == pi.want:
+            var = pi.targets[0] if pi.want == 1 else tuple(pi.targets)
             self.put(
                 ir.Input(
-                    pi["prompt"],
+                    pi.prompt,
                     var,
-                    comma=bool(pi["flags"] & 0x0040),
-                    semi=bool(pi["flags"] & 0x0080),
+                    comma=bool(pi.flags & 0x0040),
+                    semi=bool(pi.flags & 0x0080),
                 ),
-                pi["start"],
+                pi.start,
             )
             self.pend_input = None
 
@@ -891,8 +891,8 @@ class DecodeState:
         pi = self.pend_line_input
         assert pi is not None
         self.put(
-            ir.LineInput(pi["prompt"], ref, pi.get("file"), semi=pi["semi"]),
-            pi["start"],
+            ir.LineInput(pi.prompt, ref, pi.file, semi=pi.semi),
+            pi.start,
         )
         self.pend_line_input = None
 
@@ -4892,7 +4892,7 @@ def _decode_user_code(
             # convention as the other open chains (READ/INPUT#/PRINT).
             if m.ax is None:
                 raise ValueError(f"FIELD width missing at {addr:#x}")
-            e.pend_field["fields"].append((m.ax, state.loc(op[2])))
+            e.pend_field.fields.append((m.ax, state.loc(op[2])))
             m.ax = None
             state.advance(4)
             continue

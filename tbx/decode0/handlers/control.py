@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tbx import ir
-from tbx.decode0.frames import BoolTerm, PrintChain
+from tbx.decode0.frames import BoolTerm, PrintChain, UsingChain
 from tbx.decode0.const import (
     _JCC_RELOP_STR_TRUE,
     _JCC_RELOP_TRUE,
@@ -285,12 +285,7 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
         vec = op[2]
         if vec == 0xCA:  # USING begin: fmt off the sstack
             state.flush_pending()
-            e.pend_using = {
-                "fmt": e.sstack.pop(),
-                "values": [],
-                "file": None,
-                "start": c.cur,
-            }
+            e.pend_using = UsingChain(fmt=e.sstack.pop(), start=c.cur)
             c.cur = None
             state.advance()
             return True
@@ -305,14 +300,14 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             f = e.pend_fnum if emit.leg == "file" else None
             if emit.leg == "file" and f is None:
                 raise ValueError(f"file USING item without [0060] at {addr:#x}")
-            if e.pend_using["values"] and (
-                e.pend_using["file"] != f
-                or e.pend_using.get("lprint", False) != lp
+            if e.pend_using.values and (
+                e.pend_using.file != f
+                or e.pend_using.lprint != lp
             ):
                 raise ValueError(f"USING console/file leg flip at {addr:#x}")
-            e.pend_using["file"] = f
-            e.pend_using["lprint"] = lp
-            e.pend_using["values"].append(
+            e.pend_using.file = f
+            e.pend_using.lprint = lp
+            e.pend_using.values.append(
                 e.stack.pop() if emit.numeric else e.sstack.pop()
             )
             c.cur = None
@@ -393,16 +388,16 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
         if vec == 0xB9:  # LPRINT flush-newline
             if e.pend_using is not None:  # LPRINT USING closes on B9 too
                 pu, e.pend_using = e.pend_using, None
-                if not pu.get("lprint"):
+                if not pu.lprint:
                     raise ValueError(f"b9 flush of a non-printer USING at {addr:#x}")
                 state.put(
                     ir.PrintUsing(
-                        pu["fmt"],
-                        tuple(pu["values"]),
+                        pu.fmt,
+                        tuple(pu.values),
                         newline=True,
                         lprint=True,
                     ),
-                    pu["start"],
+                    pu.start,
                 )
                 c.cur = None
                 state.advance()
@@ -426,16 +421,16 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             want_file = vec == 0xBA
             if e.pend_using is not None:
                 pu, e.pend_using = e.pend_using, None
-                if (pu["file"] is not None) != want_file:
+                if (pu.file is not None) != want_file:
                     raise ValueError(f"USING flush leg mismatch at {addr:#x}")
                 state.put(
                     ir.PrintUsing(
-                        pu["fmt"],
-                        tuple(pu["values"]),
-                        file=pu["file"],
+                        pu.fmt,
+                        tuple(pu.values),
+                        file=pu.file,
                         newline=True,
                     ),
-                    pu["start"],
+                    pu.start,
                 )
             elif e.pend_print is not None:
                 pp, e.pend_print = e.pend_print, None
