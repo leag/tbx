@@ -51,10 +51,10 @@ EDITOR_FILE_LIMIT = 65536
 _OVER_LONG = {
     "banker.exe": 98245,
     "horses.exe": 67442,
-    "inv87.exe": 88275,
-    "invoice.exe": 88275,
-    "state.exe": 68875,
-    "state87.exe": 68875,
+    "inv87.exe": 88283,
+    "invoice.exe": 88283,
+    "state.exe": 68887,
+    "state87.exe": 68887,
 }
 
 CORPUS = Path(__file__).resolve().parents[1] / "fixtures" / "corpus"

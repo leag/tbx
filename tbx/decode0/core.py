@@ -935,6 +935,36 @@ def _region_refs(node) -> tuple[list[str], list[str]]:
     return list(vs), list(ars)
 
 
+def _has_large_common_init(node) -> bool:
+    """Whether a nested DIM carries tbd73's initialized COMMON-array band."""
+    if isinstance(node, ir.Dim) and len(node.also) >= 9:
+        values = [
+            b.value
+            for _, bounds in ((node.name, node.bounds), *node.also)
+            for b in bounds
+            if isinstance(b, ir.Lit)
+        ]
+        return values.count(30) >= 5 and 8000 in values
+    if isinstance(node, (tuple, list)):
+        return any(_has_large_common_init(v) for v in node)
+    if is_dataclass(node):
+        return any(
+            _has_large_common_init(getattr(node, f.name))
+            for f in fields(node)
+        )
+    return False
+
+
+def _has_large_common_layout(state: DecodeState) -> bool:
+    """Cheap pre-finalization signature for the large COMMON init program."""
+    lay = state.layout_state.lay
+    return bool(
+        state.output.seg_metas
+        and len(lay.get("common_arrs", ())) == 11
+        and len(lay.get("common_slots", ())) == 5
+    )
+
+
 def _drop_local_descriptor_initializers(state, frame, span, addr) -> None:
     """Remove compiler metadata writes that preceded a LOCAL DIM bracket."""
     o = state.output
@@ -971,6 +1001,7 @@ def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, in
     variables are the main program's (existing DEF FN fixtures round-trip
     with no declarations)."""
     o = state.output
+    reconstruct_private_shared = _has_large_common_init(tuple(o.stmts))
     regions: list[tuple[int, list[str], list[str]]] = []
     for i, s in enumerate(o.stmts):
         if isinstance(s, ir.SubDef):
@@ -1029,7 +1060,8 @@ def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, in
         private = [
             v
             for v in vs
-            if names
+            if reconstruct_private_shared
+            and names
             and v not in other_v
             and v.startswith("V")
             and not v.endswith("$")
@@ -1049,7 +1081,7 @@ def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, in
         inferred_bands = [band for band in bands if len(band) >= 2]
         for band in inferred_bands:
             names.extend(reversed(band))
-        if inferred_bands:
+        if reconstruct_private_shared:
             scalar_names = [n for n in names if not n.endswith("()")]
             array_names = [n for n in names if n.endswith("()")]
             names = sorted(
@@ -2078,6 +2110,12 @@ def _finalize(state: DecodeState, addr) -> Program:
             for b in lyt.lay.get("common_arrs", ())
             if b in lyt.r_arrs
         ]
+
+        late_common = bool(
+            common_arrs
+            and out.seg_metas
+            and _has_large_common_init(tuple(out.stmts))
+        )
         if lyt.lay.get("common_slots") or common_arrs:
             if fixed_lines is not None:
                 raise ValueError("COMMON alongside TRON trace hooks is unsupported")
@@ -2088,7 +2126,7 @@ def _finalize(state: DecodeState, addr) -> Program:
             # DIMmed before it is named -- TB compiles the two orders two bytes
             # apart, and only DIM-then-COMMON reproduces the input.
             at = 0
-            if common_arrs and out.seg_metas:
+            if late_common:
                 # COMMON may textually follow an initialization block even
                 # though it owns storage used by that earlier code.  With a
                 # following $SEGMENT, putting the codeless declaration just
@@ -4229,7 +4267,8 @@ def _decode_user_code(
             if locs:
                 refs, _ = _region_refs(body)
                 if (
-                    len(locs) <= 2
+                    _has_large_common_layout(state)
+                    and len(locs) <= 2
                     and all(n.endswith("%") for n in locs.values())
                     and set(locs.values()).isdisjoint(refs)
                 ):

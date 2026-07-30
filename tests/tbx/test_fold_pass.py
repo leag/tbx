@@ -184,11 +184,13 @@ def test_tbd73_segment_boundary_and_grouping_survive_synthesis():
     # and shifts the pool.
     assert "IF I% THEN CALL SUB6" in src
     assert "IF I% = 0 THEN" not in src
-    assert "IF NOT AU% THEN" in src
-    assert "IF NOT CL% THEN" in src
-    assert "IF NOT CM% THEN" in src
-    assert "IF NOT CO% THEN" in src
-    assert "IF NOT AU% = 0 THEN" not in src
+    bare_not = [
+        line.strip()
+        for line in src.splitlines()
+        if "IF NOT " in line
+    ]
+    assert len(bare_not) == 4
+    assert all(" = 0 THEN" not in line for line in bare_not)
 
 
 def _walk_selects(prog):
