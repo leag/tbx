@@ -3213,8 +3213,8 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 ir.For(init_s.target, init_s.value, ir.Lit(cmp_at_t[3]), ir.Lit(1)),
                 a,
             )
-            if cmp_at_t[1] == "cmp_bpi8" and c.proc_frame is not None:
-                # A literal-bound FOR over a LOCAL reserves two unused
+            if c.proc_frame is not None:
+                # A literal-bound FOR inside a procedure reserves two unused
                 # limit/step temp words in the LOCAL frame (the frame analog of
                 # the static band's phantom slots, q_forstep) -- they are not
                 # declared LOCALs (q_locidx). A literal bound leaves NO op
@@ -3225,6 +3225,16 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 # temps at the frame TAIL, so `v+2`/`v+4` are real declared
                 # LOCALs whenever the loop var is not the last one declared,
                 # t1_locstrafterforlit).
+                #
+                # The loop VARIABLE need not be a LOCAL for this: a FOR over an
+                # ordinary DGROUP scalar reserves the same frame-tail pair
+                # (t1_forsubdg, whose SUB has no LOCAL statement at all, and
+                # t1_forsubloc, where one declared LOCAL sits below the pair).
+                # Gating on `cmp_bpi8` here left those two words in the frame
+                # table to be emitted as declared LOCALs, and re-emitting them
+                # makes the compiler reserve a SECOND pair -- wild zip.exe and
+                # ziptest.exe came back with 4-word frames against the
+                # original's 2.
                 c.proc_frame.has_local_for = True
             state.branch(
                 "loop", template="for_header", target=t, address=c.cur

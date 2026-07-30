@@ -1,0 +1,9 @@
+10 SUB SUB1
+  LOCAL A%
+  A% = 1
+  FOR B% = 3 TO 5
+  PRINT B%; A%
+  NEXT B%
+END SUB
+20 CALL SUB1
+30 END

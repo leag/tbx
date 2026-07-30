@@ -424,14 +424,15 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "str_free_temp"))
         p += 14
         return p
-    if b == 0xB0 and exe[p + 2] == 0xE6:
-        # OUT with both operands in the byte range: Turbo Basic folds the
-        # general mov-AX/mov-DX/OUT-DX sequence into MOV AL,value;
-        # OUT port,AL. Keep the complete pair atomic so a stray MOV AL or
-        # immediate-port OUT remains fail-loud (wild zip.exe's tone SUBs).
-        ops.append((p, "out_imm", exe[p + 3], exe[p + 1]))
-        p += 4
-        return p
+    # There is deliberately NO `mov al,imm8; out imm8,al` op here. It used to
+    # be read as a byte-constant OUT that the compiler had folded, which is not
+    # a thing Turbo Basic does: `OUT 67, 116` emits the general mov-AX / mov-DX
+    # / OUT-DX form at top level and inside a SUB alike (probes
+    # probe_out_const_toplevel / probe_out_const_in_sub), and the mapping never
+    # had a compiled fixture. Those bytes are $INLINE machine code -- see
+    # `_try_inline_rescue`, which now claims them -- and decoding them as an
+    # OUT statement cost wild zip.exe 592 bytes and ziptest.exe 224 on the
+    # round trip. Ledger RO-OUT-IMM-FOLD.
     if b == 0x31 and exe[p + 1] == 0xC0:  # xor ax, ax (zero literal)
         ops.append((p, "xorax"))
         p += 2
@@ -1224,6 +1225,40 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
     return None
 
 
+def _has_port_immediate(exe: bytes, start: int, end: int) -> bool:
+    """Does [start, end) contain `mov al,imm8; out imm8,al` (B0 xx E6 xx)?
+
+    The one signal in this adjudication that is not ambiguous. Turbo Basic has
+    no statement that compiles to an immediate-port OUT: INP and OUT both route
+    the port through DX and emit the register forms EC/EE whatever the
+    operands, and `OUT 67, 116` -- both operands in byte range, zip.exe's own
+    pair -- emits mov-AX / mov-DX / OUT-DX at top level and inside a SUB alike
+    (probes probe_out_const_toplevel / probe_out_const_in_sub). So a body
+    carrying this pair was written by hand and reached the EXE through
+    `$INLINE`, which settles the `5D`-tail question the caller cannot otherwise
+    settle from the bytes.
+
+    Matched as the two-instruction PAIR, not as a loose search for the E4-E7
+    opcode range: these bodies are not disassembled, so a bare range test reads
+    operand and ModRM bytes as opcodes. `89 E5` -- the alternate `mov bp,sp`
+    encoding, in the prologue of the very framed procedures this guard must
+    keep rejecting -- carries an E5 in its second byte and made the guard
+    accept them.
+
+    Deliberately narrow. It does NOT try to prove a body is hand-written in
+    general: an unrecognized framed helper stays fail-loud, which is what keeps
+    wild CVT2TB.EXE and phone.exe honest. It only rules IN a body holding an
+    instruction pair the compiler cannot emit.
+
+    Witnessed by wild zip.exe and ziptest.exe, whose tone procedures are
+    `$INLINE` lists of PIT timer writes (ports 43h/41h) carrying their own bp
+    frame, and by fixture t1_inlineport.
+    """
+    return any(
+        exe[k] == 0xB0 and exe[k + 2] == 0xE6 for k in range(start, max(start, end - 3))
+    )
+
+
 def _try_inline_rescue(exe: bytes, ops: list[tuple[Any, ...]]) -> int | None:
     """After a scan failure, check whether we're stuck inside opaque code.
 
@@ -1261,7 +1296,11 @@ def _try_inline_rescue(exe: bytes, ops: list[tuple[Any, ...]]) -> int | None:
             j = target - 2
             while j > body_start and exe[j] == 0xCC:
                 j -= 1  # event-trap poll hooks sit between the pop and the ret
-            if exe[j] == 0x5D and not (i and ops[i - 1][1] == "inline_sub"):
+            if (
+                exe[j] == 0x5D
+                and not (i and ops[i - 1][1] == "inline_sub")
+                and not _has_port_immediate(exe, body_start, j)
+            ):
                 return None  # `pop bp; [hooks;] retf`: a COMPLETE framed
                 # procedure, not $INLINE -- false positives witnessed in wild
                 # CVT2TB.EXE (whose own unrelated gap-19 construct ends in a

@@ -126,7 +126,7 @@
    "sha256": "4a28abb6b32123808e4c3f041edec6837735ed0e8edc0b22988c90041507dd86",
    "bytes": 79263,
    "statements": 192,
-   "source_bytes": 67425,
+   "source_bytes": 67394,
    "toggles": "K",
    "build_match": 5,
    "roundtrip": "code-or-metadata",
@@ -414,11 +414,11 @@
    "sha256": "6f90d6235f9b983ad944297f0378e14ad133de80422a36c8bb9732f7c33df24b",
    "bytes": 39482,
    "statements": 96,
-   "source_bytes": 5652,
+   "source_bytes": 7740,
    "toggles": "",
    "build_match": 99,
    "roundtrip": "code-or-metadata",
-   "delta": 592,
+   "delta": 64,
    "excluded": null
   },
   {
@@ -426,11 +426,11 @@
    "sha256": "7a4247264a1becbfb57d45d0754d6a32eb075839bf1ce1d3edf861ddd5831732",
    "bytes": 44370,
    "statements": 309,
-   "source_bytes": 8829,
+   "source_bytes": 10683,
    "toggles": "",
    "build_match": 99,
    "roundtrip": "code-or-metadata",
-   "delta": 224,
+   "delta": -224,
    "excluded": null
   }
  ]

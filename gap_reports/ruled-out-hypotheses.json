@@ -171,6 +171,29 @@
    ],
    "instead": "A jump into a block body is legal; do not spend time making the emitter avoid it. Check block MEMBERSHIP of EXIT statements instead.",
    "source": "session 2026-07-30"
+  },
+  {
+   "id": "RO-OUT-IMM-FOLD",
+   "title": "Turbo Basic folds a byte-constant OUT into MOV AL,imm; OUT imm8,AL",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/zip.exe",
+    "wild/hits/ziptest.exe"
+   ],
+   "signatures": [
+    "out_imm",
+    "b0 <val> e6 <port>"
+   ],
+   "hypothesis": "The `b0 <val> e6 <port>` pairs filling wild zip.exe's and ziptest.exe's tone procedures are an OUT statement whose port and value both fit a byte, which Turbo Basic compiles to a compact MOV AL,value; OUT port,AL instead of the general mov-AX / mov-DX / OUT-DX form. scan.py's `out_imm` op and tests/tbx/test_out_immediate.py were both written on this premise.",
+   "negative_evidence": [
+    "Refuted by three oracle-compiled probes that all emit the GENERAL form and zero `b0/e6` bytes: wild/probes/probe_out_const_toplevel.bas (`OUT 67, 116` at top level, the exact port/value pair zip uses), wild/probes/probe_out_const_in_sub.bas (the same three OUTs inside a SUB, matching zip's 'tone SUB' shape), and a DEF SEG + hex-literal variant. Turbo Basic 1.1 has no byte-constant OUT template.",
+    "The mapping was never calibrated: `out_imm` has no compiled fixture. t1_out.bas uses port 888 (>255) and t1_out2.bas a variable operand, so neither exercises it, and test_out_immediate.py asserts only the scanner's behaviour on hand-built bytes plus that zip decodes -- it never recompiles anything.",
+    "wild/probes/probe_inline_out_imm.bas shows what DOES produce those bytes: `SUB TONE1 INLINE` with a `$INLINE &HB0,&H74,&HE6,&H43,...` list. zip's tone bodies are `55 8b ec` + 12 raw port bytes + `5d cb`, i.e. a $INLINE list carrying its own bp frame, with Turbo Basic appending the terminating CB (the skip-jmp spans 17 = 16 list bytes + 1).",
+    "Cost of the false mapping, measured through the oracle: emitting `OUT p, v` recompiles to the general form, so zip.exe grows +592 bytes (78 OUTs) and ziptest.exe +224 (69). They are the two least-identical comparable programs in the corpus (96.9% and 93.2%) entirely because of this."
+   ],
+   "instead": "Do not look for an OUT spelling that reproduces these bytes -- none exists. The bodies are source-level `SUB name INLINE` + `$INLINE`, which `ir.Inline` and emit0 already round-trip byte-exactly. FIXED the same session: `out_imm` is gone and `_try_inline_rescue` now claims a framed `55 8b ec ... 5d cb` body when it carries a `mov al,imm8; out imm8,al` pair, an instruction sequence the compiler cannot emit. Match the PAIR, not the E4-E7 opcode range: these bodies are not disassembled, and `89 e5` (the alternate `mov bp,sp`) carries an E5 that made a range test accept the very framed procedures the guard exists to reject -- wild CVT2TB.EXE and phone.exe, which stay fail-loud. Fixture t1_inlineport; zip.exe 96.87% -> 98.75% identical (delta +592 -> +64), ziptest.exe 93.17% -> 98.97% (+224 -> -224).",
+   "source": "session 2026-07-30"
   }
  ]
 }
