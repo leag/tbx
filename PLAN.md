@@ -1517,29 +1517,61 @@ all, and the runtime must carry an explicit list. It does:
   MIDDLE at 0x138.
 - `probe_datadup`: `[0x138, 0x134]` = ONE, TWO — it INCLUDES the shared item
   'ONE' that exclusion-based recovery drops.
-- wild styled.exe: **94 entries, 8 of them shared**, against the 86 the old
-  rule recovers. Target 87 is comfortably in range. The four RESTORE splits
-  {0, 48, 61, 87} resolve to 'ACCORDINGLY', 'UNLESS', 'AM', 'ING' — exactly the
+- wild styled.exe: **see the correction below — this one does not hold.** What
+  was measured was a 94-entry run at DGROUP disp 0x180, 8 of its entries shared,
+  against the 86 the old rule recovers, with the four RESTORE splits
+  {0, 48, 61, 87} resolving to 'ACCORDINGLY', 'UNLESS', 'AM', 'ING' — exactly the
   four word categories the program prints headers for (transitionals, forms of
-  TO BE, suffixes that bury action). Item 93, the last, is a shared `'xxx'`
+  TO BE, suffixes that bury action) — and item 93, the last, a shared `'xxx'`
   sentinel: the classic `READ W$: IF W$ = "xxx"` idiom is *precisely why* these
   two programs share a descriptor at all.
 
-Compare the contiguous-run hypothesis this replaces, which put item 61 at
-`'     1st/last before/after pn    '`. The table's reading is not just more
-plausible, it is independently corroborated by the program's own headers.
+**CORRECTION (same session, after the commit that claimed otherwise): the wild
+94-entry run is NOT a live DATA pointer table, and the locator problem is
+bigger than "find the base".** The region it occupies, DGROUP disp 0x180–0x23c
+in styled.exe, is genuinely VARIABLE STORAGE: 48 four-byte slots there are
+referenced as memory operands by the decoded op stream — 0x180–0x204 via
+`fld`/`fstp`/`fcomp` (single-precision numerics) and 0x208–0x23c via `movsi`
+(string descriptors). A table cannot be live at disps the program uses for
+variables, so whatever those file-image bytes are, they are not what `RESTORE`
+indexes at run time.
 
-**What is still missing is only a locator.** The table's DGROUP disp is not
-fixed and not at a constant offset from `pool_base`: probes 0x100 against
-pool_base 0x134; styled.exe 0x180 against 0x264; styllist.exe 0x140 against
-0x224 (gaps from table end to pool_base: 0x30, 0x28, 0x28). It was found here
-by taking the longest run of words that are all valid descriptor disps, which
-is a heuristic and must NOT be landed as one — a coincidental run could win it.
-The real anchor is presumably reachable from how the runtime finds the table:
-`RESTORE` writes the byte offset into system cell 0x78 and `data_read_*` indexes
-through it, so the base is either another fixed cell or a link-time constant in
-the runtime — read it out of the runtime's own DATA-read code and calibrate the
-locator against that. Everything else is already in hand.
+The earlier "48 distinct disps are code-referenced" check that should have
+caught this was wrong: it matched **any** numeric op argument, so it was
+picking up plain integer immediates like 400 and 500 rather than memory
+displacements, and it was dismissed on that basis. Re-run against memory-form
+ops only, it is unambiguous.
+
+What remains genuinely established, and what does not:
+
+- **Established.** DATA descriptors are not contiguous in the pool
+  (`probe_datamid`), so no pool-order index rule can work — this is what kills
+  the contiguous-run hypothesis, and it kills it structurally rather than on the
+  plausibility grounds the previous entry used. Exclusion loses shared items
+  (`probe_datadup`). Both probes' own 2-entry tables sit at disp 0x100, below
+  `var_base` 0x120, where nothing else is allocated, and one of them
+  demonstrably skips a code-only literal while the other includes a shared item.
+- **Not established.** That the same structure is what the wild witnesses use.
+  For styled.exe a ≥88-entry table (176+ bytes) cannot fit below `var_base`
+  0x120 at all, and there are only 8 bytes between the end of variable storage
+  (0x25c) and `pool_base` (0x264) — so if the table exists there it is not in
+  that part of DGROUP, and the run at 0x180 is something else whose bytes happen
+  to be descriptor disps. That coincidence is not explained, and 94 consecutive
+  valid disps with a recurring `'xxx'` sentinel entry is a very strange thing to
+  be accidental — it may be initial-value data the startup code consumes, or it
+  may mean layout's solve for this program is wrong (note `arrs = []` and
+  `n_static = 0` for a word-list program that surely uses an array, with 79
+  stride-4 "scalars" claimed instead). **Resolve that before building anything
+  on it.**
+
+So the honest state is: the mechanism of the BUG is understood and guarded; the
+replacement mechanism is confirmed only on two authored probes; and the wild
+witnesses' actual DATA table has not been found. `RESTORE` writing the byte
+offset into system cell 0x78 (with `data_read_*` indexing through it) is still
+the lead worth pulling — read the base out of the runtime's own DATA-read code —
+but note that searching for the base as a word in DGROUP found nothing, and
+searching for a common instruction context around the value across four files
+found nothing either. Both were tried here.
 
 **`data_orphan_lines` is NOT a usable second signal here** — checked, and it is
 EMPTY for both witnesses. That table only carries codeless-statement entries,

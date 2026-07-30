@@ -20,16 +20,18 @@ outright, and `probe_datamid` shows why: with `DATA AAA` / `PRINT "MIDDLE"` /
 interleaves DATA items with code literals, so DATA descriptors are not
 contiguous and `RESTORE` cannot be indexing the pool at all.
 
-The runtime carries an explicit DATA pointer table instead -- a word per DATA
-item, in source order, holding its descriptor disp, skipping code-only literals
-and including shared ones. It has been located in all three witnesses (94
-entries for wild styled.exe against the 86 recovered by exclusion, 8 of them
-shared; its four RESTORE splits resolve to 'ACCORDINGLY', 'UNLESS', 'AM',
-'ING', matching the four word categories that program prints headers for).
-Reading it is the real fix; what is missing is only a principled way to FIND
-it, since its DGROUP disp is neither fixed nor at a constant offset from
-`pool_base`. The search that located it -- longest run of valid descriptor disps
--- is a heuristic a coincidental run could win, so it is not landed.
+What `RESTORE` indexes instead is an explicit DATA pointer table -- a word per
+DATA item, in source order, holding its descriptor disp, skipping code-only
+literals and including shared ones. Both authored probes carry one at DGROUP
+disp 0x100, below `var_base` where nothing else is allocated: `probe_datamid`'s
+skips the PRINT-only literal, `probe_datadup`'s includes the shared item.
+
+That is confirmed on the probes ONLY. Where the wild witnesses keep theirs is
+not known -- a >=88-entry table does not fit below styled.exe's `var_base`, and
+only 8 bytes separate the end of its variable storage from `pool_base`. PLAN.md
+records a run that looked like the table and is not (that region is referenced
+as variables by `fld`/`fstp`/`movsi`), plus two locator searches that came up
+empty. So nothing is landed.
 
 So the decoder refuses. What this test fixes is that it refuses *loudly*: the
 failure used to be a bare `KeyError`, which is not a `ValueError` and so

@@ -1909,19 +1909,23 @@ def _finalize(state: DecodeState, addr) -> Program:
                     # source first-appearance order and INTERLEAVES DATA items
                     # with code literals (probe_datamid puts a PRINT-only
                     # literal between two DATA items), so RESTORE cannot be
-                    # indexing the pool at all. The runtime carries an explicit
-                    # DATA POINTER TABLE -- a word per DATA item, in source
-                    # order, holding its descriptor disp, skipping code-only
-                    # literals and INCLUDING shared ones. It has been located in
-                    # all three witnesses (94 entries for styled.exe against the
-                    # 86 recovered here, 8 shared), and reading it is the real
-                    # fix. What is missing is only a principled way to FIND it:
-                    # its DGROUP disp is neither fixed nor at a constant offset
-                    # from pool_base, and the search that found it -- longest
-                    # run of valid descriptor disps -- is a heuristic a
-                    # coincidental run could win, so it is not landed. See
-                    # PLAN.md for the locator lead (the runtime reaches the
-                    # table through system cell 0x78).
+                    # indexing the pool at all -- no pool-order rule can work.
+                    # What it indexes is an explicit DATA pointer table: a word
+                    # per DATA item, in source order, holding its descriptor
+                    # disp, skipping code-only literals and INCLUDING shared
+                    # ones. Both authored probes carry one at DGROUP disp 0x100,
+                    # below var_base where nothing else is allocated;
+                    # probe_datamid's skips the PRINT-only literal and
+                    # probe_datadup's includes the shared item.
+                    #
+                    # That is confirmed on the PROBES ONLY. Where the wild
+                    # witnesses keep theirs is unknown: a >=88-entry table does
+                    # not fit below styled.exe's var_base, and only 8 bytes
+                    # separate the end of its variable storage from pool_base.
+                    # See PLAN.md -- including a run that looked like the table
+                    # and is not (the region is referenced as variables by
+                    # fld/fstp/movsi), and two locator searches that came up
+                    # empty. Do not build on it without resolving that first.
                     #
                     # Until then it must raise HERE: this used to be a bare
                     # `KeyError`, which escaped `decode_user_code`'s ValueError
