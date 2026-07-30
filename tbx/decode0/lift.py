@@ -473,10 +473,23 @@ def _noshift(index, delta):
 
 
 def _loop_back_in_scope(back, stmts, addrs, scope_start) -> bool:
-    """A loop back-edge cannot cross a completed procedure declaration."""
+    """A loop back-edge cannot cross a completed procedure declaration.
+
+    Nor a completed FOR. Splicing the `DO` at the back-edge target puts the
+    header wherever that statement stands, and the `LOOP` goes at the end of
+    what has been decoded -- so if a `NEXT` closing a FOR opened ABOVE the
+    target falls between them, the emitted loop crosses that FOR and TB rejects
+    the NEXT (`Error 445: NEXT expected`; wild state.exe, the three
+    `LOOP WHILE` closers under the FOR at line 10200 whose NEXT is at 11490).
+    A body holding a WHOLE FOR is untouched, which is why this asks whether the
+    span closes something opened outside it rather than whether it contains a
+    NEXT at all.
+    """
     if back not in addrs:
         return False
     index = addrs.index(back)
+    if _closes_an_outer_loop(stmts[index:]):
+        return False
     return index >= scope_start and not any(
         isinstance(statement, (ir.SubDef, ir.DefFn))
         for statement in stmts[index:]
@@ -1170,11 +1183,26 @@ def _fold_if(
                     out_a.extend(addrs[else_stop:end_idx])
                     i = end_idx
                     continue
+            # The guard jumps to whatever follows the region, and a codeless DO
+            # header for the NEXT loop is spliced in exactly there, carrying no
+            # address of its own; the jump belongs past it, to the first real
+            # statement -- which is where the byte-level exit lands, since a DO
+            # generates no code. Two adjacent loops put one here (wild cal.exe,
+            # whose loop exits straight into the next loop's body at 0x14cab).
+            # The ELSE leg above makes the same skip from the other side with
+            # `else_stop`.
+            guard_at = i + 1
+            while (
+                guard_at < len(stmts)
+                and addrs[guard_at] is None
+                and isinstance(stmts[guard_at], ir.Do)
+            ):
+                guard_at += 1
             if (
                 isinstance(s, ir.IfInline)
                 and isinstance(s.cond, (ir.RelOp, ir.LogOp, ir.Group))
-                and i + 1 < len(stmts)
-                and addrs[i + 1] is not None
+                and guard_at < len(stmts)
+                and addrs[guard_at] is not None
                 and any(
                     isinstance(b, (ir.Loop, ir.Wend, ir.NextStmt))
                     for b in s.body
@@ -1186,7 +1214,7 @@ def _fold_if(
                 # after`) followed by ordinary statements and the terminator,
                 # not from a structured IF body. Preserve that topology by
                 # unfolding the recorded region back into a guard plus body.
-                guard = ir.IfGoto(_negate_cond(s.cond), ("addr", addrs[i + 1]))
+                guard = ir.IfGoto(_negate_cond(s.cond), ("addr", addrs[guard_at]))
                 if a is not None:
                     stmt_addr.claim(guard, a)
                 out_s.append(guard)

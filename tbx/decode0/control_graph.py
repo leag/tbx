@@ -337,6 +337,40 @@ def predict_fold_extents(program) -> tuple[tuple[int, int], ...]:
     return tuple(regions)
 
 
+def _position_now(edits, seq: int, index: int) -> int:
+    """Where a boundary recorded at ``index`` at event ``seq`` has moved to.
+
+    `_length_at` answers a question about the past: how long the list was when
+    a branch was recognised. Using that number as an index into the list as it
+    stands now is only right while nothing has been inserted BELOW it since --
+    and a codeless loop header is exactly such an insertion. Splicing a `DO`
+    ahead of the loop body moves every statement after it down one, so the
+    remembered length then names the statement before the body rather than its
+    first, and the region takes in a statement that precedes the branch's own
+    address (wild cal.exe: the IF at 0x14c72 collecting the INPUT at 0x14c61).
+
+    Only edits strictly below the boundary move it. An insert AT the boundary
+    puts the new statement at the region's first position, which is where a
+    header shared with the body belongs and what the fold already expects
+    (t1_dogotobody); shifting for it would push the body start past a
+    statement that is genuinely inside.
+    """
+    from bisect import bisect_right
+
+    if not isinstance(edits, (list, tuple)):
+        edits = list(edits)
+    for edit in edits[bisect_right(edits, seq, key=lambda e: e.at_event):]:
+        if edit.index is None:
+            continue
+        if edit.kind == "insert" and edit.index < index:
+            index += 1
+        elif edit.kind == "delete" and edit.index < index:
+            index -= 1
+        elif edit.kind == "splice" and edit.stop is not None and edit.stop <= index:
+            index += len(edit.payload) - (edit.stop - edit.index)
+    return index
+
+
 def _length_at(edits, seq: int) -> int:
     """The statement list's length at event ``seq``.
 

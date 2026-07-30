@@ -109,6 +109,49 @@
    ],
    "instead": "Fix the reservation, not the bound.",
    "source": "PLAN.md:1817"
+  },
+  {
+   "id": "RO-INCLUDE-BLOCK-SPAN",
+   "title": "emit_split cuts DO/LOOP and FOR/NEXT across $INCLUDE boundaries",
+   "disposition": "not-a-defect",
+   "confidence": "high",
+   "files": [
+    "wild/hits/state.exe",
+    "wild/hits/inv87.exe",
+    "wild/hits/cal.exe"
+   ],
+   "signatures": [
+    "Error 435: DO loop expected",
+    "Error 445: NEXT expected"
+   ],
+   "hypothesis": "Oversized programs emit as a root plus $INCLUDE files, and the split is by size rather than by block structure, so a DO or FOR can open in one include and close in the next -- which would explain the block-structure compile errors on exactly the programs large enough to be split.",
+   "negative_evidence": [
+    "The imbalance is real: STATE001.INC has FOR=29 NEXT=27 and STATE003.INC has a NEXT with no FOR; INV87001/2/3 are unbalanced in both directions.",
+    "But TB's $INCLUDE is TEXTUAL, so a block may span files -- inv87.exe and invoice.exe compile successfully (delta -16) with badly unbalanced includes. That is proof, not inference.",
+    "cal.exe, which does NOT compile, is balanced within every include."
+   ],
+   "instead": "Do not block-align the splitter. Per-include balance is neither necessary nor sufficient, and the compile errors on these programs have other causes.",
+   "source": "session 2026-07-30"
+  },
+  {
+   "id": "RO-NESTCHECK-AUTHORITY",
+   "title": "A block-nesting sweep can stand in for the oracle on wild source",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/cal.exe"
+   ],
+   "signatures": [
+    "Error 435: DO loop expected"
+   ],
+   "hypothesis": "A cheap depth-counting check over emitted source can decide whether a wild program's structure is right, saving the minutes an oracle compile costs.",
+   "negative_evidence": [
+    "False positives: it flags colon-joined single-line blocks (`FOR C = 1 TO 9: PRINT: NEXT C` in vhfprop) because it never splits on ':'.",
+    "False NEGATIVES, which is worse: it called cal.exe clean -- all six DO/LOOP pairs nesting at depth 1, final depth 0, no colon-joined closers -- while TB still rejected the file with Error 435.",
+    "It cannot model what TB actually validates, which includes at least the block level of a line-number jump target."
+   ],
+   "instead": "Use it to FIND candidates and never as evidence a decode is right. The oracle byte compare is the only acceptance test, which is now written into CLAUDE.md.",
+   "source": "session 2026-07-30"
   }
  ]
 }

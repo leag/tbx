@@ -588,10 +588,15 @@ class DecodeState:
         the two, which is how the derivation was shown to be right rather than
         merely plausible. It never disagreed, across both corpora and every
         construct that folds, and the frames no longer carry the note.
-        """
-        from tbx.decode0.control_graph import _length_at
 
-        return _length_at(self.stmts.edits, seq)
+        Carried forward to where that boundary sits NOW: an insertion below it
+        between the branch and this call moves the body's first statement, and
+        the answer is only useful as an index into the current list.
+        """
+        from tbx.decode0.control_graph import _length_at, _position_now
+
+        edits = self.stmts.edits
+        return _position_now(edits, seq, _length_at(edits, seq))
 
     def open_tail_if(self, target, cond) -> bool:
         """If `target` is the open procedure's own epilogue, open an inline-IF
