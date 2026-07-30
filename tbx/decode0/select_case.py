@@ -9,12 +9,15 @@ let the op fall through to normal dispatch. All helpers thread the shared
 from __future__ import annotations
 
 from tbx import ir
+from tbx.decode0.statement_log import editing
 from tbx.decode0.const import _IS_RELOP, VAR_BASE
+from tbx.decode0.frames import SelectFrame
 from tbx.decode0.lift import _fold_if, _jump_targets
 
 
 def _kind_at(state, i):
-    return state.ops[i][1] if 0 <= i < len(state.ops) else None
+    img = state.image
+    return img.ops[i][1] if 0 <= i < len(img.ops) else None
 
 
 def _is_is_mat_at(state, c):  # IS-relational materialized-boolean compare idiom
@@ -37,22 +40,24 @@ def _is_arm_header_at(state, i):
 
 
 def _arm_temp_at(state, i):
+    img = state.image
     if _kind_at(state, i + 1) == "fcomp64":
-        return state.ops[i + 1][2]
+        return img.ops[i + 1][2]
     if _kind_at(state, i + 1) == "fcomp" and _kind_at(state, i + 8) == "fcomp64":
-        return state.ops[i + 8][2]
+        return img.ops[i + 8][2]
     return None
 
 
 def _is_str_arm_header_at(state, i, temp):
+    img = state.image
     return (
         _kind_at(state, i) == "movsi"
         and _kind_at(state, i + 1) == "rt"
-        and state.ops[i + 1][2] == 0x9C
+        and img.ops[i + 1][2] == 0x9C
         and _kind_at(state, i + 2) == "movsi"
-        and state.ops[i + 2][2] == temp
+        and img.ops[i + 2][2] == temp
         and _kind_at(state, i + 3) == "rt"
-        and state.ops[i + 3][2] == 0x9C
+        and img.ops[i + 3][2] == 0x9C
         and _kind_at(state, i + 4) == "strcmp"
     )
 
@@ -62,14 +67,15 @@ def _is_str_arm_header_chr_at(state, i, temp):
     # mixing computed and bare-literal guards in one arm list) computes the
     # value at the guard site instead of loading an existing descriptor --
     # movax n; strfn CHR$ where the bare form's leading movsi/rt pair sits.
+    img = state.image
     return (
         _kind_at(state, i) == "movax"
         and _kind_at(state, i + 1) == "strfn"
-        and state.ops[i + 1][2] == "CHR$"
+        and img.ops[i + 1][2] == "CHR$"
         and _kind_at(state, i + 2) == "movsi"
-        and state.ops[i + 2][2] == temp
+        and img.ops[i + 2][2] == temp
         and _kind_at(state, i + 3) == "rt"
-        and state.ops[i + 3][2] == 0x9C
+        and img.ops[i + 3][2] == 0x9C
         and _kind_at(state, i + 4) == "strcmp"
     )
 
@@ -86,53 +92,73 @@ def _str_guard_arm(state, k, guard):
     the numeric arm (wild rsltest.exe: `case chr$(72),chr$(75),"-","8",
     "4"` needs the non-final path; every single-guard CASE calibrated
     before this only ever exercised the final path)."""
-    jcc = state.ops[k + 5]
-    state.cases[-1]["cur_guards"].append(ir.CaseValue(guard))
+    i, c = state.image, state.control
+    jcc = i.ops[k + 5]
+    c.cases[-1].cur_guards.append(ir.CaseValue(guard))
     if jcc[2] == 0x75:  # JNE: value-list non-final guard -- keep testing
-        state.k = k + 7
-        state.cur = None
+        state.seek(k + 7)
+        c.cur = None
         return True
     if jcc[2] == 0x74:  # JE: literal final/only guard -> begin body
-        next_test = state.ops[k + 6][2]
+        next_test = i.ops[k + 6][2]
         _begin_body(state, k + 7, next_test)
         return True
     raise ValueError(
-        f"SELECT CASE string arm: unexpected jcc {jcc[2]:02x} at {state.ops[k][0]:#x}"
+        f"SELECT CASE string arm: unexpected jcc {jcc[2]:02x} at {i.ops[k][0]:#x}"
     )
 
 
 def _op_index_at(state, a):
-    for i, o in enumerate(state.ops):
+    img = state.image
+    for i, o in enumerate(img.ops):
         if o[0] == a:
             return i
     return None
 
 
 def _begin_body(state, body_i, next_test):
+    img, c, o = state.image, state.control, state.output
     i = body_i
-    while i < len(state.ops) and state.ops[i][0] < next_test:
+    while i < len(img.ops) and img.ops[i][0] < next_test:
         i += 1
     if i == body_i:
         raise ValueError("SELECT CASE arm: empty body")
-    last_jmp_target = state.ops[i - 1][2] if state.ops[i - 1][1] == "jmp" else None
-    fr = state.cases[-1]
-    fr["next_test"] = next_test
-    fr["body_idx"] = len(state.stmts)
+    last_jmp_target = img.ops[i - 1][2] if img.ops[i - 1][1] == "jmp" else None
+    fr = c.cases[-1]
+    fr.next_test = next_test
+    fr.body_idx = len(o.stmts)
     if last_jmp_target is not None:
-        fr["body_jmp"] = state.ops[i - 1][0]
-        if fr["end_select"] == 0:
-            fr["end_select"] = last_jmp_target
+        fr.body_jmp = img.ops[i - 1][0]
+        if fr.end_select == 0:
+            fr.end_select = last_jmp_target
     else:  # flow-through final arm (no trailing jmp)
-        if fr["end_select"] == 0 or next_test != fr["end_select"]:
+        if fr.end_select == 0 or next_test != fr.end_select:
             raise ValueError("SELECT CASE arm: flow-through without known END SELECT")
-        fr["body_jmp"] = next_test
-    state.k = body_i
-    state.cur = None
+        fr.body_jmp = next_test
+    # The body's extent is known here and nowhere earlier: where it starts, and
+    # the arm-close jmp it runs to. Recording it is what lets the snapshot read
+    # its own region back out of the log instead of off this frame.
+    fr.body_seq = state.region(
+        "case_arm",
+        start=img.ops[body_i][0],
+        end=fr.body_jmp,
+        # Every guard of this arm has been matched by now -- the body only
+        # begins once the last one has -- so this is where the arm's whole
+        # recognition is known at once.
+        detail=tuple(fr.cur_guards),
+    ).seq
+    state.seek(body_i)
+    c.cur = None
 
 
-def _fold_arm(state, body_idx, merge):
-    """Block-fold the arm (or CASE ELSE) body sitting at `state.stmts[body_idx:]`
-    and return it as a tuple, addresses retained.
+def _fold_arm(state, frame, merge):
+    """Block-fold the arm (or CASE ELSE) body and return it, addresses retained.
+
+    Where the body begins comes from the record: `frame.body_seq` is the
+    region event `_begin_body` wrote, and the list length at that event is the
+    position. `frame.body_idx` is kept for the snapshot itself, not as a
+    agree -- the same arrangement the inline-IF fold uses, and the same one
+    Chapter 7 removes.
 
     An arm body is snapshotted here and never revisited by the top-level
     `_fold_if` pass -- exactly the situation `core.py`'s `proc_ret` already
@@ -151,28 +177,33 @@ def _fold_arm(state, body_idx, merge):
     arm, so three skips converge on the arm's trailing `jmp END SELECT`
     (`jump target 0xd0ba is not a statement start`). Fixture t1_selarmblockif.
     """
+    c, o = state.control, state.output
     # An inline IF closing this arm skips to the arm-close address, and
     # `select_case.step` runs BEFORE the dispatch loop's own close point -- so
-    # drain those bodies here or the arm folds away with one still open
-    # (TBW73.INC:716, via DecodeState.open_tail_if).
+    # close those frames here, or the arm folds away with one still open
+    # (TBW73.INC:716, via DecodeState.open_tail_if). `close_ifs` only queues
+    # the region now, so drain immediately after: the arm must not be
+    # snapshotted around a region still waiting to fold.
     state.close_ifs(merge)
+    body_idx = state.frame_start(frame.body_seq)
+    state.drain_folds(body_idx)
     stmts, addrs = _fold_if(
-        state.stmts[body_idx:],
-        state.addrs[body_idx:],
+        o.stmts[body_idx:],
+        o.addrs[body_idx:],
         bound=merge,
-        targets=_jump_targets(state.stmts),
-        stmt_addr=state.stmt_addr,
-        block_ifs=state.block_if_addrs,
+        targets=_jump_targets(o.stmts),
+        stmt_addr=o.stmt_addr,
+        block_ifs=c.block_if_addrs,
     )
-    state.stmts[body_idx:], state.addrs[body_idx:] = stmts, addrs
-    body = tuple(state.stmts[body_idx:])
+    o.stmts[body_idx:], o.addrs[body_idx:] = stmts, addrs
+    body = tuple(o.stmts[body_idx:])
     _keep_addrs(state, body, body_idx)
     return body
 
 
 def _keep_addrs(state, body, body_idx) -> None:
-    """Carry an arm/CASE-ELSE body's statement addresses into `state.stmt_addr`
-    before the snapshot deletes them from `state.addrs`.
+    """Carry an arm/CASE-ELSE body's statement addresses into `o.stmt_addr`
+    before the snapshot deletes them from `o.addrs`.
 
     Folding an arm moves its statements off the flat list, so their addresses
     vanish with it -- exactly what `core.py` already guards against at
@@ -192,190 +223,192 @@ def _keep_addrs(state, body, body_idx) -> None:
     WHILE header two statements later, in the SAME arm
     (`jump target 0xba9f is not a statement start`). Fixture t1_selarmtarget.
     """
-    for st, ad in zip(body, state.addrs[body_idx:]):
+    o = state.output
+    for st, ad in zip(body, o.addrs[body_idx:]):
         if ad is not None:
-            state.stmt_addr[id(st)] = ad
+            o.stmt_addr.claim(st, ad)
 
 
 def step(state):
-    op = state.ops[state.k]
-    addr, kind = op[0], op[1]
-    # (1) END SELECT: every arm body has jumped here -> emit the statement.
-    if (
-        state.cases
-        and state.cases[-1]["body_jmp"] is None
-        and addr == state.cases[-1]["end_select"]
-    ):
-        state.flush_pending()
-        fr = state.cases.pop()
-        case_else = None
-        if fr["in_else"]:
-            case_else = _fold_arm(state, fr["body_idx"], addr)
-            del state.stmts[fr["body_idx"] :], state.addrs[fr["body_idx"] :]
-            if not case_else:
-                # An EMPTY else region means the source had no CASE ELSE at all:
-                # `in_else` is set whenever the op after the last arm's jmp is
-                # not another arm header, which also covers landing straight on
-                # the END SELECT. Emitting `CASE ELSE` with nothing under it is
-                # not byte-free -- it was the ENTIRE 213-byte round-trip
-                # mismatch on the two-arm string SELECT inside TBW73.INC:510-514
-                # (fixture t1_ifblockselect: dropping just those two emitted
-                # lines makes the recompile byte-identical).
-                #
-                # This maps empty -> None, so a source that really did spell an
-                # empty `CASE ELSE` would come back without it. That spelling is
-                # unwitnessed and would compile to different bytes, so it would
-                # surface as a round-trip mismatch rather than pass silently.
-                case_else = None
-        state.stmts.append(ir.SelectCase(fr["selector"], tuple(fr["arms"]), case_else))
-        state.addrs.append(fr["start"])
-        state.cur = None
-        return False  # process the op at END SELECT normally
-    # (2) Arm body close: the current op is this arm's trailing `jmp END_SELECT`.
-    if state.cases and state.cases[-1]["body_jmp"] == addr:
-        state.flush_pending()
-        fr = state.cases[-1]
-        body = _fold_arm(state, fr["body_idx"], addr)
-        del state.stmts[fr["body_idx"] :], state.addrs[fr["body_idx"] :]
-        fr["arms"].append(ir.CaseArm(tuple(fr["cur_guards"]), body))
-        fr["cur_guards"] = []
-        fr["body_jmp"] = None
-        if kind != "jmp":  # flow-through final arm closes AT END SELECT
+    with editing(state.output.stmts, "select_case"):
+        i, e, c, o = state.image, state.expr, state.control, state.output
+        op = i.ops[c.k]
+        addr, kind = op[0], op[1]
+        # (1) END SELECT: every arm body has jumped here -> emit the statement.
+        if (
+            c.cases
+            and c.cases[-1].body_jmp is None
+            and addr == c.cases[-1].end_select
+        ):
+            state.flush_pending()
+            fr = c.cases.pop()
+            case_else = None
+            if fr.in_else:
+                case_else = _fold_arm(state, fr, addr)
+                del o.stmts[fr.body_idx :], o.addrs[fr.body_idx :]
+                if not case_else:
+                    # An EMPTY else region means the source had no CASE ELSE at all:
+                    # `in_else` is set whenever the op after the last arm's jmp is
+                    # not another arm header, which also covers landing straight on
+                    # the END SELECT. Emitting `CASE ELSE` with nothing under it is
+                    # not byte-free -- it was the ENTIRE 213-byte round-trip
+                    # mismatch on the two-arm string SELECT inside TBW73.INC:510-514
+                    # (fixture t1_ifblockselect: dropping just those two emitted
+                    # lines makes the recompile byte-identical).
+                    #
+                    # This maps empty -> None, so a source that really did spell an
+                    # empty `CASE ELSE` would come back without it. That spelling is
+                    # unwitnessed and would compile to different bytes, so it would
+                    # surface as a round-trip mismatch rather than pass silently.
+                    case_else = None
+            # The construct's own extent, recorded here because this is the one
+            # point where both ends are known: a SELECT header cannot record it,
+            # since the END SELECT address is not known until an arm names it
+            # (which is why the header's branch event carries `target=None`).
+            state.region(
+                "select", start=fr.start, end=addr, detail=fr.selector
+            )
+            o.stmts.append(ir.SelectCase(fr.selector, tuple(fr.arms), case_else))
+            o.addrs.append(fr.start)
+            c.cur = None
+            return False  # process the op at END SELECT normally
+        # (2) Arm body close: the current op is this arm's trailing `jmp END_SELECT`.
+        if c.cases and c.cases[-1].body_jmp == addr:
+            state.flush_pending()
+            fr = c.cases[-1]
+            body = _fold_arm(state, fr, addr)
+            del o.stmts[fr.body_idx :], o.addrs[fr.body_idx :]
+            fr.arms.append(ir.CaseArm(tuple(fr.cur_guards), body))
+            fr.cur_guards = []
+            fr.body_jmp = None
+            if kind != "jmp":  # flow-through final arm closes AT END SELECT
+                return True
+            state.advance()  # consume the trailing jmp
+            c.cur = None
+            nxt_is_arm = (
+                _is_str_arm_header_at(state, c.k, fr.temp)
+                if fr.is_string
+                else _is_arm_header_at(state, c.k)
+            )
+            if fr.next_test == fr.end_select:
+                pass  # no CASE ELSE
+            elif nxt_is_arm:
+                pass  # next arm awaits its compare
+            else:  # trailing CASE ELSE body
+                fr.in_else = True
+                fr.body_idx = len(o.stmts)
+                # A CASE ELSE has no guard to recognise it by, so nothing else
+                # in the log would mark where its body starts. It runs to the
+                # END SELECT, which is known by now.
+                fr.body_seq = state.region(
+                    "case_else", start=i.ops[c.k][0], end=fr.end_select
+                ).seq
             return True
-        state.k += 1  # consume the trailing jmp
-        state.cur = None
-        nxt_is_arm = (
-            _is_str_arm_header_at(state, state.k, fr["temp"])
-            if fr["is_string"]
-            else _is_arm_header_at(state, state.k)
-        )
-        if fr["next_test"] == fr["end_select"]:
-            pass  # no CASE ELSE
-        elif nxt_is_arm:
-            pass  # next arm awaits its compare
-        else:  # trailing CASE ELSE body
-            fr["in_else"] = True
-            fr["body_idx"] = len(state.stmts)
-        return True
-    in_body = bool(state.cases) and state.cases[-1]["body_jmp"] is not None
-    # (3) Numeric entry: fstp64 [temp] to a scratch slot, arm header following.
-    if (
-        not in_body
-        and kind == "fstp64"
-        and op[2] < VAR_BASE
-        and _is_arm_header_at(state, state.k + 1)
-        and _arm_temp_at(state, state.k + 1) == op[2]
-    ):
-        state.cases.append(
-            {
-                "selector": state.stack.pop(),
-                "temp": op[2],
-                "is_string": False,
-                "end_select": 0,
-                "arms": [],
-                "cur_guards": [],
-                "pending_range_lo": None,
-                "body_idx": 0,
-                "body_jmp": None,
-                "next_test": 0,
-                "in_else": False,
-                "start": state.cur,
-            }
-        )
-        state.k += 1
-        state.cur = None
-        return True
-    # (3a) String entry: movsi [temp]; strassign to a scratch, string arm following.
-    # The selector string was pushed to sstack by the preceding `movsi sel; rt`.
-    # An event-trapping poll hook can land right at this exact join point
-    # (wild rsltest.exe, under an active ON TIMER trap); tolerate it in the
-    # lookahead sanity check -- the main dispatch loop consumes it normally
-    # on its own turn regardless, so `state.k` below still only needs to
-    # skip `movsi [temp]; strassign` itself.
-    _hdr = state.k + 3 if _kind_at(state, state.k + 2) == "trap_hook" else state.k + 2
-    if (
-        not in_body
-        and kind == "movsi"
-        and op[2] < VAR_BASE
-        and _kind_at(state, state.k + 1) == "strassign"
-        and (
-            _is_str_arm_header_at(state, _hdr, op[2])
-            or _is_str_arm_header_chr_at(state, _hdr, op[2])
-        )
-    ):
-        state.cases.append(
-            {
-                "selector": state.sstack.pop(),
-                "temp": op[2],
-                "is_string": True,
-                "end_select": 0,
-                "arms": [],
-                "cur_guards": [],
-                "pending_range_lo": None,
-                "body_idx": 0,
-                "body_jmp": None,
-                "next_test": 0,
-                "in_else": False,
-                "start": state.cur,
-            }
-        )
-        state.k += 2  # consume movsi [temp]; strassign
-        state.cur = None
-        return True
-    # (3b) String arm: movsi val; rt; movsi temp; rt; strcmp; je body; jmp next; body.
-    if (
-        state.cases
-        and state.cases[-1]["is_string"]
-        and state.cases[-1]["body_jmp"] is None
-        and _is_str_arm_header_at(state, state.k, state.cases[-1]["temp"])
-    ):
-        return _str_guard_arm(state, state.k, state._pool_str(op[2]))
-    # (3b-chr) String arm, computed CHR$(n) guard: movax n; strfn CHR$; movsi
-    # temp; rt; strcmp; je body; jmp next; body -- same tail/positions as
-    # (3b), just a computed value instead of a pooled literal/variable.
-    if (
-        state.cases
-        and state.cases[-1]["is_string"]
-        and state.cases[-1]["body_jmp"] is None
-        and _is_str_arm_header_chr_at(state, state.k, state.cases[-1]["temp"])
-    ):
-        return _str_guard_arm(state, state.k, ir.Call("CHR$", (ir.Lit(op[2]),)))
-    # (3.5) IS-relational arm: materialized-boolean compare idiom.
-    if (
-        state.cases
-        and state.cases[-1]["body_jmp"] is None
-        and _is_is_mat_at(state, state.k)
-    ):
-        bound = state.stack.pop()
-        relop = _IS_RELOP[state.ops[state.k + 3][2]]
-        next_test = state.ops[state.k + 10][2]
-        state.cases[-1]["cur_guards"].append(ir.CaseIs(relop, bound))
-        _begin_body(state, state.k + 11, next_test)
-        return True
-    # (4) Arm compare: fcomp64 [temp] for an open frame; dispatch on jcc polarity.
-    if state.cases and kind == "fcomp64" and op[2] == state.cases[-1]["temp"]:
-        val = state.stack.pop()
-        cc, jcc_target = state.ops[state.k + 2][2], state.ops[state.k + 2][3]
-        jmp_target = state.ops[state.k + 3][2]
-        fr = state.cases[-1]
-        if cc == 0x75:  # JNE: value-list non-final guard
-            fr["cur_guards"].append(ir.CaseValue(val))
-            state.k += 4
-            state.cur = None
-        elif cc == 0x76:  # JBE: range low bound
-            fr["pending_range_lo"] = val
-            state.k += 4
-            state.cur = None
-        elif cc == 0x72:  # JB: range high bound -> emit Range, begin body
-            lo = fr["pending_range_lo"]
-            fr["pending_range_lo"] = None
-            fr["cur_guards"].append(ir.CaseRange(lo, val))
-            next_test = state.ops[_op_index_at(state, jcc_target)][2]
-            _begin_body(state, _op_index_at(state, jmp_target), next_test)
-        elif cc == 0x74:  # JE: literal final/only guard -> begin body
-            fr["cur_guards"].append(ir.CaseValue(val))
-            _begin_body(state, state.k + 4, jmp_target)
-        else:
-            raise ValueError(f"SELECT CASE arm: unexpected jcc {cc:02x} at {addr:#x}")
-        return True
-    return False
+        in_body = bool(c.cases) and c.cases[-1].body_jmp is not None
+        # (3) Numeric entry: fstp64 [temp] to a scratch slot, arm header following.
+        if (
+            not in_body
+            and kind == "fstp64"
+            and op[2] < VAR_BASE
+            and _is_arm_header_at(state, c.k + 1)
+            and _arm_temp_at(state, c.k + 1) == op[2]
+        ):
+            state.branch(
+                "case", template="select_header", target=None, address=c.cur
+            )
+            c.cases.append(SelectFrame(
+                selector=e.stack.pop(),
+                temp=op[2],
+                is_string=False,
+                start=c.cur,
+            ))
+            state.advance()
+            c.cur = None
+            return True
+        # (3a) String entry: movsi [temp]; strassign to a scratch, string arm following.
+        # The selector string was pushed to sstack by the preceding `movsi sel; rt`.
+        # An event-trapping poll hook can land right at this exact join point
+        # (wild rsltest.exe, under an active ON TIMER trap); tolerate it in the
+        # lookahead sanity check -- the main dispatch loop consumes it normally
+        # on its own turn regardless, so `c.k` below still only needs to
+        # skip `movsi [temp]; strassign` itself.
+        _hdr = c.k + 3 if _kind_at(state, c.k + 2) == "trap_hook" else c.k + 2
+        if (
+            not in_body
+            and kind == "movsi"
+            and op[2] < VAR_BASE
+            and _kind_at(state, c.k + 1) == "strassign"
+            and (
+                _is_str_arm_header_at(state, _hdr, op[2])
+                or _is_str_arm_header_chr_at(state, _hdr, op[2])
+            )
+        ):
+            state.branch(
+                "case", template="select_header", target=None, address=c.cur
+            )
+            c.cases.append(SelectFrame(
+                selector=e.sstack.pop(),
+                temp=op[2],
+                is_string=True,
+                start=c.cur,
+            ))
+            state.advance(2)  # consume movsi [temp]; strassign
+            c.cur = None
+            return True
+        # (3b) String arm: movsi val; rt; movsi temp; rt; strcmp; je body; jmp next; body.
+        if (
+            c.cases
+            and c.cases[-1].is_string
+            and c.cases[-1].body_jmp is None
+            and _is_str_arm_header_at(state, c.k, c.cases[-1].temp)
+        ):
+            return _str_guard_arm(state, c.k, state._pool_str(op[2]))
+        # (3b-chr) String arm, computed CHR$(n) guard: movax n; strfn CHR$; movsi
+        # temp; rt; strcmp; je body; jmp next; body -- same tail/positions as
+        # (3b), just a computed value instead of a pooled literal/variable.
+        if (
+            c.cases
+            and c.cases[-1].is_string
+            and c.cases[-1].body_jmp is None
+            and _is_str_arm_header_chr_at(state, c.k, c.cases[-1].temp)
+        ):
+            return _str_guard_arm(state, c.k, ir.Call("CHR$", (ir.Lit(op[2]),)))
+        # (3.5) IS-relational arm: materialized-boolean compare idiom.
+        if (
+            c.cases
+            and c.cases[-1].body_jmp is None
+            and _is_is_mat_at(state, c.k)
+        ):
+            bound = e.stack.pop()
+            relop = _IS_RELOP[i.ops[c.k + 3][2]]
+            next_test = i.ops[c.k + 10][2]
+            c.cases[-1].cur_guards.append(ir.CaseIs(relop, bound))
+            _begin_body(state, c.k + 11, next_test)
+            return True
+        # (4) Arm compare: fcomp64 [temp] for an open frame; dispatch on jcc polarity.
+        if c.cases and kind == "fcomp64" and op[2] == c.cases[-1].temp:
+            val = e.stack.pop()
+            cc, jcc_target = i.ops[c.k + 2][2], i.ops[c.k + 2][3]
+            jmp_target = i.ops[c.k + 3][2]
+            fr = c.cases[-1]
+            if cc == 0x75:  # JNE: value-list non-final guard
+                fr.cur_guards.append(ir.CaseValue(val))
+                state.advance(4)
+                c.cur = None
+            elif cc == 0x76:  # JBE: range low bound
+                fr.pending_range_lo = val
+                state.advance(4)
+                c.cur = None
+            elif cc == 0x72:  # JB: range high bound -> emit Range, begin body
+                lo = fr.pending_range_lo
+                fr.pending_range_lo = None
+                fr.cur_guards.append(ir.CaseRange(lo, val))
+                next_test = i.ops[_op_index_at(state, jcc_target)][2]
+                _begin_body(state, _op_index_at(state, jmp_target), next_test)
+            elif cc == 0x74:  # JE: literal final/only guard -> begin body
+                fr.cur_guards.append(ir.CaseValue(val))
+                _begin_body(state, c.k + 4, jmp_target)
+            else:
+                raise ValueError(f"SELECT CASE arm: unexpected jcc {cc:02x} at {addr:#x}")
+            return True
+        return False

@@ -1,5 +1,13 @@
 # tbx wild-corpus gap campaign — combined plan & handoff
 
+> **This file is now an evidence archive, not a work queue.** The campaign was
+> parked on 2026-07-29. Part I's execution plan, work queue and completion
+> checklist are **superseded by [`STATUS.md`](STATUS.md)**, which explains why
+> the checklist as written cannot be satisfied and which threads have real
+> diagnosis behind them. Part II and Part III remain accurate and are still the
+> place to go for the reasoning behind a specific finding — read them by
+> reference from `STATUS.md`, not front to back.
+
 This file merges what used to be three separate documents into one:
 `REMAINING_GAPS_PLAN.md` (the forward-looking work queue), `HANDOFF.md`
 (the chronological investigation log), and
@@ -966,6 +974,334 @@ mechanism, none of the three candidates guessed below. `secure.exe`
 still fails on the same error message at a different target and was
 NOT re-traced — do not assume it shares this fix's cause.
 
+**`secure.exe` RESOLVED 2026-07-29, and the caution above was right: it
+did not share the cause.** More importantly, the triage that closed it
+shows this error message is *not one gap*. Two different checks raise
+it, and they mean opposite things:
+
+- `ControlGraph.validate_targets` accepts an address owned by
+  **anything** — top level or any `stmt_addr` entry. It raising means
+  nothing in the program owns the address at all.
+- `_resolve_targets` needs the address reachable as a top-level index or
+  a `BodyLine`. It raising means something owns it but the tree cannot
+  address it. This is the only one Part II's framing describes.
+
+Of the 11 wild failures carrying this message, **10 raise at
+`validate_targets`** — nothing owns the address — and only `secure.exe`
+raised at `_resolve_targets`. Its cause was narrow: the target was owned
+by arm 0 of a top-level `IfBlock` with an **ELSE**, and the top-level
+dispatch mapped a block's interior only when it had exactly one arm and
+no ELSE, though `map_body`'s own nested-block recursion already counted
+arms and ELSE correctly. Both now share one `map_if_block` helper.
+Calibrated by `t1_blkgotoelse` (target in the arm) and `t1_blkgotoelif`
+(target in an ELSEIF arm), both byte-exact; wild scan 32 → 33 decode-ok
+with the report otherwise byte-identical.
+
+The remaining 10 are **at least five distinct shapes**, by the ops at
+each target — do not treat them as one:
+
+| programs | target sits on | shape |
+| --- | --- | --- |
+| resume, rsltest | `trap_hook` after `far_call` | statement after a forwarded-arg call |
+| prtguide | `jmp` after `proc_ret` | inter-definition glue (the spec's own "out of scope" case) |
+| help | `trap_hook` before `proc_ret` | procedure epilogue |
+| morcalc, photo | op right after `str2num CVL` | target lands mid-span of a merged statement — see below |
+| mdb, mdb87 | `add_sp 2` after a `jmp` | call-sequence tail |
+| elec87, electron | **no op starts there at all**, yet the scan recorded a commit | anomaly of its own |
+
+### `resume.exe` / `rsltest.exe` — first shape FIXED 2026-07-29
+
+**Resolved**, and the trace below records how. The cause was `fstp64`'s
+`fp64_bridge` leg in `core.py`: a promote-once/compare-many scratch cell
+commits **no statement**, but cleared `c.cur` anyway. Under event
+trapping the address `c.cur` was holding is the run-first hook of the
+code-less lines (ELSE, END IF) preceding the promote — and that is
+exactly what a block IF's arm-tail jump targets. Clearing it dropped the
+address, and the statement re-anchored on the *next* hook, leaving the
+target owned by nothing. `c.cur` is now cleared only on the leg that
+actually commits.
+
+Both files advance past it. They now stop at `0xa3d7` / `0xae3a`, which
+is a **different shape** — a hook run immediately before `proc_ret`, i.e.
+a jump to the SUB's own epilogue, the same family as `help.exe` in the
+table above.
+
+**Calibration caveat, stated rather than glossed.** This change has **no
+fixture**. All 1032 corpus goldens and the IR snapshot are byte-identical
+under it, which is the point — it changes nothing already witnessed — and
+the wild report is byte-identical bar the two intended advances. But
+authored probes did not reproduce the codegen: `ON TIMER`/`TIMER ON` plus
+a codeless-line run ahead of an FP compare of a by-ref integer parameter
+reproduces the *op sequence* (`trap_hook, trap_hook, arg_ref, far_fild_si,
+fstp64, trap_hook, fld1, fcomp64`, probe `pd`/`pe`) but the compiler
+targets a real variable, not a low scratch cell, so it takes the
+committing leg and decodes fine either way. What produces a scratch-cell
+promote is still unknown; `IF X% <> 1`, a compound FP condition, a second
+comparison, and a double-typed parameter were each tried and none did.
+Until one is found, the guard for this is the two wild files' recorded
+first failures, not a fixture.
+
+### The original trace (kept: it is what located the fix)
+
+The first of the five shapes above, taken as far as a diagnosis. Both
+files carry the same `$INCLUDE` library (identical `SUB1` with the same
+eight-parameter signature, identical `SUB2`/`SUB3`), so this is one cause
+in two programs.
+
+What wants the target: the **last statement of a block IF's single arm**,
+`Goto(("addr", 0xa1cb))` owned by `0xa19d` — the compiler's arm-tail jump
+past the construct. What is at the target:
+
+```
+0xa1c6 far_call 43928
+0xa1cb trap_hook      <- the GOTO's target
+0xa1cc trap_hook
+0xa1cd arg_ref 10     \
+0xa1d0 far_fild_si     |  by-ref int param -> double, into temp [bp+82]
+0xa1d4 fstp64 82      /
+0xa1db trap_hook
+0xa1dc fld1
+0xa1df fcomp64 82     -- compared against 1.0
+0xa1e8 jcc / 0xa1ea jmp
+```
+
+`0xa1cb`/`0xa1cc` are a two-hook run: a codeless source line (ELSE, END
+IF) still gets its own per-statement CC hook, which is what
+`core.py:3184`'s normalization is about. **That normalization is not the
+problem here** — the GOTO already targets position 0 of the run, so
+neither `hook_alias` nor `entry_hook` has anything to do. Confirmed by
+enumerating the runs: resume.exe has 252 (244 of length 1, 7 of 2, 1 of
+3) and the target sits at position 0 of a length-2 run; rsltest.exe the
+same at `0xac2e`.
+
+The fault is on the *statement* side. Everything from `0xa1cd` to
+`0xa1da` is the operand conversion for the condition that the `IfGoto` at
+`0xa1db` tests, so one statement spans the whole span — and per
+`core.py:3176`'s own stated design ("`c.cur` takes the FIRST hook of such
+a run and keeps it, so that is the statement's address") it should own
+`0xa1cb`. It owns `0xa1db` instead. The owned addresses in the range are
+exactly `0xa19d`, `0xa1a1`, `0xa1db`, `0xa1ed` — nothing at `0xa1cb`,
+`0xa1cc` or `0xa1cd`.
+
+So `c.cur` is being cleared, or never taken, across the FP operand
+prologue, and the statement re-anchors on the *next* hook. The remaining
+work is to find that site: `c.cur = addr` is not a single top-of-loop
+assignment but a general fallback at `core.py:4216` plus a scatter of
+defensive `if c.cur is None` guards inside individual handlers, so an op
+handled by a family dispatched before the fallback never takes it. The
+`arg_ref` / `far_fild_si` / `fstp64` trio is the span to instrument.
+
+**Do not fix this by aliasing the target onto `0xa1db`.** That inverts the
+design the surrounding code states and would put the statement's address
+after the hooks the compiler emits for its own line, which is the thing
+`cc_hooks` and the `$EVENT` metadata recovery depend on (see
+`handlers/control.py:148`, `t1_fargosub`).
+
+A probe needs event trapping on (so CC hooks are emitted at all) plus a
+codeless line ahead of an IF whose condition converts a by-ref integer
+parameter to double — that is what makes the run length 2.
+
+### The parenthesised `A OR (B AND C)` family — root cause found
+
+`unhandled jcc 74` (file.exe, grdscn.exe, hebrew.exe, pwinst.exe) and
+`unhandled materialized test` / `materialization template mismatch`
+(cal, cal87, football, varamort, kinder, kinetics, wb) are separate scan
+signatures over one construct. The failing windows all show an
+`andaxbx`/`andax_m` whose result is tested directly by a conditional jump,
+with no `orax` self-test between them.
+
+**The discriminator is an explicit parenthesis, and nothing else.** Four
+probes, differing only in parenthesisation and body form:
+
+| probe | source | result |
+| --- | --- | --- |
+| `A% = 9 OR B% = 15 AND C% = 1 THEN 70` | implicit precedence | **byte-exact** |
+| same, `THEN PRINT "Y"` | implicit precedence | **byte-exact** |
+| `A% = 9 OR (B% = 15 AND C% = 1) THEN 70` | parenthesised | **raises `unhandled jcc 74`** |
+| same, `THEN PRINT "Y"` | parenthesised | **silently wrong** |
+
+So `A OR B AND C` is calibrated and correct; `A OR (B AND C)` — the same
+expression, spelled with the redundant parentheses — is not. Turbo Basic
+compiles the parenthesised group with its own convergence/spill protocol
+rather than as a precedence cascade, and only the cascade is mapped.
+
+Both probes are stored, and both matter:
+
+- `wild/probes/probe_paren_or_and_goto.bas` fails **loudly**, with exactly
+  the wild corpus's own `unhandled jcc 74`. This is the four-program
+  signature reproduced in eight lines.
+- `wild/probes/probe_paren_or_and_inline.bas` **does not raise**. It
+  decodes `IF A% = 9 OR (B% = 15 AND C% = 1)` as
+  `IF ((C% = 1) AND B% = 15)` — outer OR term dropped, AND operands
+  reversed — and recompiling the emitted source gives a different image.
+  A silent wrong answer, which is the worse half and has no wild witness
+  because a wild program with an inline body simply decodes to something
+  plausible and nobody notices.
+
+**Where the term is lost.** `match_bool_term1` recognises the first term
+correctly even in the parenthesised form — called on the op index it
+returns `operator='OR', polarity=116, deferred=True`. But instrumenting
+the `andaxbx` combine in `handlers/arith.py` shows `pend_bool=None` there,
+with the two inner relations in AX/BX. The outer term is discarded before
+any compound machinery sees it, and the inner group's `andaxbx` is then
+taken by the generic logical-*value* combine, which has no outer term to
+fold in. That is why one spelling raises and the other does not: whether
+anything downstream notices depends on what the body needs, not on the
+condition being wrong.
+
+**The guard is in** (`_reject_dropped_bool_term`, `handlers/arith.py`).
+The drop is rejected where it happens, and the report now names the
+recognised-but-uncombined term instead of the downstream jcc:
+`parenthesised compound group at 0x98ab: outer OR term at 0x987e was
+recognised but never combined`. Gates: 2784 tests, Ruff clean, fixture
+goldens untouched, and the wild scan holds at 33 decode-ok / 53 failing
+with **no program changing status** -- `file.exe` and `grdscn.exe` simply
+report the true cause now. `hebrew.exe` and `pwinst.exe` keep their
+`unhandled jcc 74`, correctly: their shapes are `str2num INSTR; andaxbx`
+and `andax_m` respectively, so the guard does not claim them and the two
+groups stay separable. `tests/tbx/test_paren_compound_group.py` pins both
+halves.
+
+What remains is the mapping itself -- what `A OR (B AND C)` should decode
+*to* -- which still needs a fixture and byte-exact verification. The
+difference now is that getting it wrong cannot be silent.
+
+**Why the guard was free.** Measured statically across both corpora, the
+programs containing a deferred term1 are: **2 fixtures**
+(`t1_mixedbool2`, `v10_t1_mixedbool2`) which **decode correctly today**
+and are the unparenthesised form, and **10 wild programs** (bmaster,
+crossref, file, football, grdscn, hebrew, kinetics, mcmurphy, varamort,
+wb) **every one of which already fails**. So making the unconsumed-term1
+case raise costs **zero** newly-failing programs in either corpus, and
+converts the silent class into the loud one. That is the smallest safe
+first commit here, ahead of designing the mapping.
+
+### `morcalc.exe` / `photo.exe` — the target is inside a statement, first look
+
+Both are an `IfGoto` whose target lands **between two consecutive owned
+addresses**, not past the end of the program and not on glue:
+
+- morcalc: `IfGoto(V0286% <> -1, 0xd63e)` at `0xd619`. The owned addresses
+  either side are `0xd627` (a `Print`) and `0xd651`, so `0xd63e` is inside
+  the span the `Print` was given.
+- photo: `IfGoto(MID$(...) <> ..., 0xad1c)` at `0xacce`, between `0xacf7`
+  (a `NextStmt`) and `0xad5e`.
+
+In both the target is the op immediately after a `str2num CVL`, and in
+morcalc the span `0xd627..0xd650` holds a `PRINT MID$(...)` *and* a CVL
+conversion *and* the `movsi/rt` pair the jump targets — more than one
+source statement's worth of code under one address. So the reading to
+test first is that the decoder **merged several statements into one**,
+and the unresolvable target is the symptom rather than the fault. That is
+a different failure from the other four shapes in the table, all of which
+are a target that no statement could own; here a statement plausibly
+should own it.
+
+Not traced further than this.
+
+### The SUB-epilogue shape — cause found, fix written, blocked on the width gate
+
+`help.exe`, `resume.exe` and `rsltest.exe` all now fail the same way: a
+`Goto` **inside a SubDef body** targeting that SUB's own epilogue. That is
+an `EXIT SUB`, and `core.py`'s jmp handler already recognises one — but
+only when the target equals `frame.exit` or `frame.teardown_entry`. Under
+event trapping the epilogue is fronted by a run of CC hooks (`END SUB` is
+a code-less line), and the compiler jumps to the **run**, not to the
+`proc_ret`. So the comparison misses and the jump falls through to a
+plain unresolvable `Goto`.
+
+The fix is a third address meaning the same place, exactly as
+`teardown_entry` already is: a `BodyFrame.exit_hooks` field holding the
+first address of the hook run ahead of the return, computed by walking
+back over `trap_hook`s from `ret_address`, and accepted alongside the
+other two. Written and measured: **`help.exe` decodes with it.**
+
+**It is not committed, because it fails a gate rather than passing one.**
+`help.exe` then emits a 364-character line — `490 ON L% GOSUB 1663, 1853,
+...`, a 44-target `ON ... GOSUB` — and
+`test_no_wild_program_emits_an_over_wide_line` asserts the wild corpus is
+clean, with no allowlist. That gate was hard-won and weakening it to land
+a decode is the wrong trade.
+
+The line is an artifact of **numbering**, not of the source: the program
+obviously compiled, so the author's own spelling fit. But "renumber more
+tightly" is not enough, and the arithmetic settles it rather than
+leaving it to judgement.
+
+The statement is `ON L% GOSUB` with **56** targets and a 15-character
+prefix, in a program of 1308 statements. Emitted widths:
+
+| numbering | width | |
+| --- | --- | --- |
+| stride 10 (today) | 364 | over |
+| stride 1 | 311 | over |
+| every target 3 digits | 293 | over |
+| every target 2 digits | 237 | fits |
+| targets numbered 1..56 | 228 | fits |
+
+A stride of 1 over 1308 statements necessarily reaches four digits, so
+**no stride fits.** The line fits only if the targeted lines carry
+two-digit numbers, and that is only possible if the emitter numbers *only
+the lines that are jump targets* — 56 of them — rather than every
+statement. Turbo Basic allows unnumbered lines, so that is legitimate
+source, and the emitter already emits unnumbered lines inside bodies.
+
+**Number-only-targeted-lines: built, verified on a sample, reverted for
+scale.** The change itself is small — collect the top-level statements
+something targets (the `_ONE`/`_MANY` type lists mirroring
+`_resolve_targets`'s own `fix`, plus each `BodyLine`'s host), assign
+numbers to only those, and let the render loop emit no prefix for the
+rest. It works: `t1_blkgoto` comes out as `A$ = "X"` / `10 IF ...` /
+`12 PRINT "B"` / `GOTO 12`.
+
+Two things were established that the next attempt should not have to
+rediscover:
+
+1. **Dropping a line number is byte-free.** Tested directly before
+   touching the emitter, by de-numbering the untargeted lines of already
+   passing fixtures and recompiling: `t1_blkgoto`, `t1_ifgoto`,
+   `t1_print2`, `t1_subgsb`, `t1_selarmtarget` all still byte-exact.
+2. **The change holds under the oracle.** With it applied,
+   `verify_fixture` is `ok` on sixteen diverse stems, deliberately
+   including the ones that ride on line numbers -- `t1_tronif`,
+   `t1_troncase` and `t1_dblhook`/`t1_dblhooksub` (trace hooks), and
+   `t1_suberr` (the error-trap line table, where numbering is *not* the
+   emitter's to choose and correctly stays untouched).
+
+What stopped it is scale, not doubt: it moves **1159 tests** -- all 1030
+`usercode` goldens plus roughly a hundred hand-written assertions that
+spell the expected source out in full. Those hand-written tests are the
+strongest regression guards this decoder has, and rewriting them in bulk
+to match new output is regenerating the oracle that is supposed to catch
+the regression. Doing this properly means a full-corpus `verify_fixture`
+run and a reviewed diff, not a mass accept.
+
+Tried and reverted first: a `compact=True` stride-1 renumbering in `emit0`,
+applied only when the default overflows. It is both insufficient (311)
+and, with the epilogue fix reverted, unreachable — no program in either
+corpus emits an over-wide line without it — so it would be untested
+machinery, which is what this decoder does not keep. The real
+prerequisite is number-only-targeted-lines, which is a much larger
+change: every top-level statement is numbered today, so all 1030
+`usercode` goldens move and each needs re-verifying.
+
+`resume.exe` and
+`rsltest.exe` need one further step beyond that: their remaining jump is
+the `jcc`-skip + `jmp` conditional form, which the inline-IF machinery
+consumes before the jmp handler ever sees it, so it never gets exit-fold
+treatment at all.
+
+**A separate, silent bug found while calibrating the ELSE fix.** Probe
+`t1_blkgotoelse2` (a backward `GOTO` into an ELSE **body**, rather than
+into the arm) does not raise — it decodes to *invalid* source, splicing
+a `DO` inside the ELSE arm and closing `LOOP` at top level, i.e. crossed
+block nesting. The backward `jmps` is being taken for an infinite-`DO`
+back-edge (`core.py:3082`). Confirmed present **before** this fix and
+unchanged by it, so it is independent. It is not promoted to the corpus
+(the calibration rule forbids promoting a shape whose output is wrong);
+the `.bas` is worth re-authoring when that bug is taken on, because a
+silent wrong answer is worse than the loud one this section is about.
+
 Original status: 2026-07-22, investigation-only — no code changes yet. This
 supersedes the "SUB/DEF FN body" framing in `Part III`'s `6f1a9fb`
 diagnosis commit, which was **factually wrong about the mechanism**
@@ -1152,6 +1488,190 @@ fixing the intra-inline-IF gap above will also close it.
   project's own convention) once landed, including which of the three
   candidate causes above (or a fourth, if the trace finds something
   different) was the actual one.
+
+---
+
+### 2026-07-29 — a DATA item sharing a descriptor with a code literal, GUARDED; the authoritative DATA pointer table FOUND, locator OPEN (styled.exe/styllist.exe)
+
+The signature `87` — literally that, the whole message — was a bare `KeyError`.
+`item_to_stmt[s.target]` is keyed only by indices below the recovered item
+count, and a `KeyError` is not a `ValueError`, so it escaped
+`decode_user_code`'s wrapper without collecting any phase context at all. The
+scan reported the raw dictionary key as the program's entire failure signature.
+Now a `ValueError` naming the mechanism, with the normal phase/offset/op trail.
+
+**Root cause, reproduced in seven lines** (`wild/probes/probe_datadup.bas`:
+`DATA ONE` / `DATA TWO` / `PRINT "ONE"` / `RESTORE 20` → `KeyError: 1`).
+`data_items` recovers DATA by EXCLUSION — pool descriptors that no code site
+references (`d not in l.desc_disps`, core.py ~3455). The compiler emits ONE
+descriptor per distinct piece of text, so a DATA item whose text is identical to
+a string literal used in code **shares that descriptor**, is classified as
+code-referenced, and never reaches the item list. Every later item index shifts
+down and the highest `RESTORE <line>` targets fall off the end.
+
+The encoding itself is not in doubt: `t1_restoreline` (`DATA 7` / `DATA 8,9` /
+`RESTORE 20` → item 1) pins target == imm/2 over **source item order**.
+
+**Inference by exclusion is the wrong mechanism entirely — there is a physical
+DATA POINTER TABLE, and it was found.** Probe `probe_datamid` (`DATA AAA` /
+`PRINT "MIDDLE"` / `DATA BBB`) settles the structure: the code-only literal
+'MIDDLE' lands at descriptor index 1, BETWEEN 'AAA' (index 2) and 'BBB'
+(index 0). So the descriptor pool is in source first-appearance order and
+interleaves DATA items with code literals freely — DATA descriptors are **not**
+contiguous. Which means `RESTORE` cannot be indexing the descriptor pool at
+all, and the runtime must carry an explicit list. It does:
+
+- `probe_datamid`: a 2-entry word table `[0x13c, 0x134]` = AAA, BBB — it SKIPS
+  MIDDLE at 0x138.
+- `probe_datadup`: `[0x138, 0x134]` = ONE, TWO — it INCLUDES the shared item
+  'ONE' that exclusion-based recovery drops.
+- wild styled.exe: **see the correction below — this one does not hold.** What
+  was measured was a 94-entry run at DGROUP disp 0x180, 8 of its entries shared,
+  against the 86 the old rule recovers, with the four RESTORE splits
+  {0, 48, 61, 87} resolving to 'ACCORDINGLY', 'UNLESS', 'AM', 'ING' — exactly the
+  four word categories the program prints headers for (transitionals, forms of
+  TO BE, suffixes that bury action) — and item 93, the last, a shared `'xxx'`
+  sentinel: the classic `READ W$: IF W$ = "xxx"` idiom is *precisely why* these
+  two programs share a descriptor at all.
+
+**CORRECTION (same session, after the commit that claimed otherwise): the wild
+94-entry run is NOT a live DATA pointer table, and the locator problem is
+bigger than "find the base".** The region it occupies, DGROUP disp 0x180–0x23c
+in styled.exe, is genuinely VARIABLE STORAGE: 48 four-byte slots there are
+referenced as memory operands by the decoded op stream — 0x180–0x204 via
+`fld`/`fstp`/`fcomp` (single-precision numerics) and 0x208–0x23c via `movsi`
+(string descriptors). A table cannot be live at disps the program uses for
+variables, so whatever those file-image bytes are, they are not what `RESTORE`
+indexes at run time.
+
+The earlier "48 distinct disps are code-referenced" check that should have
+caught this was wrong: it matched **any** numeric op argument, so it was
+picking up plain integer immediates like 400 and 500 rather than memory
+displacements, and it was dismissed on that basis. Re-run against memory-form
+ops only, it is unambiguous.
+
+What remains genuinely established, and what does not:
+
+- **Established.** DATA descriptors are not contiguous in the pool
+  (`probe_datamid`), so no pool-order index rule can work — this is what kills
+  the contiguous-run hypothesis, and it kills it structurally rather than on the
+  plausibility grounds the previous entry used. Exclusion loses shared items
+  (`probe_datadup`). Both probes' own 2-entry tables sit at disp 0x100, below
+  `var_base` 0x120, where nothing else is allocated, and one of them
+  demonstrably skips a code-only literal while the other includes a shared item.
+- **Not established.** That the same structure is what the wild witnesses use.
+  For styled.exe a ≥88-entry table (176+ bytes) cannot fit below `var_base`
+  0x120 at all, and there are only 8 bytes between the end of variable storage
+  (0x25c) and `pool_base` (0x264) — so if the table exists there it is not in
+  that part of DGROUP, and the run at 0x180 is something else whose bytes happen
+  to be descriptor disps. That coincidence is not explained, and 94 consecutive
+  valid disps with a recurring `'xxx'` sentinel entry is a very strange thing to
+  be accidental — it may be initial-value data the startup code consumes, or it
+  may mean layout's solve for this program is wrong (note `arrs = []` and
+  `n_static = 0` for a word-list program that surely uses an array, with 79
+  stride-4 "scalars" claimed instead). **Resolve that before building anything
+  on it.**
+
+So the honest state is: the mechanism of the BUG is understood and guarded; the
+replacement mechanism is confirmed only on two authored probes; and the wild
+witnesses' actual DATA table has not been found. `RESTORE` writing the byte
+offset into system cell 0x78 (with `data_read_*` indexing through it) is still
+the lead worth pulling — read the base out of the runtime's own DATA-read code —
+but note that searching for the base as a word in DGROUP found nothing, and
+searching for a common instruction context around the value across four files
+found nothing either. Both were tried here.
+
+**`data_orphan_lines` is NOT a usable second signal here** — checked, and it is
+EMPTY for both witnesses. That table only carries codeless-statement entries,
+and these programs trigger pool recovery through their `READ`/`RESTORE`
+instead.
+
+**Separate gap found in passing: multiple DATA statements with no RESTORE
+collapse into one, and that is NOT byte-exact.** `probe_datamid` decodes to a
+single `10 DATA "AAA","BBB"` where the source had `DATA AAA` at 10 and
+`DATA BBB` at 30, and recompiles **14 bytes different** — the DATA statement
+COUNT and each one's LINE are byte-significant (already established by probes
+q_lt3/q_lt4). Statement boundaries come only from RESTORE targets or from
+`data_orphan_lines`, and with a `READ` present and no `RESTORE <line>` there is
+neither, so `splits` collapses to `{0}`. The pointer table above does not fix
+this by itself — it recovers ITEMS, not statement boundaries. Kept as a probe
+rather than promoted for exactly that reason: it does not round-trip.
+
+Also noted while tracing, unrelated and not chased: one entry in styled.exe's
+`desc_disps` (0x260) is not on the descriptor table's 4-byte grid and so matches
+no walked descriptor. Harmless to the item count (it excludes nothing), but it
+means some code site resolves a string through a disp that is not a descriptor
+start.
+
+**Gates.** 2802 tests, Ruff clean, goldens untouched, wild scan steady at
+33 / 53. `tests/tbx/test_restore_shared_item.py` pins the guard, the phase
+context, the shared signature, and that `t1_restoreline` still resolves.
+
+---
+
+### 2026-07-29 — a head-test DO loop's retry edge in its NEAR form, CLOSED (varamort.exe/football.exe)
+
+Closed `unhandled materialized test` for the two of its four witnesses that
+were one construct: a head-test `DO UNTIL <string compare>` whose body outgrew
+short-jump reach. Tally 4 -> 2; `cal.exe`/`cal87.exe` keep the signature and
+are a genuinely different sub-case (their exit target is not preceded by a
+retry edge at all — already pinned by `test_strings_input.py`).
+
+**Root cause.** `_has_jmps_back` is what separates a head-test
+`DO WHILE/UNTIL` from an inline-IF body skip: both compile the same
+`movax FFFF; jcc; inc ax; or ax,ax; jcc; jmp` materialization, and the loop is
+the one whose body ends by branching back to the test. It looked for that edge
+as op kind `jmps` only — `EB`, short rel8. Which encoding the compiler picks is
+decided by **reach, not construct**: past rel8 the same edge is emitted `E9`
+(`jmp`, near rel16). So the loop stopped being recognised for no reason visible
+in the source, and fell through to the raise.
+
+Only a **string** condition reaches this path: a numeric relop branches on its
+own flags and never materializes, so `DO UNTIL A >= 3` is unaffected at any
+body length. That cost a probe to learn — the first spelling tried decoded
+fine — and is why both wild witnesses compare strings.
+
+**The near form is admitted at cc 74 ONLY, and that asymmetry is the finding.**
+At cc 75 the inline/block-IF branch is a live competing reading, and the two
+are *not distinguishable*: measured on our own oracle, `DO WHILE c` ... `LOOP`
+and `IF c THEN` ... `GOTO <that line>` ... `END IF` over one 20-statement body
+compile to **byte-identical EXEs, 0 bytes differ**. Either spelling round-trips,
+so nothing about the bytes prefers the loop. Widening cc 75 too was tried first
+and moved 124 statements in `state.exe` (plus `state87`/`inv87`/`invoice`, two
+such sites each) — swapping one byte-exact reading for another equally valid
+one, churning four pinned programs to no gain. At cc 74 no IF reading exists —
+that branch takes 75 only — so the loop is the only reading and the near form
+must be admitted for it to be reached.
+
+**Two halves.** Widening recognition only got `DO UNTIL` emitted; the retry
+edge still came out as `GOTO <the DO's own line>` with the frame left open,
+because `core.py`'s LOOP-close lives in the `jmps` dispatch. The `jmp` branch
+got the mirror case — with exit adjacency as a *condition* rather than an
+assertion after popping, unlike its `jmps` sibling, since in that position a
+near jmp to the test address is genuinely also what a source `GOTO` compiles
+to, so failing the check means it IS a GOTO and must fall through unchanged.
+
+`_has_jmps_back` also now anchors its search on that adjacency instead of
+scanning forward for the first branch targeting the test: with the near form
+admitted, an unrelated `GOTO <test line>` would have been taken as the answer
+and returned False, hiding the real edge further down.
+
+**Gates.** 2797 tests (2784 + 13), Ruff clean, every pre-existing golden
+untouched (ops, usercode, `ir_snapshot` +56/-0 — additions only), fixtures
+`t1_dofarback` + `v10_t1_dofarback` both `verify_fixture: ok` byte-exact, DOS
+output golden captured. Wild scan 33 decode-ok / 53 failing, unchanged as a
+*count*: both witnesses advance past this gap onto deeper independent gaps
+(`varamort.exe` 0xa4f9 -> `materialization template mismatch` at 0xaff3;
+`football.exe` 0xb95a -> `unhandled jcc 74` at 0xd9bf, a compound AND of two
+materialized relations). `tests/tbx/test_far_loop_back.py` pins both halves,
+the fixture's own body length, and — deliberately — that `state.exe` keeps its
+block-IF reading, so a future widening has to argue with that test rather than
+regenerate past it.
+
+**Still open, unwitnessed.** `_find_jmps_back` (core.py's bare-value head-test
+branch) and `_has_jmps_back`'s caller at `lift.py`'s bool-tail loop decision
+carry the identical short-only assumption. No program witnesses either, so
+neither was widened — same reasoning as the `89 E5` mov encoding below.
 
 ---
 

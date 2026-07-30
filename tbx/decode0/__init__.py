@@ -87,7 +87,6 @@ from tbx.decode0.lift import (
     _fold_if,
     _has_jmps_back,
     _inline_safe,
-    _is_for_header,
     _lift_bool_do_tail,
     _lift_bool_tail,
     _lift_do_tail,
@@ -95,11 +94,22 @@ from tbx.decode0.lift import (
     _lift_next,
     _lift_var_step_next,
     _lift_while,
-    _match_bool_term1,
     _resolve_targets,
 )
 from tbx.decode0.rename import _slot, _str_lit, canonical_rename
 from tbx.decode0.core import decode_user_code
+from tbx.decode0.control_graph import ControlGraph
+from tbx.decode0.matchers import (
+    match_array_param_type,
+    match_bool_bare_term1,
+    match_bool_outer_and_group,
+    match_bool_term1,
+    match_delay,
+    match_for_header,
+    match_loose_for_header,
+)
+from tbx.decode0.cursor import OpCursor
+from tbx.decode0.events import DecodedEvent, replay_events
 
 __all__ = [
     "ARR_BLOCK",
@@ -113,7 +123,18 @@ __all__ = [
     "TB11",
     "VAR_BASE",
     "canonical_rename",
+    "ControlGraph",
+    "DecodedEvent",
     "decode_user_code",
     "find_prologue",
+    "match_array_param_type",
+    "match_bool_bare_term1",
+    "match_bool_outer_and_group",
+    "match_bool_term1",
+    "match_delay",
+    "match_for_header",
+    "match_loose_for_header",
+    "OpCursor",
+    "replay_events",
     "toggle_names",
 ]

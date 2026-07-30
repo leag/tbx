@@ -6,5 +6,7 @@ __pycache__/
 dist/
 *.egg-info/
 wild/hits/
+# decompiler output run at the repo root; fixtures and probes live in subdirectories
+/*.bas
 wild/pcsig8-scan.log
 .vscode

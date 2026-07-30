@@ -400,13 +400,21 @@ def test_wild_rsltest_argref_advances():
     # that gap (MakeWindow, the callee, is already decoded by the time
     # this call is reached, so this exercises the immediate-resolution
     # path rather than test_decode_t1_argrefonly's forward-reference one).
+    # It then stopped at 0xac2e, the tail jump of a block IF arm landing on
+    # the code-less-line hooks ahead of an FP promote-to-scratch. The promote
+    # commits no statement, but cleared `c.cur` anyway, so that hook's address
+    # was dropped and the statement re-anchored on the next hook (fixed in
+    # core.fstp64's fp64_bridge leg). It now reaches 0xae3a, which is a
+    # different shape: a run of hooks immediately before `proc_ret`, i.e. a
+    # jump to the SUB's own epilogue, which owns no statement. Same family as
+    # help.exe -- see PLAN.md Part II's table.
     import pytest
 
     from tbx import decode0
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(ValueError, match=r"jump target 0xac2e is not a statement start"):
+    with pytest.raises(ValueError, match=r"jump target 0xae3a is not a statement start"):
         decode0.decode_user_code(wild_hits_bytes("rsltest.exe"))
 
 
@@ -2187,6 +2195,56 @@ def test_decode_t1_blkgoto():
         "40 END\n"
         '50 A$ = "Q"\n'
         "60 GOTO 22\n"
+    )
+
+
+def test_decode_t1_blkgotoelse():
+    # The same jump-into-a-block-interior as t1_blkgoto, but the block has an
+    # ELSE. `_resolve_targets` used to map a block IF's interior only when the
+    # block had exactly one arm and no ELSE, so the target never entered the
+    # index and finalization raised `jump target ... is not a statement start`
+    # -- wild secure.exe, target 0x82fe, owned by arm 0's fourth statement.
+    # An ELSE changes nothing about how emit0 numbers the arm's own lines.
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_blkgotoelse.exe")))
+    assert src == (
+        '10 A$ = "X"\n'
+        '20 IF A$ <> "Q" THEN\n'
+        '  PRINT "A"\n'
+        '22 PRINT "B"\n'
+        "ELSE\n"
+        '  PRINT "C"\n'
+        "END IF\n"
+        '30 IF A$ = "X" THEN 50\n'
+        "40 END\n"
+        '50 A$ = "Q"\n'
+        "60 GOTO 22\n"
+    )
+
+
+def test_decode_t1_blkgotoelif():
+    # An ELSEIF arm's interior is addressable on the same terms, and pins the
+    # physical-line accounting the fix shares with the nested case: the target
+    # is in the SECOND arm, so its `BodyLine` phys has to count arm 0's header
+    # line, arm 0's body, and the ELSEIF header before reaching it.
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("t1_blkgotoelif.exe")))
+    assert src == (
+        '10 A$ = "X"\n'
+        '20 IF A$ = "Q" THEN\n'
+        '  PRINT "A"\n'
+        'ELSEIF A$ = "X" THEN\n'
+        '  PRINT "B"\n'
+        '24 PRINT "C"\n'
+        "ELSE\n"
+        '  PRINT "D"\n'
+        "END IF\n"
+        '30 IF A$ = "X" THEN 50\n'
+        "40 END\n"
+        '50 A$ = "Q"\n'
+        "60 GOTO 24\n"
     )
 
 

@@ -2,6 +2,10 @@
 
 [![CI](https://github.com/leag/tbx/actions/workflows/ci.yml/badge.svg)](https://github.com/leag/tbx/actions/workflows/ci.yml)
 
+> **Parked 2026-07-29 and unattended.** The decoder works as described below and
+> the test suite is green, but the wild-corpus campaign is stopped mid-tail and no
+> release was cut. Read [`STATUS.md`](STATUS.md) before starting any work here.
+
 `tbx` recovers source from 16-bit MS-DOS executables compiled by Borland Turbo
 Basic 1.0 or 1.1. A recovery is considered correct only when recompiling the
 emitted source with the original Borland toolchain reproduces the input EXE
@@ -77,10 +81,11 @@ uv run pytest
 
 ## Oracle verification
 
-The repository vendors a headless v86 harness containing the real Turbo Basic
-compiler. It is used for new fixture calibration and release checks; it is not
-part of the decompiler's runtime dependencies. Install its Node dependencies
-and follow [the oracle guide](vendor/turbo_basic_oracle/README.tbx.md), then:
+The repository vendors the headless v86 harness and its patched emulator, but
+does **not** distribute Borland's proprietary `TB.EXE` or the compiler floppy
+images. Those ignored assets must be provisioned locally before calibration.
+The oracle is used for new fixtures and release checks, never at runtime.
+Install its Node dependencies and follow [the oracle guide](vendor/turbo_basic_oracle/README.tbx.md), then:
 
 ```sh
 uv run python -m tbx.tools.verify_fixture \

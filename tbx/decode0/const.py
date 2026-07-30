@@ -209,10 +209,10 @@ def _pp_commas(pp) -> tuple[int, ...] | None:
     """gap-aligned comma counts for a pend_print dict (len(items)+1 slots:
     slot 0 = commas before the first item, slot i+1 = commas after item i),
     or None when every separator is the default ';' (see ir.Print.commas)."""
-    cs = pp.get("commas")
+    cs = pp.commas
     if not cs:
         return None
-    return tuple(cs.get(i, 0) for i in range(len(pp["items"]) + 1))
+    return tuple(cs.get(i, 0) for i in range(len(pp.items) + 1))
 
 
 _FREAD = ("fread",)  # sentinel: an INPUT#-parsed value awaiting its

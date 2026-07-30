@@ -5,6 +5,9 @@ import struct
 from typing import Any
 
 from tbx.decode0.const import _TOGGLE_BITS, _TOGGLE_NAMES
+from tbx.decode0.events import DecodedEvent, EventReconciliation
+from tbx.decode0.statement_log import StatementEdit
+from tbx.decode0.control_graph import ControlGraph
 
 
 class Program(list[Any]):
@@ -16,7 +19,9 @@ class Program(list[Any]):
     `metas` holds synthesized metastatement source lines as (stmt_index, text)
     pairs -- $STACK/$SOUND from the allocation table at index 0, $EVENT ON/OFF at
     each CC-hook transition; the emitter inserts them unnumbered before the
-    indexed statement."""
+    indexed statement. `events` and `control_graph` expose the committed
+    address-bearing lift boundary for replay and diagnostics; they do not
+    affect list equality or source emission."""
 
     lines: list[Any] | None = None
     metas: tuple[Any, ...] = ()
@@ -29,6 +34,15 @@ class Program(list[Any]):
     traced: tuple[int, ...] = ()  # TRON: statement indices inside a traced region
     # TRON: {stmt index -> traced physical-line count} for a mid-block TROFF
     trace_partial: dict[int, int]
+    events: tuple[DecodedEvent, ...] = ()
+    event_reconciliation: EventReconciliation | None = None
+    statement_edits: tuple[StatementEdit, ...] = ()
+    #: Every inline-IF fold region, in the coordinates the walk recorded it
+    #: in -- where the body began and how long the list was when decoding
+    #: reached the branch's target. Not where the splice landed: folding is
+    #: deferred, so anything folded in between has moved that.
+    fold_regions: tuple[tuple[int, int], ...] = ()
+    control_graph: ControlGraph | None = None
 
 
 def toggle_names(toggles: str) -> str:
