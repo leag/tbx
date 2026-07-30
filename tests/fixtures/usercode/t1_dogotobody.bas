@@ -7,7 +7,7 @@
   DO
 35 IF D% = 1 THEN
     D% = 5
-    GOTO 45
+    EXIT LOOP
   ELSE
     D% = D% - 1
     EXIT LOOP

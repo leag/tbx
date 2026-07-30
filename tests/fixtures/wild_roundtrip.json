@@ -74,6 +74,30 @@
    "excluded": "compiled by a different Turbo Basic build (5% runtime match): its bytes can never be ours"
   },
   {
+   "name": "cal.exe",
+   "sha256": "ee35d1d6947a05f55fac24d0017034a9b02f0635a42fb00ef3e537a02426937c",
+   "bytes": 120774,
+   "statements": 2355,
+   "source_bytes": 81404,
+   "toggles": "",
+   "build_match": 97,
+   "roundtrip": "COMPILE-FAIL",
+   "delta": null,
+   "excluded": null
+  },
+  {
+   "name": "cal87.exe",
+   "sha256": "a27a88802e7a7dba84e96d9443991d713ebd0bd491cdc2d26bf7f3787f1de58a",
+   "bytes": 120774,
+   "statements": 2355,
+   "source_bytes": 81404,
+   "toggles": "",
+   "build_match": 99,
+   "roundtrip": "COMPILE-FAIL",
+   "delta": null,
+   "excluded": null
+  },
+  {
    "name": "ck.exe",
    "sha256": "e43baf1248b6b22698b09ea76966fad68e81957f0f976b105e3ab27e50dee26c",
    "bytes": 59424,
@@ -117,8 +141,8 @@
    "source_bytes": 88391,
    "toggles": "",
    "build_match": 97,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
+   "roundtrip": "code-or-metadata",
+   "delta": -16,
    "excluded": null
   },
   {
@@ -141,8 +165,8 @@
    "source_bytes": 88391,
    "toggles": "",
    "build_match": 98,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
+   "roundtrip": "code-or-metadata",
+   "delta": -16,
    "excluded": null
   },
   {
@@ -150,7 +174,7 @@
    "sha256": "dfffbe525d25c41059a200102ec171720b2938b6b66ee335e95e4309ec2b0784",
    "bytes": 81891,
    "statements": 1789,
-   "source_bytes": 52522,
+   "source_bytes": 52530,
    "toggles": "K",
    "build_match": 99,
    "roundtrip": "code-or-metadata",
@@ -182,15 +206,27 @@
    "excluded": "IDE Options toggles K: the oracle compiles with defaults"
   },
   {
+   "name": "number.exe",
+   "sha256": "242b151c0db7701431ee63e24df73940804463a48ca65881c1f1a3532757ae07",
+   "bytes": 55526,
+   "statements": 1176,
+   "source_bytes": 29571,
+   "toggles": "K",
+   "build_match": 4,
+   "roundtrip": "COMPILE-FAIL",
+   "delta": null,
+   "excluded": "IDE Options toggles K: the oracle compiles with defaults"
+  },
+  {
    "name": "onelab87.exe",
    "sha256": "beb25ee16cd7b48b4e71af99fa9e182daa1071c8e8f9f481b32313035444480c",
    "bytes": 62003,
    "statements": 88,
-   "source_bytes": 2407,
+   "source_bytes": 2408,
    "toggles": "",
    "build_match": 96,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
+   "roundtrip": "code-or-metadata",
+   "delta": 0,
    "excluded": null
   },
   {
@@ -198,11 +234,11 @@
    "sha256": "b2f10231df811a5d1afa5735ee2258c445bfd18bb8f8c0754ae0b0774e7a2832",
    "bytes": 62003,
    "statements": 88,
-   "source_bytes": 2407,
+   "source_bytes": 2408,
    "toggles": "",
    "build_match": 96,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
+   "roundtrip": "code-or-metadata",
+   "delta": 0,
    "excluded": null
   },
   {
@@ -210,7 +246,7 @@
    "sha256": "0ee729cb13c32be89266c28352bd7f41f7ccd11cde8b84cdeeae128b10587e3d",
    "bytes": 34752,
    "statements": 146,
-   "source_bytes": 3305,
+   "source_bytes": 3320,
    "toggles": "K",
    "build_match": 5,
    "roundtrip": "COMPILE-FAIL",
@@ -257,8 +293,8 @@
    "name": "rstprint.exe",
    "sha256": "7f484c2e7dde4015ff923e690ecf82aa8f95672e9ebe9f0efa98651c63338854",
    "bytes": 37734,
-   "statements": 58,
-   "source_bytes": 1305,
+   "statements": 59,
+   "source_bytes": 1313,
    "toggles": "KBOS",
    "build_match": 97,
    "roundtrip": "COMPILE-FAIL",
@@ -270,12 +306,24 @@
    "sha256": "ae00749ad6cd57c554c4f35004564d4fb20e521c532b1d0cff2557da3276abe1",
    "bytes": 69768,
    "statements": 595,
-   "source_bytes": 17590,
+   "source_bytes": 17604,
    "toggles": "K",
    "build_match": 99,
    "roundtrip": "COMPILE-FAIL",
    "delta": null,
    "excluded": "IDE Options toggles K: the oracle compiles with defaults"
+  },
+  {
+   "name": "secure.exe",
+   "sha256": "fd0670f3ab79efa302ad92a2d0ddd1d3617d3ab18cb35ee985dedd37a919d3ad",
+   "bytes": 38409,
+   "statements": 212,
+   "source_bytes": 6315,
+   "toggles": "",
+   "build_match": 5,
+   "roundtrip": "COMPILE-FAIL",
+   "delta": null,
+   "excluded": "compiled by a different Turbo Basic build (5% runtime match): its bytes can never be ours"
   },
   {
    "name": "startup.exe",
@@ -354,7 +402,7 @@
    "sha256": "28391f33a233b07d6cf1266312429e1b1a3600a60fe0508fc022616c9bc11bd2",
    "bytes": 67011,
    "statements": 715,
-   "source_bytes": 26802,
+   "source_bytes": 26806,
    "toggles": "K",
    "build_match": 99,
    "roundtrip": "COMPILE-FAIL",
@@ -378,13 +426,12 @@
    "sha256": "7a4247264a1becbfb57d45d0754d6a32eb075839bf1ce1d3edf861ddd5831732",
    "bytes": 44370,
    "statements": 309,
-   "source_bytes": 8830,
+   "source_bytes": 8829,
    "toggles": "",
    "build_match": 99,
    "roundtrip": "code-or-metadata",
    "delta": 224,
-   "excluded": null,
-   "note": "source shrank by 2 bytes when folding moved: the eager fold emitted LOOP inside an ELSE arm while closing a DO opened outside the IF, which is crossed block nesting and not valid source. The deferred fold emits EXIT LOOP instead. It compiles now; it did not before."
+   "excluded": null
   }
  ]
 }

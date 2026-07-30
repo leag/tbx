@@ -679,6 +679,60 @@ def test_decode_t1_dogotobody():
     assert isinstance(sub.body[1].target, ir.BodyLine)
 
 
+def test_decode_t1_exloopsub():
+    # `EXIT LOOP` inside a block IF inside a codeless DO, in a SUB. The IF's
+    # region closes at the statement after END IF, so the loop body that
+    # follows looks like an else-skip region -- but it ends in the LOOP that
+    # closes a DO opened *before* the IF. An ELSE arm cannot hold that closer:
+    # TB requires END IF first, which is Error 441. Wild ziptest.exe SUB4.
+    from tbx import decode0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_exloopsub.exe"))
+    sub = next(s for s in prog if isinstance(s, ir.SubDef))
+
+    assert [type(s) for s in sub.body] == [
+        ir.Assign,
+        ir.Assign,
+        ir.Assign,
+        ir.Do,
+        ir.IfBlock,
+        ir.Assign,
+        ir.Assign,
+        ir.Assign,
+        ir.Loop,
+        ir.Locate,
+    ]
+    # The loop closer stays a sibling of the IF, and the exit keeps its name.
+    guard = sub.body[4]
+    assert guard.else_body is None
+    assert any(isinstance(s, ir.ExitLoop) for s in guard.arms[0][1])
+
+
+def test_decode_t1_exlooptop():
+    # The same shape at top level rather than in a SUB, which reaches the
+    # ELSE-region fold by a different route and was mis-folded even before the
+    # deferred-fold drain existed. Same guard covers both.
+    from tbx import decode0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_exlooptop.exe"))
+
+    assert [type(s) for s in prog] == [
+        ir.Assign,
+        ir.Assign,
+        ir.Assign,
+        ir.Do,
+        ir.IfBlock,
+        ir.Assign,
+        ir.Assign,
+        ir.Assign,
+        ir.Loop,
+        ir.Locate,
+        ir.End,
+    ]
+    assert prog[4].else_body is None
+    assert any(isinstance(s, ir.ExitLoop) for s in prog[4].arms[0][1])
+
+
 def test_decode_t1_ifthenfncall():
     # A jump target landing on a statement whose FIRST op is `push bp` -- the
     # DEF FN call-staging opener (`push bp; sub sp,N; mov bp,sp`). Third opener

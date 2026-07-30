@@ -1,6 +1,7 @@
 """Structured-control-flow lifting: FOR/DO/WHILE/IF folds and target resolution."""
 
 from __future__ import annotations
+from dataclasses import replace
 from typing import Any
 
 from tbx import ir
@@ -864,6 +865,41 @@ def _fold_body(body, targets=frozenset(), stmt_addr=None, block_ifs=None):
         return tuple(out)
 
 
+def _rewrite_exit_goto(statement, exit_addr, exit_stmt):
+    """Replace a GOTO to `exit_addr` with `exit_stmt`, inside bodies as well.
+
+    A fold entry is recorded when the loop's back-edge is reached, which is
+    after the region holding the early-exit GOTO may already have folded --
+    deferred folding drains a region as soon as the construct owning it
+    closes, so by the time this pass runs the GOTO can be a body statement
+    rather than a top-level one. It was top level under the eager fold, which
+    is the only reason scanning `stmts` alone ever sufficed; a GOTO missed here
+    survives as a bare `GOTO <line>` and takes a synthesized line number with
+    it (wild ziptest.exe SUB4, whose `EXIT LOOP` re-emerged as `GOTO 44`).
+    """
+    if isinstance(statement, ir.Goto) and statement.target == ("addr", exit_addr):
+        return exit_stmt
+    if isinstance(statement, ir.IfInline):
+        body = tuple(
+            _rewrite_exit_goto(b, exit_addr, exit_stmt) for b in statement.body
+        )
+        return statement if body == statement.body else replace(statement, body=body)
+    if isinstance(statement, ir.IfBlock):
+        arms = tuple(
+            (cond, tuple(_rewrite_exit_goto(b, exit_addr, exit_stmt) for b in arm))
+            for cond, arm in statement.arms
+        )
+        else_body = statement.else_body
+        if else_body is not None:
+            else_body = tuple(
+                _rewrite_exit_goto(b, exit_addr, exit_stmt) for b in else_body
+            )
+        if arms == statement.arms and else_body == statement.else_body:
+            return statement
+        return replace(statement, arms=arms, else_body=else_body)
+    return statement
+
+
 def _apply_exit_folds(stmts, addrs, exit_folds):
     """EXIT FOR/LOOP/SUB/DEF folds: rewrite the early-exit GOTO to the
     loop/proc exit, then fold `IF c THEN <skip>` + EXIT into `IF negate(c) THEN EXIT`.
@@ -895,12 +931,8 @@ def _apply_exit_folds(stmts, addrs, exit_folds):
                         and for_start < i < for_stop
                     )
                 )
-                if (
-                    in_for
-                    and isinstance(s, ir.Goto)
-                    and s.target == ("addr", exit_addr)
-                ):
-                    stmts[i] = exit_stmt
+                if in_for:
+                    stmts[i] = _rewrite_exit_goto(s, exit_addr, exit_stmt)
             i = 0
             while i + 1 < len(stmts):
                 if (
@@ -1008,6 +1040,31 @@ def _jump_targets(stmts) -> frozenset[int]:
     return frozenset(out)
 
 
+def _closes_an_outer_loop(stmts) -> bool:
+    """True if a loop terminator in `stmts` closes a loop opened before them.
+
+    The same rule the inline leg below already enforces on an IfInline body,
+    asked of a candidate ELSE region: `LOOP`/`WEND`/`NEXT` may stand in an arm
+    only alongside the header that opened it, because TB requires `END IF`
+    before the closer. A region that closes a loop begun outside itself is the
+    fall-through after `END IF` -- the else-skip Goto is an `EXIT LOOP`, not an
+    else -- and folding it into an arm emits source TB rejects with
+    `Error 441: END IF expected` (wild ziptest.exe SUB4; t1_exloopsub).
+
+    A region holding a WHOLE loop is untouched: its own header balances the
+    closer, which is why this counts depth rather than just looking for one.
+    """
+    depth = 0
+    for statement in stmts:
+        if isinstance(statement, (ir.Do, ir.While, ir.For)):
+            depth += 1
+        elif isinstance(statement, (ir.Loop, ir.Wend, ir.NextStmt)):
+            if depth == 0:
+                return True
+            depth -= 1
+    return False
+
+
 def _fold_if(
     stmts, addrs, bound=None, targets=frozenset(), stmt_addr=None, block_ifs=None
 ):
@@ -1047,6 +1104,10 @@ def _fold_if(
                     t in targets for t in addrs[i + 1 : end_idx] if t is not None
                 ):
                     end_idx = None  # targeted interior: not an ELSE region
+                if end_idx is not None and _closes_an_outer_loop(
+                    stmts[i + 1 : end_idx]
+                ):
+                    end_idx = None  # closes an outer loop: not an ELSE region
                 if end_idx is not None:
                     # Codeless DO headers inserted at the merge address belong
                     # before the statement the ELSE skip targets, not inside

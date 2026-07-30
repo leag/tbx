@@ -3714,7 +3714,7 @@ End()
 ## t1_dogotobody
 Assign(target=Var(name='A%'), value=Lit(value=1))
 Assign(target=Var(name='B%'), value=Lit(value=1))
-SubDef(name='SUB1', params=(), body=(IfGoto(cond=RelOp(op='=', lhs=Var(name='C%'), rhs=Lit(value=1)), target=BodyLine(stmt=2, phys=5)), IfGoto(cond=RelOp(op='=', lhs=Var(name='C%'), rhs=Lit(value=2)), target=BodyLine(stmt=2, phys=15)), ExitSub(), Do(kind=None, cond=None), IfBlock(arms=((RelOp(op='=', lhs=Var(name='D%'), rhs=Lit(value=1)), (Assign(target=Var(name='D%'), value=Lit(value=5)), Goto(target=BodyLine(stmt=2, phys=15)))),), else_body=(Assign(target=Var(name='D%'), value=BinOp(op='-', lhs=Var(name='D%'), rhs=Lit(value=1))), ExitLoop())), Loop(kind=None, cond=None), Do(kind=None, cond=None), Do(kind=None, cond=None), IfBlock(arms=((RelOp(op='=', lhs=Var(name='D%'), rhs=Lit(value=5)), (Assign(target=Var(name='D%'), value=Lit(value=1)), Goto(target=BodyLine(stmt=2, phys=23)))),), else_body=(Assign(target=Var(name='D%'), value=BinOp(op='+', lhs=Var(name='D%'), rhs=Lit(value=1))), Goto(target=BodyLine(stmt=2, phys=23)))), Loop(kind=None, cond=None), Loop(kind=None, cond=None)))
+SubDef(name='SUB1', params=(), body=(IfGoto(cond=RelOp(op='=', lhs=Var(name='C%'), rhs=Lit(value=1)), target=BodyLine(stmt=2, phys=5)), IfGoto(cond=RelOp(op='=', lhs=Var(name='C%'), rhs=Lit(value=2)), target=BodyLine(stmt=2, phys=15)), ExitSub(), Do(kind=None, cond=None), IfBlock(arms=((RelOp(op='=', lhs=Var(name='D%'), rhs=Lit(value=1)), (Assign(target=Var(name='D%'), value=Lit(value=5)), ExitLoop())),), else_body=(Assign(target=Var(name='D%'), value=BinOp(op='-', lhs=Var(name='D%'), rhs=Lit(value=1))), ExitLoop())), Loop(kind=None, cond=None), Do(kind=None, cond=None), Do(kind=None, cond=None), IfBlock(arms=((RelOp(op='=', lhs=Var(name='D%'), rhs=Lit(value=5)), (Assign(target=Var(name='D%'), value=Lit(value=1)), Goto(target=BodyLine(stmt=2, phys=23)))),), else_body=(Assign(target=Var(name='D%'), value=BinOp(op='+', lhs=Var(name='D%'), rhs=Lit(value=1))), Goto(target=BodyLine(stmt=2, phys=23)))), Loop(kind=None, cond=None), Loop(kind=None, cond=None)))
 CallStmt(name='SUB1', args=())
 End()
 
@@ -3837,6 +3837,24 @@ SubDef(name='SUB1', params=('A%', 'B%'), body=(Local(names=('C$',)), Assign(targ
 Assign(target=Var(name='D%'), value=Lit(value=5))
 Assign(target=Var(name='E%'), value=Lit(value=2))
 CallStmt(name='SUB1', args=(Var(name='D%'), Var(name='E%')))
+End()
+
+## t1_exloopsub
+CallStmt(name='SUB1', args=(StrLit(value='Q'),))
+End()
+SubDef(name='SUB1', params=('A$',), body=(Assign(target=Var(name='B$'), value=StrLit(value='A')), Assign(target=Var(name='C%'), value=Lit(value=65)), Assign(target=Var(name='D%'), value=Lit(value=3)), Do(kind=None, cond=None), IfBlock(arms=((RelOp(op='=', lhs=Var(name='B$'), rhs=Var(name='A$')), (Locate(row=Lit(value=11), col=Var(name='D%'), cursor=None, start=None, stop=None), Print(items=(Call(name='CHR$', args=(Lit(value=24),)),), newline=True, file=None, commas=None), ExitLoop())),), else_body=None), Assign(target=Var(name='D%'), value=BinOp(op='+', lhs=Var(name='D%'), rhs=Lit(value=2))), Assign(target=Var(name='C%'), value=BinOp(op='+', lhs=Var(name='C%'), rhs=Lit(value=1))), Assign(target=Var(name='B$'), value=Call(name='CHR$', args=(Var(name='C%'),))), Loop(kind=None, cond=None), Locate(row=Lit(value=15), col=Lit(value=1), cursor=None, start=None, stop=None)))
+
+## t1_exlooptop
+Assign(target=Var(name='A$'), value=StrLit(value='A'))
+Assign(target=Var(name='B%'), value=Lit(value=65))
+Assign(target=Var(name='C%'), value=Lit(value=3))
+Do(kind=None, cond=None)
+IfBlock(arms=((RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='Q')), (Locate(row=Lit(value=11), col=Var(name='C%'), cursor=None, start=None, stop=None), Print(items=(Call(name='CHR$', args=(Lit(value=24),)),), newline=True, file=None, commas=None), ExitLoop())),), else_body=None)
+Assign(target=Var(name='C%'), value=BinOp(op='+', lhs=Var(name='C%'), rhs=Lit(value=2)))
+Assign(target=Var(name='B%'), value=BinOp(op='+', lhs=Var(name='B%'), rhs=Lit(value=1)))
+Assign(target=Var(name='A$'), value=Call(name='CHR$', args=(Var(name='B%'),)))
+Loop(kind=None, cond=None)
+Locate(row=Lit(value=15), col=Lit(value=1), cursor=None, start=None, stop=None)
 End()
 
 ## t1_explog
@@ -10584,6 +10602,24 @@ SubDef(name='SUB1', params=('A%', 'B%'), body=(Local(names=('C$',)), Assign(targ
 Assign(target=Var(name='D%'), value=Lit(value=5))
 Assign(target=Var(name='E%'), value=Lit(value=2))
 CallStmt(name='SUB1', args=(Var(name='D%'), Var(name='E%')))
+End()
+
+## v10_t1_exloopsub
+CallStmt(name='SUB1', args=(StrLit(value='Q'),))
+End()
+SubDef(name='SUB1', params=('A$',), body=(Assign(target=Var(name='B$'), value=StrLit(value='A')), Assign(target=Var(name='C%'), value=Lit(value=65)), Assign(target=Var(name='D%'), value=Lit(value=3)), Do(kind=None, cond=None), IfBlock(arms=((RelOp(op='=', lhs=Var(name='B$'), rhs=Var(name='A$')), (Locate(row=Lit(value=11), col=Var(name='D%'), cursor=None, start=None, stop=None), Print(items=(Call(name='CHR$', args=(Lit(value=24),)),), newline=True, file=None, commas=None), ExitLoop())),), else_body=None), Assign(target=Var(name='D%'), value=BinOp(op='+', lhs=Var(name='D%'), rhs=Lit(value=2))), Assign(target=Var(name='C%'), value=BinOp(op='+', lhs=Var(name='C%'), rhs=Lit(value=1))), Assign(target=Var(name='B$'), value=Call(name='CHR$', args=(Var(name='C%'),))), Loop(kind=None, cond=None), Locate(row=Lit(value=15), col=Lit(value=1), cursor=None, start=None, stop=None)))
+
+## v10_t1_exlooptop
+Assign(target=Var(name='A$'), value=StrLit(value='A'))
+Assign(target=Var(name='B%'), value=Lit(value=65))
+Assign(target=Var(name='C%'), value=Lit(value=3))
+Do(kind=None, cond=None)
+IfBlock(arms=((RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='Q')), (Locate(row=Lit(value=11), col=Var(name='C%'), cursor=None, start=None, stop=None), Print(items=(Call(name='CHR$', args=(Lit(value=24),)),), newline=True, file=None, commas=None), ExitLoop())),), else_body=None)
+Assign(target=Var(name='C%'), value=BinOp(op='+', lhs=Var(name='C%'), rhs=Lit(value=2)))
+Assign(target=Var(name='B%'), value=BinOp(op='+', lhs=Var(name='B%'), rhs=Lit(value=1)))
+Assign(target=Var(name='A$'), value=Call(name='CHR$', args=(Var(name='B%'),)))
+Loop(kind=None, cond=None)
+Locate(row=Lit(value=15), col=Lit(value=1), cursor=None, start=None, stop=None)
 End()
 
 ## v10_t1_explog

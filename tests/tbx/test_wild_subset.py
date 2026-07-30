@@ -3,10 +3,10 @@
 `wild/hits` is gitignored, so `tests/fixtures/wild_roundtrip.json` is the
 committed half of it: what each program decodes to, and whether a byte-exact
 round-trip is meaningful for it at all. Most wild programs cannot match this
-oracle's output whatever the decoder does -- 18 of 32 carry IDE Options
-toggles, and 4 more were built by a different Turbo Basic release -- so the
+oracle's output whatever the decoder does -- 19 of 36 carry IDE Options
+toggles, and 5 more were built by a different Turbo Basic release -- so the
 manifest records the reason per program rather than leaving a reader to
-conclude the decoder is 22 programs worse than it is.
+conclude the decoder is 24 programs worse than it is.
 
 These checks are the parts that need no compiler: the subset still decodes,
 still produces the recorded shape, and still emits loadable source. Re-measuring
@@ -27,8 +27,8 @@ _COMPARABLE = [e for e in _ENTRIES if not e["excluded"]]
 
 def test_the_manifest_records_a_comparable_subset():
     """The point of the file: not every wild program is evidence about bytes."""
-    assert len(_ENTRIES) == 32
-    assert len(_COMPARABLE) == 10
+    assert len(_ENTRIES) == 36
+    assert len(_COMPARABLE) == 12
     for entry in _ENTRIES:
         if entry["excluded"] is None:
             continue
