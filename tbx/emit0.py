@@ -15,6 +15,9 @@ byte-identically; the toggles ride on Program.toggles and the CLI reports them
 out-of-band.
 """
 
+from dataclasses import dataclass
+import re
+
 from tbx import ir
 
 #: "The Turbo Basic editor supports lines up to 248 characters wide" (Owner's
@@ -24,6 +27,108 @@ from tbx import ir
 #: witness: 295 characters of reconstructed DATA, and the oracle harness never
 #: got it into the editor to compile at all.
 LINE_LIMIT = 248
+#: The integrated editor cannot load a source file larger than 64 KiB. Keep
+#: one byte spare so every generated file is strictly below that boundary.
+FILE_LIMIT = 65535
+#: The compiler rejects a 64 KiB include with Error 495 even though the editor
+#: accepts a root BAS up to 64 KiB. Keep includes below the signed-word boundary.
+INCLUDE_LIMIT = 32767
+
+
+@dataclass(frozen=True)
+class SourceBundle:
+    """One root BAS plus source-relative include files."""
+
+    root: str
+    includes: tuple[tuple[str, str], ...] = ()
+
+
+_PROC_HEADER = re.compile(r"^\d+ (?:SUB\b|DEF FN)")
+
+
+def _source_bytes(text: str) -> int:
+    """Size as Turbo Basic reads it: emitted source is an 8-bit byte stream."""
+    try:
+        return len(text.encode("latin-1"))
+    except UnicodeEncodeError as exc:
+        raise ValueError("emitted source contains a non-Latin-1 character") from exc
+
+
+def _all_source_includes(
+    source: str, clean: str, root_limit: int, include_limit: int
+) -> SourceBundle:
+    """Pack complete physical BASIC lines; root contains only includes."""
+    chunks: list[str] = []
+    pending: list[str] = []
+    size = 0
+    for line in source.splitlines(keepends=True):
+        line_size = _source_bytes(line)
+        if line_size > include_limit:
+            raise ValueError(
+                f"one physical source line is {line_size} bytes; "
+                f"no line-boundary split fits the {include_limit}-byte limit"
+            )
+        if pending and size + line_size > include_limit:
+            chunks.append("".join(pending))
+            pending = []
+            size = 0
+        pending.append(line)
+        size += line_size
+    if pending:
+        chunks.append("".join(pending))
+    if len(chunks) > 999:
+        raise ValueError("more than 999 include files are required")
+    includes = tuple(
+        (f"{clean}{i:03d}.INC", text)
+        for i, text in enumerate(chunks, 1)
+    )
+    root = "".join(f'$INCLUDE "{name}"\n' for name, _ in includes)
+    if _source_bytes(root) > root_limit:
+        raise ValueError(
+            f"root source remains {_source_bytes(root)} bytes after "
+            "line-boundary splitting"
+        )
+    return SourceBundle(root, includes)
+
+
+def split_source(
+    source: str,
+    prefix: str = "TBX",
+    limit: int = FILE_LIMIT,
+    include_limit: int | None = None,
+    force: bool = False,
+) -> SourceBundle:
+    """Split a procedure-free program into physical-line include chunks.
+
+    The input is already fully rendered. Splitting that text, instead of
+    rendering statement subsets, preserves global line numbering, BodyLine
+    targets, line-table grouping, and metastatement placement exactly. Turbo
+    Basic rejects `$INCLUDE` in a compilation unit containing scanned SUB or
+    block DEF FN declarations, so that case fails loudly.
+    """
+    if limit < 1:
+        raise ValueError("source-file limit must be positive")
+    include_limit = min(limit, INCLUDE_LIMIT) if include_limit is None else include_limit
+    if include_limit < 1:
+        raise ValueError("include-file limit must be positive")
+    if not force and _source_bytes(source) <= limit:
+        return SourceBundle(source)
+    if any(
+        _PROC_HEADER.match(line)
+        and not (" DEF FN" in line and " = " in line)
+        for line in source.splitlines()
+    ):
+        raise ValueError(
+            "cannot split source containing SUB or block DEF FN declarations: "
+            "Turbo Basic rejects $INCLUDE with scanned statements"
+        )
+    clean = re.sub(r"[^A-Z0-9]", "", prefix.upper())[:5] or "TBX"
+    return _all_source_includes(source, clean, limit, include_limit)
+
+
+def emit_split(stmts, prefix: str = "TBX", force: bool = False) -> SourceBundle:
+    """Render and split only when the 64 KiB editor limit requires it."""
+    return split_source(emit(stmts), prefix=prefix, force=force)
 
 
 def _split_list_statement(stmt, width: int):

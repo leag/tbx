@@ -2,7 +2,7 @@
 
 import os
 
-from tbx import cli
+from tbx import cli, emit0
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _CORPUS = os.path.join(_ROOT, "fixtures", "corpus")
@@ -19,6 +19,59 @@ def test_decompile_to_file(tmp_path):
     out = tmp_path / "out.bas"
     assert cli.main([os.path.join(_CORPUS, "v10_t1_delay.exe"), "-o", str(out)]) == 0
     assert out.read_text() == open(os.path.join(_GOLD, "v10_t1_delay.bas")).read()
+
+
+def test_split_output_writes_the_root_and_latin1_include(tmp_path, monkeypatch):
+    out = tmp_path / "out.bas"
+    bundle = emit0.SourceBundle(
+        '10 A = 1\n$INCLUDE "OUT001.INC"\n20 END\n',
+        (("OUT001.INC", '30 SUB SUB1\n  PRINT "Í"\nEND SUB\n'),),
+    )
+    monkeypatch.setattr(emit0, "emit_split", lambda *_args, **_kwargs: bundle)
+
+    assert (
+        cli.main(
+            [
+                os.path.join(_CORPUS, "v10_t1_delay.exe"),
+                "-o",
+                str(out),
+                "--split",
+            ]
+        )
+        == 0
+    )
+    assert out.read_bytes() == bundle.root.encode("latin-1")
+    assert (tmp_path / "OUT001.INC").read_bytes() == bundle.includes[0][1].encode(
+        "latin-1"
+    )
+
+
+def test_split_output_refuses_to_overwrite_an_existing_include(
+    tmp_path, monkeypatch, capsys
+):
+    out = tmp_path / "out.bas"
+    include = tmp_path / "OUT001.INC"
+    include.write_text("mine")
+    bundle = emit0.SourceBundle(
+        '$INCLUDE "OUT001.INC"\n',
+        (("OUT001.INC", "10 END\n"),),
+    )
+    monkeypatch.setattr(emit0, "emit_split", lambda *_args, **_kwargs: bundle)
+
+    assert (
+        cli.main(
+            [
+                os.path.join(_CORPUS, "v10_t1_delay.exe"),
+                "-o",
+                str(out),
+                "--split",
+            ]
+        )
+        == 1
+    )
+    assert include.read_text() == "mine"
+    assert not out.exists()
+    assert "refusing to overwrite" in capsys.readouterr().err
 
 
 def test_ops_dump(capsys):

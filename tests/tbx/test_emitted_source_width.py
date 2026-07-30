@@ -44,10 +44,9 @@ EDITOR_LINE_LIMIT = 248
 #: as an over-wide line: not source that could have been handed to the editor.
 EDITOR_FILE_LIMIT = 65536
 
-#: Wild programs whose emitted source exceeds that, with its size. The source
-#: they came from must have been divided across `$INCLUDE` files, which the
-#: emitter does not reconstruct -- so these are the programs the oracle cannot
-#: round-trip as one file however narrow their lines get.
+#: Wild programs whose unsplit emitted source exceeds that, with its size.
+#: Keep the sizes pinned while also requiring emit_split to make compiler-sized
+#: root and include files below.
 _OVER_LONG = {
     "banker.exe": 98245,
     "horses.exe": 67442,
@@ -56,6 +55,7 @@ _OVER_LONG = {
     "state.exe": 68887,
     "state87.exe": 68887,
 }
+_SPLITTABLE = set(_OVER_LONG) - {"horses.exe"}
 
 CORPUS = Path(__file__).resolve().parents[1] / "fixtures" / "corpus"
 
@@ -138,3 +138,27 @@ def test_a_known_over_long_program_has_not_got_worse(name, size):
     from conftest import wild_hits_bytes
 
     assert _size(wild_hits_bytes(name)) == size
+
+
+@pytest.mark.parametrize("name", sorted(_SPLITTABLE))
+def test_an_over_long_program_splits_into_compiler_sized_files(name):
+    from conftest import wild_hits_bytes
+
+    prog = decode0.decode_user_code(wild_hits_bytes(name))
+    bundle = emit0.emit_split(prog, prefix=Path(name).stem)
+
+    assert bundle.includes
+    assert len(bundle.root.encode("latin-1")) < EDITOR_FILE_LIMIT
+    assert all(
+        len(text.encode("latin-1")) <= emit0.INCLUDE_LIMIT
+        for _, text in bundle.includes
+    )
+
+
+def test_an_over_long_program_with_scanned_subs_fails_loud():
+    from conftest import wild_hits_bytes
+
+    prog = decode0.decode_user_code(wild_hits_bytes("horses.exe"))
+
+    with pytest.raises(ValueError, match="scanned statements"):
+        emit0.emit_split(prog, prefix="horses")

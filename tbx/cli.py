@@ -2,6 +2,7 @@
 
     tbx PROGRAM.EXE                 # recovered source on stdout
     tbx PROGRAM.EXE -o PROGRAM.BAS  # write to a file
+    tbx PROGRAM.EXE -o PROGRAM.BAS --split  # add .INC files when over 64 KiB
     tbx PROGRAM.EXE --ops           # canonical op-stream dump (debugging aid)
 
 Decoding is fail-loud by design: an EXE that uses a construct outside the
@@ -55,19 +56,34 @@ def main(argv=None) -> int:
         action="store_true",
         help="dump the canonical op stream instead of source",
     )
+    ap.add_argument(
+        "--split",
+        action="store_true",
+        help="split source over 64 KiB into procedure-boundary .INC files "
+        "(requires --output)",
+    )
     args = ap.parse_args(argv)
+    if args.split and (args.output is None or args.ops):
+        print("tbx: --split requires --output and cannot be used with --ops", file=sys.stderr)
+        return 1
 
     try:
         exe = args.exe.read_bytes()
     except OSError as e:
         print(f"tbx: {e}", file=sys.stderr)
         return 1
+    bundle = None
     try:
         if args.ops:
             text = _dump_ops(exe)
         else:
             prog = decode0.decode_user_code(exe)
-            text = emit0.emit(prog)
+            bundle = (
+                emit0.emit_split(prog, prefix=args.output.stem)
+                if args.split
+                else None
+            )
+            text = bundle.root if bundle is not None else emit0.emit(prog)
             # IDE compiler toggles have no source form (see emit0); surface them
             # out-of-band so `-o` output stays exactly the recompiling source.
             toggles = getattr(prog, "toggles", "")
@@ -82,7 +98,24 @@ def main(argv=None) -> int:
         return 1
 
     if args.output:
-        args.output.write_text(text)
+        if bundle is not None:
+            collisions = [
+                args.output.parent / name
+                for name, _ in bundle.includes
+                if (args.output.parent / name).exists()
+            ]
+            if collisions:
+                names = ", ".join(p.name for p in collisions[:3])
+                print(
+                    f"tbx: refusing to overwrite existing include file(s): {names}",
+                    file=sys.stderr,
+                )
+                return 1
+            for name, include in bundle.includes:
+                (args.output.parent / name).write_text(
+                    include, encoding="latin-1", newline=""
+                )
+        args.output.write_text(text, encoding="latin-1", newline="")
     else:
         sys.stdout.write(text)
     return 0
