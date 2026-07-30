@@ -1,5 +1,13 @@
 # tbx wild-corpus gap campaign — combined plan & handoff
 
+> **This file is now an evidence archive, not a work queue.** The campaign was
+> parked on 2026-07-29. Part I's execution plan, work queue and completion
+> checklist are **superseded by [`STATUS.md`](STATUS.md)**, which explains why
+> the checklist as written cannot be satisfied and which threads have real
+> diagnosis behind them. Part II and Part III remain accurate and are still the
+> place to go for the reasoning behind a specific finding — read them by
+> reference from `STATUS.md`, not front to back.
+
 This file merges what used to be three separate documents into one:
 `REMAINING_GAPS_PLAN.md` (the forward-looking work queue), `HANDOFF.md`
 (the chronological investigation log), and

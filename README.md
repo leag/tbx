@@ -2,6 +2,10 @@
 
 [![CI](https://github.com/leag/tbx/actions/workflows/ci.yml/badge.svg)](https://github.com/leag/tbx/actions/workflows/ci.yml)
 
+> **Parked 2026-07-29 and unattended.** The decoder works as described below and
+> the test suite is green, but the wild-corpus campaign is stopped mid-tail and no
+> release was cut. Read [`STATUS.md`](STATUS.md) before starting any work here.
+
 `tbx` recovers source from 16-bit MS-DOS executables compiled by Borland Turbo
 Basic 1.0 or 1.1. A recovery is considered correct only when recompiling the
 emitted source with the original Borland toolchain reproduces the input EXE
