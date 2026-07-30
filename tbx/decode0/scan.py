@@ -1226,33 +1226,41 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
 
 
 def _has_port_immediate(exe: bytes, start: int, end: int) -> bool:
-    """Does [start, end) contain `mov al,imm8; out imm8,al` (B0 xx E6 xx)?
+    """Does [start, end) hold an instruction sequence the compiler cannot emit?
 
-    The one signal in this adjudication that is not ambiguous. Turbo Basic has
-    no statement that compiles to an immediate-port OUT: INP and OUT both route
-    the port through DX and emit the register forms EC/EE whatever the
-    operands, and `OUT 67, 116` -- both operands in byte range, zip.exe's own
-    pair -- emits mov-AX / mov-DX / OUT-DX at top level and inside a SUB alike
-    (probes probe_out_const_toplevel / probe_out_const_in_sub). So a body
-    carrying this pair was written by hand and reached the EXE through
-    `$INLINE`, which settles the `5D`-tail question the caller cannot otherwise
-    settle from the bytes.
+    The caller's `5D`-tail question is undecidable from shape alone: a framed
+    procedure and a `$INLINE` list that happens to carry its own bp frame end
+    in the same `5D CB`. What can decide it is CONTENT -- a body holding an
+    instruction Turbo Basic has no way to generate was written by hand and
+    reached the EXE through `$INLINE`, whatever its framing looks like.
 
-    Matched as the two-instruction PAIR, not as a loose search for the E4-E7
-    opcode range: these bodies are not disassembled, so a bare range test reads
-    operand and ModRM bytes as opcodes. `89 E5` -- the alternate `mov bp,sp`
-    encoding, in the prologue of the very framed procedures this guard must
-    keep rejecting -- carries an E5 in its second byte and made the guard
-    accept them.
+    One such sequence is recognized today: `mov al,imm8; out imm8,al`
+    (B0 xx E6 xx). Turbo Basic has no statement that compiles to an
+    immediate-port OUT -- INP and OUT both route the port through DX and emit
+    the register forms EC/EE whatever their operands, and `OUT 67, 116`, with
+    both operands in byte range, still emits mov-AX / mov-DX / OUT-DX at top
+    level and inside a SUB alike (probes probe_out_const_toplevel /
+    probe_out_const_in_sub). Add further sequences here as they are witnessed
+    and proved unreachable from source; each must earn its place with a probe
+    showing the compiler emitting something else for every spelling that could
+    plausibly produce it.
 
-    Deliberately narrow. It does NOT try to prove a body is hand-written in
-    general: an unrecognized framed helper stays fail-loud, which is what keeps
-    wild CVT2TB.EXE and phone.exe honest. It only rules IN a body holding an
-    instruction pair the compiler cannot emit.
+    Match whole instruction SEQUENCES, never a bare opcode-range test: these
+    bodies are not disassembled, so any single-byte test reads operand and
+    ModRM bytes as opcodes. Searching the E4-E7 port-I/O range was the first
+    attempt and it accepted `89 E5` -- the alternate `mov bp,sp` encoding,
+    sitting in the prologue of the very framed procedures this guard exists to
+    reject.
 
-    Witnessed by wild zip.exe and ziptest.exe, whose tone procedures are
-    `$INLINE` lists of PIT timer writes (ports 43h/41h) carrying their own bp
-    frame, and by fixture t1_inlineport.
+    Deliberately narrow, and one-way. It only ever rules a body IN; a body it
+    does not recognize stays fail-loud, which is what keeps an unexplained
+    framed helper (wild CVT2TB.EXE, phone.exe) from being silently reprinted as
+    machine code instead of being decoded.
+
+    Witnessed by wild zip.exe and ziptest.exe, whose per-setting procedures are
+    `$INLINE` lists that reprogram PIT counter 1 -- command byte 74h to port
+    43h, then a 16-bit divisor to port 41h -- carrying their own bp frame, and
+    by fixture t1_inlineport.
     """
     return any(
         exe[k] == 0xB0 and exe[k + 2] == 0xE6 for k in range(start, max(start, end - 3))

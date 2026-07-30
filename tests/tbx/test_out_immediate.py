@@ -1,14 +1,19 @@
-"""Wild zip.exe's tone procedures are $INLINE machine code, not OUT statements.
+"""A framed body the compiler cannot have emitted is $INLINE, not OUT statements.
 
 This file used to assert the opposite. It pinned an `out_imm` op reading
 `mov al,imm8; out imm8,al` as a byte-constant OUT that Turbo Basic had folded
 -- a mapping with no compiled fixture, refuted by probe: `OUT 67, 116` (zip's
 own operands) emits the general mov-AX / mov-DX / OUT-DX form at top level and
-inside a SUB alike, and TB has no statement that compiles to E4-E7 at all.
+inside a SUB alike. TB routes every INP/OUT port through DX, so an immediate-
+port instruction is one the compiler cannot have written; that is what lets
+`_try_inline_rescue` rule the body in, on the SEQUENCE rather than the opcode.
 
 The bodies are `SUB name INLINE` + `$INLINE`, which round-trips byte-exactly;
-decoding them as OUT cost zip.exe 592 bytes and ziptest.exe 224. Ledger
-RO-OUT-IMM-FOLD; fixture t1_inlineport is the shape in miniature.
+decoding them as OUT cost zip.exe 592 bytes and ziptest.exe 224. They reprogram
+PIT counter 1 -- command 74h to port 43h, then a divisor to port 41h -- which
+is the DRAM refresh generator, not the speaker: zip.exe is a PC speed-up
+utility emitting one ZIPx.BIN per refresh divisor. Ledger RO-OUT-IMM-FOLD;
+fixture t1_inlineport is the shape in miniature.
 """
 
 import os
@@ -30,13 +35,17 @@ def test_mov_al_out_imm_is_not_in_the_vocabulary():
 def test_port_immediate_only_rules_a_body_in():
     body = bytes.fromhex("55 8b ec b0 74 e6 43 5d")
     assert scan._has_port_immediate(body, 0, len(body))
-    # A framed body with no port instruction stays ambiguous, so the caller
-    # keeps declining it -- that is what holds CVT2TB.EXE and phone.exe loud.
+    # A framed body with no such sequence stays ambiguous, so the caller keeps
+    # declining it -- that is what holds CVT2TB.EXE and phone.exe loud.
     plain = bytes.fromhex("55 8b ec 8b 46 06 5d")
     assert not scan._has_port_immediate(plain, 0, len(plain))
+    # The whole reason this matches a sequence and not the E4-E7 opcode range:
+    # `89 e5` is the alternate `mov bp,sp`, so a range test fires on the
+    # prologue of every framed procedure the guard exists to reject.
+    assert not scan._has_port_immediate(bytes.fromhex("55 89 e5 5d"), 0, 4)
 
 
-def test_zip_tone_procedures_decode_as_inline():
+def test_zip_port_procedures_decode_as_inline():
     from conftest import wild_hits_bytes
 
     prog = decode0.decode_user_code(wild_hits_bytes("zip.exe"))
@@ -48,7 +57,7 @@ def test_zip_tone_procedures_decode_as_inline():
     assert inline[0].data == bytes.fromhex("558becb074e643b012e641b000e6415d")
 
 
-def test_ziptest_tone_procedures_decode_as_inline():
+def test_ziptest_port_procedures_decode_as_inline():
     from conftest import wild_hits_bytes
 
     prog = decode0.decode_user_code(wild_hits_bytes("ziptest.exe"))
