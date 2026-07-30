@@ -11,6 +11,16 @@ from tbx.decode0.frames import BoolTerm, IfFrame, LoopFrame
 from tbx.decode0.statement_log import editing
 
 
+def _nopatch(index, statement):
+    """Revise a statement without recording it -- the isolated-test default.
+
+    The walk passes `state.patch`, the same way it passes `state.shift_pending`
+    to the loop lifts. A lift that rebuilds a statement the walk committed owes
+    the log an account of the revision, or `reconcile` reads the replacement as
+    a statement nothing decided.
+    """
+
+
 def _lift_next(ops, k, fors, stmts, addrs, exit_folds) -> int:
     """Consume the NEXT template at ops[k] (a testw at the open FOR's test address):
     testw [step+2],8000h; 74 +3; e9 NEG; FLD lim; FCOMP v; fstsw; <73 BODY>; e9 EXIT;
@@ -107,7 +117,7 @@ def _lift_next(ops, k, fors, stmts, addrs, exit_folds) -> int:
         return i
 
 
-def _lift_var_step_next(ops, k, fors, stmts, addrs) -> int:
+def _lift_var_step_next(ops, k, fors, stmts, addrs, patch=_nopatch) -> int:
     """Consume the computed (variable) STEP FOR's NEXT template at ops[k]
     (an orax_self at the open FOR's test address): the increment `v = v +
     step` was already lifted as the preceding Assign -- fold it in, exactly
@@ -198,7 +208,13 @@ def _lift_var_step_next(ops, k, fors, stmts, addrs) -> int:
         del stmts[-1], addrs[-1]
 
         old = stmts[f.idx]
-        stmts[f.idx] = ir.For(old.var, old.init, ir.Lit(asc_lim), old.step)
+        revised = ir.For(old.var, old.init, ir.Lit(asc_lim), old.step)
+        # Before the list edit: `state.patch` reads the statement it is
+        # replacing out of the list, so assigning first would have it record
+        # the new node as superseding itself. The second assignment is
+        # idempotent there, and is what does the work under `_nopatch`.
+        patch(f.idx, revised)
+        stmts[f.idx] = revised
 
         stmts.append(ir.NextStmt(var))
         addrs.append(a)
@@ -900,7 +916,7 @@ def _rewrite_exit_goto(statement, exit_addr, exit_stmt):
     return statement
 
 
-def _apply_exit_folds(stmts, addrs, exit_folds):
+def _apply_exit_folds(stmts, addrs, exit_folds, patch=_nopatch):
     """EXIT FOR/LOOP/SUB/DEF folds: rewrite the early-exit GOTO to the
     loop/proc exit, then fold `IF c THEN <skip>` + EXIT into `IF negate(c) THEN EXIT`.
     """
@@ -932,7 +948,18 @@ def _apply_exit_folds(stmts, addrs, exit_folds):
                     )
                 )
                 if in_for:
-                    stmts[i] = _rewrite_exit_goto(s, exit_addr, exit_stmt)
+                    rewritten = _rewrite_exit_goto(s, exit_addr, exit_stmt)
+                    if rewritten is not s:
+                        # Only the whole-statement case is a revision the log
+                        # can carry: a top-level GOTO the walk committed
+                        # becoming the EXIT it always was. When the rewrite
+                        # happens INSIDE a body the statement replaced is a
+                        # fold product, which was assembled rather than
+                        # committed and so has no event to revise. `patch`
+                        # comes before the list edit as in `_lift_next`.
+                        if isinstance(s, ir.Goto):
+                            patch(i, rewritten)
+                        stmts[i] = rewritten
             i = 0
             while i + 1 < len(stmts):
                 if (

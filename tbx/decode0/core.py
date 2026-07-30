@@ -1646,7 +1646,7 @@ def _finalize(state: DecodeState, addr) -> Program:
     with editing(state.output.stmts, "finalize"):
         img, lyt, c, out = (state.image, state.layout_state,
                             state.control, state.output)
-        out.stmts[:] = _resolve_calls(
+        resolved = _resolve_calls(
             out.stmts,
             c.proc_names,
             c.proc_params,
@@ -1657,6 +1657,32 @@ def _finalize(state: DecodeState, addr) -> Program:
             c.proc_str_offs,
             out.stmt_addr,
         )
+        # Retyping a call REBUILDS the statement (frozen nodes), and a rebuilt
+        # node carries none of the original's identity, so the event that
+        # committed it no longer refers to anything in the list. Assigning the
+        # whole slice hid that: the edit log stayed lossless while `reconcile`
+        # read every rebuilt statement as `synthesized`, which is the report
+        # reserved for a statement that reached the program with no decision
+        # behind it. Record each as the revision it is instead. The pass is
+        # strictly 1:1 -- it retypes statements, never adds or drops one --
+        # which is what lets position stand for identity here.
+        if len(resolved) != len(out.stmts):
+            raise ValueError(
+                f"_resolve_calls changed the statement count "
+                f"({len(out.stmts)} -> {len(resolved)})"
+            )
+        for index, (before, after) in enumerate(zip(list(out.stmts), resolved)):
+            if before is after:
+                continue
+            if out.event_log is not None and out.event_log.committed(before):
+                state.patch(index, after)
+            else:
+                # A container the walk ASSEMBLED rather than decoded -- a
+                # SubDef, whose body statements each have their own event
+                # while the container has none. There is no commit to revise,
+                # and retyping it does not change that; it stays accounted for
+                # the way every assembled statement is.
+                out.stmts[index] = after
         # Error-trap line table, probed early -- before DATA/dims/COMMON/TRON
         # synthesis below mutates out.addrs -- so a codeless DATA statement
         # with no READ/RESTORE anywhere to trigger its recovery (wild
@@ -1752,10 +1778,14 @@ def _finalize(state: DecodeState, addr) -> Program:
                     # materialize-and-back-jcc shape as `LOOP WHILE cond`, but
                     # has no codeless DO line-table entry (t1_iftailerr; wild
                     # vhfprop.exe). The condition polarity is already identical.
-                    out.stmts[loop_idx] = ir.IfGoto(loop_s.cond, ("addr", host))
+                    # Recorded as a revision of the LOOP that was committed
+                    # here, not as a fresh statement: the decision is "that
+                    # loop was really a tail-test IF", and the log should say
+                    # so rather than leave the replacement unaccounted for.
+                    state.patch(loop_idx, ir.IfGoto(loop_s.cond, ("addr", host)))
                     drop.add(do_idx)
                     continue
-                out.stmts[loop_idx] = ir.Goto(("addr", host))
+                state.patch(loop_idx, ir.Goto(("addr", host)))
                 drop.add(do_idx)
             if drop:
                 keep = [i for i in range(len(out.stmts)) if i not in drop]
@@ -2054,7 +2084,7 @@ def _finalize(state: DecodeState, addr) -> Program:
                 ]
         # EXIT FOR/LOOP folds (Task 3.1): rewrite the early-exit GOTO to the loop
         # exit, then fold `IF c THEN <skip>` + EXIT into `IF negate(c) THEN EXIT`.
-        _apply_exit_folds(out.stmts, out.addrs, c.exit_folds)
+        _apply_exit_folds(out.stmts, out.addrs, c.exit_folds, patch=state.patch)
         out.stmts[:], out.addrs[:] = _fold_if(
             out.stmts,
             out.addrs,
@@ -4295,7 +4325,7 @@ def _decode_user_code(
             assert c.proc_frame is not None  # proc_ret only closes an open SUB body
             state.flush_pending()
             _apply_exit_folds(
-                out.stmts, out.addrs, c.exit_folds
+                out.stmts, out.addrs, c.exit_folds, patch=state.patch
             )  # EXIT SUB fold (Task 3.5), body-local
             c.exit_folds.clear()
             # Multi-line IF blocks inside the body, the same fold the top level
@@ -4531,7 +4561,7 @@ def _decode_user_code(
             c.proc_names[c.fn_frame.entry] = name
             if c.fn_frame.block:  # multi-line DEF FN ... END DEF
                 _apply_exit_folds(
-                    out.stmts, out.addrs, c.exit_folds
+                    out.stmts, out.addrs, c.exit_folds, patch=state.patch
                 )  # EXIT DEF fold (body-local)
                 c.exit_folds.clear()
                 # Multi-line IF blocks inside the body -- the SAME fold
@@ -4822,8 +4852,11 @@ def _decode_user_code(
                 if c.fors and c.fors[-1].v == c.pend_arg:
                     f = c.fors[-1]
                     old = out.stmts[f.idx]
-                    out.stmts[f.idx] = ir.For(
-                        old.var, old.init, old.limit, ir.Lit(-1)
+                    # The FOR's real step is only known at the NEXT, so this
+                    # revises what the header committed -- the case `patch`
+                    # was written for.
+                    state.patch(
+                        f.idx, ir.For(old.var, old.init, old.limit, ir.Lit(-1))
                     )
                     f.step = -1
                 else:
@@ -4898,7 +4931,7 @@ def _decode_user_code(
             and c.fors[-1].var_step
         ):
             state.seek(_lift_var_step_next(
-                img.ops, c.k, c.fors, out.stmts, out.addrs
+                img.ops, c.k, c.fors, out.stmts, out.addrs, patch=state.patch
             ))
             c.cur = None
             continue

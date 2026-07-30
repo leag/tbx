@@ -1,0 +1,8 @@
+10 CALL SUB1
+20 END
+30 SUB SUB1
+  LOCAL V0%()
+  DIM V0%(3)
+  V0%(1) = 7
+  PRINT V0%(1)
+END SUB

@@ -239,6 +239,22 @@ class EventLog:
         self.events.append(event)
         return event
 
+    def committed(self, statement: Any) -> bool:
+        """Whether some event in the log put ``statement`` in the program.
+
+        The question `supersede` asks before it will revise anything, exposed
+        for a caller that has to decide. Not everything in the statement list
+        was committed: a SUB body is ASSEMBLED at its procedure's return from
+        statements already accounted for, so the container itself has no event
+        of its own, and a pass that retypes one has nothing to revise. Matched
+        by identity, exactly as `supersede` matches.
+        """
+        return any(
+            (event.kind == "statement" and event.payload is statement)
+            or (event.kind == "patch" and event.payload.statement is statement)
+            for event in self.events
+        )
+
     def supersede(self, previous: Any, statement: Any) -> DecodedEvent:
         """Record that ``previous`` was revised into ``statement``.
 
@@ -390,6 +406,11 @@ def _nested_statements(value: Any) -> set:
                 try:
                     found.add(item)
                 except TypeError:
+                    # Deliberate, and the one swallow in the decoder: an
+                    # unhashable payload cannot be looked up here, so it is
+                    # skipped and the caller reports it as rewritten. See this
+                    # function's docstring -- it is a conservative answer about
+                    # bookkeeping, never a decode that guessed.
                     pass
             for f in fields(item):
                 visit(getattr(item, f.name), False)
