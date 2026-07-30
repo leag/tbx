@@ -228,6 +228,13 @@ class DefType:
 
 
 @dataclass(frozen=True)
+class MetaStmt:
+    """Codeless compiler directive that occupies a statement position."""
+
+    text: str
+
+
+@dataclass(frozen=True)
 class Print:
     """PRINT [#n,] item[; item...][;] -- item vectors (console: string BE / numeric BB;
     file: string C0 / numeric BD after [0060]=n), flush (B8/BA) only without a trailing

@@ -21,6 +21,6 @@
 210 PRINT "line 18"
 220 PRINT "line 19"
 230 PRINT "line 20"
-240 LOOP UNTIL A$ = CHR$(13) OR A$ = CHR$(27)
+240 LOOP UNTIL (A$ = CHR$(13)) OR (A$ = CHR$(27))
 250 PRINT "done"
 260 END

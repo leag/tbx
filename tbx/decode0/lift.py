@@ -529,7 +529,26 @@ def _lift_bool_do_tail(ops, k, pend_cmp, pb, stmts, addrs, put, shift=_noshift):
                 return None
             kind = "WHILE" if back_jcc[2] == 0x74 else "UNTIL"
         r2 = ir.RelOp(_JCC_RELOP_TRUE[m_jcc[2]], *pend_cmp)
-        cond = ir.LogOp(pb.op, pb.r1, r2)
+        # The string-relational loop-tail materialization is the
+        # parenthesized-term spelling: `LOOP UNTIL (s$ = ...) OR (s$ = ...)`.
+        # Dropping those groups makes TB normalize the saved boolean through
+        # XOR/CMP instead of reloading it for OR AX,AX. Numeric compound loop
+        # conditions use this same outer template without parentheses, so the
+        # operand type is the discriminator (t1_boolloopuntil/t1_booluntil;
+        # wild tbd73 TBW73.INC:727).
+        string_terms = all(
+            isinstance(term, ir.RelOp)
+            and (
+                getattr(term.lhs, "ty", None) == "STR"
+                or getattr(term.rhs, "ty", None) == "STR"
+            )
+            for term in (pb.r1, r2)
+        )
+        cond = ir.LogOp(
+            pb.op,
+            ir.Group(pb.r1) if string_terms else pb.r1,
+            ir.Group(r2) if string_terms else r2,
+        )
         idx = addrs.index(back)  # splice `DO` before the body start
         stmts.insert(idx, ir.Do(None))
         addrs.insert(idx, None)
@@ -841,7 +860,9 @@ def _fold_body_ifgotos(body, end_addr, stmt_addr=None):
             ):
                 tail = _fold_body_ifgotos(body[j + 1 :], end_addr, stmt_addr)
                 c = b.cond
-                new_node = ir.IfInline(ir.RelOp(_NEGATE_REL[c.op], c.lhs, c.rhs), tail)
+                new_node = ir.IfInline(
+                    ir.RelOp(_NEGATE_REL[c.op], c.lhs, c.rhs), tail
+                )
                 if stmt_addr is not None:
                     a = stmt_addr.get(id(b))
                     if a is not None:

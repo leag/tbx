@@ -653,8 +653,12 @@ def test_decode_t1_boolloopuntil():
             "UNTIL",
             ir.LogOp(
                 "OR",
-                ir.RelOp("=", ir.Var("A$"), ir.Call("CHR$", (ir.Lit(13),))),
-                ir.RelOp("=", ir.Var("A$"), ir.Call("CHR$", (ir.Lit(27),))),
+                ir.Group(
+                    ir.RelOp("=", ir.Var("A$"), ir.Call("CHR$", (ir.Lit(13),)))
+                ),
+                ir.Group(
+                    ir.RelOp("=", ir.Var("A$"), ir.Call("CHR$", (ir.Lit(27),)))
+                ),
             ),
         ), stem
 

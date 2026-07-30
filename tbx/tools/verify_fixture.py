@@ -34,7 +34,9 @@ def verify(stem: str) -> str:
         return f"skip: Options toggles {decode0.toggle_names(toggles)}"
     src = emit0.emit(prog)
     dialect = "1.0" if stem.startswith("v10_") else "1.1"
-    with tempfile.NamedTemporaryFile("w", suffix=".bas", delete=False) as f:
+    with tempfile.NamedTemporaryFile(
+        "w", suffix=".bas", encoding="latin-1", delete=False
+    ) as f:
         f.write(src)
         bas = f.name
     try:

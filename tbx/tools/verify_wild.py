@@ -77,7 +77,9 @@ def verify(name: str) -> str:
     if match < BUILD_MATCH_FLOOR:
         return f"skip: different Turbo Basic build ({match}% runtime match)"
 
-    with tempfile.NamedTemporaryFile("w", suffix=".bas", delete=False) as f:
+    with tempfile.NamedTemporaryFile(
+        "w", suffix=".bas", encoding="latin-1", delete=False
+    ) as f:
         f.write(emit0.emit(prog))
         bas = f.name  # closed before the compiler reads it off disk
     try:

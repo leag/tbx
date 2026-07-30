@@ -78,6 +78,7 @@ from tbx.ir.stmt_nodes import (
     GetGfx,
     Incr,
     Inline,
+    MetaStmt,
     Input,
     InputFile,
     Ioctl,
@@ -335,6 +336,8 @@ def _us_decl(s) -> str | None:
         return f"OPTION BASE {s.n}"
     if isinstance(s, DefType):
         return "DEFSNG A-Z"
+    if isinstance(s, MetaStmt):
+        return s.text
     if isinstance(s, Erase):
         return f"ERASE {s.name}"
     if isinstance(s, Shared):

@@ -152,9 +152,43 @@ def test_the_pass_reproduces_a_wild_program_the_corpus_cannot_speak_for():
     folds = _eager_folds(prog)
     selects = _walk_selects(prog)
 
-    assert (len(folds), len(selects)) == (43, 13), "fixture drifted"
+    assert (len(folds), len(selects)) == (56, 13), "fixture drifted"
     assert sum(s in produced for s in folds) >= 38
     assert sum(s in built for s in selects) >= 12
+
+
+def test_tbd73_segment_boundary_and_grouping_survive_synthesis():
+    """Codeless declarations must not move executable-layout evidence."""
+    from conftest import wild_hits_bytes
+
+    from tbx import emit0
+
+    prog = decode0.decode_user_code(wild_hits_bytes("tbd73.exe"))
+
+    # The authored $SEGMENT precedes the first INLINE SUB. Recording the
+    # transition as a walk-time list length placed it after SUB3 once four
+    # static DIMs and COMMON were reconstructed.
+    first_sub = next(i for i, stmt in enumerate(prog) if isinstance(stmt, ir.SubDef))
+    assert prog.metas == ((first_sub, "$SEGMENT"),)
+
+    # The original AX/CX/DI shuttle preserves the completed left sum as an
+    # explicitly grouped value. Minimal parenthesization recompiles through a
+    # different register template.
+    src = emit0.emit(prog)
+    assert "(((Q% - P%) \\ 2) + P%) - (LEN(U$) \\ 2)" in src
+    assert (
+        "V7%(E%) + V8%(E%) \\ 2 - (LEN(X$(AD%)) \\ 2)" in src
+    )
+    # A by-ref numeric parameter tested by OR AX,AX is source-level bare
+    # truthiness. Normalizing its false-skip to `= 0` recompiles as XOR/CMP
+    # and shifts the pool.
+    assert "IF I% THEN CALL SUB6" in src
+    assert "IF I% = 0 THEN" not in src
+    assert "IF NOT AU% THEN" in src
+    assert "IF NOT CL% THEN" in src
+    assert "IF NOT CM% THEN" in src
+    assert "IF NOT CO% THEN" in src
+    assert "IF NOT AU% = 0 THEN" not in src
 
 
 def _walk_selects(prog):

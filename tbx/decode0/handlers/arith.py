@@ -1259,12 +1259,13 @@ def int_bitwise_bx(state: DecodeState, op, addr, kind) -> bool:
             and isinstance(m.bx, ir.BinOp)
             and _PREC[m.bx.op] <= _PREC["+"]
         ):
-            # `NEG AX; ADD AX,BX` with a grouped BX is TB's source-order
-            # template for `grouped_left - (computed_right)`, not a leading
-            # negative addend.  Keeping it as `-right + left` recompiles with
-            # array accesses on the wrong side of the register staging (the
-            # repeated centering expressions in tbd73's Makevmenu/Makehmenu).
-            m.ax = ir.BinOp("-", ir.Group(m.bx), ir.Group(m.ax.operand))
+            # `NEG AX; ADD AX,BX` is TB's source-order template for
+            # `left - (computed_right)`, not a leading negative addend.  The
+            # completed BX value does *not* imply an explicitly grouped left:
+            # tbd73's authored centering expression is
+            # `wcol(idx) + (wcols(idx) \ 2) - (LEN(...) \ 2)`.  Grouping the
+            # whole sum changes the compiler's register shuffle.
+            m.ax = ir.BinOp("-", m.bx, ir.Group(m.ax.operand))
         elif kind == "andaxbx" and e.direct_bool_gate:
             # An ungrouped outer logical AND evaluates its short-circuiting
             # left group first and preserves it through BX/CX while AX computes
@@ -1300,8 +1301,17 @@ def int_bitwise_bx(state: DecodeState, op, addr, kind) -> bool:
             left = m.ax
             if (
                 isinstance(left, ir.BinOp)
-                and not isinstance(m.bx, ir.BinOp)
-                and _PREC[left.op] > _PREC[comb]
+                and (
+                    # A computed RHS forces the final subtraction through
+                    # AX/BX.  When the left-hand sum survives the compiler's
+                    # CX/DI shuttle as one value, that is the explicit
+                    # `((a \ 2) + b) - (c \ 2)` spelling; dropping the outer
+                    # group changes the evaluation template (tbd73 Titlecenter).
+                    kind == "subaxbx"
+                    and left.op == "+"
+                    or not isinstance(m.bx, ir.BinOp)
+                    and _PREC[left.op] > _PREC[comb]
+                )
             ):
                 left = ir.Group(left)
             right = _rgrp(comb, m.bx)

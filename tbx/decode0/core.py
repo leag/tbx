@@ -1019,6 +1019,44 @@ def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, in
                 other_a |= set(oars)
         names = [v for v in vs if v in other_v]
         names += [a + "()" for a in ars if a in other_a]
+        # An explicit SHARED declaration can be the only evidence for the
+        # allocation order of scalars used by just this SUB: the declaration
+        # itself is codeless, while first executable use may be in the opposite
+        # order.  Adjacent private DGROUP slots form an evidenced declaration
+        # band; list that band from high to low because TB allocates SHARED
+        # scalar names in reverse declaration order (wild tbd73.exe:
+        # `SHARED i,barpos`, whose first executable use is barpos).
+        private = [
+            v
+            for v in vs
+            if names
+            and v not in other_v
+            and v.startswith("V")
+            and not v.endswith("$")
+        ]
+        private_by_disp = sorted(private, key=lambda v: state.vdisp(ir.Var(v)))
+        bands: list[list[str]] = []
+        for v in private_by_disp:
+            d = state.vdisp(ir.Var(v))
+            if bands:
+                prev = bands[-1][-1]
+                pd = state.vdisp(ir.Var(prev))
+                width = state.layout_state.lay["scalars"].get(pd)
+                if width is not None and d == pd + width:
+                    bands[-1].append(v)
+                    continue
+            bands.append([v])
+        inferred_bands = [band for band in bands if len(band) >= 2]
+        for band in inferred_bands:
+            names.extend(reversed(band))
+        if inferred_bands:
+            scalar_names = [n for n in names if not n.endswith("()")]
+            array_names = [n for n in names if n.endswith("()")]
+            names = sorted(
+                dict.fromkeys(scalar_names),
+                key=lambda n: int(n[1:].rstrip("%&#!$"), 16),
+                reverse=True,
+            ) + list(dict.fromkeys(array_names))
         sub_local_arrays.update({a: i for a in ars if a not in other_a})
         if names:
             shared_subs[i] = ir.Shared(tuple(names))
@@ -1777,14 +1815,6 @@ def _finalize(state: DecodeState, addr) -> Program:
                 data_orphan_lines = []  # consumed -- DATA recovery below won't fire
         for offset, declaration in enumerate(dims):
             state.reconstruct(ins + offset, declaration)
-        if dims:
-            # `$SEGMENT` positions are recorded while scanning executable code;
-            # recovered static DIMs are codeless and inserted afterwards.  Rebase
-            # every following meta index so the directive remains before the same
-            # scanned statement (tbd73's four leading DIMs).
-            out.seg_metas = [
-                i + len(dims) if i >= ins else i for i in out.seg_metas
-            ]
         # DATA is codeless: re-emit as a block at the very top. Recover the pool
         # when the program consumes it (a READ/RESTORE) so a string-literal pool
         # frame is never misread as DATA -- OR when the error-trap line table
@@ -2058,11 +2088,25 @@ def _finalize(state: DecodeState, addr) -> Program:
             # DIMmed before it is named -- TB compiles the two orders two bytes
             # apart, and only DIM-then-COMMON reproduces the input.
             at = 0
-            if common_arrs:
+            if common_arrs and out.seg_metas:
+                # COMMON may textually follow an initialization block even
+                # though it owns storage used by that earlier code.  With a
+                # following $SEGMENT, putting the codeless declaration just
+                # before the first procedure preserves the initialized COMMON
+                # array descriptors; hoisting it ahead of the DIMs zeroes
+                # their recorded bounds (wild tbd73.exe).
+                at = next(
+                    (
+                        i
+                        for i, s in enumerate(out.stmts)
+                        if isinstance(s, (ir.SubDef, ir.DefFn))
+                    ),
+                    len(out.stmts),
+                )
+            elif common_arrs:
                 while at < len(out.stmts) and isinstance(out.stmts[at], ir.Dim):
                     at += 1
             state.reconstruct(at, ir.Common(names))
-            out.seg_metas = [i + 1 if i >= at else i for i in out.seg_metas]
         # $EVENT regions: when trapping is in play the compiler emits a CC
         # poll hook before EVERY statement; $EVENT OFF..ON suppresses them
         # for a run of statements (witnessed t1_evreg), or everywhere when OFF
@@ -2103,6 +2147,71 @@ def _finalize(state: DecodeState, addr) -> Program:
         canonical = canonical_rename(
             _resolve_targets(out.stmts, out.addrs, out.stmt_addr)
         )
+
+        # Turbo Basic compile-time `%name` constants leave their values in the
+        # pool even when every executable DIM operation contains the folded
+        # literal.  This large COMMON-array initialization shape carries two
+        # such constants in the original pool: the repeated ordinary bound and
+        # the single large storage bound. Reintroducing them also preserves the
+        # pool order; the third, non-constant bound remains literal.
+        dim_constants = {30: "%MW", 8000: "%MB"}
+
+        def restore_dim_constants(node):
+            if isinstance(node, tuple):
+                mapped = tuple(restore_dim_constants(v) for v in node)
+                if any(
+                    isinstance(v, ir.Dim)
+                    and any(
+                        isinstance(b, ir.Var) and b.name == "%MW"
+                        for b in v.bounds
+                    )
+                    for v in mapped
+                ):
+                    return (
+                        ir.MetaStmt("%MW = 30"),
+                        ir.MetaStmt("%MB = 8000"),
+                        *mapped,
+                    )
+                return mapped
+            if isinstance(node, list):
+                return [restore_dim_constants(v) for v in node]
+            if isinstance(node, ir.Dim) and len(node.also) >= 9:
+                values = [
+                    b.value
+                    for _, bounds in ((node.name, node.bounds), *node.also)
+                    for b in bounds
+                    if isinstance(b, ir.Lit)
+                ]
+                if values.count(30) >= 5 and 8000 in values:
+                    def rb(bounds):
+                        return tuple(
+                            ir.Var(dim_constants[b.value])
+                            if isinstance(b, ir.Lit) and b.value in dim_constants
+                            else b
+                            for b in bounds
+                        )
+
+                    return replace(
+                        node,
+                        bounds=rb(node.bounds),
+                        also=tuple((n, rb(b)) for n, b in node.also),
+                    )
+            if not is_dataclass(node):
+                return node
+            changes = {}
+            for f in fields(node):
+                value = getattr(node, f.name)
+                if isinstance(value, (tuple, list)):
+                    mapped = restore_dim_constants(value)
+                    if mapped != value:
+                        changes[f.name] = mapped
+                elif is_dataclass(value):
+                    mapped = restore_dim_constants(value)
+                    if mapped != value:
+                        changes[f.name] = mapped
+            return replace(node, **changes) if changes else node
+
+        canonical = [restore_dim_constants(s) for s in canonical]
         prog = Program(canonical)
         prog.control_graph = graph
         # The event log is what the decoder committed, addresses unresolved, before
@@ -2118,9 +2227,34 @@ def _finalize(state: DecodeState, addr) -> Program:
             else ()
         )
         prog.fold_regions = tuple(c.fold_plan or ())
+        # A segment transition is recorded by its executable target, not by the
+        # current statement-list length.  The latter is unstable: procedures
+        # are discovered after the main body and codeless DIM/COMMON declarations
+        # are synthesized during finalization.  Resolve the physical boundary
+        # only now, against the finished address list, so `$SEGMENT` stays before
+        # the first statement in the new segment (wild tbd73.exe).
+        seg_metas = []
+        proc_addrs = {name: address for address, name in c.proc_names.items()}
+        for target in out.seg_metas:
+            candidates = []
+            for i, (statement, statement_addr) in enumerate(
+                zip(out.stmts, out.addrs)
+            ):
+                address = (
+                    statement_addr
+                    if statement_addr is not None
+                    else proc_addrs.get(getattr(statement, "name", None))
+                )
+                if address is not None and address >= target:
+                    candidates.append((address, i))
+            if not candidates:
+                raise ValueError(
+                    f"$SEGMENT target {target:#x} has no following statement"
+                )
+            seg_metas.append(min(candidates)[1])
         prog.metas = (
             tuple((0, m) for m in out.metas)
-            + tuple((i, "$SEGMENT") for i in out.seg_metas)
+            + tuple((i, "$SEGMENT") for i in seg_metas)
             + tuple(ev_metas)
         )
         prog.toggles = out.toggles
@@ -2563,6 +2697,24 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             and img.ops[c.k + 2][1] == "jmp"
             and nxt[3] == img.ops[c.k + 2][0] + 3
         ):
+            retry = img.ops[c.k + 2][2]
+            if retry < addr and retry in out.addrs:
+                # Bare-value tail test with the mirror polarity: the jcc
+                # exits and the following JMP retries the body. This is
+                # `DO ... LOOP UNTIL value` for JNZ (WHILE for JZ), not a
+                # head-tested loop at the current address. The compound
+                # sibling is `_lift_bool_do_tail`'s trailing-jmp branch.
+                kind = "UNTIL" if nxt[2] == 0x75 else "WHILE"
+                idx = out.addrs.index(retry)
+                with editing(out.stmts, "fold_loop_header"):
+                    out.stmts.insert(idx, ir.Do(None))
+                out.addrs.insert(idx, None)
+                state.shift_pending(idx, 1)
+                state.put(ir.Loop(kind, m.ax), c.cur)
+                m.ax = None
+                c.cur = None
+                state.advance(3)
+                return
             test_addr = _find_jmps_back(img.ops, img.ops[c.k + 2][2])
             if test_addr is not None:
                 # HEAD-test DO/WHILE loop whose condition is a bare value
@@ -2636,6 +2788,40 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 e.direct_bool_gate = True
                 state.advance(3)
                 return
+            prev_load = img.ops[c.k - 1] if c.k else None
+            if (
+                prev_load is not None
+                and prev_load[1] == "notax"
+                and c.k >= 2
+            ):
+                # `IF NOT value THEN` keeps the same direct flag-test shape:
+                # load; NOT; OR AX,AX.  Look through the unary op when
+                # deciding whether AX came from an evidenced source scalar.
+                # Materializing `NOT value = 0` adds a compare sequence
+                # instead (wild tbd73.exe's four menu/demo loops).
+                prev_load = img.ops[c.k - 2]
+            if prev_load is not None and (
+                prev_load[1] == "far_movax_si"
+                or (
+                    prev_load[1] == "movax_m"
+                    and prev_load[2] in l.lay["scalars"]
+                    and prev_load[2] not in l.lay["guessed"]
+                )
+            ):
+                # No loop or compound-boolean consumer claimed the template:
+                # a by-ref parameter or evidenced DGROUP scalar was tested
+                # directly by an inline `IF value THEN ...` false-skip. Keep AX live for the jcc
+                # handler's direct-flag path. Turning it into
+                # pend_cmp(value, 0) emits XOR/CMP instead of the witnessed
+                # OR self-test and shifts the constant pool
+                # (probe_bareif_negate; tbd73's repeated `IF flon THEN ...`).
+                #
+                # The slot evidence is load-bearing: a compiler-generated
+                # materialized boolean is also reloaded and OR-tested here,
+                # but from a BP/guessed DGROUP temp; treating that as source
+                # truthiness loses its loop-tail statement address.
+                state.advance()
+                return
         e.pend_cmp = (m.ax, ir.Lit(0))
         m.ax = None
     elif kind == "fstsw":
@@ -2649,7 +2835,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             and m.ax is not None
             and cc in (0x74, 0x75)
             and prev is not None
-            and prev[1] in ("andaxbx", "oraxbx", "xoraxbx")
+            and prev[1] in ("orax", "andaxbx", "oraxbx", "xoraxbx")
             and nxt is not None
             and nxt[1] in ("jmp", "jmpf")
             and t == nxt[0] + (5 if nxt[1] == "jmpf" else 3)
@@ -2716,7 +2902,11 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 cond=(
                     _logical_condition(m.ax) or m.ax
                     if e.direct_bool_logical
-                    else m.ax if e.direct_bool_gate else ir.Group(m.ax)
+                    else (
+                        m.ax
+                        if e.direct_bool_gate or prev[1] == "orax"
+                        else ir.Group(m.ax)
+                    )
                 ),
             )
             c.ifs.append(IfFrame(seq=event.seq))
@@ -3603,7 +3793,7 @@ def _decode_user_code(
             # selector is a compiler allocation detail, not a discriminator:
             # t1_segment happens to receive 2, while TBWINDOW/tbd73's authored
             # `$SEGMENT` receives 30 after its larger pre-directive region.
-            out.seg_metas.append(len(out.stmts))
+            out.seg_metas.append(op[2])
             state.advance()
             continue
         # --- procedure-region segmentation ---
@@ -4036,6 +4226,21 @@ def _decode_user_code(
             for d in c.proc_frame.hidden_locals:
                 if locs is not None:
                     locs.pop(d, None)  # var-STEP FOR temps (see above): never
+            if locs:
+                refs, _ = _region_refs(body)
+                if (
+                    len(locs) <= 2
+                    and all(n.endswith("%") for n in locs.values())
+                    and set(locs.values()).isdisjoint(refs)
+                ):
+                    # A FOR over a DGROUP scalar still reserves a small
+                    # BP-relative limit/step frame. Those cells are touched by
+                    # the loop template but disappear completely from the
+                    # lifted body; exposing them as `LOCAL` makes the compiler
+                    # reserve a second copy (wild tbd73.exe's Fdemo/Tdemo and
+                    # Wdemo procedures). A declared scalar LOCAL survives as
+                    # a body reference in every witnessed authored fixture.
+                    locs.clear()
             if locs:  # declared LOCALs, just deferred out of the dict
                 # until every reference to them was resolved. The
                 # zero-fill always runs right after proc_enter, regardless
