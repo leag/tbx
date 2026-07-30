@@ -937,28 +937,42 @@ def _apply_exit_folds(stmts, addrs, exit_folds, patch=_nopatch):
         for exit_stmt, skip_addr, exit_addr in exit_folds:
             for_start = None
             for_stop = None
-            if isinstance(exit_stmt, ir.ExitFor):
+            opener, closer = {
+                ir.ExitFor: (ir.For, ir.NextStmt),
+                ir.ExitLoop: (ir.Do, ir.Loop),
+            }.get(type(exit_stmt), (None, None))
+            if opener is not None:
                 for_stop = next(
                     (i for i, a in enumerate(addrs) if a == skip_addr), None
                 )
                 if for_stop is not None:
                     depth = 0
                     for j in range(for_stop - 1, -1, -1):
-                        if isinstance(stmts[j], ir.NextStmt):
+                        if isinstance(stmts[j], closer):
                             depth += 1
-                        elif isinstance(stmts[j], ir.For):
+                        elif isinstance(stmts[j], opener):
                             if depth == 0:
                                 for_start = j
                                 break
                             depth -= 1
             for i, s in enumerate(stmts):
+                # An EXIT only rewrites a jump made from INSIDE the loop it
+                # leaves. Without that, every jump to the address just past a
+                # loop becomes an EXIT, including one that is not leaving it at
+                # all: a following loop whose body starts exactly there is
+                # entered by a BACKWARD jump to the same address, and rewriting
+                # its back-edge as `EXIT LOOP` both loses that loop and strands
+                # the EXIT outside any loop, which TB rejects with `Error 435:
+                # DO loop expected` (wild cal.exe, whose loop at 0x14d10 has
+                # two long-jmp back-edges to loop 2's own exit address).
+                # `ExitFor` was already gated this way; the span is found the
+                # same way for both, and an EXIT whose loop cannot be located
+                # keeps the old ungated behaviour.
                 in_for = (
-                    not isinstance(exit_stmt, ir.ExitFor)
-                    or (
-                        for_start is not None
-                        and for_stop is not None
-                        and for_start < i < for_stop
-                    )
+                    opener is None
+                    or for_start is None
+                    or for_stop is None
+                    or for_start < i < for_stop
                 )
                 if in_for:
                     rewritten = _rewrite_exit_goto(s, exit_addr, exit_stmt)

@@ -50,10 +50,10 @@ EDITOR_FILE_LIMIT = 65536
 _OVER_LONG = {
     "banker.exe": 98245,
     "horses.exe": 67425,
-    "inv87.exe": 88339,
-    "invoice.exe": 88339,
-    "state.exe": 69187,
-    "state87.exe": 69187,
+    "inv87.exe": 88341,
+    "invoice.exe": 88341,
+    "state.exe": 69191,
+    "state87.exe": 69191,
 }
 _SPLITTABLE = set(_OVER_LONG) - {"horses.exe"}
 
