@@ -22,11 +22,36 @@ Run on `release/0.1.0` at `b79a756`:
 Fixture corpus: 442 compiled `.bas` fixtures, 1034 op goldens, 1015 emitted-source
 goldens. Authored probes: 28 under `wild/probes/`.
 
-Branches: `release/0.1.0` is **18 commits ahead of `main`, 0 behind** — clean and
-fast-forwardable; it was never merged. `experimental/c0` (the native C backend)
-is 1 ahead. `experimental/deferred-fold`, `propagate_call_types` and
-`refactor-direct-bool-ir` are all **0 ahead of `main`** — already merged, safe to
-delete. Version stays `0.1.0`; **nothing was tagged or released.**
+### Branch state — read this before trusting any local ref
+
+**Local `main` and `origin/main` have diverged, and the local one is the real
+work.** Local `main` is **73 commits ahead of `origin/main` and 1 behind.** The
+one commit it lacks is `e56d981`, GitHub's own merge commit for PR #5; the same
+content was merged locally as `2ff4189` instead, so the two histories describe
+the same work through different merge commits and will not fast-forward onto each
+other.
+
+The practical consequence: **anyone cloning this repository from GitHub gets a
+`main` that is 73 commits behind this working copy.** Measure against
+`origin/main`, not `main`, when reasoning about what the world can see.
+
+| Branch | vs local `main` | vs `origin/main` |
+|---|---|---|
+| `release/0.1.0` | ahead 20, behind 0 | ahead 93, behind 1 |
+| `experimental/c0` (native C backend) | ahead 1, behind 83 | ahead 1, behind 11 |
+| `experimental/deferred-fold` | ahead 0, behind 32 | **ahead 41**, behind 1 |
+| `propagate_call_types` | ahead 0, behind 84 | ahead 0, behind 12 |
+| `refactor-direct-bool-ir` | ahead 0, behind 83 | ahead 0, behind 11 |
+
+So: `propagate_call_types` and `refactor-direct-bool-ir` are fully merged by both
+measures and are safe to delete. `experimental/deferred-fold` is **not** — it is
+merged into local `main` only, and carries 41 commits `origin/main` has never
+seen. `experimental/c0` holds one unique commit and is the branch `CLAUDE.md`
+designates for the native C backend; keep it.
+
+PR [#6](https://github.com/leag/tbx/pull/6) is open for `release/0.1.0` → `main`
+and carries the 93 commits above. Version stays `0.1.0`; **nothing was tagged or
+released, and merging that PR would not be a release.**
 
 ## What "correct" means here, and where that runs out
 
