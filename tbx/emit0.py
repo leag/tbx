@@ -251,6 +251,26 @@ def _name_fn_results(body, name):
             out.append(b)
     return out
 
+
+def _join_line(group, txt, col: int) -> str:
+    """Render one original line's statements, `:`-joined -- except after an IfGoto.
+
+    Turbo Basic ends a line at an `IF ... THEN <line>`: `IF c THEN 80: S` is
+    Error 431, End-of-line expected. So a statement the line table puts on the
+    same line as an IfGoto can only have come from that IF's ELSE clause -- the
+    fall-through path, which is exactly what IfGoto leaves to the next
+    statement. Everything after the ELSE belongs to it, so the tail is joined
+    the same way, nesting a further IfGoto inside the clause it falls into.
+    Witnessed on wild vhfprop.exe (28 such lines).
+    """
+    head = txt(group[0], col)
+    if len(group) == 1:
+        return head
+    tail = _join_line(group[1:], txt, col)
+    sep = " ELSE " if isinstance(group[0], ir.IfGoto) else ": "
+    return f"{head}{sep}{tail}"
+
+
 def emit(stmts, *, compact: bool = False) -> str:
     # Jump targets INSIDE a SUB/DEF FN body (ir.BodyLine): physical line k of
     # the block at top-level index i is numbered line[i] + k, and only that
@@ -437,7 +457,9 @@ def emit(stmts, *, compact: bool = False) -> str:
         j = i + 1
         while j < len(stmts) and line[j] == line[i]:
             j += 1
-        text = ": ".join(txt(stmts[k], len(f"{line[i]} ")) for k in range(i, j))
+        text = _join_line(
+            [stmts[k] for k in range(i, j)], txt, len(f"{line[i]} ")
+        )
         if i in traced:
             body = text.split("\n")
             nt = partial.get(i, len(body))  # physical lines that carry a hook

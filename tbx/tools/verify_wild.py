@@ -27,6 +27,7 @@ each recorded delta was measured against.
 
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 import sys
@@ -57,6 +58,26 @@ def build_match(data: bytes) -> int:
     ref = reference_runtime()
     region = data[0x100 : 0x100 + len(ref)]
     return 100 * sum(a == b for a, b in zip(ref, region)) // len(ref)
+
+
+def distance(a: bytes, b: bytes) -> tuple[int, float]:
+    """Alignment-aware distance: (bytes that must be inserted/deleted, % identical).
+
+    A positionwise count is misleading here. One extra byte early in an EXE
+    shifts every later byte, so a build that differs by a single 48-byte record
+    scores as 43641 bytes wrong (wild cal.exe) when it is 98% the same file.
+    Aligning first separates "a few localized edits" from "genuinely different
+    code", which is the only distinction worth acting on.
+
+    Costs about a minute per 90k program -- small against the v86 compile that
+    produced `b`, and only paid on a mismatch.
+    """
+    match = sum(
+        block.size
+        for block in difflib.SequenceMatcher(None, a, b, autojunk=False)
+        .get_matching_blocks()
+    )
+    return (len(a) - match) + (len(b) - match), 200 * match / (len(a) + len(b))
 
 
 def load_manifest() -> list[dict]:
@@ -92,8 +113,11 @@ def verify(name: str) -> str:
         return f"COMPILE-FAIL: {str(exc).splitlines()[-1][:80]}"
     if out == data:
         return "exact"
-    differ = sum(a != b for a, b in zip(out, data)) + abs(len(out) - len(data))
-    return f"{differ} bytes differ, delta {len(out) - len(data):+d}"
+    edit, pct = distance(data, out)
+    return (
+        f"{edit} bytes off ({pct:.2f}% identical), "
+        f"delta {len(out) - len(data):+d}"
+    )
 
 
 def main(argv: list[str]) -> int:

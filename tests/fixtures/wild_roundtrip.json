@@ -33,8 +33,8 @@
    "source_bytes": 98245,
    "toggles": "K",
    "build_match": 5,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
+   "roundtrip": "code-or-metadata",
+   "delta": 5776,
    "excluded": "IDE Options toggles K: the oracle compiles with defaults"
   },
   {
@@ -129,8 +129,8 @@
    "source_bytes": 67425,
    "toggles": "K",
    "build_match": 5,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
+   "roundtrip": "code-or-metadata",
+   "delta": 5152,
    "excluded": "IDE Options toggles K: the oracle compiles with defaults"
   },
   {
@@ -213,8 +213,8 @@
    "source_bytes": 29571,
    "toggles": "K",
    "build_match": 4,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
+   "roundtrip": "code-or-metadata",
+   "delta": 5904,
    "excluded": "IDE Options toggles K: the oracle compiles with defaults"
   },
   {
@@ -249,8 +249,8 @@
    "source_bytes": 3320,
    "toggles": "K",
    "build_match": 5,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
+   "roundtrip": "code-or-metadata",
+   "delta": 5744,
    "excluded": "IDE Options toggles K: the oracle compiles with defaults"
   },
   {
@@ -297,8 +297,8 @@
    "source_bytes": 1313,
    "toggles": "KBOS",
    "build_match": 97,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
+   "roundtrip": "code-or-metadata",
+   "delta": -246,
    "excluded": "IDE Options toggles KBOS: the oracle compiles with defaults"
   },
   {
@@ -309,8 +309,8 @@
    "source_bytes": 17593,
    "toggles": "K",
    "build_match": 99,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
+   "roundtrip": "code-or-metadata",
+   "delta": 64,
    "excluded": "IDE Options toggles K: the oracle compiles with defaults"
   },
   {
@@ -321,8 +321,8 @@
    "source_bytes": 6315,
    "toggles": "",
    "build_match": 5,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
+   "roundtrip": "code-or-metadata",
+   "delta": 6000,
    "excluded": "compiled by a different Turbo Basic build (5% runtime match): its bytes can never be ours"
   },
   {
@@ -402,11 +402,11 @@
    "sha256": "28391f33a233b07d6cf1266312429e1b1a3600a60fe0508fc022616c9bc11bd2",
    "bytes": 67011,
    "statements": 715,
-   "source_bytes": 26806,
+   "source_bytes": 26918,
    "toggles": "K",
    "build_match": 99,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
+   "roundtrip": "filler-plus-metadata",
+   "delta": 0,
    "excluded": "IDE Options toggles K: the oracle compiles with defaults"
   },
   {
