@@ -61,23 +61,30 @@ def build_match(data: bytes) -> int:
 
 
 def distance(a: bytes, b: bytes) -> tuple[int, float]:
-    """Alignment-aware distance: (bytes that must be inserted/deleted, % identical).
+    """(bytes of the original the rebuild did not reproduce, % identical).
 
     A positionwise count is misleading here. One extra byte early in an EXE
-    shifts every later byte, so a build that differs by a single 48-byte record
+    shifts every later byte, so a build differing by a single 48-byte record
     scores as 43641 bytes wrong (wild cal.exe) when it is 98% the same file.
     Aligning first separates "a few localized edits" from "genuinely different
     code", which is the only distinction worth acting on.
+
+    Counted against `a` alone. Summing the unmatched bytes on BOTH sides would
+    charge a plain substitution twice -- once as a delete, once as an insert --
+    and read worse than the naive count on same-length programs (onelab87.exe:
+    76 against a naive 39). The size delta already reports what `b` has that
+    `a` does not.
 
     Costs about a minute per 90k program -- small against the v86 compile that
     produced `b`, and only paid on a mismatch.
     """
     match = sum(
         block.size
-        for block in difflib.SequenceMatcher(None, a, b, autojunk=False)
-        .get_matching_blocks()
+        for block in difflib.SequenceMatcher(
+            None, a, b, autojunk=False
+        ).get_matching_blocks()
     )
-    return (len(a) - match) + (len(b) - match), 200 * match / (len(a) + len(b))
+    return len(a) - match, 200 * match / (len(a) + len(b))
 
 
 def load_manifest() -> list[dict]:
