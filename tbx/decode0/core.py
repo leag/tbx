@@ -3376,10 +3376,12 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 out.stmts
                 and isinstance(out.stmts[-1], ir.IfGoto)
                 and isinstance(out.stmts[-1].target, tuple)
+                and c.k + 1 < len(img.ops)
+                and out.stmts[-1].target[1] == img.ops[c.k + 1][0]
             ):
                 c.exit_folds.append((exit_stmt, out.stmts[-1].target[1], t))
                 state.put(ir.Goto(("addr", t)), c.cur)
-            else:  # bare (unconditional) EXIT SUB/DEF (witnessed t1_subgsb)
+            else:  # bare/unconditionally reached EXIT SUB/DEF (t1_subgsb)
                 state.put(exit_stmt, c.cur)
         else:
             state.put(ir.Goto(("addr", t)), c.cur)
@@ -3398,6 +3400,20 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         c.cur = None
     elif kind == "jmps":
         nxt = img.ops[c.k + 1] if c.k + 1 < len(img.ops) else None
+        # A codeless DO header can share its address with an IF that is still
+        # queued for folding. Inserting the header at that IF's pre-fold list
+        # position lets the later fold absorb or displace it, especially when
+        # an external GOTO also names the shared body address (horses.exe,
+        # three adjacent LOOP back-edges at 0x848a; t1_dogotobody). Fold the
+        # closed region first, then place DO against the address-owning folded
+        # statement.
+        target_frames = [
+            fr
+            for fr in c.pending_ifs
+            if state.frame_event(fr).address == op[2]
+        ]
+        if op[2] < addr and target_frames:
+            state.drain_folds(min(fr.start for fr in target_frames))
         # Asked once, against the list as the queued folds will leave it: every
         # branch below means the folded list, which is what the eager fold
         # handed them for free.
@@ -3424,9 +3440,15 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             state.shift_pending(idx, 1)
             state.put(ir.Loop(None), c.cur)
             # EXIT LOOP: a GOTO past the LOOP (to nxt) is an exit; the conditional that
-            # skips it jumps to the LOOP back-edge (this jmps' addr). Fold at epilogue.
-            if nxt is not None:
-                c.exit_folds.append((ir.ExitLoop(), addr, nxt[0]))
+            # skips it jumps to the LOOP back-edge (this jmps' addr). Fold at
+            # epilogue. Nested codeless DOs end in consecutive jmps; all their
+            # EXIT LOOP branches land after the whole closer run, not on the
+            # next unreachable closer (horses.exe/t1_dogotobody).
+            exit_k = c.k + 1
+            while exit_k < len(img.ops) and img.ops[exit_k][1] == "jmps":
+                exit_k += 1
+            if exit_k < len(img.ops):
+                c.exit_folds.append((ir.ExitLoop(), addr, img.ops[exit_k][0]))
         elif op[2] < addr and (
             op[2] in out.stmt_addr.values() or op[2] in state.folded_away
         ):

@@ -611,6 +611,8 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             state.advance(3)  # consume movax FFFF, jcc, incax
             return True
     if kind == "movax" and e.pend_cmp and op[2] == 0xFFFF:
+        frame = c.proc_frame if c.proc_frame is not None else c.fn_frame
+        scope_start = state.frame_start(frame.seq) if frame is not None else 0
         if e.pend_bool is not None:  # compound-IF tail
             nk = _lift_bool_do_tail(
                 i.ops,
@@ -621,6 +623,7 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
                 o.addrs,
                 state.put,
                 shift=state.shift_pending,
+                scope_start=scope_start,
             )  # compound DO..LOOP WHILE/UNTIL?
             if nk is not None:
                 state.seek(nk)
@@ -696,6 +699,7 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             state.put,
             c.cur,
             shift=state.shift_pending,
+            scope_start=scope_start,
         )  # DO..LOOP WHILE/UNTIL
         if nk is not None:
             state.seek(nk)

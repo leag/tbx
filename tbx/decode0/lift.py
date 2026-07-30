@@ -455,7 +455,20 @@ def _noshift(index, delta):
     """
 
 
-def _lift_do_tail(ops, k, pend_cmp, stmts, addrs, put, cur, shift=_noshift):
+def _loop_back_in_scope(back, stmts, addrs, scope_start) -> bool:
+    """A loop back-edge cannot cross a completed procedure declaration."""
+    if back not in addrs:
+        return False
+    index = addrs.index(back)
+    return index >= scope_start and not any(
+        isinstance(statement, (ir.SubDef, ir.DefFn))
+        for statement in stmts[index:]
+    )
+
+
+def _lift_do_tail(
+    ops, k, pend_cmp, stmts, addrs, put, cur, shift=_noshift, scope_start=0
+):
     """Tail-test DO ... LOOP WHILE/UNTIL: mov ax,0FFFF; Jcc(R) +1; inc ax; or ax,ax;
     <cc BACKWARD> where BACKWARD targets an earlier statement (the loop body start) --
     no trailing e9 (the conditional jcc IS the back-edge). Splice a bare `DO` before
@@ -470,7 +483,11 @@ def _lift_do_tail(ops, k, pend_cmp, stmts, addrs, put, cur, shift=_noshift):
         if m_jcc[3] != ops[k + 3][0] or m_jcc[2] not in _JCC_RELOP_TRUE:
             return None
         back = back_jcc[3]
-        if back_jcc[2] not in (0x74, 0x75) or back >= ops[k][0] or back not in addrs:
+        if (
+            back_jcc[2] not in (0x74, 0x75)
+            or back >= ops[k][0]
+            or not _loop_back_in_scope(back, stmts, addrs, scope_start)
+        ):
             return None
         cond = ir.RelOp(_JCC_RELOP_TRUE[m_jcc[2]], *pend_cmp)
         kind = "WHILE" if back_jcc[2] == 0x75 else "UNTIL"
@@ -482,7 +499,9 @@ def _lift_do_tail(ops, k, pend_cmp, stmts, addrs, put, cur, shift=_noshift):
         return k + len(want)
 
 
-def _lift_bool_do_tail(ops, k, pend_cmp, pb, stmts, addrs, put, shift=_noshift):
+def _lift_bool_do_tail(
+    ops, k, pend_cmp, pb, stmts, addrs, put, shift=_noshift, scope_start=0
+):
     """Compound-IF second term ending in a tail-test DO ... LOOP WHILE/UNTIL:
     same shape as `_lift_do_tail` (materialization's Jcc IS the backward
     loop edge, no trailing jmp), except the combining op at index 3 is the
@@ -518,14 +537,20 @@ def _lift_bool_do_tail(ops, k, pend_cmp, pb, stmts, addrs, put, shift=_noshift):
         if back_jcc[2] not in (0x74, 0x75):
             return None
         back, nk = back_jcc[3], k + len(want)
-        if back < ops[k][0] and back in addrs:  # the jcc itself retries
+        if (
+            back < ops[k][0]
+            and _loop_back_in_scope(back, stmts, addrs, scope_start)
+        ):  # the jcc itself retries
             kind = "WHILE" if back_jcc[2] == 0x75 else "UNTIL"
         else:  # ...or the trailing jmp does, with the jcc as the exit
             jmp = ops[nk] if nk < len(ops) else None
             if jmp is None or jmp[1] != "jmp" or back != jmp[0] + 3:
                 return None
             back, nk = jmp[2], nk + 1
-            if back >= ops[k][0] or back not in addrs:
+            if (
+                back >= ops[k][0]
+                or not _loop_back_in_scope(back, stmts, addrs, scope_start)
+            ):
                 return None
             kind = "WHILE" if back_jcc[2] == 0x74 else "UNTIL"
         r2 = ir.RelOp(_JCC_RELOP_TRUE[m_jcc[2]], *pend_cmp)
@@ -1015,10 +1040,22 @@ def _fold_if(
                 ):
                     end_idx = None  # targeted interior: not an ELSE region
                 if end_idx is not None:
+                    # Codeless DO headers inserted at the merge address belong
+                    # before the statement the ELSE skip targets, not inside
+                    # the preceding ELSE arm. They have no address of their
+                    # own and can stack when nested loops share one body
+                    # address (horses.exe/t1_dogotobody).
+                    else_stop = end_idx
+                    while (
+                        else_stop > i + 1
+                        and isinstance(stmts[else_stop - 1], ir.Do)
+                        and addrs[else_stop - 1] is None
+                    ):
+                        else_stop -= 1
                     arms = [(s.cond, _fold_body(s.body[:-1], targets, stmt_addr, block_ifs))]
                     else_s, _ = _fold_if(
-                        stmts[i + 1 : end_idx],
-                        addrs[i + 1 : end_idx],
+                        stmts[i + 1 : else_stop],
+                        addrs[i + 1 : else_stop],
                         bound=end,
                         targets=targets,
                         stmt_addr=stmt_addr,
@@ -1031,6 +1068,8 @@ def _fold_if(
                         else_body = tuple(else_s) if else_s else None
                     out_s.append(ir.IfBlock(tuple(arms), else_body))
                     out_a.append(a)
+                    out_s.extend(stmts[else_stop:end_idx])
+                    out_a.extend(addrs[else_stop:end_idx])
                     i = end_idx
                     continue
             if (

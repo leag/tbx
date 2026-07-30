@@ -651,6 +651,34 @@ def test_decode_t1_gotobeforefor():
     assert isinstance(prog[6], ir.NextStmt)
 
 
+def test_decode_t1_dogotobody():
+    # Three consecutive LOOP back-edges in a SUB: one targets an IF body and
+    # two nested codeless DO headers share the second IF's address. External
+    # GOTOs target both bodies. Loop headers must be placed after the target
+    # IFs fold, and every closer's exit is the first non-LOOP operation.
+    # Wild horses.exe at 0x848a/0x848c/0x848e.
+    from tbx import decode0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_dogotobody.exe"))
+    sub = next(s for s in prog if isinstance(s, ir.SubDef))
+
+    assert [type(s) for s in sub.body] == [
+        ir.IfGoto,
+        ir.IfGoto,
+        ir.ExitSub,
+        ir.Do,
+        ir.IfBlock,
+        ir.Loop,
+        ir.Do,
+        ir.Do,
+        ir.IfBlock,
+        ir.Loop,
+        ir.Loop,
+    ]
+    assert isinstance(sub.body[0].target, ir.BodyLine)
+    assert isinstance(sub.body[1].target, ir.BodyLine)
+
+
 def test_decode_t1_ifthenfncall():
     # A jump target landing on a statement whose FIRST op is `push bp` -- the
     # DEF FN call-staging opener (`push bp; sub sp,N; mov bp,sp`). Third opener

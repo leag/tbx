@@ -49,7 +49,7 @@ EDITOR_FILE_LIMIT = 65536
 #: root and include files below.
 _OVER_LONG = {
     "banker.exe": 98245,
-    "horses.exe": 67486,
+    "horses.exe": 67425,
     "inv87.exe": 88369,
     "invoice.exe": 88369,
     "state.exe": 69192,

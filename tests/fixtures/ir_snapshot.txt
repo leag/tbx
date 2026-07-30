@@ -3701,6 +3701,13 @@ Loop(kind=None, cond=None)
 Print(items=(Var(name='A$'),), newline=True, file=None, commas=None)
 End()
 
+## t1_dogotobody
+Assign(target=Var(name='A%'), value=Lit(value=1))
+Assign(target=Var(name='B%'), value=Lit(value=1))
+SubDef(name='SUB1', params=(), body=(IfGoto(cond=RelOp(op='=', lhs=Var(name='C%'), rhs=Lit(value=1)), target=BodyLine(stmt=2, phys=5)), IfGoto(cond=RelOp(op='=', lhs=Var(name='C%'), rhs=Lit(value=2)), target=BodyLine(stmt=2, phys=15)), ExitSub(), Do(kind=None, cond=None), IfBlock(arms=((RelOp(op='=', lhs=Var(name='D%'), rhs=Lit(value=1)), (Assign(target=Var(name='D%'), value=Lit(value=5)), Goto(target=BodyLine(stmt=2, phys=15)))),), else_body=(Assign(target=Var(name='D%'), value=BinOp(op='-', lhs=Var(name='D%'), rhs=Lit(value=1))), ExitLoop())), Loop(kind=None, cond=None), Do(kind=None, cond=None), Do(kind=None, cond=None), IfBlock(arms=((RelOp(op='=', lhs=Var(name='D%'), rhs=Lit(value=5)), (Assign(target=Var(name='D%'), value=Lit(value=1)), Goto(target=BodyLine(stmt=2, phys=23)))),), else_body=(Assign(target=Var(name='D%'), value=BinOp(op='+', lhs=Var(name='D%'), rhs=Lit(value=1))), Goto(target=BodyLine(stmt=2, phys=23)))), Loop(kind=None, cond=None), Loop(kind=None, cond=None)))
+CallStmt(name='SUB1', args=())
+End()
+
 ## t1_draw
 Draw(cmd=StrLit(value='U10R10D10L10'))
 End()

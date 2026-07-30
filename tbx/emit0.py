@@ -332,6 +332,8 @@ def emit(stmts, *, compact: bool = False) -> str:
             return f"ON {s.event}{n} GOSUB {L(s.target)}"
         if isinstance(s, ir.Resume) and s.target is not None:
             return f"RESUME {L(s.target)}"
+        if isinstance(s, ir.Restore) and s.target is not None:
+            return f"RESTORE {L(s.target)}"
         if isinstance(s, ir.While):
             return f"WHILE {ir.unparse_cond(s.cond)}"
         if isinstance(s, ir.IfInline):
