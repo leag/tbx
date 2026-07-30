@@ -214,7 +214,7 @@ def cargs(state: DecodeState, op, addr, kind) -> bool:
                 # type disagrees with the callee's parameter, which TB rejects:
                 # `Error 475: Parameter mismatch`. Take the same deferral as a
                 # slot layout never placed at all (below) and let the callee's
-                # own signature type it (fixture t1_byrefonlyarg; wild
+                # own signature type it (fixture t1_argrefonly; wild
                 # tbd73.exe, whose CALLs pass several such variables).
                 raise ValueError("by-ref slot width was guessed, not evidenced")
             c.pend_args.append(state.loc(op[2]))

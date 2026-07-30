@@ -2095,7 +2095,8 @@ def _finalize(state: DecodeState, addr) -> Program:
             # its LAST hook is TROFF's and the statement paired with it is
             # really the first post-region statement (witnessed t1_tron2). A run
             # reaching program end keeps the hook line on its last statement
-            # (TROFF-before-END is byte-invisible, t1_tron_troff).
+            # (TROFF-before-END is byte-invisible: t1_tron2r2's source closes
+            # `TROFF: END` and its verified golden emits the END alone).
             hooked = [i for i, a in enumerate(out.addrs) if a in out.trace_tbl]
             if not hooked:
                 raise ValueError("trace hooks present but paired with no statement")

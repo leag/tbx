@@ -956,7 +956,9 @@ def _fold_body_ifgotos(body, end_addr, stmt_addr=None):
     `THEN <line>`); when such an IfGoto inside an inline-IF body targets the
     body's own END address, the source was a nested inline IF whose skip-jcc
     merged with the enclosing close -- negate the compare and nest the tail
-    (witnessed t1_nestif / wild vhfprop.exe). Other targets are left alone
+    (witnessed by wild vhfprop.exe ONLY -- no corpus fixture reaches this
+    negation, so it has no byte-exact calibration behind it; authoring one is
+    an open task). Other targets are left alone
     (fail-loud at recompile until a fixture witnesses them). The negated
     IfInline occupies the CONSUMED IfGoto's own position, so its recorded
     address (if any) transfers to the new node -- otherwise a GOTO targeting

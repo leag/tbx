@@ -1,0 +1,114 @@
+{
+ "schema_version": 1,
+ "document_type": "tbx.ruled_out_hypotheses",
+ "updated": "2026-07-30",
+ "note": "Decoder-side hypotheses that were investigated and REJECTED: a cause that turned out not to be the cause, or a fix that was written, tested and reverted. The sibling ledger runtime-revision-assessments.json covers the other class, where the answer is a property of the compiler rather than of our code; a pattern that is unwitnessable by our oracle belongs there, not here. The point of both is that a rejected hypothesis is expensive evidence and is otherwise lost the moment a session ends -- PLAN.md records them chronologically, and this is the deduplicated index into it. An entry earns its place by saying what was tried, what killed it, and what a re-attempt should do instead.",
+ "dispositions": [
+  "refuted",
+  "reverted",
+  "superseded",
+  "not-a-defect"
+ ],
+ "hypotheses": [
+  {
+   "id": "RO-ELSE-DO-SKIP",
+   "title": "Let the inline-IF guard skip address-less spliced DO headers",
+   "disposition": "reverted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/cal.exe",
+    "wild/hits/cal87.exe"
+   ],
+   "signatures": [
+    "Error 435: DO loop expected"
+   ],
+   "hypothesis": "cal.exe emits a LOOP inside an inline IF because _fold_if's inline guard -- the leg that unfolds an IfInline containing a loop closer back into a guard plus body -- declines when the next statement is a codeless DO spliced in for the FOLLOWING loop, which carries no address. Teaching it to skip such headers, as the ELSE leg already does with else_stop, should let the unfold fire.",
+   "negative_evidence": [
+    "The premise is correct and was confirmed by instrumentation: of cal's four IfInline-with-loop-closer regions, i=383/2032/2097 have a real next address and unfold, and only i=2007 has next_type=Do next_addr=None.",
+    "The fix nonetheless produces WRONG source. cal's bytes run input at 0x14c61, fstp BD at 0x14c6b, then the compare at 0x14c72, but the emitted result becomes `IF BD >= 1 AND BD <= 80 THEN <exit>` FOLLOWED BY the INPUT -- testing a stale BD before reading it.",
+    "It also fixes nothing: recompiling the result through the oracle fails with the SAME Error 435 at the same line.",
+    "The full suite passed and a block-nesting sweep called cal clean, so neither signal detected either failure."
+   ],
+   "instead": "The defect is upstream of the guard. The recorded IfInline is addressed 0x14c72 but its body holds the Input from 0x14c61 -- a statement preceding its own address -- so the region absorbed the statement before it. Instrument whatever builds that region rather than repairing its consumers.",
+   "source": "session 2026-07-30; commit ed78a4f is the unrelated fix that shipped from the same session"
+  },
+  {
+   "id": "RO-CAL-SOURCE-SHAPES",
+   "title": "Six candidate source spellings for cal.exe's failing loop",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/cal.exe"
+   ],
+   "signatures": [
+    "Error 435: DO loop expected"
+   ],
+   "hypothesis": "cal's mis-folded loop can be reproduced by authoring the source shape it appears to have come from, giving a minimal fixture to calibrate against.",
+   "negative_evidence": [
+    "All six compiled clean through the oracle and DECODE CORRECTLY today, so none reproduces the defect: compound integer tail test (LOOP WHILE A% < 1 OR A% > 80); the same with a single-precision variable; IF ... THEN BEEP ELSE EXIT LOOP inside a DO; IF ... AND ... THEN EXIT LOOP followed by BEEP; two such loops adjacent, the second starting at the first's exit address; and an external IF x THEN <line> jumping into the loop body."
+   ],
+   "instead": "Stop guessing at the source. The trigger is not any of the obvious spellings, and four rounds of guessing cost more than the instrumentation that finally localized it.",
+   "source": "session 2026-07-30"
+  },
+  {
+   "id": "RO-GRID-ALIGN16",
+   "title": "Static-array grid offset is align16(scalar band width)",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/schart.exe"
+   ],
+   "signatures": [
+    "DGROUP layout not solvable from the calibrated rules"
+   ],
+   "hypothesis": "The array grid starts align16(scalar_band_width) past VAR_BASE, fitting three probe widths (38, 48, 62 -> 48, 48, 64) exactly.",
+   "negative_evidence": [
+    "All three data points shared n_static=10, so the fit was unconstrained. An n=11 probe gave 32/48/32 bytes at n=9/10/11 -- not a function of width at all.",
+    "The real mechanism is not a formula: the compiler stamps a self-describing ordinary-scalars band descriptor into the init image, and the record run floats past variable-length init data by up to 720 bytes."
+   ],
+   "instead": "When an offset refuses to fit a formula, hexdump the region and look for self-describing structure before curve-fitting. Two sessions of fitting were answered by one 30-line hexdump.",
+   "source": "PLAN.md Part III, gaps 27 and 28"
+  },
+  {
+   "id": "RO-OR-VALUE-FOLDED",
+   "title": "OR-flavored value-folded groups, (A AND B) OR (C OR D)",
+   "disposition": "reverted",
+   "confidence": "medium",
+   "files": [
+    "wild/hits/grdscn.exe",
+    "wild/hits/kinder.exe",
+    "wild/hits/kinetics.exe",
+    "wild/hits/wb.exe"
+   ],
+   "signatures": [
+    "materialization template mismatch"
+   ],
+   "hypothesis": "The mixed-precedence compound-IF folder can be extended to the OR-of-groups shape these four files need.",
+   "negative_evidence": [
+    "Tried and reverted within the campaign; no fixture landed and the tree was confirmed clean afterwards.",
+    "A probe named q_orofors3.bas is recorded as reproducing the shape, so the gap is real -- what failed was the fix, not the diagnosis. NOTE the probe itself was never committed to wild/probes, so that evidence cannot currently be re-run and would have to be re-authored."
+   ],
+   "instead": "Re-read PLAN.md:1775 before re-attempting; the entry says why the first attempt was abandoned.",
+   "source": "PLAN.md:1775"
+  },
+  {
+   "id": "RO-LOCAL-FOR-TEMPS",
+   "title": "LOCAL slot reuse across a FOR loop's scratch temps",
+   "disposition": "not-a-defect",
+   "confidence": "high",
+   "files": [
+    "wild/hits/bmaster.exe",
+    "wild/hits/ifi.exe"
+   ],
+   "signatures": [
+    "[bp+6] outside the open LOCAL frame"
+   ],
+   "hypothesis": "The failure is a bad LOCAL frame bound.",
+   "negative_evidence": [
+    "Traced precisely with an instrumented core.py, reverted and never committed: the variable-limit-FOR branch reserves a step/limit word pair that COLLIDES with a declared LOCAL. The frame bound is right; the reservation is what overlaps."
+   ],
+   "instead": "Fix the reservation, not the bound.",
+   "source": "PLAN.md:1817"
+  }
+ ]
+}

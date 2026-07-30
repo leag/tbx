@@ -153,7 +153,9 @@ code, because several were **tried and reverted** and the entry says why.
   `rsltest`.
 - **OR-flavored value-folded groups** (`PLAN.md:1775`). `(A AND B) OR (C OR D)`.
   **Tried and reverted** this campaign, no fixture landed, tree confirmed clean.
-  An oracle probe (`q_orofors3.bas`) does reproduce the shape. Affects `grdscn`,
+  An oracle probe reproducing the shape is described in that same entry, but it
+  was never committed to `wild/probes/`, so it must be re-authored from the
+  description before the evidence can be re-run. Affects `grdscn`,
   `kinder`, `kinetics`, `wb`.
 - **LOCAL slot reuse across FOR scratch temps** (`PLAN.md:1817`). Traced
   precisely with instrumented `core.py` (reverted, not committed): the
@@ -172,6 +174,10 @@ code, because several were **tried and reverted** and the entry says why.
   incomparable. Paths and diagnostics only, never executable bytes.
 - `gap_reports/runtime-revision-assessments.json` — `RR-*` ledger with
   hypothesis, evidence class, confidence and disposition per assessment.
+- `gap_reports/ruled-out-hypotheses.json` — `RO-*` ledger, the sibling for
+  decoder-side dead ends: a cause that was not the cause, or a fix written and
+  reverted. Read it before re-deriving a diagnosis; several entries exist
+  precisely because the obvious approach was tried and failed.
 - `wild/probes/` — authored probes that compiled, with `.bas` source and a
   recorded first failure.
 - `docs/release-checklist.md` — what a release would have required. Unused; no

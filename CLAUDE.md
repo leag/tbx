@@ -75,6 +75,43 @@ uv run python -m tbx.tools.verify_fixture STEM
 The oracle is used for calibration only, not at runtime. See
 `vendor/turbo_basic_oracle/README.tbx.md` and `docs/release-checklist.md`.
 
+The oracle is also the only acceptance test that counts. A change can pass the
+suite, satisfy a structural check and still emit source that is wrong -- the
+fixture corpus cannot cover a wild shape it has no fixture for, and a checker
+you wrote alongside the fix shares its assumptions. Use those to find
+candidates; believe a byte comparison. When the change touches a *comparable*
+wild program (`excluded: null` in `tests/fixtures/wild_roundtrip.json`), a
+delta is measurable, so measure it before claiming the fix works.
+
+## Baselines
+
+`tests/fixtures/wild_roundtrip.json`, the goldens and `ir_snapshot.txt` are
+baselines: they record what was true when it was last verified.
+
+**Never re-record a baseline to absorb a regression.** If a wild program's
+round trip degrades, the entry is evidence, not an inconvenience -- fix the
+decoder and re-measure, so the recorded delta means the same thing it did
+before. Two changes are legitimate: an intended decoder change, re-measured
+through the oracle and reviewed in the diff like code; and a newly decoding
+program being added. Both leave the file describing reality; absorbing a
+regression leaves it describing nothing.
+
+## Negative results
+
+A hypothesis that was investigated and rejected is expensive evidence, and it
+is lost the moment a session ends unless it is written down. Two ledgers under
+`gap_reports/` hold them, validated by `tests/tbx/test_ledgers.py`:
+
+- `runtime-revision-assessments.json` -- the answer is a property of the
+  compiler or runtime, including patterns this oracle can never witness.
+- `ruled-out-hypotheses.json` -- decoder-side: a cause that was not the cause,
+  or a fix written, tested and reverted. Each entry says what was tried, what
+  killed it, and what to do instead.
+
+Record the dead end before moving on, and reach for the ledgers before
+re-deriving a diagnosis. `PLAN.md` remains the chronological archive; the
+ledgers are the deduplicated index into it.
+
 ## Tests and fixtures
 
 Golden operations, IR snapshots, and emitted source live under
