@@ -49,11 +49,11 @@ EDITOR_FILE_LIMIT = 65536
 #: root and include files below.
 _OVER_LONG = {
     "banker.exe": 98245,
-    "horses.exe": 67442,
-    "inv87.exe": 88283,
-    "invoice.exe": 88283,
-    "state.exe": 68887,
-    "state87.exe": 68887,
+    "horses.exe": 67486,
+    "inv87.exe": 88369,
+    "invoice.exe": 88369,
+    "state.exe": 69192,
+    "state87.exe": 69192,
 }
 _SPLITTABLE = set(_OVER_LONG) - {"horses.exe"}
 
@@ -155,10 +155,12 @@ def test_an_over_long_program_splits_into_compiler_sized_files(name):
     )
 
 
-def test_an_over_long_program_with_scanned_subs_fails_loud():
+def test_an_over_long_program_with_scanned_subs_uses_compact_numbering():
     from conftest import wild_hits_bytes
 
     prog = decode0.decode_user_code(wild_hits_bytes("horses.exe"))
+    bundle = emit0.emit_split(prog, prefix="horses")
 
-    with pytest.raises(ValueError, match="scanned statements"):
-        emit0.emit_split(prog, prefix="horses")
+    assert not bundle.includes
+    assert len(bundle.root.encode("latin-1")) < EDITOR_FILE_LIMIT
+    assert "GOTO " in bundle.root

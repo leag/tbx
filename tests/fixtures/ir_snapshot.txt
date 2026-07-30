@@ -4434,6 +4434,16 @@ Assign(target=Var(name='A'), value=Lit(value=2))
 Assign(target=Var(name='B'), value=Lit(value=3))
 End()
 
+## t1_gotobeforefor
+Assign(target=Var(name='A%'), value=Lit(value=1))
+IfGoto(cond=RelOp(op='<>', lhs=Var(name='A%'), rhs=Lit(value=1)), target=4)
+Assign(target=Var(name='A%'), value=Lit(value=0))
+Goto(target=7)
+For(var=Var(name='B%'), init=Lit(value=1), limit=Lit(value=2), step=Lit(value=1))
+Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)
+NextStmt(var=Var(name='B%'))
+End()
+
 ## t1_gotoerr
 Assign(target=Var(name='A%'), value=Err())
 Assign(target=Var(name='B%'), value=Erl())
@@ -4503,11 +4513,29 @@ Print(items=(StrLit(value='A'),), newline=True, file=None, commas=None)
 Print(items=(StrLit(value='B'),), newline=True, file=None, commas=None)
 End()
 
+## t1_ifgotobody
+Assign(target=Var(name='A%'), value=Lit(value=1))
+IfBlock(arms=((LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='A%'), rhs=Lit(value=1)), rhs=RelOp(op='=', lhs=Var(name='A%'), rhs=Lit(value=2))), (Print(items=(StrLit(value='BEFORE'),), newline=True, file=None, commas=None), IfGoto(cond=RelOp(op='=', lhs=Var(name='A%'), rhs=Lit(value=1)), target=3), Print(items=(StrLit(value='AFTER'),), newline=True, file=None, commas=None))),), else_body=None)
+Print(items=(StrLit(value='OUTSIDE'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_ifin
 Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Input(prompt=None, var=Var(name='B'), comma=False, semi=False)
 IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), body=(Assign(target=Var(name='C'), value=Lit(value=1)), Assign(target=Var(name='D'), value=Lit(value=2))))
 Print(items=(Var(name='C'), Var(name='D')), newline=True, file=None, commas=None)
+End()
+
+## t1_ifloopguard
+Assign(target=Var(name='A%'), value=Lit(value=3))
+Do(kind=None, cond=None)
+Input(prompt=None, var=Var(name='A%'), comma=False, semi=False)
+IfGoto(cond=LogOp(op='AND', lhs=RelOp(op='>=', lhs=Var(name='A%'), rhs=Lit(value=0)), rhs=RelOp(op='<=', lhs=Var(name='A%'), rhs=Lit(value=2))), target=7)
+IfGoto(cond=RelOp(op='=', lhs=Var(name='A%'), rhs=Lit(value=0)), target=9)
+Beep()
+Loop(kind=None, cond=None)
+Print(items=(StrLit(value='OK'),), newline=True, file=None, commas=None)
+End()
 End()
 
 ## t1_iftailarm

@@ -1,0 +1,20 @@
+# t1_gotobeforefor dialect=1.1 start=08700
+08703:movm_imm:294:1
+08709:movax:1
+0870C:cmpax_m:294
+08710:jcc:116:34581
+08712:jmp:34590
+08715:movm_imm:294:0
+0871B:jmp:34621
+0871E:movm_imm:292:1
+08724:jmp:34614
+08727:fild:292
+0872C:rt:187
+0872E:rt:184
+08732:inc_m:292
+08736:cmp_mi8:292:2
+0873B:jcc:126:34599
+0873D:end
+08740:epilogue
+# commits
+08730

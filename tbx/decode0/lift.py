@@ -684,6 +684,11 @@ def _inline_safe(body) -> bool:
     """A THEN/ELSE body renders on one line only if no nested IF precedes the last
     statement (else a trailing statement would bind to the inner IF -- it must block).
 
+    The same restriction applies to `IF condition THEN line`: Turbo Basic
+    requires that line-target form to end the physical line. A following
+    colon statement produces Error 431 rather than belonging to the enclosing
+    IF (wild inv87/invoice, fixture t1_ifgotobody).
+
     A BLOCK-structured statement cannot render inline at all, wherever it sits --
     including last, where the nested-IF rule above would otherwise allow it:
     `IF c THEN SELECT CASE ...` is not valid source, and TB rejects it outright
@@ -699,7 +704,22 @@ def _inline_safe(body) -> bool:
     Fixture t1_ifblockselect."""
     if any(isinstance(b, (ir.SelectCase, ir.IfBlock)) for b in body):
         return False
-    return not any(isinstance(b, (ir.IfInline, ir.IfBlock)) for b in body[:-1])
+    return not any(
+        isinstance(b, (ir.IfInline, ir.IfBlock, ir.IfGoto))
+        for b in body[:-1]
+    )
+
+
+def _negate_cond(cond):
+    """Logical complement used when an IF region was source-level guard flow."""
+    if isinstance(cond, ir.RelOp):
+        return ir.RelOp(_NEGATE_REL[cond.op], cond.lhs, cond.rhs)
+    if isinstance(cond, ir.LogOp):
+        op = "OR" if cond.op == "AND" else "AND"
+        return ir.LogOp(op, _negate_cond(cond.lhs), _negate_cond(cond.rhs))
+    if isinstance(cond, ir.Group):
+        return ir.Group(_negate_cond(cond.inner))
+    raise ValueError(f"cannot negate IF condition {cond!r}")
 
 
 def _body_has_target(body, targets, stmt_addr) -> bool:
@@ -817,8 +837,36 @@ def _apply_exit_folds(stmts, addrs, exit_folds):
     """
     with editing(stmts, "apply_exit_folds"):
         for exit_stmt, skip_addr, exit_addr in exit_folds:
+            for_start = None
+            for_stop = None
+            if isinstance(exit_stmt, ir.ExitFor):
+                for_stop = next(
+                    (i for i, a in enumerate(addrs) if a == skip_addr), None
+                )
+                if for_stop is not None:
+                    depth = 0
+                    for j in range(for_stop - 1, -1, -1):
+                        if isinstance(stmts[j], ir.NextStmt):
+                            depth += 1
+                        elif isinstance(stmts[j], ir.For):
+                            if depth == 0:
+                                for_start = j
+                                break
+                            depth -= 1
             for i, s in enumerate(stmts):
-                if isinstance(s, ir.Goto) and s.target == ("addr", exit_addr):
+                in_for = (
+                    not isinstance(exit_stmt, ir.ExitFor)
+                    or (
+                        for_start is not None
+                        and for_stop is not None
+                        and for_start < i < for_stop
+                    )
+                )
+                if (
+                    in_for
+                    and isinstance(s, ir.Goto)
+                    and s.target == ("addr", exit_addr)
+                ):
                     stmts[i] = exit_stmt
             i = 0
             while i + 1 < len(stmts):
@@ -985,6 +1033,32 @@ def _fold_if(
                     out_a.append(a)
                     i = end_idx
                     continue
+            if (
+                isinstance(s, ir.IfInline)
+                and isinstance(s.cond, (ir.RelOp, ir.LogOp, ir.Group))
+                and i + 1 < len(stmts)
+                and addrs[i + 1] is not None
+                and any(
+                    isinstance(b, (ir.Loop, ir.Wend, ir.NextStmt))
+                    for b in s.body
+                )
+            ):
+                # A loop terminator cannot sit inside an IF block that began
+                # outside its loop: END IF would be required before LOOP. This
+                # byte shape comes from a source-level guard (`IF NOT c THEN
+                # after`) followed by ordinary statements and the terminator,
+                # not from a structured IF body. Preserve that topology by
+                # unfolding the recorded region back into a guard plus body.
+                guard = ir.IfGoto(_negate_cond(s.cond), ("addr", addrs[i + 1]))
+                if a is not None:
+                    stmt_addr.claim(guard, a)
+                out_s.append(guard)
+                out_a.append(a)
+                for body_stmt in s.body:
+                    out_s.append(body_stmt)
+                    out_a.append(stmt_addr.get(id(body_stmt)))
+                i += 1
+                continue
             if isinstance(s, ir.IfInline) and (
                 not _inline_safe(s.body)
                 or _body_has_target(s.body, targets, stmt_addr)

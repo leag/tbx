@@ -54,6 +54,23 @@ def _source_bytes(text: str) -> int:
         raise ValueError("emitted source contains a non-Latin-1 character") from exc
 
 
+def _compact_source_spacing(source: str) -> str:
+    """Remove optional spaces outside string literals.
+
+    Turbo Basic requires indentation for scanned procedure/block bodies, so
+    compact output retains one leading space per nesting level. Spaces around
+    `=` and after list separators are lexical decoration and can be removed.
+    """
+    out = []
+    for line in source.splitlines(keepends=True):
+        parts = re.split(r'("[^"]*")', line)
+        for i in range(0, len(parts), 2):
+            parts[i] = re.sub(r" *= *", "=", parts[i])
+            parts[i] = re.sub(r"([,;]) +", r"\1", parts[i])
+        out.append("".join(parts))
+    return "".join(out)
+
+
 def _all_source_includes(
     source: str, clean: str, root_limit: int, include_limit: int
 ) -> SourceBundle:
@@ -128,7 +145,17 @@ def split_source(
 
 def emit_split(stmts, prefix: str = "TBX", force: bool = False) -> SourceBundle:
     """Render and split only when the 64 KiB editor limit requires it."""
-    return split_source(emit(stmts), prefix=prefix, force=force)
+    source = emit(stmts)
+    if _source_bytes(source) > FILE_LIMIT and any(
+        isinstance(stmt, (ir.SubDef, ir.DefFn)) and (
+            not isinstance(stmt, ir.DefFn) or stmt.is_block
+        )
+        for stmt in stmts
+    ):
+        compact = emit(stmts, compact=True)
+        if _source_bytes(compact) <= FILE_LIMIT:
+            return SourceBundle(compact)
+    return split_source(source, prefix=prefix, force=force)
 
 
 def _split_list_statement(stmt, width: int):
@@ -206,7 +233,7 @@ def _name_fn_results(body, name):
             out.append(b)
     return out
 
-def emit(stmts) -> str:
+def emit(stmts, *, compact: bool = False) -> str:
     # Jump targets INSIDE a SUB/DEF FN body (ir.BodyLine): physical line k of
     # the block at top-level index i is numbered line[i] + k, and only that
     # targeted line is emitted numbered (witnessed t1_subgsb).
@@ -276,7 +303,7 @@ def emit(stmts) -> str:
         out = []
         for b in body:
             for ln in render(b, col + 2).split("\n"):
-                out.append("  " + ln)
+                out.append((" " if compact else "  ") + ln)
         return "\n".join(out)
 
     def txt(s, col=0):
@@ -429,4 +456,5 @@ def emit(stmts) -> str:
         i = j
     if hooks:
         raise ValueError(f"{len(hooks)} trace-hook lines left unconsumed")
-    return "".join(out)
+    source = "".join(out)
+    return _compact_source_spacing(source) if compact else source

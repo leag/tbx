@@ -77,17 +77,19 @@ def verify(name: str) -> str:
     if match < BUILD_MATCH_FLOOR:
         return f"skip: different Turbo Basic build ({match}% runtime match)"
 
-    with tempfile.NamedTemporaryFile(
-        "w", suffix=".bas", encoding="latin-1", delete=False
-    ) as f:
-        f.write(emit0.emit(prog))
-        bas = f.name  # closed before the compiler reads it off disk
     try:
-        out = oracle.compile_bas(bas, dialect="1.1", timeout=1200)
+        with tempfile.TemporaryDirectory(prefix="tbx-wild-") as temp:
+            directory = Path(temp)
+            bundle = emit0.emit_split(prog, prefix=path.stem)
+            bas = directory / f"{path.stem[:8]}.bas"
+            bas.write_text(bundle.root, encoding="latin-1", newline="")
+            for filename, source in bundle.includes:
+                (directory / filename).write_text(
+                    source, encoding="latin-1", newline=""
+                )
+            out = oracle.compile_bas(bas, dialect="1.1", timeout=1200)
     except Exception as exc:  # the harness, not a rejection: report it as such
         return f"COMPILE-FAIL: {str(exc).splitlines()[-1][:80]}"
-    finally:
-        Path(bas).unlink(missing_ok=True)
     if out == data:
         return "exact"
     differ = sum(a != b for a, b in zip(out, data)) + abs(len(out) - len(data))

@@ -139,13 +139,13 @@ def test_the_loop_body_really_did_outgrow_a_short_jmp():
     assert backward_near, "fixture no longer carries a near backward jmp"
 
 
-def test_an_ambiguous_cc75_site_keeps_its_block_if_reading():
-    """The near form must NOT be admitted where an IF reading competes.
+def test_an_ambiguous_cc75_site_keeps_its_guard_reading():
+    """The near form must NOT be admitted where an IF guard reading competes.
 
     state.exe's cursor loop at 0xd9db is the site this was traced on: cc 75,
     retry edge `jmp 0xd9db` at 0xe94c immediately before the exit at 0xe94f.
     Reading it as `DO WHILE AO$ <> CHR$(13)` is not *wrong* -- it recompiles to
-    the same bytes as the block IF -- but it is not more right either, and it
+    the same bytes as the guard -- but it is not more right either, and it
     is not what the corpus is calibrated on. `test_wild_subset` pins the
     statement counts for this program and its three siblings; this names the
     reason those counts are load-bearing, so a future widening has to argue
@@ -158,4 +158,4 @@ def test_an_ambiguous_cc75_site_keeps_its_block_if_reading():
     source = emit0.emit(decode0.decode_user_code(hits.read_bytes()))
 
     assert "DO WHILE AO$ <> CHR$(13)" not in source
-    assert "IF AO$ <> CHR$(13) THEN" in source
+    assert "IF AO$ = CHR$(13) THEN" in source

@@ -591,6 +591,66 @@ def test_decode_t1_ifblockselect():
         assert "THEN SELECT" not in src, stem
 
 
+def test_decode_t1_ifgotobody():
+    # A line-target IF must end its physical line. When one occurs before the
+    # end of an enclosing compound IF's body, spelling the outer IF inline
+    # produces `IF outer THEN ...: IF inner THEN line: trailing`, rejected by
+    # Turbo Basic with Error 431. Wild inv87/invoice at emitted line 4360.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_ifgotobody.exe"))
+
+    assert isinstance(prog[1], ir.IfBlock)
+    assert isinstance(prog[1].arms[0][1][1], ir.IfGoto)
+    assert emit0.emit(prog) == (
+        "10 A% = 1\n"
+        "20 IF A% = 1 OR A% = 2 THEN\n"
+        '  PRINT "BEFORE"\n'
+        "  IF A% = 1 THEN 40\n"
+        '  PRINT "AFTER"\n'
+        "END IF\n"
+        '30 PRINT "OUTSIDE"\n'
+        "40 END\n"
+    )
+
+
+def test_decode_t1_ifloopguard():
+    # A conditional skip whose apparent body reaches LOOP is source-level
+    # guard flow, not a block IF: folding it would put LOOP before END IF and
+    # Turbo Basic rejects that with Error 441. Wild inv87/invoice and state.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_ifloopguard.exe"))
+
+    assert isinstance(prog[3], ir.IfGoto)
+    assert isinstance(prog[6], ir.Loop)
+    assert emit0.emit(prog) == (
+        "10 A% = 3\n"
+        "20 DO\n"
+        "30 INPUT A%\n"
+        "40 IF A% >= 0 AND A% <= 2 THEN 80\n"
+        "50 IF A% = 0 THEN 100\n"
+        "60 BEEP\n"
+        "70 LOOP\n"
+        '80 PRINT "OK"\n'
+        "90 END\n"
+        "100 END\n"
+    )
+
+
+def test_decode_t1_gotobeforefor():
+    # A GOTO to the address after an upcoming NEXT is not EXIT FOR: it lies
+    # before that FOR's header. Exit folding must be scoped to the loop body.
+    # Wild inv87/invoice emitted EXIT FOR before FOR (Error 438).
+    from tbx import decode0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_gotobeforefor.exe"))
+
+    assert isinstance(prog[3], ir.Goto)
+    assert isinstance(prog[4], ir.For)
+    assert isinstance(prog[6], ir.NextStmt)
+
+
 def test_decode_t1_ifthenfncall():
     # A jump target landing on a statement whose FIRST op is `push bp` -- the
     # DEF FN call-staging opener (`push bp; sub sp,N; mov bp,sp`). Third opener

@@ -1,0 +1,8 @@
+10 A% = 1
+20 IF A% <> 1 THEN 50
+30 A% = 0
+40 GOTO 80
+50 FOR B% = 1 TO 2
+60 PRINT B%
+70 NEXT B%
+80 END
