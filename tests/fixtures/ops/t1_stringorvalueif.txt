@@ -1,0 +1,37 @@
+# t1_stringorvalueif dialect=1.1 start=08700
+08703:movsi:320
+08706:rt:156
+08708:movsi:288
+0870B:strassign
+0870D:movsi:288
+08710:rt:156
+08712:movsi:316
+08715:rt:156
+08717:strcmp
+08719:movax:65535
+0871C:jcc:116:34591
+0871E:incax
+0871F:movsi:288
+08722:rt:156
+08724:movsi:320
+08727:rt:156
+08729:strcmp
+0872B:movbxax
+0872D:movax:65535
+08730:jcc:116:34611
+08732:incax
+08733:oraxbx
+08735:jcc:116:34618
+08737:jmp:34630
+0873A:movsi:312
+0873D:rt:156
+0873F:rt:190
+08741:rt:184
+08743:end
+08746:movsi:308
+08749:rt:156
+0874B:rt:190
+0874D:rt:184
+0874F:end
+08752:epilogue
+# commits

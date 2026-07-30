@@ -1,0 +1,23 @@
+# v10_t1_bareifgoto dialect=1.0 start=070B0
+070B3:arg_push_ref:288
+070B8:far_call:28867
+070BD:end
+070C0:jmp:28908
+070C3:proc_enter
+070C6:arg_ref:6
+070C9:far_movax_si
+070CC:orax
+070CE:jcc:116:28883
+070D0:jmp:28895
+070D3:movsi:312
+070D6:rt:156
+070D8:rt:190
+070DA:rt:184
+070DC:jmp:28904
+070DF:movsi:308
+070E2:rt:156
+070E4:rt:190
+070E6:rt:184
+070E8:proc_ret:4
+070EC:epilogue
+# commits

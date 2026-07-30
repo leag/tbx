@@ -1,0 +1,23 @@
+# t1_returngosub dialect=1.1 start=08830
+08833:input:304:16384
+0883A:read_num
+0883D:fstp:288
+08844:call:34899
+08847:movsi:308
+0884A:rt:156
+0884C:rt:190
+0884E:rt:184
+08850:end
+08853:fld1
+08856:fcomp:288
+0885B:fstsw
+0885F:jcc:116:34916
+08861:jmp:34921
+08864:add_sp:2
+08867:jmps:34887
+08869:add_sp:2
+0886C:jmps:34896
+0886E:epilogue
+# commits
+08842
+0885D

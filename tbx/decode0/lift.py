@@ -537,9 +537,13 @@ def _lift_bool_do_tail(
         if back_jcc[2] not in (0x74, 0x75):
             return None
         back, nk = back_jcc[3], k + len(want)
+        empty_body = _same_code_offset(back, pb.start)
         if (
             back < ops[k][0]
-            and _loop_back_in_scope(back, stmts, addrs, scope_start)
+            and (
+                _loop_back_in_scope(back, stmts, addrs, scope_start)
+                or empty_body
+            )
         ):  # the jcc itself retries
             kind = "WHILE" if back_jcc[2] == 0x75 else "UNTIL"
         else:  # ...or the trailing jmp does, with the jcc as the exit
@@ -574,7 +578,11 @@ def _lift_bool_do_tail(
             ir.Group(pb.r1) if string_terms else pb.r1,
             ir.Group(r2) if string_terms else r2,
         )
-        idx = addrs.index(back)  # splice `DO` before the body start
+        # With an empty body the retry edge lands on the condition itself,
+        # which has no committed statement address to splice before.  The
+        # source is still an ordinary `DO : LOOP WHILE/UNTIL ...`; append its
+        # byte-free opener immediately before the LOOP statement.
+        idx = len(stmts) if empty_body else addrs.index(back)
         stmts.insert(idx, ir.Do(None))
         addrs.insert(idx, None)
         shift(idx, 1)

@@ -1371,10 +1371,12 @@ def _scan_pass(
                 ops.append((p, "segjmp", start + seg * 16, seg))
                 p = start + seg * 16
                 continue
-            # Segment-zero calls use the user-code origin; relocated code
-            # segments use the preceding byte as their logical origin (the
-            # same one-byte convention seen in wild far-call targets).
-            target = (start if seg == 0 else start - 1) + off
+            # Far jumps use the user-code origin plus the segment's paragraph
+            # displacement. This is observable directly when a $SEGMENT
+            # handoff names the same segment:
+            # t1_resumefar's segment 2 begins at start+32, and wild wb.exe's
+            # segment 2603 begins at start+2603*16.
+            target = start + seg * 16 + off
             ops.append((p, "jmpf", target, seg, off))
             p += 5
             continue
@@ -1654,6 +1656,7 @@ def _scan_pass(
             if sub == 0xC6:  # SCREEN m[,b][,a][,v]: trailing presence mask
                 # 08 mode / 04 burst / 02 apage / 01 vpage (t1_screenb/p)
                 if p + 3 >= len(exe) or exe[p + 3] not in (
+                    0x02,  # SCREEN ,,apage (t1_screena; wild refund)
                     0x03,  # SCREEN ,,apage,vpage (cleanup/reformat)
                     0x08,
                     0x0C,

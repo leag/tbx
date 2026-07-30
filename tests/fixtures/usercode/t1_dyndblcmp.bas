@@ -1,0 +1,9 @@
+10 A% = 2
+20 DIM V0#(A%)
+30 V0#(1) = 5
+40 V0#(2) = 5
+50 IF V0#(2) = V0#(1) THEN 80
+60 PRINT "NO"
+70 END
+80 PRINT "YES"
+90 END

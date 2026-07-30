@@ -1,0 +1,5 @@
+10 INPUT A$, B$
+20 C% = A$ = B$
+30 IF C% = 0 THEN 50
+40 PRINT "SAME"
+50 END

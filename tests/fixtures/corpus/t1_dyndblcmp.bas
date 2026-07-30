@@ -1,0 +1,9 @@
+10 N% = 2
+20 DIM A#(N%)
+30 A#(1) = 5
+40 A#(2) = 5
+50 IF A#(2) = A#(1) THEN 80
+60 PRINT "NO"
+70 END
+80 PRINT "YES"
+90 END

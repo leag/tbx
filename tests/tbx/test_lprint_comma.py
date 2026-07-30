@@ -13,7 +13,7 @@ from tbx.ir import unparse_stmt
         # advanced past the SUB-local-array allocation-order guard, which was
         # a conservative guess in the wrong direction (t1_sublocafter)
         ("prtguide.exe", "jump target 0x80bc is not a statement start"),
-        ("rs.exe", "numeric INPUT read without FSTP at 0xbb1a"),
+        ("rs.exe", "jump target 0xcee7 is not a statement start"),
     ],
 )
 def test_wild_lprint_comma_advances_to_later_gap(stem, next_gap):

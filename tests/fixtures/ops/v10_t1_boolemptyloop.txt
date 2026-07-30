@@ -1,0 +1,27 @@
+# v10_t1_boolemptyloop dialect=1.0 start=071E0
+071E3:input:304:16384
+071EA:read_num
+071ED:fstp64:288
+071F4:fild:310
+071F9:fcomp64:288
+071FE:fstsw
+07200:movax:65535
+07203:jcc:119:29190
+07205:incax
+07206:orax
+0720A:jcc:116:29199
+0720C:jmp:29217
+0720F:fild:308
+07214:fcomp64:288
+07219:fstsw
+0721B:movax:65535
+0721E:jcc:114:29217
+07220:incax
+07221:orax
+07225:jcc:117:29172
+07227:end
+0722A:epilogue
+# commits
+071F2
+07208
+07223

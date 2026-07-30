@@ -1,0 +1,7 @@
+10 A$ = "M"
+20 N = 0
+30 IF (N = 0 AND RIGHT$(A$, 1) = CHR$(77)) THEN 60
+40 PRINT "NO"
+50 END
+60 PRINT "YES"
+70 END

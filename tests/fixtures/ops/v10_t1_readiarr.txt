@@ -1,0 +1,18 @@
+# v10_t1_readiarr dialect=1.0 start=07110
+07113:movm_imm:346:1
+07119:jmp:28987
+0711C:data_read_num
+0711F:movsim:346
+07123:shlsi
+07125:addsi:368
+07129:fistp:44
+0712E:fwait
+07130:movaxmem:44
+07133:movm_ax_si
+07137:inc_m:346
+0713B:cmp_mi8:346:2
+07140:jcc:126:28956
+07142:end
+07145:epilogue
+# commits
+07135

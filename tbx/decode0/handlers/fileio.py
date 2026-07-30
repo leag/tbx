@@ -166,6 +166,8 @@ def data_read(state: DecodeState, op, addr, kind) -> bool:
             raise ValueError(f"numeric INPUT read without target at {addr:#x}")
         if nxt[1] in ("fstp", "fstp64"):  # SINGLE/DOUBLE variable target
             var, used = state.loc(nxt[2]), 2
+        elif nxt[1] == "fstp_bp":  # LOCAL SINGLE target
+            var, used = state.loc_local_fp(nxt[2]), 2
         elif nxt[1] == "fistp" and nxt[2] == 0x2C:
             # INTEGER target via the x87-to-AX bridge. FWAIT has a calibrated
             # two-NOP spelling in this runtime family; the terminal store may
@@ -194,12 +196,22 @@ def data_read(state: DecodeState, op, addr, kind) -> bool:
                 else state.loc_local(store[2])
             )
             used = j + 2 - c.k
-        elif nxt[1] in ("fld", "fild"):
+        elif (
+            nxt[1] in ("fld", "fild", "fld64")
+            or (
+                nxt[1] == "moves_m"
+                and c.k + 2 < len(i.ops)
+                and i.ops[c.k + 2][1] in ("far_fstp", "far_fstp64")
+            )
+        ):
             # Array-element target (t1_inparr, wild schart.exe): the index
             # computation runs between the read and the element store, so the
             # parsed value waits on the FP stack as a sentinel and the store
             # terminal (fstp_si) names the target; pend_input stays open for
-            # it. Any other continuation still fails loudly below.
+            # it. A DOUBLE-valued dynamic-array index begins with fld64
+            # (t1_inpdynarr); a constant index starts directly with the
+            # descriptor load `moves_m` (t1_inpdynconst; wild rs.exe).
+            # Any other continuation still fails loudly below.
             e.stack.append(_INPUTREAD)
             state.advance()
             return True

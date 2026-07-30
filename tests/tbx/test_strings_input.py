@@ -1,7 +1,6 @@
 """String variables + INPUT / LINE INPUT (including `INPUT "prompt", X$`, flags 0x0040)."""
 
 import os
-import pytest
 from tbx import ir
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -29,13 +28,19 @@ def _exe(name):
     return open(os.path.join(_ROOT, "fixtures", "corpus", name), "rb").read()
 
 
-def test_integer_input_nop_sync_advances_cal():
-    from tbx import decode0
+def test_bare_value_or_advances_cal_and_cal87():
+    from tbx import decode0, emit0
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(ValueError, match="unhandled materialized test at 0x15eed"):
-        decode0.decode_user_code(wild_hits_bytes("cal.exe"))
+    for name in ("cal.exe", "cal87.exe"):
+        try:
+            program = decode0.decode_user_code(wild_hits_bytes(name))
+        except ValueError as exc:
+            assert "unhandled materialized test at 0x15eed" not in str(exc)
+        else:
+            source = emit0.emit(program)
+            assert " OR " in source
 
 
 def test_decode_t1_str():
@@ -49,6 +54,62 @@ def test_decode_t1_str():
         ir.End(),
     ]
     assert decode0.decode_user_code(_exe("t1_str.exe")) == want
+
+
+def test_string_relational_value_clears_its_compare_type():
+    """A following numeric IF must not inherit the assignment's string flag."""
+    from tbx import decode0, emit0
+
+    program = decode0.decode_user_code(_exe("v10_t1_strrelvalif.exe"))
+    source = emit0.emit(program)
+
+    assert "C% = A$ = B$" in source
+    assert "IF C% = 0 THEN" in source
+
+
+def test_string_relational_value_can_store_through_a_byref_integer():
+    from tbx import decode0, emit0
+
+    source = emit0.emit(
+        decode0.decode_user_code(_exe("v10_t1_strrelvalbyref.exe"))
+    )
+
+    assert "F% = D$ = E$" in source
+
+
+def test_bare_byref_value_can_feed_a_direct_if_goto():
+    from tbx import decode0, emit0
+
+    source = emit0.emit(decode0.decode_user_code(_exe("v10_t1_bareifgoto.exe")))
+
+    assert "IF B% THEN" in source
+    assert '"NONZERO"' in source
+
+
+def test_numeric_input_targets_local_and_dynamic_array_elements():
+    from tbx import decode0, emit0
+
+    local = emit0.emit(decode0.decode_user_code(_exe("t1_inplocal.exe")))
+    dynamic = emit0.emit(decode0.decode_user_code(_exe("t1_inpdynarr.exe")))
+
+    assert "INPUT A" in local
+    assert "INPUT V0#(B#)" in dynamic
+
+
+def test_dynamic_double_array_elements_can_compare_directly():
+    from tbx import decode0, emit0
+
+    source = emit0.emit(decode0.decode_user_code(_exe("t1_dyndblcmp.exe")))
+
+    assert "IF V0#(2) = V0#(1) THEN" in source
+
+
+def test_numeric_input_can_target_constant_dynamic_array_element():
+    from tbx import decode0, emit0
+
+    source = emit0.emit(decode0.decode_user_code(_exe("t1_inpdynconst.exe")))
+
+    assert "INPUT V0#(1)" in source
 
 
 def test_decode_t1_inp():

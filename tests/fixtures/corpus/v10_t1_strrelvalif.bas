@@ -1,0 +1,5 @@
+10 INPUT A$, B$
+20 V% = A$ = B$
+30 IF V% = 0 THEN 50
+40 PRINT "SAME"
+50 END

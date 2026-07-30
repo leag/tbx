@@ -115,6 +115,13 @@ class UsingEmitMatch(TemplateMatch):
     leg: str = ""
 
 
+@dataclass(frozen=True)
+class TargetMatch(TemplateMatch):
+    """A control-flow template carrying one absolute code target."""
+
+    target: int = 0
+
+
 #: Item vector -> output leg, for the operation that follows a USING emit.
 _USING_ITEM_LEG = {0xBE: "console", 0xC0: "file", 0xBF: "printer"}
 
@@ -143,6 +150,28 @@ def _window(ops, index):
     if index is None:
         raise TypeError("operation index is required")
     return ops, index
+
+
+def match_return_to(ops, index: int | None = None) -> TargetMatch | None:
+    """Ordinary-GOSUB ``RETURN <line>``: unwind its word, then jump.
+
+    Event-trap returns use the scanner's dedicated ``return_to`` operation.
+    A regular GOSUB frame instead compiles as ``add sp,2`` followed by either
+    jump width (``t1_returngosub``; wild mdb.exe/mdb87.exe).
+    """
+    ops, index = _window(ops, index)
+    if (
+        index + 1 >= len(ops)
+        or ops[index][1:] != ("add_sp", 2)
+        or ops[index + 1][1] not in ("jmp", "jmps")
+    ):
+        return None
+    return TargetMatch(
+        template="return_to_gosub",
+        start=index,
+        stop=index + 2,
+        target=ops[index + 1][2],
+    )
 
 
 def match_bool_term1(ops, index: int | None = None) -> BoolTermMatch | None:
@@ -218,8 +247,69 @@ def match_bool_term1(ops, index: int | None = None) -> BoolTermMatch | None:
     return None
 
 
+def match_string_logical_value_group(
+    ops, index: int | None = None
+) -> BoolTermMatch | None:
+    """Explicit string-led relational ``AND|OR`` value group.
+
+    Unlike an unparenthesized compound IF, this form has no short-circuit
+    dispatch after its first term. Both relations materialize independently,
+    fold through AX/BX, and only the completed value feeds a jcc/jmp decision
+    (t1_stringorvalueif; wild kinder.exe, whose right relation is numeric).
+    Requiring the immediately preceding ``strcmp`` distinguishes this from
+    the numeric-led parenthesized group in t1_orofands.
+    """
+    ops, index = _window(ops, index)
+    if (
+        index == 0
+        or ops[index - 1][1] != "strcmp"
+        or index + 3 >= len(ops)
+        or ops[index][1:] != ("movax", 0xFFFF)
+        or ops[index + 1][1] != "jcc"
+        or ops[index + 1][2] not in _JCC_RELOP_TRUE
+        or ops[index + 2][1] != "incax"
+        or ops[index + 1][3] != ops[index + 3][0]
+    ):
+        return None
+    for j in range(index + 3, min(index + 14, len(ops) - 7)):
+        if any(
+            op[1] in ("jcc", "jmp", "jmpf", "jmps")
+            for op in ops[index + 3 : j]
+        ):
+            # An intervening dispatch closes the first term as an ordinary
+            # short-circuit chain; do not reach across it into a later
+            # materialization (t1_mixedbool).
+            continue
+        tail = [o[1] for o in ops[j : j + 8]]
+        if (
+            tail[0] not in ("strcmp", "fstsw")
+            or tail[1:5] != ["movbxax", "movax", "jcc", "incax"]
+        ):
+            continue
+        combination = {"andaxbx": "AND", "oraxbx": "OR"}.get(tail[5])
+        if (
+            combination is None
+            or ops[j + 2][2] != 0xFFFF
+            or ops[j + 3][2] not in _JCC_RELOP_TRUE
+            or ops[j + 3][3] != ops[j + 5][0]
+            or tail[6:] != ["jcc", "jmp"]
+            or ops[j + 6][2] not in (0x74, 0x75)
+            or ops[j + 6][3] != ops[j + 7][0] + 3
+        ):
+            continue
+        return BoolTermMatch(
+            template="string_logical_value_group",
+            start=index,
+            stop=j + 8,
+            operator=combination,
+            polarity=ops[j + 6][2],
+            short_circuit=ops[j + 7][2],
+        )
+    return None
+
+
 def match_bool_bare_term1(ops, index: int | None = None) -> BoolTermMatch | None:
-    """Sibling of :func:`match_bool_term1` for a BARE-VALUE compound-AND term.
+    """Sibling of :func:`match_bool_term1` for a bare-value compound term.
 
     ``ops[index]`` is an ``orax`` self-testing a just-computed value (e.g. a
     function call's raw result), immediately followed by the same jcc+jmp
@@ -232,19 +322,24 @@ def match_bool_bare_term1(ops, index: int | None = None) -> BoolTermMatch | None
     ``PEEK(&H410) AND (&H40=48)``, confirmed byte-exact via a dedicated oracle
     probe).
 
-    AND only: OR's own short-circuit landing offset for a bare-value term1 is
-    unwitnessed, so a bare-value OR term stays fail-loud rather than guessed.
+    OR uses JZ and lands directly on the trailing ``orax``; this is calibrated
+    by ``t1_bareor`` and witnessed by wild cal.exe/cal87.exe.
     """
     ops, index = _window(ops, index)
     if (
         ops[index][1] != "orax"
         or index + 2 >= len(ops)
         or ops[index + 1][1] != "jcc"
-        or ops[index + 1][2] != 0x75
+        or ops[index + 1][2] not in (0x74, 0x75)
         or ops[index + 2][1] != "jmp"
         or ops[index + 1][3] != ops[index + 2][0] + 3
     ):
         return None
+    polarity = ops[index + 1][2]
+    combinator, operator, delta = {
+        0x75: ("andaxbx", "AND", 2),
+        0x74: ("orax", "OR", 0),
+    }[polarity]
     short_circuit = ops[index + 2][2]
     for j in range(index + 3, min(index + 36, len(ops) - 3)):
         if ops[j][1] != "movax" or ops[j][2] != 0xFFFF:
@@ -252,15 +347,15 @@ def match_bool_bare_term1(ops, index: int | None = None) -> BoolTermMatch | None
         if (
             ops[j + 1][1] == "jcc"
             and ops[j + 2][1] == "incax"
-            and ops[j + 3][1] == "andaxbx"
-            and _same_code_offset(short_circuit, ops[j + 3][0] + 2)
+            and ops[j + 3][1] == combinator
+            and _same_code_offset(short_circuit, ops[j + 3][0] + delta)
         ):
             return BoolTermMatch(
                 template="bool_bare_term1",
                 start=index,
                 stop=index + 3,
-                operator="AND",
-                polarity=0x75,
+                operator=operator,
+                polarity=polarity,
                 short_circuit=short_circuit,
             )
         # The first materialization decides: a later one belongs to a
@@ -296,6 +391,16 @@ def match_bool_outer_and_group(ops, index: int | None = None) -> BoolTermMatch |
             o[1] == "andaxbx" and _same_code_offset(jmp[2], o[0] + 2)
             for o in ops[index + 6 : index + 36]
         )
+        # The parenthesized right group parks the outer value in CX while
+        # its own BX fold runs, then restores it for the final AND. A flat
+        # `A AND B` has the same header and convergence address but no CX
+        # spill, so accepting it here would steal ordinary compound chains.
+        and ("movrr", "cx", "bx") in [
+            o[1:] for o in ops[index + 6 : index + 36]
+        ]
+        and ("movrr", "bx", "cx") in [
+            o[1:] for o in ops[index + 6 : index + 36]
+        ]
     ):
         return None
     return BoolTermMatch(

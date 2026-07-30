@@ -1,0 +1,8 @@
+10 A = 3
+20 B = 2
+30 S$ = "N"
+40 IF ((A = 3 AND B = 2) OR B = 3) AND (S$ = "N") THEN 70
+50 PRINT "NO"
+60 END
+70 PRINT "YES"
+80 END

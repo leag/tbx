@@ -76,6 +76,16 @@ def test_return_to_line():
     assert emit0.emit(got).endswith("40 CLS\n50 RETURN 30\n")
 
 
+def test_return_to_line_from_an_ordinary_gosub_frame():
+    """Regular GOSUB uses add-sp/jump, unlike event-trap RETURN <line>."""
+    from tbx import decode0
+
+    got = decode0.decode_user_code(_exe("t1_returngosub.exe"))
+    returns = [statement for statement in got if isinstance(statement, ir.Return)]
+
+    assert returns == [ir.Return(2), ir.Return(3)]
+
+
 def test_decode_t1_whmidref():
     # A head-test WHILE whose condition READS A BY-REF PARAM FIRST
     # (`WHILE MID$(S$, X%, 1) <> "1"`). The statement's opening op is the

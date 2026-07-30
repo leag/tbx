@@ -50,7 +50,7 @@ handful of sites; the module a failure comes from is the practical stand-in.
 
 ## State ownership
 
-`DecodeState` holds 98 persistent fields. They are partitioned across six
+`DecodeState` holds 99 persistent fields. They are partitioned across six
 views -- **total and disjoint**, enforced by `tests/tbx/test_state_parts.py`,
 which fails if a field gains a second owner or none. A view is an alias, not a
 copy, and writing an unowned name through one raises rather than shadowing it.
@@ -69,10 +69,10 @@ read somewhere, so nothing in the list is decoration.
 
     `ax`, `bx`, `cint_round`, `cx`, `di`, `dx`, `fp64_bridge`, `pend_es`, `reg_spills`, `si`
 
-**`state.expr`** (ExprState, 26 fields)
+**`state.expr`** (ExprState, 27 fields)
 : Expression stacks, staged operand cells, and pending expression folds.
 
-    `bchk_bp`, `bchk_subs`, `color_cells`, `direct_bool_gate`, `direct_bool_logical`, `pend_bool`, `pend_bool_outer`, `pend_cmp`, `pend_cmp_str`, `pend_dataread`, `pend_field`, `pend_filein`, `pend_fnum`, `pend_getstr`, `pend_icmp`, `pend_input`, `pend_line_input`, `pend_mode_lit`, `pend_print`, `pend_shortstr`, `pend_swap`, `pend_swap_rev`, `pend_using`, `reg_logical_results`, `sstack`, `stack`
+    `bchk_bp`, `bchk_subs`, `color_cells`, `direct_bool_gate`, `direct_bool_group`, `direct_bool_logical`, `pend_bool`, `pend_bool_outer`, `pend_cmp`, `pend_cmp_str`, `pend_dataread`, `pend_field`, `pend_filein`, `pend_fnum`, `pend_getstr`, `pend_icmp`, `pend_input`, `pend_line_input`, `pend_mode_lit`, `pend_print`, `pend_shortstr`, `pend_swap`, `pend_swap_rev`, `pend_using`, `reg_logical_results`, `sstack`, `stack`
 
 **`state.layout_state`** (LayoutState, 16 fields)
 : DGROUP layout, slot registries, array facts, and data/string pools.

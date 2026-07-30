@@ -34,7 +34,7 @@ from pathlib import Path
 
 import pytest
 
-from tbx import decode0, emit0
+from tbx import decode0, emit0, ir
 
 #: Turbo Basic Owner's Handbook (1987), editor limits.
 EDITOR_LINE_LIMIT = 248
@@ -50,10 +50,10 @@ EDITOR_FILE_LIMIT = 65536
 _OVER_LONG = {
     "banker.exe": 98245,
     "horses.exe": 67425,
-    "inv87.exe": 88369,
-    "invoice.exe": 88369,
-    "state.exe": 69192,
-    "state87.exe": 69192,
+    "inv87.exe": 88391,
+    "invoice.exe": 88391,
+    "state.exe": 69220,
+    "state87.exe": 69220,
 }
 _SPLITTABLE = set(_OVER_LONG) - {"horses.exe"}
 
@@ -97,6 +97,19 @@ def test_no_wild_program_emits_an_over_wide_line():
             over.append((exe.name, widest))
 
     assert not over, f"{len(over)} wild programs emit an over-wide line: {over}"
+
+
+def test_a_long_literal_concatenation_uses_optional_spacing_to_fit():
+    value = ir.StrLit("1234567890")
+    expr = value
+    for _ in range(16):
+        expr = ir.BinOp("+", expr, value)
+    program = [ir.Assign(ir.Var("A$"), expr)]
+
+    line = emit0.emit(program).rstrip()
+
+    assert len(line) <= EDITOR_LINE_LIMIT
+    assert "+" in line
 
 
 def test_a_line_table_that_distinguishes_nothing_is_not_used():

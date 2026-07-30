@@ -14,6 +14,7 @@ from tbx.decode0.statement_log import editing
 from tbx.decode0.matchers import (
     match_array_param_type,
     match_fn_result_readback,
+    match_return_to,
 )
 from tbx.decode0.const import (
     ARR_BLOCK,
@@ -876,16 +877,18 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                 c.cur = None
         elif (
             sik[1] == "fistp"
-            and c.k + ao + 4 < len(img.ops)
-            and img.ops[c.k + ao + 2][1] == "fwait"
-            and img.ops[c.k + ao + 3][1] == "movaxmem"
-            and img.ops[c.k + ao + 3][2] == sik[2]
-            and img.ops[c.k + ao + 4][1] == pre + "movm_ax_si"
+            and (sync := _sync_len(img.ops, c.k + ao + 2)) is not None
+            and c.k + ao + 3 + sync < len(img.ops)
+            and img.ops[c.k + ao + 2 + sync][1] == "movaxmem"
+            and img.ops[c.k + ao + 2 + sync][2] == sik[2]
+            and img.ops[c.k + ao + 3 + sync][1] == pre + "movm_ax_si"
         ):
             # FP-stack value stored as INTEGER into a computed array element
             # (`INPUT #n, A$(i,j), B%(i,j)`, wild pfl.exe/pwinst.exe): the
             # generic FP->int scratch bridge (`fistp <scratch>; fwait;
-            # movaxmem <scratch>`, the same IDX% bridge used elsewhere)
+            # movaxmem <scratch>`, the same IDX% bridge used elsewhere).
+            # Some runtime revisions encode FWAIT as the already-calibrated
+            # two-NOP synchronization alias (wild process.exe).
             # lands the value in ax, THEN the ordinary INTEGER element write
             # (movm_ax_si) consumes it -- unlike the plain fstp_si case
             # above, the value never sits on the FP stack in a form this
@@ -902,7 +905,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             else:
                 state.put(ir.Assign(ref, v), c.cur)
             c.cur = None
-            state.advance(ao + 5)
+            state.advance(ao + 4 + sync)
             return True
         elif sik[1] in (pre + "fld_si", pre + "fld_si64", pre + "fild_si32"):
             expr_.stack.append(ref)
@@ -1251,6 +1254,33 @@ def int_bitwise_bx(state: DecodeState, op, addr, kind) -> bool:
         }[kind]
         if m.ax is None or m.bx is None:
             raise ValueError(f"ax,bx combine with empty regs at {addr:#x}")
+        if (
+            kind == "andaxbx"
+            and e.pend_bool is None
+            and e.pend_bool_outer is not None
+        ):
+            # Explicitly parenthesized precedence group: `A OR (B AND C)`.
+            # match_bool_term1 has already staged A as pend_bool_outer. The
+            # group's register protocol evaluates B first into BX and C
+            # second into AX, the reverse of the ordinary arithmetic
+            # convention below. Preserve both that source order and the
+            # byte-significant parentheses, then let the following direct
+            # jcc/jmp pair emit the IF body (t1_parenorandgoto/
+            # t1_parenorandinline; wild file.exe, grdscn.exe, wb.exe).
+            left = m.bx.inner if isinstance(m.bx, ir.Group) else m.bx
+            right = m.ax.inner if isinstance(m.ax, ir.Group) else m.ax
+            inner = ir.Group(ir.BinOp("AND", left, right))
+            m.ax = ir.BinOp(
+                e.pend_bool_outer.op,
+                e.pend_bool_outer.r1,
+                inner,
+            )
+            e.pend_bool_outer = None
+            e.direct_bool_logical = True
+            e.reg_logical_results.append(m.ax)
+            m.bx = None
+            state.advance()
+            return True
         if kind == "andaxbx" and e.pend_bool is None:
             _reject_dropped_bool_term(state, addr)
         if (
@@ -1272,6 +1302,20 @@ def int_bitwise_bx(state: DecodeState, op, addr, kind) -> bool:
             # the right group (t1_nestedbool), reversing the usual arithmetic
             # register-evaluation order.
             m.ax = ir.BinOp(comb, m.bx, _rgrp(comb, m.ax))
+        elif kind == "oraxbx" and e.direct_bool_group is not None:
+            # The integer right-hand group of `A AND (B OR C)` evaluates B
+            # into AX before spilling it through BX/CX, then evaluates C.
+            # At this fold AX holds B and BX holds C, unlike the string
+            # sibling's ordinary register orientation.
+            if e.direct_bool_group == "string_value":
+                left = m.ax.inner if isinstance(m.ax, ir.Group) else m.ax
+                right = m.bx.inner if isinstance(m.bx, ir.Group) else m.bx
+                value = ir.Group(ir.BinOp(comb, left, right))
+                e.direct_bool_gate = False
+            else:
+                value = ir.BinOp(comb, m.bx, _rgrp(comb, m.ax))
+            m.ax = value
+            e.direct_bool_group = None
         elif (
             kind in ("andaxbx", "oraxbx", "xoraxbx")
             and isinstance(m.bx, ir.BinOp)
@@ -1454,7 +1498,16 @@ def fp_math(state: DecodeState, op, addr, kind) -> bool:
         state.advance()  # (bridge templates consume their
         return True
     if kind == "fstp_temp":  # FSTP [ss:si]: materialized literal CALL arg
-        c.pend_args.append(e.stack.pop())
+        value = e.stack.pop()
+        nxt = i.ops[c.k + 1] if c.k + 1 < len(i.ops) else None
+        if nxt is not None and nxt[1] == "arg_push_temp":
+            c.pend_args.append(value)
+        else:
+            # FP sibling of movm_ax_temp above: a DEF FN argument frame has
+            # no arg_push_temp markers and closes through mov_bp_sp/fn_call.
+            # Key it by the future BP offset instead of leaking it into the
+            # next ordinary SUB CALL (v10_t1_fnfpbeforecall; wild refund).
+            c.fn_args[mach.si] = value
         c.cur = None
         state.advance()
         return True
@@ -1513,13 +1566,7 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
             # DOUBLE (fld_bp64/fstp_bp64/fold_bp64/fold_n_bp64, m64) is the
             # same first-touch convention over FOUR words instead of two
             # (wild filepatc.exe).
-            locs = local_frame.locals or {}
-            if bp_off in locs and locs[bp_off].endswith("%"):
-                locs[bp_off] = locs[bp_off][:-1] + ("#" if is64 else "!")
-                extra = (2, 4, 6) if is64 else (2,)
-                for e in extra:
-                    locs.pop(bp_off + e, None)
-            pvar = ir.Var(locs[bp_off])
+            pvar = state.loc_local_fp(bp_off, is64=is64)
             if kind in ("fld_bp", "fld_bp64"):
                 expr_.stack.append(pvar)
             elif kind in ("fstp_bp", "fstp_bp64"):
@@ -1585,6 +1632,7 @@ def far_fp(state: DecodeState, op, addr, kind) -> bool:
         "far_fold",
         "far_fld64",
         "far_fstp64",
+        "far_fcomp64",
         "far_fold64",
     ):  # 1-D const subscript
         if m.pend_es is None:
@@ -1596,11 +1644,24 @@ def far_fp(state: DecodeState, op, addr, kind) -> bool:
         width = 2 if kind == "far_fild" else 8 if kind.endswith("64") else 4
         ref = ir.ArrayRef(a["name"], (ir.Lit(disp // width + a["lo"][0]),))
         m.pend_es = None
-        if kind in ("far_fld", "far_fild"):
+        if kind in ("far_fld", "far_fild", "far_fld64"):
             e.stack.append(ref)
         elif kind in ("far_fstp", "far_fstp64"):
-            state.put(ir.Assign(ref, e.stack.pop()), c.cur)
+            value = e.stack.pop()
+            if value is _FREAD:
+                state._fread_target(ref)
+            elif value is _READDATA:
+                state._readdata_target(ref)
+            elif value is _INPUTREAD:
+                state._input_target(ref, is_str=False)
+            else:
+                state.put(ir.Assign(ref, value), c.cur)
             c.cur = None
+        elif kind == "far_fcomp64":
+            # Dynamic DOUBLE-array element compare, memory operand first in
+            # the decoder's reversed-x87 flag orientation (t1_dyndblcmp;
+            # wild rs.exe).
+            e.pend_cmp = (ref, e.stack.pop())
         else:
             e.stack.append(_orient(op[2], ref, e.stack.pop()))
         state.advance()
@@ -1611,6 +1672,11 @@ def far_fp(state: DecodeState, op, addr, kind) -> bool:
 def stack_ops(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: mov_si_sp, add_si_sp, sub_sp, add_sp, arg_push_temp, mov_bx_sp, les_si_ss_bx, str_temp_free, push_bp, pop_bp, mov_bp_sp, str_free_temp, bchk_base."""
     c = state.control
+    if kind == "add_sp" and (matched := match_return_to(state.image.ops, c.k)):
+        state.put(ir.Return(("addr", matched.target)), addr)
+        c.cur = None
+        state.advance(matched.consumed)
+        return True
     if kind == "push_bp":  # opens a call-staging temp frame -- save the
         if c.cur is None:
             # ...and, when nothing is open yet, it also opens the STATEMENT: a

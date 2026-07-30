@@ -856,6 +856,17 @@ def test_decode_t1_ifbeforecall():
         assert "24 CALL SUB1(C$(),B%)\n" in emit0.emit(prog), stem
 
 
+def test_decode_t1_ifbeforecallref():
+    # Two scalar by-reference arguments use arg_push_ref directly, with no
+    # outgoing-area prologue. The first push therefore owns the CALL address.
+    from tbx import decode0, emit0
+
+    source = emit0.emit(decode0.decode_user_code(_exe("t1_ifbeforecallref.exe")))
+
+    assert "30 IF A% = 0 THEN 50" in source
+    assert "50 CALL SUB1(A%,B%)" in source
+
+
 def test_decode_t1_iftaillast():
     # A single-line `IF cond THEN <stmt>` as the LAST statement of a SUB body.
     # The dispatch pair's false-skip lands on the epilogue, and the usual
@@ -3213,6 +3224,21 @@ def test_decode_t1_resumestart():
     src = emit0.emit(prog)
     assert src.splitlines()[0] == "10 ON ERROR GOTO 900"
     assert src.splitlines()[-1] == "900 RESUME 10"
+
+
+def test_decode_t1_resumefar():
+    # RESUME <line> uses an EA ptr16:16 tail when its target is inside a
+    # relocated $SEGMENT rather than at that segment's offset zero. Besides
+    # accepting jmpf as the far sibling of jmps/jmp, this proves the scanner
+    # includes segment*16 when mapping the target back to the file image.
+    # Calibrated by t1_resumefar and witnessed by wild wb.exe.
+    from tbx import decode0, emit0
+
+    prog = decode0.decode_user_code(_exe("t1_resumefar.exe"))
+    src = emit0.emit(prog)
+
+    assert "40 RESUME 60" in src
+    assert '$SEGMENT\n50 PRINT "BEFORE"\n60 PRINT "RECOVERED"' in src
 
 
 def test_decode_t1_addimm():

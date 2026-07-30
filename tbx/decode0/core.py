@@ -140,6 +140,7 @@ class DecodeState:
     dim_frame: dict[str, Any] | None = None
     discard_strs: Any = None
     direct_bool_gate: bool = False
+    direct_bool_group: str | None = None
     direct_bool_logical: bool = False
     data_items: Any = None
     dos: Any = None
@@ -385,6 +386,19 @@ class DecodeState:
             # variables for the one param (byte-exact needs the declared
             # name and every body reference to agree)
         raise ValueError(f"[bp+{bp_off}] outside the open LOCAL frame")
+
+    def loc_local_fp(self, bp_off, *, is64=False):
+        """Resolve and first-touch a SINGLE/DOUBLE LOCAL stack slot."""
+        frame = self.proc_frame if self.proc_frame is not None else self.fn_frame
+        if frame is None or frame.locals is None or bp_off not in frame.locals:
+            raise ValueError(f"FP [bp+{bp_off}] outside the open LOCAL frame")
+        self.touch_local(bp_off)
+        locs = frame.locals
+        if locs[bp_off].endswith("%"):
+            locs[bp_off] = locs[bp_off][:-1] + ("#" if is64 else "!")
+            for extra in ((2, 4, 6) if is64 else (2,)):
+                locs.pop(bp_off + extra, None)
+        return ir.Var(locs[bp_off])
 
     def touch_local(self, bp_off):
         """Record that the body really referenced this frame slot.
@@ -1256,6 +1270,12 @@ def _resolve_calls(
                     new_args[i] = ir.Var(f"P{off:02X}")
                     changed = True
                     continue
+                if _idx >= len(params):
+                    raise ValueError(
+                        f"forwarded argument {_idx + 1} exceeds the "
+                        f"{len(params)} recovered parameters of procedure "
+                        f"{target:#x}"
+                    )
                 sfx = params[_idx][-1] if params[_idx][-1] in "%$&#" else ""
                 if sfx == "%":
                     proc_int_offs.add(off)
@@ -1284,6 +1304,12 @@ def _resolve_calls(
                     new_args[i] = fallback
                     changed = True
                     continue
+                if _idx >= len(params):
+                    raise ValueError(
+                        f"forwarded argument {_idx + 1} exceeds the "
+                        f"{len(params)} recovered parameters of procedure "
+                        f"{target:#x}"
+                    )
                 sfx = params[_idx][-1] if params[_idx][-1] in "%$&#" else ""
                 new_args[i] = ir.Var(_slot(off) + sfx)
                 changed = True
@@ -2348,13 +2374,18 @@ def _finalize(state: DecodeState, addr) -> Program:
                 )  # the demoted-TROFF pairing
                 prog.lines = _fill_lines(real, len(prog))
             elif table is not None:
+                line_map_detail = "unknown statement"
                 try:
                     pending_data_lines = iter(data_lines or ())
                     pending_dim_lines = iter(dim_lines or ())
                     pending_do_lines = iter(do_lines or ())
                     pending_deftype_lines = iter(deftype_lines)
                     lines = []
-                    for s, a in zip(prog, out.addrs):
+                    for stmt_index, (s, a) in enumerate(zip(prog, out.addrs)):
+                        line_map_detail = (
+                            f"statement {stmt_index} {type(s).__name__} "
+                            f"at {a!r}"
+                        )
                         queue = (
                             pending_data_lines
                             if isinstance(s, ir.Data)
@@ -2377,7 +2408,8 @@ def _finalize(state: DecodeState, addr) -> Program:
                 except (KeyError, TypeError):
                     raise ValueError(
                         "error-trap line table present but statements don't map "
-                        "1:1 to its entries (multi-statement lines unsupported)"
+                        "1:1 to its entries (multi-statement lines unsupported): "
+                        f"{line_map_detail}"
                     )
         return prog
 
@@ -2776,17 +2808,18 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 m.ax = None
                 state.advance(3)
                 return
-            if match_bool_bare_term1(img.ops, c.k) is not None:
-                # A bare-value (uncompared) compound-AND first term (wild
-                # rsltest.exe: `PEEK(&H410) AND &H40 = 48`) -- stage it as
+            if (bare_term := match_bool_bare_term1(img.ops, c.k)) is not None:
+                # A bare-value (uncompared) compound first term (wild
+                # rsltest.exe: `PEEK(&H410) AND &H40 = 48`; cal.exe/cal87.exe:
+                # `NOT value OR array(index) = array(index)`) -- stage it as
                 # e.pend_bool exactly as match_bool_term1's caller
                 # does for a comparison-based term1, so the ordinary
                 # movax_family dispatch (control.py) folds term2's own
                 # materialization into it once reached.
                 e.pend_bool = BoolTerm(
                     r1=m.ax,
-                    op="AND",
-                    sc=img.ops[c.k + 2][2],
+                    op=bare_term.operator,
+                    sc=bare_term.short_circuit,
                     start=c.cur,
                 )
                 m.ax = None
@@ -2890,10 +2923,12 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             e.direct_bool_gate = True
             state.advance(2)
             return
-        if cc == 0x74 and direct_bool and e.direct_bool_gate:
-            # Direct-GOTO sibling of the inline-body form: JZ skips the far
-            # jump when the completed logical value is false, so the far jump
-            # itself is the source THEN target (t1_nestedgoto; wild styled).
+        if cc == 0x74 and direct_bool:
+            # Direct-GOTO sibling of the inline-body form: JZ skips the
+            # following jump when the completed value is false, so that jump
+            # itself is the source THEN target. This applies both to a folded
+            # logical value (t1_nestedgoto; wild styled) and a bare scalar
+            # truth test (v10_t1_bareifgoto; wild hebrew.exe).
             # The materialized outer term is positive evidence for a block
             # IF here: the equivalent one-line direct boolean form has no
             # movax-FFFF header (probe_string_nested_and_or_block).
@@ -2910,6 +2945,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             )
             m.ax = None
             e.direct_bool_gate = False
+            e.direct_bool_group = None
             e.direct_bool_logical = False
             c.cur = None
             state.advance(2)
@@ -2950,6 +2986,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             c.ifs.append(IfFrame(seq=event.seq))
             m.ax = None
             e.direct_bool_gate = False
+            e.direct_bool_group = None
             e.direct_bool_logical = False
             c.cur = None
             state.advance(2)

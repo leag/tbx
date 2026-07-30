@@ -1,0 +1,8 @@
+10 A% = 1
+20 B% = 2
+30 IF A% <> 0 THEN A% = 0
+40 CALL SHOW(A%, B%)
+50 END
+100 SUB SHOW(X%, Y%)
+110 PRINT X%, Y%
+120 END SUB

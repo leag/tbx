@@ -1,0 +1,8 @@
+10 A$ = "A"
+20 B$ = "B"
+30 CALL CHECK(A$, B$, V%)
+40 PRINT V%
+50 END
+100 SUB CHECK(X$, Y$, R%)
+110 R% = X$ = Y$
+120 END SUB

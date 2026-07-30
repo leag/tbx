@@ -1,0 +1,9 @@
+10 A% = 1
+20 B% = 2
+30 IF A% = 0 THEN 50
+40 A% = 0
+50 CALL SUB1(A%,B%)
+60 END
+70 SUB SUB1(C%, D%)
+  PRINT C%, D%
+END SUB

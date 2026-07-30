@@ -379,6 +379,25 @@ def test_decode_t1_boolwh():
     assert decode0.decode_user_code(_exe("t1_boolwh.exe")) == want
 
 
+def test_decode_empty_compound_loop_body():
+    from tbx import decode0
+
+    want = [
+        ir.Input(None, ir.Var("A#")),
+        ir.Do(None, None),
+        ir.Loop(
+            "WHILE",
+            ir.LogOp(
+                "OR",
+                ir.RelOp("<", ir.Var("A#"), ir.Lit(2)),
+                ir.RelOp(">", ir.Var("A#"), ir.Lit(7)),
+            ),
+        ),
+        ir.End(),
+    ]
+    assert decode0.decode_user_code(_exe("v10_t1_boolemptyloop.exe")) == want
+
+
 def test_decode_t1_booluntil():
     from tbx import decode0
 

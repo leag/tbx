@@ -45,6 +45,31 @@ from tbx.tools import oracle
 REPORT_SCHEMA_VERSION = 1
 hits, fails, corpus_members, roundtrips, nontb, nexe = [], [], [], [], 0, 0
 
+# These are alternate 8087 builds of the same authored wild programs.  Keep
+# executable results distinct (an 8087 build can expose a different decoder
+# gap), but do not count each pair as two program families.
+_FPU87_FAMILIES = {
+    "cal87": "cal",
+    "elec87": "electron",
+    "inv87": "invoice",
+    "mdb87": "mdb",
+    "onelab87": "onelabel",
+    "state87": "state",
+}
+
+
+def program_family(name: str) -> str:
+    """Return the authored-program key for a wild executable path."""
+    stem = Path(name.replace("!", "/")).stem.lower()
+    return _FPU87_FAMILIES.get(stem, stem)
+
+
+def family_totals() -> tuple[int, int, int]:
+    """(all TB families, decode-ok families, failed families)."""
+    ok = {program_family(name) for name, _dialect, _statements in hits}
+    failed = {program_family(name) for name, _dialect, _message in fails}
+    return len(ok | failed), len(ok), len(failed)
+
 
 def failure_signature(message: str) -> str:
     """Collapse address-specific failures into a stable triage key."""
@@ -166,6 +191,12 @@ def main():
             print(f"(skipping iso {p}; mount or extract it first)")
     print(f"\n{nexe} EXEs scanned: {len(hits)} TB decode-ok, "
           f"{len(fails)} TB-but-fail, {nontb} not Turbo Basic")
+    families, family_hits, family_fails = family_totals()
+    print(
+        f"{families} TB program families: {family_hits} decode-ok, "
+        f"{family_fails} decode-failed "
+        f"(8087 variants retained as separate executable results)"
+    )
     if roundtrip:
         exact = sum(ok is True for _, ok, _, _ in roundtrips)
         attempted = sum(ok is not None for _, ok, _, _ in roundtrips)
@@ -184,6 +215,9 @@ def main():
                 "decode_ok": len(hits),
                 "decode_failed": len(fails),
                 "not_turbo_basic": nontb,
+                "program_families": families,
+                "family_decode_ok": family_hits,
+                "family_decode_failed": family_fails,
             },
             "hits": [
                 {"name": name, "dialect": dialect, "statements": statements}

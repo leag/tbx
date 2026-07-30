@@ -67,6 +67,7 @@ def _compact_source_spacing(source: str) -> str:
         for i in range(0, len(parts), 2):
             parts[i] = re.sub(r" *= *", "=", parts[i])
             parts[i] = re.sub(r"([,;]) +", r"\1", parts[i])
+            parts[i] = re.sub(r" *\+ *", "+", parts[i])
         out.append("".join(parts))
     return "".join(out)
 
@@ -159,14 +160,13 @@ def emit_split(stmts, prefix: str = "TBX", force: bool = False) -> SourceBundle:
 
 
 def _split_list_statement(stmt, width: int):
-    """A DATA or COMMON whose items do not fit one line, as several statements.
+    """A splittable list whose items do not fit one line, as several statements.
 
-    Both are declarations of a list, and the compiler is lossy about how the
-    list was divided: `ir.Common`'s own note records that splitting across
-    several COMMON statements compiles identically (t1_common1), and DATA items
-    enter the constant pool in order, which several statements preserve exactly
-    as one does. So the division is the emitter's to choose, and it has to
-    choose one that fits.
+    DATA and COMMON are declarations for which the compiler is lossy about
+    source statement boundaries. A semicolon-separated PRINT list is likewise
+    emitted as the same sequence of runtime item calls whether divided across
+    physical PRINT statements (v10_t1_printphysical). So the division is the
+    emitter's to choose, and it has to choose one that fits.
 
     Only the first statement is numbered by the caller; the rest are
     continuation lines, which keeps a `RESTORE` targeting this DATA pointing at
@@ -178,6 +178,20 @@ def _split_list_statement(stmt, width: int):
         items, rebuild = stmt.items, lambda part: ir.Data(tuple(part))
     elif isinstance(stmt, ir.Common):
         items, rebuild = stmt.names, lambda part: ir.Common(tuple(part))
+    elif (
+        isinstance(stmt, ir.Print)
+        and stmt.commas is None
+        and len(stmt.items) > 1
+    ):
+        # Consecutive semicolon-separated PRINT calls are byte-equivalent to
+        # one long PRINT item list; in fact number.exe's repeated error-line
+        # entry proves its 1063-column display was authored as several
+        # physical PRINT lines. Every intermediate chunk suppresses its
+        # newline, and the final chunk inherits the original terminator.
+        items = stmt.items
+
+        def rebuild(part):
+            return ir.Print(tuple(part), newline=False, file=stmt.file)
     else:
         return None
 
@@ -193,6 +207,10 @@ def _split_list_statement(stmt, width: int):
             part = candidate
     if part:
         lines.append(ir.unparse_stmt(rebuild(part)))
+    if isinstance(stmt, ir.Print) and lines:
+        lines[-1] = ir.unparse_stmt(
+            ir.Print(tuple(part), newline=stmt.newline, file=stmt.file)
+        )
     # A single item too wide for a line on its own cannot be divided further;
     # say so rather than emitting a line the editor would reject.
     if len(lines) < 2:
@@ -446,14 +464,22 @@ def emit(stmts, *, compact: bool = False) -> str:
             )
         else:
             prefix = f"{line[i]} "
-            if j == i + 1 and len(prefix) + len(text) > LINE_LIMIT:
+            physical = text.splitlines() or [""]
+            widths = [len(prefix) + len(physical[0])]
+            widths.extend(len(part) for part in physical[1:])
+            widest = max(widths)
+            if j == i + 1 and widest > LINE_LIMIT:
                 # Too wide for the editor. A list declaration can be divided
-                # without changing what it compiles to; anything else has to
-                # go out as it is, since narrowing it would be a guess about
-                # source we did not recover.
+                # without changing what it compiles to. Optional expression
+                # spacing is equally free, and is enough for long literal
+                # concatenations (wild cal.exe/cal87.exe).
                 divided = _split_list_statement(stmts[i], len(prefix))
                 if divided is not None:
                     text = divided
+                else:
+                    narrowed = _compact_source_spacing(prefix + text)
+                    if max(map(len, narrowed.splitlines())) <= LINE_LIMIT:
+                        text = narrowed[len(prefix) :]
             out.append(f"{prefix}{text}\n")
         i = j
     if hooks:

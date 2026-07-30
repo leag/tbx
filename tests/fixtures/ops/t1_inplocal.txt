@@ -1,0 +1,18 @@
+# t1_inplocal dialect=1.1 start=08830
+08833:sub_sp:4
+08836:far_call:34881
+0883B:end
+0883E:jmp:34934
+08841:proc_enter
+08844:local_init:2:6
+08858:input:288:16384
+0885F:read_num
+08862:fstp_bp:6
+08868:fld_bp:6
+0886C:rt:187
+0886E:rt:184
+08872:proc_ret:4
+08876:epilogue
+# commits
+08866
+08870

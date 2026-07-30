@@ -1,0 +1,5 @@
+10 N% = 2
+20 DIM A#(N%)
+30 INPUT A#(1)
+40 PRINT A#(1)
+50 END

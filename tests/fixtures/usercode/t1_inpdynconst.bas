@@ -1,0 +1,5 @@
+10 A% = 2
+20 DIM V0#(A%)
+30 INPUT V0#(1)
+40 PRINT V0#(1)
+50 END

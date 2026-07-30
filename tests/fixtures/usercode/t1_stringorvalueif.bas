@@ -1,0 +1,6 @@
+10 A$ = "M"
+20 IF (A$ = "M" OR A$ = "X") THEN 50
+30 PRINT "NO"
+40 END
+50 PRINT "YES"
+60 END

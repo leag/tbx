@@ -1,0 +1,28 @@
+# v10_t1_strrelvalif dialect=1.0 start=071E0
+071E3:input:304:1
+071EA:read_str
+071ED:movsi:294
+071F0:strassign
+071F2:read_str
+071F5:movsi:290
+071F8:strassign
+071FA:movsi:294
+071FD:rt:156
+071FF:movsi:290
+07202:rt:156
+07204:strcmp
+07206:movax:65535
+07209:jcc:116:29196
+0720B:incax
+0720C:movm_ax:288
+07210:xorax
+07212:cmpax_m:288
+07216:jcc:117:29211
+07218:jmp:29220
+0721B:movsi:308
+0721E:rt:156
+07220:rt:190
+07222:rt:184
+07224:end
+07227:epilogue
+# commits

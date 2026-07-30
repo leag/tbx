@@ -1,0 +1,6 @@
+10 DIM A%(2)
+20 FOR I% = 1 TO 2
+30 READ A%(I%)
+40 NEXT I%
+50 DATA 11, 22
+60 END

@@ -19,11 +19,13 @@ from tbx.decode0.matchers import (
     match_bool_bare_term1,
     match_bool_outer_and_group,
     match_bool_term1,
+    match_string_logical_value_group,
     match_delay,
     match_fn_result_readback,
     match_for_header,
     match_loose_for_header,
     match_proc_body,
+    match_return_to,
     match_using_chain_continues,
     match_using_emit,
 )
@@ -156,9 +158,9 @@ def test_bool_bare_term1_matches_an_uncompared_and_term():
     assert (match.start, match.stop) == (0, 3)
 
 
-def test_bool_bare_term1_rejects_the_unwitnessed_or_form():
-    # OR's short-circuit landing offset for a bare-value term is uncalibrated,
-    # so it must stay a no-match rather than be guessed into an OR fold.
+def test_bool_bare_term1_matches_an_uncompared_or_term():
+    # OR's short circuit lands directly on the trailing OR combinator.
+    # Calibrated by t1_bareor; wild cal.exe/cal87.exe.
     ops = [
         (0x100, "orax"),
         (0x102, "jcc", 0x74, 0x107),  # OR polarity
@@ -169,7 +171,12 @@ def test_bool_bare_term1_rejects_the_unwitnessed_or_form():
         (0x116, "orax"),
     ]
 
-    assert match_bool_bare_term1(ops, 0) is None
+    match = match_bool_bare_term1(ops, 0)
+
+    assert match is not None
+    assert match.template == "bool_bare_term1"
+    assert match.operator == "OR"
+    assert match.short_circuit == 0x116
 
 
 def test_bool_bare_term1_takes_only_the_first_materialization():
@@ -192,6 +199,23 @@ def test_bool_bare_term1_takes_only_the_first_materialization():
     assert match_bool_bare_term1(ops, 0) is None
 
 
+def test_return_to_matches_the_gosub_stack_unwind_and_jump():
+    ops = [(0x100, "add_sp", 2), (0x103, "jmp", 0x80)]
+
+    match = match_return_to(ops, 0)
+
+    assert match is not None
+    assert match.template == "return_to_gosub"
+    assert match.target == 0x80
+    assert match.consumed == 2
+
+
+def test_return_to_rejects_other_stack_cleanup():
+    ops = [(0x100, "add_sp", 4), (0x103, "jmp", 0x80)]
+
+    assert match_return_to(ops, 0) is None
+
+
 def test_bool_outer_and_group_matches_a_spilled_right_group():
     ops = [
         (0x100, "movax", 0xFFFF),
@@ -201,6 +225,8 @@ def test_bool_outer_and_group_matches_a_spilled_right_group():
         (0x108, "jcc", 0x75, 0x10D),
         (0x10A, "jmp", 0x148),  # 0x146 + 2
         (0x120, "strcmp"),
+        (0x130, "movrr", "cx", "bx"),
+        (0x140, "movrr", "bx", "cx"),
         (0x146, "andaxbx"),
     ]
 
@@ -224,6 +250,54 @@ def test_bool_outer_and_group_rejects_a_missing_convergence_and():
     ]
 
     assert match_bool_outer_and_group(ops, 0) is None
+
+
+def test_string_logical_value_group_matches_its_two_materializations():
+    ops = [
+        (0x0FE, "strcmp"),
+        (0x100, "movax", 0xFFFF),
+        (0x103, "jcc", 0x74, 0x106),
+        (0x105, "incax"),
+        (0x106, "movsi", 0x200),
+        (0x109, "strcmp"),
+        (0x10B, "movbxax"),
+        (0x10D, "movax", 0xFFFF),
+        (0x110, "jcc", 0x74, 0x113),
+        (0x112, "incax"),
+        (0x113, "oraxbx"),
+        (0x115, "jcc", 0x74, 0x11A),
+        (0x117, "jmp", 0x140),
+    ]
+
+    match = match_string_logical_value_group(ops, 1)
+
+    assert match is not None
+    assert match.operator == "OR"
+    assert match.consumed == 12
+
+
+def test_string_logical_value_group_accepts_a_numeric_right_relation():
+    ops = [
+        (0x0FE, "strcmp"),
+        (0x100, "movax", 0xFFFF),
+        (0x103, "jcc", 0x74, 0x106),
+        (0x105, "incax"),
+        (0x106, "fldz"),
+        (0x109, "fcomp", 0x200),
+        (0x10D, "fstsw"),
+        (0x10F, "movbxax"),
+        (0x111, "movax", 0xFFFF),
+        (0x114, "jcc", 0x74, 0x117),
+        (0x116, "incax"),
+        (0x117, "andaxbx"),
+        (0x119, "jcc", 0x75, 0x11E),
+        (0x11B, "jmp", 0x140),
+    ]
+
+    match = match_string_logical_value_group(ops, 1)
+
+    assert match is not None
+    assert match.operator == "AND"
 
 
 # --------------------------------------------------------------------------

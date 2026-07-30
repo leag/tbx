@@ -29,6 +29,7 @@ from tbx.decode0.matchers import (
     array_param_suffix,
     match_bool_outer_and_group,
     match_bool_term1,
+    match_string_logical_value_group,
     match_using_emit,
 )
 
@@ -197,6 +198,13 @@ def cargs(state: DecodeState, op, addr, kind) -> bool:
         state.advance()
         return True
     if kind == "arg_push_ref":  # push a by-ref CALL arg (caller's var)
+        if c.cur is None:
+            # With a small all-scalar argument list there is no preceding
+            # `sub sp,N` staging prologue: this first direct reference push is
+            # the CALL statement's address. Anchor it before this early-return
+            # handler advances, so an inline IF can skip to the following CALL
+            # (t1_ifbeforecallref; wild process.exe).
+            c.cur = addr
         try:
             if op[2] in l.lay.get("guessed", ()):
                 # Layout placed this slot but GUESSED its width -- its phantom-
@@ -513,7 +521,7 @@ def errors_trap(state: DecodeState, op, addr, kind) -> bool:
             node = ir.Resume()
         elif nxt is not None and nxt[1] == "resume_next":
             node = ir.Resume(next_=True)
-        elif nxt is not None and nxt[1] in ("jmps", "jmp"):
+        elif nxt is not None and nxt[1] in ("jmps", "jmp", "jmpf"):
             node = ir.Resume(target=("addr", nxt[2]))
         elif nxt is not None and nxt[1] == "run":
             # RESUME <line>, where <line> is the program's very FIRST
@@ -643,11 +651,47 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
                     branch=state.branch,
                 )  # a mid-chain segment keeps pend_bool open (t1_and3)
             e.pend_cmp = None
+            e.pend_cmp_str = False
             c.cur = None
             return True
         # Use the legacy index as the source of truth while this handler still
         # shares the dispatch loop with non-cursor handlers.  The matcher is
         # pure, so this keeps recognition independent from cursor history.
+        if (
+            e.pend_cmp_str
+            and match_string_logical_value_group(i.ops, c.k) is not None
+        ):
+            lhs, rhs = e.pend_cmp
+            m.ax = ir.BinOp(
+                _JCC_RELOP_STR_TRUE[i.ops[c.k + 1][2]], lhs, rhs
+            )
+            e.pend_cmp = None
+            e.pend_cmp_str = False
+            e.direct_bool_gate = True
+            e.direct_bool_group = "string_value"
+            e.direct_bool_logical = True
+            state.advance(3)
+            return True
+        if match_bool_outer_and_group(i.ops, c.k) is not None:
+            # The materialized left term of `A AND (B OR C)` is preserved
+            # through BX/CX while the right group uses its own spill fold.
+            # Check this before the generic mixed-precedence matcher: numeric
+            # groups also expose a later final AND, which otherwise looks like
+            # a deferred flat chain. The protocol is shared by string terms
+            # (t1_boolstrgroup) and integer relations
+            # (v10_t1_intandorgroup; wild file.exe).
+            m.ax = ir.RelOp(_JCC_RELOP_TRUE[i.ops[c.k + 1][2]], *e.pend_cmp)
+            e.pend_cmp = None
+            e.pend_cmp_str = False
+            e.direct_bool_gate = True
+            e.direct_bool_group = (
+                "numeric_right"
+                if not any(o[1] == "strcmp" for o in i.ops[c.k + 6 : c.k + 36])
+                else None
+            )
+            e.direct_bool_logical = True
+            state.advance(6)
+            return True
         comb = match_bool_term1(i.ops, c.k)  # compound-IF first term?
         if comb is not None:
             op, deferred = comb.operator, comb.deferred
@@ -675,19 +719,7 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
                     start=c.cur,
                 )
             e.pend_cmp = None
-            state.advance(6)
-            return True
-        if (
-            match_bool_outer_and_group(i.ops, c.k) is not None
-            and any(o[1] == "strcmp" for o in i.ops[c.k + 6 : c.k + 36])
-        ):
-            # The materialized left term of `A AND (B OR C)` is preserved
-            # through BX/CX while the right group uses its own spill fold.
-            m.ax = ir.RelOp(_JCC_RELOP_TRUE[i.ops[c.k + 1][2]], *e.pend_cmp)
-            e.pend_cmp = None
             e.pend_cmp_str = False
-            e.direct_bool_gate = True
-            e.direct_bool_logical = True
             state.advance(6)
             return True
         nk = _lift_do_tail(
@@ -704,28 +736,34 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
         if nk is not None:
             state.seek(nk)
             e.pend_cmp = None
+            e.pend_cmp_str = False
             c.cur = None
             return True
+        _group_term_map = (
+            _JCC_RELOP_STR_TRUE if e.pend_cmp_str else _JCC_RELOP_TRUE
+        )
         if (
             e.direct_bool_gate
             and m.bx is not None
-            and not e.pend_cmp_str
             and c.k + 3 < len(i.ops)
             and i.ops[c.k + 1][1] == "jcc"
             and i.ops[c.k + 2][1] == "incax"
             and i.ops[c.k + 3][1] == "andaxbx"
             and i.ops[c.k + 1][3] == i.ops[c.k + 3][0]
-            and i.ops[c.k + 1][2] in _JCC_RELOP_TRUE
+            and i.ops[c.k + 1][2] in _group_term_map
         ):
             # The right side of `((a) OR (b)) AND (c)` is a single
             # parenthesized relation. It materializes directly into AX and is
             # immediately combined with the short-circuited left side in BX,
             # rather than using the normal six-op IF/loop tail template.
+            # String relations use strcmp's forward flag map
+            # (t1_nestedmixedstr; wild kinetics.exe).
             lhs, rhs = e.pend_cmp
             m.ax = ir.Group(
-                ir.BinOp(_JCC_RELOP_TRUE[i.ops[c.k + 1][2]], lhs, rhs)
+                ir.BinOp(_group_term_map[i.ops[c.k + 1][2]], lhs, rhs)
             )
             e.pend_cmp = None
+            e.pend_cmp_str = False
             state.advance(3)
             return True
         if (
@@ -756,6 +794,7 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
                 ir.BinOp(_JCC_RELOP_TRUE[i.ops[c.k + 1][2]], lhs, rhs)
             )
             e.pend_cmp = None
+            e.pend_cmp_str = False
             state.advance(3)
             return True
         # A STRING compare may take this path too, but ONLY inside an
@@ -800,18 +839,28 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             and i.ops[c.k + 2][1] == "incax"
             and i.ops[c.k + 1][3] == i.ops[c.k + 3][0]
             and i.ops[c.k + 1][2] in _JCC_RELOP_TRUE
-            and i.ops[c.k + 3][1] == "movm_ax"
+            and (
+                i.ops[c.k + 3][1] == "movm_ax"
+                or (
+                    c.k + 4 < len(i.ops)
+                    and i.ops[c.k + 3][1] == "arg_ref"
+                    and i.ops[c.k + 4][1] == "far_movm_ax_si"
+                )
+            )
         ):
             # String relational-as-VALUE assigned directly to a scalar
             # (`V% = A$ = B$`, wild hebrew.exe): materializes -1/0 into ax
-            # with no dispatch pair, the next op stores ax straight into a
-            # DS scalar via movm_ax. Unlike the FP case above, the whole
+            # with no dispatch pair, then stores AX either into a DS scalar
+            # via movm_ax or a by-reference INTEGER via
+            # arg_ref/far_movm_ax_si (v10_t1_strrelvalbyref; wild
+            # process.exe). Unlike the FP case above, the whole
             # RHS IS the relational expression (there's no enclosing
             # arithmetic to disambiguate), so no Group wrapper is needed --
             # `V% = A$ = B$` parses the same with or without parens.
             lhs, rhs = e.pend_cmp
-            m.ax = ir.RelOp(_JCC_RELOP_TRUE[i.ops[c.k + 1][2]], lhs, rhs)
+            m.ax = ir.BinOp(_JCC_RELOP_TRUE[i.ops[c.k + 1][2]], lhs, rhs)
             e.pend_cmp = None
+            e.pend_cmp_str = False
             state.advance(3)
             return True
         _bx_term1 = m.bx.inner if isinstance(m.bx, ir.Group) else m.bx
@@ -877,6 +926,7 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
                 branch=state.branch,
             )
             e.pend_cmp = None
+            e.pend_cmp_str = False
             c.cur = None
             return True
         state.seek(_lift_while(
@@ -902,6 +952,7 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             shift=state.shift_pending,
         ))
         e.pend_cmp = None
+        e.pend_cmp_str = False
         c.cur = None
         return True
     if kind == "movax":  # int literal into ax

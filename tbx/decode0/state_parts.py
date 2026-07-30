@@ -103,6 +103,7 @@ class ExprState(StateView):
             "bchk_subs",
             "color_cells",
             "direct_bool_gate",
+            "direct_bool_group",
             "direct_bool_logical",
             "stack",
             "sstack",

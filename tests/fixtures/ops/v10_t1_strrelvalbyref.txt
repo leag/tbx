@@ -1,0 +1,33 @@
+# v10_t1_strrelvalbyref dialect=1.0 start=070B0
+070B3:movsi:312
+070B6:rt:156
+070B8:movsi:294
+070BB:strassign
+070BD:movsi:308
+070C0:rt:156
+070C2:movsi:290
+070C5:strassign
+070C7:arg_push_ref:294
+070CC:arg_push_ref:290
+070D1:arg_push_ref:288
+070D6:far_call:28908
+070DB:fild:288
+070E0:rt:187
+070E2:rt:184
+070E6:end
+070E9:jmp:28939
+070EC:proc_enter
+070EF:arg_ref:14
+070F2:far_spush
+070F4:arg_ref:10
+070F7:far_spush
+070F9:strcmp
+070FB:movax:65535
+070FE:jcc:116:28929
+07100:incax
+07101:arg_ref:6
+07104:far_movm_ax_si
+07107:proc_ret:12
+0710B:epilogue
+# commits
+070E4

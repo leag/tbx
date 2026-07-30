@@ -1,0 +1,26 @@
+# t1_inpdynconst dialect=1.1 start=089D0
+089D3:movm_imm:342:2
+089D9:movsi:288
+089DC:movdx:153
+089DF:movesdx
+089E1:dim_begin
+089E4:movax_m:342
+089E8:movm_ax:298
+089EC:movm_imm:296:0
+089F2:movsi:288
+089F5:movdx:153
+089F8:movesdx
+089FA:dim_end
+089FD:input:352:16384
+08A04:read_num
+08A07:moves_m:288
+08A0B:far_fstp64:8
+08A13:moves_m:288
+08A17:far_fld64:8
+08A1D:rt:187
+08A1F:rt:184
+08A23:end
+08A26:epilogue
+# commits
+08A11
+08A21

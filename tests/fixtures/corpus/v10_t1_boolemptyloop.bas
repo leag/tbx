@@ -1,0 +1,4 @@
+10 INPUT X#
+20 DO
+30 LOOP WHILE X# < 2 OR X# > 7
+40 END
