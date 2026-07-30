@@ -129,6 +129,26 @@ code, because several were **tried and reverted** and the entry says why.
   "typed by evidence" from "defaulted" — **not** another caller-side special
   case. This is the highest-value single thread in the repo, because it is the
   one wild file where a round trip is meaningful.
+- **`cal.exe`/`cal87.exe` — a loop closed too early** (2026-07-30). Two upstream
+  defects were found and fixed (commit `c2994a3`): a fold region started one
+  statement early when a codeless `DO` was spliced below its recorded boundary,
+  and the inline guard now skips those address-less headers. cal's decode now
+  matches its byte order — INPUT before the test, `IF BD >= 1 AND BD <= 80 THEN
+  <exit>`. It still does not compile. The remaining defect is precise: **two
+  `EXIT LOOP` statements stand outside any `DO...LOOP`** (bundle lines 20405 and
+  20435, immediately after the `LOOP` at 20345), which is what TB reports as
+  `Error 435: DO loop expected`. They belong to a loop the decoder closes too
+  early, so look for the missing enclosing `DO...LOOP` rather than at the EXITs
+  themselves. Ruled out along the way, in
+  `gap_reports/ruled-out-hypotheses.json`: `$INCLUDE` block spanning
+  (`RO-INCLUDE-BLOCK-SPAN`), jumping into a DO body (`RO-GOTO-INTO-DO`), and
+  six candidate source spellings (`RO-CAL-SOURCE-SHAPES`). A block-nesting
+  sweep will call this file clean — it cannot see an EXIT outside its block.
+- **`state.exe`/`state87.exe` — one loop/FOR crossing left** (2026-07-30). Three
+  of four were closed by teaching `_loop_back_in_scope` that a back-edge may not
+  span a `NEXT` whose FOR opened above it. The fourth survives because the
+  compound tail-test path bypasses that guard when `empty_body` is true
+  (`lift.py`, `_lift_bool_do_tail`). Still COMPILE-FAIL.
 - **Per-procedure TYPE resolution pre-pass** (`PLAN.md:60`, live checkpoint).
   Rounds 18 and 19 were single-pass state-ordering bugs — the decoder infers
   whole-procedure facts destructively *while* lifting, so results depend on which

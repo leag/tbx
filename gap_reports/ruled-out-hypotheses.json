@@ -152,6 +152,25 @@
    ],
    "instead": "Use it to FIND candidates and never as evidence a decode is right. The oracle byte compare is the only acceptance test, which is now written into CLAUDE.md.",
    "source": "session 2026-07-30"
+  },
+  {
+   "id": "RO-GOTO-INTO-DO",
+   "title": "TB rejects an IF..THEN <line> that jumps into a DO...LOOP body",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/cal.exe"
+   ],
+   "signatures": [
+    "Error 435: DO loop expected"
+   ],
+   "hypothesis": "cal.exe's remaining Error 435 comes from `IF BD >= 1 AND BD <= 80 THEN 20295` jumping from outside into the NEXT loop's body, which TB would reject as a block-level violation.",
+   "negative_evidence": [
+    "Refuted by probe q_gotointoloop.bas: a DO/LOOP whose body is entered by an `IF c THEN <line>` from before the loop compiles clean through the oracle.",
+    "The real cause is elsewhere -- see the cal entry under 'Diagnosed but not landed' in STATUS.md: two EXIT LOOP statements stand outside any DO...LOOP."
+   ],
+   "instead": "A jump into a block body is legal; do not spend time making the emitter avoid it. Check block MEMBERSHIP of EXIT statements instead.",
+   "source": "session 2026-07-30"
   }
  ]
 }
