@@ -122,6 +122,18 @@
    "excluded": "different Turbo Basic build (18% runtime match)"
   },
   {
+   "name": "help.exe",
+   "sha256": "0f2eec5a36b1ceb49d5b9878227c5d8c34d8155bb75b653694be3d7d0de3a1d5",
+   "bytes": 73712,
+   "statements": 1308,
+   "source_bytes": 50934,
+   "toggles": "K",
+   "build_match": 88,
+   "roundtrip": "filler-plus-metadata",
+   "delta": 0,
+   "excluded": "different Turbo Basic build (88% runtime match)"
+  },
+  {
    "name": "horses.exe",
    "sha256": "4a28abb6b32123808e4c3f041edec6837735ed0e8edc0b22988c90041507dd86",
    "bytes": 79263,
@@ -288,6 +300,18 @@
    "roundtrip": "filler-plus-metadata",
    "delta": 0,
    "excluded": "different Turbo Basic build (86% runtime match)"
+  },
+  {
+   "name": "resume.exe",
+   "sha256": "3a4a54ac96f13c7e4decc88be3a759845e371ad75ab28a80ba2c4960d03616fa",
+   "bytes": 95604,
+   "statements": 1903,
+   "source_bytes": 62236,
+   "toggles": "",
+   "build_match": 98,
+   "roundtrip": "code-or-metadata",
+   "delta": -48,
+   "excluded": null
   },
   {
    "name": "rev.exe",

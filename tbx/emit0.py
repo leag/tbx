@@ -279,6 +279,34 @@ def _join_line(group, txt, col: int) -> str:
     return f"{head}{sep}{tail}"
 
 
+def _wrap_continued(head: str, items: list[str], col: int) -> str:
+    """`head` + comma list, folded over physical lines with `_` continuations.
+
+    Turbo Basic joins a line ending in ` _` to the next one before compiling,
+    and the result is byte-identical to the unwrapped spelling. Continuation
+    lines are indented to the caller's margin so the statement still reads as
+    one thing.
+    """
+    pad = " " * (col + 2)
+    lines: list[str] = []
+    cur = head
+    first = True
+    for i, item in enumerate(items):
+        piece = item + ("," if i < len(items) - 1 else "")
+        candidate = cur + ("" if cur.endswith(" ") or not cur else " ") + piece
+        width = (0 if first else len(pad)) + len(candidate) + 2  # room for ` _`
+        if not first or col:
+            width += col if first else 0
+        if cur not in (head, "") and width > LINE_LIMIT:
+            lines.append(cur.rstrip() + " _")
+            cur = pad + piece
+            first = False
+            continue
+        cur = candidate if cur != head else head + piece
+    lines.append(cur.rstrip())
+    return "\n".join(lines)
+
+
 def emit(stmts, *, compact: bool = False) -> str:
     # Jump targets INSIDE a SUB/DEF FN body (ir.BodyLine): physical line k of
     # the block at top-level index i is numbered line[i] + k, and only that
@@ -369,8 +397,18 @@ def emit(stmts, *, compact: bool = False) -> str:
             return f"RETURN {L(s.target)}"
         if isinstance(s, (ir.OnGoto, ir.OnGosub)):
             kw = "GOTO" if isinstance(s, ir.OnGoto) else "GOSUB"
-            lines = ", ".join(str(L(t)) for t in s.targets)
-            return f"ON {ir.unparse(s.selector)} {kw} {lines}"
+            head = f"ON {ir.unparse(s.selector)} {kw} "
+            targets = [str(L(t)) for t in s.targets]
+            out = head + ", ".join(targets)
+            if col + len(out) <= LINE_LIMIT:
+                return out
+            # Too wide for the editor, so fold it over physical lines with
+            # Turbo Basic's `_` continuation, which is byte-identical to the
+            # one-line spelling (probe probe_on_gosub_continuation). An ON
+            # GOSUB list is a single statement with nothing
+            # `_split_list_statement` can divide, so this is the only lever --
+            # wild help.exe's 56 targets are 364 characters on one line.
+            return _wrap_continued(head, targets, col)
         if isinstance(s, ir.OnError):
             return f"ON ERROR GOTO {0 if s.target is None else L(s.target)}"
         if isinstance(s, ir.OnTrap):

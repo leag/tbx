@@ -414,7 +414,7 @@ def test_wild_rsltest_argref_advances():
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(ValueError, match=r"jump target 0xae3a is not a statement start"):
+    with pytest.raises(ValueError, match=r"jump target 0xf325 is not a statement start"):
         decode0.decode_user_code(wild_hits_bytes("rsltest.exe"))
 
 

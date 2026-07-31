@@ -586,6 +586,11 @@ def match_proc_body(ops, index: int | None = None) -> ProcBodyMatch | None:
     so the frame's exit address has to name the FIRST pair, not the
     ``proc_ret``.
 
+    Under event trapping the epilogue also carries ``trap_hook`` stamps, which
+    are no-ops to the lift in the same way, and the EXIT SUB jumps to the first
+    of those (wild help.exe, resume.exe, rsltest.exe -- ``jump target 0x8b06 /
+    0xa3d7 / 0xae3a is not a statement start``). Fixture t1_exitsubtrap.
+
     Recognizing only the ``proc_ret`` left the EXIT SUB decoded as a plain Goto
     to an address no statement owns (wild tbd73.exe, TBW73.INC:452: ``EXIT
     SUB`` inside ``IF curntpos > itemcount THEN ... END IF`` in ``SUB
@@ -603,19 +608,30 @@ def match_proc_body(ops, index: int | None = None) -> ProcBodyMatch | None:
     if ret is None:
         return None
     epilogue = ret
-    while (
-        epilogue - 2 >= index
-        and ops[epilogue - 1][1] == "str_temp_free"
-        and ops[epilogue - 2][1] == "arg_ref"
-    ):
-        epilogue -= 2
+    freed = 0
+    while epilogue > index:
+        if ops[epilogue - 1][1] == "trap_hook":
+            # Event-trap poll stamps sit in the epilogue too, between the last
+            # statement and the return, and an EXIT SUB jumps to the FIRST of
+            # them for the same reason it jumps to the first string-free pair.
+            epilogue -= 1
+            continue
+        if (
+            epilogue - 2 >= index
+            and ops[epilogue - 1][1] == "str_temp_free"
+            and ops[epilogue - 2][1] == "arg_ref"
+        ):
+            epilogue -= 2
+            freed += 1
+            continue
+        break
     return ProcBodyMatch(
         template="proc_body",
         start=index,
         stop=ret + 1,
         ret_address=ops[ret][0],
         exit_address=ops[epilogue][0],
-        freed_strings=(ret - epilogue) // 2,
+        freed_strings=freed,
     )
 
 

@@ -57,6 +57,7 @@ _OVER_LONG = {
 }
 _SPLITTABLE = set(_OVER_LONG) - {"horses.exe"}
 
+
 CORPUS = Path(__file__).resolve().parents[1] / "fixtures" / "corpus"
 
 
@@ -82,7 +83,11 @@ def test_no_fixture_emits_a_line_the_editor_would_reject():
 
 
 def test_no_wild_program_emits_an_over_wide_line():
-    """The wild corpus is where every one of these was found, and is now clean."""
+    """The wild corpus is where every one of these was found, and is now clean.
+
+    help.exe's 56-target `ON L% GOSUB` was the last one, at 364 characters; it
+    folds over `_` continuations now.
+    """
     from conftest import wild_hits_bytes
 
     wild_hits_bytes("zip.exe")  # skip the whole check when the corpus is absent
@@ -177,3 +182,25 @@ def test_an_over_long_program_with_scanned_subs_uses_compact_numbering():
     assert not bundle.includes
     assert len(bundle.root.encode("latin-1")) < EDITOR_FILE_LIMIT
     assert "GOTO " in bundle.root
+
+
+def test_a_long_jump_list_folds_over_continuations():
+    """`_` joins physical lines before compiling, byte-identically.
+
+    An `ON x GOSUB` list is one statement with no split `_split_list_statement`
+    can make, so continuation is the only way to keep it inside the editor's
+    248 columns. Verified byte-identical against the one-line spelling by probe
+    (wild/probes/probe_on_gosub_continuation.bas); wild help.exe needs it, at
+    56 targets and 364 characters unwrapped.
+    """
+    from conftest import wild_hits_bytes
+
+    source = emit0.emit(decode0.decode_user_code(wild_hits_bytes("help.exe")))
+    lines = source.splitlines()
+    at = next(i for i, l in enumerate(lines) if "ON L% GOSUB" in l)
+    assert lines[at].endswith(" _"), lines[at][-20:]
+    assert not lines[at + 1].endswith(" _")  # exactly one fold is needed
+    assert max(len(l) for l in lines) <= EDITOR_LINE_LIMIT
+    # The fold is spacing only: the target list is unchanged.
+    joined = lines[at][:-2] + lines[at + 1].strip()
+    assert joined.count(",") == 55  # 56 targets
