@@ -20,9 +20,9 @@ def test_scan_testw_bp_is_exact():
 @pytest.mark.parametrize(
     ("stem", "exc", "next_gap"),
     [
-        ("cleanup.exe", ValueError, "LOCAL zero-fill outside a fresh SUB/DEF FN body at 0xd0ca"),
-        ("crossref.exe", ValueError, "string BP push outside DEF FN at 0xb081"),
-        ("reformat.exe", ValueError, "LOCAL zero-fill outside a fresh SUB/DEF FN body at 0xd455"),
+        ("cleanup.exe", ValueError, "string store to .bp.4. in DEF FN body at 0xd0fe"),
+        ("crossref.exe", ValueError, "string store to .bp.4. in DEF FN body at 0xb0b7"),
+        ("reformat.exe", ValueError, "string store to .bp.4. in DEF FN body at 0xd489"),
     ],
 )
 def test_fp_local_for_advances_wild_program(stem, exc, next_gap):

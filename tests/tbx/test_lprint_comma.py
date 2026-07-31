@@ -39,7 +39,7 @@ def test_wild_lprint_comma_program_decodes_completely():
     data = wild_hits_bytes("prtguide.exe")
     start, dialect = decode0.find_prologue(data)
     assert any(op[1:] == ("rt", 0xC2) for op in decode0._scan(data, start, dialect, set()))
-    assert len(decode0.decode_user_code(data)) == 911
+    assert len(decode0.decode_user_code(data)) == 910
 
 
 def test_lprint_comma_render():

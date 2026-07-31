@@ -832,3 +832,57 @@ def match_delay(ops, index: int | None = None) -> DelayMatch | None:
         hooks=tuple(hooks),
         loop_back=loop_back,
     )
+
+
+def match_definition_bracket(ops, index: int | None = None) -> TargetMatch | None:
+    """A ``jmp`` at ``index`` that brackets the framed definition right after it.
+
+    The compiler brackets every SUB/DEF FN with a jmp over its body, and the
+    decoder normally recognizes that jmp by what PRECEDES it: the entry jmp at
+    op 0, a jmp landed on by the previous bracket, or a jmp sitting where a
+    definition just closed. None of those hold when a definition is interleaved
+    into main code behind an ordinary subroutine, where the op before the
+    bracket is a user ``RETURN`` -- and the decoder then lifts the bracket as a
+    user ``GOTO`` and never opens the body's frame (wild cleanup.exe,
+    reformat.exe: ``LOCAL zero-fill outside a fresh SUB/DEF FN body at 0xd0ca /
+    0xd455``).
+
+    So this recognizes the bracket by what it DOES instead, which needs no
+    context at all: the next op begins a framed body -- ``proc_enter``, or the
+    ``mov [bp+0],0`` result-slot zero-fill that opens a block DEF FN -- and the
+    jmp's target is the op right after that body's own closer, modulo the
+    ``trap_hook`` stamps event trapping puts there. A jmp that lands exactly
+    past the closer of the body it opens is skipping that body and nothing
+    else. Fixture t1_gosubthendef.
+
+    The unframed forms (``inline_sub``, ``opaque_helper``) are deliberately not
+    here: they have no closer to measure a bracket against.
+    """
+    index = 0 if index is None else index
+    if index + 1 >= len(ops) or ops[index][1] != "jmp":
+        return None
+    head = ops[index + 1]
+    if head[1] == "proc_enter":
+        closer = "proc_ret"
+    elif head[1] == "mov_bp_imm" and head[2] == 0 and head[3] == 0:
+        closer = "fn_ret"
+    else:
+        return None
+    target = ops[index][2]
+    if target <= ops[index][0]:  # a bracket always jumps forward
+        return None
+    for j in range(index + 1, len(ops)):
+        if ops[j][1] != closer:
+            continue
+        j += 1
+        while j < len(ops) and ops[j][1] == "trap_hook" and ops[j][0] < target:
+            j += 1
+        if j < len(ops) and ops[j][0] == target:
+            return TargetMatch(
+                template="definition_bracket",
+                start=index,
+                stop=index + 1,
+                target=target,
+            )
+        return None
+    return None

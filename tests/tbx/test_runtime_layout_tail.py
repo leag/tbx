@@ -33,8 +33,8 @@ def test_runtime_layout_recovers_scalars_after_hole(stem, string_disp, single_di
 @pytest.mark.parametrize(
     ("stem", "exc", "next_gap"),
     [
-        ("cleanup.exe", ValueError, "LOCAL zero-fill outside a fresh SUB/DEF FN body at 0xd0ca"),
-        ("reformat.exe", ValueError, "LOCAL zero-fill outside a fresh SUB/DEF FN body at 0xd455"),
+        ("cleanup.exe", ValueError, "string store to .bp.4. in DEF FN body at 0xd0fe"),
+        ("reformat.exe", ValueError, "string store to .bp.4. in DEF FN body at 0xd489"),
     ],
 )
 def test_runtime_layout_witnesses_reach_next_gap(stem, exc, next_gap):

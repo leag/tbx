@@ -50,8 +50,8 @@ def test_string_local_in_block_def_fn(stem):
         # from the frame table (t1_locstrafterfor)
         ("bmaster.exe", ValueError, "forwarded arg to unknown callee params at 0x9391"),
         ("ifi.exe", ValueError, "unhandled INT 8c at 0x19bd2"),
-        ("cleanup.exe", ValueError, "LOCAL zero-fill outside a fresh SUB/DEF FN body at 0xd0ca"),
-        ("reformat.exe", ValueError, "LOCAL zero-fill outside a fresh SUB/DEF FN body at 0xd455"),
+        ("cleanup.exe", ValueError, "string store to .bp.4. in DEF FN body at 0xd0fe"),
+        ("reformat.exe", ValueError, "string store to .bp.4. in DEF FN body at 0xd489"),
     ],
 )
 def test_string_local_witnesses_advance(stem, exc, next_gap):

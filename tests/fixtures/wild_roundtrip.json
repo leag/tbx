@@ -257,12 +257,12 @@
    "name": "prtguide.exe",
    "sha256": "844dd8eaf6e53e2be3765423c699f3baee1722acaf7b725fd2caf345aae20434",
    "bytes": 75944,
-   "statements": 911,
-   "source_bytes": 51612,
+   "statements": 910,
+   "source_bytes": 51577,
    "toggles": "K",
    "build_match": 86,
    "roundtrip": "code-or-metadata",
-   "delta": -64,
+   "delta": 0,
    "excluded": "different Turbo Basic build (86% runtime match)"
   },
   {

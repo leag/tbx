@@ -4498,6 +4498,14 @@ End()
 Assign(target=Var(name='B'), value=Lit(value=2))
 Return(target=None)
 
+## t1_gosubthendef
+Gosub(target=3)
+Print(items=(FnCall(name='FNFN1%', args=(Lit(value=3),)),), newline=True, file=None, commas=None)
+End()
+Print(items=(StrLit(value='sub'),), newline=True, file=None, commas=None)
+Return(target=None)
+DefFn(name='FNFN1%', params=('A%',), body=(Local(names=('B%',)), Assign(target=Var(name='B%'), value=BinOp(op='+', lhs=Var(name='A%'), rhs=Lit(value=1))), FnResult(value=Var(name='B%'))), is_block=True)
+
 ## t1_goto
 Assign(target=Var(name='A'), value=Lit(value=1))
 Goto(target=3)

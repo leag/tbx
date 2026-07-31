@@ -48,6 +48,7 @@ from tbx.decode0.matchers import (
     match_bool_bare_term1,
     match_for_header,
     match_loose_for_header,
+    match_definition_bracket,
     match_proc_body,
 )
 from tbx.decode0.rename import _slot, _str_lit, canonical_rename
@@ -4373,6 +4374,21 @@ def _decode_user_code(
                 img.main_start = op[2]
                 state.advance()  # glue, not a GOTO
                 continue
+        if (
+            c.has_procs
+            and kind == "jmp"
+            and c.fn_frame is None
+            and c.proc_frame is None
+            and match_definition_bracket(img.ops, c.k) is not None
+        ):  # ...and a definition interleaved into main code is bracketed by a
+            # jmp none of the three rules above sees, because the op before it
+            # is whatever main code happened to end with -- a user RETURN in
+            # wild cleanup.exe/reformat.exe. Recognized by what the jmp does
+            # (it lands exactly past its body's closer) rather than by context.
+            c.decl_skip_addr = addr
+            img.main_start = op[2]
+            state.advance()  # glue, not a GOTO
+            continue
         if kind == "inline_sub":  # SUB name INLINE: the compiler copies
             # $INLINE's byte list verbatim with NO proc_enter/proc_ret
             # framing at all (see _try_inline_rescue in scan.py) -- no
