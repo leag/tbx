@@ -4370,6 +4370,7 @@ def _decode_user_code(
             and c.fn_frame is None
             and c.proc_frame is None
             and c.k > 0
+            and op[2] > addr  # a bracket always skips FORWARD over a body
         ):
             j = c.k - 1
             while j >= 0 and img.ops[j][1] == "trap_hook":
@@ -4385,6 +4386,14 @@ def _decode_user_code(
                 # lands right before an un-proc_enter'd DEF FN body -- without
                 # this, the DEF FN's own auto-open below never fires because
                 # it's gated on `addr < main_start`, which stays None forever).
+                #
+                # The forward test above is what keeps "where a definition just
+                # closed" from also describing the program's own tail: a
+                # backward jmp there is a user GOTO that happens to sit after
+                # the LAST proc_ret, and swallowing it left its address owned
+                # by no statement (wild cleanup.exe, reformat.exe: `jump target
+                # 0xf317 / 0xf6a2 is not a statement start`, from two GOTOs
+                # aimed at exactly that spot).
                 c.decl_skip_addr = addr
                 img.main_start = op[2]
                 state.advance()  # glue, not a GOTO

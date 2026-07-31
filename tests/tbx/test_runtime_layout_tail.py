@@ -33,8 +33,8 @@ def test_runtime_layout_recovers_scalars_after_hole(stem, string_disp, single_di
 @pytest.mark.parametrize(
     ("stem", "exc", "next_gap"),
     [
-        ("cleanup.exe", ValueError, "jump target 0xf317 is not a statement start"),
-        ("reformat.exe", ValueError, "jump target 0xf6a2 is not a statement start"),
+        ("cleanup.exe", ValueError, "jump target 0xd875 is not a statement start"),
+        ("reformat.exe", ValueError, "jump target 0xdc00 is not a statement start"),
     ],
 )
 def test_runtime_layout_witnesses_reach_next_gap(stem, exc, next_gap):

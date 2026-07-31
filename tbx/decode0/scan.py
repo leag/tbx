@@ -52,6 +52,14 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
             # even at short-jmp range (v10_t1_run: e9 fd ff, rel -3) -- a GOTO
             # there would compile short. 1.1 RUN jumps to the prologue instead.
             ops.append((p, "run"))
+        elif target == start:
+            # ...and that prologue jump only reached the short-jmp form's
+            # `target == start` test while it stayed in rel8 range. A RUN far
+            # enough from the entry compiles near and landed here as an
+            # ordinary jmp to an address no statement owns, since the prologue
+            # is not a statement (wild cleanup.exe, reformat.exe: `jump target
+            # 0xa2b0 is not a statement start`). Fixture t1_runfar.
+            ops.append((p, "run"))
         else:
             ops.append((p, "jmp", target))
         p += 3
