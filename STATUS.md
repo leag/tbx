@@ -129,6 +129,27 @@ code, because several were **tried and reverted** and the entry says why.
   "typed by evidence" from "defaulted" — **not** another caller-side special
   case. This is the highest-value single thread in the repo, because it is the
   one wild file where a round trip is meaningful.
+- **`resume.exe` — the DGROUP band is 24 bytes too wide** (2026-07-31). Newly
+  decoding, comparable, and the worst comparable program at 80.14% identical
+  (19010 unreproduced, delta -48). It is ONE defect amplified, not many: the
+  divergence starts at the FIRST statement, where our `movsi` names the string
+  descriptor at 0x62c and the original names 0x614 (+24), while pooled literals
+  move the other way (0x98c -> 0x984, -8). Every variable reference in the 49 KB
+  code region then differs, which is the whole of the 80%.
+  So the numeric sub-band we cause the compiler to allocate is 24 bytes larger
+  than the original's. Next step is to compare the band composition against the
+  original's stamp (the `layout.py` stamp path already reads
+  `(num_size, num_base, str_size, ...)`) rather than to hunt statements: with
+  216 variables (188 string, 14 single, 14 integer) a single wrong type or one
+  extra numeric explains it, and +24 is 6 singles, 12 integers, or 3 doubles.
+  Two localized code clusters remain after that, +112 at 0x160c8 and -64 at
+  0x172b5, worth re-measuring only once the band matches.
+  Two side findings, neither the cause: the emitted `DIM` names its nine runtime
+  arrays `V8%`..`V0`, raw placeholders `canonical_rename` never re-letters
+  (byte-neutral, but the same leak class as the nested-USING one); and our
+  rebuild does not re-scan (`unhandled byte c4 at 0xb3a2`) because it holds a
+  `$INLINE` BIOS blob that `_try_inline_rescue`'s chain rule reclaims in the
+  original but not in the rebuilt layout.
 - **`cal.exe`/`cal87.exe` — a loop closed too early** (2026-07-30). Two upstream
   defects were found and fixed (commit `c2994a3`): a fold region started one
   statement early when a codeless `DO` was spliced below its recorded boundary,
