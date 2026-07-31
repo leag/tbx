@@ -1508,7 +1508,13 @@ def fp_math(state: DecodeState, op, addr, kind) -> bool:
             # Key it by the future BP offset instead of leaking it into the
             # next ordinary SUB CALL (v10_t1_fnfpbeforecall; wild refund).
             c.fn_args[mach.si] = value
-        c.cur = None
+        # `c.cur` is deliberately NOT cleared: this operation stages an
+        # argument and commits nothing, so the statement it belongs to is
+        # still open and still owns the address the hook ahead of it set.
+        # Clearing it left a CALL whose FP arguments are staged this way
+        # owning its own `far_call` address instead of its statement start,
+        # so the eight GOTOs aimed there resolved to nothing (wild
+        # cleanup.exe, reformat.exe: `jump target 0xe9be / 0xed49`).
         state.advance()
         return True
     return False

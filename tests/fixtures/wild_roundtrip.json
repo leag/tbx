@@ -110,6 +110,18 @@
    "excluded": "Options toggles Keyboard break, Bounds, Overflow; different Turbo Basic build (18% runtime match)"
   },
   {
+   "name": "cleanup.exe",
+   "sha256": "7a2e0a733cfeb4f7e43fa8bf5d15879ae083211faf6c253eba7135337035cca6",
+   "bytes": 71507,
+   "statements": 197,
+   "source_bytes": 19936,
+   "toggles": "KBOS",
+   "build_match": 96,
+   "roundtrip": "code-or-metadata",
+   "delta": -3239,
+   "excluded": "Options toggles Keyboard break, Bounds, Overflow, Stack test"
+  },
+  {
    "name": "color.exe",
    "sha256": "0d8f09cc437d91a2407638932428253aa26878fae1a838a19fce9b83d2d5abca",
    "bytes": 39248,
@@ -300,6 +312,18 @@
    "roundtrip": "filler-plus-metadata",
    "delta": 0,
    "excluded": "different Turbo Basic build (86% runtime match)"
+  },
+  {
+   "name": "reformat.exe",
+   "sha256": "53fcd0b05f730a2a93d446aa86115c14a2dae8b453cfadf1007dbabfaaf50952",
+   "bytes": 72597,
+   "statements": 219,
+   "source_bytes": 20767,
+   "toggles": "KBOS",
+   "build_match": 96,
+   "roundtrip": "code-or-metadata",
+   "delta": -3255,
+   "excluded": "Options toggles Keyboard break, Bounds, Overflow, Stack test"
   },
   {
    "name": "resume.exe",

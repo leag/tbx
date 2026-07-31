@@ -423,9 +423,17 @@ def test_wild_rsltest_argref_advances():
     # anyway, so the statement loses the only address it had. All eleven
     # `pend_args.append` sites were checked: every one leaves `c.cur` alone
     # (`arg_push_arr` in arith.py reads as an offender only because the
-    # `palette_using` branch below it clears after its own `state.put`). So the
-    # class is exhausted as of this commit, and a future instance means a NEW
-    # staging site, not one that was missed.
+    # `palette_using` branch below it clears after its own `state.put`).
+    #
+    # That audit concluded the class was exhausted. It was not: `fstp_temp`
+    # was a twelfth site, and it cleared `c.cur` (wild cleanup.exe,
+    # reformat.exe: `jump target 0xe9be / 0xed49`, eight GOTOs at a CALL whose
+    # FP arguments stage through it). Enumerating `pend_args.append` was the
+    # wrong net -- fstp_temp appends there on one branch and to `c.fn_args` on
+    # the other, and the DEF-FN branch is what put it outside the search. The
+    # question to ask of a candidate is not where it appends but whether it
+    # COMMITS: an operation that stages and commits nothing must leave the
+    # open statement's address alone.
     from tbx import decode0
 
     from conftest import wild_hits_bytes
