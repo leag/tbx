@@ -135,8 +135,11 @@ code, because several were **tried and reverted** and the entry says why.
   is retyped at BOTH ends -- argument, header and body together
   (`_type_untyped_callee_params`), which is what avoids the `Error 475` a
   one-ended retype gives. What remains is 1365 unreproduced bytes and delta
-  -32, no longer one amplified defect, so the next look should start from a
-  fresh region diff rather than this thread.
+  -32. The region diff is done: the last structural difference is 12 sites
+  where the original compares a by-ref INTEGER parameter in DOUBLE precision
+  (`far_fild_si; fstp64; fld1; fcomp64`) and we emit the plain integer compare
+  -- ledger `RR-BYREF-INT-FP-COMPARE`, with three refuted source spellings and
+  the probes attached.
 - **`cal.exe`/`cal87.exe` — a loop closed too early** (2026-07-30). Two upstream
   defects were found and fixed (commit `c2994a3`): a fold region started one
   statement early when a codeless `DO` was spliced below its recorded boundary,

@@ -1,0 +1,7 @@
+10 A% = 2
+20 CALL FOO(A%)
+30 END
+40 SUB FOO(P%)
+50 IF P% <> 1 THEN 70
+60 PRINT "one"
+70 END SUB

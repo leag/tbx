@@ -252,6 +252,25 @@
    ],
    "assessment": "Audited after the blanket claim 'a program compiled with a toggle can never be reproduced' turned out to be false for Keyboard break. Measured against their default-toggle twins, the flagged corpus fixtures cost: K one byte (the flags mask at prologue-0x73, no code, same length -- fkb_t1_and, fkb_t1_beep); S three bytes plus the mask (fst_t1_gosub); B 128 bytes of instrumentation plus the mask (fbd_t1_arr1); 8087 a different runtime entirely (f87_t1_beep, 86.8% aligned). So K is verifiable with the mask normalized and the rest are not, which is now what verify_wild and verify_fixture implement. The related claim that toggles have NO SOURCE SPELLING is TRUE and was probe-checked here: `$DEBUG`, `$ERROR ON` and `$FLOAT EMULATE` are all rejected by TB 1.1 (Errors 471/416/416), and the metastatements it does accept -- $EVENT, $INCLUDE, $INLINE, $SEGMENT, $SOUND, $STACK -- cover none of the five Options toggles. Scope the remaining exclusion correctly: B/O/S are out of reach OF THIS HARNESS, not in principle. tb_v86.js exposes only --compile-exe/--floppy/--rows/--run-ms/--workspace, but the library underneath drives the IDE by held keystrokes and navigates its menus, so the Options toggles are reachable the same way the compile is. Adding that path would make bill.exe, ck.exe, rstprint.exe and tamstart.exe judgeable -- the only four programs still excluded for a toggle.",
    "source": "session 2026-07-31"
+  },
+  {
+   "id": "RR-BYREF-INT-FP-COMPARE",
+   "title": "A by-ref INTEGER parameter compared in double precision against 1.0",
+   "signatures": [
+    "far_fild_si",
+    "fstp64",
+    "fcomp64",
+    "far_cmpax_si"
+   ],
+   "disposition": "unresolved",
+   "evidence_class": "unresolved",
+   "confidence": "medium",
+   "files": [
+    "wild/hits/resume.exe"
+   ],
+   "promotion_criteria": "A probe that compiles to `arg_ref; far_fild_si; fstp64 <temp>; fld1; fcomp64 <temp>` for a by-ref integer parameter. Then the IR needs whatever distinguishes it from the plain integer compare, and emit0 needs to spell that.",
+   "assessment": "resume.exe's last structural difference, 12 sites. The original loads a by-ref INTEGER parameter with `far_fild_si`, stores it to the FP temp as a double (`fstp64 82`), pushes 1.0 (`fld1`) and compares in double precision (`fcomp64 82`). We emit the direct integer compare `far_cmpax_si` instead -- hence the op-kind diff fcomp64 12 -> 0, fstsw 15 -> 3, far_cmpax_si 5 -> 17. It is the whole of what is left in resume after the forwarded-parameter typing landed (1365 unreproduced bytes, 98.59% identical). Three source spellings probed inside a SUB with a by-ref `P%`, none of which reproduces the shape: `IF P% <> 1` gives far_cmpax_si (what we already emit); `IF P% <> 1#` gives neither fld1 nor fcomp64; `IF 1 <> P%` gives far_movax_si + cmpax_m against a pooled literal. Probes saved as wild/probes/probe_byref_c_int.bas, probe_byref_c_dbl.bas and probe_byref_c_rev.bas. Note the operand order the bytes imply: `fld1` precedes `fcomp64`, so the LITERAL is the left operand and the converted parameter the right -- a reversed comparison is the most likely shape, but the plain reversal probed above is not it. Try DEFDBL/DEFSNG in scope, a double LOCAL or SHARED in the same expression, and a comparison whose other side is a double variable rather than a literal.",
+   "source": "session 2026-07-31"
   }
  ]
 }
