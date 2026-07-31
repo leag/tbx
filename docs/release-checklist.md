@@ -19,8 +19,11 @@ uv run python -m tbx.tools.verify_fixture t1_print t1_gosub t1_subsh \
 - The repository-vendored oracle is used by default. Set `TBX_ORACLE` only
   when pointing at a compatible harness; older sibling checkouts may not
   support the per-run workspace option used by `verify_fixture`.
-- Every line must end `ok` (or `skip: Options toggles ...` for `f*_`
-  stems, which compile with non-default IDE Options and can never match).
+- Every line must end `ok`, or `ok bar the Options flags byte` for an `fkb_`
+  stem -- Keyboard break leaves only the flags mask, one byte, so those ARE
+  verified. Only a toggle that emits code the oracle cannot be asked for
+  (`fbd_` Bounds +128 bytes, `fst_` Stack test +3, `f87_` a different runtime)
+  gives `skip: Options toggles ...`.
 - A full-corpus audit (`--all`, hours) is warranted after emitter-wide
   canonicalization changes, not for every release.
 

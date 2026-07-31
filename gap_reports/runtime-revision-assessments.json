@@ -1,7 +1,7 @@
 {
  "schema_version": 1,
  "document_type": "tbx.runtime_revision_assessments",
- "updated": "2026-07-30",
+ "updated": "2026-07-31",
  "corpus_fingerprint": "2043f80bf6bf929b0a8058ebb0b83e3ec6b63664855e4428b4781db63c4924a3",
  "evidence_classes": [
   "oracle-verified",
@@ -233,6 +233,25 @@
    ],
    "assessment": "The 16 TB 1.0 programs split into two runtime revisions, and the split is decided by a single block at runtime-region offset 0x1bcf (file 0x1ccf). This oracle's 1.0 spells a 4-way dispatch as `mov bl,[si]; inc si` followed by four `cmp bl,imm8; je` (28 bytes); the other revision spells it `lodsb` followed by four `cmp al,imm8; je` (22 bytes) -- the same routine, hand-shortened by exactly 6 bytes. The fingerprint is clean: all 7 programs at 96-99% build match carry the long form, all 9 at 86-88% carry the short one, with no overlap. A second, independent marker sits at offset 0x0621, where the stack switch loads SS then SP in one revision and SP then SS in the other; it tracks the same split exactly. Those 6 bytes are most of what the positionwise score reacts to. 161 of the differing 16-bit words are CALL rel16 displacements differing by exactly -0x0006, i.e. the same call to a target past the shortened block; a further 22 differ by -0x0020 from a second shortened region in the 0x1d76-0x1fff tail. Measured with alignment instead, the two revisions are 95.5-96% identical (330-370 unreproduced bytes in an 8 KB runtime) against 99.1-99.7% for same-revision programs. So the revision gap is real but small: a handful of size optimizations, not different code. Do NOT read the 0x1500-0x1780 band as a revision marker. It is a table of 16-bit addresses whose entries keep identical spacing but shift per program (autonum -12221, number -5828, rev/book -504): program-specific link-time data, which is why book/number/rev score 96-97% while autonum/baby/banker/mymenu score 99% within the SAME revision. Surveying every program with the dialect-correct reference (the `--all` sweep) shows the corpus holds at least FOUR runtime builds, not two: this oracle's 1.0 and the 6-byte-shorter 1.0 above, plus this oracle's 1.1 and a second 1.1 carrying bill.exe, ck.exe, color.exe and mm.exe. That fourth group scores 18% positionwise and 83.4-83.5% aligned against our 1.1, and its members are 96-99% identical to each other, so it is one coherent build rather than four unrelated ones. It is NOT characterized further -- no fingerprint block has been isolated for it the way `lodsb` isolates the 1.0 split.",
    "source": "session 2026-07-30"
+  },
+  {
+   "id": "RR-TOGGLE-REACHABILITY",
+   "title": "Which IDE Options toggles actually put byte-exactness out of reach",
+   "signatures": [
+    "Options toggles",
+    "skip: Options toggles"
+   ],
+   "disposition": "closed",
+   "evidence_class": "oracle-verified",
+   "confidence": "high",
+   "files": [
+    "wild/hits/bill.exe",
+    "wild/hits/ck.exe",
+    "wild/hits/rstprint.exe",
+    "wild/hits/tamstart.exe"
+   ],
+   "assessment": "Audited after the blanket claim 'a program compiled with a toggle can never be reproduced' turned out to be false for Keyboard break. Measured against their default-toggle twins, the flagged corpus fixtures cost: K one byte (the flags mask at prologue-0x73, no code, same length -- fkb_t1_and, fkb_t1_beep); S three bytes plus the mask (fst_t1_gosub); B 128 bytes of instrumentation plus the mask (fbd_t1_arr1); 8087 a different runtime entirely (f87_t1_beep, 86.8% aligned). So K is verifiable with the mask normalized and the rest are not, which is now what verify_wild and verify_fixture implement. The related claim that toggles have NO SOURCE SPELLING is TRUE and was probe-checked here: `$DEBUG`, `$ERROR ON` and `$FLOAT EMULATE` are all rejected by TB 1.1 (Errors 471/416/416), and the metastatements it does accept -- $EVENT, $INCLUDE, $INLINE, $SEGMENT, $SOUND, $STACK -- cover none of the five Options toggles. Scope the remaining exclusion correctly: B/O/S are out of reach OF THIS HARNESS, not in principle. tb_v86.js exposes only --compile-exe/--floppy/--rows/--run-ms/--workspace, but the library underneath drives the IDE by held keystrokes and navigates its menus, so the Options toggles are reachable the same way the compile is. Adding that path would make bill.exe, ck.exe, rstprint.exe and tamstart.exe judgeable -- the only four programs still excluded for a toggle.",
+   "source": "session 2026-07-31"
   }
  ]
 }
