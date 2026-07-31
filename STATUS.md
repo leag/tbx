@@ -129,14 +129,14 @@ code, because several were **tried and reverted** and the entry says why.
   "typed by evidence" from "defaulted" — **not** another caller-side special
   case. This is the highest-value single thread in the repo, because it is the
   one wild file where a round trip is meaningful.
-- **`resume.exe` — 95.53%, was 80.14%** (2026-07-31). The band defect is
-  closed: forwarded args to framed opaque helpers now take their type from the
-  caller, since a helper has none to give (`_type_helper_forwards`). What is
-  left is 4285 unreproduced bytes and delta -32, no longer one amplified
-  defect. Two of its twelve untyped forwards go to an ORDINARY SUB with an
-  untyped parameter and are deliberately not retyped -- doing so gives
-  `Error 475` (ledger `RO-UNIFY-DEFERRED-PARAM`); typing that callee's own
-  parameter from the caller's evidence is the remaining thread.
+- **`resume.exe` — 98.59%, was 80.14%** (2026-07-31). Both halves of the
+  forwarded-parameter typing are in: a helper callee takes the caller's type
+  (`_type_helper_forwards`), and an ORDINARY callee with an untyped parameter
+  is retyped at BOTH ends -- argument, header and body together
+  (`_type_untyped_callee_params`), which is what avoids the `Error 475` a
+  one-ended retype gives. What remains is 1365 unreproduced bytes and delta
+  -32, no longer one amplified defect, so the next look should start from a
+  fresh region diff rather than this thread.
 - **`cal.exe`/`cal87.exe` — a loop closed too early** (2026-07-30). Two upstream
   defects were found and fixed (commit `c2994a3`): a fold region started one
   statement early when a codeless `DO` was spliced below its recorded boundary,

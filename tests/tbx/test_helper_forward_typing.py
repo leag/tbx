@@ -55,3 +55,32 @@ def test_helper_callees_are_the_only_ones_retyped():
     body = out[2].body
     assert body[0].args == (ir.Var("P06%"),), "helper callee should be retyped"
     assert body[1].args == (ir.Var("P06"),), "plain callee must be left alone"
+
+
+def test_an_ordinary_callee_is_retyped_at_both_ends():
+    """The sibling case: retype the argument AND the callee's own header.
+
+    Retyping only the argument is what produced `Error 475: Parameter
+    mismatch`, because the callee's declared parameter then contradicted it.
+    Doing both together is what makes it compile.
+    """
+    from tbx.decode0.core import _type_untyped_callee_params
+
+    callee = ir.SubDef("SUB8", ("P06",), (ir.Print((ir.Var("P06"),)),))
+    caller = ir.SubDef("SUB1", ("P0A%",), (ir.CallStmt("SUB8", (ir.Var("P0A"),)),))
+    out = _type_untyped_callee_params([callee, caller])
+    assert out[0].params == ("P06%",), "callee header must take the type"
+    assert out[0].body[0].items == (ir.Var("P06%"),), "and its own body with it"
+    assert out[1].body[0].args == (ir.Var("P0A%"),), "and the argument"
+
+
+def test_callers_that_disagree_leave_it_alone():
+    """Two suffixes for one position is not evidence."""
+    from tbx.decode0.core import _type_untyped_callee_params
+
+    callee = ir.SubDef("SUB8", ("P06",), (ir.End(),))
+    a = ir.SubDef("SUB1", ("P0A%",), (ir.CallStmt("SUB8", (ir.Var("P0A"),)),))
+    b = ir.SubDef("SUB2", ("P0A$",), (ir.CallStmt("SUB8", (ir.Var("P0A"),)),))
+    out = _type_untyped_callee_params([callee, a, b])
+    assert out[0].params == ("P06",)
+    assert out[1].body[0].args == (ir.Var("P0A"),)

@@ -1273,6 +1273,152 @@ def _respell_params(node, spell, stmt_addr=None):
     return new_node
 
 
+def _type_untyped_callee_params(stmts, stmt_addr=None):
+    """Give an ordinary callee's untyped parameter the caller's evidence.
+
+    The sibling of `_type_helper_forwards`, for the case it deliberately skips.
+    When a forwarded argument reaches an ORDINARY SUB whose parameter at that
+    position was never typed, the argument lands unsuffixed and splits the
+    caller's parameter in two exactly as it does for a helper -- but the callee
+    HAS a declared header, so retyping only the argument makes the two
+    disagree and TB rejects the source (`Error 475: Parameter mismatch`,
+    ledger RO-UNIFY-DEFERRED-PARAM).
+
+    So retype both ends together: the argument, the callee's parameter, and
+    every use of that parameter inside the callee's own body. The caller's
+    suffix is the only evidence either side has, and after this both headers
+    say the same thing.
+
+    Applied only where every caller agrees on the suffix. Two callers
+    disagreeing means the evidence is not evidence, and the split names stay.
+    """
+    helpers = {
+        s.name
+        for s in stmts
+        if isinstance(s, ir.SubDef)
+        and len(s.body) == 1
+        and isinstance(s.body[0], (ir.OpaqueHelper, ir.Inline))
+    }
+    subs = {
+        s.name: s
+        for s in stmts
+        if isinstance(s, ir.SubDef) and s.name not in helpers
+    }
+
+    # (callee, argpos) -> the suffixes callers forward there.
+    wanted: dict[tuple[str, int], set[str]] = {}
+    for caller in subs.values():
+        spell = {
+            p.rstrip("%$&#"): p
+            for p in caller.params
+            if p.startswith("P") and not p.endswith("(1)") and p[-1] in "%$&#"
+        }
+        if not spell:
+            continue
+        for node in _walk_nodes(caller.body):
+            if not isinstance(node, ir.CallStmt) or node.name not in subs:
+                continue
+            callee = subs[node.name]
+            for i, arg in enumerate(node.args):
+                if not (isinstance(arg, ir.Var) and arg.name in spell):
+                    continue
+                if i >= len(callee.params):
+                    continue
+                if callee.params[i][-1] in "%$&#" or not callee.params[i].startswith("P"):
+                    continue
+                wanted.setdefault((node.name, i), set()).add(spell[arg.name][-1])
+
+    retype = {k: next(iter(v)) for k, v in wanted.items() if len(v) == 1}
+    if not retype:
+        return stmts
+
+    out = []
+    for stmt in stmts:
+        if not isinstance(stmt, ir.SubDef) or stmt.name in helpers:
+            out.append(stmt)
+            continue
+        params = list(stmt.params)
+        spell_body: dict[str, str] = {}
+        for (callee_name, i), sfx in retype.items():
+            if callee_name != stmt.name or i >= len(params):
+                continue
+            old = params[i]
+            params[i] = old + sfx
+            spell_body[old] = params[i]
+        caller_spell = {
+            p.rstrip("%$&#"): p
+            for p in stmt.params
+            if p.startswith("P") and not p.endswith("(1)") and p[-1] in "%$&#"
+        }
+
+        def fix_call(node):
+            if isinstance(node, ir.CallStmt) and node.name in subs:
+                args = tuple(
+                    ir.Var(caller_spell[a.name])
+                    if (
+                        isinstance(a, ir.Var)
+                        and a.name in caller_spell
+                        and (node.name, i) in retype
+                    )
+                    else a
+                    for i, a in enumerate(node.args)
+                )
+                if any(a is not b for a, b in zip(node.args, args)):
+                    return ir.CallStmt(node.name, args)
+            return node
+
+        body = tuple(
+            _rewrite_nodes(b, fix_call, spell_body, stmt_addr) for b in stmt.body
+        )
+        changed = tuple(params) != stmt.params or any(
+            a is not b for a, b in zip(stmt.body, body)
+        )
+        out.append(stmt if not changed else ir.SubDef(stmt.name, tuple(params), body))
+    return out
+
+
+def _walk_nodes(nodes):
+    for node in nodes:
+        yield node
+        for f in getattr(node, "__dataclass_fields__", ()):
+            value = getattr(node, f)
+            if isinstance(value, tuple):
+                yield from _walk_nodes(value)
+            elif is_dataclass(value) and not isinstance(value, type):
+                yield from _walk_nodes((value,))
+
+
+def _rewrite_nodes(node, fix_call, spell, stmt_addr):
+    """`fix_call` on every CallStmt, `spell` on every Var, rebuilding in place."""
+    replaced = fix_call(node)
+    if replaced is not node:
+        if stmt_addr is not None:
+            owned = stmt_addr.address_of(node)
+            if owned is not None:
+                stmt_addr.claim(replaced, owned)
+        node = replaced
+    if isinstance(node, ir.Var) and node.name in spell:
+        return ir.Var(spell[node.name])
+    if isinstance(node, tuple):
+        new = tuple(_rewrite_nodes(x, fix_call, spell, stmt_addr) for x in node)
+        return node if all(a is b for a, b in zip(node, new)) else new
+    if is_dataclass(node) and not isinstance(node, type):
+        changes = {}
+        for f in fields(node):
+            old = getattr(node, f.name)
+            new = _rewrite_nodes(old, fix_call, spell, stmt_addr)
+            if new is not old:
+                changes[f.name] = new
+        if changes:
+            rebuilt = replace(node, **changes)
+            if stmt_addr is not None:
+                owned = stmt_addr.address_of(node)
+                if owned is not None:
+                    stmt_addr.claim(rebuilt, owned)
+            return rebuilt
+    return node
+
+
 def _type_helper_forwards(stmts, stmt_addr=None):
     """Type a forwarded arg from the CALLER when the callee cannot type it.
 
@@ -1813,6 +1959,7 @@ def _finalize(state: DecodeState, addr) -> Program:
         # strictly 1:1 -- it retypes statements, never adds or drops one --
         # which is what lets position stand for identity here.
         resolved = _type_helper_forwards(resolved, out.stmt_addr)
+        resolved = _type_untyped_callee_params(resolved, out.stmt_addr)
         if len(resolved) != len(out.stmts):
             raise ValueError(
                 f"_resolve_calls changed the statement count "
