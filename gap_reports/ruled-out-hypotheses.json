@@ -1,7 +1,7 @@
 {
  "schema_version": 1,
  "document_type": "tbx.ruled_out_hypotheses",
- "updated": "2026-07-30",
+ "updated": "2026-07-31",
  "note": "Decoder-side hypotheses that were investigated and REJECTED: a cause that turned out not to be the cause, or a fix that was written, tested and reverted. The sibling ledger runtime-revision-assessments.json covers the other class, where the answer is a property of the compiler rather than of our code; a pattern that is unwitnessable by our oracle belongs there, not here. The point of both is that a rejected hypothesis is expensive evidence and is otherwise lost the moment a session ends -- PLAN.md records them chronologically, and this is the deduplicated index into it. An entry earns its place by saying what was tried, what killed it, and what a re-attempt should do instead.",
  "dispositions": [
   "refuted",
@@ -222,6 +222,28 @@
    ],
    "instead": "SUPERSEDED -- the fix landed once the span was right. The marker is useless for finding statement starts in general (a `PRINT USING` opens with `rt CA` and carries none), but it answers the narrow question exactly: given TWO `rt CA` before one flush, a marker in the SPAN BETWEEN THEM means two statements, none means one. That separates wild banker.exe (merge; 155 -> 98 bytes off, delta +16 -> 0) from wild inv87.exe / invoice.exe (do not merge; they regress 649 -> 733 and 513 -> 597 if you do). The earlier attempts tested from the CHAIN's start, which is not the span the nesting absorbs. See t1_usingtwice and tests/tbx/test_using_nested_item.py.",
    "source": "session 2026-07-30"
+  },
+  {
+   "id": "RO-UNIFY-DEFERRED-PARAM",
+   "title": "Unify a deferred forwarded-arg placeholder with the parameter at the same offset",
+   "disposition": "reverted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/resume.exe"
+   ],
+   "signatures": [
+    "arg_push_fwd",
+    "arg_push_ref",
+    "Error 475: Parameter mismatch"
+   ],
+   "hypothesis": "resume.exe's numeric band is 24 bytes too wide because 64 `P<off>` placeholders reach canonical_rename unrespelled. Its SUB bodies hold BOTH `P12%` (the parameter) and `P12` (a forwarded use of the same offset): `arg_push_fwd` stages the placeholder, the enclosing SUB's respelling at proc_ret settles it, but a forward-reference call resolves later in `_resolve_calls` and -- when the callee is a `SUB ... INLINE`, which has no signature to take a suffix from -- lands unsuffixed. canonical_rename then letters two variables out of one parameter and the compiler allocates a DGROUP scalar for the second. Unifying the unsuffixed name with the suffixed parameter at the same offset should collapse them.",
+   "negative_evidence": [
+    "The diagnosis holds and is worth keeping: the op-kind diff is exactly complementary, `arg_push_fwd` 39 -> 18 and `arg_push_ref` 4 -> 25, and the six extra band slots at 0x30a..0x31e are read by nothing but `arg_push_ref`. 64 unsuffixed placeholders reach canonical_rename across four SUBs.",
+    "The FIX does not work. Respelling every unsuffixed `P<off>` to the suffixed parameter of the same offset makes all 39 wild programs still decode, but resume then fails to compile: `Error 475: Parameter mismatch`. Forcing the parameter's INTEGER suffix onto the forwarded argument contradicts what the callee expects at that position -- before the change the split-off variable was unsuffixed, i.e. a SINGLE, and the call compiled.",
+    "So the two names are not merely a spelling accident: the enclosing SUB's recovered parameter TYPE (integer) and the callee's expectation (single) disagree, and unification exposes that rather than fixing it. Also note the rebuild must carry `stmt_addr` through `_respell_params` -- omitting it orphaned a jump target immediately (`jump target 0x9d25 is not a statement start`)."
+   ],
+   "instead": "Settle the TYPE before the spelling. The question is which of the two is wrong: the enclosing SUB's parameter typed `%` at that offset, or the callee's parameter at that argument position. Compare the by-ref parameter's own uses inside the enclosing SUB against the callee's declared param, and get the type from whichever has real evidence -- `proc_int_offs`/`proc_str_offs` and friends are where that evidence is recorded. A name-level unification cannot work while the two disagree. The payoff is unchanged: this is the whole of resume's 80%, and every other byte of its DGROUP init image already matches.",
+   "source": "session 2026-07-31"
   }
  ]
 }

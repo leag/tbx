@@ -177,11 +177,18 @@ code, because several were **tried and reverted** and the entry says why.
   something the compiler has to materialise into a DGROUP temp first. We lose
   the identity "this argument IS the parameter I received" and spell it as a
   fresh value. Six temps get reused across the 21 sites, hence +24 and not +84.
-  Fix the argument recovery at those sites and the band, the layout anchor and
-  the whole 80% follow -- everything else in the DGROUP init image already
-  matches byte for byte. Look at `core.py`'s `arg_push_fwd` handling and
-  `_respell_params`; the related "forwarded arg to unknown callee params"
-  failure on bmaster.exe is likely the same machinery.
+  Mechanism identified: 64 `P<off>` placeholders reach canonical_rename
+  unrespelled, so a body holds both `P12%` (the parameter) and `P12` (a
+  forwarded use of it) and two variables are lettered out of one. The deferred
+  `fwdpending` path in `_resolve_calls` creates the unsuffixed one after the
+  SUB's own respelling has already run, and an INLINE callee gives it no
+  suffix to take.
+  Unifying them by name was TRIED AND REVERTED (`RO-UNIFY-DEFERRED-PARAM`):
+  resume then fails to compile with `Error 475: Parameter mismatch`, because
+  the parameter's integer suffix contradicts what the callee expects at that
+  position. Settle the TYPE first -- which of the two is wrong, the enclosing
+  SUB's `%` at that offset or the callee's param -- then the spelling follows.
+  Everything else in the DGROUP init image already matches byte for byte.
   Two localized code clusters remain after that, +112 at 0x160c8 and -64 at
   0x172b5, worth re-measuring only once the band matches.
   Two side findings, neither the cause: the emitted `DIM` names its nine runtime
