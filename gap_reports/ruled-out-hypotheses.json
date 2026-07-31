@@ -244,6 +244,26 @@
    ],
    "instead": "SUPERSEDED -- the fix landed once it was gated on the CALLEE. The two names are one parameter, but only a helper-bodied callee may take its type from the caller: a helper emits as `SUB name INLINE` with no parameter list, so nothing can contradict it. An ordinary SUB with an untyped parameter must NOT be retyped this way -- that is what produced `Error 475: Parameter mismatch`. Ten of resume's twelve untyped forwards go to helpers; retyping those took it from 80.14% to 95.53% identical. See `_type_helper_forwards` and tests/tbx/test_helper_forward_typing.py.",
    "source": "session 2026-07-31"
+  },
+  {
+   "id": "RO-DISP-NOT-SCALAR-ONE-CAUSE",
+   "title": "The `displacement is neither scalar nor array element` bucket is one shared cause",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/billadd.exe",
+    "wild/hits/filepatc.exe",
+    "wild/hits/crossref.exe"
+   ],
+   "signatures": [
+    "displacement 0x76 is neither scalar nor array element",
+    "displacement 0x1054 is neither scalar nor array element",
+    "displacement 0x324 is neither scalar nor array element"
+   ],
+   "hypothesis": "Three wild programs stop on the same message from the same line (DecodeState.loc), so the three unclassified displacements share a cause and one classification rule closes all three.",
+   "negative_evidence": "They do not even fall in the same DGROUP region. billadd's 0x76 is BELOW VAR_BASE (0x110), a runtime system cell reached by `movax_m`. filepatc's 0x1054 is ABOVE pool_base (0xa04) and below the first array base (0x1060), reached by `idiv_m` as the divisor of a MOD; a probe compiling `(X% \\ 32) MOD 16` shows the compiler routes a LITERAL divisor through bx with a cx spill and never emits `idiv_m`, so that displacement is a memory VARIABLE the layout did not recover, not a pooled constant. crossref's 0x324 sits inside the static region below pool_base (0x374) and is reached through a `far_call` argument path. Three regions, three access paths, three causes.",
+   "instead": "Treat the message as a symptom of layout recovery, not a bucket. filepatc is a DGROUP layout gap (see RR-DGROUP-BIGARR); billadd needs the runtime system cell at 0x76 named, the way cmpax_m already special-cases ERR at 0x74 and ERL at 0x72; crossref needs its own investigation. Bucketing wild failures by message text overstates how much one fix can close -- count distinct causes before promising a bucket.",
+   "source": "session 2026-07-31"
   }
  ]
 }
