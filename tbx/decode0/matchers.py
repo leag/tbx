@@ -576,6 +576,37 @@ def match_loose_for_header(ops, index, stmts, vdisp) -> ForHeaderMatch | None:
 _REGISTER_SHUTTLE = frozenset({"movbxax", "movrr"})
 
 
+def epilogue_entry(ops, closer: int, floor: int = 0) -> tuple[int, int]:
+    """(index an EXIT lands on, count of strings freed) for the body closing at
+    ``closer``.
+
+    A body's epilogue is the run immediately before its return: one
+    ``arg_ref <disp>; str_temp_free`` pair per LOCAL/parameter string, plus the
+    ``trap_hook`` poll stamps a trapping build leaves there. All of it is a
+    no-op to the lift, so it produces no statement -- but it IS where an EXIT
+    SUB / EXIT DEF jumps, and the address it jumps to is the FIRST op of the
+    run, not the return.
+
+    Shared by ``match_proc_body`` and the block DEF FN frame, which has no
+    ``proc_enter`` to be matched and so has to walk its own epilogue back.
+    """
+    i, freed = closer, 0
+    while i > floor:
+        if ops[i - 1][1] == "trap_hook":
+            i -= 1
+            continue
+        if (
+            i - 2 >= floor
+            and ops[i - 1][1] == "str_temp_free"
+            and ops[i - 2][1] == "arg_ref"
+        ):
+            i -= 2
+            freed += 1
+            continue
+        break
+    return i, freed
+
+
 def match_proc_body(ops, index: int | None = None) -> ProcBodyMatch | None:
     """Extent of the SUB/DEF FN body opened by ``proc_enter`` at ``index``.
 
@@ -607,24 +638,7 @@ def match_proc_body(ops, index: int | None = None) -> ProcBodyMatch | None:
     )
     if ret is None:
         return None
-    epilogue = ret
-    freed = 0
-    while epilogue > index:
-        if ops[epilogue - 1][1] == "trap_hook":
-            # Event-trap poll stamps sit in the epilogue too, between the last
-            # statement and the return, and an EXIT SUB jumps to the FIRST of
-            # them for the same reason it jumps to the first string-free pair.
-            epilogue -= 1
-            continue
-        if (
-            epilogue - 2 >= index
-            and ops[epilogue - 1][1] == "str_temp_free"
-            and ops[epilogue - 2][1] == "arg_ref"
-        ):
-            epilogue -= 2
-            freed += 1
-            continue
-        break
+    epilogue, freed = epilogue_entry(ops, ret, index)
     return ProcBodyMatch(
         template="proc_body",
         start=index,

@@ -3839,6 +3839,11 @@ Troff()
 End()
 Return(target=None)
 
+## t1_exitdeflocstr
+DefFn(name='FNFN1$', params=('A$', 'B%'), body=(Local(names=('C$',)), Assign(target=Var(name='C$'), value=StrLit(value='x')), IfBlock(arms=((RelOp(op='>', lhs=Var(name='B%'), rhs=Lit(value=3)), (FnResult(value=Var(name='C$')), ExitDef())),), else_body=None), FnResult(value=BinOp(op='+', lhs=Var(name='C$'), rhs=Var(name='A$')))), is_block=True)
+Print(items=(FnCall(name='FNFN1$', args=(StrLit(value='y'), Lit(value=5))),), newline=True, file=None, commas=None)
+End()
+
 ## t1_exitsublocstr
 SubDef(name='SUB1', params=('A%', 'B%'), body=(Local(names=('C$',)), Assign(target=Var(name='C$'), value=StrLit(value='x')), IfBlock(arms=((RelOp(op='>', lhs=Var(name='A%'), rhs=Var(name='B%')), (Assign(target=Var(name='A%'), value=Lit(value=0)), ExitSub())),), else_body=None), Print(items=(Var(name='C$'), Var(name='A%')), newline=True, file=None, commas=None)))
 Assign(target=Var(name='D%'), value=Lit(value=5))

@@ -48,6 +48,7 @@ from tbx.decode0.matchers import (
     match_bool_bare_term1,
     match_for_header,
     match_loose_for_header,
+    epilogue_entry,
     match_definition_bracket,
     match_proc_body,
 )
@@ -4452,7 +4453,18 @@ def _decode_user_code(
             and addr < img.main_start
             and kind != "proc_enter"
         ):
-            fn_exit = next(o[0] for o in img.ops[c.k :] if o[1] == "fn_ret")
+            ret_k = next(
+                j for j, o in enumerate(img.ops[c.k :], c.k) if o[1] == "fn_ret"
+            )
+            fn_exit = img.ops[ret_k][0]
+            # ...and no proc_enter means no match_proc_body, so the epilogue is
+            # walked back here instead. Without it the frame's only exit was
+            # the fn_ret, and an EXIT DEF in a body that frees LOCAL or
+            # parameter strings jumps to the FIRST free pair -- decoded as a
+            # plain Goto to an address no statement owns (wild cleanup.exe,
+            # reformat.exe: `jump target 0xd875 / 0xdc00`). Fixture
+            # t1_exitdeflocstr; the SUB half of the same fact is t1_exitsublocstr.
+            entry_k, _ = epilogue_entry(img.ops, ret_k, c.k)
             c.fn_frame = FnFrame(
                 entry=addr,
                 # A DEF FN body has no proc_enter to record its extent, so it
@@ -4460,6 +4472,7 @@ def _decode_user_code(
                 seq=state.region("fn", start=addr, end=fn_exit).seq,
                 idx=len(out.stmts),
                 exit=fn_exit,
+                exit_entry=img.ops[entry_k][0] if entry_k != ret_k else None,
             )
             c.cur = None  # fall through to lift this op into the body
         if kind == "proc_enter":
