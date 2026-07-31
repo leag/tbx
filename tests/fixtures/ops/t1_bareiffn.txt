@@ -1,0 +1,22 @@
+# t1_bareiffn dialect=1.1 start=08C80
+08C83:movm_imm:96:1
+08C89:movsi:296
+08C8C:rt:156
+08C8E:movsi:300
+08C91:rt:156
+08C93:movax:128
+08C96:open
+08C99:movax:1
+08C9C:fn_ax_ax:EOF
+08C9F:orax
+08CA1:jcc:116:36006
+08CA3:jmp:36015
+08CA6:movsi:292
+08CA9:rt:156
+08CAB:rt:190
+08CAD:rt:184
+08CAF:movax:1
+08CB2:close
+08CB5:end
+08CB8:epilogue
+# commits

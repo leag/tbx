@@ -291,6 +291,13 @@ Assign(target=Var(name='AP%'), value=ArrayRef(name='V1', indices=(Lit(value=1),)
 Print(items=(Var(name='A'), Var(name='AN'), Var(name='AP%')), newline=True, file=None, commas=(0, 1, 1, 0))
 End()
 
+## t1_bareiffn
+Open(mode=StrLit(value='I'), num=1, file=StrLit(value='DATA.TXT'), reclen=None, for_as=False)
+IfGoto(cond=Call(name='EOF', args=(Lit(value=1),)), target=3)
+Print(items=(StrLit(value='more'),), newline=True, file=None, commas=None)
+Close(num=1)
+End()
+
 ## t1_bareor
 Dim(name='V0', bounds=(3,), also=())
 Dim(name='V1', bounds=(3,), also=())

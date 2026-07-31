@@ -2929,6 +2929,12 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 prev_load = img.ops[c.k - 2]
             if prev_load is not None and (
                 prev_load[1] == "far_movax_si"
+                # A function result is a source-level value by construction --
+                # the compiler never routes one of its own materialized
+                # booleans through a BASIC function -- so it needs no slot
+                # evidence to qualify (t1_bareiffn: `IF EOF(1) THEN`; wild
+                # pz.exe has four).
+                or prev_load[1] == "fn_ax_ax"
                 or (
                     prev_load[1] == "movax_m"
                     and prev_load[2] in l.lay["scalars"]
