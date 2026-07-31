@@ -147,10 +147,17 @@ code, because several were **tried and reverted** and the entry says why.
   the original's 42. So the difference is in what the COMPILER allocates around
   them, and the two candidates are the synthesized `SHARED` bindings (a SUB
   variable we share gets a main slot instead of its own local-static one, and
-  resume's SHARED lists are large) and the phantom FOR/temp slots. Compare the
-  original's 11 slots against the slots our rebuild allocates in 0x302..0x350
-  before touching anything: our rebuild scans only as far as 0xb3a2, which is
-  past the main program, so a partial scan is enough to enumerate them.
+  resume's SHARED lists are large) and the phantom FOR/temp slots.
+  The array region is confirmed IDENTICAL -- both hold the same nine 0x36
+  blocks at 0x120..0x2d0, so both numeric bands start at 0x302 and the whole
+  +24 is composition inside the band.
+  Comparing the two slot maps needs our rebuild to scan, and it does not:
+  `unhandled byte c4 at 0xb3a2`, a `$INLINE` BIOS blob that
+  `_try_inline_rescue` reclaims in the original but not in the rebuild. A
+  PARTIAL scan is not a substitute -- it reaches only 2218 of ~17000 ops and
+  makes our band look like it starts 28 bytes late when it starts at 0x302 like
+  the original's. Fix the rescue first: being unable to decode our own output
+  is a gap in its own right, and it is what blocks this one.
   Two localized code clusters remain after that, +112 at 0x160c8 and -64 at
   0x172b5, worth re-measuring only once the band matches.
   Two side findings, neither the cause: the emitted `DIM` names its nine runtime
