@@ -1273,6 +1273,94 @@ def _respell_params(node, spell, stmt_addr=None):
     return new_node
 
 
+def _type_helper_forwards(stmts, stmt_addr=None):
+    """Type a forwarded arg from the CALLER when the callee cannot type it.
+
+    `arg_push_fwd` stages a `P<off>` placeholder and takes its suffix from the
+    callee's parameter in the same position. A framed opaque helper has no such
+    evidence -- its parameter offsets come from the BP frame and its types are
+    unknown, so `proc_params` holds bare `P<off>` -- and the forwarded argument
+    lands unsuffixed. The enclosing SUB then holds both `P12%` (its parameter)
+    and `P12` (this use of it), `canonical_rename` letters two variables out of
+    one, and the compiler allocates a DGROUP scalar for the second.
+
+    Only for a helper-bodied callee. It emits as `SUB name INLINE` with NO
+    parameter list, so nothing can contradict the caller's type. Doing this for
+    an ordinary SUB whose parameter merely happens to be untyped breaks the
+    build instead: the argument's suffix then disagrees with the callee's own
+    declared header and TB rejects it (`Error 475: Parameter mismatch`, ledger
+    RO-UNIFY-DEFERRED-PARAM).
+
+    Wild resume.exe: ten of its twelve untyped forwards go to helpers.
+    """
+    helpers = {
+        s.name
+        for s in stmts
+        if isinstance(s, ir.SubDef)
+        and len(s.body) == 1
+        and isinstance(s.body[0], (ir.OpaqueHelper, ir.Inline))
+    }
+    if not helpers:
+        return stmts
+
+    out = []
+    for stmt in stmts:
+        if not isinstance(stmt, ir.SubDef) or stmt.name in helpers:
+            out.append(stmt)
+            continue
+        spell = {}
+        for param in stmt.params:
+            if param.endswith("(1)") or not param.startswith("P"):
+                continue
+            base = param.rstrip("%$&#")
+            if base != param:
+                spell[base] = param
+        if not spell:
+            out.append(stmt)
+            continue
+
+        def retype(node):
+            if isinstance(node, ir.CallStmt) and node.name in helpers:
+                args = tuple(
+                    ir.Var(spell[a.name])
+                    if isinstance(a, ir.Var) and a.name in spell
+                    else a
+                    for a in node.args
+                )
+                if any(a is not b for a, b in zip(node.args, args)):
+                    return ir.CallStmt(node.name, args)
+                return node
+            if isinstance(node, tuple):
+                new = tuple(retype(x) for x in node)
+                return node if all(a is b for a, b in zip(node, new)) else new
+            if is_dataclass(node) and not isinstance(node, type):
+                changes = {}
+                for f in fields(node):
+                    old = getattr(node, f.name)
+                    new = retype(old)
+                    if new is not old:
+                        changes[f.name] = new
+                if changes:
+                    rebuilt = replace(node, **changes)
+                    if stmt_addr is not None:
+                        # Rebuilding drops the old object's address claim, and
+                        # an orphaned claim is an unresolvable jump target.
+                        owned = stmt_addr.address_of(node)
+                        if owned is not None:
+                            stmt_addr.claim(rebuilt, owned)
+                    return rebuilt
+                return node
+            return node
+
+        body = tuple(retype(b) for b in stmt.body)
+        out.append(
+            stmt
+            if all(a is b for a, b in zip(stmt.body, body))
+            else ir.SubDef(stmt.name, stmt.params, body)
+        )
+    return out
+
+
 def _resolve_calls(
     stmts,
     proc_names,
@@ -1724,6 +1812,7 @@ def _finalize(state: DecodeState, addr) -> Program:
         # behind it. Record each as the revision it is instead. The pass is
         # strictly 1:1 -- it retypes statements, never adds or drops one --
         # which is what lets position stand for identity here.
+        resolved = _type_helper_forwards(resolved, out.stmt_addr)
         if len(resolved) != len(out.stmts):
             raise ValueError(
                 f"_resolve_calls changed the statement count "

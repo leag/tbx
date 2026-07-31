@@ -226,7 +226,7 @@
   {
    "id": "RO-UNIFY-DEFERRED-PARAM",
    "title": "Unify a deferred forwarded-arg placeholder with the parameter at the same offset",
-   "disposition": "reverted",
+   "disposition": "superseded",
    "confidence": "high",
    "files": [
     "wild/hits/resume.exe"
@@ -242,7 +242,7 @@
     "The FIX does not work. Respelling every unsuffixed `P<off>` to the suffixed parameter of the same offset makes all 39 wild programs still decode, but resume then fails to compile: `Error 475: Parameter mismatch`. Forcing the parameter's INTEGER suffix onto the forwarded argument contradicts what the callee expects at that position -- before the change the split-off variable was unsuffixed, i.e. a SINGLE, and the call compiled.",
     "So the two names are not merely a spelling accident: the enclosing SUB's recovered parameter TYPE (integer) and the callee's expectation (single) disagree, and unification exposes that rather than fixing it. Also note the rebuild must carry `stmt_addr` through `_respell_params` -- omitting it orphaned a jump target immediately (`jump target 0x9d25 is not a statement start`)."
    ],
-   "instead": "Settle the TYPE before the spelling. The question is which of the two is wrong: the enclosing SUB's parameter typed `%` at that offset, or the callee's parameter at that argument position. Compare the by-ref parameter's own uses inside the enclosing SUB against the callee's declared param, and get the type from whichever has real evidence -- `proc_int_offs`/`proc_str_offs` and friends are where that evidence is recorded. A name-level unification cannot work while the two disagree. The payoff is unchanged: this is the whole of resume's 80%, and every other byte of its DGROUP init image already matches.",
+   "instead": "SUPERSEDED -- the fix landed once it was gated on the CALLEE. The two names are one parameter, but only a helper-bodied callee may take its type from the caller: a helper emits as `SUB name INLINE` with no parameter list, so nothing can contradict it. An ordinary SUB with an untyped parameter must NOT be retyped this way -- that is what produced `Error 475: Parameter mismatch`. Ten of resume's twelve untyped forwards go to helpers; retyping those took it from 80.14% to 95.53% identical. See `_type_helper_forwards` and tests/tbx/test_helper_forward_typing.py.",
    "source": "session 2026-07-31"
   }
  ]

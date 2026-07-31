@@ -129,74 +129,14 @@ code, because several were **tried and reverted** and the entry says why.
   "typed by evidence" from "defaulted" — **not** another caller-side special
   case. This is the highest-value single thread in the repo, because it is the
   one wild file where a round trip is meaningful.
-- **`resume.exe` — the DGROUP band is 24 bytes too wide** (2026-07-31). Newly
-  decoding, comparable, and the worst comparable program at 80.14% identical
-  (19010 unreproduced, delta -48). It is ONE defect amplified, not many: the
-  divergence starts at the FIRST statement, where our `movsi` names the string
-  descriptor at 0x62c and the original names 0x614 (+24), while pooled literals
-  move the other way (0x98c -> 0x984, -8). Every variable reference in the 49 KB
-  code region then differs, which is the whole of the 80%.
-  The DGROUP is laid out as nine runtime-array blocks of 0x36 from 0x120
-  (ending 0x302), then the main numeric band, then string descriptors at 4-byte
-  stride. In the ORIGINAL the numeric band is 0x302..0x32c -- 42 bytes, 11
-  slots, ten singles and one integer (0x306, 0x30a, 0x30e, 0x312, 0x314, 0x318,
-  0x31c, 0x320, 0x324, 0x328 referenced). Ours is 66. There is no stamp to read:
-  resume has runtime arrays, and stamped programs are the no-runtime-array ones.
-  The 24 bytes are NOT extra declarations. Our emitted source has only nine
-  main-level numerics -- eight singles and `H%` -- which is 34 bytes, less than
-  the original's 42. So the difference is in what the COMPILER allocates around
-  them, and the two candidates are the synthesized `SHARED` bindings (a SUB
-  variable we share gets a main slot instead of its own local-static one, and
-  resume's SHARED lists are large) and the phantom FOR/temp slots.
-  The array region is confirmed IDENTICAL -- both hold the same nine 0x36
-  blocks at 0x120..0x2d0, so both numeric bands start at 0x302 and the whole
-  +24 is composition inside the band.
-  Do NOT compare the slot maps with a partial scan: it reaches only 2218 of
-  ~17000 ops and makes our band look like it starts 28 bytes late, when it
-  starts at 0x302 like the original's.
-  The scan blocker is FIXED (helper payloads no longer re-emit the compiler's
-  CC/CB tail, so all six bodies round-trip byte-exact). Our rebuild still does
-  not decode -- it reaches `DGROUP layout not solvable (runtime slot grid
-  anchor)` -- but that is a CONSEQUENCE, not a second defect.
-  The DGROUP init image is byte-identical between the two files except ONE
-  WORD, the band stamp at DS:0x110: `(s1, b1, s2, b1+s1, ...)` reads
-  s1=0x26 (38) in the original and s1=0x3e (62) in ours, with b1=0x306 and
-  s2=0x2ec identical. So the defect is exactly 24 bytes of extra numeric band
-  and nothing else -- every array block, every string descriptor, every pool
-  entry already matches. Measure any candidate fix at that word.
-  CAUSE FOUND, not yet fixed. The 24 bytes are six by-ref argument temporaries
-  at 0x30a, 0x30e, 0x312, 0x316, 0x31a, 0x31e -- slots nothing reads or writes,
-  reached only by `arg_push_ref`. The op-kind diff against the original is
-  exactly complementary:
-
-      arg_push_fwd   39 -> 18   (-21)
-      arg_push_ref    4 -> 25   (+21)
-
-  So at 21 call sites the original FORWARDS the enclosing SUB's own by-ref
-  parameter straight through (`arg_push_fwd`, no storage), and we instead emit
-  something the compiler has to materialise into a DGROUP temp first. We lose
-  the identity "this argument IS the parameter I received" and spell it as a
-  fresh value. Six temps get reused across the 21 sites, hence +24 and not +84.
-  Mechanism identified: 64 `P<off>` placeholders reach canonical_rename
-  unrespelled, so a body holds both `P12%` (the parameter) and `P12` (a
-  forwarded use of it) and two variables are lettered out of one. The deferred
-  `fwdpending` path in `_resolve_calls` creates the unsuffixed one after the
-  SUB's own respelling has already run, and an INLINE callee gives it no
-  suffix to take.
-  Unifying them by name was TRIED AND REVERTED (`RO-UNIFY-DEFERRED-PARAM`):
-  resume then fails to compile with `Error 475: Parameter mismatch`, because
-  the parameter's integer suffix contradicts what the callee expects at that
-  position. Settle the TYPE first -- which of the two is wrong, the enclosing
-  SUB's `%` at that offset or the callee's param -- then the spelling follows.
-  Everything else in the DGROUP init image already matches byte for byte.
-  Two localized code clusters remain after that, +112 at 0x160c8 and -64 at
-  0x172b5, worth re-measuring only once the band matches.
-  Two side findings, neither the cause: the emitted `DIM` names its nine runtime
-  arrays `V8%`..`V0`, raw placeholders `canonical_rename` never re-letters
-  (byte-neutral, but the same leak class as the nested-USING one); and our
-  rebuild does not re-scan (`unhandled byte c4 at 0xb3a2`) because it holds a
-  `$INLINE` BIOS blob that `_try_inline_rescue`'s chain rule reclaims in the
-  original but not in the rebuilt layout.
+- **`resume.exe` — 95.53%, was 80.14%** (2026-07-31). The band defect is
+  closed: forwarded args to framed opaque helpers now take their type from the
+  caller, since a helper has none to give (`_type_helper_forwards`). What is
+  left is 4285 unreproduced bytes and delta -32, no longer one amplified
+  defect. Two of its twelve untyped forwards go to an ORDINARY SUB with an
+  untyped parameter and are deliberately not retyped -- doing so gives
+  `Error 475` (ledger `RO-UNIFY-DEFERRED-PARAM`); typing that callee's own
+  parameter from the caller's evidence is the remaining thread.
 - **`cal.exe`/`cal87.exe` — a loop closed too early** (2026-07-30). Two upstream
   defects were found and fixed (commit `c2994a3`): a fold region started one
   statement early when a codeless `DO` was spliced below its recorded boundary,
