@@ -406,7 +406,11 @@ def console(state: DecodeState, op, addr, kind) -> bool:
                 c.cur = None
                 state.advance()
                 return True
-            state.flush_pending()
+            # A TAB after a NESTED USING is an item of the chain that owns it,
+            # not the start of a statement (t1_usingtwice's TAB between the two
+            # USING clauses).
+            if not state.close_nested_using():
+                state.flush_pending()
         if leg == "lprint":  # printer leg joins/opens an LPRINT chain (t1_ltab)
             if (
                 e.pend_print is not None

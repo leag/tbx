@@ -1,0 +1,35 @@
+# t1_usingtwice dialect=1.1 start=08C60
+08C63:fld64:330
+08C68:fstp64:288
+08C6F:movsi:320
+08C72:rt:156
+08C74:movsi:296
+08C77:strassign
+08C79:movax:5
+08C7C:tabspc:200
+08C7E:movsi:316
+08C81:rt:156
+08C83:rt:191
+08C85:movax:25
+08C88:tabspc:200
+08C8A:movsi:312
+08C8D:rt:156
+08C8F:rt:202
+08C91:fld64:288
+08C96:rt:203
+08C98:rt:191
+08C9A:movax:37
+08C9D:tabspc:200
+08C9F:movsi:308
+08CA2:rt:156
+08CA4:rt:202
+08CA6:movsi:296
+08CA9:rt:156
+08CAB:rt:204
+08CAD:rt:191
+08CAF:rt:185
+08CB3:end
+08CB6:epilogue
+# commits
+08C6D
+08CB1

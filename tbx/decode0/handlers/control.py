@@ -26,6 +26,7 @@ from tbx.decode0.lift import (
     _lift_while,
 )
 from tbx.decode0.matchers import (
+    match_second_using_before_flush,
     array_param_suffix,
     match_bool_outer_and_group,
     match_bool_term1,
@@ -292,8 +293,36 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
     if kind == "rt":  # PRINT chains
         vec = op[2]
         if vec == 0xCA:  # USING begin: fmt off the sstack
-            state.flush_pending()
-            e.pend_using = UsingChain(fmt=e.sstack.pop(), start=c.cur)
+            # More than one USING can live in ONE print statement, and that
+            # form has no byte-equal split spelling (t1_usingtwice), so the
+            # USING has to become an ITEM of the open chain rather than end it.
+            # Two conditions, both necessary:
+            #   - another `rt CA` before this statement's flush, and
+            #   - NO per-statement commit marker in the span between them.
+            # The marker is what separates wild banker.exe (none in the span,
+            # one statement) from wild inv87.exe / invoice.exe (a marker before
+            # the second clause, so genuinely two). Checking the span is the
+            # point: an earlier attempt tested from the CHAIN's start instead
+            # and merged statements that were never one, ledger
+            # RO-COMMIT-MARKER-BOUNDARY.
+            outer = e.pend_print
+            multi = False
+            if outer is not None:
+                if any(isinstance(x, ir.PrintUsing) for x in outer.items):
+                    multi = True  # already inside a multi-USING statement
+                else:
+                    second = match_second_using_before_flush(i.ops, c.k)
+                    multi = second is not None and not (
+                        state.statement_boundary_between(
+                            addr, i.ops[second.start][0]
+                        )
+                    )
+            if not multi:
+                state.flush_pending()
+                outer = None
+            e.pend_using = UsingChain(
+                fmt=e.sstack.pop(), start=c.cur, nested_in=outer
+            )
             c.cur = None
             state.advance()
             return True
@@ -358,7 +387,8 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             return True
         if vec in (0xBB, 0xBE, 0xBD, 0xC0):  # item-eval vectors
             if e.pend_using is not None:  # plain item closes a USING chain
-                state.flush_pending()
+                if not state.close_nested_using():  # ...into its owner, if nested
+                    state.flush_pending()
             f = e.pend_fnum if vec in (0xBD, 0xC0) else None
             if vec in (0xBD, 0xC0) and f is None:
                 raise ValueError(f"file print item without [0060] at {addr:#x}")
@@ -376,7 +406,8 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             # FP stack, BF string off the sstack (witnessed t1_lpstr)
             item = e.sstack.pop() if vec == 0xBF else e.stack.pop()
             if e.pend_using is not None:  # plain item closes a USING chain
-                state.flush_pending()
+                if not state.close_nested_using():  # ...into its owner, if nested
+                    state.flush_pending()
             if (
                 e.pend_print is not None
                 and e.pend_print.mode != "lprint"
@@ -394,6 +425,7 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             state.advance()
             return True
         if vec == 0xB9:  # LPRINT flush-newline
+            state.close_nested_using()  # an item of the chain, not a statement
             if e.pend_using is not None:  # LPRINT USING closes on B9 too
                 pu, e.pend_using = e.pend_using, None
                 if not pu.lprint:
@@ -427,6 +459,7 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             return True
         if vec in (0xB8, 0xBA):  # flush-newline: statement complete
             want_file = vec == 0xBA
+            state.close_nested_using()  # an item of the chain, see the B9 leg
             if e.pend_using is not None:
                 pu, e.pend_using = e.pend_using, None
                 if (pu.file is not None) != want_file:

@@ -198,8 +198,8 @@
   },
   {
    "id": "RO-COMMIT-MARKER-BOUNDARY",
-   "title": "Nesting a second USING into its print chain: required for banker, but it costs inv87/invoice",
-   "disposition": "reverted",
+   "title": "Reading CD 87 as every statement boundary (the USING nesting needs a narrower span)",
+   "disposition": "superseded",
    "confidence": "high",
    "files": [
     "wild/hits/banker.exe",
@@ -220,7 +220,7 @@
     "Implemented with a bounded lookahead gate (another `rt CA` before the statement's flush) plus a branch-target span guard. banker.exe improves 155 -> 98 bytes off and delta +16 -> 0, and every USING fixture stays byte-exact. But wild inv87.exe and invoice.exe REGRESS: 649 -> 733 and 513 -> 597 bytes off, delta -16 -> -32, and without the span guard they stop decoding entirely (`jump target 0xc7af is not a statement start`, a statement inside the absorbed span being a jump target). Both are comparable programs, so this is a net loss. Reverted.",
     "Four gates tried and rejected: commit markers (unsound -- CD 87 is not per statement); TAB trailing an open USING chain (no effect on banker, churns other sources); second-USING-before-flush with a branch-target span guard (the one above); and restricting to the printer leg (does not separate them -- inv87's chains are LPRINT too, nests stay at 18)."
    ],
-   "instead": "The representation is settled and the requirement is proven: only the single-statement spelling reproduces the bytes, so a nested `PrintUsing` in the print item list is the right shape, and it works end to end (render case + rename-walk case, no new IR node). What is missing is a gate that separates banker's shape from inv87/invoice's -- four have been tried and are listed above, so start by diffing those two op streams against banker's around each `rt CA` rather than proposing a fifth. Do NOT land it without re-measuring inv87 and invoice: they are comparable, they regress, and a branch target inside the absorbed span breaks their decode outright.",
+   "instead": "SUPERSEDED -- the fix landed once the span was right. The marker is useless for finding statement starts in general (a `PRINT USING` opens with `rt CA` and carries none), but it answers the narrow question exactly: given TWO `rt CA` before one flush, a marker in the SPAN BETWEEN THEM means two statements, none means one. That separates wild banker.exe (merge; 155 -> 98 bytes off, delta +16 -> 0) from wild inv87.exe / invoice.exe (do not merge; they regress 649 -> 733 and 513 -> 597 if you do). The earlier attempts tested from the CHAIN's start, which is not the span the nesting absorbs. See t1_usingtwice and tests/tbx/test_using_nested_item.py.",
    "source": "session 2026-07-30"
   }
  ]

@@ -6796,6 +6796,12 @@ Assign(target=Var(name='B'), value=Lit(value=2))
 PrintUsing(fmt=StrLit(value='##'), values=(Var(name='A'), Call(name='TAB', args=(Lit(value=5),)), Var(name='B')), file=None, newline=True, lprint=False)
 End()
 
+## t1_usingtwice
+Assign(target=Var(name='A#'), value=DblLit(value=12.5))
+Assign(target=Var(name='B$'), value=StrLit(value='xy'))
+Lprint(items=(Call(name='TAB', args=(Lit(value=5),)), StrLit(value='n '), Call(name='TAB', args=(Lit(value=25),)), PrintUsing(fmt=StrLit(value='####.###'), values=(Var(name='A#'),), file=None, newline=False, lprint=True), Call(name='TAB', args=(Lit(value=37),)), PrintUsing(fmt=StrLit(value='\\ \\'), values=(Var(name='B$'),), file=None, newline=False, lprint=True)), newline=True, commas=None)
+End()
+
 ## t1_varptr
 Assign(target=Var(name='A'), value=Lit(value=1))
 Assign(target=Var(name='B%'), value=Call(name='VARPTR', args=(Var(name='A'),)))

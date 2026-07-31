@@ -48,7 +48,7 @@ EDITOR_FILE_LIMIT = 65536
 #: Keep the sizes pinned while also requiring emit_split to make compiler-sized
 #: root and include files below.
 _OVER_LONG = {
-    "banker.exe": 98245,
+    "banker.exe": 97906,
     "horses.exe": 67394,
     "inv87.exe": 88341,
     "invoice.exe": 88341,

@@ -93,6 +93,12 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
         return walk(c)  # bare numeric-truthiness condition (no explicit
         # compare in source, e.g. `LOOP UNTIL LEN(K$)` -- wild metric.exe)
 
+    def walk_item(item):
+        """A PRINT/LPRINT item is usually an Expr, but a nested `PrintUsing`
+        (a second USING inside one statement) is a STATEMENT node -- `walk`
+        rejects it as "not an Expr" and its variables never get re-lettered."""
+        return rn(item) if isinstance(item, ir.PrintUsing) else walk(item)
+
     def rn(s):
         if isinstance(s, ir.Assign):
             return ir.Assign(walk(s.target), walk(s.value))
@@ -146,7 +152,7 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.Loop(s.kind, walk_cond(s.cond) if s.cond is not None else None)
         if isinstance(s, ir.Print):
             return ir.Print(
-                tuple(walk(i) for i in s.items),
+                tuple(walk_item(i) for i in s.items),
                 newline=s.newline,
                 file=s.file,
                 commas=s.commas,
@@ -281,7 +287,7 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.Write(tuple(walk(i) for i in s.items), file=s.file)
         if isinstance(s, ir.Lprint):
             return ir.Lprint(
-                tuple(walk(i) for i in s.items),
+                tuple(walk_item(i) for i in s.items),
                 newline=s.newline,
                 commas=s.commas,
             )

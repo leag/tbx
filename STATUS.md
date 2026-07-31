@@ -129,44 +129,6 @@ code, because several were **tried and reverted** and the entry says why.
   "typed by evidence" from "defaulted" — **not** another caller-side special
   case. This is the highest-value single thread in the repo, because it is the
   one wild file where a round trip is meaningful.
-- **`banker.exe`/`number.exe` — one PRINT statement, two `USING` clauses**
-  (2026-07-30). banker recompiles 155 bytes off in 94 KB but 16 bytes too long,
-  and every one of those bytes is a per-statement commit marker (`CD 87`,
-  raw `CD 81` in TB 1.0) that the original does not have. Turbo Basic accepts
-  a SECOND `USING` inside one print statement:
-  `LPRINT TAB(5); "n "; TAB(25); USING f1$; A#; TAB(37); USING f2$; B$`
-  compiles to one statement with two `rt CA` USING-begins
-  (`wild/probes/probe_using_twice_one_stmt.bas`, byte-shape identical to
-  banker's). The decoder flushes unconditionally at `rt CA`
-  (`handlers/control.py`, "USING begin") and again where a plain item follows a
-  USING emit, so one source statement becomes four. 13 extra markers in banker,
-  15 sites across banker and number.
-  The evidence for the real boundary is already collected and unused:
-  `out.commits` holds every commit-marker address, so "is there a marker between
-  this chain's start and here" answers it exactly. What blocks the fix is
-  representation, not detection — the IR has `Lprint(items)` and
-  `PrintUsing(fmt, values)` as separate statements with no mixed form. The
-  cheapest shape is to let a `PrintUsing` sit inside a print item list and
-  render it as `USING fmt; v1; v2`, which needs no new node but does need the
-  `pend_print`/`pend_using` chain pair to nest.
-  **Tried twice and reverted** (ledger `RO-COMMIT-MARKER-BOUNDARY`). Second
-  attempt got banker to 98 bytes off and delta 0 -- the nesting works -- but
-  inv87.exe and invoice.exe regress (649 -> 733, 513 -> 597) and both are
-  comparable, so it is a net loss until a gate separates the two shapes. The nesting was
-  built and works -- it produced exactly the right single statement for the
-  probe -- but the gate is unsound: `CD 87` is NOT emitted per statement, so
-  "no marker between" does not mean "same statement". t1_lpusing has three
-  print statements and two markers, and merging on that basis collapsed it into
-  one. A narrower version (only a TAB trailing an open USING chain) regresses
-  nothing and improves the probe 20 -> 15 bytes off, but moves neither banker
-  nor number while churning their emitted source, so it was reverted too.
-  Both affected programs carry IDE toggle `K`. That was read as "can never be
-  byte-exact", which is wrong -- K costs exactly one flags byte -- so banker and
-  number ARE comparable and this gap does cost real bytes on judged programs.
-  Work out what governs `CD 87` before spending more here.
-  `probe_commit_per_statement.bas` pins the thing that makes the diagnosis
-  readable: markers are per STATEMENT, not per line — a colon-joined
-  `PRINT 1: PRINT 2` emits two.
 - **`cal.exe`/`cal87.exe` — a loop closed too early** (2026-07-30). Two upstream
   defects were found and fixed (commit `c2994a3`): a fold region started one
   statement early when a codeless `DO` was spliced below its recorded boundary,

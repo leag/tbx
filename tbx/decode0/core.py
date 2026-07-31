@@ -673,6 +673,43 @@ class DecodeState:
             raise ValueError(f"[bp+{bp_off}] already has non-string LOCAL type")
         return ir.Var(name)
 
+    def statement_boundary_between(self, start, addr) -> bool:
+        """Is there a per-statement commit marker in (start, addr]?
+
+        `CD 87` (raw `CD 81` under TB 1.0) is side-collected by the scanner into
+        `output.commits`. It is NOT emitted for every statement -- a `PRINT
+        USING` opens with its own `rt CA` and carries none, so t1_lpusing has
+        three print statements and two markers -- which makes this useless for
+        finding statement starts in general and is why an earlier attempt to do
+        that failed (ledger RO-COMMIT-MARKER-BOUNDARY).
+
+        What it answers reliably is the narrow question the USING nesting asks:
+        given TWO `rt CA` before one flush, is there a plain-print statement
+        between them? A marker in that span says yes (wild inv87.exe,
+        invoice.exe); none says the whole run is one statement (wild
+        banker.exe, t1_usingtwice).
+        """
+        if start is None or addr is None:
+            return True  # no span to judge -- keep the splitting behaviour
+        return any(start < m <= addr for m in (self.output.commits or ()))
+
+    def close_nested_using(self):
+        """Fold a nested USING chain back into the print chain that owns it."""
+        pu = self.pend_using
+        if pu is None or pu.nested_in is None:
+            return False
+        self.pend_using = None
+        pu.nested_in.items.append(
+            ir.PrintUsing(
+                pu.fmt,
+                tuple(pu.values),
+                file=pu.file,
+                newline=False,  # the OWNING chain's flush decides the newline
+                lprint=pu.lprint,
+            )
+        )
+        return True
+
     def flush_pending(self):
         """A trailing-';' print has no flush vector: the chain is proven
         closed only when the next statement completes, so finalize lazily with
@@ -684,6 +721,9 @@ class DecodeState:
         A chain closes late but is still a decoder decision, so each one lands
         through `commit` and records its event like any other statement."""
         with editing(self.stmts, "flush_pending"):
+            # A nested USING is an ITEM of the open chain, so it rejoins that
+            # chain before the chain itself is committed.
+            self.close_nested_using()
             if self.pend_dataread is not None:
                 pr, self.pend_dataread = self.pend_dataread, None
                 if not pr.targets:

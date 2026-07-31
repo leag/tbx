@@ -348,6 +348,19 @@ def _us_decl(s) -> str | None:
         return "COMMON " + ", ".join(s.names)
 
 
+def _print_item(item) -> str:
+    """One item of a PRINT/LPRINT list.
+
+    Usually an expression, but a `PrintUsing` sits here when a statement holds
+    more than one USING clause (t1_usingtwice). Its file/newline/lprint fields
+    belong to the owning chain and are not rendered.
+    """
+    if isinstance(item, PrintUsing):
+        vals = "; ".join(unparse(v) for v in item.values)
+        return f"USING {unparse(item.fmt)}; {vals}"
+    return unparse(item)
+
+
 def _us_output(s) -> str | None:
     """Render PRINT family, sound and misc actions; None if `s` is not one of them."""
     if isinstance(s, Print):
@@ -358,7 +371,7 @@ def _us_output(s) -> str | None:
             if cs[0]:
                 parts.append("," * cs[0] + " ")
             for i, item in enumerate(s.items):
-                parts.append(unparse(item))
+                parts.append(_print_item(item))
                 if i < len(s.items) - 1:
                     parts.append("," * cs[i + 1] + " " if cs[i + 1] else "; ")
             txt += " " + "".join(parts)
@@ -506,7 +519,7 @@ def _us_console(s) -> str | None:
             if cs[0]:
                 parts.append("," * cs[0] + " ")
             for i, item in enumerate(s.items):
-                parts.append(unparse(item))
+                parts.append(_print_item(item))
                 if i < len(s.items) - 1:
                     parts.append("," * cs[i + 1] + " " if cs[i + 1] else "; ")
             txt += " " + "".join(parts)

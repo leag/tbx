@@ -733,6 +733,32 @@ def match_using_emit(ops, index: int | None = None) -> UsingEmitMatch | None:
 _USING_CHAIN_LOOKAHEAD = 18
 
 
+def match_second_using_before_flush(ops, index: int | None = None):
+    """Another `USING` begin before this statement's flush, if there is one.
+
+    Turbo Basic accepts more than one USING in a single print statement
+    (`LPRINT TAB(5); USING f1$; A#; TAB(37); USING f2$; B$`), and that form is
+    not interchangeable with any split spelling -- only the one-statement
+    source reproduces the bytes, the four candidate splits coming back 15-20
+    bytes off (t1_usingtwice). Two `rt CA` before one flush vector is what says
+    so. A SINGLE USING after items is byte-identical split off, so this fires
+    only on the second.
+
+    The match points at the second `rt CA`, which the caller needs: two USING
+    begins are necessary but not sufficient, and the span between them is where
+    the deciding evidence sits.
+    """
+    ops, index = _window(ops, index)
+    for j in range(index + 1, min(index + _USING_CHAIN_LOOKAHEAD * 2, len(ops))):
+        if ops[j][1] != "rt":
+            continue
+        if ops[j][2] == 0xCA:
+            return TemplateMatch(template="second_using", start=j, stop=j + 1)
+        if ops[j][2] in (0xB8, 0xB9, 0xBA):  # statement flush: chain is over
+            return None
+    return None
+
+
 def match_using_chain_continues(
     ops, index: int | None = None
 ) -> TemplateMatch | None:
