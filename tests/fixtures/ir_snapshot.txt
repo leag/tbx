@@ -6138,6 +6138,15 @@ Assign(target=Var(name='F%'), value=Lit(value=1))
 CallStmt(name='SUB1', args=(Var(name='D%'), Var(name='E$'), Var(name='F%')))
 End()
 
+## t1_selreftrap
+OnTrap(event='TIMER', n=Lit(value=1), target=5)
+TrapCtl(event='TIMER', n=None, mode='ON')
+Assign(target=Var(name='A%'), value=Lit(value=2))
+CallStmt(name='SUB1', args=(Var(name='A%'),))
+End()
+Return(target=None)
+SubDef(name='SUB1', params=('B%',), body=(SelectCase(selector=Var(name='B%'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=1)),), body=(Print(items=(StrLit(value='one'),), newline=True, file=None, commas=None),)), CaseArm(guards=(CaseValue(value=Lit(value=2)),), body=(Print(items=(StrLit(value='two'),), newline=True, file=None, commas=None),))), case_else=None),))
+
 ## t1_shell
 Shell(cmd=StrLit(value='DIR'))
 End()

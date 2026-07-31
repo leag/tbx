@@ -33,6 +33,13 @@ def _is_is_mat_at(state, c):  # IS-relational materialized-boolean compare idiom
     )
 
 
+def _skip_hooks(state, i):
+    """The first index at or after `i` that is not an event-trap poll stamp."""
+    while _kind_at(state, i) == "trap_hook":
+        i += 1
+    return i
+
+
 def _is_arm_header_at(state, i):
     return _kind_at(state, i) in ("fldz", "fld1", "fild", "fld") and (
         _kind_at(state, i + 1) == "fcomp64" or _is_is_mat_at(state, i + 1)
@@ -406,12 +413,20 @@ def step(state):
             return True
         in_body = bool(c.cases) and c.cases[-1].body_jmp is not None
         # (3) Numeric entry: fstp64 [temp] to a scratch slot, arm header following.
+        # An event-trapping poll hook lands at this join too, exactly as it does
+        # at the string entry below -- the selector evaluation and the first arm
+        # test are separate statements, so a trapping program stamps between
+        # them. Without skipping it the SELECT is never recognised and the arms
+        # decode as an IF chain, which recompiles to integer compares instead of
+        # the selector's FP scratch cell (t1_selreftrap; wild resume.exe, 12
+        # sites, and the whole of what was left of its round trip).
+        head = _skip_hooks(state, c.k + 1)
         if (
             not in_body
             and kind == "fstp64"
             and op[2] < VAR_BASE
-            and _is_arm_header_at(state, c.k + 1)
-            and _arm_temp_at(state, c.k + 1) == op[2]
+            and _is_arm_header_at(state, head)
+            and _arm_temp_at(state, head) == op[2]
         ):
             state.branch(
                 "case", template="select_header", target=None, address=c.cur
