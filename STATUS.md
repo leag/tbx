@@ -155,12 +155,21 @@ code, because several were **tried and reverted** and the entry says why.
   ~17000 ops and makes our band look like it starts 28 bytes late, when it
   starts at 0x302 like the original's.
   The scan blocker is FIXED (helper payloads no longer re-emit the compiler's
-  CC/CB tail, so all six bodies round-trip byte-exact), but our rebuild still
-  does not decode: it now reaches `DGROUP layout not solvable (runtime slot
-  grid anchor)` in the layout phase. That is the same subsystem as the +24, so
-  the two are probably one defect seen from both ends -- our source makes the
-  compiler lay out a DGROUP our own layout solver then cannot anchor. Solving
-  that is the next step and the payoff is the whole 80% -> high-90s.
+  CC/CB tail, so all six bodies round-trip byte-exact). Our rebuild still does
+  not decode -- it reaches `DGROUP layout not solvable (runtime slot grid
+  anchor)` -- but that is a CONSEQUENCE, not a second defect.
+  The DGROUP init image is byte-identical between the two files except ONE
+  WORD, the band stamp at DS:0x110: `(s1, b1, s2, b1+s1, ...)` reads
+  s1=0x26 (38) in the original and s1=0x3e (62) in ours, with b1=0x306 and
+  s2=0x2ec identical. So the defect is exactly 24 bytes of extra numeric band
+  and nothing else -- every array block, every string descriptor, every pool
+  entry already matches. Measure any candidate fix at that word.
+  Accounting so far: our source's main-level numerics are eight singles and
+  `H%` (34 bytes); `SHARED R, S, T` adds three more singles (12) that no
+  main-level statement uses, though that is probably legitimate -- two
+  procedures referencing one slot IS a shared main slot. That leaves ~16 bytes
+  unexplained, four singles or four main-level FOR temp pairs. Payoff for
+  closing it is the whole 80% -> high-90s, since every later reference shifts.
   Two localized code clusters remain after that, +112 at 0x160c8 and -64 at
   0x172b5, worth re-measuring only once the band matches.
   Two side findings, neither the cause: the emitted `DIM` names its nine runtime
