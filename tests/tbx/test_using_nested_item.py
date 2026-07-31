@@ -71,3 +71,36 @@ def test_a_marker_in_the_span_blocks_the_merge():
         if isinstance(i, ir.PrintUsing)
     ]
     assert nested == []
+
+
+def test_a_helper_payload_drops_the_bytes_the_compiler_re_adds():
+    """CB and, under EVENT trapping, the CC poll stamp before it.
+
+    Both are Turbo Basic's contribution, not the payload's. Re-emitting either
+    makes the recompiled body longer than the original, which is enough to miss
+    `find_opaque_helpers`' exact-body match -- and then our own output does not
+    scan (wild resume.exe: six helpers, 113 bytes in and 114 out,
+    `unhandled byte c4`).
+    """
+    from tbx.ir.render import _without_appended_tail
+
+    assert _without_appended_tail(bytes.fromhex("558bec5dcccb")) == bytes.fromhex("558bec5d")
+    assert _without_appended_tail(bytes.fromhex("558bec5dcb")) == bytes.fromhex("558bec5d")
+    # No trailing CB: nothing to strip but the stamps.
+    assert _without_appended_tail(bytes.fromhex("558bec5d")) == bytes.fromhex("558bec5d")
+
+
+def test_resume_helper_payloads_round_trip_byte_exact():
+    from conftest import wild_hits_bytes
+
+    import tbx.decode0.scan as sc
+    from tbx import decode0 as d0
+
+    data = wild_hits_bytes("resume.exe")
+    start, dia = d0.find_prologue(data)
+    ops = sc._scan(data, start, dia, set())
+    bodies = [o[2] for o in ops if o[1] in ("opaque_helper", "inline_sub")]
+    assert [len(b) for b in bodies] == [113, 128, 120, 112, 111, 107]
+    # Every one ends with the compiler's own stamp+ret, which must not be
+    # emitted back into the source.
+    assert all(b.endswith(bytes.fromhex("cccb")) for b in bodies)

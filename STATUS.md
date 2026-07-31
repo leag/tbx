@@ -151,13 +151,16 @@ code, because several were **tried and reverted** and the entry says why.
   The array region is confirmed IDENTICAL -- both hold the same nine 0x36
   blocks at 0x120..0x2d0, so both numeric bands start at 0x302 and the whole
   +24 is composition inside the band.
-  Comparing the two slot maps needs our rebuild to scan, and it does not:
-  `unhandled byte c4 at 0xb3a2`, a `$INLINE` BIOS blob that
-  `_try_inline_rescue` reclaims in the original but not in the rebuild. A
-  PARTIAL scan is not a substitute -- it reaches only 2218 of ~17000 ops and
-  makes our band look like it starts 28 bytes late when it starts at 0x302 like
-  the original's. Fix the rescue first: being unable to decode our own output
-  is a gap in its own right, and it is what blocks this one.
+  Do NOT compare the slot maps with a partial scan: it reaches only 2218 of
+  ~17000 ops and makes our band look like it starts 28 bytes late, when it
+  starts at 0x302 like the original's.
+  The scan blocker is FIXED (helper payloads no longer re-emit the compiler's
+  CC/CB tail, so all six bodies round-trip byte-exact), but our rebuild still
+  does not decode: it now reaches `DGROUP layout not solvable (runtime slot
+  grid anchor)` in the layout phase. That is the same subsystem as the +24, so
+  the two are probably one defect seen from both ends -- our source makes the
+  compiler lay out a DGROUP our own layout solver then cannot anchor. Solving
+  that is the next step and the payoff is the whole 80% -> high-90s.
   Two localized code clusters remain after that, +112 at 0x160c8 and -64 at
   0x172b5, worth re-measuring only once the band matches.
   Two side findings, neither the cause: the emitted `DIM` names its nine runtime

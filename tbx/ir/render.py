@@ -627,6 +627,24 @@ def _us_fileio(s) -> str | None:
 _INLINE_PER_LINE = 14
 
 
+def _without_appended_tail(data: bytes) -> bytes:
+    """A helper payload with the bytes the compiler re-appends removed.
+
+    Turbo Basic contributes the closing far RET (CB) itself, and under EVENT
+    trapping it also stamps a poll (CC) immediately before it. Both are the
+    compiler's, not the payload's, so re-emitting either makes the recompiled
+    body longer than the original by exactly that much -- which is enough to
+    miss `find_opaque_helpers`' exact-body match and leave our own output
+    unscannable (wild resume.exe: 113 bytes in, 114 back out, `unhandled byte
+    c4`).
+    """
+    if data.endswith(b"\xCB"):
+        data = data[:-1]
+    while data.endswith(b"\xCC"):
+        data = data[:-1]
+    return data
+
+
 def _inline_lines(data: bytes) -> str:
     """`$INLINE` byte list, wrapped across as many source lines as it takes.
 
@@ -654,7 +672,7 @@ def _us_procdata(s) -> str | None:
         # `$INLINE "file"` payloads after linking.  The compiler contributes
         # the final far RET (CB), so emit the payload as byte-list INLINE and
         # let Turbo BASIC append CB again on recompilation.
-        data = s.data[:-1] if s.data.endswith(b"\xCB") else s.data
+        data = _without_appended_tail(s.data)
         return _inline_lines(data)
     if isinstance(s, CallStmt):
         if s.args:
