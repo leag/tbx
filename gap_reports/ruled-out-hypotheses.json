@@ -195,6 +195,30 @@
    ],
    "instead": "Do not look for an OUT spelling that reproduces these bytes -- none exists. The bodies are source-level `SUB name INLINE` + `$INLINE`, which `ir.Inline` and emit0 already round-trip byte-exactly. FIXED the same session: `out_imm` is gone and `_try_inline_rescue` now claims a framed `55 8b ec ... 5d cb` body when its CONTENT holds an instruction sequence the compiler cannot emit -- currently `mov al,imm8; out imm8,al`, extensible as further such sequences are proved. Match whole sequences, never a bare opcode-range test: these bodies are not disassembled, and searching the E4-E7 port-I/O range accepted `89 e5`, the alternate `mov bp,sp`, in the prologue of the framed procedures the guard exists to reject (wild CVT2TB.EXE, phone.exe, which stay fail-loud). The check is one-way -- it only rules a body IN. Fixture t1_inlineport; zip.exe 96.87% -> 98.75% identical (delta +592 -> +64), ziptest.exe 93.17% -> 98.97% (+224 -> -224).",
    "source": "session 2026-07-30"
+  },
+  {
+   "id": "RO-COMMIT-MARKER-BOUNDARY",
+   "title": "The CD 87 commit markers can be read as the source's statement boundaries",
+   "disposition": "reverted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/banker.exe",
+    "wild/hits/number.exe"
+   ],
+   "signatures": [
+    "CD 87",
+    "commit marker",
+    "USING"
+   ],
+   "hypothesis": "banker.exe recompiles 16 bytes long because 13 extra per-statement commit markers (`CD 87`; raw `CD 81` under TB 1.0) appear where the original has none, so `out.commits` -- which the scanner already collects -- can tell the decoder where the source really put its statement breaks. Specifically: a `USING` that begins while a print chain is open belongs to that chain when no marker separates them, and should be nested as an item rather than ending the statement.",
+   "negative_evidence": [
+    "The marker is NOT emitted per statement, which the whole idea depends on. Fixture t1_lpusing has three consecutive print statements on three numbered lines and only TWO markers: the middle one, `LPRINT USING \"##.##\"; B;`, has none. A `PRINT USING` opens with its own `rt CA` and carries no `CD 87`, so absence of a marker does not mean absence of a boundary.",
+    "Implemented anyway to see: `UsingChain.nested_in`, a `close_nested_using` that folds the chain back into its owner's item list, render support for a `PrintUsing` sitting in a print item list, and the rename walk taught to descend into it. It produced exactly the right source for the probe -- one statement, both USING clauses -- and REGRESSED t1_lpusing, merging its three statements into one. Reverted.",
+    "The narrower follow-up (leave `rt CA` alone; only let a TAB trailing an open USING chain stay in that chain, gated on the same marker test) does not regress anything and improves the probe from 20 to 15 bytes off, but it does NOT move banker.exe or number.exe at all -- their `pend_using.start` is None mid-statement, so the gate stays conservative -- while churning the emitted source of banker and horses. Reverted too: baseline churn with no measurable gain on any program.",
+    "What IS established: `LPRINT TAB(5); \"n \"; TAB(25); USING f1$; A#; TAB(37); USING f2$; B$` is one legal Turbo Basic statement compiling to one marker and two `rt CA` (wild/probes/probe_using_twice_one_stmt.bas, byte shape identical to banker's). The decoder splitting it into four is a real fidelity gap. Markers are also per statement and not per line where they DO appear -- a colon-joined `PRINT 1: PRINT 2` emits two (wild/probes/probe_commit_per_statement.bas)."
+   ],
+   "instead": "Do not reach for `out.commits` as a statement-boundary oracle; work out what actually governs `CD 87` first, because the evidence so far (markers before plain print statements, none before a USING-opening one, none before assignments) does not yet fit a single rule. The representation half is settled and reusable: nesting a `PrintUsing` inside a print item list works end to end and needs no new IR node, only a render case and a rename-walk case -- what is missing is a sound test for WHEN to nest. Note the payoff before spending more: the only two programs with the shape, banker.exe and number.exe, both carry IDE toggle K and can never be byte-exact, so nothing the oracle can judge today improves. Full diagnosis under 'Diagnosed but not landed' in STATUS.md.",
+   "source": "session 2026-07-30"
   }
  ]
 }

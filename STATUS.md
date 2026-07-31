@@ -149,9 +149,17 @@ code, because several were **tried and reverted** and the entry says why.
   cheapest shape is to let a `PrintUsing` sit inside a print item list and
   render it as `USING fmt; v1; v2`, which needs no new node but does need the
   `pend_print`/`pend_using` chain pair to nest.
-  **Deliberately not landed**: both affected programs carry IDE toggle `K`, so
-  neither can ever be byte-exact, and no comparable program has the shape. This
-  is a fidelity gap worth closing when a comparable witness appears, not before.
+  **Tried and reverted** (ledger `RO-COMMIT-MARKER-BOUNDARY`). The nesting was
+  built and works -- it produced exactly the right single statement for the
+  probe -- but the gate is unsound: `CD 87` is NOT emitted per statement, so
+  "no marker between" does not mean "same statement". t1_lpusing has three
+  print statements and two markers, and merging on that basis collapsed it into
+  one. A narrower version (only a TAB trailing an open USING chain) regresses
+  nothing and improves the probe 20 -> 15 bytes off, but moves neither banker
+  nor number while churning their emitted source, so it was reverted too.
+  Both affected programs carry IDE toggle `K` and can never be byte-exact, and
+  no comparable program has the shape, so nothing the oracle can judge improves.
+  Work out what governs `CD 87` before spending more here.
   `probe_commit_per_statement.bas` pins the thing that makes the diagnosis
   readable: markers are per STATEMENT, not per line — a colon-joined
   `PRINT 1: PRINT 2` emits two.
