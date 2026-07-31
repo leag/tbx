@@ -3,8 +3,9 @@
 Two emitter bugs -- a dropped `PRINT ,,` and an `EOF(n)` truth test spelled as
 a comparison -- lived in wild pz.exe for as long as the corpus has had it, and
 the harness never saw them: `verify` returned `skip:` before compiling, because
-pz carries an IDE toggle. It can indeed never be byte-exact. Its USER code is
-still ours, and compiling it is what found both.
+pz carries an IDE toggle -- and a runtime revision this oracle does not have,
+which is the part that really does put byte-exactness out of reach. Its USER
+code is still ours, and compiling it is what found both.
 
 So the reasons now annotate the result instead of replacing it, and only a
 program that COULD have been exact counts against the tally.
@@ -28,10 +29,18 @@ def test_a_clean_program_has_no_reason():
     assert verify_wild.unreachable_reason(data, _prog(), "1.1") is None
 
 
-def test_a_toggle_is_a_reason_but_not_a_skip():
+def test_a_code_bearing_toggle_is_a_reason_but_not_a_skip():
     data = (verify_wild._ROOT / "tests/fixtures/corpus/t1_ifgoto.exe").read_bytes()
-    reason = verify_wild.unreachable_reason(data, _prog("K"), "1.1")
-    assert reason and "Keyboard break" in reason
+    reason = verify_wild.unreachable_reason(data, _prog("B"), "1.1")
+    assert reason and "Bounds" in reason
+
+
+def test_keyboard_break_alone_is_not_a_reason():
+    # K leaves ONLY the flags mask -- one byte, no inserted code -- so the
+    # program is judged with that byte normalized rather than excused.
+    data = (verify_wild._ROOT / "tests/fixtures/corpus/t1_ifgoto.exe").read_bytes()
+    assert verify_wild.unreachable_reason(data, _prog("K"), "1.1") is None
+    assert verify_wild.unreachable_reason(data, _prog("KB"), "1.1") is not None
 
 
 def test_a_wrong_build_is_a_reason():

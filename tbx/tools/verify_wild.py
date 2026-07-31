@@ -16,9 +16,14 @@ oracle's output whatever the decoder does, for two reasons that have nothing to
 do with decoding.
 
 **IDE Options toggles.** They are baked into the EXE and have no source
-spelling, so a program compiled with Keyboard break or Bounds checking on can
-never be reproduced by an oracle that compiles with defaults.
-`verify_fixture` already skips fixtures for exactly this.
+spelling, so an oracle compiling with defaults cannot reproduce them. How much
+that costs depends entirely on WHICH toggle, and the long-standing blanket
+claim that such a program "can never be reproduced" was wrong: Keyboard break
+leaves no trace but the flags mask itself -- one byte, no inserted code, same
+length (`fkb_t1_and`, `fkb_t1_beep` against their default twins). Bounds costs
+128 bytes of instrumentation and Stack test 3, which really are unreachable.
+So `FLAGS_ONLY_TOGGLES` programs are judged with that byte normalized, and only
+the rest are excused. Seven wild programs were sitting behind that one byte.
 
 **A different Turbo Basic build.** The runtime is most of a compiled EXE, so a
 program built by another release differs almost everywhere no matter how
@@ -125,6 +130,24 @@ def load_manifest() -> list[dict]:
     return json.loads(MANIFEST.read_text())["programs"]
 
 
+#: IDE toggles whose ONLY trace in the compiled image is the flags mask itself.
+#: Keyboard break is the whole set: `fkb_t1_and` and `fkb_t1_beep` differ from
+#: their default-toggle twins by exactly one byte, the mask at prologue-0x73,
+#: with no inserted code and no size change. Contrast Stack test (+3 bytes) and
+#: Bounds (+128) in `fst_t1_gosub` / `fbd_t1_arr1`. A program carrying only
+#: these is one byte from byte-exact, so it is worth judging rather than
+#: excluding -- wild banker.exe comes back 155 bytes off in 94 KB.
+FLAGS_ONLY_TOGGLES = frozenset("K")
+
+
+def normalize_flags(data: bytes, dialect_start: int) -> bytes:
+    """`data` with the IDE Options mask zeroed, so a flags-only toggle cancels."""
+    at = dialect_start - 0x73
+    if at < 0 or at >= len(data):
+        return data
+    return data[:at] + b"\x00" + data[at + 1 :]
+
+
 def unreachable_reason(data: bytes, prog, dialect: str) -> str | None:
     """Why this program can never be byte-exact here, or None if it can.
 
@@ -137,7 +160,7 @@ def unreachable_reason(data: bytes, prog, dialect: str) -> str | None:
     """
     reasons = []
     toggles = getattr(prog, "toggles", "")
-    if toggles:
+    if set(toggles) - FLAGS_ONLY_TOGGLES:
         reasons.append(f"Options toggles {decode0.toggle_names(toggles)}")
     match = build_match(data, dialect)
     if match < BUILD_MATCH_FLOOR:
@@ -154,6 +177,7 @@ def verify(name: str) -> str:
     data = path.read_bytes()
     dialect = program_dialect(data)
     prog = decode0.decode_user_code(data)
+    toggles = getattr(prog, "toggles", "")
     unreachable = unreachable_reason(data, prog, dialect)
 
     try:
@@ -174,6 +198,11 @@ def verify(name: str) -> str:
         return f"COMPILE-FAIL: {str(exc).splitlines()[-1][:80]}"
     if out == data:
         return "exact"
+    start = decode0.find_prologue(data)[0]
+    if set(toggles) <= FLAGS_ONLY_TOGGLES and toggles and normalize_flags(
+        out, start
+    ) == normalize_flags(data, start):
+        return f"exact bar the Options flags byte ({decode0.toggle_names(toggles)})"
     edit, pct = distance(data, out)
     text = (
         f"{edit} bytes off ({pct:.2f}% identical), "
