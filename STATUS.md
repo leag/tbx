@@ -164,12 +164,24 @@ code, because several were **tried and reverted** and the entry says why.
   s2=0x2ec identical. So the defect is exactly 24 bytes of extra numeric band
   and nothing else -- every array block, every string descriptor, every pool
   entry already matches. Measure any candidate fix at that word.
-  Accounting so far: our source's main-level numerics are eight singles and
-  `H%` (34 bytes); `SHARED R, S, T` adds three more singles (12) that no
-  main-level statement uses, though that is probably legitimate -- two
-  procedures referencing one slot IS a shared main slot. That leaves ~16 bytes
-  unexplained, four singles or four main-level FOR temp pairs. Payoff for
-  closing it is the whole 80% -> high-90s, since every later reference shifts.
+  CAUSE FOUND, not yet fixed. The 24 bytes are six by-ref argument temporaries
+  at 0x30a, 0x30e, 0x312, 0x316, 0x31a, 0x31e -- slots nothing reads or writes,
+  reached only by `arg_push_ref`. The op-kind diff against the original is
+  exactly complementary:
+
+      arg_push_fwd   39 -> 18   (-21)
+      arg_push_ref    4 -> 25   (+21)
+
+  So at 21 call sites the original FORWARDS the enclosing SUB's own by-ref
+  parameter straight through (`arg_push_fwd`, no storage), and we instead emit
+  something the compiler has to materialise into a DGROUP temp first. We lose
+  the identity "this argument IS the parameter I received" and spell it as a
+  fresh value. Six temps get reused across the 21 sites, hence +24 and not +84.
+  Fix the argument recovery at those sites and the band, the layout anchor and
+  the whole 80% follow -- everything else in the DGROUP init image already
+  matches byte for byte. Look at `core.py`'s `arg_push_fwd` handling and
+  `_respell_params`; the related "forwarded arg to unknown callee params"
+  failure on bmaster.exe is likely the same machinery.
   Two localized code clusters remain after that, +112 at 0x160c8 and -64 at
   0x172b5, worth re-measuring only once the band matches.
   Two side findings, neither the cause: the emitted `DIM` names its nine runtime
