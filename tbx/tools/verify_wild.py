@@ -1,8 +1,14 @@
 """Byte-exact round-trip verification over the wild subset the oracle can judge.
 
-    python -m tbx.tools.verify_wild            # the comparable subset
-    python -m tbx.tools.verify_wild --all      # every decoding wild program
+    python -m tbx.tools.verify_wild            # the comparable subset, fast
+    python -m tbx.tools.verify_wild --all      # compile every decoding program
     python -m tbx.tools.verify_wild NAME ...
+
+The default gates a release and stays quick. `--all` is the thorough sweep: it
+COMPILES the programs the default skips rather than printing why they were
+skipped, which is what the flag used to do and what made it useless. Exclusion
+decides whether a mismatch is a failure, never whether to look -- see
+`unreachable_reason`.
 
 `scan_wild --roundtrip` compiles everything it decoded, which makes its tally
 read far worse than the decoder is: most wild programs cannot match this
@@ -119,20 +125,36 @@ def load_manifest() -> list[dict]:
     return json.loads(MANIFEST.read_text())["programs"]
 
 
+def unreachable_reason(data: bytes, prog, dialect: str) -> str | None:
+    """Why this program can never be byte-exact here, or None if it can.
+
+    This decides whether a mismatch is a FAILURE, not whether to look. A
+    program the oracle cannot reproduce exactly still recompiles into something
+    worth diffing: wild pz.exe carries an IDE toggle AND a different runtime
+    revision, so it can never match -- and its op stream still gave up two real
+    emitter bugs (a dropped `PRINT ,,` and an `EOF(n)` truth test spelled as a
+    comparison), because both live in USER code, which is ours either way.
+    """
+    reasons = []
+    toggles = getattr(prog, "toggles", "")
+    if toggles:
+        reasons.append(f"Options toggles {decode0.toggle_names(toggles)}")
+    match = build_match(data, dialect)
+    if match < BUILD_MATCH_FLOOR:
+        reasons.append(f"different Turbo Basic build ({match}% runtime match)")
+    return "; ".join(reasons) or None
+
+
 def verify(name: str) -> str:
-    """'exact' | 'skip: ...' | 'N bytes, delta +M' for one wild program."""
+    """'exact' | 'skip: ...' | 'N bytes off (P% identical), delta +M' for one
+    wild program, with why byte-exactness is unreachable when it is."""
     path = _HITS / name
     if not path.is_file():
         return f"skip: {name} not present (gitignored corpus)"
     data = path.read_bytes()
     dialect = program_dialect(data)
     prog = decode0.decode_user_code(data)
-    toggles = getattr(prog, "toggles", "")
-    if toggles:
-        return f"skip: Options toggles {decode0.toggle_names(toggles)}"
-    match = build_match(data, dialect)
-    if match < BUILD_MATCH_FLOOR:
-        return f"skip: different Turbo Basic build ({match}% runtime match)"
+    unreachable = unreachable_reason(data, prog, dialect)
 
     try:
         with tempfile.TemporaryDirectory(prefix="tbx-wild-") as temp:
@@ -153,10 +175,11 @@ def verify(name: str) -> str:
     if out == data:
         return "exact"
     edit, pct = distance(data, out)
-    return (
+    text = (
         f"{edit} bytes off ({pct:.2f}% identical), "
         f"delta {len(out) - len(data):+d}"
     )
+    return text if unreachable is None else f"{text}  [expected: {unreachable}]"
 
 
 def main(argv: list[str]) -> int:
@@ -181,7 +204,8 @@ def main(argv: list[str]) -> int:
                 continue
         result = verify(name)
         print(f"{name}: {result}")
-        if not result.startswith(("exact", "skip:")):
+        # A mismatch only counts against us where byte-exactness was reachable.
+        if not result.startswith(("exact", "skip:")) and "[expected:" not in result:
             bad += 1
     print(f"\n{len(names)} checked, {bad} not byte-exact")
     return 1 if bad else 0
