@@ -270,6 +270,24 @@
    ],
    "assessment": "resume.exe's last structural difference, 12 sites: op-kind diff fcomp64 12 -> 0, fstsw 15 -> 3, far_cmpax_si 5 -> 17. We emit a direct integer compare where the original compares in double precision. It is all that is left after the forwarded-parameter typing landed (1365 unreproduced bytes, 98.59% identical).\n\nCORRECTED READING, after nine refuted probes. The shape is NOT one comparison. A per-statement commit marker sits between the conversion and the compare:\n    arg_ref 10; far_fild_si; fstp64 82   <- tail of the PRECEDING statement\n  | fld1; fcomp64 82; fstsw; jcc         <- the IF\nand only 4 of the 12 `fcomp64` have a paired `fstp64` at all -- one site is `fild 2558; fcomp64 82` with no conversion, reading a value cell 82 already held. So cell 82 (0x52, below VAR_BASE) is a persistent FP scratch cell carried ACROSS statements, and the question is what puts the parameter there, not how the comparison is spelled.\n\nNine spellings probed inside a SUB with a by-ref `P%`, none reproducing it, all saved under wild/probes/probe_byref_*.bas: `P% <> 1` (far_cmpax_si, what we emit); `P% <> 1#`; `1 <> P%` (far_movax_si + pooled cmpax_m); DEFDBL A-Z in scope; SHARED double compared against the param; a double LOCAL compared against it; DEFINT A-Z with an unsuffixed parameter; `P% <> 1!`; and `CDBL(P%) <> 1`. The last three all produce `far_icomp_si` -- TB's DIRECT compare of an FP value against a by-ref integer -- which is the point: TB has a one-op form and uses it everywhere I could construct, so the wild's materialised form must come from something that needs the converted value to OUTLIVE the comparison.\n\nRESOLVED. Not a comparison spelling at all -- a SELECT CASE. The corrected reading said the conversion belonged to the PRECEDING statement and cell 82 was scratch carried across a boundary; that is exactly a selector evaluated into its temp with the arms comparing against it. Probe sc_ref.bas (`SELECT CASE P%` over a by-ref integer parameter) reproduces the byte shape and decodes correctly; probe sc_trap.bas, the same source with an ON TIMER trap active, reproduces resume's shape exactly and decoded as an IF chain. The numeric SELECT entry tested the op immediately after `fstp64` and saw the poll stamp, so the SELECT never opened. The STRING entry already skipped that same hook, citing wild rsltest.exe. Fixed by skipping trap stamps in the numeric lookahead; fixture t1_selreftrap. resume.exe 98.59% -> 98.82%.",
    "source": "session 2026-07-31"
+  },
+  {
+   "id": "RR-TRAP-STAMP-CALL-TARGET",
+   "title": "A branch to a trap-stamped CALL statement names an address no statement owns (rsltest.exe)",
+   "signatures": [
+    "jump target 0xX is not a statement start",
+    "trap_hook",
+    "mov_mem_sp"
+   ],
+   "disposition": "unresolved",
+   "evidence_class": "unresolved",
+   "confidence": "medium",
+   "files": [
+    "wild/hits/rsltest.exe"
+   ],
+   "promotion_criteria": "A probe where a branch targets a CALL that begins with literal-argument staging under an active trap, showing which address the statement is committed at. Then either commit the CALL at the staging op or teach resolution the alias, WITH that witness.",
+   "assessment": "rsltest.exe is the last of the three programs whose jump target lands on an event-trap poll stamp. The other two closed with `match_proc_body` learning to walk the stamps in a procedure epilogue (t1_exitsubtrap: help.exe, resume.exe). This one does not, and the reason is what sits after the stamp:\n    0xf322 jmp 0xf325\n    0xf325 trap_hook          <- the target\n    0xf326 mov_mem_sp 102     <- literal-argument staging\n    0xf32a sub_sp 10\n    ... arg_push_temp ... far_call\nSo the branch names the stamp of a CALL statement whose own recorded address is further along, past the staging ops. Advancing the target past the stamps is NOT enough -- 0xf326 owns no statement either.\n\nTwo general fixes were implemented and REVERTED, both because they fixed nothing measurable:\n(1) Retargeting every branch that lands on a stamp, in `_scan`. This breaks wild prtguide.exe and resume.exe outright: a procedure exit deliberately IS the first stamp of its epilogue, so retargeting those loses the address `match_proc_body` just established.\n(2) Accepting a stamp as an ALIAS for the statement behind it, in `ControlGraph.from_statements` and in `_resolve_targets`' lookup. Harmless -- all 39 programs still decode -- but it does not close rsltest, because the statement behind the stamp is not at stamp+1. Adding tolerance with no witness is what the calibration rule forbids, so it was reverted rather than kept 'in case'.\n\nNote for whoever picks this up: the check that fires is `ControlGraph.validate_targets`, not `_resolve_targets` -- both raise the identical message, and patching the latter has no effect on this failure.",
+   "source": "session 2026-07-31"
   }
  ]
 }
