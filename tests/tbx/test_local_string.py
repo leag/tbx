@@ -50,8 +50,8 @@ def test_string_local_in_block_def_fn(stem):
         # from the frame table (t1_locstrafterfor)
         ("bmaster.exe", ValueError, "forwarded arg to unknown callee params at 0x9391"),
         ("ifi.exe", ValueError, "unhandled INT 8c at 0x19bd2"),
-        ("cleanup.exe", ValueError, "jump target 0xe92e is not a statement start"),
-        ("reformat.exe", ValueError, "jump target 0xecb9 is not a statement start"),
+        ("cleanup.exe", ValueError, "jump target 0xe9be is not a statement start"),
+        ("reformat.exe", ValueError, "jump target 0xed49 is not a statement start"),
     ],
 )
 def test_string_local_witnesses_advance(stem, exc, next_gap):

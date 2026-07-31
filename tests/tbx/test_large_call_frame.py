@@ -80,8 +80,8 @@ def test_scan_local_array_index_dx_spill():
 @pytest.mark.parametrize(
     ("stem", "exc", "next_gap"),
     [
-        ("cleanup.exe", ValueError, "jump target 0xe92e is not a statement start"),
-        ("reformat.exe", ValueError, "jump target 0xecb9 is not a statement start"),
+        ("cleanup.exe", ValueError, "jump target 0xe9be is not a statement start"),
+        ("reformat.exe", ValueError, "jump target 0xed49 is not a statement start"),
     ],
 )
 def test_large_local_family_advances_wild_program(stem, exc, next_gap):

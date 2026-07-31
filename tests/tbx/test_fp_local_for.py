@@ -20,9 +20,9 @@ def test_scan_testw_bp_is_exact():
 @pytest.mark.parametrize(
     ("stem", "exc", "next_gap"),
     [
-        ("cleanup.exe", ValueError, "jump target 0xe92e is not a statement start"),
+        ("cleanup.exe", ValueError, "jump target 0xe9be is not a statement start"),
         ("crossref.exe", ValueError, "displacement 0x324 is neither scalar nor array element"),
-        ("reformat.exe", ValueError, "jump target 0xecb9 is not a statement start"),
+        ("reformat.exe", ValueError, "jump target 0xed49 is not a statement start"),
     ],
 )
 def test_fp_local_for_advances_wild_program(stem, exc, next_gap):

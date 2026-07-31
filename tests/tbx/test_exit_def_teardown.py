@@ -79,3 +79,30 @@ def test_epilogue_entry_stops_at_a_real_statement():
     ops = [(0x10, "movsi", 4), (0x13, "strassign"), (0x15, "fn_ret")]
     entry, freed = epilogue_entry(ops, 2)
     assert (entry, freed) == (2, 0)
+
+
+def test_epilogue_entry_skips_a_local_dynamic_array_free():
+    """The heap block of a `LOCAL A()` is released in the epilogue too, and an
+    EXIT SUB aims ahead of it (wild cleanup.exe, reformat.exe). Not counted as
+    a freed string: `freed_strings` feeds the retf pop arithmetic and an array
+    block is not a string descriptor."""
+    ops = [
+        (0x10, "movsi", 4),
+        (0x13, "strassign"),
+        (0x15, "trap_hook"),
+        (0x16, "movsi", 14),
+        (0x19, "local_arr_free"),
+        (0x1C, "proc_ret", 4),
+    ]
+    entry, freed = epilogue_entry(ops, 5)
+    assert (ops[entry][0], freed) == (0x15, 0)
+
+
+def test_exit_sub_past_a_local_array_free_resolves():
+    body = next(
+        s.body
+        for s in decode0.decode_user_code(_exe("t1_exitsublocarr"))
+        if isinstance(s, ir.SubDef)
+    )
+    kinds = [type(s).__name__ for s in _walk(body)]
+    assert "ExitSub" in kinds

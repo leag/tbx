@@ -581,7 +581,8 @@ def epilogue_entry(ops, closer: int, floor: int = 0) -> tuple[int, int]:
     ``closer``.
 
     A body's epilogue is the run immediately before its return: one
-    ``arg_ref <disp>; str_temp_free`` pair per LOCAL/parameter string, plus the
+    ``arg_ref <disp>; str_temp_free`` pair per LOCAL/parameter string, one
+    ``movsi <disp>; local_arr_free`` pair per LOCAL dynamic array, plus the
     ``trap_hook`` poll stamps a trapping build leaves there. All of it is a
     no-op to the lift, so it produces no statement -- but it IS where an EXIT
     SUB / EXIT DEF jumps, and the address it jumps to is the FIRST op of the
@@ -602,6 +603,17 @@ def epilogue_entry(ops, closer: int, floor: int = 0) -> tuple[int, int]:
         ):
             i -= 2
             freed += 1
+            continue
+        if (
+            i - 2 >= floor
+            and ops[i - 1][1] == "local_arr_free"
+            and ops[i - 2][1] == "movsi"
+        ):  # a LOCAL dynamic array's heap block, released the same way and in
+            # the same place (wild cleanup.exe, reformat.exe, whose three EXIT
+            # SUBs each aim at the stamp ahead of this pair). Counted apart
+            # from the strings: `freed_strings` is what the retf pop
+            # arithmetic reads, and an array block is not a string descriptor.
+            i -= 2
             continue
         break
     return i, freed

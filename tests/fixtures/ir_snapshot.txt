@@ -3844,6 +3844,11 @@ DefFn(name='FNFN1$', params=('A$', 'B%'), body=(Local(names=('C$',)), Assign(tar
 Print(items=(FnCall(name='FNFN1$', args=(StrLit(value='y'), Lit(value=5))),), newline=True, file=None, commas=None)
 End()
 
+## t1_exitsublocarr
+SubDef(name='SUB1', params=('A%',), body=(Local(names=('V0()',)), Dim(name='V0', bounds=(Lit(value=4),), also=()), Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=7)), IfInline(cond=RelOp(op='>', lhs=Var(name='A%'), rhs=Lit(value=2)), body=(ExitSub(),), else_body=None), Print(items=(ArrayRef(name='V0', indices=(Lit(value=1),)),), newline=True, file=None, commas=None)))
+CallStmt(name='SUB1', args=(Lit(value=5),))
+End()
+
 ## t1_exitsublocstr
 SubDef(name='SUB1', params=('A%', 'B%'), body=(Local(names=('C$',)), Assign(target=Var(name='C$'), value=StrLit(value='x')), IfBlock(arms=((RelOp(op='>', lhs=Var(name='A%'), rhs=Var(name='B%')), (Assign(target=Var(name='A%'), value=Lit(value=0)), ExitSub())),), else_body=None), Print(items=(Var(name='C$'), Var(name='A%')), newline=True, file=None, commas=None)))
 Assign(target=Var(name='D%'), value=Lit(value=5))
