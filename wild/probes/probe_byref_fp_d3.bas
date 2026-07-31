@@ -1,0 +1,9 @@
+10 A% = 2
+20 CALL FOO(A%)
+30 END
+40 SUB FOO(P%)
+50 LOCAL X#
+60 X# = 1
+70 IF P% <> X# THEN 90
+80 PRINT "one"
+90 END SUB

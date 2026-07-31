@@ -1,0 +1,9 @@
+10 A% = 2
+20 D# = 1
+30 CALL FOO(A%)
+40 END
+50 SUB FOO(P%)
+60 SHARED D#
+70 IF P% <> D# THEN 90
+80 PRINT "one"
+90 END SUB
