@@ -136,12 +136,21 @@ code, because several were **tried and reverted** and the entry says why.
   descriptor at 0x62c and the original names 0x614 (+24), while pooled literals
   move the other way (0x98c -> 0x984, -8). Every variable reference in the 49 KB
   code region then differs, which is the whole of the 80%.
-  So the numeric sub-band we cause the compiler to allocate is 24 bytes larger
-  than the original's. Next step is to compare the band composition against the
-  original's stamp (the `layout.py` stamp path already reads
-  `(num_size, num_base, str_size, ...)`) rather than to hunt statements: with
-  216 variables (188 string, 14 single, 14 integer) a single wrong type or one
-  extra numeric explains it, and +24 is 6 singles, 12 integers, or 3 doubles.
+  The DGROUP is laid out as nine runtime-array blocks of 0x36 from 0x120
+  (ending 0x302), then the main numeric band, then string descriptors at 4-byte
+  stride. In the ORIGINAL the numeric band is 0x302..0x32c -- 42 bytes, 11
+  slots, ten singles and one integer (0x306, 0x30a, 0x30e, 0x312, 0x314, 0x318,
+  0x31c, 0x320, 0x324, 0x328 referenced). Ours is 66. There is no stamp to read:
+  resume has runtime arrays, and stamped programs are the no-runtime-array ones.
+  The 24 bytes are NOT extra declarations. Our emitted source has only nine
+  main-level numerics -- eight singles and `H%` -- which is 34 bytes, less than
+  the original's 42. So the difference is in what the COMPILER allocates around
+  them, and the two candidates are the synthesized `SHARED` bindings (a SUB
+  variable we share gets a main slot instead of its own local-static one, and
+  resume's SHARED lists are large) and the phantom FOR/temp slots. Compare the
+  original's 11 slots against the slots our rebuild allocates in 0x302..0x350
+  before touching anything: our rebuild scans only as far as 0xb3a2, which is
+  past the main program, so a partial scan is enough to enumerate them.
   Two localized code clusters remain after that, +112 at 0x160c8 and -64 at
   0x172b5, worth re-measuring only once the band matches.
   Two side findings, neither the cause: the emitted `DIM` names its nine runtime
