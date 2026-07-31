@@ -58,8 +58,8 @@
    "toggles": "KBO",
    "build_match": 18,
    "roundtrip": "code-or-metadata",
-   "delta": -304,
-   "excluded": "Options toggles Keyboard break, Bounds, Overflow; different Turbo Basic build (18% runtime match)"
+   "delta": -288,
+   "excluded": "different Turbo Basic build (18% runtime match)"
   },
   {
    "name": "book.exe",
@@ -107,7 +107,7 @@
    "build_match": 18,
    "roundtrip": "code-or-metadata",
    "delta": -288,
-   "excluded": "Options toggles Keyboard break, Bounds, Overflow; different Turbo Basic build (18% runtime match)"
+   "excluded": "different Turbo Basic build (18% runtime match)"
   },
   {
    "name": "cleanup.exe",
@@ -118,8 +118,8 @@
    "toggles": "KBOS",
    "build_match": 96,
    "roundtrip": "code-or-metadata",
-   "delta": -3239,
-   "excluded": "Options toggles Keyboard break, Bounds, Overflow, Stack test"
+   "delta": -231,
+   "excluded": null
   },
   {
    "name": "color.exe",
@@ -132,6 +132,42 @@
    "roundtrip": "code-or-metadata",
    "delta": -32,
    "excluded": "different Turbo Basic build (18% runtime match)"
+  },
+  {
+   "name": "d-fix.exe",
+   "sha256": "c8f58fe7f308e486a267b969096a17e0ea11803d7bcf70c4de09c6df60f9eeb2",
+   "bytes": 47556,
+   "statements": 730,
+   "source_bytes": 15880,
+   "toggles": "",
+   "build_match": 99,
+   "roundtrip": "code-or-metadata",
+   "delta": 0,
+   "excluded": null
+  },
+  {
+   "name": "day086.exe",
+   "sha256": "65da5791ea3b284f2f91b23e4ef08681f7fccda5ef79ef38c7177795432d46d8",
+   "bytes": 35075,
+   "statements": 138,
+   "source_bytes": 4572,
+   "toggles": "",
+   "build_match": 99,
+   "roundtrip": "code-or-metadata",
+   "delta": 0,
+   "excluded": null
+  },
+  {
+   "name": "day386.exe",
+   "sha256": "f35bb184a56a05838c7e0c254b7f933efb1e5927a51e25623a3ccd8c15c7e759",
+   "bytes": 35075,
+   "statements": 138,
+   "source_bytes": 4572,
+   "toggles": "",
+   "build_match": 99,
+   "roundtrip": "code-or-metadata",
+   "delta": 0,
+   "excluded": null
   },
   {
    "name": "help.exe",
@@ -156,6 +192,18 @@
    "roundtrip": "code-or-metadata",
    "delta": -640,
    "excluded": "different Turbo Basic build (88% runtime match)"
+  },
+  {
+   "name": "install0.exe",
+   "sha256": "db3e7617978b5113bad9f9ddd97dbe598a5552eca80e70d9706ecc1dbef8bd8d",
+   "bytes": 42319,
+   "statements": 397,
+   "source_bytes": 11537,
+   "toggles": "KBOS",
+   "build_match": 97,
+   "roundtrip": "code-or-metadata",
+   "delta": 0,
+   "excluded": null
   },
   {
    "name": "inv87.exe",
@@ -218,6 +266,18 @@
    "excluded": "different Turbo Basic build (18% runtime match)"
   },
   {
+   "name": "mmsetup.exe",
+   "sha256": "332df5f38b0f3a5cd9060c847b677bc2f2befc4e2b0d237a1d5e1f82c0d265af",
+   "bytes": 61744,
+   "statements": 52,
+   "source_bytes": 2753,
+   "toggles": "K",
+   "build_match": 18,
+   "roundtrip": "code-or-metadata",
+   "delta": -288,
+   "excluded": "different Turbo Basic build (18% runtime match)"
+  },
+  {
    "name": "mymenu.exe",
    "sha256": "54be07ea344a41d164bacaf90210bd54343912f76c6f5190763876a66bb6409e",
    "bytes": 39008,
@@ -264,6 +324,18 @@
    "roundtrip": "code-or-metadata",
    "delta": 0,
    "excluded": null
+  },
+  {
+   "name": "pcagent.exe",
+   "sha256": "14482906e3ab691f4608cc98cf9e78f4dfccd8952250968d59078394bc4f357b",
+   "bytes": 72652,
+   "statements": 1672,
+   "source_bytes": 37840,
+   "toggles": "",
+   "build_match": 87,
+   "roundtrip": "code-or-metadata",
+   "delta": -480,
+   "excluded": "different Turbo Basic build (87% runtime match)"
   },
   {
    "name": "prtguide.exe",
@@ -322,8 +394,20 @@
    "toggles": "KBOS",
    "build_match": 96,
    "roundtrip": "code-or-metadata",
-   "delta": -3255,
-   "excluded": "Options toggles Keyboard break, Bounds, Overflow, Stack test"
+   "delta": -231,
+   "excluded": null
+  },
+  {
+   "name": "rescfg.exe",
+   "sha256": "85da774b9b39c8e654d22f727cfa3c674f06ccd107d71ceb5969fa7f9b89cd6f",
+   "bytes": 49436,
+   "statements": 131,
+   "source_bytes": 11697,
+   "toggles": "",
+   "build_match": 99,
+   "roundtrip": "code-or-metadata",
+   "delta": 48,
+   "excluded": null
   },
   {
    "name": "resume.exe",
@@ -370,8 +454,8 @@
    "toggles": "KBOS",
    "build_match": 97,
    "roundtrip": "code-or-metadata",
-   "delta": -246,
-   "excluded": "Options toggles Keyboard break, Bounds, Overflow, Stack test"
+   "delta": 0,
+   "excluded": null
   },
   {
    "name": "schart.exe",
@@ -454,8 +538,8 @@
    "toggles": "KBOS",
    "build_match": 96,
    "roundtrip": "code-or-metadata",
-   "delta": -476,
-   "excluded": "Options toggles Keyboard break, Bounds, Overflow, Stack test"
+   "delta": -128,
+   "excluded": null
   },
   {
    "name": "tbd73.exe",
@@ -476,6 +560,30 @@
    "statements": 715,
    "source_bytes": 26918,
    "toggles": "K",
+   "build_match": 99,
+   "roundtrip": "filler-plus-metadata",
+   "delta": 0,
+   "excluded": null
+  },
+  {
+   "name": "year086.exe",
+   "sha256": "f1b28761edf08a951f5f7bac3e737d3d61bd96c5c24bd003ebc08d47a964a440",
+   "bytes": 41203,
+   "statements": 168,
+   "source_bytes": 7286,
+   "toggles": "",
+   "build_match": 99,
+   "roundtrip": "filler-plus-metadata",
+   "delta": 0,
+   "excluded": null
+  },
+  {
+   "name": "year386.exe",
+   "sha256": "e37f24e60fa250da07083ed20932e87c07f0cd0e6477dc3d6000bff3be34fea9",
+   "bytes": 41203,
+   "statements": 168,
+   "source_bytes": 7286,
+   "toggles": "",
    "build_match": 99,
    "roundtrip": "filler-plus-metadata",
    "delta": 0,

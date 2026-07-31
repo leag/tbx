@@ -12,18 +12,23 @@ decides whether a mismatch is a failure, never whether to look -- see
 
 `scan_wild --roundtrip` compiles everything it decoded, which makes its tally
 read far worse than the decoder is: most wild programs cannot match this
-oracle's output whatever the decoder does, for two reasons that have nothing to
+oracle's output whatever the decoder does, for one reason that has nothing to
 do with decoding.
 
-**IDE Options toggles.** They are baked into the EXE and have no source
-spelling, so an oracle compiling with defaults cannot reproduce them. How much
-that costs depends entirely on WHICH toggle, and the long-standing blanket
-claim that such a program "can never be reproduced" was wrong: Keyboard break
-leaves no trace but the flags mask itself -- one byte, no inserted code, same
-length (`fkb_t1_and`, `fkb_t1_beep` against their default twins). Bounds costs
-128 bytes of instrumentation and Stack test 3, which really are unreachable.
-So `FLAGS_ONLY_TOGGLES` programs are judged with that byte normalized, and only
-the rest are excused. Seven wild programs were sitting behind that one byte.
+**IDE Options toggles are no longer an exclusion reason.** They are baked into
+the EXE and have no source spelling, but `compile_bas`'s `toggles` argument
+drives the real Options menu before compiling (see
+`tb_v86_lib.setOptionsToggles`), the same way `--compile-exe` already drove
+"Compile to EXE file" -- so a toggle-carrying program is compiled the way it
+actually was, not with defaults. The long-standing blanket claim that such a
+program "can never be reproduced" was already wrong for the cheapest toggle
+(Keyboard break leaves no trace but the flags mask itself), and is now handled
+uniformly for all four (`8KBOS`): verified byte-exact by a self-consistency
+round trip (a KBOS-toggled EXE, decoded, re-emitted, and recompiled with the
+same toggles reproduces the original exactly), and wild install0.exe went from
+unmeasured to 99.17% identical once compiled with its own KBOS toggles.
+`FLAGS_ONLY_TOGGLES`/`normalize_flags` remain for `verify_fixture`, which does
+not yet drive the toggles menu.
 
 **A different Turbo Basic build.** The runtime is most of a compiled EXE, so a
 program built by another release differs almost everywhere no matter how
@@ -151,21 +156,25 @@ def normalize_flags(data: bytes, dialect_start: int) -> bytes:
 def unreachable_reason(data: bytes, prog, dialect: str) -> str | None:
     """Why this program can never be byte-exact here, or None if it can.
 
-    This decides whether a mismatch is a FAILURE, not whether to look. A
-    program the oracle cannot reproduce exactly still recompiles into something
-    worth diffing: wild pz.exe carries an IDE toggle AND a different runtime
-    revision, so it can never match -- and its op stream still gave up two real
-    emitter bugs (a dropped `PRINT ,,` and an `EOF(n)` truth test spelled as a
-    comparison), because both live in USER code, which is ours either way.
+    This decides whether a mismatch is a FAILURE, not whether to look. IDE
+    Options toggles are NOT a reason any more: `compile_bas`'s `toggles` drives
+    the real Options menu the same way `--compile-exe` drives "Compile to EXE
+    file" (see `tb_v86_lib.setOptionsToggles`), verified byte-exact by a
+    self-consistency round trip (a KBOS-toggled EXE, decoded, re-emitted, and
+    recompiled with the same toggles reproduces the original exactly) and by
+    wild install0.exe going from unmeasured to 99.17% identical once compiled
+    with its own KBOS toggles.
+
+    A program the oracle cannot reproduce exactly still recompiles into
+    something worth diffing: wild pz.exe was built by a different runtime
+    revision, so it can never match -- and its op stream still gave up two
+    real emitter bugs (a dropped `PRINT ,,` and an `EOF(n)` truth test spelled
+    as a comparison), because both live in USER code, which is ours either way.
     """
-    reasons = []
-    toggles = getattr(prog, "toggles", "")
-    if set(toggles) - FLAGS_ONLY_TOGGLES:
-        reasons.append(f"Options toggles {decode0.toggle_names(toggles)}")
     match = build_match(data, dialect)
     if match < BUILD_MATCH_FLOOR:
-        reasons.append(f"different Turbo Basic build ({match}% runtime match)")
-    return "; ".join(reasons) or None
+        return f"different Turbo Basic build ({match}% runtime match)"
+    return None
 
 
 def verify(name: str) -> str:
@@ -192,17 +201,14 @@ def verify(name: str) -> str:
                 )
             # The program's own dialect, not a fixed one: compiling a 1.0
             # program with the 1.1 compiler cannot reproduce it whatever the
-            # decode did.
-            out = oracle.compile_bas(bas, dialect=dialect, timeout=1200)
+            # decode did. `toggles` drives the real Options menu to match --
+            # see `tb_v86_lib.setOptionsToggles` -- so a toggle-carrying
+            # program is compiled the way it actually was, not with defaults.
+            out = oracle.compile_bas(bas, dialect=dialect, timeout=1200, toggles=toggles)
     except Exception as exc:  # the harness, not a rejection: report it as such
         return f"COMPILE-FAIL: {str(exc).splitlines()[-1][:80]}"
     if out == data:
         return "exact"
-    start = decode0.find_prologue(data)[0]
-    if set(toggles) <= FLAGS_ONLY_TOGGLES and toggles and normalize_flags(
-        out, start
-    ) == normalize_flags(data, start):
-        return f"exact bar the Options flags byte ({decode0.toggle_names(toggles)})"
     edit, pct = distance(data, out)
     text = (
         f"{edit} bytes off ({pct:.2f}% identical), "

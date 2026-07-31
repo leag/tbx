@@ -3,6 +3,7 @@
 // SOLVER.BAS, then Run (compile-to-memory) or --compile-exe (compile-to-EXE on disk).
 // Usage: node tb_v86.js <file.bas> [--run-ms N] [--rows a-b] [--compile-exe]
 //                       [--floppy tb10_floppy.img]   (default tb_floppy.img = TB 1.1)
+//                       [--toggles KBOS]  (IDE Options: any of 8/K/B/O/S, ON only)
 const path = require("path");
 const lib = require("./tb_v86_lib.js");
 
@@ -13,7 +14,8 @@ const opt = (name, def) => { const i = args.indexOf(name); return i >= 0 ? args[
 const RUN_MS = parseInt(opt("--run-ms", "9000"), 10);
 const ROWS = opt("--rows", "0-24");
 const COMPILE_EXE = args.includes("--compile-exe");
-if (!basArg) { console.error("usage: node tb_v86.js <file.bas> [--run-ms N] [--rows a-b] [--compile-exe]"); process.exit(2); }
+const TOGGLES = opt("--toggles", "");
+if (!basArg) { console.error("usage: node tb_v86.js <file.bas> [--run-ms N] [--rows a-b] [--compile-exe] [--toggles KBOS]"); process.exit(2); }
 
 const WORKSPACE = path.resolve(opt("--workspace", HERE));
 const workImg = lib.buildWorkImg(basArg, HERE, opt("--floppy", undefined), WORKSPACE);
@@ -21,7 +23,8 @@ console.error(`[harness] work.img built with SOLVER.BAS`);
 
 const emulator = lib.bootEmulator({ here: HERE, workImg });
 const { scr } = lib.attachScreen(emulator);
-const { altKey, tapKey, typeSlow, waitFor, held, heldExt } = lib.makeDriver(emulator);
+const driver = lib.makeDriver(emulator);
+const { altKey, tapKey, typeSlow, waitFor, held, heldExt } = driver;
 const sleep = lib.sleep, ENTER = lib.ENTER;
 const fs = require("fs");
 
@@ -42,6 +45,11 @@ const fs = require("fs");
   if (loaded) await lib.waitForStableScreen(scr, 700, 20000);
   console.error("[harness] auto-loaded:", loaded);
   if (!loaded) { await altKey(0x21); await tapKey(0x26, 700); await typeSlow("SOLVER.BAS"); await tapKey(ENTER, 2500); }
+
+  if (TOGGLES) {
+    await lib.setOptionsToggles(driver, scr, TOGGLES);
+    console.error("[harness] toggles set:", TOGGLES);
+  }
 
   if (COMPILE_EXE) {
     // Set Options -> Compile to -> EXE file. In-menu keys must be held to register;

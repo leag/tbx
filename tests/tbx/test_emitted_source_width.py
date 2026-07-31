@@ -104,6 +104,27 @@ def test_no_wild_program_emits_an_over_wide_line():
     assert not over, f"{len(over)} wild programs emit an over-wide line: {over}"
 
 
+def test_a_wide_dim_comma_list_folds_with_continuation():
+    """A fourth over-wide shape: wild d-fix.exe's 30-array DIM at 296 chars.
+
+    Unlike DATA/COMMON, a DIM comma list is one statement with one trailing
+    commit marker (see `ir.Dim`), so it cannot be divided into several
+    statements the way `_split_list_statement` divides those. Turbo Basic's
+    `_` continuation folds it over physical lines without changing the
+    statement boundary, and compiles byte-identical (checked against the
+    oracle on a 3-array DIM, folded vs. unfolded).
+    """
+    bound = (ir.Var("M%"),)
+    program = [
+        ir.Dim("V0$", bound, also=tuple((f"V{i}$", bound) for i in range(1, 30)))
+    ]
+
+    source = emit0.emit(program).rstrip()
+
+    assert all(len(ln) <= EDITOR_LINE_LIMIT for ln in source.split("\n"))
+    assert " _\n" in source, "expected a `_` continuation fold, got one physical line"
+
+
 def test_a_long_literal_concatenation_uses_optional_spacing_to_fit():
     value = ir.StrLit("1234567890")
     expr = value

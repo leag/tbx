@@ -9,6 +9,14 @@ code is still ours, and compiling it is what found both.
 
 So the reasons now annotate the result instead of replacing it, and only a
 program that COULD have been exact counts against the tally.
+
+IDE Options toggles are no longer a reason at all: `compile_bas`'s `toggles`
+drives the real Options menu before compiling (`tb_v86_lib.setOptionsToggles`),
+so a toggle-carrying program is compiled the way it actually was. Verified
+byte-exact by a self-consistency round trip (a KBOS-toggled EXE, decoded,
+re-emitted, and recompiled with the same toggles reproduces the original
+exactly), and wild install0.exe going from unmeasured to 99.17% identical
+compiled with its own KBOS toggles.
 """
 
 from tbx.tools import verify_wild
@@ -29,18 +37,13 @@ def test_a_clean_program_has_no_reason():
     assert verify_wild.unreachable_reason(data, _prog(), "1.1") is None
 
 
-def test_a_code_bearing_toggle_is_a_reason_but_not_a_skip():
+def test_no_toggle_combination_is_a_reason_on_its_own():
+    # Every toggle -- including code-bearing ones like Bounds, unlike the
+    # one-byte-only Keyboard break -- is compiled for real (see module
+    # docstring), so none of them make byte-exactness unreachable by itself.
     data = (verify_wild._ROOT / "tests/fixtures/corpus/t1_ifgoto.exe").read_bytes()
-    reason = verify_wild.unreachable_reason(data, _prog("B"), "1.1")
-    assert reason and "Bounds" in reason
-
-
-def test_keyboard_break_alone_is_not_a_reason():
-    # K leaves ONLY the flags mask -- one byte, no inserted code -- so the
-    # program is judged with that byte normalized rather than excused.
-    data = (verify_wild._ROOT / "tests/fixtures/corpus/t1_ifgoto.exe").read_bytes()
-    assert verify_wild.unreachable_reason(data, _prog("K"), "1.1") is None
-    assert verify_wild.unreachable_reason(data, _prog("KB"), "1.1") is not None
+    for toggles in ("K", "B", "KB", "KBOS"):
+        assert verify_wild.unreachable_reason(data, _prog(toggles), "1.1") is None
 
 
 def test_a_wrong_build_is_a_reason():

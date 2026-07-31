@@ -70,11 +70,18 @@ def oracle_dir() -> Path:
     return cand
 
 
-def compile_bas(bas: Path | str, dialect: str = "1.1", timeout: int = 300) -> bytes:
+def compile_bas(
+    bas: Path | str, dialect: str = "1.1", timeout: int = 300, toggles: str = ""
+) -> bytes:
     """Compile a .BAS with the real Turbo Basic compiler; return EXE bytes.
 
     The vendored harness stages external ``$INCLUDE`` and ``$INLINE``
     dependencies relative to the source file before invoking Turbo Basic.
+
+    `toggles` sets IDE Options before compiling (any of "8KBOS", ON only --
+    they are all OFF by default), driven through the real Options menu the
+    same way `--compile-exe` drives "Compile to EXE file". See
+    `tb_v86_lib.setOptionsToggles`.
     """
     d = oracle_dir()
     with tempfile.TemporaryDirectory(prefix="tbx-oracle-") as workspace:
@@ -83,6 +90,8 @@ def compile_bas(bas: Path | str, dialect: str = "1.1", timeout: int = 300) -> by
             "node", "tb_v86.js", str(Path(bas).resolve()), "--compile-exe",
             "--workspace", workspace,
         ]
+        if toggles:
+            cmd += ["--toggles", toggles]
         floppy = _FLOPPIES[dialect]
         if floppy:
             cmd += ["--floppy", floppy]

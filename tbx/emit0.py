@@ -482,6 +482,24 @@ def emit(stmts, *, compact: bool = False) -> str:
                 _name_fn_results(s.body, s.name), render_fn_body, col
             )
             return f"{header}\nEND DEF" if not inner else f"{header}\n{inner}\nEND DEF"
+        if isinstance(s, ir.Dim):
+            out = ir.unparse_stmt(s)
+            if col + len(out) <= LINE_LIMIT:
+                return out
+            # A DIM comma list is one statement with one trailing commit marker
+            # (ir.Dim), unlike DATA/COMMON where the compiler is lossy about
+            # where a list was divided -- so it cannot be split into several
+            # DIM statements the way `_split_list_statement` divides those.
+            # Turbo Basic's `_` continuation folds it over physical lines
+            # without changing the statement boundary, and compiles
+            # byte-identical (checked against the oracle on a 3-array DIM,
+            # folded vs. unfolded). Wild d-fix.exe's 30-array DIM is 296 chars.
+            head = "DIM DYNAMIC " if s.dynamic else "DIM "
+            arrs = [
+                ir.unparse_stmt(ir.Dim(n, b, dynamic=s.dynamic)).removeprefix(head)
+                for n, b in ((s.name, s.bounds), *s.also)
+            ]
+            return _wrap_continued(head, arrs, col)
         return ir.unparse_stmt(s)
 
     # Statements sharing an original line number (only possible when the error-trap
