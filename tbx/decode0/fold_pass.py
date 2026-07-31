@@ -248,7 +248,8 @@ def fold_constructs(program) -> list:
     were committed at, and which IFs the bytes say were spelled multi-line.
     """
     from tbx.decode0.addresses import AddressOwnership
-    from tbx.decode0.lift import _fold_if, _jump_targets
+    from tbx.decode0.lift import _fold_if, _jump_targets, _target_counts
+    from tbx.decode0.select_case import _fold_arm_ifgoto_else
 
     events = committed(program.events)
     statements = [event.payload for event in events]
@@ -347,6 +348,16 @@ def fold_constructs(program) -> list:
                 targets=_jump_targets(statements),
                 stmt_addr=stmt_addr,
                 block_ifs=block_ifs,
+            )
+            # The walk folds an arm's single-line IF/ELSE too, and this pass
+            # has to build the same arm it does -- `_fold_if` alone leaves the
+            # IfGoto spelling, which an arm cannot carry
+            # (select_case._fold_arm_ifgoto_else; t1_selarmifelse).
+            folded, folded_addrs = _fold_arm_ifgoto_else(
+                folded,
+                folded_addrs,
+                operation.end_address,
+                _target_counts(statements),
             )
             statements[start:stop], addresses[start:stop] = folded, folded_addrs
             shifts.append((operation.stop, (stop - start) - len(folded)))

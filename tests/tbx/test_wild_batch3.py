@@ -1088,9 +1088,14 @@ def test_decode_t1_selelsetarget():
         assert isinstance(blk, ir.IfBlock), f"{stem}: {type(blk).__name__}"
         arm = blk.arms[0][1]
         assert sum(isinstance(b, ir.SelectCase) for b in arm) == 2, stem
-        # the second SELECT is the inline IF's skip target, numbered in place
-        assert emit0.emit(prog).count("\n20 SELECT CASE B$\n") == 1, stem
-        assert "  IF C% <= 2 THEN 20\n" in emit0.emit(prog), stem
+        # The CASE ELSE's trailing inline IF used to survive as a conditional
+        # GOTO, which forced the second SELECT to be numbered so the skip had
+        # something to name. It now folds into the arm as the single-line IF
+        # the source actually spells (`IF C% > 2 THEN PRINT "flon"`, see the
+        # .bas), so nothing targets the second SELECT and it is unnumbered.
+        # Still byte-exact in both dialects.
+        assert "\n20 SELECT CASE B$\n" not in emit0.emit(prog), stem
+        assert '      IF C% > 2 THEN PRINT "flon"\n' in emit0.emit(prog), stem
 
 
 def test_decode_t1_fnlitresult():

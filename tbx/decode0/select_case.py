@@ -12,7 +12,7 @@ from tbx import ir
 from tbx.decode0.statement_log import editing
 from tbx.decode0.const import _IS_RELOP, VAR_BASE
 from tbx.decode0.frames import SelectFrame
-from tbx.decode0.lift import _fold_if, _jump_targets
+from tbx.decode0.lift import _fold_if, _jump_targets, _negate_cond, _target_counts
 
 
 def _kind_at(state, i):
@@ -195,10 +195,110 @@ def _fold_arm(state, frame, merge):
         stmt_addr=o.stmt_addr,
         block_ifs=c.block_if_addrs,
     )
+    stmts, addrs = _fold_arm_ifgoto_else(stmts, addrs, merge, _target_counts(o.stmts))
     o.stmts[body_idx:], o.addrs[body_idx:] = stmts, addrs
     body = tuple(o.stmts[body_idx:])
     _keep_addrs(state, body, body_idx)
     return body
+
+
+def _addr_target(t):
+    """The address an unresolved `("addr", a)` target names, else None."""
+    return t[1] if isinstance(t, tuple) and t and t[0] == "addr" else None
+
+
+def _fold_arm_ifgoto_else(stmts, addrs, merge, counts):
+    """Fold single-line IFs that `_fold_if` cannot see, inside a CASE arm.
+
+    A simple condition canonicalizes to `ir.IfGoto`, never to the `ir.IfInline`
+    `_fold_if` matches on, so `IF c THEN x [ELSE y]` reaches here as a
+    conditional GOTO plus loose statements:
+
+        IF c THEN x            IfGoto(NOT c, ->arm end)   <then...>
+        IF c THEN x ELSE y     IfGoto(NOT c, ->E)  <then...>  Goto(->arm end)
+                               E: <else...>
+
+    At top level both spellings are fine -- they emit as numbered lines and
+    recompile byte-for-byte, which is why this must NOT run there (t1_ifgoto).
+    In an arm they cannot be spelled: the skip targets the arm's own end, which
+    is the arm-close jmp and owns no statement, so the address never resolves
+    (`jump target 0x873e is not a statement start`).
+
+    Folding to `ir.IfBlock` would be wrong rather than merely ugly -- over a
+    simple condition the block spelling compiles to different bytes -- so this
+    reproduces the source's own single-line form via `IfInline.else_body`, with
+    the condition negated back into its source sense.
+
+    An ELSE run is folded recursively, which is what recovers a chained
+    `IF a THEN x ELSE IF b THEN y ELSE z`: every arm of the chain skips to the
+    same arm end, so `merge` stays fixed all the way down.
+
+    Only a branch to the arm end is rewritten. An IfGoto naming a real
+    statement inside the arm already resolves and already round-trips as a
+    numbered line, so it is left exactly as it is.
+    """
+    local = _target_counts(stmts)
+    if counts.get(merge, 0) != local.get(merge, 0):
+        # Something outside this arm jumps to its end; the arm-close address is
+        # not ours alone to consume.
+        return stmts, addrs
+    return _fold_region(stmts, addrs, merge, counts)
+
+
+def _unreferenced(addrs, counts) -> bool:
+    """No statement anywhere names one of these addresses.
+
+    A run about to be swallowed into an inline body stops being addressable, so
+    it may not hold a jump target -- the same rule `_fold_if` applies to an ELSE
+    region, and the reason a source that really did spell numbered lines is left
+    alone.
+    """
+    return not any(counts.get(a, 0) for a in addrs if a is not None)
+
+
+def _fold_region(stmts, addrs, merge, counts):
+    out_s, out_a = [], []
+    i = 0
+    while i < len(stmts):
+        s, a = stmts[i], addrs[i]
+        target = _addr_target(s.target) if isinstance(s, ir.IfGoto) else None
+        node = None
+        if target is not None and a is not None and target > a:
+            if target == merge and i + 1 < len(stmts):
+                # `IF c THEN <rest of arm>`: the false branch leaves the arm.
+                if _unreferenced(addrs[i + 1 :], counts):
+                    node = ir.IfInline(
+                        _negate_cond(s.cond), tuple(stmts[i + 1 :]), None
+                    )
+            else:
+                j = next(
+                    (k for k in range(i + 1, len(stmts)) if addrs[k] == target), None
+                )
+                if (
+                    j is not None
+                    and j - 1 > i
+                    and isinstance(stmts[j - 1], ir.Goto)
+                    and _addr_target(stmts[j - 1].target) == merge
+                    and counts.get(target, 0) == 1  # only our own IfGoto
+                    and _unreferenced(addrs[i + 1 : j - 1], counts)
+                ):
+                    else_s, _ = _fold_region(
+                        stmts[j:], addrs[j:], merge, counts
+                    )
+                    node = ir.IfInline(
+                        _negate_cond(s.cond),
+                        tuple(stmts[i + 1 : j - 1]),
+                        tuple(else_s),
+                    )
+        if node is None:
+            out_s.append(s)
+            out_a.append(a)
+            i += 1
+            continue
+        out_s.append(node)
+        out_a.append(a)
+        i = len(stmts)  # the fold reaches the arm end by construction
+    return out_s, out_a
 
 
 def _keep_addrs(state, body, body_idx) -> None:

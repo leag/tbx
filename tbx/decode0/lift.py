@@ -1059,24 +1059,40 @@ def _jump_targets(stmts) -> frozenset[int]:
     SubDef/DefFn bodies are deliberately NOT walked: by the time a body is
     inside one, its own `_fold_if` pass at proc_ret/fn_ret has already run
     with its statements at top level, so its targets were collected then."""
-    out = set()
+    return frozenset(_target_counts(stmts))
+
+
+def _target_counts(stmts) -> dict[int, int]:
+    """`_jump_targets` with multiplicity: how many references each address has.
+
+    A membership test cannot tell "some other statement jumps here" from "the
+    statement I am about to fold away jumps here", and a fold that consumes its
+    own branch needs exactly that distinction -- see
+    `select_case._fold_arm_ifgoto_else`, whose region is delimited by the two
+    jumps it removes."""
+    out: dict[int, int] = {}
+
+    def hit(a):
+        out[a] = out.get(a, 0) + 1
 
     def walk(s):
         if isinstance(s, (ir.Goto, ir.IfGoto, ir.Gosub)):
             if isinstance(s.target, tuple) and s.target[0] == "addr":
-                out.add(s.target[1])
+                hit(s.target[1])
         elif isinstance(s, (ir.OnGoto, ir.OnGosub)):
             for tag, a in s.targets:
                 if tag == "addr":
-                    out.add(a)
+                    hit(a)
         elif isinstance(s, (ir.OnError, ir.Resume)) and s.target is not None:
             if isinstance(s.target, tuple) and s.target[0] == "addr":
-                out.add(s.target[1])
+                hit(s.target[1])
         elif isinstance(s, ir.OnTrap):
             if isinstance(s.target, tuple) and s.target[0] == "addr":
-                out.add(s.target[1])
+                hit(s.target[1])
         elif isinstance(s, ir.IfInline):
             for b in s.body:
+                walk(b)
+            for b in s.else_body or ():
                 walk(b)
         elif isinstance(s, ir.IfBlock):
             for _cond, arm in s.arms:
@@ -1093,7 +1109,7 @@ def _jump_targets(stmts) -> frozenset[int]:
 
     for s in stmts:
         walk(s)
-    return frozenset(out)
+    return out
 
 
 def _closes_an_outer_loop(stmts) -> bool:
@@ -1462,7 +1478,11 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
                 raise ValueError(f"jump target {a:#x} is not a statement start")
             return ir.OnTrap(s.event, s.n, index[a])
         if isinstance(s, ir.IfInline):
-            return ir.IfInline(s.cond, tuple(fix(b) for b in s.body))
+            return ir.IfInline(
+                s.cond,
+                tuple(fix(b) for b in s.body),
+                None if s.else_body is None else tuple(fix(b) for b in s.else_body),
+            )
         if isinstance(s, ir.IfBlock):
             arms = tuple((c, tuple(fix(b) for b in body)) for c, body in s.arms)
             else_body = (

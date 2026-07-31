@@ -34,7 +34,7 @@ ErrorStmt(code=Lit(value=25))
 Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None)
 End()
 Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None)
-IfInline(cond=LogOp(op='AND', lhs=LogOp(op='AND', lhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=25)), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=27))), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=57))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='Z'),), newline=True, file=None, commas=None)))
+IfInline(cond=LogOp(op='AND', lhs=LogOp(op='AND', lhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=25)), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=27))), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=57))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='Z'),), newline=True, file=None, commas=None)), else_body=None)
 Resume(next_=False, target=3)
 
 ## t1_argrefonly
@@ -3151,7 +3151,7 @@ End()
 ## t1_boolflags
 Assign(target=Var(name='A'), value=Lit(value=0))
 Assign(target=Var(name='B'), value=Lit(value=1))
-IfInline(cond=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='A'), rhs=Lit(value=0))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='B'), rhs=Lit(value=0))))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None),))
+IfInline(cond=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='A'), rhs=Lit(value=0))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='B'), rhs=Lit(value=0))))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None),), else_body=None)
 End()
 
 ## t1_boolloopuntil
@@ -3185,14 +3185,14 @@ End()
 ## t1_boolstrgroup
 Assign(target=Var(name='A$'), value=StrLit(value='K'))
 Assign(target=Var(name='B%'), value=Neg(operand=Lit(value=1)))
-IfInline(cond=BinOp(op='AND', lhs=Var(name='B%'), rhs=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=75),)))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=77),))))))), body=(Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None),))
+IfInline(cond=BinOp(op='AND', lhs=Var(name='B%'), rhs=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=75),)))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=77),))))))), body=(Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None),), else_body=None)
 End()
 
 ## t1_boolstrord
 Assign(target=Var(name='A$'), value=StrLit(value='K'))
 Assign(target=Var(name='B%'), value=Neg(operand=Lit(value=1)))
-IfInline(cond=BinOp(op='AND', lhs=Var(name='B%'), rhs=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='<', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=75),)))), rhs=Group(inner=BinOp(op='>', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=77),))))))), body=(Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None),))
-IfInline(cond=BinOp(op='AND', lhs=Var(name='B%'), rhs=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='<=', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=75),)))), rhs=Group(inner=BinOp(op='>=', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=77),))))))), body=(Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None),))
+IfInline(cond=BinOp(op='AND', lhs=Var(name='B%'), rhs=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='<', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=75),)))), rhs=Group(inner=BinOp(op='>', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=77),))))))), body=(Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None),), else_body=None)
+IfInline(cond=BinOp(op='AND', lhs=Var(name='B%'), rhs=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='<=', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=75),)))), rhs=Group(inner=BinOp(op='>=', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=77),))))))), body=(Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None),), else_body=None)
 End()
 
 ## t1_booluntil
@@ -3373,7 +3373,7 @@ End()
 ## t1_cmpstale
 Assign(target=Var(name='A$'), value=StrLit(value='#'))
 Assign(target=Var(name='B$'), value=StrLit(value='X'))
-IfInline(cond=LogOp(op='AND', lhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='#')), rhs=RelOp(op='<>', lhs=Var(name='B$'), rhs=StrLit(value=''))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None),))
+IfInline(cond=LogOp(op='AND', lhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='#')), rhs=RelOp(op='<>', lhs=Var(name='B$'), rhs=StrLit(value=''))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None),), else_body=None)
 Assign(target=Var(name='B$'), value=BinOp(op='+', lhs=Var(name='A$'), rhs=Var(name='B$')))
 IfGoto(cond=RelOp(op='<=', lhs=Call(name='LEN', args=(Var(name='B$'),)), rhs=Lit(value=4)), target=6)
 Assign(target=Var(name='B$'), value=Call(name='RIGHT$', args=(Var(name='B$'), Lit(value=4))))
@@ -4507,11 +4507,19 @@ Assign(target=Var(name='C%'), value=Lit(value=0))
 Assign(target=Var(name='C%'), value=BinOp(op='+', lhs=Var(name='C%'), rhs=Lit(value=1)))
 Goto(target=3)
 
+## t1_gotosubline
+Assign(target=Var(name='A%'), value=Lit(value=1))
+IfGoto(cond=RelOp(op='=', lhs=Var(name='A%'), rhs=Lit(value=1)), target=3)
+Print(items=(StrLit(value='no'),), newline=True, file=None, commas=None)
+SubDef(name='SUB1', params=(), body=(Print(items=(StrLit(value='in sub'),), newline=True, file=None, commas=None),))
+Print(items=(StrLit(value='after'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_icmpmat
 Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
 Assign(target=Var(name='B'), value=Lit(value=0))
-IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=2)), rhs=RelOp(op='<', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=9))), body=(Assign(target=Var(name='B'), value=Lit(value=1)),))
-IfInline(cond=LogOp(op='OR', lhs=RelOp(op='>=', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=3)), rhs=RelOp(op='<=', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=1))), body=(Assign(target=Var(name='B'), value=Lit(value=2)),))
+IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=2)), rhs=RelOp(op='<', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=9))), body=(Assign(target=Var(name='B'), value=Lit(value=1)),), else_body=None)
+IfInline(cond=LogOp(op='OR', lhs=RelOp(op='>=', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=3)), rhs=RelOp(op='<=', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=1))), body=(Assign(target=Var(name='B'), value=Lit(value=2)),), else_body=None)
 Print(items=(Var(name='B'),), newline=True, file=None, commas=None)
 End()
 
@@ -4572,7 +4580,7 @@ End()
 
 ## t1_ifgoto
 Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
-IfInline(cond=LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='T')), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='t'))), body=(Cls(), Goto(target=5)))
+IfInline(cond=LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='T')), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='t'))), body=(Cls(), Goto(target=5)), else_body=None)
 IfGoto(cond=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='X')), target=4)
 Print(items=(StrLit(value='A'),), newline=True, file=None, commas=None)
 Print(items=(StrLit(value='B'),), newline=True, file=None, commas=None)
@@ -4587,7 +4595,7 @@ End()
 ## t1_ifin
 Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Input(prompt=None, var=Var(name='B'), comma=False, semi=False)
-IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), body=(Assign(target=Var(name='C'), value=Lit(value=1)), Assign(target=Var(name='D'), value=Lit(value=2))))
+IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), body=(Assign(target=Var(name='C'), value=Lit(value=1)), Assign(target=Var(name='D'), value=Lit(value=2))), else_body=None)
 Print(items=(Var(name='C'), Var(name='D')), newline=True, file=None, commas=None)
 End()
 
@@ -4604,7 +4612,7 @@ End()
 End()
 
 ## t1_iftailarm
-SubDef(name='SUB1', params=('A%', 'B%', 'C$'), body=(SelectCase(selector=Var(name='C$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='a')),), body=(IfInline(cond=RelOp(op='<>', lhs=Var(name='A%'), rhs=Var(name='B%')), body=(Print(items=(StrLit(value='x'),), newline=True, file=None, commas=None),)),)),), case_else=(Print(items=(StrLit(value='z'),), newline=True, file=None, commas=None),)),))
+SubDef(name='SUB1', params=('A%', 'B%', 'C$'), body=(SelectCase(selector=Var(name='C$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='a')),), body=(IfInline(cond=RelOp(op='<>', lhs=Var(name='A%'), rhs=Var(name='B%')), body=(Print(items=(StrLit(value='x'),), newline=True, file=None, commas=None),), else_body=None),)),), case_else=(Print(items=(StrLit(value='z'),), newline=True, file=None, commas=None),)),))
 Assign(target=Var(name='D%'), value=Lit(value=1))
 Assign(target=Var(name='E%'), value=Lit(value=2))
 Assign(target=Var(name='F$'), value=StrLit(value='a'))
@@ -4619,7 +4627,7 @@ Assign(target=Var(name='C%'), value=BinOp(op='+', lhs=Var(name='C%'), rhs=Lit(va
 IfGoto(cond=RelOp(op='<', lhs=Var(name='C%'), rhs=Lit(value=10)), target=3)
 
 ## t1_iftaillast
-SubDef(name='SUB1', params=('A%', 'B%', 'C%'), body=(Local(names=('D',)), For(var=Var(name='D'), init=Lit(value=1), limit=Var(name='A%'), step=Lit(value=1)), Print(items=(Var(name='D'),), newline=True, file=None, commas=None), NextStmt(var=Var(name='D')), IfInline(cond=RelOp(op='>', lhs=Var(name='C%'), rhs=BinOp(op='+', lhs=Lit(value=1), rhs=Group(inner=BinOp(op='+', lhs=Var(name='A%'), rhs=Group(inner=Neg(operand=Var(name='B%'))))))), body=(Assign(target=Var(name='B%'), value=BinOp(op='-', lhs=Var(name='D'), rhs=Lit(value=1))),))))
+SubDef(name='SUB1', params=('A%', 'B%', 'C%'), body=(Local(names=('D',)), For(var=Var(name='D'), init=Lit(value=1), limit=Var(name='A%'), step=Lit(value=1)), Print(items=(Var(name='D'),), newline=True, file=None, commas=None), NextStmt(var=Var(name='D')), IfInline(cond=RelOp(op='>', lhs=Var(name='C%'), rhs=BinOp(op='+', lhs=Lit(value=1), rhs=Group(inner=BinOp(op='+', lhs=Var(name='A%'), rhs=Group(inner=Neg(operand=Var(name='B%'))))))), body=(Assign(target=Var(name='B%'), value=BinOp(op='-', lhs=Var(name='D'), rhs=Lit(value=1))),), else_body=None)))
 Assign(target=Var(name='E%'), value=Lit(value=3))
 Assign(target=Var(name='F%'), value=Lit(value=1))
 Assign(target=Var(name='G%'), value=Lit(value=9))
@@ -5275,7 +5283,7 @@ Assign(target=Var(name='A'), value=Lit(value=0))
 Assign(target=Var(name='B'), value=Lit(value=1))
 Assign(target=Var(name='C'), value=Lit(value=0))
 Assign(target=Var(name='D'), value=Lit(value=1))
-IfInline(cond=BinOp(op='AND', lhs=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='A'), rhs=Lit(value=0))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='B'), rhs=Lit(value=0)))), rhs=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='C'), rhs=Lit(value=0))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='D'), rhs=Lit(value=0)))))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None),))
+IfInline(cond=BinOp(op='AND', lhs=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='A'), rhs=Lit(value=0))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='B'), rhs=Lit(value=0)))), rhs=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='C'), rhs=Lit(value=0))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='D'), rhs=Lit(value=0)))))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None),), else_body=None)
 End()
 
 ## t1_nestedgoto
@@ -5301,7 +5309,7 @@ End()
 Assign(target=Var(name='A'), value=Lit(value=0))
 Assign(target=Var(name='B'), value=Lit(value=1))
 Assign(target=Var(name='C'), value=Lit(value=0))
-IfInline(cond=BinOp(op='AND', lhs=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='A'), rhs=Lit(value=0))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='B'), rhs=Lit(value=0)))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='C'), rhs=Lit(value=0)))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None),))
+IfInline(cond=BinOp(op='AND', lhs=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='A'), rhs=Lit(value=0))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='B'), rhs=Lit(value=0)))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='C'), rhs=Lit(value=0)))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None),), else_body=None)
 End()
 
 ## t1_nestelse
@@ -5484,11 +5492,11 @@ ErrorStmt(code=Lit(value=25))
 Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None)
 End()
 Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None)
-IfInline(cond=LogOp(op='OR', lhs=LogOp(op='OR', lhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=25)), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=27))), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=57))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='Z'),), newline=True, file=None, commas=None)))
+IfInline(cond=LogOp(op='OR', lhs=LogOp(op='OR', lhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=25)), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=27))), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=57))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='Z'),), newline=True, file=None, commas=None)), else_body=None)
 Resume(next_=False, target=3)
 
 ## t1_orofands
-SubDef(name='SUB1', params=('A%', 'B$', 'C%', 'D$'), body=(IfInline(cond=LogOp(op='OR', lhs=Group(inner=LogOp(op='AND', lhs=RelOp(op='=', lhs=Var(name='A%'), rhs=Lit(value=0)), rhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='X')))), rhs=Group(inner=LogOp(op='AND', lhs=RelOp(op='=', lhs=Var(name='C%'), rhs=Lit(value=1)), rhs=RelOp(op='=', lhs=Var(name='D$'), rhs=StrLit(value='Y'))))), body=(Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None),)),))
+SubDef(name='SUB1', params=('A%', 'B$', 'C%', 'D$'), body=(IfInline(cond=LogOp(op='OR', lhs=Group(inner=LogOp(op='AND', lhs=RelOp(op='=', lhs=Var(name='A%'), rhs=Lit(value=0)), rhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='X')))), rhs=Group(inner=LogOp(op='AND', lhs=RelOp(op='=', lhs=Var(name='C%'), rhs=Lit(value=1)), rhs=RelOp(op='=', lhs=Var(name='D$'), rhs=StrLit(value='Y'))))), body=(Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None),), else_body=None),))
 Assign(target=Var(name='E%'), value=Lit(value=0))
 CallStmt(name='SUB1', args=(Var(name='E%'), StrLit(value='X'), Var(name='E%'), StrLit(value='Y')))
 End()
@@ -5497,7 +5505,7 @@ End()
 Assign(target=Var(name='A%'), value=Lit(value=1))
 Assign(target=Var(name='B%'), value=Lit(value=2))
 Assign(target=Var(name='C%'), value=Lit(value=3))
-IfInline(cond=LogOp(op='OR', lhs=RelOp(op='>', lhs=Var(name='A%'), rhs=Var(name='B%')), rhs=RelOp(op='<', lhs=Var(name='A%'), rhs=Var(name='C%'))), body=(Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None),))
+IfInline(cond=LogOp(op='OR', lhs=RelOp(op='>', lhs=Var(name='A%'), rhs=Var(name='B%')), rhs=RelOp(op='<', lhs=Var(name='A%'), rhs=Var(name='C%'))), body=(Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None),), else_body=None)
 End()
 
 ## t1_out
@@ -5549,7 +5557,7 @@ End()
 Assign(target=Var(name='A%'), value=Lit(value=9))
 Assign(target=Var(name='B%'), value=Lit(value=15))
 Assign(target=Var(name='C%'), value=Lit(value=1))
-IfInline(cond=LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='A%'), rhs=Lit(value=9)), rhs=Group(inner=LogOp(op='AND', lhs=RelOp(op='=', lhs=Var(name='B%'), rhs=Lit(value=15)), rhs=RelOp(op='=', lhs=Var(name='C%'), rhs=Lit(value=1))))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None),))
+IfInline(cond=LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='A%'), rhs=Lit(value=9)), rhs=Group(inner=LogOp(op='AND', lhs=RelOp(op='=', lhs=Var(name='B%'), rhs=Lit(value=15)), rhs=RelOp(op='=', lhs=Var(name='C%'), rhs=Lit(value=1))))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None),), else_body=None)
 End()
 
 ## t1_pcomma
@@ -6078,6 +6086,12 @@ Assign(target=Var(name='H$'), value=StrLit(value='a'))
 CallStmt(name='SUB1', args=(Var(name='E%'), Var(name='F%'), Var(name='G%'), Var(name='H$')))
 End()
 
+## t1_selarmifelse
+Assign(target=Var(name='A%'), value=Lit(value=1))
+SelectCase(selector=Var(name='A%'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=1)),), body=(IfInline(cond=RelOp(op='=', lhs=Var(name='B%'), rhs=Lit(value=0)), body=(Assign(target=Var(name='B%'), value=Lit(value=64)),), else_body=(Assign(target=Var(name='B%'), value=BinOp(op='-', lhs=Var(name='B%'), rhs=Lit(value=1))),)),)), CaseArm(guards=(CaseValue(value=Lit(value=2)),), body=(IfInline(cond=RelOp(op='=', lhs=Var(name='B%'), rhs=Lit(value=64)), body=(Assign(target=Var(name='B%'), value=Lit(value=0)),), else_body=(Assign(target=Var(name='B%'), value=BinOp(op='+', lhs=Var(name='B%'), rhs=Lit(value=1))),)),))), case_else=None)
+Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_selarmtarget
 SubDef(name='SUB1', params=('A$', 'B%', 'C%'), body=(SelectCase(selector=Var(name='A$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='a')),), body=(Decr(var=Var(name='B%')), IfGoto(cond=RelOp(op='>=', lhs=Var(name='B%'), rhs=Lit(value=1)), target=BodyLine(stmt=0, phys=6)), Assign(target=Var(name='B%'), value=Var(name='C%')), Do(kind='WHILE', cond=RelOp(op='=', lhs=Call(name='MID$', args=(Var(name='A$'), Var(name='B%'), Lit(value=1))), rhs=StrLit(value='0'))), Decr(var=Var(name='B%')), Loop(kind=None, cond=None))),), case_else=(Assign(target=Var(name='B%'), value=Lit(value=0)),)),))
 Assign(target=Var(name='D$'), value=StrLit(value='a'))
@@ -6095,7 +6109,7 @@ End()
 Return(target=None)
 
 ## t1_selelsetarget
-SubDef(name='SUB1', params=('A%', 'B$', 'C%'), body=(IfBlock(arms=((LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='a')), rhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='b'))), (SelectCase(selector=Var(name='A%'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=3)),), body=(Print(items=(StrLit(value='three'),), newline=True, file=None, commas=None),)),), case_else=(Print(items=(StrLit(value='other'),), newline=True, file=None, commas=None), IfGoto(cond=RelOp(op='<=', lhs=Var(name='C%'), rhs=Lit(value=2)), target=BodyLine(stmt=0, phys=10)), Print(items=(StrLit(value='flon'),), newline=True, file=None, commas=None))), SelectCase(selector=Var(name='B$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='a')),), body=(Print(items=(StrLit(value='AA'),), newline=True, file=None, commas=None),)),), case_else=(Print(items=(StrLit(value='BB'),), newline=True, file=None, commas=None),)))),), else_body=None),))
+SubDef(name='SUB1', params=('A%', 'B$', 'C%'), body=(IfBlock(arms=((LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='a')), rhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='b'))), (SelectCase(selector=Var(name='A%'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=3)),), body=(Print(items=(StrLit(value='three'),), newline=True, file=None, commas=None),)),), case_else=(Print(items=(StrLit(value='other'),), newline=True, file=None, commas=None), IfInline(cond=RelOp(op='>', lhs=Var(name='C%'), rhs=Lit(value=2)), body=(Print(items=(StrLit(value='flon'),), newline=True, file=None, commas=None),), else_body=None))), SelectCase(selector=Var(name='B$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='a')),), body=(Print(items=(StrLit(value='AA'),), newline=True, file=None, commas=None),)),), case_else=(Print(items=(StrLit(value='BB'),), newline=True, file=None, commas=None),)))),), else_body=None),))
 Assign(target=Var(name='D%'), value=Lit(value=3))
 Assign(target=Var(name='E$'), value=StrLit(value='a'))
 Assign(target=Var(name='F%'), value=Lit(value=1))
@@ -6973,7 +6987,7 @@ ErrorStmt(code=Lit(value=25))
 Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None)
 End()
 Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None)
-IfInline(cond=LogOp(op='AND', lhs=LogOp(op='AND', lhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=25)), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=27))), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=57))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='Z'),), newline=True, file=None, commas=None)))
+IfInline(cond=LogOp(op='AND', lhs=LogOp(op='AND', lhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=25)), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=27))), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=57))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='Z'),), newline=True, file=None, commas=None)), else_body=None)
 Resume(next_=False, target=3)
 
 ## v10_t1_argrefonly
@@ -10075,7 +10089,7 @@ End()
 ## v10_t1_boolflags
 Assign(target=Var(name='A'), value=Lit(value=0))
 Assign(target=Var(name='B'), value=Lit(value=1))
-IfInline(cond=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='A'), rhs=Lit(value=0))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='B'), rhs=Lit(value=0))))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None),))
+IfInline(cond=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='A'), rhs=Lit(value=0))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='B'), rhs=Lit(value=0))))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None),), else_body=None)
 End()
 
 ## v10_t1_boolloopuntil
@@ -10109,14 +10123,14 @@ End()
 ## v10_t1_boolstrgroup
 Assign(target=Var(name='A$'), value=StrLit(value='K'))
 Assign(target=Var(name='B%'), value=Neg(operand=Lit(value=1)))
-IfInline(cond=BinOp(op='AND', lhs=Var(name='B%'), rhs=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=75),)))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=77),))))))), body=(Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None),))
+IfInline(cond=BinOp(op='AND', lhs=Var(name='B%'), rhs=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=75),)))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=77),))))))), body=(Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None),), else_body=None)
 End()
 
 ## v10_t1_boolstrord
 Assign(target=Var(name='A$'), value=StrLit(value='K'))
 Assign(target=Var(name='B%'), value=Neg(operand=Lit(value=1)))
-IfInline(cond=BinOp(op='AND', lhs=Var(name='B%'), rhs=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='<', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=75),)))), rhs=Group(inner=BinOp(op='>', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=77),))))))), body=(Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None),))
-IfInline(cond=BinOp(op='AND', lhs=Var(name='B%'), rhs=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='<=', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=75),)))), rhs=Group(inner=BinOp(op='>=', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=77),))))))), body=(Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None),))
+IfInline(cond=BinOp(op='AND', lhs=Var(name='B%'), rhs=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='<', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=75),)))), rhs=Group(inner=BinOp(op='>', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=77),))))))), body=(Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None),), else_body=None)
+IfInline(cond=BinOp(op='AND', lhs=Var(name='B%'), rhs=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='<=', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=75),)))), rhs=Group(inner=BinOp(op='>=', lhs=Var(name='A$'), rhs=Call(name='CHR$', args=(Lit(value=77),))))))), body=(Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None),), else_body=None)
 End()
 
 ## v10_t1_booluntil
@@ -10264,7 +10278,7 @@ End()
 ## v10_t1_cmpstale
 Assign(target=Var(name='A$'), value=StrLit(value='#'))
 Assign(target=Var(name='B$'), value=StrLit(value='X'))
-IfInline(cond=LogOp(op='AND', lhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='#')), rhs=RelOp(op='<>', lhs=Var(name='B$'), rhs=StrLit(value=''))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None),))
+IfInline(cond=LogOp(op='AND', lhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='#')), rhs=RelOp(op='<>', lhs=Var(name='B$'), rhs=StrLit(value=''))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None),), else_body=None)
 Assign(target=Var(name='B$'), value=BinOp(op='+', lhs=Var(name='A$'), rhs=Var(name='B$')))
 IfGoto(cond=RelOp(op='<=', lhs=Call(name='LEN', args=(Var(name='B$'),)), rhs=Lit(value=4)), target=6)
 Assign(target=Var(name='B$'), value=Call(name='RIGHT$', args=(Var(name='B$'), Lit(value=4))))
@@ -10797,7 +10811,7 @@ DefFn(name='FNFN1', params=('A',), body=(FnResult(value=BinOp(op='+', lhs=Var(na
 
 ## v10_t1_fnfpbeforecall
 DefFn(name='FNFN1', params=('A', 'B'), body=BinOp(op='+', lhs=Var(name='A'), rhs=Var(name='B')), is_block=False)
-SubDef(name='SUB1', params=('C', 'D'), body=(Assign(target=Var(name='E'), value=FnCall(name='FNFN1', args=(Var(name='C'), Var(name='D')))), IfInline(cond=RelOp(op='>', lhs=Var(name='C'), rhs=Lit(value=0)), body=(CallStmt(name='SUB1', args=(BinOp(op='-', lhs=Var(name='C'), rhs=Lit(value=1)), Var(name='E'))),))))
+SubDef(name='SUB1', params=('C', 'D'), body=(Assign(target=Var(name='E'), value=FnCall(name='FNFN1', args=(Var(name='C'), Var(name='D')))), IfInline(cond=RelOp(op='>', lhs=Var(name='C'), rhs=Lit(value=0)), body=(CallStmt(name='SUB1', args=(BinOp(op='-', lhs=Var(name='C'), rhs=Lit(value=1)), Var(name='E'))),), else_body=None)))
 CallStmt(name='SUB1', args=(Lit(value=2), Lit(value=3)))
 End()
 
@@ -11243,8 +11257,8 @@ Goto(target=3)
 ## v10_t1_icmpmat
 Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
 Assign(target=Var(name='B'), value=Lit(value=0))
-IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=2)), rhs=RelOp(op='<', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=9))), body=(Assign(target=Var(name='B'), value=Lit(value=1)),))
-IfInline(cond=LogOp(op='OR', lhs=RelOp(op='>=', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=3)), rhs=RelOp(op='<=', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=1))), body=(Assign(target=Var(name='B'), value=Lit(value=2)),))
+IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=2)), rhs=RelOp(op='<', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=9))), body=(Assign(target=Var(name='B'), value=Lit(value=1)),), else_body=None)
+IfInline(cond=LogOp(op='OR', lhs=RelOp(op='>=', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=3)), rhs=RelOp(op='<=', lhs=Call(name='LEN', args=(Var(name='A$'),)), rhs=Lit(value=1))), body=(Assign(target=Var(name='B'), value=Lit(value=2)),), else_body=None)
 Print(items=(Var(name='B'),), newline=True, file=None, commas=None)
 End()
 
@@ -11296,7 +11310,7 @@ End()
 
 ## v10_t1_ifgoto
 Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
-IfInline(cond=LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='T')), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='t'))), body=(Cls(), Goto(target=5)))
+IfInline(cond=LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='T')), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='t'))), body=(Cls(), Goto(target=5)), else_body=None)
 IfGoto(cond=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='X')), target=4)
 Print(items=(StrLit(value='A'),), newline=True, file=None, commas=None)
 Print(items=(StrLit(value='B'),), newline=True, file=None, commas=None)
@@ -11305,12 +11319,12 @@ End()
 ## v10_t1_ifin
 Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Input(prompt=None, var=Var(name='B'), comma=False, semi=False)
-IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), body=(Assign(target=Var(name='C'), value=Lit(value=1)), Assign(target=Var(name='D'), value=Lit(value=2))))
+IfInline(cond=LogOp(op='AND', lhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=1)), rhs=RelOp(op='<', lhs=Var(name='B'), rhs=Lit(value=5))), body=(Assign(target=Var(name='C'), value=Lit(value=1)), Assign(target=Var(name='D'), value=Lit(value=2))), else_body=None)
 Print(items=(Var(name='C'), Var(name='D')), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_iftailarm
-SubDef(name='SUB1', params=('A%', 'B%', 'C$'), body=(SelectCase(selector=Var(name='C$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='a')),), body=(IfInline(cond=RelOp(op='<>', lhs=Var(name='A%'), rhs=Var(name='B%')), body=(Print(items=(StrLit(value='x'),), newline=True, file=None, commas=None),)),)),), case_else=(Print(items=(StrLit(value='z'),), newline=True, file=None, commas=None),)),))
+SubDef(name='SUB1', params=('A%', 'B%', 'C$'), body=(SelectCase(selector=Var(name='C$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='a')),), body=(IfInline(cond=RelOp(op='<>', lhs=Var(name='A%'), rhs=Var(name='B%')), body=(Print(items=(StrLit(value='x'),), newline=True, file=None, commas=None),), else_body=None),)),), case_else=(Print(items=(StrLit(value='z'),), newline=True, file=None, commas=None),)),))
 Assign(target=Var(name='D%'), value=Lit(value=1))
 Assign(target=Var(name='E%'), value=Lit(value=2))
 Assign(target=Var(name='F$'), value=StrLit(value='a'))
@@ -11325,7 +11339,7 @@ Assign(target=Var(name='C%'), value=BinOp(op='+', lhs=Var(name='C%'), rhs=Lit(va
 IfGoto(cond=RelOp(op='<', lhs=Var(name='C%'), rhs=Lit(value=10)), target=3)
 
 ## v10_t1_iftaillast
-SubDef(name='SUB1', params=('A%', 'B%', 'C%'), body=(Local(names=('D',)), For(var=Var(name='D'), init=Lit(value=1), limit=Var(name='A%'), step=Lit(value=1)), Print(items=(Var(name='D'),), newline=True, file=None, commas=None), NextStmt(var=Var(name='D')), IfInline(cond=RelOp(op='>', lhs=Var(name='C%'), rhs=BinOp(op='+', lhs=Lit(value=1), rhs=Group(inner=BinOp(op='+', lhs=Var(name='A%'), rhs=Group(inner=Neg(operand=Var(name='B%'))))))), body=(Assign(target=Var(name='B%'), value=BinOp(op='-', lhs=Var(name='D'), rhs=Lit(value=1))),))))
+SubDef(name='SUB1', params=('A%', 'B%', 'C%'), body=(Local(names=('D',)), For(var=Var(name='D'), init=Lit(value=1), limit=Var(name='A%'), step=Lit(value=1)), Print(items=(Var(name='D'),), newline=True, file=None, commas=None), NextStmt(var=Var(name='D')), IfInline(cond=RelOp(op='>', lhs=Var(name='C%'), rhs=BinOp(op='+', lhs=Lit(value=1), rhs=Group(inner=BinOp(op='+', lhs=Var(name='A%'), rhs=Group(inner=Neg(operand=Var(name='B%'))))))), body=(Assign(target=Var(name='B%'), value=BinOp(op='-', lhs=Var(name='D'), rhs=Lit(value=1))),), else_body=None)))
 Assign(target=Var(name='E%'), value=Lit(value=3))
 Assign(target=Var(name='F%'), value=Lit(value=1))
 Assign(target=Var(name='G%'), value=Lit(value=9))
@@ -11895,7 +11909,7 @@ Assign(target=Var(name='A'), value=Lit(value=0))
 Assign(target=Var(name='B'), value=Lit(value=1))
 Assign(target=Var(name='C'), value=Lit(value=0))
 Assign(target=Var(name='D'), value=Lit(value=1))
-IfInline(cond=BinOp(op='AND', lhs=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='A'), rhs=Lit(value=0))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='B'), rhs=Lit(value=0)))), rhs=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='C'), rhs=Lit(value=0))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='D'), rhs=Lit(value=0)))))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None),))
+IfInline(cond=BinOp(op='AND', lhs=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='A'), rhs=Lit(value=0))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='B'), rhs=Lit(value=0)))), rhs=Group(inner=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='C'), rhs=Lit(value=0))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='D'), rhs=Lit(value=0)))))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None),), else_body=None)
 End()
 
 ## v10_t1_nestedgoto
@@ -11911,7 +11925,7 @@ End()
 Assign(target=Var(name='A'), value=Lit(value=0))
 Assign(target=Var(name='B'), value=Lit(value=1))
 Assign(target=Var(name='C'), value=Lit(value=0))
-IfInline(cond=BinOp(op='AND', lhs=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='A'), rhs=Lit(value=0))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='B'), rhs=Lit(value=0)))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='C'), rhs=Lit(value=0)))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None),))
+IfInline(cond=BinOp(op='AND', lhs=BinOp(op='OR', lhs=Group(inner=BinOp(op='=', lhs=Var(name='A'), rhs=Lit(value=0))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='B'), rhs=Lit(value=0)))), rhs=Group(inner=BinOp(op='=', lhs=Var(name='C'), rhs=Lit(value=0)))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None),), else_body=None)
 End()
 
 ## v10_t1_nestelse
@@ -12074,11 +12088,11 @@ ErrorStmt(code=Lit(value=25))
 Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None)
 End()
 Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None)
-IfInline(cond=LogOp(op='OR', lhs=LogOp(op='OR', lhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=25)), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=27))), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=57))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='Z'),), newline=True, file=None, commas=None)))
+IfInline(cond=LogOp(op='OR', lhs=LogOp(op='OR', lhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=25)), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=27))), rhs=RelOp(op='=', lhs=Err(), rhs=Lit(value=57))), body=(Print(items=(StrLit(value='Y'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='Z'),), newline=True, file=None, commas=None)), else_body=None)
 Resume(next_=False, target=3)
 
 ## v10_t1_orofands
-SubDef(name='SUB1', params=('A%', 'B$', 'C%', 'D$'), body=(IfInline(cond=LogOp(op='OR', lhs=Group(inner=LogOp(op='AND', lhs=RelOp(op='=', lhs=Var(name='A%'), rhs=Lit(value=0)), rhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='X')))), rhs=Group(inner=LogOp(op='AND', lhs=RelOp(op='=', lhs=Var(name='C%'), rhs=Lit(value=1)), rhs=RelOp(op='=', lhs=Var(name='D$'), rhs=StrLit(value='Y'))))), body=(Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None),)),))
+SubDef(name='SUB1', params=('A%', 'B$', 'C%', 'D$'), body=(IfInline(cond=LogOp(op='OR', lhs=Group(inner=LogOp(op='AND', lhs=RelOp(op='=', lhs=Var(name='A%'), rhs=Lit(value=0)), rhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='X')))), rhs=Group(inner=LogOp(op='AND', lhs=RelOp(op='=', lhs=Var(name='C%'), rhs=Lit(value=1)), rhs=RelOp(op='=', lhs=Var(name='D$'), rhs=StrLit(value='Y'))))), body=(Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None),), else_body=None),))
 Assign(target=Var(name='E%'), value=Lit(value=0))
 CallStmt(name='SUB1', args=(Var(name='E%'), StrLit(value='X'), Var(name='E%'), StrLit(value='Y')))
 End()
@@ -12087,7 +12101,7 @@ End()
 Assign(target=Var(name='A%'), value=Lit(value=1))
 Assign(target=Var(name='B%'), value=Lit(value=2))
 Assign(target=Var(name='C%'), value=Lit(value=3))
-IfInline(cond=LogOp(op='OR', lhs=RelOp(op='>', lhs=Var(name='A%'), rhs=Var(name='B%')), rhs=RelOp(op='<', lhs=Var(name='A%'), rhs=Var(name='C%'))), body=(Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None),))
+IfInline(cond=LogOp(op='OR', lhs=RelOp(op='>', lhs=Var(name='A%'), rhs=Var(name='B%')), rhs=RelOp(op='<', lhs=Var(name='A%'), rhs=Var(name='C%'))), body=(Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None),), else_body=None)
 End()
 
 ## v10_t1_out
@@ -12568,7 +12582,7 @@ End()
 Return(target=None)
 
 ## v10_t1_selelsetarget
-SubDef(name='SUB1', params=('A%', 'B$', 'C%'), body=(IfBlock(arms=((LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='a')), rhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='b'))), (SelectCase(selector=Var(name='A%'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=3)),), body=(Print(items=(StrLit(value='three'),), newline=True, file=None, commas=None),)),), case_else=(Print(items=(StrLit(value='other'),), newline=True, file=None, commas=None), IfGoto(cond=RelOp(op='<=', lhs=Var(name='C%'), rhs=Lit(value=2)), target=BodyLine(stmt=0, phys=10)), Print(items=(StrLit(value='flon'),), newline=True, file=None, commas=None))), SelectCase(selector=Var(name='B$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='a')),), body=(Print(items=(StrLit(value='AA'),), newline=True, file=None, commas=None),)),), case_else=(Print(items=(StrLit(value='BB'),), newline=True, file=None, commas=None),)))),), else_body=None),))
+SubDef(name='SUB1', params=('A%', 'B$', 'C%'), body=(IfBlock(arms=((LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='a')), rhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='b'))), (SelectCase(selector=Var(name='A%'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=3)),), body=(Print(items=(StrLit(value='three'),), newline=True, file=None, commas=None),)),), case_else=(Print(items=(StrLit(value='other'),), newline=True, file=None, commas=None), IfInline(cond=RelOp(op='>', lhs=Var(name='C%'), rhs=Lit(value=2)), body=(Print(items=(StrLit(value='flon'),), newline=True, file=None, commas=None),), else_body=None))), SelectCase(selector=Var(name='B$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='a')),), body=(Print(items=(StrLit(value='AA'),), newline=True, file=None, commas=None),)),), case_else=(Print(items=(StrLit(value='BB'),), newline=True, file=None, commas=None),)))),), else_body=None),))
 Assign(target=Var(name='D%'), value=Lit(value=3))
 Assign(target=Var(name='E$'), value=StrLit(value='a'))
 Assign(target=Var(name='F%'), value=Lit(value=1))
@@ -13365,7 +13379,7 @@ End()
 Assign(target=Var(name='A'), value=Lit(value=0))
 Do(kind=None, cond=None)
 Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1)))
-IfInline(cond=RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=3)), body=(ExitLoop(),))
+IfInline(cond=RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=3)), body=(ExitLoop(),), else_body=None)
 Loop(kind=None, cond=None)
 Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 End()
@@ -13381,7 +13395,7 @@ End()
 ## zz_efor
 For(var=Var(name='A'), init=Lit(value=1), limit=Lit(value=10), step=Lit(value=1))
 Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
-IfInline(cond=RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=5)), body=(ExitFor(),))
+IfInline(cond=RelOp(op='=', lhs=Var(name='A'), rhs=Lit(value=5)), body=(ExitFor(),), else_body=None)
 NextStmt(var=Var(name='A'))
 Print(items=(StrLit(value='DONE'),), newline=True, file=None, commas=None)
 
@@ -13404,7 +13418,7 @@ DefFn(name='FNFN1', params=('A',), body=(FnResult(value=BinOp(op='*', lhs=Var(na
 Print(items=(FnCall(name='FNFN1', args=(Lit(value=21),)),), newline=True, file=None, commas=None)
 
 ## zz_mdeffn2
-DefFn(name='FNFN1', params=('A',), body=(IfInline(cond=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=0)), body=(ExitDef(),)), FnResult(value=BinOp(op='*', lhs=Var(name='A'), rhs=Lit(value=2)))), is_block=True)
+DefFn(name='FNFN1', params=('A',), body=(IfInline(cond=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=0)), body=(ExitDef(),), else_body=None), FnResult(value=BinOp(op='*', lhs=Var(name='A'), rhs=Lit(value=2)))), is_block=True)
 Print(items=(FnCall(name='FNFN1', args=(Lit(value=21),)),), newline=True, file=None, commas=None)
 
 ## zz_op_and
@@ -13589,7 +13603,7 @@ Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=5))
 CallStmt(name='SUB1', args=(ArrayRef(name='V0', indices=(Lit(value=1),)),))
 
 ## zz_sub7
-SubDef(name='SUB1', params=('A',), body=(IfInline(cond=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=0)), body=(ExitSub(),)), Print(items=(Var(name='A'),), newline=True, file=None, commas=None)))
+SubDef(name='SUB1', params=('A',), body=(IfInline(cond=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=0)), body=(ExitSub(),), else_body=None), Print(items=(Var(name='A'),), newline=True, file=None, commas=None)))
 CallStmt(name='SUB1', args=(Lit(value=5),))
 
 ## zz_vm_darith

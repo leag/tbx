@@ -457,13 +457,21 @@ class DateTimeSet:
 
 @dataclass(frozen=True)
 class IfInline:
-    """IF cond THEN <stmt[: stmt...]> -- the inline-body form: dispatch pair
-    `75 +3; e9 SKIP` (jump past the body when false), body statements follow.
-    Required for compound conditions, whose negation does not
-    materialize to the same bytes; simple conditions canonicalize to IfGoto."""
+    """IF cond THEN <stmt[: stmt...]> [ELSE <stmt[: stmt...]>] -- the inline-body
+    form: dispatch pair `75 +3; e9 SKIP` (jump past the body when false), body
+    statements follow. Required for compound conditions, whose negation does not
+    materialize to the same bytes; simple conditions canonicalize to IfGoto.
+
+    `else_body` is None for the far commoner no-ELSE form, and is NOT
+    interchangeable with the IfBlock spelling: a block IF over a simple
+    condition compiles to different bytes (t1_selarmifelse's arm is 16 bytes
+    shorter inline). It exists because a CASE arm cannot hold the canonical
+    IfGoto spelling -- that one needs a numbered line to skip to, and an arm's
+    else-skip lands on the arm-close jmp, which owns no statement."""
 
     cond: object  # RelOp | LogOp
     body: tuple[Stmt, ...]
+    else_body: object = None  # tuple[Stmt, ...] | None
 
 
 @dataclass(frozen=True)

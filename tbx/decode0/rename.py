@@ -99,7 +99,11 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
         if isinstance(s, ir.IfGoto):
             return ir.IfGoto(walk_cond(s.cond), s.target)
         if isinstance(s, ir.IfInline):
-            return ir.IfInline(walk_cond(s.cond), tuple(rn(b) for b in s.body))
+            return ir.IfInline(
+                walk_cond(s.cond),
+                tuple(rn(b) for b in s.body),
+                None if s.else_body is None else tuple(rn(b) for b in s.else_body),
+            )
         if isinstance(s, ir.IfBlock):
             arms = tuple(
                 (walk_cond(c), tuple(rn(b) for b in body)) for c, body in s.arms

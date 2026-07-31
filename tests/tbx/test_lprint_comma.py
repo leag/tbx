@@ -10,9 +10,6 @@ from tbx.ir import unparse_stmt
     ("stem", "next_gap"),
     [
         ("billadd.exe", "displacement 0x76 is neither scalar nor array element"),
-        # advanced past the SUB-local-array allocation-order guard, which was
-        # a conservative guess in the wrong direction (t1_sublocafter)
-        ("prtguide.exe", "jump target 0x80bc is not a statement start"),
         ("rs.exe", "jump target 0xcee7 is not a statement start"),
     ],
 )
@@ -32,6 +29,17 @@ def test_wild_lprint_comma_advances_to_later_gap(stem, next_gap):
         assert any(op[1:] == ("rt", 0xC2) for op in ops)
     with pytest.raises(ValueError, match=next_gap):
         decode0.decode_user_code(data)
+
+
+def test_wild_lprint_comma_program_decodes_completely():
+    """prtguide.exe used to stop at `jump target 0x80bc`, the skip-jmp that
+    brackets a SUB declaration; it decodes end to end since t1_gotosubline."""
+    from conftest import wild_hits_bytes
+
+    data = wild_hits_bytes("prtguide.exe")
+    start, dialect = decode0.find_prologue(data)
+    assert any(op[1:] == ("rt", 0xC2) for op in decode0._scan(data, start, dialect, set()))
+    assert len(decode0.decode_user_code(data)) == 911
 
 
 def test_lprint_comma_render():

@@ -155,6 +155,9 @@ class DecodeState:
     fn_frame: dict[str, Any] | None = None
     fors: Any = None
     has_procs: Any = None
+    #: Address of the skip-jmp bracketing the definition being opened; becomes
+    #: the SubDef's own address, since that is where its line number lands.
+    decl_skip_addr: Any = None
     have_fre: Any = None
     hook_seq: Any = None
     ifs: Any = None
@@ -1440,7 +1443,10 @@ def _resolve_calls(
             )
         if isinstance(s, ir.IfInline):
             new_body = walk(s.body)
-            return s if new_body is s.body else ir.IfInline(s.cond, tuple(new_body))
+            new_else = None if s.else_body is None else tuple(walk(s.else_body))
+            if new_body is s.body and new_else == s.else_body:
+                return s
+            return ir.IfInline(s.cond, tuple(new_body), new_else)
         if isinstance(s, ir.IfBlock):
             changed = False
             arms = []
@@ -1603,7 +1609,14 @@ def _propagate_call_types(stmts, stmt_addr=None):
             return s if all(a is b for a, b in zip(s.body, new_body)) else ir.SubDef(s.name, s.params, new_body)
         if isinstance(s, ir.IfInline):
             new_body = tuple(update_stmt(b) for b in s.body)
-            return s if all(a is b for a, b in zip(s.body, new_body)) else ir.IfInline(s.cond, new_body)
+            new_else = (
+                None
+                if s.else_body is None
+                else tuple(update_stmt(b) for b in s.else_body)
+            )
+            if all(a is b for a, b in zip(s.body, new_body)) and new_else == s.else_body:
+                return s
+            return ir.IfInline(s.cond, new_body, new_else)
         if isinstance(s, ir.IfBlock):
             changed = False
             arms = []
@@ -2217,6 +2230,13 @@ def _finalize(state: DecodeState, addr) -> Program:
             on = True  # compiler default: $EVENT ON
             for i, a in enumerate(out.addrs):
                 if a is None:  # synthesized stmt: state persists
+                    continue
+                if isinstance(out.stmts[i], (ir.SubDef, ir.DefFn)):
+                    # A declaration's address is the skip-jmp that hops it
+                    # (t1_gotosubline), which is compiler glue and never
+                    # carries a poll hook. Reading it as an unhooked statement
+                    # invents an `$EVENT OFF` at every SUB in a trapping
+                    # program (t1_dblhooksub).
                     continue
                 if (a in out.cc_hooks) != on:
                     on = not on
@@ -3741,6 +3761,11 @@ def _decode_user_code(
         o[1] in ("proc_enter", "fn_ret", "inline_sub", "opaque_helper")
         for o in img.ops
     )  # def region present
+    #: Address of the skip-jmp bracketing the definition now being opened.
+    #: A SUB's line number resolves to that jmp, not to its proc_enter --
+    #: `GOTO <the SUB's own line>` is a jump into the def region's glue, which
+    #: the compiler answers by hopping the definition (t1_gotosubline).
+    c.decl_skip_addr = None
     c.proc_names = {}  # proc entry addr -> synthesized name (SUB1.., FNFN1..)
     c.proc_params = {}  # SUB entry addr -> params tuple (declaration order),
     # for typing forwarded by-ref args at nested CALL sites (q_fwd)
@@ -3941,6 +3966,7 @@ def _decode_user_code(
             continue
         # --- procedure-region segmentation ---
         if c.has_procs and c.k == 0 and kind == "jmp":
+            c.decl_skip_addr = addr
             img.main_start = op[
                 2
             ]  # entry jmp over the def region: target = main start
@@ -3962,6 +3988,7 @@ def _decode_user_code(
             # and it's ON ERROR) rather than generically allowing any
             # leading statement, since a real early GOTO must not be
             # swallowed as glue.
+            c.decl_skip_addr = addr
             img.main_start = op[2]
             state.advance()  # glue, not a GOTO
             continue
@@ -3990,6 +4017,7 @@ def _decode_user_code(
             # by compiler skip-jump glue over that body, either directly to
             # the epilogue or to the next chained definition's skip-jump; it
             # has no source GOTO spelling (probe arrayparam6; wild zip.exe).
+            c.decl_skip_addr = addr
             img.main_start = op[2]
             state.advance()
             continue
@@ -4013,6 +4041,7 @@ def _decode_user_code(
             # right before a SUB -- there the user's jmp and the compiler's skip
             # are two separate ops (probe t1_declnoend; wild rsltest.exe, whose
             # DIM block precedes a $INCLUDE'd TBWINDOW definition run).
+            c.decl_skip_addr = addr
             img.main_start = op[2]
             state.advance()  # glue, not a GOTO
             continue
@@ -4033,6 +4062,7 @@ def _decode_user_code(
             # already pins this jmp to exactly where the previous hop landed
             # (probe t1_inlinethendef; wild tbd73.exe, whose TBWINDOW DEF FN
             # run follows the inline SUBs)
+            c.decl_skip_addr = addr
             img.main_start = op[2]
             state.advance()  # glue, not a GOTO
             continue
@@ -4057,6 +4087,7 @@ def _decode_user_code(
                 # lands right before an un-proc_enter'd DEF FN body -- without
                 # this, the DEF FN's own auto-open below never fires because
                 # it's gated on `addr < main_start`, which stays None forever).
+                c.decl_skip_addr = addr
                 img.main_start = op[2]
                 state.advance()  # glue, not a GOTO
                 continue
@@ -4485,7 +4516,14 @@ def _decode_user_code(
                 )
                 c.fwd_inline_offs.clear()
             out.stmts.append(ir.SubDef(name, params, body))
-            out.addrs.append(None)  # a SUB definition is never a jump target
+            # The declaration's own line IS addressable: the compiler puts the
+            # skip-jmp that hops the definition at that line's address, so
+            # `GOTO <the SUB's line>` compiles to a jump landing on it
+            # (t1_gotosubline; wild process.exe, prtguide.exe). None only when
+            # no glue jmp was seen -- a definition the entry jmp already
+            # covered.
+            out.addrs.append(c.decl_skip_addr)
+            c.decl_skip_addr = None
             c.proc_frame = None
             c.cur = None
             state.advance()

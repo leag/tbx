@@ -235,7 +235,15 @@ def _name_fn_results(body, name):
         if isinstance(b, ir.FnResult):
             out.append(ir.Assign(ir.Var(name), b.value))
         elif isinstance(b, ir.IfInline):
-            out.append(ir.IfInline(b.cond, tuple(_name_fn_results(b.body, name))))
+            out.append(
+                ir.IfInline(
+                    b.cond,
+                    tuple(_name_fn_results(b.body, name)),
+                    None
+                    if b.else_body is None
+                    else tuple(_name_fn_results(b.else_body, name)),
+                )
+            )
         elif isinstance(b, ir.IfBlock):
             out.append(
                 ir.IfBlock(
@@ -377,6 +385,12 @@ def emit(stmts, *, compact: bool = False) -> str:
         if isinstance(s, ir.IfInline):
             body = ": ".join(txt(b, col) for b in s.body)
             inline = f"IF {ir.unparse_cond(s.cond)} THEN {body}"
+            if s.else_body:
+                # The ELSE form has no block equivalent to fall back on: over a
+                # simple condition the two compile differently, so this stays
+                # one line however wide it gets (t1_selarmifelse).
+                tail = ": ".join(txt(b, col) for b in s.else_body)
+                return f"{inline} ELSE {tail}"
             if col + len(inline) > LINE_LIMIT and isinstance(s.cond, ir.LogOp):
                 # Too wide for the editor, and a compound condition -- for
                 # which the block spelling compiles to the same bytes, checked
