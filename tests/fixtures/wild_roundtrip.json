@@ -326,6 +326,18 @@
    "excluded": null
   },
   {
+   "name": "rsltest.exe",
+   "sha256": "6739e73ecc18b819018323f3c6b0164c321215fe5b19601a85445909ab686aa7",
+   "bytes": 99578,
+   "statements": 934,
+   "source_bytes": 58356,
+   "toggles": "",
+   "build_match": 98,
+   "roundtrip": "code-or-metadata",
+   "delta": -80,
+   "excluded": null
+  },
+  {
    "name": "rstprint.exe",
    "sha256": "7f484c2e7dde4015ff923e690ecf82aa8f95672e9ebe9f0efa98651c63338854",
    "bytes": 37734,

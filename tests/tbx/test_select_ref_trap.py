@@ -47,3 +47,18 @@ def test_the_untrapped_form_is_unchanged():
     # must not change how it is recognised.
     prog = _prog("zz_sc1")
     assert sum(isinstance(s, ir.SelectCase) for s in prog) == 1
+
+
+def test_a_full_stack_metastatement_is_spellable():
+    """`$STACK` takes a positive INTEGER constant, so 32768 cannot be said.
+
+    The allocation table counts PARAGRAPHS, so `paras * 16` can land on 32768 --
+    which TB rejects as Error 425, and `&H8000` as Error 426 (negative in a
+    signed word). 32767 is accepted and rounds to the same 2048 paragraphs, so
+    it regenerates the same table. t1_stackmax is itself compiled from
+    `$STACK 32767` and decoded as 32768 before this; wild rsltest.exe failed to
+    compile on line one for it.
+    """
+    src = emit0.emit(_prog("t1_stackmax"))
+    assert "$STACK 32767" in src
+    assert "$STACK 32768" not in src

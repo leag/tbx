@@ -79,5 +79,13 @@ def _meta_stmts(exe: bytes, start: int) -> tuple[str, ...]:
     if sound != 0x10:  # or $STACK would fail its byte-exact gate
         metas.append(f"$SOUND {sound * 2}")
     if stack != 0x40:
-        metas.append(f"$STACK {stack * 16}")
+        # The table counts PARAGRAPHS, so any byte count in the same paragraph
+        # regenerates it -- and the top one, 32768, is not a value `$STACK`
+        # accepts: TB wants a positive INTEGER constant, so 32768 is Error 425
+        # and `&H8000` is Error 426 (negative as a signed word). 32767 is
+        # accepted and rounds to the same 2048 paragraphs, which is what the
+        # source must have said. Witnessed by wild rsltest.exe, whose emitted
+        # `$STACK 32768` failed to compile on line one, and by t1_stackmax --
+        # itself compiled from `$STACK 32767` and decoded as 32768 before this.
+        metas.append(f"$STACK {min(stack * 16, 32767)}")
     return tuple(metas)

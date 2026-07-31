@@ -600,8 +600,14 @@ def string_ops(state: DecodeState, op, addr, kind) -> bool:
         state.advance()
         return True
     if kind == "str_store_temp":  # CD A3: materialized string literal CALL arg
+        # Staging an argument, NOT ending a statement: keep `c.cur`. Clearing
+        # it discarded the address the statement had already taken -- under
+        # event trapping that is the poll stamp the whole run starts at, so a
+        # branch to the CALL then matched no statement (wild rsltest.exe,
+        # `jump target 0xf325`; the address reappeared at the `push_bp` two ops
+        # later, 0xf352, which nothing names). Every sibling staging op --
+        # `arg_push_temp`, `movm_ax_temp`, `mov_mem_sp` -- leaves it alone.
         c.pend_args.append(e.sstack.pop())
-        c.cur = None
         state.advance()
         return True
     return False

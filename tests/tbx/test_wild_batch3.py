@@ -404,18 +404,25 @@ def test_wild_rsltest_argref_advances():
     # the code-less-line hooks ahead of an FP promote-to-scratch. The promote
     # commits no statement, but cleared `c.cur` anyway, so that hook's address
     # was dropped and the statement re-anchored on the next hook (fixed in
-    # core.fstp64's fp64_bridge leg). It now reaches 0xae3a, which is a
-    # different shape: a run of hooks immediately before `proc_ret`, i.e. a
-    # jump to the SUB's own epilogue, which owns no statement. Same family as
-    # help.exe -- see PLAN.md Part II's table.
-    import pytest
-
+    # core.fstp64's fp64_bridge leg). It then reached 0xae3a -- a run of hooks
+    # before `proc_ret`, a jump to the SUB's own epilogue -- closed by teaching
+    # `match_proc_body` to walk those stamps (t1_exitsubtrap, with help.exe and
+    # resume.exe). The last one, 0xf325, was the SAME `c.cur` defect a THIRD
+    # time: `str_store_temp` stages a CALL argument and committed no statement,
+    # yet cleared `c.cur`, so the statement's address -- the poll stamp its run
+    # began at -- was dropped and reappeared two ops later on `push_bp`, which
+    # nothing branches to.
+    #
+    # rsltest.exe now decodes end to end. Three ops have now been caught
+    # clearing `c.cur` without committing (fstp64's bridge, str_store_temp,
+    # and the epilogue walk's stamps); a fourth is worth suspecting whenever a
+    # trapping program reports a jump target that is a `trap_hook`.
     from tbx import decode0
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(ValueError, match=r"jump target 0xf325 is not a statement start"):
-        decode0.decode_user_code(wild_hits_bytes("rsltest.exe"))
+    program = decode0.decode_user_code(wild_hits_bytes("rsltest.exe"))
+    assert len(tuple(program)) > 500
 
 
 def test_decode_t1_declnoend():

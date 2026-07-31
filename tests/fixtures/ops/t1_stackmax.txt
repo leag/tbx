@@ -1,0 +1,8 @@
+# t1_stackmax dialect=1.1 start=08700
+08703:fld1
+08706:rt:187
+08708:rt:184
+0870C:end
+0870F:epilogue
+# commits
+0870A

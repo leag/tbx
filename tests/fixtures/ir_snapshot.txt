@@ -6178,6 +6178,10 @@ End()
 Assign(target=Var(name='A%'), value=Lit(value=1))
 End()
 
+## t1_stackmax
+Print(items=(Lit(value=1),), newline=True, file=None, commas=None)
+End()
+
 ## t1_stick
 Assign(target=Var(name='A%'), value=Call(name='STICK', args=(Lit(value=0),)))
 End()
