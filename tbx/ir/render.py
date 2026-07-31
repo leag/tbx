@@ -364,6 +364,13 @@ def _us_output(s) -> str | None:
             txt += " " + "".join(parts)
         if s.newline:
             return txt
+        if not s.items and cs[-1]:
+            # `PRINT ,,`: zone advances with nothing to print. The commas ARE
+            # the terminator -- a trailing comma suppresses the newline the way
+            # `;` does -- so this is not `PRINT ,,;` (t1_printcommatail; wild
+            # pz.exe lost two INT BBh calls here, because the zones only
+            # survive elsewhere by attaching to a following PRINT).
+            return txt + " " + "," * cs[-1]
         return txt + ("," * cs[-1] if s.items and cs[-1] else ";")
     if isinstance(s, PrintUsing):
         kw = "LPRINT" if s.lprint else "PRINT"
@@ -505,6 +512,8 @@ def _us_console(s) -> str | None:
             txt += " " + "".join(parts)
         if s.newline:
             return txt
+        if not s.items and cs[-1]:  # `LPRINT ,,` -- see the PRINT sibling
+            return txt + " " + "," * cs[-1]
         return txt + ("," * cs[-1] if s.items and cs[-1] else ";")
     if isinstance(s, Cls):
         return "CLS"

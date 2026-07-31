@@ -1,0 +1,5 @@
+10 PRINT "a"
+20 PRINT ,,
+30 LOCATE 5,5
+40 PRINT "b"
+50 END

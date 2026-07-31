@@ -258,11 +258,11 @@
    "sha256": "0ee729cb13c32be89266c28352bd7f41f7ccd11cde8b84cdeeae128b10587e3d",
    "bytes": 34752,
    "statements": 146,
-   "source_bytes": 3320,
+   "source_bytes": 3322,
    "toggles": "K",
    "build_match": 88,
-   "roundtrip": "filler-plus-metadata",
-   "delta": 0,
+   "roundtrip": "code-or-metadata",
+   "delta": 16,
    "excluded": "IDE Options toggles K: the oracle compiles with defaults; compiled by a different Turbo Basic build (88% runtime match)"
   },
   {

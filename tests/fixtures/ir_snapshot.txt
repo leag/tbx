@@ -5676,6 +5676,13 @@ Print(items=(StrLit(value='WORLD!'),), newline=True, file=None, commas=None)
 Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 End()
 
+## t1_printcommatail
+Print(items=(StrLit(value='a'),), newline=True, file=None, commas=None)
+Print(items=(), newline=False, file=None, commas=(2,))
+Locate(row=Lit(value=5), col=Lit(value=5), cursor=None, start=None, stop=None)
+Print(items=(StrLit(value='b'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_pset
 Pset(x=Lit(value=10), y=Lit(value=20), color=None, preset=False, step=False)
 End()
