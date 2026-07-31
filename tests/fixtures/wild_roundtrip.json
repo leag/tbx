@@ -8,10 +8,10 @@
    "statements": 144,
    "source_bytes": 4720,
    "toggles": "",
-   "build_match": 5,
+   "build_match": 99,
    "roundtrip": "filler-plus-metadata",
    "delta": 0,
-   "excluded": "compiled by a different Turbo Basic build (5% runtime match): its bytes can never be ours"
+   "excluded": null
   },
   {
    "name": "baby.exe",
@@ -20,9 +20,9 @@
    "statements": 1051,
    "source_bytes": 33495,
    "toggles": "K",
-   "build_match": 5,
-   "roundtrip": "code-or-metadata",
-   "delta": 304,
+   "build_match": 99,
+   "roundtrip": "filler-plus-metadata",
+   "delta": 0,
    "excluded": "IDE Options toggles K: the oracle compiles with defaults"
   },
   {
@@ -32,9 +32,9 @@
    "statements": 3029,
    "source_bytes": 98245,
    "toggles": "K",
-   "build_match": 5,
+   "build_match": 99,
    "roundtrip": "code-or-metadata",
-   "delta": 5776,
+   "delta": 16,
    "excluded": "IDE Options toggles K: the oracle compiles with defaults"
   },
   {
@@ -44,10 +44,10 @@
    "statements": 173,
    "source_bytes": 4081,
    "toggles": "K",
-   "build_match": 5,
-   "roundtrip": "code-or-metadata",
-   "delta": 64,
-   "excluded": "IDE Options toggles K: the oracle compiles with defaults"
+   "build_match": 88,
+   "roundtrip": "filler-plus-metadata",
+   "delta": 0,
+   "excluded": "IDE Options toggles K: the oracle compiles with defaults; compiled by a different Turbo Basic build (88% runtime match)"
   },
   {
    "name": "bill.exe",
@@ -59,7 +59,7 @@
    "build_match": 18,
    "roundtrip": "code-or-metadata",
    "delta": -304,
-   "excluded": "IDE Options toggles KBO: the oracle compiles with defaults"
+   "excluded": "IDE Options toggles KBO: the oracle compiles with defaults; compiled by a different Turbo Basic build (18% runtime match)"
   },
   {
    "name": "book.exe",
@@ -68,10 +68,10 @@
    "statements": 488,
    "source_bytes": 24760,
    "toggles": "",
-   "build_match": 5,
+   "build_match": 96,
    "roundtrip": "code-or-metadata",
    "delta": 0,
-   "excluded": "compiled by a different Turbo Basic build (5% runtime match): its bytes can never be ours"
+   "excluded": null
   },
   {
    "name": "cal.exe",
@@ -107,7 +107,7 @@
    "build_match": 18,
    "roundtrip": "code-or-metadata",
    "delta": -288,
-   "excluded": "IDE Options toggles KBO: the oracle compiles with defaults"
+   "excluded": "IDE Options toggles KBO: the oracle compiles with defaults; compiled by a different Turbo Basic build (18% runtime match)"
   },
   {
    "name": "color.exe",
@@ -118,8 +118,8 @@
    "toggles": "K",
    "build_match": 18,
    "roundtrip": "code-or-metadata",
-   "delta": 448,
-   "excluded": "IDE Options toggles K: the oracle compiles with defaults"
+   "delta": -32,
+   "excluded": "IDE Options toggles K: the oracle compiles with defaults; compiled by a different Turbo Basic build (18% runtime match)"
   },
   {
    "name": "horses.exe",
@@ -128,10 +128,10 @@
    "statements": 192,
    "source_bytes": 67394,
    "toggles": "K",
-   "build_match": 5,
+   "build_match": 88,
    "roundtrip": "code-or-metadata",
-   "delta": 5152,
-   "excluded": "IDE Options toggles K: the oracle compiles with defaults"
+   "delta": -640,
+   "excluded": "IDE Options toggles K: the oracle compiles with defaults; compiled by a different Turbo Basic build (88% runtime match)"
   },
   {
    "name": "inv87.exe",
@@ -152,10 +152,10 @@
    "statements": 206,
    "source_bytes": 6077,
    "toggles": "K",
-   "build_match": 5,
+   "build_match": 88,
    "roundtrip": "code-or-metadata",
-   "delta": 144,
-   "excluded": "IDE Options toggles K: the oracle compiles with defaults"
+   "delta": 32,
+   "excluded": "IDE Options toggles K: the oracle compiles with defaults; compiled by a different Turbo Basic build (88% runtime match)"
   },
   {
    "name": "invoice.exe",
@@ -178,7 +178,7 @@
    "toggles": "K",
    "build_match": 99,
    "roundtrip": "code-or-metadata",
-   "delta": 1008,
+   "delta": 512,
    "excluded": "IDE Options toggles K: the oracle compiles with defaults"
   },
   {
@@ -190,8 +190,8 @@
    "toggles": "K",
    "build_match": 18,
    "roundtrip": "code-or-metadata",
-   "delta": 480,
-   "excluded": "IDE Options toggles K: the oracle compiles with defaults"
+   "delta": -288,
+   "excluded": "IDE Options toggles K: the oracle compiles with defaults; compiled by a different Turbo Basic build (18% runtime match)"
   },
   {
    "name": "mymenu.exe",
@@ -200,7 +200,7 @@
    "statements": 212,
    "source_bytes": 7528,
    "toggles": "K",
-   "build_match": 5,
+   "build_match": 99,
    "roundtrip": "code-or-metadata",
    "delta": 0,
    "excluded": "IDE Options toggles K: the oracle compiles with defaults"
@@ -212,9 +212,9 @@
    "statements": 1176,
    "source_bytes": 29571,
    "toggles": "K",
-   "build_match": 4,
+   "build_match": 97,
    "roundtrip": "code-or-metadata",
-   "delta": 5904,
+   "delta": -160,
    "excluded": "IDE Options toggles K: the oracle compiles with defaults"
   },
   {
@@ -248,10 +248,10 @@
    "statements": 911,
    "source_bytes": 51612,
    "toggles": "K",
-   "build_match": 4,
+   "build_match": 86,
    "roundtrip": "code-or-metadata",
-   "delta": 5760,
-   "excluded": "compiled by a different Turbo Basic build (4% runtime match) and with IDE Options toggles K"
+   "delta": -64,
+   "excluded": "IDE Options toggles K: the oracle compiles with defaults; compiled by a different Turbo Basic build (86% runtime match)"
   },
   {
    "name": "pz.exe",
@@ -260,10 +260,10 @@
    "statements": 146,
    "source_bytes": 3320,
    "toggles": "K",
-   "build_match": 5,
-   "roundtrip": "code-or-metadata",
-   "delta": 5744,
-   "excluded": "IDE Options toggles K: the oracle compiles with defaults"
+   "build_match": 88,
+   "roundtrip": "filler-plus-metadata",
+   "delta": 0,
+   "excluded": "IDE Options toggles K: the oracle compiles with defaults; compiled by a different Turbo Basic build (88% runtime match)"
   },
   {
    "name": "r.exe",
@@ -284,10 +284,10 @@
    "statements": 129,
    "source_bytes": 6841,
    "toggles": "K",
-   "build_match": 4,
+   "build_match": 86,
    "roundtrip": "filler-plus-metadata",
    "delta": 0,
-   "excluded": "IDE Options toggles K: the oracle compiles with defaults"
+   "excluded": "IDE Options toggles K: the oracle compiles with defaults; compiled by a different Turbo Basic build (86% runtime match)"
   },
   {
    "name": "rev.exe",
@@ -296,10 +296,10 @@
    "statements": 78,
    "source_bytes": 3404,
    "toggles": "",
-   "build_match": 5,
+   "build_match": 96,
    "roundtrip": "code-or-metadata",
-   "delta": 304,
-   "excluded": "compiled by a different Turbo Basic build (5% runtime match): its bytes can never be ours"
+   "delta": 0,
+   "excluded": null
   },
   {
    "name": "rstprint.exe",
@@ -332,10 +332,10 @@
    "statements": 212,
    "source_bytes": 6315,
    "toggles": "",
-   "build_match": 5,
-   "roundtrip": "code-or-metadata",
-   "delta": 6000,
-   "excluded": "compiled by a different Turbo Basic build (5% runtime match): its bytes can never be ours"
+   "build_match": 88,
+   "roundtrip": "filler-plus-metadata",
+   "delta": 0,
+   "excluded": "compiled by a different Turbo Basic build (88% runtime match)"
   },
   {
    "name": "startup.exe",
@@ -344,10 +344,10 @@
    "statements": 24,
    "source_bytes": 534,
    "toggles": "K",
-   "build_match": 5,
+   "build_match": 88,
    "roundtrip": "filler-plus-metadata",
    "delta": 0,
-   "excluded": "IDE Options toggles K: the oracle compiles with defaults"
+   "excluded": "IDE Options toggles K: the oracle compiles with defaults; compiled by a different Turbo Basic build (88% runtime match)"
   },
   {
    "name": "state.exe",
@@ -380,10 +380,10 @@
    "statements": 38,
    "source_bytes": 739,
    "toggles": "",
-   "build_match": 5,
+   "build_match": 88,
    "roundtrip": "filler-plus-metadata",
    "delta": 0,
-   "excluded": "compiled by a different Turbo Basic build (5% runtime match): its bytes can never be ours"
+   "excluded": "compiled by a different Turbo Basic build (88% runtime match)"
   },
   {
    "name": "tamstart.exe",
