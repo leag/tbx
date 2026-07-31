@@ -6073,9 +6073,23 @@ def _decode_user_code(
                     c.cur = None
                 elif c.fn_frame is not None:  # FN result desc at [bp+0]
                     if d != 0:
-                        raise ValueError(
-                            f"string store to [bp+{d}] in DEF FN body at {addr:#x}"
+                        if d not in c.fn_frame.str_offs:
+                            raise ValueError(
+                                f"string store to [bp+{d}] in DEF FN body at {addr:#x}"
+                            )
+                        # Assignment to a string PARAMETER of the enclosing
+                        # DEF FN -- the store sibling of the spush_bp read
+                        # above, and reached only once that read has named the
+                        # offset a parameter (wild cleanup.exe, reformat.exe,
+                        # crossref.exe: `P04$ = <expr over P04$>`, all three
+                        # stopping here). Fixture t1_fnstrparamassign.
+                        state.put(
+                            ir.Assign(ir.Var(f"P{d:02X}$"), e.sstack.pop()),
+                            c.cur,
                         )
+                        c.cur = None
+                        state.advance(2)
+                        continue
                     c.fn_frame.str_result = True
                     if c.fn_frame.block:  # FNx$ = expr statement
                         state.put(ir.FnResult(e.sstack.pop()), c.cur)

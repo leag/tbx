@@ -32,9 +32,9 @@ def test_undimensioned_local_array_cleanup(stem):
 @pytest.mark.parametrize(
     ("stem", "exc", "next_gap"),
     [
-        ("cleanup.exe", ValueError, "string store to .bp.4. in DEF FN body at 0xd0fe"),
-        ("crossref.exe", ValueError, "string store to .bp.4. in DEF FN body at 0xb0b7"),
-        ("reformat.exe", ValueError, "string store to .bp.4. in DEF FN body at 0xd489"),
+        ("cleanup.exe", ValueError, "unhandled op far_ref_bp at 0xd375"),
+        ("crossref.exe", ValueError, "unhandled op far_ref_bp at 0xbda5"),
+        ("reformat.exe", ValueError, "unhandled op far_ref_bp at 0xd700"),
     ],
 )
 def test_wild_local_bounds_remain_closed(stem, exc, next_gap):

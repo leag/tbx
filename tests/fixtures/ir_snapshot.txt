@@ -4083,6 +4083,11 @@ DefFn(name='FNFN1$', params=('A$',), body=(FnResult(value=BinOp(op='+', lhs=Var(
 Print(items=(FnCall(name='FNFN1$', args=(StrLit(value='HI'),)),), newline=True, file=None, commas=None)
 End()
 
+## t1_fnstrparamassign
+Print(items=(FnCall(name='FNFN1$', args=(StrLit(value='ab'),)),), newline=True, file=None, commas=None)
+End()
+DefFn(name='FNFN1$', params=('A$',), body=(Assign(target=Var(name='A$'), value=BinOp(op='+', lhs=Var(name='A$'), rhs=StrLit(value='!'))), FnResult(value=Var(name='A$'))), is_block=True)
+
 ## t1_for
 Assign(target=Var(name='A'), value=Lit(value=0))
 For(var=Var(name='B'), init=Lit(value=1), limit=Lit(value=5), step=Lit(value=1))

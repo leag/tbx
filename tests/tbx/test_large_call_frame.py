@@ -80,8 +80,8 @@ def test_scan_local_array_index_dx_spill():
 @pytest.mark.parametrize(
     ("stem", "exc", "next_gap"),
     [
-        ("cleanup.exe", ValueError, "string store to .bp.4. in DEF FN body at 0xd0fe"),
-        ("reformat.exe", ValueError, "string store to .bp.4. in DEF FN body at 0xd489"),
+        ("cleanup.exe", ValueError, "unhandled op far_ref_bp at 0xd375"),
+        ("reformat.exe", ValueError, "unhandled op far_ref_bp at 0xd700"),
     ],
 )
 def test_large_local_family_advances_wild_program(stem, exc, next_gap):
