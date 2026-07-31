@@ -621,7 +621,10 @@ def _us_fileio(s) -> str | None:
     if isinstance(s, Rset):
         return f"RSET {unparse(s.target)} = {unparse(s.source)}"
     if isinstance(s, MidAssign):
-        return f"MID$({unparse(s.target)}, {unparse(s.start)}) = {unparse(s.source)}"
+        args = f"{unparse(s.target)}, {unparse(s.start)}"
+        if s.length is not None:
+            args += f", {unparse(s.length)}"
+        return f"MID$({args}) = {unparse(s.source)}"
 
 
 _INLINE_PER_LINE = 14

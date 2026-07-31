@@ -183,13 +183,33 @@ def test_integer_divide_memory_template():
     assert ops == [(0, "idiv_m", 0x1054)]
 
 
-def test_tb10_cvl_vector_alias():
+def test_tb10_raw_a9_is_the_three_argument_mid_assign():
+    """Canonical AF is `MID$(t$, start, len) = s$`, not an alias of CVL.
+
+    TB 1.0's raw A9 does canonicalize to AF -- but AF is the three-argument
+    MID$ assignment in both dialects, and this vector used to be read as CVL
+    on the strength of that shift alone. Compiling both constructs settles it:
+    `MID$(A$, N%, 1) = " "` emits raw A9 under TB 1.0 and AF under TB 1.1,
+    while `CVL(A$)` emits raw A3 under TB 1.0 and A9 under TB 1.1 -- so the
+    two never share a canonical vector and CVL never reaches AF.
+    """
     from tbx.decode0.dialect import TB10
     from tbx.decode0.scan import _scan_int
 
     ops = []
     vec = TB10.canon_vec(0xA9)
+    assert vec == 0xAF
     assert _scan_int(b"\xcd\xa9", 0, set(), TB10, ops, 0, vec) == 2
+    assert ops == [(0, "midassign3")]
+
+
+def test_tb10_cvl_is_raw_a3():
+    from tbx.decode0.dialect import TB10
+    from tbx.decode0.scan import _scan_int
+
+    ops = []
+    vec = TB10.canon_vec(0xA3)
+    assert _scan_int(b"\xcd\xa3", 0, set(), TB10, ops, 0, vec) == 2
     assert ops == [(0, "str2num", "CVL")]
 
 

@@ -1075,6 +1075,22 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
         ops.append((p, "midassign"))
         p += 2
         return p
+    if vec == 0xAF:  # MID$(target$, start, len) = source$: start in bx and
+        # len in ax, the same register convention the MID$ FUNCTION uses for
+        # its own three arguments. Both dialects canonicalize to this vector
+        # (TB 1.0 spells it raw AD).
+        #
+        # This was mapped to CVL in `_STR2NUM_VECS`, on the belief that it was
+        # TB 1.0's raw A9 shifted -- which the shift arithmetic does not give
+        # (A9 + 2 = AB), and TB 1.1 has no reason to reach a 1.0 spelling at
+        # all. A compiled `MID$(A$, N%, 1) = " "` emits AF and a compiled
+        # `CVL(A$)` emits A9, in 1.1 and 1.0 alike. The false mapping turned
+        # every three-argument MID$ assignment into a CVL of its target with
+        # the source string left stranded on the string stack (wild
+        # cleanup.exe, reformat.exe, crossref.exe).
+        ops.append((p, "midassign3"))
+        p += 2
+        return p
     if vec in _FN_VECS:  # runtime intrinsic: FP top -> result
         ops.append((p, "fn", _FN_VECS[vec]))
         p += 2

@@ -1028,6 +1028,21 @@ def _has_large_common_layout(state: DecodeState) -> bool:
     )
 
 
+def _mid3(state, target, source, addr):
+    """`MID$(target$, start, len) = source$` from the AF vector's registers.
+
+    start in bx and len in ax -- the same convention the MID$ FUNCTION uses
+    for the same three arguments, and the reverse of what the two-argument
+    assignment (AE) does with its single start in ax.
+    """
+    m = state.machine
+    if m.ax is None or m.bx is None:
+        raise ValueError(f"3-argument MID$= without start/len at {addr:#x}")
+    start, length = m.bx, m.ax
+    m.ax = m.bx = None
+    return ir.MidAssign(target, start, source, length)
+
+
 def _drop_local_descriptor_initializers(state, frame, span, addr) -> None:
     """Remove compiler metadata writes that preceded a LOCAL DIM bracket."""
     o = state.output
@@ -4575,6 +4590,36 @@ def _decode_user_code(
             m.ax = None
             state.advance()
             continue
+        if (
+            kind == "far_ref_bp"
+            and c.k + 1 < len(img.ops)
+            and img.ops[c.k + 1][1] == "midassign3"
+        ):  # the frame-slot sibling of the movsi/movdx/movesdx target above:
+            # `MID$(P04$, start, len) = source$` where the target string is a
+            # DEF FN parameter or a LOCAL rather than a DGROUP scalar (wild
+            # cleanup.exe, reformat.exe, crossref.exe).
+            frame = c.proc_frame if c.proc_frame is not None else c.fn_frame
+            if frame is None:
+                raise ValueError(f"frame MID$= outside a body at {addr:#x}")
+            d = op[2]
+            if frame.locals is not None and d in frame.locals:
+                target = state.loc_local_str(d)
+            elif c.fn_frame is not None:
+                # Not a LOCAL, so a string parameter -- a DEF FN frame slot is
+                # one or the other. Registered here as well as at the
+                # `spush_bp` read, because a body may WRITE the parameter
+                # before it ever reads it (t1_mid3frame does exactly that, and
+                # requiring the read first made the recognition depend on
+                # statement order).
+                c.fn_frame.param_offs.add(d)
+                c.fn_frame.str_offs.add(d)
+                target = ir.Var(f"P{d:02X}$")
+            else:
+                raise ValueError(f"frame MID$= to unknown [bp+{d}] at {addr:#x}")
+            state.put(_mid3(state, target, e.sstack.pop(), addr), c.cur)
+            c.cur = None
+            state.advance(2)
+            continue
         if kind == "far_ref_bp" and c.k + 1 < len(img.ops) and (
             img.ops[c.k + 1][1] == "dim_end"
         ):  # dim_end: finalize the LOCAL DYNAMIC array descriptor opened above
@@ -6207,7 +6252,8 @@ def _decode_user_code(
                 c.k + 3 < len(img.ops)
                 and img.ops[c.k + 1][1] == "movdx"
                 and img.ops[c.k + 2][1] == "movesdx"
-                and img.ops[c.k + 3][1] in ("lset", "rset", "midassign")
+                and img.ops[c.k + 3][1]
+                in ("lset", "rset", "midassign", "midassign3")
             ):
                 op3 = img.ops[c.k + 3][1]
                 target = state.loc(d)
@@ -6216,6 +6262,11 @@ def _decode_user_code(
                     state.put(ir.Lset(target, source), c.cur)
                 elif op3 == "rset":
                     state.put(ir.Rset(target, source), c.cur)
+                elif op3 == "midassign3":
+                    state.put(_mid3(state, target, source, addr), c.cur)
+                    c.cur = None
+                    state.advance(4)
+                    continue
                 else:  # MID$(target$, start) = source$: start is any
                     # expression, not just a literal (`MID$(A$, N%) = B$`,
                     # wild pwinst.exe) -- movax_m/whatever computed it

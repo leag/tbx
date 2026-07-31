@@ -952,11 +952,19 @@ class Rset:
 
 @dataclass(frozen=True)
 class MidAssign:
-    """MID$(target$, start) = source$ -- overwrite substring in place."""
+    """MID$(target$, start[, len]) = source$ -- overwrite substring in place.
+
+    The two- and three-argument forms are separate runtime vectors (AE and AF)
+    with different register conventions, but one statement: `length` is None
+    for the two-argument spelling, which is not the same as a length that
+    happens to equal the source's -- the source text differs and so do the
+    compiled bytes.
+    """
 
     target: object  # Var ($)
     start: object  # Expr
     source: object  # Expr ($)
+    length: object | None = None  # Expr, or None for the 2-argument form
 
 
 # --- procedures (SUB / DEF FN / CALL) ---

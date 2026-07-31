@@ -20,9 +20,9 @@ def test_scan_testw_bp_is_exact():
 @pytest.mark.parametrize(
     ("stem", "exc", "next_gap"),
     [
-        ("cleanup.exe", ValueError, "unhandled op far_ref_bp at 0xd375"),
-        ("crossref.exe", ValueError, "unhandled op far_ref_bp at 0xbda5"),
-        ("reformat.exe", ValueError, "unhandled op far_ref_bp at 0xd700"),
+        ("cleanup.exe", ValueError, "jump target 0xf317 is not a statement start"),
+        ("crossref.exe", ValueError, "displacement 0x324 is neither scalar nor array element"),
+        ("reformat.exe", ValueError, "jump target 0xf6a2 is not a statement start"),
     ],
 )
 def test_fp_local_for_advances_wild_program(stem, exc, next_gap):
