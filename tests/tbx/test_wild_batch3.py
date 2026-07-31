@@ -415,8 +415,17 @@ def test_wild_rsltest_argref_advances():
     #
     # rsltest.exe now decodes end to end. Three ops have now been caught
     # clearing `c.cur` without committing (fstp64's bridge, str_store_temp,
-    # and the epilogue walk's stamps); a fourth is worth suspecting whenever a
-    # trapping program reports a jump target that is a `trap_hook`.
+    # and the epilogue walk's stamps).
+    #
+    # The class was then AUDITED rather than left to a fourth accident. What
+    # makes it a bug is staging into `c.pend_args` -- which carries no start of
+    # its own, unlike a PrintChain or UsingChain -- and clearing `c.cur`
+    # anyway, so the statement loses the only address it had. All eleven
+    # `pend_args.append` sites were checked: every one leaves `c.cur` alone
+    # (`arg_push_arr` in arith.py reads as an offender only because the
+    # `palette_using` branch below it clears after its own `state.put`). So the
+    # class is exhausted as of this commit, and a future instance means a NEW
+    # staging site, not one that was missed.
     from tbx import decode0
 
     from conftest import wild_hits_bytes
