@@ -164,6 +164,15 @@ code, because several were **tried and reverted** and the entry says why.
   the original allocation; Turbo Basic rejects the resulting source with
   `Error 408: Segment exceeds 64k` at line 28220. The directive is required to
   compile this large program, so it cannot be the missing 48-byte reservation.
+  With the oracle harness's Compile-to navigation fixed, the current split
+  source recompiles to 127,313 bytes. The first scanned-op mismatch is already
+  the first array access (`FILD 0x1378` in the original versus `0x134c` in the
+  rebuild); every scalar and pool slot remains aligned. Two oracle probes show
+  that adding twelve scalar slots shifts the array band by exactly 48 bytes,
+  but also shifts the pool, so that is not evidence for inserting twelve
+  speculative variables. The remaining cause is an untracked compiler-generated
+  pool/code-layout contribution and needs a source witness before changing
+  layout recovery.
 
 - **`tbd73.exe` round-trip** (`PLAN.md:2000`, round 47). Decodes end to end —
   906 lines, exit 0 — but does not recompile. Four defects were fixed; the
