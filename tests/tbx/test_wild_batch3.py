@@ -1897,15 +1897,15 @@ def test_wild_mcmurphy_double_for_next_wraparound_advances():
     # code-offset wraparound needs tens of thousands of statements -- so,
     # like the other established wraparound/far-jump closures in this
     # campaign, this is a wild-only witness advance, not an oracle-verified
-    # fixture.
-    import pytest
-
+    # fixture. The later stack-test recovery now carries the file past the
+    # old testw sentinel, so assert the advance directly rather than pinning
+    # the superseded failure text.
     from tbx import decode0
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(ValueError, match=r"unhandled op testw at 0x1afbc"):
-        decode0.decode_user_code(wild_hits_bytes("mcmurphy.exe"))
+    prog = decode0.decode_user_code(wild_hits_bytes("mcmurphy.exe"))
+    assert len(prog) > 3000
 
 
 def test_decode_t1_forvarlimfar():
