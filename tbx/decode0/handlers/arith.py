@@ -1591,7 +1591,19 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
             if kind in ("fld_bp", "fld_bp64"):
                 expr_.stack.append(pvar)
             elif kind in ("fstp_bp", "fstp_bp64"):
-                state.put(ir.Assign(pvar, expr_.stack.pop()), c.cur)
+                v = expr_.stack.pop()
+                if v is _FREAD:  # INPUT# LOCAL numeric target (wild
+                    # kinetics.exe: the DGROUP fstp/fstp64 sibling in core.py
+                    # already threads this sentinel through; this LOCAL-frame
+                    # branch never did, so an INPUT# target that happened to
+                    # be a LOCAL never joined its chain -- the chain closed
+                    # with no stored target, reported far away at whatever
+                    # statement's flush_pending() discovered it empty.
+                    state._fread_target(pvar)
+                elif v is _READDATA:  # READ LOCAL numeric target, same gap
+                    state._readdata_target(pvar)
+                else:
+                    state.put(ir.Assign(pvar, v), c.cur)
                 c.cur = None
             elif kind in ("fold_bp", "fold_bp64", "ifold_bp"):
                 expr_.stack.append(_orient(op[2], pvar, expr_.stack.pop()))

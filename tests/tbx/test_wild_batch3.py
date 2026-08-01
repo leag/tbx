@@ -376,6 +376,27 @@ def test_decode_t1_fordecrmidbody():
     )
 
 
+def test_decode_t1_inputfilelocal():
+    # INPUT# into a LOCAL SINGLE variable: the DGROUP `fstp` handler in
+    # core.py already threads the `_FREAD`/`_READDATA` sentinels through to
+    # `state._fread_target`/`_readdata_target`, but its LOCAL-frame sibling
+    # (`fstp_bp`/`fstp_bp64` in handlers/arith.py) built a plain `ir.Assign`
+    # unconditionally -- so a LOCAL INPUT#/READ target never joined its
+    # chain, and it closed empty ("INPUT# chain closed without any stored
+    # target"), reported at whatever unrelated statement's flush_pending()
+    # discovered it. Wild kinetics.exe.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_inputfilelocal.exe"))
+    reads = [s for s in prog[0].body if isinstance(s, ir.InputFile)]
+    assert len(reads) == 1 and reads[0].vars, "the LOCAL target must join the chain"
+    assert emit0.emit(prog) == (
+        "10 SUB SUB1\n  LOCAL A\n"
+        '  OPEN "TEST.DAT" FOR INPUT AS #1\n  INPUT #1, A\n'
+        "  CLOSE #1\n  PRINT A\nEND SUB\n20 CALL SUB1\n30 END\n"
+    )
+
+
 def test_decode_t1_palettereset():
     # Bare PALETTE (INT ECh sub 86h, zero operands: reset to default
     # palette) -- distinct from PALETTE attr,color (sub 88h). Identified

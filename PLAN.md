@@ -2592,6 +2592,31 @@ four.
 reconstruction for its nested DEF FN IFs is still open, and is now the only
 thing between it and the next gap.
 
+### 2026-08-01 — Round 39: kinetics.exe's `INPUT# chain closed without any stored target` — LANDED (LOCAL fstp_bp never threaded the sentinel)
+
+`core.py`'s DGROUP `fstp` handler already threads the `_FREAD`/`_READDATA`
+sentinels through to `state._fread_target`/`_readdata_target` when the
+popped expression-stack value is one of them (an `INPUT #n, v` or `READ v`
+target). Its LOCAL-frame sibling in `handlers/arith.py` -- the `fstp_bp`/
+`fstp_bp64` branch reached when the target displacement is inside an open
+SUB/DEF FN's LOCAL frame -- built a plain `ir.Assign(pvar, expr_.stack.pop())`
+unconditionally, never checking for either sentinel. So `INPUT #1, A` (or
+`READ A`) into a LOCAL SINGLE/DOUBLE variable silently built a bogus Assign
+whose "value" was the sentinel tuple, and never appended to the open chain's
+targets -- which then closed empty at whatever unrelated LATER statement's
+`flush_pending()` discovered it, same "reported far from the real cause"
+shape as rounds 35/36/38. Found by tracing kinetics.exe's `read_file_num` op
+back from the failing flush to the actual `fstp_bp` op three bytes later.
+
+**Fixed** by adding the same three-way branch (`_FREAD`/`_READDATA`/plain
+value) the DGROUP case already has. Verified with an oracle-compiled probe
+(`SUB` with `LOCAL A!`, `OPEN ... INPUT`, `INPUT #1, A!`) -- decodes and
+recompiles byte-exact -- promoted as `tests/fixtures/corpus/
+t1_inputfilelocal`, pinned by `test_decode_t1_inputfilelocal`, confirmed to
+fail without the fix. kinetics.exe now advances to a distinct, later,
+unrelated gap (`string BP push outside DEF FN`). Full suite green, ruff
+clean.
+
 ### 2026-07-31 — Round 38: mcmurphy.exe's `NEXT template mismatch` — LANDED (`jcc_body` skipped the wraparound-tolerant compare)
 
 `lift._lift_next`'s inner `jcc_body(i, cc, inv)` helper compares a jcc/jmp
