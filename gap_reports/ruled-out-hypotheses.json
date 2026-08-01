@@ -1,7 +1,7 @@
 {
  "schema_version": 1,
  "document_type": "tbx.ruled_out_hypotheses",
- "updated": "2026-07-31",
+ "updated": "2026-08-01",
  "note": "Decoder-side hypotheses that were investigated and REJECTED: a cause that turned out not to be the cause, or a fix that was written, tested and reverted. The sibling ledger runtime-revision-assessments.json covers the other class, where the answer is a property of the compiler rather than of our code; a pattern that is unwitnessable by our oracle belongs there, not here. The point of both is that a rejected hypothesis is expensive evidence and is otherwise lost the moment a session ends -- PLAN.md records them chronologically, and this is the deduplicated index into it. An entry earns its place by saying what was tried, what killed it, and what a re-attempt should do instead.",
  "dispositions": [
   "refuted",
@@ -283,6 +283,27 @@
     "The ordinary INT 8A probe still requires relative targets to decode as GOSUBs, and no independent oracle witness proves that a CD 8A target is helper-only."
    ],
    "instead": "Keep the calibrated relative-target rule. Investigate the remaining structural divergence using the split-source oracle measurement and a probe that reproduces the multi-toggle helper bytes, rather than classifying by target opcode prefix.",
+   "source": "session 2026-08-01"
+  },
+  {
+   "id": "RO-MCMURPHY-DATA-END-PLACEMENT",
+   "title": "Moving the reconstructed DATA block to a later source segment restores the pool",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/mcmurphy.exe"
+   ],
+   "signatures": [
+    "DATA/string-descriptor ordering",
+    "mcmurphy round-trip delta"
+   ],
+   "hypothesis": "The nine recovered DATA items are emitted at the top only because their original codeless statement was later in the included source. Moving the canonical DATA statement to the end of the program, or to the end of MCMUR001, should put its descriptors before the tail code literals and restore the byte layout.",
+   "negative_evidence": [
+    "Moving DATA to the end of MCMUR003 compiled successfully but produced 130,065 bytes, 355 bytes longer than the 129,710-byte original.",
+    "Moving DATA to the end of MCMUR001 (line 12145, the last available line before MCMUR002) compiled successfully but produced 130,081 bytes, 371 bytes longer than the original.",
+    "The uncapped canonical report remains 129,697 bytes with identical scalar/array bases and pool-string multisets; placement alone is not the missing mechanism."
+   ],
+   "instead": "Do not add a source-position heuristic. Recover the compiler's DATA statement metadata or a wild witness for its pointer/boundary table first; the mcmurphy EXE has no error-trap line table, and arbitrary placement changes unrelated allocation metadata.",
    "source": "session 2026-08-01"
   }
  ]
