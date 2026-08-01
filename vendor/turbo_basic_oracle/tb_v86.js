@@ -24,7 +24,7 @@ console.error(`[harness] work.img built with SOLVER.BAS`);
 const emulator = lib.bootEmulator({ here: HERE, workImg });
 const { scr } = lib.attachScreen(emulator);
 const driver = lib.makeDriver(emulator);
-const { altKey, tapKey, typeSlow, waitFor, held, heldExt, tapKeyExt } = driver;
+const { altKey, tapKey, typeSlow, waitFor, held, tapKeyExt } = driver;
 const sleep = lib.sleep, ENTER = lib.ENTER;
 const fs = require("fs");
 
