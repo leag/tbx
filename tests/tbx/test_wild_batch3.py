@@ -1908,6 +1908,32 @@ def test_wild_mcmurphy_double_for_next_wraparound_advances():
     assert len(prog) > 3000
 
 
+def test_wild_mcmurphy_segmented_string_guards_are_retained():
+    # Several command-dispatch comparisons use a near target whose 16-bit
+    # offset also names an operation in the earlier code window.  The scanner
+    # elides the bytes at the true target, so an exact-address IF close left
+    # the frame open and dropped its condition (and its pool descriptor).
+    from tbx import decode0, emit0
+
+    from conftest import wild_hits_bytes
+
+    source = emit0.emit(decode0.decode_user_code(wild_hits_bytes("mcmurphy.exe")))
+    for literal in (
+        "xbutler",
+        "xmaid",
+        "x#z",
+        "xK",
+        "xZ",
+        "x6160",
+        "re30>75",
+        "x30>75",
+        "O",
+        "u>",
+        "u<",
+    ):
+        assert literal in source
+
+
 def test_decode_t1_forvarlimfar():
     # Variable-limit integer FOR/NEXT whose body is beyond short-jump
     # range: the NEXT test uses the inverse signed condition + JMP instead

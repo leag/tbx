@@ -9,6 +9,22 @@ Read this file first. `PLAN.md` is 9000 lines and is now an **evidence
 archive**, not a work queue — go there for the reasoning behind a specific
 finding, not to find out what to do next.
 
+## Current mcmurphy investigation
+
+The command-dispatch string guards now survive decoding when a near branch's
+16-bit target names an operation in an earlier code window. `DecodeState.branch`
+canonicalizes that target to the matching operation in the active window before
+inline-IF frames close. The wild regression asserts all eleven previously
+missing literals (`xmaid`, `xbutler`, `x#z`, `xK`, `xZ`, `x6160`, `re30>75`,
+`x30>75`, `O`, `u>`, `u<`) remain in emitted source.
+
+Measured with the oracle using dialect `1.1` and toggles `KBOS`, the mcmurphy
+round trip improved from 127,313 to 129,697 bytes against a 129,710-byte
+original. Layout array bases and the complete string-pool multiset now match;
+the remaining 13-byte delta is a DATA/string-descriptor ordering issue, not a
+missing guard. Use `python -m tbx.tools.roundtrip_report` to reproduce the
+measurement.
+
 ## Verified state on the park date
 
 Run on `release/0.1.0` at `b79a756`:

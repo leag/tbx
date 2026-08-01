@@ -434,7 +434,27 @@ class DecodeState:
         otherwise be folded away with the IF's body still open (wild tbd73.exe,
         TBW73.INC:716).
         """
-        while self.ifs and addr == self.frame_event(self.ifs[-1]).payload.target:
+        # A short branch can target the middle of a compiler helper that the
+        # scanner intentionally elides.  Final target resolution already
+        # retargets such edges to the first following scanned operation; use
+        # the same rule while walking, or the IF frame remains open forever
+        # and its condition disappears from the emitted IR (mcmurphy's
+        # command-dispatch string tests).
+        op_addrs = {op[0] for op in self.image.ops}
+        while self.ifs:
+            target = self.frame_event(self.ifs[-1]).payload.target
+            if addr != target and not (
+                target is not None
+                and target not in op_addrs
+                and addr % 0x10000 == target % 0x10000
+            ):
+                break
+            if addr != target:
+                logger.warning(
+                    "closing IF at %05x on unresolved target %05x",
+                    addr,
+                    target,
+                )
             fr = self.ifs.pop()
             self.flush_pending()
             # The region is complete here and its extent is only knowable here
@@ -897,6 +917,31 @@ class DecodeState:
         assert output is not None
         if output.event_log is None:
             output.event_log = EventLog()
+        # Near branches in a later 64 KiB code window retain the compiler's
+        # 16-bit target in the scanned stream.  If the target falls inside an
+        # elided helper, resolve that offset to the following scanned op now;
+        # keeping the canonical address on the frame is essential because
+        # nested inline-IFs close in stack order.  Waiting until final target
+        # resolution leaves an unreachable outer frame and absorbs every
+        # inner condition (mcmurphy's command-dispatch string tests).
+        op_addrs = {op[0] for op in self.image.ops}
+        if target is not None and (target not in op_addrs or (
+            frame == "if" and address is not None and target < address
+        )):
+            candidates = [
+                op[0]
+                for op in self.image.ops
+                if op[0] % 0x10000 == target % 0x10000
+                and (address is None or op[0] >= address)
+            ]
+            if candidates:
+                replacement = min(candidates)
+                logger.warning(
+                    "canonicalizing branch target %05x -> %05x",
+                    target,
+                    replacement,
+                )
+                target = replacement
         return output.event_log.branch(
             frame,
             template=template,
