@@ -25,6 +25,15 @@ the remaining 13-byte delta is a DATA/string-descriptor ordering issue, not a
 missing guard. Use `python -m tbx.tools.roundtrip_report` to reproduce the
 measurement.
 
+The residual was narrowed from the original descriptor table without another
+oracle compile: the descriptors classified as DATA are three non-contiguous
+runs (indices `570`, `572`, and `583..589`), interleaved with code-referenced
+strings. mcmurphy has no error-trap line table, so it carries no codeless DATA
+statement lines or boundaries that the decoder can recover. Emitting those
+runs as one top-level `DATA` statement is therefore the only evidence-backed
+canonicalization currently available; synthesizing source placement from pool
+order would be a guess and risks changing unrelated programs.
+
 ## Verified state on the park date
 
 Run on `release/0.1.0` at `b79a756`:
