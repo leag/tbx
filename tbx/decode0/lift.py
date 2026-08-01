@@ -1383,12 +1383,16 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
         following = [candidate for candidate in index if candidate >= a]
         if following:
             replacement = min(following)
-            logger.warning("retargeting unresolved %05x -> %05x", a, replacement)
+            # Wild recovery deliberately retargets edges that land in scanner-
+            # elided helper bytes.  This is expected on large programs; keep
+            # the detail available for focused tracing without flooding a
+            # buffered harness with one warning per edge.
+            logger.debug("retargeting unresolved %05x -> %05x", a, replacement)
             return replacement
         wrapped = [candidate for candidate in index if candidate % 0x10000 == a % 0x10000]
         if wrapped:
             replacement = min(wrapped, key=lambda candidate: abs(candidate - a))
-            logger.warning("retargeting wrapped %05x -> %05x", a, replacement)
+            logger.debug("retargeting wrapped %05x -> %05x", a, replacement)
             return replacement
         return a
 

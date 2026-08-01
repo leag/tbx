@@ -34,6 +34,13 @@ runs as one top-level `DATA` statement is therefore the only evidence-backed
 canonicalization currently available; synthesizing source placement from pool
 order would be a guess and risks changing unrelated programs.
 
+Artifact refresh (2026-08-01): `scan_wild --only mcmurphy.exe` reports one
+Turbo Basic 1.1 hit with 3,092 statements and no decode failures. A follow-up
+oracle report was attempted with an 800 MB virtual-memory cap; the vendored
+Node/V8 process failed before compilation while reserving its CodeRange. This
+is an infrastructure limit, not a decoder or source-compile result; the last
+uncapped oracle measurement remains 129,697 rebuilt bytes versus 129,710.
+
 ## Verified state on the park date
 
 Run on `release/0.1.0` at `b79a756`:
