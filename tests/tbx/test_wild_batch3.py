@@ -428,6 +428,55 @@ def test_decode_t1_forstepm1_ovf():
     )
 
 
+def test_decode_t1_numstrvaluegroup():
+    # A NUMERIC-led relational value group whose second term is a string
+    # relation: the mirror of the existing STRING-led one
+    # (`match_string_logical_value_group`, t1_stringorvalueif). Both terms
+    # always materialize (no short-circuit dispatch after term1), which
+    # `_lift_while` used to misread as a WHILE/inline-IF header, raising
+    # "materialization template mismatch" partway through term2's own
+    # materialize (wild kinder.exe). Fixed by a new sibling matcher,
+    # `match_numeric_logical_value_group` -- OR only, since the AND
+    # combine-time fold this feeds has no counterpart (see its docstring).
+    from tbx import decode0, emit0
+
+    prog = decode0.decode_user_code(_exe("t1_numstrvaluegroup.exe"))
+    assert emit0.emit(prog) == (
+        '10 A# = 1.5#\n20 B$ = "AB"\n30 IF (A# = 1.5# OR B$ = "AB") THEN 50\n'
+        "40 END\n50 PRINT \"YES\"\n60 END\n"
+    )
+
+
+def test_decode_t1_numstr3chain():
+    # The value group's real wild witness (kinder.exe) is a 3-TERM chain,
+    # not just 2: `A# = B# OR C$ = D$ OR C$ = E$`. A 3rd term chains flat
+    # off the 2-term fold with no closing jcc/jmp of its own -- just more
+    # term-staging leading into the next materialize -- so the matcher
+    # only needs to recognize the fold through `oraxbx`, and neither
+    # `direct_bool_gate` nor `direct_bool_group` may clear after an
+    # intermediate fold (both are only ever closed by the eventual closing
+    # jcc). Getting the register roles' left/right order backwards (an
+    # earlier attempt swapped them, matching the string-led case) is
+    # invisible for an isolated 2-term probe -- OR is commutative there --
+    # but produces the wrong INNER nesting once a 3rd term makes the
+    # 2-term fold's result an operand of another fold; caught by building
+    # this exact 3-term probe and checking it byte-exact, not by the
+    # 2-term probe alone.
+    #
+    # This is still not kinder.exe's own EXACT construct: its real 3-term
+    # instance defers ALL THREE materializations before combining (an
+    # extra register shuffle appears that this flat probe's shape doesn't
+    # reproduce), so kinder.exe itself remains unfixed -- see PLAN.md.
+    from tbx import decode0, emit0
+
+    prog = decode0.decode_user_code(_exe("t1_numstr3chain.exe"))
+    assert emit0.emit(prog) == (
+        '10 A# = 1.5#\n20 B$ = "AB"\n30 C$ = "CD"\n'
+        '40 IF (A# = 1.5# OR B$ = "AB" OR B$ = "CD") THEN 50\n'
+        "50 PRINT \"YES\"\n60 END\n"
+    )
+
+
 def test_decode_t1_palettereset():
     # Bare PALETTE (INT ECh sub 86h, zero operands: reset to default
     # palette) -- distinct from PALETTE attr,color (sub 88h). Identified

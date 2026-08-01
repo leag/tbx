@@ -30,6 +30,7 @@ from tbx.decode0.matchers import (
     array_param_suffix,
     match_bool_outer_and_group,
     match_bool_term1,
+    match_numeric_logical_value_group,
     match_string_logical_value_group,
     match_using_emit,
 )
@@ -708,6 +709,32 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             e.pend_cmp_str = False
             e.direct_bool_gate = True
             e.direct_bool_group = "string_value"
+            e.direct_bool_logical = True
+            state.advance(3)
+            return True
+        if (
+            e.pend_cmp
+            and not e.pend_cmp_str
+            and match_numeric_logical_value_group(i.ops, c.k) is not None
+        ):
+            # Mirror of the string-led value group just above, numeric first
+            # and a string relation second (wild kinder.exe): the shared tail
+            # (strcmp; movbxax; movax FFFF; jcc; incax; oraxbx; ...) folds
+            # the same way regardless of which side led, EXCEPT the operand
+            # order: string-led banks term1(string) to bx then materializes
+            # term2(numeric) into ax, so its fold puts ax(term2) first --
+            # numeric-led is the mirror image (bx=term1 numeric, ax=term2
+            # string), so ITS fold must put bx(term1) first instead, or a
+            # 3+-term chain nests the wrong operand order once this fold's
+            # result itself becomes an operand of the next one (checked:
+            # sharing "string_value" here reproduced byte-exact for an
+            # isolated 2-term probe -- OR being commutative hid it -- but
+            # broke a 3-term chain's inner nesting, probe q_numstr3chain).
+            e.direct_bool_group = "numeric_value"
+            lhs, rhs = e.pend_cmp
+            m.ax = ir.BinOp(_JCC_RELOP_TRUE[i.ops[c.k + 1][2]], lhs, rhs)
+            e.pend_cmp = None
+            e.direct_bool_gate = True
             e.direct_bool_logical = True
             state.advance(3)
             return True

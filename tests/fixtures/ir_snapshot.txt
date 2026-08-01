@@ -5420,6 +5420,22 @@ Assign(target=Var(name='B%'), value=Lit(value=2))
 Assign(target=Var(name='C%'), value=Lit(value=3))
 End()
 
+## t1_numstr3chain
+Assign(target=Var(name='A#'), value=DblLit(value=1.5))
+Assign(target=Var(name='B$'), value=StrLit(value='AB'))
+Assign(target=Var(name='C$'), value=StrLit(value='CD'))
+IfGoto(cond=Group(inner=LogOp(op='OR', lhs=LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='A#'), rhs=DblLit(value=1.5)), rhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='AB'))), rhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='CD')))), target=4)
+Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None)
+End()
+
+## t1_numstrvaluegroup
+Assign(target=Var(name='A#'), value=DblLit(value=1.5))
+Assign(target=Var(name='B$'), value=StrLit(value='AB'))
+IfGoto(cond=Group(inner=LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='A#'), rhs=DblLit(value=1.5)), rhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='AB')))), target=4)
+End()
+Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_ob2
 Dim(name='V0', bounds=(10, 10), also=())
 Dim(name='V1', bounds=((1, 6), (1, 6)), also=())

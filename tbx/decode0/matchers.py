@@ -308,6 +308,75 @@ def match_string_logical_value_group(
     return None
 
 
+def match_numeric_logical_value_group(
+    ops, index: int | None = None
+) -> BoolTermMatch | None:
+    """Mirror of :func:`match_string_logical_value_group`: a NUMERIC-led
+    relational ``AND|OR`` value group whose second term is a string relation.
+
+    Same non-short-circuiting shape (both relations always materialize, only
+    the completed value feeds the final jcc/jmp), just with the leading
+    relation numeric instead of string -- ``ops[index]`` is the numeric
+    term's own ``movax FFFF`` materialization (no ``orax`` tail, unlike an
+    ordinary short-circuit chain's first term), and the tail's own second
+    term is a raw ``strcmp`` rather than the numeric ``fstsw`` the string-led
+    matcher's tail also accepts. Wild kinder.exe: `IF A# = B# OR C$ = D$
+    THEN <line>` (probe q_numstrvaluegroup).
+
+    A 3rd (or later) term chains flat off the same tail shape with no
+    closing ``jcc;jmp`` of its own -- just more term-staging leading into
+    the NEXT ``strcmp``/fold (wild kinder.exe's real witness is a 3-term
+    `A# = B# OR C$ = D$ OR C$ = E$`, probe q_numstr3chain) -- so only the
+    fold through ``oraxbx`` is required here; whether that closes the whole
+    expression or continues is for the caller's downstream fold (the
+    ``direct_bool_gate``/``reg_logical_results`` chain machinery) to decide,
+    not this recognizer.
+
+    OR only: the combine-time fold this feeds (``arith.py``'s ``oraxbx and
+    e.direct_bool_group is not None`` branch) has no AND counterpart -- the
+    sibling ``andaxbx`` branch belongs to a DIFFERENT feature
+    (``match_bool_outer_and_group``) that happens to share the
+    ``direct_bool_gate`` flag but not the register orientation this shape
+    needs, so accepting AND here would silently fold with the wrong operand
+    order (checked: probed `A# = B# AND C$ = D$` this way emits a misplaced
+    Group and does not recompile byte-identical).
+    """
+    ops, index = _window(ops, index)
+    if (
+        index + 3 >= len(ops)
+        or ops[index][1:] != ("movax", 0xFFFF)
+        or ops[index + 1][1] != "jcc"
+        or ops[index + 1][2] not in _JCC_RELOP_TRUE
+        or ops[index + 2][1] != "incax"
+        or ops[index + 1][3] != ops[index + 3][0]
+    ):
+        return None
+    for j in range(index + 3, min(index + 14, len(ops) - 6)):
+        if any(
+            op[1] in ("jcc", "jmp", "jmpf", "jmps")
+            for op in ops[index + 3 : j]
+        ):
+            # An intervening dispatch closes the first term as an ordinary
+            # short-circuit chain; do not reach across it into a later
+            # materialization.
+            continue
+        tail = [o[1] for o in ops[j : j + 6]]
+        if (
+            tail != ["strcmp", "movbxax", "movax", "jcc", "incax", "oraxbx"]
+            or ops[j + 2][2] != 0xFFFF
+            or ops[j + 3][2] not in _JCC_RELOP_TRUE
+            or ops[j + 3][3] != ops[j + 5][0]
+        ):
+            continue
+        return BoolTermMatch(
+            template="numeric_logical_value_group",
+            start=index,
+            stop=j + 6,
+            operator="OR",
+        )
+    return None
+
+
 def match_bool_bare_term1(ops, index: int | None = None) -> BoolTermMatch | None:
     """Sibling of :func:`match_bool_term1` for a bare-value compound term.
 

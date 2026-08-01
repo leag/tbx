@@ -1,0 +1,35 @@
+# t1_numstrvaluegroup dialect=1.1 start=08700
+08703:fld64:316
+08708:fstp64:288
+0870F:movsi:312
+08712:rt:156
+08714:movsi:296
+08717:strassign
+08719:fld64:316
+0871E:fcomp64:288
+08723:fstsw
+08725:movax:65535
+08728:jcc:116:34603
+0872A:incax
+0872B:movsi:296
+0872E:rt:156
+08730:movsi:312
+08733:rt:156
+08735:strcmp
+08737:movbxax
+08739:movax:65535
+0873C:jcc:116:34623
+0873E:incax
+0873F:oraxbx
+08743:jcc:116:34632
+08745:jmp:34635
+08748:end
+0874B:movsi:308
+0874E:rt:156
+08750:rt:190
+08752:rt:184
+08754:end
+08757:epilogue
+# commits
+0870D
+08741

@@ -1334,15 +1334,35 @@ def int_bitwise_bx(state: DecodeState, op, addr, kind) -> bool:
             # into AX before spilling it through BX/CX, then evaluates C.
             # At this fold AX holds B and BX holds C, unlike the string
             # sibling's ordinary register orientation.
-            if e.direct_bool_group == "string_value":
-                left = m.ax.inner if isinstance(m.ax, ir.Group) else m.ax
-                right = m.bx.inner if isinstance(m.bx, ir.Group) else m.bx
+            if e.direct_bool_group in ("string_value", "numeric_value"):
+                # Register roles mirror which side led (see the two match
+                # sites in handlers/control.py): a string-led group banks
+                # term1 to bx then materializes term2 into ax, so term2(ax)
+                # comes first; numeric-led is the other way around, so
+                # term1(bx) has to come first instead -- getting this
+                # backwards is invisible for an ISOLATED two-term group (OR
+                # is commutative and both operand orders compile
+                # byte-identical there) but nests the wrong inner order once
+                # this fold's own result becomes an operand of a THIRD term
+                # (wild kinder.exe, probe q_numstr3chain).
+                ax = m.ax.inner if isinstance(m.ax, ir.Group) else m.ax
+                bx = m.bx.inner if isinstance(m.bx, ir.Group) else m.bx
+                left, right = (ax, bx) if e.direct_bool_group == "string_value" else (bx, ax)
                 value = ir.Group(ir.BinOp(comb, left, right))
-                e.direct_bool_gate = False
+                # Neither `direct_bool_gate` NOR `direct_bool_group` clear
+                # here: a THIRD (or later) term chains flat off this SAME
+                # fold, reaching this exact branch again for its own
+                # `oraxbx`. Clearing either one early (as the two-term case
+                # alone used to) sent a 3rd term down the unrelated
+                # `match_bool_outer_and_group` flat-chain branch instead,
+                # which does not unwrap this shape's Groups and left a
+                # spurious extra one. Both flags are only ever closed by the
+                # eventual closing jcc (core.py), which already clears them
+                # unconditionally.
             else:
                 value = ir.BinOp(comb, m.bx, _rgrp(comb, m.ax))
+                e.direct_bool_group = None
             m.ax = value
-            e.direct_bool_group = None
         elif (
             kind in ("andaxbx", "oraxbx", "xoraxbx")
             and isinstance(m.bx, ir.BinOp)

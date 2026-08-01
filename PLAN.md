@@ -2592,6 +2592,77 @@ four.
 reconstruction for its nested DEF FN IFs is still open, and is now the only
 thing between it and the next gap.
 
+### 2026-08-01 — Round 43: a NUMERIC-led boolean value group, landed as a new feature -- but NOT kinder.exe's own shape
+
+Deep-dived the compound-boolean-materialization territory that rounds 37/41/
+42 kept landing back in (kinder.exe/grdscn.exe/hebrew.exe/file.exe's second
+gap all sit somewhere in it). Traced kinder.exe's own failure
+(`materialization template mismatch at 0xbace`) to a genuinely missing
+FEATURE, not a bug: `match_string_logical_value_group` (an existing,
+calibrated matcher for `(A$ = "M" OR X$ = "N")`-style relations that
+ALWAYS both evaluate, no short-circuit dispatch, string term leading) has
+no mirror for the numeric-led order -- `(A# = B# OR C$ = D$)`, numeric
+first, string second. `_lift_while` misread the string term's own
+materialization as a loop/inline-IF header and raised.
+
+Added `match_numeric_logical_value_group` (matchers.py) plus a control.py
+call site mirroring the string-led one, gated on `e.pend_cmp` (not
+`e.pend_cmp_str`) and restricted to OR -- the AND combine-time fold this
+would feed has no calibrated counterpart at all (checked: it silently
+mis-groups and does not recompile byte-identical, so AND is deliberately
+rejected by the matcher rather than guessed).
+
+**Chasing the real wild witness surfaced it needs N-term chaining, not just
+2**: kinder.exe's actual construct is a 3-term chain (`A# = B# OR C$ = D$ OR
+C$ = E$`), which the naive 2-term-only port of the string-led matcher can't
+recognize (its tail requires an immediate closing jcc/jmp; a mid-chain term
+has none). Fixed in three steps, each verified against its own oracle
+probe:
+1. Relaxed the matcher's tail check to stop requiring the closing jcc/jmp
+   (the caller never used those fields anyway) -- `q_numstr3chain.bas`.
+2. Found `arith.py`'s `oraxbx` combine-time fold cleared `direct_bool_gate`/
+   `direct_bool_group` unconditionally right after the FIRST fold -- fine
+   for exactly 2 terms (the flags are also cleared, harmlessly-redundantly,
+   by the eventual closing jcc), but it silently misroutes a 3rd term
+   through an unrelated feature's flat-chain branch, which doesn't unwrap
+   this shape's Groups and leaves a spurious extra one. Left both flags set
+   after an intermediate fold; only the final closing jcc (which already
+   does this for every other shape) clears them.
+3. The fold's own left/right operand order matters once nested: an
+   ISOLATED 2-term probe compiled byte-identical either way (OR is
+   commutative there) which is what let a register-role mixup slip through
+   at first -- string-led banks term1 to bx then materializes term2 into ax
+   (so ax-then-bx is correct order), numeric-led is the mirror image
+   (bx-then-ax) -- getting this backwards only shows up once the fold's own
+   result becomes an operand of a 3rd term's fold, nesting the wrong inner
+   order. Split into two markers (`"string_value"` / `"numeric_value"`) so
+   each gets its own correct operand order.
+
+Promoted `tests/fixtures/corpus/t1_numstrvaluegroup` (2-term) and
+`t1_numstr3chain` (3-term), both oracle-verified byte-exact, pinned by
+`test_decode_t1_numstrvaluegroup`/`test_decode_t1_numstr3chain`, both
+confirmed to fail on the pre-fix code -- and re-verified the EXISTING
+`t1_stringorvalueif` fixture still passes throughout (it broke twice during
+this work, from the operand-order and premature-flag-clear mistakes above,
+both caught before landing).
+
+**kinder.exe itself is still NOT fixed**: its real 3-term instance defers
+ALL THREE materializations before combining at all -- an extra `movrr
+cx,bx` register shuffle appears between term2's own fold and term3's
+staging that this flat-chain model's byte shape doesn't reproduce (checked
+directly against kinder.exe's own ops: `match_numeric_logical_value_group`
+returns `None` at the real failure site, because position `index+12` is
+`movsi` -- more term-staging -- not `oraxbx`, i.e. terms 1+2 are NOT folded
+before term3 stages, unlike this round's probe). This is a distinct,
+still-open shape needing its own dedicated tracing next time -- do not
+assume the fix above resolves kinder.exe; it doesn't, confirmed by direct
+re-test after landing. grdscn.exe/hebrew.exe/football.exe/copyall.exe/
+file.exe's second gap were also re-checked after landing and are
+UNCHANGED -- all distinct instances within the same broader family, none
+sharing this exact cause.
+
+Full suite 3069 passed / 2 skipped, ruff clean.
+
 ### 2026-08-01 — Round 42: catalog.exe's `unhandled INT EC sub a6` — ruled out a dozen candidates, unresolved
 
 `catalog.exe` (dialect 1.0) fails at scan phase on canonical EC sub 0xA6
