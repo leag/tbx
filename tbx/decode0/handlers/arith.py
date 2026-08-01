@@ -31,6 +31,21 @@ if TYPE_CHECKING:
     from tbx.decode0.core import DecodeState
 
 
+def _next_real_addr(img, i):
+    """The address of the next op after `i`, skipping toggle-instrumentation
+    ops (`into`/`stack_chk`) that carry no source spelling and can land
+    between any two ops under the Overflow/Stack-test IDE options -- so a
+    positional adjacency check (e.g. "is this op immediately followed by the
+    FOR's own NEXT test") has to look past them the same way the main
+    dispatch loop's own generic `into`/`stack_chk` skip effectively does
+    (wild bill.exe: an Overflow-toggle `into` between a loop's closing
+    `dec_m` and its `cmp_mi8` test broke the adjacency check that guards
+    against a mid-body DECR hijacking the step, round 36's fix)."""
+    while i < len(img.ops) and img.ops[i][1] in ("into", "stack_chk"):
+        i += 1
+    return img.ops[i][0] if i < len(img.ops) else None
+
+
 def int_alu(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addax_bp, addsiax, subax_m, imul_m, imul_bp, movax_bp, idivbx, cmpax_m, inc_m, dec_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
     img, m, expr_, l, c, o = (state.image, state.machine, state.expr,
@@ -560,8 +575,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         if (
             c.fors
             and c.fors[-1].v == op[2]
-            and c.k + 1 < len(img.ops)
-            and img.ops[c.k + 1][0] == c.fors[-1].test
+            and _next_real_addr(img, c.k + 1) == c.fors[-1].test
         ):
             f = c.fors[-1]
             old = o.stmts[f.idx]
@@ -587,8 +601,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         if (
             c.fors
             and c.fors[-1].v == op[2]
-            and c.k + 1 < len(img.ops)
-            and img.ops[c.k + 1][0] == c.fors[-1].test
+            and _next_real_addr(img, c.k + 1) == c.fors[-1].test
         ):
             f = c.fors[-1]
             old = o.stmts[f.idx]
@@ -615,8 +628,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         if not (
             c.fors
             and c.fors[-1].v == op[2]
-            and c.k + 1 < len(img.ops)
-            and img.ops[c.k + 1][0] == c.fors[-1].test
+            and _next_real_addr(img, c.k + 1) == c.fors[-1].test
         ):
             var = state.loc(op[2])
             state.put(ir.Assign(var, ir.BinOp("+", var, ir.Lit(op[3]))), c.cur)

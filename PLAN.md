@@ -2592,6 +2592,36 @@ four.
 reconstruction for its nested DEF FN IFs is still open, and is now the only
 thing between it and the next gap.
 
+### 2026-08-01 — Round 40: round 36's own fix regressed bill.exe — FIXED (an `into` between `dec_m` and its test)
+
+Re-scanning after round 39 turned up `bill.exe: int NEXT: expected JLE/JBE/JGE
+to body at 0xe8e3` -- a file that decoded fine before this session. Bisected:
+it decoded successfully as of `b8fea5d` (before round 36's `dec_m`/`dec_bp`/
+`addm_i8` adjacency guard) and broke exactly at that commit.
+
+Root cause: bill.exe carries the Overflow ('O') IDE toggle, which inserts a
+semantic-free `into` check after arithmetic that can overflow -- including
+right after a STEP -1 loop's own closing `dec_m`, before its `cmp_mi8` test.
+Round 36's guard checked `img.ops[c.k + 1][0] == f.test` -- the address of
+the LITERAL next op -- which is `into`'s address here, not the test's, so
+the guard rejected the loop's own genuine step-defining decrement.
+
+**Fixed** with `_next_real_addr`, a small helper that skips `into`/
+`stack_chk` (both already handled as no-ops by the main dispatch loop
+generically) before taking the adjacency address, used by all three guarded
+branches. Verified: bill.exe decodes again (22 statements, matching
+pre-round-36); the original round-36 fix still holds (file.exe's probe still
+round-trips byte-exact). Promoted `tests/fixtures/corpus/t1_forstepm1_ovf`
+(`FOR I%=5 TO 1 STEP -1`, compiled with `--toggles O`) -- byte-exact against
+`oracle.compile_bas(toggles="O")` directly, since `verify_fixture` still only
+drives `FLAGS_ONLY_TOGGLES` (K) and skips anything else -- pinned by
+`test_decode_t1_forstepm1_ovf`, confirmed to fail against round 36's
+unpatched guard. An earlier attempt at this fixture used a mid-body DECR on
+an ASCENDING loop and passed even against the buggy guard, because an
+ascending loop's real NEXT is `inc_m` (no guard, so nothing to break) --
+worth remembering: only a STEP -1 loop's own `dec_m` exercises this path.
+Full suite green, ruff clean.
+
 ### 2026-08-01 — Round 39: kinetics.exe's `INPUT# chain closed without any stored target` — LANDED (LOCAL fstp_bp never threaded the sentinel)
 
 `core.py`'s DGROUP `fstp` handler already threads the `_FREAD`/`_READDATA`

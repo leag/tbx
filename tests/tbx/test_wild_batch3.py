@@ -397,6 +397,37 @@ def test_decode_t1_inputfilelocal():
     )
 
 
+def test_decode_t1_forstepm1_ovf():
+    # The round-36 fix (require a following op at the FOR's own test address
+    # before letting dec_m/dec_bp/addm_i8 patch the step) was itself broken
+    # by the Overflow IDE toggle: an `into` check lands between a STEP -1
+    # loop's own closing `dec_m` and its `cmp_mi8` test, so the following
+    # op's address is `into`'s, not the test's -- the fix's own guard then
+    # rejected this now-LEGITIMATE case, and wild bill.exe (Overflow-toggle,
+    # previously decoding) regressed to the exact error round 36 had just
+    # fixed. Caught by re-testing bill.exe after landing, not by a fixture
+    # (this one is this session's own reproduction, added after the fact --
+    # an earlier attempt used a mid-body DECR on an ASCENDING loop, but that
+    # loop's real NEXT is `inc_m`, which has no guard to break; only a
+    # STEP -1 loop's own `dec_m`+`into`+test shape exercises this). Fixed via
+    # `_next_real_addr`, which skips `into`/`stack_chk` the same way the main
+    # dispatch loop's own generic handling of them would.
+    #
+    # `verify_fixture` skips this one ("Options toggles Overflow" is not in
+    # `FLAGS_ONLY_TOGGLES`, so it doesn't try to compile it) -- byte-exactness
+    # was checked directly against `oracle.compile_bas(..., toggles="O")`
+    # instead, matching the source below exactly.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_forstepm1_ovf.exe"))
+    loops = [s for s in prog if isinstance(s, ir.For)]
+    assert loops[0].step == ir.Lit(-1)
+    assert getattr(prog, "toggles", "") == "O"
+    assert emit0.emit(prog) == (
+        "10 FOR A% = 5 TO 1 STEP -1\n20 PRINT A%\n30 NEXT A%\n40 END\n"
+    )
+
+
 def test_decode_t1_palettereset():
     # Bare PALETTE (INT ECh sub 86h, zero operands: reset to default
     # palette) -- distinct from PALETTE attr,color (sub 88h). Identified
