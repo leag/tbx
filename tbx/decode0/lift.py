@@ -981,16 +981,18 @@ def _apply_exit_folds(stmts, addrs, exit_folds, patch=_nopatch):
                 # the EXIT outside any loop, which TB rejects with `Error 435:
                 # DO loop expected` (wild cal.exe, whose loop at 0x14d10 has
                 # two long-jmp back-edges to loop 2's own exit address).
-                # `ExitFor` was already gated this way; the span is found the
-                # same way for both, and an EXIT whose loop cannot be located
-                # keeps the old ungated behaviour.
-                in_for = (
-                    opener is None
-                    or for_start is None
-                    or for_stop is None
-                    or for_start < i < for_stop
+                # The span is found the same way for FOR and DO. If the
+                # enclosing construct cannot be located, this target is
+                # ambiguous (it may be a back-edge into an adjacent loop), so
+                # preserve the GOTO. Emitting EXIT LOOP without a proven DO
+                # produces invalid BASIC and Turbo Basic's misleading Error
+                # 435 (wild cal.exe/mcmurphy.exe).
+                in_scope = opener is None or (
+                    for_start is not None
+                    and for_stop is not None
+                    and for_start < i < for_stop
                 )
-                if in_for:
+                if in_scope:
                     rewritten = _rewrite_exit_goto(s, exit_addr, exit_stmt)
                     if rewritten is not s:
                         # Only the whole-statement case is a revision the log

@@ -135,9 +135,10 @@ code, because several were **tried and reverted** and the entry says why.
   loop is therefore mistaken for the preceding loop's exit and becomes
   `ExitLoop` outside any `Do`. The existing guard comment documents the failure
   for `cal.exe`; `mcmurphy.exe` is a second witness of the same ungated fallback.
-  Do not fix this by deleting `EXIT LOOP` or by accepting the source: constrain
-  the rewrite to a positively identified enclosing `Do`, then calibrate against
-  both witnesses and the oracle.
+  The decoder fix now constrains the rewrite to a positively identified
+  enclosing `Do`; ambiguous targets remain `GOTO`s, and the emitter guard still
+  rejects any invalid `ExitLoop` that slips through. Both witnesses should be
+  recompiled through the oracle before this fix is treated as byte-exact.
 
 - **`tbd73.exe` round-trip** (`PLAN.md:2000`, round 47). Decodes end to end —
   906 lines, exit 0 — but does not recompile. Four defects were fixed; the
