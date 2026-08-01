@@ -96,6 +96,37 @@ through the oracle and reviewed in the diff like code; and a newly decoding
 program being added. Both leave the file describing reality; absorbing a
 regression leaves it describing nothing.
 
+## Triage before diving into a gap
+
+Not every wild-corpus failure is worth the same investment. Before working a
+gap, spend a few minutes reading the raise site and its containing function,
+and let that predict the cost:
+
+- A short, isolated function with a simple guard or condition (an adjacency
+  check, a missing sentinel thread-through) is cheap -- fix it now.
+- A function threading several shared mutable flags across many branches
+  (`direct_bool_gate`, `pend_bool`, `direct_bool_group`, ...), or a heuristic
+  search over many candidate parameters (DGROUP layout recovery), is
+  expensive regardless of how narrow the symptom looks on the surface. Budget
+  for that consciously, or defer it.
+
+Set an explicit probe budget before committing to a hypothesis: two or three
+oracle probes to reproduce the exact byte shape. If none match, that is not a
+cue to try a fourth guess -- it is the signal that the construct is rarer or
+structurally different than assumed. Write down what was ruled out (see
+below) and stop, rather than continuing to iterate past the budget.
+
+Prefer gaps with multiple independent wild witnesses over a single instance:
+a fix confirmed against one file's exact bytes can be an overfit, while a fix
+that closes several files at once is much stronger evidence it is the real
+mechanism.
+
+When a hypothesis needs checking, build the oracle probe first and diff its
+op stream against the failing file's, rather than reading deeply into the
+surrounding decoder logic before writing anything. Verifying empirically is
+usually faster than reasoning abstractly from code, and it tells you exactly
+which branch needs to change.
+
 ## Negative results
 
 A hypothesis that was investigated and rejected is expensive evidence, and it
