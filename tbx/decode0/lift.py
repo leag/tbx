@@ -43,8 +43,20 @@ def _lift_next(ops, k, fors, stmts, addrs, exit_folds) -> int:
             return i + len(want)
 
         def jcc_body(i, cc, inv):
+            # `f.body` and a real jump target are both file-linear addresses,
+            # but a body that starts a later procedure can spell the same IP
+            # 64 KiB above the header's own window (wild electron.exe is
+            # `_same_code_offset`'s existing witness for this; wild
+            # mcmurphy.exe's DOUBLE FOR/NEXT template is the same wraparound,
+            # just reached through the long jcc-skip-jmp form instead of a
+            # direct short jcc).
             o = ops[i]
-            if o[1] == "jcc" and o[2] == cc and o[3] == f.body:
+            if (
+                o[1] == "jcc"
+                and o[2] == cc
+                and f.body is not None
+                and _same_code_offset(o[3], f.body)
+            ):
                 return i + 1
             if (
                 o[1] == "jcc"
@@ -52,7 +64,8 @@ def _lift_next(ops, k, fors, stmts, addrs, exit_folds) -> int:
                 and o[3] == o[0] + 5
                 and i + 1 < len(ops)
                 and ops[i + 1][1] == "jmp"
-                and ops[i + 1][2] == f.body
+                and f.body is not None
+                and _same_code_offset(ops[i + 1][2], f.body)
             ):
                 return i + 2
             raise ValueError(

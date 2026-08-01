@@ -1784,6 +1784,29 @@ def test_wild_mf_compound_if_far_exit_advances():
         decode0.decode_user_code(wild_hits_bytes("mf.exe"))
 
 
+def test_wild_mcmurphy_double_for_next_wraparound_advances():
+    # `_lift_next`'s `jcc_body` compared a jcc/jmp target against the open
+    # FOR's `f.body` with plain `==`, but a body that starts a later
+    # procedure can spell the same IP 64 KiB above the header's own window --
+    # `_same_code_offset` exists precisely for this (calibrated on wild
+    # electron.exe, used two lines below in this same function for an
+    # adjacent check), but `jcc_body` never called it. Wild mcmurphy.exe's
+    # DOUBLE-precision FOR/NEXT hits this through the long jcc-skip-jmp form.
+    # A dedicated probe is impractical here -- reproducing a real 64 KiB
+    # code-offset wraparound needs tens of thousands of statements -- so,
+    # like the other established wraparound/far-jump closures in this
+    # campaign, this is a wild-only witness advance, not an oracle-verified
+    # fixture.
+    import pytest
+
+    from tbx import decode0
+
+    from conftest import wild_hits_bytes
+
+    with pytest.raises(ValueError, match=r"unhandled op testw at 0x1afbc"):
+        decode0.decode_user_code(wild_hits_bytes("mcmurphy.exe"))
+
+
 def test_decode_t1_forvarlimfar():
     # Variable-limit integer FOR/NEXT whose body is beyond short-jump
     # range: the NEXT test uses the inverse signed condition + JMP instead

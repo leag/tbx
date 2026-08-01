@@ -2592,6 +2592,68 @@ four.
 reconstruction for its nested DEF FN IFs is still open, and is now the only
 thing between it and the next gap.
 
+### 2026-07-31 — Round 38: mcmurphy.exe's `NEXT template mismatch` — LANDED (`jcc_body` skipped the wraparound-tolerant compare)
+
+`lift._lift_next`'s inner `jcc_body(i, cc, inv)` helper compares a jcc/jmp
+target against the open FOR's `f.body` with plain `==` in both its direct
+and long (jcc-skip-jmp) forms. But two lines below, in the SAME function,
+the negative-path target check already uses `_same_code_offset` -- a body
+that starts a later procedure can spell the same IP 64 KiB above the
+header's own window (calibrated on wild electron.exe). `jcc_body` never got
+that treatment, so mcmurphy.exe's DOUBLE-precision FOR/NEXT (reached through
+the long form: `jcc 0x72` skip + `jmp`) raised `NEXT template mismatch`
+because its `jmp` target was `f.body`'s low 16 bits, not `f.body` itself.
+
+**Fixed** by routing both `jcc_body` comparisons through `_same_code_offset`,
+matching the sibling check. A dedicated oracle probe is impractical here --
+reproducing a genuine 64 KiB code-offset wraparound needs tens of thousands
+of statements -- so, like the project's other established wraparound/far-
+jump closures (`test_wild_mf_compound_if_far_exit_advances`,
+`test_wild_filepatc_...`), this is a wild-only witness: pinned by
+`test_wild_mcmurphy_double_for_next_wraparound_advances`, which asserts
+mcmurphy.exe now progresses to a distinct, later, unrelated failure
+(confirmed to still be the OLD message without the fix). Full suite green,
+ruff clean.
+
+### 2026-07-31 — Round 37: two gaps set aside after real tracing, not landed
+
+Two candidates chased this round, both traced far enough to know they are
+NOT quick wins, deliberately not force-fixed:
+
+**`bmaster.exe`'s `forwarded arg to unknown callee params at 0x9391`** --
+instrumented `handlers.control.calls`'s `far_call` branch: at the raise,
+`c.pend_args` holds 18 entries for a callee with only 6 declared params, and
+a debug print on every SUCCESSFUL `c.pend_args.clear()` shows THIS is the
+first `far_call` reached in the whole decode -- so the 18 entries are not
+leftover from an improperly-cleared EARLIER call (there is no earlier one),
+they are genuinely staged before ever reaching a `far_call` dispatch. The
+staged values look like three separate CALLs' worth of arguments
+concatenated (heterogeneous LOCAL/DGROUP/string-literal mix, `('fwd', 6)` /
+`('fwd', 42)` / `('fwd', 38)` interleaved with plain vars). Not yet
+determined: which earlier op sequence emits arg-staging ops
+(`arg_push_ref`/`arg_push_fwd`) without a `far_call` (or equivalent) ever
+draining them -- candidates not yet checked: a forward-referenced callee's
+CALL recognized under a different kind than plain `far_call`, or a runtime
+(`rt`) dispatch that ALSO stages through the same `arg_push_*` family for a
+non-CALL builtin. Needs the SAME kind of `commit()`-level instrumentation
+morcalc.exe's round 35 used, walking backward from the SUB's `proc_enter` to
+find where the first orphaned `arg_push_*` sequence begins.
+
+**`file.exe`'s `ax,bx combine with empty regs`** (a second, LATER instance
+in the same file, distinct from the one round 36 fixed) -- this is the
+SAME open gap already flagged in Round 26/`probe_fnintarith_param`
+(2026-07-24-ish): a `DEF FN(param)` call's argument-staging frame does not
+preserve a register value computed before the call across the call itself.
+Traced the exact bytes of `probe_fnintarith_param` (`A% = FNBar%(2) - 7`):
+no `push ax` exists anywhere between the pre-call `mov ax,7` and the
+post-call `movbxax`/`movax_bp:0` pair, so whatever value the compiler
+intends to preserve must ride in a stack CELL this decoder isn't currently
+attributing correctly -- but the probe's own operands (7 and 2+5=7) are
+numerically identical, which would mask a wrong-operand-order bug even if
+one were "fixed" blind. Next session: rebuild the probe with DISTINCT
+operand values (e.g. `FNBar%(2) - 100`) before touching the decoder, so a
+fix can actually be checked instead of coincidentally passing.
+
 ### 2026-07-31 — Round 36: file.exe's `int NEXT (var limit): expected JLE to body` — LANDED (a mid-body DECR hijacking STEP)
 
 `file.exe` raised inside the SAME "movax_m + cmpm_ax" variable-limit NEXT
