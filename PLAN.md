@@ -2592,6 +2592,41 @@ four.
 reconstruction for its nested DEF FN IFs is still open, and is now the only
 thing between it and the next gap.
 
+### 2026-08-01 — Round 41: pwinst.exe's `unhandled jcc 74` — traced, deliberately not landed
+
+`pwinst.exe` stops at `andax_m:504` directly followed by `jcc 0x74` with no
+intervening compare -- `core.py`'s big jcc dispatch (~line 3360-3419) only
+recognizes a pending compare set by `fcomp`/`strcmp`/an explicit `cmp`, or
+`orax`'s own extensively-calibrated self-test convention; a bitwise fold
+(`andax_m`/`orax_m`/`xorax_m`) never sets `e.pend_cmp`, so a jcc testing
+ITS OWN flags directly (no separate self-test op) falls through to the
+final `raise`.
+
+Reproduced cleanly: `IF A% AND B% AND C% THEN` (`q_andflagsif6.bas`, oracle
+1.1) compiles the first operand with the usual `orax` truthiness pre-check,
+but the SECOND fold (`andax_m` combining with C%) is followed DIRECTLY by
+`jcc 0x75` -- a short-circuit AND chain's non-first operand tests its own
+just-computed flags, exactly pwinst.exe's shape. (`IF A% AND 1 THEN` also
+reaches this jcc, but hits an unrelated pool-constant layout gap first --
+not useful as the isolating probe; the 3-operand chain is.)
+
+**Deliberately not fixed this round**: `orax`'s sibling handling in
+`core.py` (~line 3090-3260+) is one of the most heavily cross-calibrated
+areas in the decoder -- DO/WHILE polling loops, bare-value compound terms
+(`match_bool_bare_term1`), a parenthesized-group AND (`direct_bool_gate`),
+a `NOT`-prefixed lookbehind, and a slot-evidence gate all interact through
+`e.pend_cmp`/`m.ax`/`e.pend_bool`/`e.direct_bool_gate` in this one function.
+The mechanically obvious fix -- having `andax_m`/`orax_m`/`xorax_m` also set
+`e.pend_cmp = (m.ax, ir.Lit(0))` -- risks colliding with any of that
+machinery, or with the PURE-VALUE use of these same ops (`C% = A% AND B%`,
+no boolean context at all), and I don't have enough calibration coverage to
+tell which without risking a regression like round 36's own (bill.exe).
+Next session: start from `match_bool_bare_term1` and `_JCC_RELOP`'s own
+call sites to see whether a narrower, position-gated version (only when the
+IMMEDIATELY PRECEDING op was itself `andax_m`/`orax_m`/`xorax_m`, mirroring
+this round's `_next_real_addr` adjacency-checking) can be threaded through
+without touching the `orax` branch at all.
+
 ### 2026-08-01 — Round 40: round 36's own fix regressed bill.exe — FIXED (an `into` between `dec_m` and its test)
 
 Re-scanning after round 39 turned up `bill.exe: int NEXT: expected JLE/JBE/JGE
