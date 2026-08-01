@@ -164,6 +164,13 @@ constructs from them alone.
 | `python -m tbx.tools.scan_wild DIR` | decode a corpus, report every failure |
 | `python -m tbx.tools.verify_fixture STEM` | oracle round-trip, one fixture |
 | `python -m tbx.tools.verify_wild` | oracle round-trip, the comparable wild subset |
+| `python -m tbx.tools.roundtrip_report PROGRAM.EXE` | oracle round-trip with layout, first-op, and string-pool diffs |
+
+`roundtrip_report` keeps the emitted split source and rebuilt executable in
+`--outdir` (or a temporary directory) and prints JSON suitable for attaching
+to a gap report. It uses the source program's detected dialect and runtime
+toggles, so the report measures decoder differences rather than a mismatched
+compiler configuration.
 
 `pip install '.[debug]'` adds the iced-x86 CFG tools (`tbx.tools.cfg`).
 
