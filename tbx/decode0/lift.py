@@ -1248,7 +1248,13 @@ def _fold_if(
                 guard_at += 1
             if (
                 isinstance(s, ir.IfInline)
-                and isinstance(s.cond, (ir.RelOp, ir.LogOp, ir.Group))
+                # Compound conditions are emitted by Turbo Basic as a
+                # structured block when their body owns a loop terminator.
+                # Unfolding those into a negated guard changes the compiler's
+                # short-circuit boolean template (and therefore the bytes).
+                # Guard recovery is only sound for a single relational test,
+                # whose source spelling is otherwise indistinguishable.
+                and isinstance(s.cond, ir.RelOp)
                 and guard_at < len(stmts)
                 and addrs[guard_at] is not None
                 and any(

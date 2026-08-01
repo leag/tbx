@@ -34,6 +34,14 @@ runs as one top-level `DATA` statement is therefore the only evidence-backed
 canonicalization currently available; synthesizing source placement from pool
 order would be a guess and risks changing unrelated programs.
 
+The boolean folding gap is now closed for a calibrated shape: when a compound
+`IF` owns a `FOR/NEXT` body, `_fold_if` preserves the structured block instead
+of rewriting it as a negated `OR` guard. The rewrite changed Turbo Basic's
+short-circuit template (`AND`/`andaxbx` to `OR`), causing byte drift. The new
+`probe_compound_loop_block` fixture round-trips byte-for-byte (34,832 bytes).
+The mcmurphy measurement remains 129,697 versus 129,710 because its residual
+13-byte difference is in the separate DATA descriptor ordering issue.
+
 Artifact refresh (2026-08-01): `scan_wild --only mcmurphy.exe` reports one
 Turbo Basic 1.1 hit with 3,092 statements and no decode failures. A follow-up
 oracle report was attempted with an 800 MB virtual-memory cap; the vendored
