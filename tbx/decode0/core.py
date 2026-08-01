@@ -936,7 +936,10 @@ class DecodeState:
             ]
             if candidates:
                 replacement = min(candidates)
-                logger.warning(
+                # This is an expected normalization for wrapped near branches,
+                # not a decoder anomaly.  Keep it available for focused
+                # tracing without flooding stderr on large wild programs.
+                logger.debug(
                     "canonicalizing branch target %05x -> %05x",
                     target,
                     replacement,
