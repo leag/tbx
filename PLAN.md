@@ -2592,6 +2592,33 @@ four.
 reconstruction for its nested DEF FN IFs is still open, and is now the only
 thing between it and the next gap.
 
+### 2026-08-01 — Round 42: catalog.exe's `unhandled INT EC sub a6` — ruled out a dozen candidates, unresolved
+
+`catalog.exe` (dialect 1.0) fails at scan phase on canonical EC sub 0xA6
+(raw 0xA4, dialect 1.0's `canon_sub` shift +2 above the DELAY floor) --
+a gap in the dispatch table between POKE (0xA2) and PSET/PRESET commit
+(0xA4 raw / same canonical since no other sub sits between).
+
+Tried compiling and decoding a dozen plausible candidate statements at 1.1
+(canonical numbering is dialect-independent) to see which one's raw EC sub
+comes out as 0xA6: `OUT`, `WAIT`, `WINDOW`, `VIEW (...)`, `CIRCLE`, `SOUND`,
+`RANDOMIZE n`, `KILL`, `CHDIR`, `RESET`, `WIDTH` -- every one already
+decodes via an existing dedicated op (`out`, `wait_poll`, `window`,
+`circle`, `sound`, `randomize`, `kill`, `chdir`, `clear`, ordinary `movm`),
+none produced the missing sub. `VIEW PRINT`/`LOCK`/`UNLOCK`/`CLEAR ,,n`
+didn't even compile under the oracle (rejected or timed out) so they're
+ruled out as candidates too, not just untested.
+
+The failure site's surrounding bytes (a DGROUP read, `int ADh`, an ES:SI
+far-pointer setup via `int 9Eh`, then a literal `2` staged into the shared
+scratch cell at disp 0x60 before the mystery `int EC,A6`) suggest a
+FAR-STRING-argument statement, narrowing the search but not resolving it --
+would need either TB's own statement table (unavailable) or a slower,
+more systematic sweep of the remaining BASIC keyword list against this
+exact byte signature. Not chased further this round; a fresh session
+should start from the byte-signature clue above rather than re-guessing
+keywords blind.
+
 ### 2026-08-01 — Round 41: pwinst.exe's `unhandled jcc 74` — traced, deliberately not landed
 
 `pwinst.exe` stops at `andax_m:504` directly followed by `jcc 0x74` with no
