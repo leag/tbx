@@ -557,7 +557,12 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         # to `LOCAL X% = X% - 1` (a generic subtract) the way the DGROUP
         # case's two spellings are -- decodes as its own `ir.Decr` node
         # (wild horses.exe, probe q_localdecr).
-        if c.fors and c.fors[-1].v == op[2]:
+        if (
+            c.fors
+            and c.fors[-1].v == op[2]
+            and c.k + 1 < len(img.ops)
+            and img.ops[c.k + 1][0] == c.fors[-1].test
+        ):
             f = c.fors[-1]
             old = o.stmts[f.idx]
             with editing(o.stmts, "patch_for_step"):
@@ -579,7 +584,12 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         # placeholder-patch as addm_i8: the header folded a provisional
         # Lit(1) step before this NEXT-side evidence was available (wild
         # bill.exe).
-        if c.fors and c.fors[-1].v == op[2]:
+        if (
+            c.fors
+            and c.fors[-1].v == op[2]
+            and c.k + 1 < len(img.ops)
+            and img.ops[c.k + 1][0] == c.fors[-1].test
+        ):
             f = c.fors[-1]
             old = o.stmts[f.idx]
             with editing(o.stmts, "patch_for_step"):
@@ -602,7 +612,12 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         # before this NEXT-side evidence was available (q_forstep/
         # q_forstepneg). Outside a FOR this is the multi-unit sibling of
         # inc_m: `X% = X% + literal` (wild number.exe).
-        if not (c.fors and c.fors[-1].v == op[2]):
+        if not (
+            c.fors
+            and c.fors[-1].v == op[2]
+            and c.k + 1 < len(img.ops)
+            and img.ops[c.k + 1][0] == c.fors[-1].test
+        ):
             var = state.loc(op[2])
             state.put(ir.Assign(var, ir.BinOp("+", var, ir.Lit(op[3]))), c.cur)
             c.cur = None

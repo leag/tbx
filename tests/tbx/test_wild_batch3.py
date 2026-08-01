@@ -355,6 +355,27 @@ def test_decode_t1_forvarlimneg():
     assert loops == [ir.For(ir.Var("B%"), ir.Lit(5), ir.Var("A%"), ir.Lit(-1))]
 
 
+def test_decode_t1_fordecrmidbody():
+    # A mid-body DECR of the loop variable must not be mistaken for the
+    # loop's own STEP -1 NEXT decrement: `dec_m`/`dec_bp`/`addm_i8` used to
+    # patch the open FOR's step (and the already-emitted ir.For's Lit(1))
+    # the moment they saw the loop displacement, with no check that this was
+    # actually the NEXT template rather than an ordinary same-named DECR
+    # statement earlier in the body. Fixed by requiring the following op's
+    # address to be the FOR's own recorded test address (matching the guard
+    # `inc_m`'s harmless silent-consume case never needed, since it has no
+    # side effect to protect). Wild file.exe: a DECR I% mid-body inside
+    # `FOR I% = 1 TO ...` whose real NEXT still steps +1 via inc_m.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_fordecrmidbody.exe"))
+    loops = [s for s in prog if isinstance(s, ir.For)]
+    assert loops[0].step == ir.Lit(1), "the mid-body DECR must not flip the step"
+    assert emit0.emit(prog) == (
+        "10 FOR A% = 1 TO 5\n20 A% = A% - 1\n30 PRINT A%\n40 NEXT A%\n50 END\n"
+    )
+
+
 def test_decode_t1_palettereset():
     # Bare PALETTE (INT ECh sub 86h, zero operands: reset to default
     # palette) -- distinct from PALETTE attr,color (sub 88h). Identified

@@ -57,6 +57,35 @@ def test_helper_callees_are_the_only_ones_retyped():
     assert body[1].args == (ir.Var("P06"),), "plain callee must be left alone"
 
 
+def test_retyping_a_jump_targeted_call_carries_its_address():
+    """A CALL to a helper can itself be a jump target -- a FOR loop's own
+    back edge onto its body's first statement, when that statement happens to
+    be exactly this kind of forwarding CALL (wild morcalc.exe). `retype`'s
+    CallStmt branch used to return the rebuilt statement directly, without
+    the `stmt_addr.claim` carry its own sibling branches (and `_rewrite_nodes`
+    in `_type_untyped_callee_params`) already do -- so the loop's back edge
+    address was silently dropped and `_resolve_targets` raised `jump target
+    ... is not a statement start` at a totally unrelated, much later offset.
+    """
+    from tbx.decode0.addresses import AddressOwnership
+    from tbx.decode0.core import _type_helper_forwards
+
+    helper = ir.SubDef("SUB9", ("P06",), (ir.OpaqueHelper(b"\x55"),))
+    call = ir.CallStmt("SUB9", (ir.Var("P06"),))
+    caller = ir.SubDef("SUB1", ("P06%",), (call,))
+    stmt_addr = AddressOwnership()
+    stmt_addr.claim(call, 0x9298)
+
+    out = _type_helper_forwards([helper, caller], stmt_addr)
+
+    rebuilt = out[1].body[0]
+    assert rebuilt.args == (ir.Var("P06%"),), "helper callee should be retyped"
+    assert rebuilt is not call, "must have actually rebuilt the statement"
+    assert stmt_addr.address_of(rebuilt) == 0x9298, (
+        "the rebuild must carry the original CALL's address forward"
+    )
+
+
 def test_an_ordinary_callee_is_retyped_at_both_ends():
     """The sibling case: retype the argument AND the callee's own header.
 

@@ -2592,6 +2592,90 @@ four.
 reconstruction for its nested DEF FN IFs is still open, and is now the only
 thing between it and the next gap.
 
+### 2026-07-31 — Round 36: file.exe's `int NEXT (var limit): expected JLE to body` — LANDED (a mid-body DECR hijacking STEP)
+
+`file.exe` raised inside the SAME "movax_m + cmpm_ax" variable-limit NEXT
+branch morcalc.exe calibrates (core.py:5356-5396), but for a different
+reason: `f.step` was `-1` at the failing test even though the loop's real
+NEXT increments (`inc_m`, STEP +1). Traced by printing the open `ForFrame`
+at the raise site.
+
+Root cause: `handlers/arith.py`'s `dec_m`/`dec_bp`/`addm_i8` cases patch the
+open FOR's step (and rewrite its already-emitted `ir.For` header) the moment
+they see an op targeting the loop variable's displacement -- with NO check
+that this op is actually the loop's own closing NEXT rather than an ordinary,
+unrelated statement earlier in the body that happens to touch the same
+variable (`DECR I%` mid-loop, byte-identical to `I% = I% - 1`, is valid BASIC
+and file.exe's SUB does exactly this before the loop's real `inc_m` NEXT).
+`inc_m`'s sibling case has the identical shape but is harmless (it just
+silently consumes the op, no patch) -- that asymmetry is what let this exist
+for four templates but only bite the three with a side effect.
+
+**Fixed** by requiring the op immediately following the dec/step op to sit at
+the FOR's own recorded `test` address (the same adjacency the "int NEXT"
+branches downstream already check, `addr == f.test`) before treating it as
+the loop's step -- otherwise it falls through to the ordinary
+`ir.Decr`/`Assign` path, unchanged. Verified with a probe
+(`FOR I%=1 TO 5: DECR I%: PRINT I%: NEXT I%`) that reproduced the crash before
+the fix and decodes + emits + recompiles byte-exact after; promoted as
+`tests/fixtures/corpus/t1_fordecrmidbody`, with
+`test_decode_t1_fordecrmidbody` in `test_wild_batch3.py` pinning both the
+unchanged `Lit(1)` step and the exact emitted source, and confirmed it fails
+without the fix. `file.exe` now advances past this to a different, unrelated,
+already-known gap family ("ax,bx combine with empty regs", same bucket as
+copyall.exe/football.exe) -- out of scope here. Full suite 3056 passed / 2
+skipped, ruff clean.
+
+### 2026-07-31 — Round 35: morcalc.exe's `jump target 0x9298` — LANDED (a rebuild dropping `stmt_addr`, not a missing NEXT shape)
+
+`morcalc.exe` still failed after the earlier `mov_mem_sp`/`arg_ref` anchoring
+fix (2026-07-23, same file, same reported address) closed a DIFFERENT bug at
+this same coincidental address. The first hypothesis this round (a missing
+fifth variable-limit-NEXT branch for `movax_bp`+`cmpm_ax`, LOCAL limit/DGROUP
+var) was WRONG -- disproved by building two probes reproducing that exact op
+shape byte-for-byte (`movm_ax_bp` limit-stash, `movax_bp`+`cmpm_ax`+`jcc`
+retest): both decoded fine, because that combination was never routed through
+`c.fors`/NEXT recognition at all in EITHER the wild file or the probes -- it
+resolves as a plain `Assign`/`Goto`/body/`IfGoto` sequence, same as any other
+loop-as-GOTO shape, and that ordinary path already handles its jump target.
+
+The real cause, found by instrumenting `commit()` and walking the FINAL tree
+by identity (`AddressOwnership._by_id`, not just "is some address claimed
+somewhere"): the CALL at 0x9298 -- the loop body's first statement, forwarding
+several of the enclosing SUB's own by-ref params onward to a callee -- commits
+and gets claimed correctly, and stays correctly claimed through
+`_resolve_calls`/`_type_untyped_callee_params`. But `_type_helper_forwards`'s
+local `retype()` closure (`core.py:1485-1516`) has an early-return branch for
+a CALL to a helper-bodied (`SUB ... INLINE`) callee that rebuilds the
+statement -- respelling an untyped forwarded arg to the caller's suffix --
+and returns the new object directly, without the `stmt_addr.claim` carry its
+own sibling branch (the generic dataclass path two lines below) and
+`_type_untyped_callee_params`'s `_rewrite_nodes` both already do. So the
+rebuilt CALL silently lost its claim, and the FOR loop's own back-edge (the
+only reference to 0x9298 in the whole op stream) had nothing left to resolve
+against by the time `_resolve_targets` ran -- reported at a totally unrelated,
+much later offset, since `_resolve_targets` walks the whole program, not the
+neighborhood of the missing target.
+
+**Fixed** by adding the same three-line carry to that branch (mirroring the
+generic path immediately below it). Verified against two hand-built oracle
+probes reproducing the exact shape (a `FOR`-loop over a by-ref SUB parameter
+forwarding that loop variable to an INLINE-SUB helper) -- both decode
+correctly now -- and a synthetic unit test,
+`test_retyping_a_jump_targeted_call_carries_its_address` in
+`test_helper_forward_typing.py`, that constructs the IR directly (this is an
+identity-preservation bug in existing internal state-tracking, not a new byte
+mapping, so a direct `_type_helper_forwards` unit test is the right guard, the
+same way `test_helper_callees_are_the_only_ones_retyped` already is one
+function up) and confirmed it fails without the fix. `morcalc.exe` now decodes
+in full (2667 statements, was raising). It cannot be promoted to
+`wild_roundtrip.json`'s comparable subset even so: its `build_match` is 87%
+(below the 90% floor -- a different Turbo Basic build, per
+`RR-TB10-TWO-REVISIONS`), and it separately hits an unrelated pre-existing
+emitter gap on `OPEN ... FOR RANDOM AS` (`unsupported FOR-AS OPEN mode 'R'`,
+`emit0`/`ir/render.py:579`) -- both out of scope for this fix. Full suite
+3053 passed / 2 skipped, ruff clean.
+
 ### 2026-07-31 — Round 34: block-IF vs inline-IF is BYTE-SIGNIFICANT — discriminator FOUND, blocked on line accounting
 
 Chasing tbd73's residual ELSE-arm gap led somewhere more consequential: the

@@ -1491,7 +1491,18 @@ def _type_helper_forwards(stmts, stmt_addr=None):
                     for a in node.args
                 )
                 if any(a is not b for a, b in zip(node.args, args)):
-                    return ir.CallStmt(node.name, args)
+                    rebuilt = ir.CallStmt(node.name, args)
+                    if stmt_addr is not None:
+                        # Same identity hazard the generic dataclass branch
+                        # below already guards: this early return rebuilds the
+                        # statement too, so its stmt_addr claim has to move
+                        # with it or a jump landing on this exact CALL can
+                        # never resolve (wild morcalc.exe: a FOR loop's own
+                        # back edge onto a forwarding CALL to a helper SUB).
+                        owned = stmt_addr.address_of(node)
+                        if owned is not None:
+                            stmt_addr.claim(rebuilt, owned)
+                    return rebuilt
                 return node
             if isinstance(node, tuple):
                 new = tuple(retype(x) for x in node)
