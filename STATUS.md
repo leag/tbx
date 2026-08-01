@@ -154,6 +154,12 @@ code, because several were **tried and reverted** and the entry says why.
   it is a compiler/runtime revision artifact or a reproducible KBOS helper
   shape before adding preservation logic.
 
+- **`mcmurphy.exe` 48-byte static-band shift — `$SEGMENT` hypothesis ruled out
+  (2026-08-01).** Removing the recovered `$SEGMENT` directive does not produce
+  the original allocation; Turbo Basic rejects the resulting source with
+  `Error 408: Segment exceeds 64k` at line 28220. The directive is required to
+  compile this large program, so it cannot be the missing 48-byte reservation.
+
 - **`tbd73.exe` round-trip** (`PLAN.md:2000`, round 47). Decodes end to end —
   906 lines, exit 0 — but does not recompile. Four defects were fixed; the
   recompile now stops at `Error 475: Parameter mismatch` with two diagnosed open
