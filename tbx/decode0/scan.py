@@ -931,11 +931,18 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
         # are offset:segment words instead (the high word is the segment
         # paragraph).  Decode both forms; treating the latter as i32 creates
         # impossible Gosub targets such as 0xe989b00 (wild mcmurphy.exe).
-        _off, _seg = struct.unpack_from("<HH", exe, p + 2)
-        # The stack-check dispatcher is a runtime helper protocol, even when
-        # its target word happens to be in the current segment. It does not
-        # denote a BASIC GOSUB line; retain it as a source-less helper op.
-        ops.append((p, "stack_call_runtime"))
+        off = struct.unpack_from("<i", exe, p + 2)[0]
+        target = start + off
+        # The normal protocol carries a signed start-relative GOSUB target
+        # (fst_t1_gosub and the KBOS probe). Multi-toggle builds also contain
+        # runtime helper instances whose four payload bytes are not an offset
+        # at all; their decoded target lands outside the user image (wild
+        # mcmurphy.exe at 0xad21/0x10318). Preserve those helpers as source-less
+        # operations instead of manufacturing an impossible GOSUB.
+        if start <= target < len(exe):
+            ops.append((p, "call", target))
+        else:
+            ops.append((p, "stack_call_runtime"))
         p += 6
         return p
     if vec == 0x8B:  # stack-test RETURN: `c3` ret becomes a checked-return
