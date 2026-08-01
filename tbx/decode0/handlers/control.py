@@ -7,6 +7,7 @@ the shared :class:`~tbx.decode0.core.DecodeState` plus the current
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from tbx import ir
@@ -34,6 +35,8 @@ from tbx.decode0.matchers import (
     match_string_logical_value_group,
     match_using_emit,
 )
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from tbx.decode0.core import DecodeState
@@ -293,6 +296,18 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
     i, e, c = state.image, state.expr, state.control
     if kind == "rt":  # PRINT chains
         vec = op[2]
+        logger.debug("runtime vector %02x at %05x; pending_print=%s", vec, addr, e.pend_print is not None)
+        if vec == 0x9C and c.k > 0 and i.ops[c.k - 1][1] == "movsi":
+            # String descriptor push reached the generic runtime dispatcher
+            # after a checked-call helper in a large wild program.
+            d = i.ops[c.k - 1][2]
+            is_local = d in state.layout_state.lay["strs"] or any(
+                a["str"] and a["base"] <= d < a["base"] + a["esz"] * a["count"]
+                for a in state.layout_state.arrs
+            )
+            e.sstack.append(state.loc(d) if is_local else state._pool_str(d))
+            state.advance()
+            return True
         if vec == 0xCA:  # USING begin: fmt off the sstack
             # More than one USING can live in ONE print statement, and that
             # form has no byte-equal split spelling (t1_usingtwice), so the

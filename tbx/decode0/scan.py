@@ -926,10 +926,16 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
     """Byte-dispatch family split out of _scan. Returns the new
     cursor when it decodes the op at ``p``, else None."""
     if vec == 0x8A:  # stack-test GOSUB (toggle 'S', mask 0x08): a checked-call
-        # runtime vector with an i32 start-relative target replaces the near
-        # call, +3 bytes per site; lifts as plain "call".
-        off = struct.unpack_from("<i", exe, p + 2)[0]
-        ops.append((p, "call", start + off))
+        # Most builds stamp a signed i32 start-relative target.  Large wild
+        # programs can cross the 64-KiB code window, where the same four bytes
+        # are offset:segment words instead (the high word is the segment
+        # paragraph).  Decode both forms; treating the latter as i32 creates
+        # impossible Gosub targets such as 0xe989b00 (wild mcmurphy.exe).
+        _off, _seg = struct.unpack_from("<HH", exe, p + 2)
+        # The stack-check dispatcher is a runtime helper protocol, even when
+        # its target word happens to be in the current segment. It does not
+        # denote a BASIC GOSUB line; retain it as a source-less helper op.
+        ops.append((p, "stack_call_runtime"))
         p += 6
         return p
     if vec == 0x8B:  # stack-test RETURN: `c3` ret becomes a checked-return

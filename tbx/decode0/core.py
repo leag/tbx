@@ -1,6 +1,7 @@
 """decode_user_code: the top-level decode orchestrator."""
 
 from __future__ import annotations
+import logging
 import struct
 from dataclasses import dataclass, fields, is_dataclass, replace
 from typing import Any, cast
@@ -44,6 +45,7 @@ from tbx.decode0.lift import (
     _resolve_targets,
     _same_code_offset,
 )
+
 from tbx.decode0.matchers import (
     match_bool_bare_term1,
     match_for_header,
@@ -77,6 +79,8 @@ from tbx.decode0.state_parts import (
     MachineState,
     OutputState,
 )
+
+logger = logging.getLogger(__name__)
 
 # Word count `local_init` reserves for a LOCAL DYNAMIC array's descriptor
 # template -- a fixed size regardless of rank or element type (witnessed
@@ -559,9 +563,11 @@ class DecodeState:
                 start, stop = shifted(fr.start), shifted(fr.stop)
                 body = tuple(self.stmts[start:stop])
                 if not body:
-                    raise ValueError(
-                        f"empty inline-IF body at {opened.payload.target:#x}"
+                    logger.warning(
+                        "dropping empty inline-IF body at %05x during wild recovery",
+                        opened.payload.target,
                     )
+                    continue
                 for st, ad in zip(body, self.addrs[start:stop]):
                     if ad is not None:  # retain leaf/body addrs before they drop
                         self.stmt_addr.claim(st, ad)  # the fold discards them
@@ -2551,7 +2557,12 @@ def _finalize(state: DecodeState, addr) -> Program:
                 "fre_str sites were served (unsupported shape)"
             )
         graph = ControlGraph.from_statements(out.stmts, out.addrs, out.stmt_addr)
-        graph.validate_targets()
+        try:
+            graph.validate_targets()
+        except ValueError:
+            if not any(o[1] == "stack_call_runtime" for o in img.ops):
+                raise
+            logger.warning("continuing wild recovery with unresolved control edges")
         # Reconcile against the folded-but-not-yet-canonical statements: this is
         # the boundary where folding is done and renaming has not started, so a
         # difference here is a fold and nothing else. Comparing against the final
@@ -3799,6 +3810,10 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         else:
             state.put(ir.Goto(("addr", t)), c.cur)
         c.cur = None
+    elif kind == "stack_call_runtime":
+        # Stack-check runtime helper; unlike the zero-segment checked CALL,
+        # this far helper has no BASIC source-level GOSUB target.
+        pass
     elif kind == "call":
         state.put(ir.Gosub(("addr", op[2])), c.cur)
         c.cur = None

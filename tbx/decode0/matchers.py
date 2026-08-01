@@ -603,7 +603,7 @@ def match_loose_for_header(ops, index, stmts, vdisp) -> ForHeaderMatch | None:
         return None
     i += 3
     if i < len(ops) and ops[i][1] == "jcc" and ops[i][2] == 0x76:
-        if ops[i][3] != body:
+        if not _same_code_offset(ops[i][3], body):
             return None
     elif (
         i + 1 < len(ops)
@@ -611,8 +611,14 @@ def match_loose_for_header(ops, index, stmts, vdisp) -> ForHeaderMatch | None:
         and ops[i][2] == 0x77
         and ops[i][3] == ops[i][0] + 5
         and ops[i + 1][1] == "jmp"
-        and ops[i + 1][2] == body
+        # The scanner canonicalizes near targets to the branch's first
+        # 64-KiB window.  A long FOR body can therefore be named by the
+        # equivalent offset in the current window (wild mcmurphy.exe).
+        and _same_code_offset(ops[i + 1][2], body)
     ):
+        # Keep the branch's own canonical target for downstream FOR-frame
+        # bookkeeping; it is the address later operations will use.
+        body = ops[i + 1][2]
         i += 2
     else:
         return None

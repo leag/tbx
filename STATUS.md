@@ -121,6 +121,24 @@ These are the threads with real diagnosis behind them. Each is a genuine
 stopping point, not an unexplored gap — read the cited entry before touching the
 code, because several were **tried and reverted** and the entry says why.
 
+- **`mcmurphy.exe` round-trip — unmatched `EXIT LOOP` (diagnosed 2026-08-01).**
+  The emitted source contains `EXIT LOOP` at BASIC line `7920` before the next
+  lexical `DO` (line `8010`), with the same shape recurring at `8300`, `10390`,
+  and `11130`. Turbo Basic consequently reports `Error 435: DO loop expected`
+  later, at physical include line 1840 (`18370 AI = 0`); that reported line is
+  only where the parser notices the earlier damage. The decoder-side cause is
+  `_apply_exit_folds()` in `tbx/decode0/lift.py`: it rewrites every GOTO whose
+  target equals an exit address when it cannot locate the enclosing loop
+  (`for_start is None`), because `in_for` deliberately falls back to `True`.
+  In this large state-machine shape, a following loop begins at the same
+  address as the preceding loop's exit; the backward edge into that following
+  loop is therefore mistaken for the preceding loop's exit and becomes
+  `ExitLoop` outside any `Do`. The existing guard comment documents the failure
+  for `cal.exe`; `mcmurphy.exe` is a second witness of the same ungated fallback.
+  Do not fix this by deleting `EXIT LOOP` or by accepting the source: constrain
+  the rewrite to a positively identified enclosing `Do`, then calibrate against
+  both witnesses and the oracle.
+
 - **`tbd73.exe` round-trip** (`PLAN.md:2000`, round 47). Decodes end to end —
   906 lines, exit 0 — but does not recompile. Four defects were fixed; the
   recompile now stops at `Error 475: Parameter mismatch` with two diagnosed open

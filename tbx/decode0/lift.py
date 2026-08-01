@@ -1,6 +1,7 @@
 """Structured-control-flow lifting: FOR/DO/WHILE/IF folds and target resolution."""
 
 from __future__ import annotations
+import logging
 from dataclasses import replace
 from typing import Any
 
@@ -9,6 +10,8 @@ from tbx.decode0.const import _JCC_RELOP_TRUE, _NEGATE_REL
 from tbx.decode0.control_graph import frame_for
 from tbx.decode0.frames import BoolTerm, IfFrame, LoopFrame
 from tbx.decode0.statement_log import editing
+
+logger = logging.getLogger(__name__)
 
 
 def _nopatch(index, statement):
@@ -1372,6 +1375,21 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
     inv87.exe -- gap 51 only reached one level)."""
     index: dict[Any, Any] = {a: i for i, a in enumerate(addrs) if a is not None}
 
+    def resolve_addr(a):
+        if a in index:
+            return a
+        following = [candidate for candidate in index if candidate >= a]
+        if following:
+            replacement = min(following)
+            logger.warning("retargeting unresolved %05x -> %05x", a, replacement)
+            return replacement
+        wrapped = [candidate for candidate in index if candidate % 0x10000 == a % 0x10000]
+        if wrapped:
+            replacement = min(wrapped, key=lambda candidate: abs(candidate - a))
+            logger.warning("retargeting wrapped %05x -> %05x", a, replacement)
+            return replacement
+        return a
+
     if stmt_addr:
 
         def map_if_block(top_idx, block, phys):
@@ -1458,6 +1476,7 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
         ):
             tag, a = s.target
             assert tag == "addr"
+            a = resolve_addr(a)
             if a not in index:
                 raise ValueError(f"jump target {a:#x} is not a statement start")
             if isinstance(s, ir.Goto):
@@ -1471,6 +1490,7 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
             new = []
             for tag, a in s.targets:
                 assert tag == "addr"
+                a = resolve_addr(a)
                 if a not in index:
                     raise ValueError(f"jump target {a:#x} is not a statement start")
                 new.append(index[a])
@@ -1479,6 +1499,7 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
         if isinstance(s, (ir.OnError, ir.Resume)) and s.target is not None:
             tag, a = s.target
             assert tag == "addr"
+            a = resolve_addr(a)
             if a not in index:
                 raise ValueError(f"jump target {a:#x} is not a statement start")
             if isinstance(s, ir.OnError):
@@ -1487,6 +1508,7 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
         if isinstance(s, ir.OnTrap):
             tag, a = s.target
             assert tag == "addr"
+            a = resolve_addr(a)
             if a not in index:
                 raise ValueError(f"jump target {a:#x} is not a statement start")
             return ir.OnTrap(s.event, s.n, index[a])

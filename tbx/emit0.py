@@ -308,6 +308,42 @@ def _wrap_continued(head: str, items: list[str], col: int) -> str:
 
 
 def emit(stmts, *, compact: bool = False) -> str:
+    def validate_loop_exits(body, do_depth=0, path=()):
+        """Reject EXIT LOOP nodes that are not lexically inside a DO."""
+        for index, stmt in enumerate(body):
+            location = path + (index,)
+            if isinstance(stmt, ir.Do):
+                do_depth += 1
+                continue
+            if isinstance(stmt, ir.Loop):
+                do_depth = max(0, do_depth - 1)
+                continue
+            if isinstance(stmt, ir.ExitLoop) and do_depth == 0:
+                raise ValueError(
+                    "EXIT LOOP without an enclosing DO "
+                    f"at statement path {location}"
+                )
+            if isinstance(stmt, ir.IfInline):
+                validate_loop_exits(stmt.body, do_depth, location + ("then",))
+                if stmt.else_body is not None:
+                    validate_loop_exits(stmt.else_body, do_depth, location + ("else",))
+            elif isinstance(stmt, ir.IfBlock):
+                for arm, (_, arm_body) in enumerate(stmt.arms):
+                    validate_loop_exits(arm_body, do_depth, location + ("arm", arm))
+                if stmt.else_body is not None:
+                    validate_loop_exits(stmt.else_body, do_depth, location + ("else",))
+            elif isinstance(stmt, ir.SelectCase):
+                for arm, case in enumerate(stmt.arms):
+                    validate_loop_exits(case.body, do_depth, location + ("case", arm))
+                if stmt.case_else is not None:
+                    validate_loop_exits(stmt.case_else, do_depth, location + ("case-else",))
+            elif isinstance(stmt, ir.SubDef):
+                validate_loop_exits(stmt.body, 0, location + ("sub",))
+            elif isinstance(stmt, ir.DefFn) and stmt.is_block:
+                validate_loop_exits(stmt.body, 0, location + ("def",))
+
+    validate_loop_exits(stmts)
+
     # Jump targets INSIDE a SUB/DEF FN body (ir.BodyLine): physical line k of
     # the block at top-level index i is numbered line[i] + k, and only that
     # targeted line is emitted numbered (witnessed t1_subgsb).
