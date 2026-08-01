@@ -2592,6 +2592,71 @@ four.
 reconstruction for its nested DEF FN IFs is still open, and is now the only
 thing between it and the next gap.
 
+### 2026-08-01 — Round 44: slimmer.exe's `unhandled FP op esc=db modrm=5e` (LOCAL LONG store) — triaged, source trigger unresolved
+
+Surveyed the untriaged `TB-BUT-FAILS ... unhandled byte NN [phase=scan]`
+singleton gaps left over from the wild scan (lmaster.exe, nvg.exe,
+pcdcfile.exe, pgmsarc.exe, phone.exe, pw.exe, sabpcv3.exe, slimmer.exe,
+smenu0.exe). Triage first: `lmaster.exe`, `pcdcfile.exe`, `pgmsarc.exe` all
+fail at `start+3` -- the very first byte scanned after the prologue -- which
+is suspicious rather than promising (a real first statement after runtime
+init should look like an ordinary template, not an arbitrary opcode like
+`21` = `AND Ev,Gv`); these look like coincidental `cd ec b8`/`cd ec ba`
+byte matches inside data preceding the true prologue, or non-TB EXEs, not
+genuine vocabulary gaps. Left untouched. `nvg.exe` fails deep inside what
+turns out to be a large `inline_sub`-rescued machine-code blob (an
+INT-hooking/DTA-pattern routine, hundreds of bytes, clearly hand-written
+ASM via `INLINE`/`CALL ABSOLUTE`, not a template gap) -- expensive and
+not it. `smenu0.exe`'s `unhandled INT EC sub 46` is the same "guess which
+BASIC keyword produces this dispatch number" search catalog.exe's sub 0xA6
+(round 42) and pwinst.exe's sub 0x4A (HANDOFF gap) already showed is
+expensive; deferred, not attempted.
+
+`slimmer.exe`'s gap looked cheapest: `esc=db modrm=5e` at 0xc815 decodes as
+`FISTP32 [bp+08]` (mod=01/reg=011/rm=110, i.e. store the FP-stack top as a
+32-bit int into a LOCAL frame slot) immediately after an `FLDZ`. The
+non-bp-relative sibling (`fistp32`/`fild32` into a DGROUP long var) is
+already handled in `scan.py`/`core.py`; the `[bp+disp8]` LOCAL-frame kind
+dict in `_scan_direct`'s FP dispatch (`tbx/decode0/scan.py:2040-2086`,
+alongside `fld_bp`/`fstp_bp`/`fld_bp64`/`fstp_bp64`) is simply missing the
+`(0xDB, 0)`/`(0xDB, 3)` cases (`fild32_bp`/`fistp32_bp`), and
+`handlers/arith.py:fp_bp` has no LONG-typed counterpart to
+`loc_local_fp`'s SINGLE/DOUBLE first-touch retyping (`core.py:395`) --
+would need a `loc_local_long`-style method retyping the slot's `%` suffix
+to `&` and dropping one phantom word, mirroring the existing SINGLE path
+exactly.
+
+Before writing that, tried to reproduce the exact byte shape (a `FISTP32
+[bp+d8]` right after an `FLDZ`, i.e. what looks like a LOCAL LONG variable
+being explicitly zeroed) with 1.0-dialect probes compiled through the
+oracle, budgeted at 2-3 attempts per the triage rule:
+
+- `SUB F(X!) ... LOCAL Y& ... Y = 100000` / `Y = X` (a LONG local assigned
+  a literal or an FP expression): the compiler does NOT allocate the LOCAL
+  frame slot at all for these -- it round-trips through a DGROUP scratch
+  cell (`fild32`/`fstp 288` or `far_fld_si`/`fstp 288`) and a runtime call
+  for the PRINT, never touching `[bp+off]` with an ESC opcode.
+- `LOCAL A$, Y&` followed by `Y = 0`: rejected by the compiler itself
+  (`Error 418: Numeric expression requires relational operator`) --  a
+  probe authoring mistake (likely the multi-type `LOCAL` list or the `Y&`
+  spelling in that position), not evidence about the runtime.
+
+None of the 3 probes reproduced an actual `[bp+off]` FISTP32/FLDZ pair, so
+per the triage budget this stops here rather than continuing to guess.
+Not written to `ruled-out-hypotheses.json` (no fix was written and
+reverted, and this isn't a runtime-revision question) -- same status as
+catalog.exe's round-42 entry: a real, narrow, well-understood vocabulary
+gap (the scan-table and `loc_local_fp`-mirroring implementation shape is
+already clear) whose triggering BASIC source is still unfound. Next
+session should try: a LONG LOCAL referenced across multiple statements
+in a loop (forcing real stack storage instead of the scratch-cell
+optimization seen above), or a LONG LOCAL in a DEF FN body/multi-param
+SUB signature that couldn't fold through a DGROUP temp because of
+recursion/re-entrancy.
+
+Suite untouched (no code changed this round); ruff not run (no files
+edited).
+
 ### 2026-08-01 — Round 43: a NUMERIC-led boolean value group, landed as a new feature -- but NOT kinder.exe's own shape
 
 Deep-dived the compound-boolean-materialization territory that rounds 37/41/
