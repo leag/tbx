@@ -148,9 +148,11 @@ code, because several were **tried and reverted** and the entry says why.
   remaining first structural divergence is operation 1384: the original has
   an out-of-image INT 8A helper immediately before a valid checked GOSUB, while
   the rebuilt image has only the GOSUB. That helper is not a source-level
-  target (its payload decodes to `0xe989b00`), so it must not be guessed as a
-  GOSUB. Establish whether it is a compiler/runtime revision artifact or a
-  reproducible KBOS helper shape before adding preservation logic.
+  target: its payload decodes to `0xe989b00`, and interpreting the words as a
+  far pointer lands at `0xe980`, whose bytes begin `INT 87`/runtime dispatch,
+  not a BASIC statement. It must not be guessed as a GOSUB. Establish whether
+  it is a compiler/runtime revision artifact or a reproducible KBOS helper
+  shape before adding preservation logic.
 
 - **`tbd73.exe` round-trip** (`PLAN.md:2000`, round 47). Decodes end to end —
   906 lines, exit 0 — but does not recompile. Four defects were fixed; the
