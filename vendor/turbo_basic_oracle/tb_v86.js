@@ -24,7 +24,7 @@ console.error(`[harness] work.img built with SOLVER.BAS`);
 const emulator = lib.bootEmulator({ here: HERE, workImg });
 const { scr } = lib.attachScreen(emulator);
 const driver = lib.makeDriver(emulator);
-const { altKey, tapKey, typeSlow, waitFor, held, heldExt } = driver;
+const { altKey, tapKey, typeSlow, waitFor, held, heldExt, tapKeyExt } = driver;
 const sleep = lib.sleep, ENTER = lib.ENTER;
 const fs = require("fs");
 
@@ -52,19 +52,20 @@ const fs = require("fs");
   }
 
   if (COMPILE_EXE) {
-    // Set Options -> Compile to -> EXE file. In-menu keys must be held to register;
-    // the hold auto-repeats once, so 2 Downs wrap Memory->Chain file->EXE file.
+    // Set Options -> Compile to -> EXE file. The popup order is Memory -> EXE
+    // file -> Chain file, so use one precise (non-repeating) Down from the
+    // default Memory selection. A held key repeats and skips past EXE file.
     for (let attempt = 1; attempt <= 4 && !scr().includes("Compile to"); attempt++) {
       await altKey(0x18);              // Alt-O (Options); "Compile to" is the first item
       if (!scr().includes("Compile to")) { await held(0x01, 400); await sleep(800); }  // retry
     }
     await held(ENTER, 600);            // open the Compile-to popup (Memory/EXE file/Chain file)
-    await heldExt(0x50, 500);          // Down
-    await heldExt(0x50, 500);          // Down (wraps to EXE file)
+    await tapKeyExt(0x50, 500);        // Down to EXE file
     await held(ENTER, 700);            // select
     const compileTo = (scr().split("\n")[3] || "").trim();
     if (!compileTo.includes("EXE file")) {
       console.error("[harness] FAILED to set Compile to EXE file; row3:", compileTo);
+      console.error("[harness] Compile-to screen:\n" + scr());
       process.exit(1);
     }
     console.error("[harness] Compile to: EXE file");

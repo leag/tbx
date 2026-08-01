@@ -154,14 +154,10 @@ code, because several were **tried and reverted** and the entry says why.
   it is a compiler/runtime revision artifact or a reproducible KBOS helper
   shape before adding preservation logic.
 
-  A second mcmurphy shape has a relative-looking INT 8A payload whose target
-  is another INT 8A entry. Those 220 targets are helper chaining, not source
-  GOSUB labels; treating them as calls inflated the emitted source and
-  disturbed layout recovery. The scanner now keeps `CD 8A` targets source-less
-  while retaining ordinary relative targets as GOSUBs. Decode emits 3,015 lines
-  (down from 3,185 before this filter). Oracle recompilation is currently
-  blocked at the harness compile step (`FAILED to set Compile to EXE file`), so
-  no byte delta is claimed yet.
+  A tested follow-up hypothesis treated 220 relative-looking targets landing on
+  another `CD 8A` as helper chaining. The oracle rejects that change: split
+  source recompiles at 125,309 bytes versus 127,313 bytes with those targets
+  retained. The filter was reverted; those targets are not proven helpers.
 
 - **`mcmurphy.exe` 48-byte static-band shift — `$SEGMENT` hypothesis ruled out
   (2026-08-01).** Removing the recovered `$SEGMENT` directive does not produce

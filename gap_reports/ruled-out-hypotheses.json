@@ -264,6 +264,26 @@
    "negative_evidence": "They do not even fall in the same DGROUP region. billadd's 0x76 is BELOW VAR_BASE (0x110), a runtime system cell reached by `movax_m`. filepatc's 0x1054 is ABOVE pool_base (0xa04) and below the first array base (0x1060), reached by `idiv_m` as the divisor of a MOD; a probe compiling `(X% \\ 32) MOD 16` shows the compiler routes a LITERAL divisor through bx with a cx spill and never emits `idiv_m`, so that displacement is a memory VARIABLE the layout did not recover, not a pooled constant. crossref's 0x324 sits inside the static region below pool_base (0x374) and is reached through a `far_call` argument path. Three regions, three access paths, three causes.",
    "instead": "Treat the message as a symptom of layout recovery, not a bucket. filepatc is a DGROUP layout gap (see RR-DGROUP-BIGARR); billadd needs the runtime system cell at 0x76 named, the way cmpax_m already special-cases ERR at 0x74 and ERL at 0x72; crossref needs its own investigation. Bucketing wild failures by message text overstates how much one fix can close -- count distinct causes before promising a bucket.",
    "source": "session 2026-07-31"
+  },
+  {
+   "id": "RO-MCMURPHY-INT8A-CHAIN",
+   "title": "Relative INT 8A targets landing on CD 8A are compiler helpers",
+   "disposition": "reverted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/mcmurphy.exe"
+   ],
+   "signatures": [
+    "INT 8A target begins with CD 8A",
+    "mcmurphy round-trip delta"
+   ],
+   "hypothesis": "The 220 relative-looking INT 8A payloads whose targets begin with another INT 8A are helper chaining and should remain source-less rather than becoming GOSUB calls.",
+   "negative_evidence": [
+    "With the filter, the correctly split source compiled through the oracle to 125,309 bytes; retaining the calls compiled to 127,313 bytes, so the proposed classification regresses the byte delta by 2,004 bytes.",
+    "The ordinary INT 8A probe still requires relative targets to decode as GOSUBs, and no independent oracle witness proves that a CD 8A target is helper-only."
+   ],
+   "instead": "Keep the calibrated relative-target rule. Investigate the remaining structural divergence using the split-source oracle measurement and a probe that reproduces the multi-toggle helper bytes, rather than classifying by target opcode prefix.",
+   "source": "session 2026-08-01"
   }
  ]
 }

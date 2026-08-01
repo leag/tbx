@@ -939,12 +939,7 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
         # at all; their decoded target lands outside the user image (wild
         # mcmurphy.exe at 0xad21/0x10318). Preserve those helpers as source-less
         # operations instead of manufacturing an impossible GOSUB.
-        # A relative-looking payload can still name the stack-check helper
-        # itself. In mcmurphy, 220 such targets land on another INT 8A entry
-        # (`cd 8a`), whereas genuine BASIC GOSUB targets begin with ordinary
-        # statement code. Keep the helper source-less or it becomes a spurious
-        # GOSUB in the emitted program (and changes the segment layout).
-        if start <= target < len(exe) and exe[target : target + 2] != b"\xcd\x8a":
+        if start <= target < len(exe):
             ops.append((p, "call", target))
         else:
             ops.append((p, "stack_call_runtime"))
