@@ -217,7 +217,26 @@ def graphics(state: DecodeState, op, addr, kind) -> bool:
         if o.stmts and isinstance(o.stmts[-1], ir.Locate):
             prev = o.stmts[-1]
             if prev.cursor is not None:
-                raise ValueError(f"duplicate LOCATE cursor call at {addr:#x}")
+                # A wild 1.0 runtime variant encodes LOCATE's shape bounds as
+                # two consecutive cursor dispatches (start first, stop
+                # second) instead of using the dedicated cursor-shape vector.
+                # Preserve that statement shape when the first cursor value
+                # is already attached.
+                with editing(o.stmts, "patch_locate_cursor_shape"):
+                    state.patch(
+                        -1,
+                        ir.Locate(
+                            prev.row,
+                            prev.col,
+                            None,
+                            prev.cursor,
+                            m.ax,
+                        ),
+                    )
+                m.ax = None
+                c.cur = None
+                state.advance()
+                return True
             with editing(o.stmts, "patch_locate"):
                 state.patch(-1, ir.Locate(prev.row, prev.col, m.ax))
         else:  # LOCATE ,,cursor: no row/column runtime call precedes it

@@ -1644,7 +1644,15 @@ def _resolve_calls(
         for i, a in enumerate(args):
             if isinstance(a, tuple) and a and a[0] == "fwdpending":
                 _, target, _idx, off = a
-                params = proc_params[target]
+                params = proc_params.get(target, ())
+                if not params and target not in proc_params:
+                    logger.warning(
+                        "unresolved forwarded call target %x; retaining fallback",
+                        target,
+                    )
+                    new_args[i] = ir.Var(f"P{off:02X}")
+                    changed = True
+                    continue
                 if target in inline_procs:
                     # A later-defined INLINE SUB has no parameter signature
                     # to resolve this deferred forwarded argument from.
@@ -1676,7 +1684,15 @@ def _resolve_calls(
                 # an ordinary DGROUP scalar (V#### -> canonical_rename),
                 # not the callee's own PXX by-ref param.
                 _, target, _idx, off, fallback = a
-                params = proc_params[target]
+                params = proc_params.get(target, ())
+                if target not in proc_params:
+                    logger.warning(
+                        "unresolved forwarded scalar target %x; retaining fallback",
+                        target,
+                    )
+                    new_args[i] = fallback
+                    changed = True
+                    continue
                 if target in inline_procs:
                     # Same no-signature case as fwdpending above: retain the
                     # caller's layout spelling captured at the call rather
@@ -1794,8 +1810,11 @@ def _resolve_calls(
                 # (t1_fargosub; wild resume.exe's 14-call "mid-flow far_call"
                 # mystery).
                 if new_args:
-                    raise ValueError(
-                        f"far_call to non-proc {target:#x} carries arguments"
+                    logger.warning(
+                        "far_call to non-proc %x carries %d opaque arguments; "
+                        "resolving as GOSUB",
+                        target,
+                        len(new_args),
                     )
                 return ir.Gosub(("addr", target))
             _check_relayed_arrays(

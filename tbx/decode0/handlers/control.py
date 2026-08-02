@@ -474,7 +474,16 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
                 state.advance()
                 return True
             if e.pend_print.mode != "lprint":
-                raise ValueError(f"b9 flush without open LPRINT chain at {addr:#x}")
+                logger.warning(
+                    "B9 flush closes non-printer print chain (%s) at %x",
+                    e.pend_print.mode,
+                    addr,
+                )
+                pp, e.pend_print = e.pend_print, None
+                state.put(ir.Lprint(tuple(pp.items), commas=_pp_commas(pp)), pp.start)
+                c.cur = None
+                state.advance()
+                return True
             pp, e.pend_print = e.pend_print, None
             state.put(
                 ir.Lprint(tuple(pp.items), commas=_pp_commas(pp)),
