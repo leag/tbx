@@ -42,18 +42,22 @@ def test_string_local_in_block_def_fn(stem):
     assert ir.Erase("V0$") in fn.body
 
 
-@pytest.mark.parametrize(
-    ("stem", "exc", "next_gap"),
-    [
-        # advanced past `string BP push outside DEF FN at 0x9279` once the
-        # variable-limit LOCAL FOR stopped deleting the local at loop_var+2
-        # from the frame table (t1_locstrafterfor)
-        ("bmaster.exe", ValueError, "forwarded arg to unknown callee params at 0x9391"),
-        ("ifi.exe", ValueError, "unhandled INT 8c at 0x19bd2"),
-    ],
-)
-def test_string_local_witnesses_advance(stem, exc, next_gap):
+@pytest.mark.parametrize("stem", ["bmaster.exe", "ifi.exe"])
+def test_string_local_witnesses_decode(stem):
+    """Wild LOCAL-string witnesses remain decodable after their gaps close.
+
+    These used to assert the next fail-loud signature.  Both gaps have since
+    advanced past those raises, so retaining the old expected failures would
+    turn progress into a false regression.
+    """
     from conftest import wild_hits_bytes
 
-    with pytest.raises(exc, match=next_gap):
-        decode0.decode_user_code(wild_hits_bytes(stem))
+    program = decode0.decode_user_code(wild_hits_bytes(stem))
+    assert program
+    if stem == "bmaster.exe":
+        assert emit0.emit(program)
+    else:
+        # The decoder now reaches the emitter; its unresolved cross-body edge
+        # is the next documented gap for IFI, not the old INT 8C scanner stop.
+        with pytest.raises(KeyError, match="35551"):
+            emit0.emit(program)
