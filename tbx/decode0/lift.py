@@ -371,7 +371,11 @@ def _lift_bool_tail(
         # `jmpf` (5 bytes, EA) instead of the near `jmp` (3 bytes, E9) here --
         # same op-kind breadth `direct_bool` already accepts for its own
         # dispatch-tail jmp.
-        if want[:5] == ["movax", "jcc", "incax", comb, "jcc"] and want[5] in (
+        if want[:3] == ["movax", "jcc", "incax"] and want[3] in (
+            comb,
+            "andaxbx",
+            "orax",
+        ) and want[4] == "jcc" and want[5] in (
             "jmp",
             "jmpf",
         ):
@@ -386,7 +390,11 @@ def _lift_bool_tail(
         jmp_len = 5 if f_jmp[1] == "jmpf" else 3
         if f_jcc[2] not in (0x74, 0x75) or f_jcc[3] != f_jmp[0] + jmp_len:
             raise ValueError(f"compound-IF tail: bad dispatch pair at {f_jcc[0]:#x}")
-        delta = 2 if pb.op == "AND" else 0
+        # The legacy helper variant chooses the boolean combine instruction
+        # from the dispatch polarity, not the source-level outer operator.
+        # Use the observed opcode when it differs from ``pb``.
+        observed_comb = want[3]
+        delta = 2 if observed_comb == "andaxbx" else 0
         if not _same_code_offset(pb.sc, ops[k + 3][0] + delta):
             raise ValueError(
                 f"compound-IF: short-circuit target mismatch at {ops[k][0]:#x}"
@@ -684,6 +692,8 @@ def _lift_while(
             "jcc",
             "jmp",
         ]
+        if k + len(want) <= len(ops) and ops[k + 3 + off][1] == "andaxbx":
+            want[3 + off] = "andaxbx"
         if k + len(want) > len(ops) or [o[1] for o in ops[k : k + len(want)]] != want:
             raise ValueError(f"materialization template mismatch at {ops[k][0]:#x}")
         m_jcc, exit_jcc, exit_jmp = ops[k + 1], ops[k + 4 + off], ops[k + 5 + off]

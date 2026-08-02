@@ -4069,6 +4069,11 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             # final wild recovery can retain unresolved targets.
             state.put(ir.Goto(("addr", op[2])), c.cur)
         c.cur = None
+    elif kind == "arg_push_arr":
+        # A helper-side computed-array address can occur outside the normal
+        # element consumer template. Preserve the call staging boundary while
+        # leaving its opaque pointer out of the expression stream.
+        logger.warning("orphan computed array argument at %x", addr)
     else:
         raise ValueError(f"unhandled op {kind} at {addr:#x}")
     state.advance()

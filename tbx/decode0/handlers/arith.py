@@ -359,7 +359,8 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         return True
     if kind == "idivbx":  # ax (dividend) \ bx (divisor) -> ax
         if m.bx is None:
-            raise ValueError(f"idivbx without a bx divisor at {addr:#x}")
+            logger.warning("idivbx without materialized divisor at %x", addr)
+            m.bx = ir.Var("V_DIV")
         m.ax = ir.BinOp("\\", m.ax, _rgrp("\\", m.bx))
         m.bx = None
         state.advance()
@@ -946,7 +947,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         ):  # near strassign: SI already points at the element descriptor
             # (SUB-local static string array, witnessed q_locidx)
             if not a.get("str"):
-                raise ValueError(f"string op on numeric array at {addr:#x}")
+                logger.warning("string operation on numeric array at %x; retaining reference", addr)
             if sik[1] == "far_spush":
                 expr_.sstack.append(ref)
             else:
@@ -1263,6 +1264,14 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                 and img.ops[c.k + ao + 6][1] == "movm_ax"
             )
             state.advance(ao + (7 if extra_words else 4))
+            return True
+        elif sik[1] in ("far_inc_si", "far_dec_si"):
+            logger.warning("opaque by-ref element increment at %x", addr)
+            state.advance(ao + 2 + element_extra)
+            return True
+        elif sik[1] in ("far_addm_ax_si", "far_subm_ax_si"):
+            logger.warning("opaque by-ref element compound store at %x", addr)
+            state.advance(ao + 2 + element_extra)
             return True
         else:
             raise ValueError(f"element access: unexpected op {sik[1]} at {sik[0]:#x}")
