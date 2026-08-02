@@ -29,7 +29,7 @@
    "negative_evidence": [
     "Explicit LEN(INKEY$)=0, integer-suffixed zero, INKEY$=\"\", and NOT/implicit truth variants were probed against the oracle; only DO...LOOP UNTIL LEN(INKEY$) produced the wild ORAX/JE back-edge.",
     "Replacing both flattened guards with DO...LOOP UNTIL reproduces the complete operation stream; with DATA continuations the rebuilt image is 432 bytes larger, and the remaining raw mismatch is confined to the line-table/DATA bookkeeping band.",
-    "A line-numberless rebuild (labels, including a branch-target-only variant) changes the line fields to zero but retains the metadata delta. Joining the DATA continuations into one over-wide physical line is rejected by the oracle (Error 416), while BASIC continuations compile but allocate the extra 424-byte bookkeeping band. The original compiler/source spelling is therefore not recoverable from the wild zero-valued table."
+    "A line-numberless rebuild (labels, including a branch-target-only variant) changes the line fields to zero but retains the metadata delta. Joining the DATA continuations into one over-wide physical line is rejected by the oracle (Error 416), while BASIC continuations compile but allocate the extra 424-byte bookkeeping band. One-item and multi-item DATA statement probes both retain the oracle's descending table. The original compiler/source spelling is therefore not recoverable from the wild zero-valued table."
    ],
    "promotion_criteria": "Find a compiler revision or additional wild witness that emits the compact zero-test for an equality-zero self-loop before changing the emitter.",
    "source": "oracle probes, session 2026-08-01"
