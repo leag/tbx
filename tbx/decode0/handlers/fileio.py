@@ -147,7 +147,9 @@ def file_random(state: DecodeState, op, addr, kind) -> bool:
     if kind in ("get", "put", "seek"):  # random-access record ops
         if e.pend_fnum is None:
             raise ValueError(f"{kind.upper()} without file number at {addr:#x}")
-        pos = e.stack.pop()
+        # PUT #n may omit the record expression and write the current record
+        # (the older TB 1.0 dispatch revision used by catalog.exe).
+        pos = e.stack.pop() if e.stack else None
         klass: Any = {"get": ir.Get, "put": ir.Put, "seek": ir.Seek}[kind]
         state.put(klass(e.pend_fnum, pos), c.cur)
         e.pend_fnum = None

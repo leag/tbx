@@ -1478,7 +1478,16 @@ def _scan_pass(
         else:
             vec = exe[p + 1]
         if vec == 0xEC:  # runtime statement dispatch
-            sub = dia.canon_sub(exe[p + 2], 0x28)  # EC inserts at DELAY (v10_t1_delay)
+            raw_sub = exe[p + 2]
+            # A second TB 1.0 dispatch table (catalog.exe and the cal/night
+            # family) places PUT # two slots earlier than the calibrated
+            # v10 table.  The surrounding [0060] file-number setup and the
+            # following record loop identify this as the existing PUT shape.
+            sub = (
+                0xA8
+                if dia.name == "1.0" and raw_sub == 0xA4
+                else dia.canon_sub(raw_sub, 0x28)
+            )  # EC inserts at DELAY (v10_t1_delay)
             if sub == 0x32:  # END (ordinary statement)
                 ops.append((p, "end"))
                 p += 3

@@ -598,7 +598,7 @@ def _us_fileio(s) -> str | None:
     if isinstance(s, GetString):
         return f"GET$ #{s.num}, {unparse(s.count)}, {unparse(s.target)}"
     if isinstance(s, Put):
-        return f"PUT #{s.num}, {unparse(s.pos)}"
+        return f"PUT #{s.num}" if s.pos is None else f"PUT #{s.num}, {unparse(s.pos)}"
     if isinstance(s, PutString):
         return f"PUT$ #{s.num}, {unparse(s.text)}"
     if isinstance(s, Seek):

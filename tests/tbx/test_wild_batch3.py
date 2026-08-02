@@ -3266,6 +3266,27 @@ def test_decode_metric_empty_inkey_polls_as_do_until():
     assert "17890 DO\n17900 LOOP UNTIL LEN(INKEY$)\n17910 END" in src
 
 
+def test_decode_catalog_legacy_put_without_record():
+    """The older TB 1.0 PUT dispatch permits writing the current record."""
+    from dataclasses import fields, is_dataclass
+    from tbx import decode0, ir
+    from conftest import wild_hits_bytes
+
+    program = decode0.decode_user_code(wild_hits_bytes("catalog.exe"))
+
+    def walk(value):
+        if isinstance(value, (tuple, list)):
+            for item in value:
+                yield from walk(item)
+        elif is_dataclass(value):
+            yield value
+            for field in fields(value):
+                yield from walk(getattr(value, field.name))
+
+    puts = [node for node in walk(program) if isinstance(node, ir.Put)]
+    assert puts and all(node.num == 2 and node.pos is None for node in puts)
+
+
 def test_decode_t1_deftype():
     # DEFINT/DEFSTR/DEFSNG/DEFDBL emit no executable code, but each leaves
     # an orphan entry in an active error-trap line table. The declaration's

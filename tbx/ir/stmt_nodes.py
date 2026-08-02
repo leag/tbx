@@ -883,10 +883,10 @@ class PutString:
 
 @dataclass(frozen=True)
 class Put:
-    """PUT #n, rec -- write a random-access record."""
+    """PUT #n[, rec] -- write a random-access record."""
 
     num: int  # file number
-    pos: object  # Expr (record number)
+    pos: object | None  # Expr (record number), or None for current record
 
 
 @dataclass(frozen=True)
