@@ -9,9 +9,9 @@ a decoder defect detectable with no oracle at all, by reading the emitted text.
 It is also a class the fixture corpus cannot report: all 1030 fixtures emit
 inside the limit, and every violation is in a wild program. Three shapes:
 
-- a pooled `DATA` or `COMMON` list emitted as one statement, where the source
-  must have carried several. `emit0._split_list_statement` now divides those,
-  which is free: the compiler is lossy about how such a list was divided.
+- a pooled `DATA` or `COMMON` list too wide for one physical line.
+  `emit0._split_list_statement` folds DATA with compiler continuations and
+  divides COMMON where its statement boundary is byte-invisible.
   Fixed wild zip.exe (295), book.exe (396) and baby.exe (6116) -- and zip.exe
   went from failing to reach the compiler at all to compiling.
 - an inline IF whose folded body does not fit, respelled as a block IF. Free
