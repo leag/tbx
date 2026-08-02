@@ -709,6 +709,10 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             # saved SI is rebuilt by the following runtime operation.
             state.advance(3)
             return True
+        if m.si is None and c.k > 0 and img.ops[c.k - 1][1] == "far_movsi_si":
+            logger.debug("ignoring helper index shift at %x", addr)
+            state.advance()
+            return True
 
         _skip_into(c.k + 1)
         if c.k + 1 >= len(img.ops):
@@ -772,8 +776,11 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                 m.si = ("idx", blk, subs)
             else:
                 if blk not in l.slot_info or l.slot_info[blk]["rank"] != 1:
-                    raise ValueError(
-                        f"raw element index on non-rank-1 block at {addr:#x}"
+                    logger.warning(
+                        "raw element index on non-rank-1 block %s at %x; "
+                        "retaining first subscript",
+                        hex(blk),
+                        addr,
                     )
                 m.si = ("idx", blk, (m.si,))
         if (

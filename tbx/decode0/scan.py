@@ -152,6 +152,19 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         ops.append((p, "local_init", cnt, disp))
         p += 20
         return p
+    if (
+        b == 0x51
+        and exe[p + 1] == 0x57
+        and exe[p + 2] == 0xB9
+        and exe[p + 5] == 0xBF
+        and exe[p + 8 : p + 11] == b"\xfc\xf3\xab"
+        and exe[p + 11 : p + 13] == b"\x5f\x59"
+    ):
+        cnt = struct.unpack_from("<H", exe, p + 3)[0]
+        disp = struct.unpack_from("<H", exe, p + 6)[0]
+        ops.append((p, "local_init", cnt, disp))
+        p += 13
+        return p
     # Function/temp-frame glue: semantic-free SP/BP frame setup &
     # teardown around DEF FN call sites; matched AFTER the proc_enter/proc_ret
     # combined forms above. The lifter skips these.
@@ -491,6 +504,14 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
     if b == 0x03 and exe[p + 1] == 0x06:  # add ax, [disp16] (int left-fold)
         ops.append((p, "addax_m", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4
+        return p
+    if b == 0x26 and exe[p + 1] == 0x03 and exe[p + 2] == 0x06:
+        ops.append((p, "addax_m", struct.unpack_from("<H", exe, p + 3)[0]))
+        p += 5
+        return p
+    if b == 0x26 and exe[p + 1] == 0x8B and exe[p + 2] == 0x06:
+        ops.append((p, "movax_m", struct.unpack_from("<H", exe, p + 3)[0]))
+        p += 5
         return p
     if b == 0x03 and exe[p + 1] == 0x86:  # add ax,[bp+disp16]: large LOCAL
         ops.append((p, "addax_bp", struct.unpack_from("<H", exe, p + 2)[0]))
