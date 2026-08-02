@@ -163,7 +163,8 @@ def _split_list_statement(stmt, width: int):
     """A splittable list whose items do not fit one line, as several statements.
 
     DATA and COMMON are declarations for which the compiler is lossy about
-    source statement boundaries. A semicolon-separated PRINT list is likewise
+    source statement boundaries; DATA is folded with `_` continuations so a
+    width split does not invent extra codeless statements. A semicolon-separated PRINT list is likewise
     emitted as the same sequence of runtime item calls whether divided across
     physical PRINT statements (v10_t1_printphysical). So the division is the
     emitter's to choose, and it has to choose one that fits.
@@ -175,7 +176,14 @@ def _split_list_statement(stmt, width: int):
     Returns None when the statement is not a list of this kind or already fits.
     """
     if isinstance(stmt, ir.Data):
-        items, rebuild = stmt.items, lambda part: ir.Data(tuple(part))
+        # DATA's source statement boundary is byte-significant in the error
+        # line table.  Physical `DATA ...` continuation lines are joined by
+        # the compiler, whereas emitting each width-sized chunk as a new DATA
+        # statement creates one codeless line-table entry per chunk.  Keep the
+        # declaration logical and fold only its physical spelling.
+        rendered = [ir.unparse_stmt(ir.Data((item,))).removeprefix("DATA ")
+                    for item in stmt.items]
+        return _wrap_continued("DATA ", rendered, width)
     elif isinstance(stmt, ir.Common):
         items, rebuild = stmt.names, lambda part: ir.Common(tuple(part))
     elif (

@@ -25,10 +25,11 @@
    "files": [
     "wild/hits/metric.exe"
    ],
-   "assessment": "The source shape is a structured empty-key wait loop: `DO: LOOP UNTIL LEN(INKEY$)` (the same form appears again at the later wait loop). The Oracle reproduces the wild operation sequence exactly: `strfn; str2num; orax; JE` back to the loop header. The decoder currently flattens each loop to `IF LEN(INKEY$) = 0 THEN <same line>`, which preserves semantics but not codeless loop/line-table metadata.",
+   "assessment": "The source shape is a structured empty-key wait loop: `DO: LOOP UNTIL LEN(INKEY$)` (the same form appears again at the later wait loop). The Oracle reproduces the wild operation sequence exactly: `strfn; str2num; orax; JE` back to the loop header. Reconstructing both loops makes the operation stream byte-for-byte identical. Keeping the large DATA declaration as one logical statement (using physical continuations) removes its 26 spurious line-table entries and reduces the rebuild delta from 496 to 432 bytes. The residual is compiler/source-layout metadata: two extra table rows (8 bytes) plus a 424-byte DATA bookkeeping band that the oracle emits for the continuation spelling but the wild image does not.",
    "negative_evidence": [
     "Explicit LEN(INKEY$)=0, integer-suffixed zero, INKEY$=\"\", and NOT/implicit truth variants were probed against the oracle; only DO...LOOP UNTIL LEN(INKEY$) produced the wild ORAX/JE back-edge.",
-    "Replacing both flattened guards with DO...LOOP UNTIL reproduces the complete operation stream, but the rebuilt image remains 496 bytes larger, isolating the remaining difference to codeless loop/line-table or image metadata rather than DATA ordering."
+    "Replacing both flattened guards with DO...LOOP UNTIL reproduces the complete operation stream; with DATA continuations the rebuilt image is 432 bytes larger, and the remaining raw mismatch is confined to the line-table/DATA bookkeeping band.",
+    "A line-numberless rebuild (labels, including a branch-target-only variant) changes the line fields to zero but retains the metadata delta. Joining the DATA continuations into one over-wide physical line is rejected by the oracle (Error 416), while BASIC continuations compile but allocate the extra 424-byte bookkeeping band. The original compiler/source spelling is therefore not recoverable from the wild zero-valued table."
    ],
    "promotion_criteria": "Find a compiler revision or additional wild witness that emits the compact zero-test for an equality-zero self-loop before changing the emitter.",
    "source": "oracle probes, session 2026-08-01"
