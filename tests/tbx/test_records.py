@@ -8,8 +8,6 @@ regression fails with a pointed message instead of a corpus-wide decode diff.
 
 import struct
 
-import pytest
-
 from tbx import decode0, ir
 
 
