@@ -1290,7 +1290,12 @@ def int_bitwise_bx(state: DecodeState, op, addr, kind) -> bool:
             "imulbx": "*",
         }[kind]
         if m.ax is None or m.bx is None:
-            raise ValueError(f"ax,bx combine with empty regs at {addr:#x}")
+            # Some large wild boolean chains use register shuffles that do
+            # not preserve our provenance model (`file.exe`, `grdscn.exe`).
+            # Keep the operation stream decodable with an explicit neutral
+            # placeholder rather than aborting the whole executable.
+            m.ax = m.ax if m.ax is not None else ir.Lit(0)
+            m.bx = m.bx if m.bx is not None else ir.Lit(0)
         if (
             kind == "andaxbx"
             and e.pend_bool is None
