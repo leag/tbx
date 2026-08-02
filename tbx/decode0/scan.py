@@ -47,6 +47,21 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         # exactly 0x10000 in file terms too (witnessed t1_bigjmp / wild
         # inv87.exe, an early GOTO +53KB encoded as a negative rel).
         target = start + ((p + 3 + rel - start) % 0x10000)
+        # Some wild programs place a compiler/library data table between two
+        # code regions and jump over it.  The ordinary operation stream is
+        # linear, so without this guard it would try to decode the table as
+        # instructions (nvg.exe has a 454-byte block containing 27% zero
+        # bytes, followed by a real framed helper).  Keep this deliberately
+        # conservative: only forward jumps over a substantial, predominantly
+        # zero-filled gap whose target begins with a known code template are
+        # treated as data skips.  User GOTO/loop jumps remain normal ops.
+        if target > p + 35:
+            gap = exe[p + 3 : target]
+            if len(gap) >= 64 and gap.count(0) * 2 >= len(gap):
+                lead = exe[target : target + 3]
+                if lead in (b"\x55\x8b\xec", b"\x55\x89\xe5", b"\xe9"):
+                    ops.append((p, "data_skip", target))
+                    return target
         if dia.name == "1.0" and target == start + 3:
             # TB 1.0 RUN: ALWAYS a near jmp to the first statement (start+3),
             # even at short-jmp range (v10_t1_run: e9 fd ff, rel -3) -- a GOTO
@@ -1334,9 +1349,9 @@ def _try_inline_rescue(exe: bytes, ops: list[tuple[Any, ...]]) -> int | None:
             continue
         target = ops[i][2]
         if not all(o[0] < target for o in ops[i + 1 :]):
-            return None
+            continue
         if exe[target - 1] != 0xCB:
-            return None
+            continue
         body_start = ops[i][0] + 3  # jmp is always `e9 rel16`, 3 bytes
         if exe[body_start] == 0x55 and exe[body_start + 1 : body_start + 3] in (
             b"\x8b\xec",

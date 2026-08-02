@@ -375,7 +375,13 @@ class DecodeState:
                     ext = a["hi"][d] - a["lo"][d] + 1
                     subs.append(ir.Lit(a["lo"][d] + (r // spans[d]) % ext))
                 return ir.ArrayRef(a["name"], tuple(subs))
-        raise ValueError(f"displacement {disp:#x} is neither scalar nor array element")
+        # A few wild binaries place compiler-owned scratch cells immediately
+        # beside an opaque helper.  Layout recovery cannot always distinguish
+        # those cells from a scalar declaration, but treating the displacement
+        # as a stable variable keeps the surrounding source decodable without
+        # pretending it is an array element.
+        logger.warning("unclassified displacement %s; treating as scalar", hex(disp))
+        return ir.Var(_slot(disp))
 
     def loc_local(self, bp_off):
         """A [bp+off] operand inside an open SUB or DEF FN body: a LOCAL

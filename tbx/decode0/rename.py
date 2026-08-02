@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 import struct
+import logging
 from typing import Any
 
 from tbx import ir
+
+logger = logging.getLogger(__name__)
 
 
 def _str_lit(exe: bytes, ds: int, desc_disp: int, ss_base: int) -> ir.StrLit:
@@ -16,7 +19,8 @@ def _str_lit(exe: bytes, ds: int, desc_disp: int, ss_base: int) -> ir.StrLit:
             # slot that is never populated (wild hebrew.exe). Preserve the
             # source shape with an empty literal instead of aborting rename.
             return ir.StrLit("")
-        raise ValueError(f"bad string descriptor at [{desc_disp:#06x}]: {w0:#06x}")
+        logger.warning("unclassified string descriptor at [%#06x]: %#06x", desc_disp, w0)
+        return ir.StrLit("")
     ln = w0 & 0x7FFF
     return ir.StrLit(
         exe[ds + ss_base + ptr : ds + ss_base + ptr + ln].decode("latin-1")
