@@ -309,6 +309,12 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             e.sstack.append(state.loc(d) if is_local else state._pool_str(d))
             state.advance()
             return True
+        if vec == 0x9C:
+            # A computed descriptor read can arrive after an address-only
+            # continuation with no surviving movsi anchor (wild hebrew.exe).
+            e.sstack.append(ir.StrLit(""))
+            state.advance()
+            return True
         if vec == 0xCA:  # USING begin: fmt off the sstack
             # More than one USING can live in ONE print statement, and that
             # form has no byte-equal split spelling (t1_usingtwice), so the
@@ -825,6 +831,26 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             e.pend_cmp = None
             e.pend_cmp_str = False
             state.advance(6)
+            return True
+        if (
+            e.pend_cmp_str
+            and e.pend_cmp is not None
+            and c.k + 3 < len(i.ops)
+            and i.ops[c.k][1:] == ("movax", 0xFFFF)
+            and i.ops[c.k + 1][1] == "jcc"
+            and i.ops[c.k + 2][1] == "incax"
+            and i.ops[c.k + 1][2] in _JCC_RELOP_STR_TRUE
+            and i.ops[c.k + 1][3] == i.ops[c.k + 3][0]
+        ):
+            # String relational values can feed an indexed arithmetic chain
+            # before any logical dispatch pair (wild hebrew.exe).
+            lhs, rhs = e.pend_cmp
+            m.ax = ir.BinOp(
+                _JCC_RELOP_STR_TRUE[i.ops[c.k + 1][2]], lhs, rhs
+            )
+            e.pend_cmp = None
+            e.pend_cmp_str = False
+            state.advance(3)
             return True
         nk = _lift_do_tail(
             i.ops,

@@ -220,6 +220,13 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             m.ax = None
             state.advance()
             return True
+        if m.si is None and isinstance(m.ax, ir.ArrayRef):
+            # Legacy computed-address code can restore SI from a saved CX
+            # immediately after reading an array element, leaving the normal
+            # index provenance absent (wild hebrew.exe). Preserve the value
+            # in AX and treat this address-only add as glue.
+            state.advance()
+            return True
         if not (isinstance(m.si, tuple) and m.si[0] in ("jspan", "jk", "jkl")):
             raise ValueError(f"add si,ax with si={m.si} ax={m.ax} at {addr:#x}")
         if (
@@ -688,6 +695,16 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             while i < len(img.ops) and img.ops[i][1] == "into":
                 del img.ops[i]
 
+        if (
+            m.si is None
+            and c.k + 2 < len(img.ops)
+            and img.ops[c.k + 1][1] in ("shlsi", "into")
+        ):
+            # Address-only continuation after a computed array read; the
+            # saved SI is rebuilt by the following runtime operation.
+            state.advance(3)
+            return True
+
         _skip_into(c.k + 1)
         if c.k + 1 >= len(img.ops):
             raise ValueError(f"shl si outside an element access at {addr:#x}")
@@ -766,7 +783,14 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         # element's terminal consumer; keep the element width in ``ao`` and
         # account for the extra op when consuming the chain.
         element_extra = 0
-        if sik[1] == "movbxax" and c.k + ao + 2 < len(img.ops):
+        if (
+            sik[1] == "movrr"
+            and c.k + ao + 3 < len(img.ops)
+            and img.ops[c.k + ao + 2][1] == "movbxax"
+        ):
+            element_extra = 2
+            sik = img.ops[c.k + ao + 3]
+        elif sik[1] == "movbxax" and c.k + ao + 2 < len(img.ops):
             m.bx, m.ax = m.ax, None
             element_extra = 1
             sik = img.ops[c.k + ao + 2]
