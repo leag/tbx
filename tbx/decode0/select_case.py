@@ -129,7 +129,21 @@ def _begin_body(state, body_i, next_test):
     while i < len(img.ops) and img.ops[i][0] < next_test:
         i += 1
     if i == body_i:
-        raise ValueError("SELECT CASE arm: empty body")
+        # Empty CASE arms are emitted by TB when adjacent guards share the
+        # same fall-through point (wild ifi/bmaster).  There is no statement
+        # region to fold; record a zero-width arm and let ``step`` append the
+        # empty CaseArm when it reaches the next guard/END SELECT.
+        fr = c.cases[-1]
+        fr.next_test = next_test
+        fr.body_idx = len(o.stmts)
+        fr.body_jmp = next_test
+        fr.body_seq = state.region(
+            "case_arm", start=next_test, end=next_test,
+            detail=tuple(fr.cur_guards),
+        ).seq
+        state.seek(body_i)
+        c.cur = None
+        return
     last_jmp_target = img.ops[i - 1][2] if img.ops[i - 1][1] == "jmp" else None
     fr = c.cases[-1]
     fr.next_test = next_test

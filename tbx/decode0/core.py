@@ -2679,9 +2679,12 @@ def _finalize(state: DecodeState, addr) -> Program:
                 )
         events = state.events
         reconciliation = reconcile(events, out.stmts)
-        canonical = canonical_rename(
-            _resolve_targets(out.stmts, out.addrs, out.stmt_addr)
-        )
+        try:
+            resolved = _resolve_targets(out.stmts, out.addrs, out.stmt_addr)
+        except ValueError as exc:
+            logger.warning("continuing wild recovery with unresolved jump: %s", exc)
+            resolved = out.stmts
+        canonical = canonical_rename(resolved)
 
         # Turbo Basic compile-time `%name` constants leave their values in the
         # pool even when every executable DIM operation contains the folded
