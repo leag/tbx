@@ -102,7 +102,7 @@ def _str_guard_arm(state, k, guard):
     i, c = state.image, state.control
     jcc = i.ops[k + 5]
     c.cases[-1].cur_guards.append(ir.CaseValue(guard))
-    if jcc[2] == 0x75:  # JNE: value-list non-final guard -- keep testing
+    if jcc[2] in (0x72, 0x73, 0x75, 0x76, 0x77):  # range/non-final guard
         state.seek(k + 7)
         c.cur = None
         return True
@@ -154,7 +154,10 @@ def _begin_body(state, body_i, next_test):
             fr.end_select = last_jmp_target
     else:  # flow-through final arm (no trailing jmp)
         if fr.end_select == 0 or next_test != fr.end_select:
-            raise ValueError("SELECT CASE arm: flow-through without known END SELECT")
+            # Wild SELECT layouts can fall through directly into the next
+            # arm's test without the canonical closing jump. Use that test as
+            # the arm boundary so later arms remain decodable.
+            fr.end_select = next_test
         fr.body_jmp = next_test
     # The body's extent is known here and nowhere earlier: where it starts, and
     # the arm-close jmp it runs to. Recording it is what lets the snapshot read
