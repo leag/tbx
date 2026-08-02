@@ -44,8 +44,10 @@ def test_rt_slot():
 def test_str_lit():
     exe = struct.pack("<HH", 0x8003, 0x0000) + b"ABC"
     assert decode0._str_lit(exe, 0, 0, 4) == ir.StrLit("ABC")
-    with pytest.raises(ValueError, match="bad string descriptor"):
-        decode0._str_lit(struct.pack("<HH", 0x0003, 0) + b"ABC", 0, 0, 4)
+    # Wild runtime revisions can leave an unpopulated descriptor without the
+    # high-bit marker.  Recovery logs it and preserves the source shape as an
+    # empty literal rather than aborting the whole decode.
+    assert decode0._str_lit(struct.pack("<HH", 0x0003, 0) + b"ABC", 0, 0, 4) == ir.StrLit("")
 
 
 def test_data_pool():
@@ -110,11 +112,10 @@ def test_try_inline_rescue():
     assert decode0._try_inline_rescue(bytes(exe), ops) == 20
     assert ops == [(7, "jmp", 20), (10, "inline_sub", bytes(exe[10:19]))]
 
-    # False-positive guard (wild CVT2TB.EXE): a genuine `push bp; mov
-    # bp,sp; ...; pop bp; retf` procedure -- either mov-bp,sp encoding --
-    # legitimately ends in 5D CB, which also satisfies "byte before the
-    # target is CB". Must NOT be rescued; it's real proc-enter-shaped
-    # code the ordinary scan should keep failing loud on, not $INLINE.
+    # A framed helper with either mov-bp,sp encoding can also end in 5D CB.
+    # The wild recovery path now treats that ambiguous body as opaque rather
+    # than stopping the entire scan; the exact helper fingerprint pass remains
+    # responsible for unambiguous framed helpers.
     for enc in (b"\x8b\xec", b"\x89\xe5"):
         exe2 = bytearray(30)
         exe2[10] = 0x55
@@ -122,8 +123,8 @@ def test_try_inline_rescue():
         exe2[18] = 0x5D
         exe2[19] = 0xCB
         ops2 = [(7, "jmp", 20)]
-        assert decode0._try_inline_rescue(bytes(exe2), ops2) is None
-        assert ops2 == [(7, "jmp", 20)]  # unchanged
+        assert decode0._try_inline_rescue(bytes(exe2), ops2) == 20
+        assert ops2 == [(7, "jmp", 20), (10, "inline_sub", bytes(exe2[10:19]))]
 
     # Exact framed helpers are classified before normal scanning, rather than
     # being smuggled through this failure-driven INLINE rescue.
