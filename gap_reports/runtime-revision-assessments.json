@@ -13,6 +13,27 @@
  ],
  "assessments": [
   {
+   "id": "RR-METRIC-INKEY-LEN-TEST",
+   "title": "metric.exe optimized LEN(INKEY$)=0 zero test",
+   "signatures": [
+    "strfn INKEY$ + str2num LEN + orax",
+    "metric round-trip delta"
+   ],
+   "disposition": "candidate-runtime-revision",
+   "evidence_class": "candidate-runtime-revision",
+   "confidence": "medium",
+   "files": [
+    "wild/hits/metric.exe"
+   ],
+   "assessment": "The source semantics are an empty-key wait loop: `IF LEN(INKEY$) = 0 THEN 860`, because the conditional jump targets the same INKEY$ operation. The wild compiler emits the compact `strfn; str2num; orax; JE` form. The vendored 1.1 oracle emits `xorax; strfn; movbxax; str2num; cmpax_bx; JNE` for the explicit equality spelling, while implicit truth forms produce ORAX with different branch polarity. No tested source spelling reproduces the wild self-loop bytes.",
+   "negative_evidence": [
+    "Explicit LEN(INKEY$)=0, integer-suffixed zero, INKEY$=\"\", and NOT/implicit truth variants were probed against the oracle.",
+    "Changing the emitted source to the closest implicit-boolean form removes the 512-byte alignment growth but changes program semantics and still does not match the original image; DATA layout remains identical."
+   ],
+   "promotion_criteria": "Find a compiler revision or additional wild witness that emits the compact zero-test for an equality-zero self-loop before changing the emitter.",
+   "source": "oracle probes, session 2026-08-01"
+  },
+  {
    "id": "RR-ED-1E",
    "title": "Three-argument INSTR runtime entry",
    "signatures": [
