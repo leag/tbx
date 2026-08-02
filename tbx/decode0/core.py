@@ -2899,11 +2899,11 @@ def _finalize(state: DecodeState, addr) -> Program:
                             lines.append(table[a - img.start])
                     prog.lines = lines
                 except (KeyError, TypeError):
-                    raise ValueError(
-                        "error-trap line table present but statements don't map "
-                        "1:1 to its entries (multi-statement lines unsupported): "
-                        f"{line_map_detail}"
+                    logger.warning(
+                        "ignoring incomplete error-trap line table during wild "
+                        "recovery: %s", line_map_detail
                     )
+                    prog.lines = []
         return prog
 
 
