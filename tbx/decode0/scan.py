@@ -992,16 +992,20 @@ def _scan_int(exe, p, commits, dia, ops, start, vec) -> int | None:
         ops.append((p, "fstsw"))
         p += 2
         return p
-    if vec == 0x8C and exe[p + 2] in (0xE9, 0xEB):
+    if vec == 0x8C and exe[p + 2] in (0xE9, 0xEB, 0xEA):
         # RETURN <line>: the runtime vector unwinds the active GOSUB/event
-        # frame, then a near jump selects the requested line
-        # (t1_returnline; wild baby/crossref/help/prtguide/readme).
+        # frame, then a near or far jump selects the requested line
+        # (t1_returnline; wild baby/crossref/help/prtguide/readme and ifi).
         if exe[p + 2] == 0xE9:
             target = p + 5 + struct.unpack_from("<h", exe, p + 3)[0]
             size = 5
-        else:
+        elif exe[p + 2] == 0xEB:
             target = p + 4 + struct.unpack_from("<b", exe, p + 3)[0]
             size = 4
+        else:
+            off, seg = struct.unpack_from("<HH", exe, p + 3)
+            target = start + seg * 16 + off
+            size = 7
         ops.append((p, "return_to", target))
         p += size
         return p
