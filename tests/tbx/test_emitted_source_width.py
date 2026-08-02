@@ -125,6 +125,16 @@ def test_a_wide_dim_comma_list_folds_with_continuation():
     assert " _\n" in source, "expected a `_` continuation fold, got one physical line"
 
 
+def test_a_wide_data_list_keeps_one_statement_boundary():
+    """DATA width folding must not invent codeless line-table entries."""
+    data = ir.Data(tuple(ir.DataItem("X" * 20, True) for _ in range(20)))
+    source = emit0.emit([data]).rstrip()
+
+    assert source.count("DATA ") == 1
+    assert " _\n" in source
+    assert all(len(line) <= EDITOR_LINE_LIMIT for line in source.split("\n"))
+
+
 def test_a_long_literal_concatenation_uses_optional_spacing_to_fit():
     value = ir.StrLit("1234567890")
     expr = value
