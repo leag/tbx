@@ -276,6 +276,12 @@ def graphics_box(state: DecodeState, op, addr, kind) -> bool:
     e, c = state.expr, state.control
     if kind in ("view", "window"):  # coord cells -> (x1,y1)-(x2,y2)
         fl = op[2]
+        if kind == "view" and fl == 0:
+            # Runtime reset emitted by the Hebrew graphics library after an
+            # explicit VIEW; no coordinate cells or source statement belong
+            # to this zero-flag dispatch (wild hebrew.exe).
+            state.advance()
+            return True
         base, scr_bit, extra = (
             (0x04, 0x08, 0x03) if kind == "view" else (0x01, 0x02, 0x00)
         )

@@ -715,6 +715,28 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
         # pure, so this keeps recognition independent from cursor history.
         if (
             e.pend_cmp_str
+            and m.bx is not None
+            and c.k + 3 < len(i.ops)
+            and i.ops[c.k][1:] == ("movax", 0xFFFF)
+            and i.ops[c.k + 1][1] == "jcc"
+            and i.ops[c.k + 2][1] == "incax"
+            and i.ops[c.k + 1][2] in _JCC_RELOP_STR_TRUE
+            and i.ops[c.k + 1][3] == i.ops[c.k + 3][0]
+        ):
+            # String-led value groups can spill the first relation through BX
+            # before the second materialization (hebrew.exe); its strcmp is
+            # not immediately adjacent to this header. Stage the second
+            # relation and let the following OR/AND register fold consume it.
+            lhs, rhs = e.pend_cmp
+            m.ax = ir.Group(
+                ir.BinOp(_JCC_RELOP_STR_TRUE[i.ops[c.k + 1][2]], lhs, rhs)
+            )
+            e.pend_cmp = None
+            e.pend_cmp_str = False
+            state.advance(3)
+            return True
+        if (
+            e.pend_cmp_str
             and match_string_logical_value_group(i.ops, c.k) is not None
         ):
             lhs, rhs = e.pend_cmp
@@ -849,6 +871,28 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             state.advance(3)
             return True
         if (
+            e.direct_bool_gate
+            and m.bx is not None
+            and c.k + 3 < len(i.ops)
+            and i.ops[c.k + 1][1] == "jcc"
+            and i.ops[c.k + 2][1] == "incax"
+            and i.ops[c.k + 3][1] == "oraxbx"
+            and i.ops[c.k + 1][3] == i.ops[c.k + 3][0]
+            and i.ops[c.k + 1][2] in _group_term_map
+        ):
+            # Numeric-led/string-right value groups (wild kinder) use the
+            # OR register fold rather than the nested-AND path above. Keep
+            # the second relation as a value so arith.oraxbx can combine it
+            # with the first term already banked in BX.
+            lhs, rhs = e.pend_cmp
+            m.ax = ir.Group(
+                ir.BinOp(_group_term_map[i.ops[c.k + 1][2]], lhs, rhs)
+            )
+            e.pend_cmp = None
+            e.pend_cmp_str = False
+            state.advance(3)
+            return True
+        if (
             not e.direct_bool_gate
             and m.bx is not None
             and not e.pend_cmp_str
@@ -890,6 +934,28 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
         # strcmp's flags are FORWARD, so the four ORDERING rows need
         # _JCC_RELOP_STR_TRUE, NOT _JCC_RELOP_TRUE's FP-reversed rows.
         _tmap = _JCC_RELOP_STR_TRUE if e.pend_cmp_str else _JCC_RELOP_TRUE
+        if (
+            e.direct_bool_gate
+            and m.bx is not None
+            and e.pend_cmp is not None
+            and c.k + 3 < len(i.ops)
+            and i.ops[c.k][1:] == ("movax", 0xFFFF)
+            and i.ops[c.k + 1][1] == "jcc"
+            and i.ops[c.k + 2][1] == "incax"
+            and i.ops[c.k + 1][2] in _tmap
+            and i.ops[c.k + 1][3] == i.ops[c.k + 3][0]
+        ):
+            # The second string term may perform its strcmp setup after the
+            # first materialization header (kinder's numeric-led OR group),
+            # so the final ``oraxbx`` is not adjacent to this header. Stage
+            # the relation now; the normal register fold will consume it
+            # when that terminal arrives.
+            lhs, rhs = e.pend_cmp
+            m.ax = ir.Group(ir.BinOp(_tmap[i.ops[c.k + 1][2]], lhs, rhs))
+            e.pend_cmp = None
+            e.pend_cmp_str = False
+            state.advance(3)
+            return True
         if (
             (not e.pend_cmp_str or e.direct_bool_gate)
             and c.k + 3 < len(i.ops)

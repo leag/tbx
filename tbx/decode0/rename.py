@@ -11,6 +11,11 @@ def _str_lit(exe: bytes, ds: int, desc_disp: int, ss_base: int) -> ir.StrLit:
     """Read a string literal via its pool descriptor `<len|0x8000> <ptr16>`."""
     w0, ptr = struct.unpack_from("<HH", exe, ds + desc_disp)
     if not w0 & 0x8000:
+        if w0 == 0:
+            # A legacy runtime helper can leave a zero descriptor in a pooled
+            # slot that is never populated (wild hebrew.exe). Preserve the
+            # source shape with an empty literal instead of aborting rename.
+            return ir.StrLit("")
         raise ValueError(f"bad string descriptor at [{desc_disp:#06x}]: {w0:#06x}")
     ln = w0 & 0x7FFF
     return ir.StrLit(
