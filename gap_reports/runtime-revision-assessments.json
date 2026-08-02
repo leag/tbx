@@ -25,10 +25,10 @@
    "files": [
     "wild/hits/metric.exe"
    ],
-   "assessment": "The source semantics are an empty-key wait loop: `IF LEN(INKEY$) = 0 THEN 860`, because the conditional jump targets the same INKEY$ operation. The wild compiler emits the compact `strfn; str2num; orax; JE` form. The vendored 1.1 oracle emits `xorax; strfn; movbxax; str2num; cmpax_bx; JNE` for the explicit equality spelling, while implicit truth forms produce ORAX with different branch polarity. No tested source spelling reproduces the wild self-loop bytes.",
+   "assessment": "The source shape is a structured empty-key wait loop: `DO: LOOP UNTIL LEN(INKEY$)` (the same form appears again at the later wait loop). The Oracle reproduces the wild operation sequence exactly: `strfn; str2num; orax; JE` back to the loop header. The decoder currently flattens each loop to `IF LEN(INKEY$) = 0 THEN <same line>`, which preserves semantics but not codeless loop/line-table metadata.",
    "negative_evidence": [
-    "Explicit LEN(INKEY$)=0, integer-suffixed zero, INKEY$=\"\", and NOT/implicit truth variants were probed against the oracle.",
-    "Changing the emitted source to the closest implicit-boolean form removes the 512-byte alignment growth but changes program semantics and still does not match the original image; DATA layout remains identical."
+    "Explicit LEN(INKEY$)=0, integer-suffixed zero, INKEY$=\"\", and NOT/implicit truth variants were probed against the oracle; only DO...LOOP UNTIL LEN(INKEY$) produced the wild ORAX/JE back-edge.",
+    "Replacing both flattened guards with DO...LOOP UNTIL reproduces the complete operation stream, but the rebuilt image remains 496 bytes larger, isolating the remaining difference to codeless loop/line-table or image metadata rather than DATA ordering."
    ],
    "promotion_criteria": "Find a compiler revision or additional wild witness that emits the compact zero-test for an equality-zero self-loop before changing the emitter.",
    "source": "oracle probes, session 2026-08-01"
