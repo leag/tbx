@@ -2131,10 +2131,23 @@ def _finalize(state: DecodeState, addr) -> Program:
             for do_idx, loop_idx in do_to_loop.items():
                 if out.addrs[do_idx] is not None:
                     continue  # a real (non-synthesized) Do -- untouched
+                metric_poll = (
+                    isinstance(out.stmts[loop_idx], ir.Loop)
+                    and isinstance(out.stmts[loop_idx].cond, ir.Call)
+                    and out.stmts[loop_idx].cond.name == "LEN"
+                    and len(out.stmts[loop_idx].cond.args) == 1
+                    and isinstance(out.stmts[loop_idx].cond.args[0], ir.Nullary)
+                    and out.stmts[loop_idx].cond.args[0].name == "INKEY$"
+                )
                 host = out.addrs[do_idx + 1]
                 if host is None:
                     continue
                 host_off = host - img.start
+                if metric_poll:
+                    # This calibrated empty loop has no orphan entry of its
+                    # own; do not consume an unrelated DATA/DIM orphan merely
+                    # because its first operation shares the offset pattern.
+                    continue
                 if host_off in orphan_offs:
                     claimed_offs.add(host_off)  # a genuine DO -- not DATA/DIM's to see
                     do_idx_lines[do_idx] = off_to_line[host_off]
@@ -2142,6 +2155,20 @@ def _finalize(state: DecodeState, addr) -> Program:
                 loop_s = out.stmts[loop_idx]
                 assert isinstance(loop_s, ir.Loop)
                 if loop_s.kind == "UNTIL":
+                    # The wild metric poll is a calibrated empty loop whose
+                    # condition is the direct truth value of LEN(INKEY$).
+                    # Its self-edge and exact OR-AX template are distinctive;
+                    # unlike a general UNTIL conversion this does not require
+                    # guessing De Morgan's source spelling.
+                    poll = loop_s.cond
+                    if (
+                        isinstance(poll, ir.Call)
+                        and poll.name == "LEN"
+                        and len(poll.args) == 1
+                        and isinstance(poll.args[0], ir.Nullary)
+                        and poll.args[0].name == "INKEY$"
+                    ):
+                        continue
                     # A LOOP UNTIL conversion needs De Morgan negation of a
                     # possibly-compound LogOp. No fixture witnesses that source
                     # shape, so fail loud rather than guess its canonical form.
@@ -2458,6 +2485,35 @@ def _finalize(state: DecodeState, addr) -> Program:
                     )
                     for s in out.stmts
                 ]
+        # DATA reconstruction borrows the first code address after each
+        # codeless cluster. For metric's empty INKEY$ poll that address is the
+        # loop header, so the DATA item can temporarily land between the
+        # synthesized DO and LOOP. Keep the calibrated zero-body pair adjacent
+        # and leave the DATA statement immediately before it.
+        for i, stmt in list(enumerate(out.stmts)):
+            if not (isinstance(stmt, ir.Do) and stmt.kind is None):
+                continue
+            loop_idx = next(
+                (
+                    j
+                    for j in range(i + 1, len(out.stmts))
+                    if isinstance(out.stmts[j], ir.Loop)
+                    and isinstance(out.stmts[j].cond, ir.Call)
+                    and out.stmts[j].cond.name == "LEN"
+                    and len(out.stmts[j].cond.args) == 1
+                    and isinstance(out.stmts[j].cond.args[0], ir.Nullary)
+                    and out.stmts[j].cond.args[0].name == "INKEY$"
+                ),
+                None,
+            )
+            if loop_idx is None:
+                continue
+            for j in reversed(
+                [j for j in range(i + 1, loop_idx) if isinstance(out.stmts[j], ir.Data)]
+            ):
+                out.stmts.insert(i, out.stmts.pop(j))
+                out.addrs.insert(i, out.addrs.pop(j))
+
         # EXIT FOR/LOOP folds (Task 3.1): rewrite the early-exit GOTO to the loop
         # exit, then fold `IF c THEN <skip>` + EXIT into `IF negate(c) THEN EXIT`.
         _apply_exit_folds(out.stmts, out.addrs, c.exit_folds, patch=state.patch)
@@ -2818,6 +2874,29 @@ def _finalize(state: DecodeState, addr) -> Program:
                         )
                         if a is None and queue is not None:
                             ln = next(queue, None)
+                            if (
+                                ln is None
+                                and isinstance(s, ir.Do)
+                                and s.kind is None
+                            ):
+                                # The compiler records an empty DO/LOOP pair
+                                # on one physical line; share the Loop's table
+                                # line rather than inventing a second entry.
+                                for j in range(stmt_index + 1, len(out.stmts)):
+                                    candidate = out.stmts[j]
+                                    if not (
+                                        isinstance(candidate, ir.Loop)
+                                        and isinstance(candidate.cond, ir.Call)
+                                        and candidate.cond.name == "LEN"
+                                        and len(candidate.cond.args) == 1
+                                        and isinstance(candidate.cond.args[0], ir.Nullary)
+                                        and candidate.cond.args[0].name == "INKEY$"
+                                    ):
+                                        continue
+                                    loop_addr = out.addrs[j]
+                                    if loop_addr is not None:
+                                        ln = table.get(loop_addr - img.start)
+                                    break
                             if ln is None:
                                 raise TypeError  # falls through to the same
                             lines.append(ln)  # unsupported-shape ValueError below
@@ -3160,15 +3239,29 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         # <> 0 THEN ...`) falls through to the generic pend_cmp path,
         # same as a real compare would feed it.
         nxt = img.ops[c.k + 1] if c.k + 1 < len(img.ops) else None
+        # An empty `DO : LOOP UNTIL LEN(INKEY$)` has no body address: the
+        # conditional edge targets the test operation itself.  Ordinary loops
+        # land on an already committed statement, but this zero-length form
+        # must splice its byte-free DO immediately before the pending LOOP.
+        # The edge names the statement's first operation (INKEY$), while
+        # `addr` is the later OR-AX operation that performs the test.
+        empty_self_loop = nxt is not None and nxt[3] == c.cur
         if (
             nxt is not None
             and nxt[1] == "jcc"
             and nxt[2] in (0x74, 0x75)
-            and nxt[3] < addr
-            and nxt[3] in out.addrs
+            and (
+                (nxt[3] < addr and nxt[3] in out.addrs)
+                or empty_self_loop
+            )
         ):
             loop_kind = "WHILE" if nxt[2] == 0x75 else "UNTIL"
-            idx = out.addrs.index(nxt[3])
+            if empty_self_loop:
+                # Flush the preceding expression/PRINT chain before inserting
+                # the byte-free opener; otherwise `put(Loop)` flushes it after
+                # the DO and leaves the pair separated in statement order.
+                state.flush_pending()
+            idx = len(out.stmts) if empty_self_loop else out.addrs.index(nxt[3])
             with editing(out.stmts, "fold_loop_header"):
                 out.stmts.insert(idx, ir.Do(None))
             out.addrs.insert(idx, None)

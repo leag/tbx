@@ -3256,6 +3256,16 @@ def test_decode_t1_orax():
     )
 
 
+def test_decode_metric_empty_inkey_polls_as_do_until():
+    """metric's empty-body LEN(INKEY$) back-edges are real DO...LOOP tests."""
+    from tbx import decode0, emit0
+    from conftest import wild_hits_bytes
+
+    src = emit0.emit(decode0.decode_user_code(wild_hits_bytes("metric.exe")))
+    assert "860 DO\n870 LOOP UNTIL LEN(INKEY$)\n880 KEY OFF" in src
+    assert "17890 DO\n17900 LOOP UNTIL LEN(INKEY$)\n17910 END" in src
+
+
 def test_decode_t1_deftype():
     # DEFINT/DEFSTR/DEFSNG/DEFDBL emit no executable code, but each leaves
     # an orphan entry in an active error-trap line table. The declaration's
