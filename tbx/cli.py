@@ -58,6 +58,15 @@ def _escape_data(text: str) -> str:
 def _dump_data(program: list[object]) -> str:
     """Dump DATA constants with escaped bytes for human inspection."""
 
+    def number(text: str) -> str:
+        try:
+            value = int(text, 10)
+        except ValueError:
+            return text
+        if value < 0:
+            return f"-&H{-value:X}"
+        return f"&H{value:X}"
+
     lines: list[str] = []
     index = 0
     for statement in program:
@@ -65,7 +74,7 @@ def _dump_data(program: list[object]) -> str:
             continue
         for item in statement.items:
             kind = "string" if item.is_str else "number"
-            value = _escape_data(item.text) if item.is_str else item.text
+            value = _escape_data(item.text) if item.is_str else number(item.text)
             lines.append(f"{index:03d} {kind}: {value}")
             index += 1
     return "\n".join(lines) + ("\n" if lines else "")
