@@ -58,7 +58,21 @@ def find_prologue(exe: bytes) -> tuple[int, Dialect]:
     0xBA (canonical BC), so `cd ec ba` -- the 1.1 signature -- occurs INSIDE 1.0 user
     code (v10_t1_resumel). The true prologue always precedes user code, so the lowest
     offset of either signature is the prologue."""
-    cands = [(i, dia) for dia in DIALECTS if (i := exe.find(dia.prologue)) >= 0]
+    # MZ self-extractors and archives can carry an embedded TB-looking byte
+    # sequence in their overlay.  Restrict recognition to the declared DOS
+    # image; otherwise an appended ZIP payload is misclassified as TB 1.0.
+    image_end = len(exe)
+    if len(exe) >= 0x1C and exe[:2] == b"MZ":
+        cblp, cp = struct.unpack_from("<HH", exe, 2)
+        if cp:
+            image_end = min(
+                len(exe), cp * 512 - (512 - cblp if cblp else 0)
+            )
+    cands = [
+        (i, dia)
+        for dia in DIALECTS
+        if (i := exe.find(dia.prologue, 0, image_end)) >= 0
+    ]
     if cands:
         return min(cands, key=lambda t: t[0])
     raise ValueError("TB program prologue (cd ec ba / cd ec b8) not found")

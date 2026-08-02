@@ -113,6 +113,17 @@ def test_find_prologue_dialects():
     assert s11 == 0x8700 and s10 == 0x70B0
 
 
+def test_find_prologue_ignores_mz_overlay_bytes():
+    """An appended archive must not supply a false Turbo Basic prologue."""
+    from pathlib import Path
+    import pytest
+    from tbx import decode0
+
+    archive = (Path(__file__).parents[2] / "wild" / "hits" / "bm1_dsk2.exe").read_bytes()
+    with pytest.raises(ValueError, match="TB program prologue"):
+        decode0.find_prologue(archive)
+
+
 def test_decode_v10_trivial():
     from tbx import decode0
 
