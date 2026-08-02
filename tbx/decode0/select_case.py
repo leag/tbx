@@ -531,7 +531,7 @@ def step(state):
                 fr.pending_range_lo = val
                 state.advance(4)
                 c.cur = None
-            elif cc == 0x72:  # JB: range high bound -> emit Range, begin body
+            elif cc in (0x72, 0x73, 0x77):  # range high bound -> emit Range
                 lo = fr.pending_range_lo
                 fr.pending_range_lo = None
                 fr.cur_guards.append(ir.CaseRange(lo, val))

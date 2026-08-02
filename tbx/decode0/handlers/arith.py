@@ -1060,7 +1060,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             # hebrew.exe), mem on the right like subax_m/far_subax_si
             # (SUB isn't commutative, unlike addax_si's mem-left form).
             m.ax = ir.BinOp("-", m.ax, _rgrp("-", ref))
-        elif sik[1] == "imul_si":
+        elif sik[1] in ("imul_si", "far_imulax_si"):
             # imul word [si]: multiplicative fold of a computed array
             # element (`ARRAY1%(k) * ARRAY2%(i,j)`, wild grdscn.exe) --
             # mem = the array ref (left operand), same orientation as
@@ -1070,6 +1070,9 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             # computation -- no special handling needed here since ax
             # just holds whatever expression was staged before this ran.
             m.ax = ir.BinOp("*", ref, _rgrp("*", m.ax))
+        elif sik[1] in ("far_andax_si", "far_orax_si"):
+            op_name = "AND" if sik[1] == "far_andax_si" else "OR"
+            m.ax = ir.BinOp(op_name, ref, _rgrp(op_name, m.ax))
         elif sik[1] == pre + "cmpax_si":
             # cmp ax, [si] (near) / cmp ax, es:[si] (far): relational against
             # a computed array element (`IF ARRAY%(i) = ... THEN ...`, wild

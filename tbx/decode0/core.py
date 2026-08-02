@@ -3563,7 +3563,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             c.cur = None
             state.advance()
             return
-        if cc in (0x74, 0x75) and nxt is not None and nxt[1] in ("jmp", "jmpf"):
+        if cc in range(0x72, 0x80) and nxt is not None and nxt[1] in ("jmp", "jmpf"):
             # Wild boolean chains can consume the compare provenance before
             # their final short-circuit Jcc; retain the branch edge so the
             # rest of the procedure remains decodable.
@@ -5688,6 +5688,11 @@ def _decode_user_code(
             state.advance(2)
             continue
         if handlers.int_alu(state, op, addr, kind):
+            continue
+        if kind == "cmpm_ax_bp":
+            # Unframed LOCAL compare used by a wild helper; its branch glue is
+            # recovered separately, so do not abort on the compare itself.
+            state.advance()
             continue
         if kind == "epilogue":
             state.diagnostics.phase = "finalize"
