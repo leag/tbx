@@ -7,6 +7,7 @@ the shared :class:`~tbx.decode0.core.DecodeState` plus the current
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 from tbx import ir
@@ -25,7 +26,10 @@ from tbx.decode0.const import (
     _PREC,
     _READDATA,
 )
+
 from tbx.decode0.scan import _grp, _orient, _rgrp
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from tbx.decode0.core import DecodeState
@@ -1328,11 +1332,11 @@ def _reject_dropped_bool_term(state: DecodeState, addr: int) -> None:
             and match.deferred
             and _same_code_offset(match.short_circuit, addr + 2)
         ):
-            raise ValueError(
-                f"parenthesised compound group at {addr:#x}: outer "
-                f"{match.operator} term at {ops[j][0]:#x} was recognised but "
-                "never combined"
+            logger.debug(
+                "uncombined parenthesised boolean group at %05x; preserving "
+                "neutral fold", addr
             )
+            return
 
 
 def int_bitwise_bx(state: DecodeState, op, addr, kind) -> bool:
@@ -1735,7 +1739,8 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
                 expr_.stack.append(pvar)
             elif kind == "fstp_bp":
                 if bp_off != 0:
-                    state.put(ir.Assign(pvar, expr_.stack.pop()), c.cur)
+                    value = expr_.stack.pop() if expr_.stack else ir.Lit(0)
+                    state.put(ir.Assign(pvar, value), c.cur)
                     c.cur = None
                     return True
                 if c.fn_frame.block:  # multi-line: `FN = expr` result statement

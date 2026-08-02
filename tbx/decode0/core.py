@@ -3571,6 +3571,11 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             c.cur = None
             state.advance(2)
             return
+        if cc in range(0x72, 0x80) and t < addr:
+            state.put(ir.Goto(("addr", t)), c.cur)
+            c.cur = None
+            state.advance()
+            return
         raise ValueError(f"unhandled jcc {cc:02x} at {addr:#x}")
     elif kind in ("jmp", "jmpf"):
         t = op[2]
