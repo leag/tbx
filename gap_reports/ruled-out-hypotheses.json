@@ -326,6 +326,27 @@
    ],
    "instead": "Do not add a source-position heuristic. Recover the compiler's DATA statement metadata or a wild witness for its pointer/boundary table first; the mcmurphy EXE has no error-trap line table, and arbitrary placement changes unrelated allocation metadata.",
    "source": "session 2026-08-01"
+  },
+  {
+   "id": "RO-STRING-GROUP-SPLIT-MATCH",
+   "title": "A broad string materialization match can represent a nested OR group",
+   "disposition": "reverted",
+   "confidence": "high",
+   "files": [
+    "wild/probes/probe_string_nested_and_or_block.exe"
+   ],
+   "signatures": [
+    "missing per-term group parentheses",
+    "compound IF round-trip regression"
+   ],
+   "hypothesis": "When a string logical-value header is followed by `oraxbx` or `andaxbx` materialization, recognizing the whole span as a split materialization group is sufficient; the nested comparisons can be represented by one outer Group.",
+   "negative_evidence": [
+    "The matcher produced one Group around `B$ = \"B\" OR C$ = \"C\"` instead of the two source-faithful per-term Groups.",
+    "The emitted source changed from `((B$ = \"B\") OR (C$ = \"C\"))` to `(B$ = \"B\" OR C$ = \"C\")`, and the focused compound suite fell from 21 passing tests to 20.",
+    "Removing the broad split and negated materialization branches restored the original nested IR and all 21 compound tests pass."
+   ],
+   "instead": "Keep string logical-value recognition limited to the calibrated templates that preserve each explicit comparison Group. If a wild helper needs split materialization, add a hand-built matcher test and an oracle-calibrated fixture before broadening the range.",
+   "source": "session 2026-08-01"
   }
  ]
 }

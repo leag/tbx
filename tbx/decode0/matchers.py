@@ -305,29 +305,6 @@ def match_string_logical_value_group(
             polarity=ops[j + 6][2],
             short_circuit=ops[j + 7][2],
         )
-    if any(
-        ops[j][1] == "oraxbx"
-        for j in range(index + 3, min(index + 36, len(ops)))
-    ):
-        return BoolTermMatch(
-            template="string_logical_value_group_split",
-            start=index,
-            stop=index + 3,
-            operator="OR",
-        )
-    if any(
-        ops[j][1] == "andaxbx"
-        and j + 3 < len(ops)
-        and ops[j + 1][1] == "notax"
-        and ops[j + 2][1] == "orax"
-        for j in range(index + 3, min(index + 36, len(ops)))
-    ):
-        return BoolTermMatch(
-            template="string_logical_value_group_not",
-            start=index,
-            stop=index + 3,
-            operator="AND",
-        )
     return None
 
 

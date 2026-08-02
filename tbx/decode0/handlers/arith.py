@@ -804,7 +804,6 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         ):
             element_extra = 3
             sik = img.ops[c.k + ao + 4]
-        elif sik[1] == "movbxax" and c.k + ao + 2 < len(img.ops):
         if sik[1] == "movbxax" and c.k + ao + 2 < len(img.ops):
             m.bx, m.ax = m.ax, None
             element_extra = 1
