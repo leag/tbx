@@ -760,6 +760,16 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         ):
             raise ValueError(f"shl si outside an element access at {addr:#x}")
         sik = img.ops[c.k + ao + 1]
+        # A long-form computed element read can preserve the previously
+        # materialized scalar in BX before loading the element (bmaster/ifi,
+        # `movbxax; mov ax,[si]`).  The register move is glue, not the
+        # element's terminal consumer; keep the element width in ``ao`` and
+        # account for the extra op when consuming the chain.
+        element_extra = 0
+        if sik[1] == "movbxax" and c.k + ao + 2 < len(img.ops):
+            m.bx, m.ax = m.ax, None
+            element_extra = 1
+            sik = img.ops[c.k + ao + 2]
         if param_rec is not None:
             esz = 1 << ao
             suffix = (
@@ -1180,7 +1190,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             return True
         else:
             raise ValueError(f"element access: unexpected op {sik[1]} at {sik[0]:#x}")
-        state.advance(ao + 2)
+        state.advance(ao + 2 + element_extra)
         return True
     if kind == "movmem_ax":  # int->FP bridge
         nxt = img.ops[c.k + 1] if c.k + 1 < len(img.ops) else None

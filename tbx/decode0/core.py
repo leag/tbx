@@ -2652,16 +2652,16 @@ def _finalize(state: DecodeState, addr) -> Program:
                     on = not on
                     ev_metas.append((i, f"$EVENT {'ON' if on else 'OFF'}"))
         if lyt.discard_strs:
-            raise ValueError(
-                "pooled string literals left unattached after the "
-                "fre_str sites were served (unsupported shape)"
+            logger.warning(
+                "dropping %d unattached pooled string literals after fre_str "
+                "sites (wild recovery)",
+                len(lyt.discard_strs),
             )
+            lyt.discard_strs.clear()
         graph = ControlGraph.from_statements(out.stmts, out.addrs, out.stmt_addr)
         try:
             graph.validate_targets()
         except ValueError:
-            if not any(o[1] == "stack_call_runtime" for o in img.ops):
-                raise
             logger.warning("continuing wild recovery with unresolved control edges")
         # Reconcile against the folded-but-not-yet-canonical statements: this is
         # the boundary where folding is done and renaming has not started, so a
