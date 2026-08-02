@@ -82,6 +82,17 @@ from tbx.decode0.state_parts import (
 
 logger = logging.getLogger(__name__)
 
+
+def _is_bare_len_poll(value) -> bool:
+    """Whether ``value`` is the direct LEN(INKEY$) truth-value expression."""
+    return (
+        isinstance(value, ir.Call)
+        and value.name == "LEN"
+        and len(value.args) == 1
+        and isinstance(value.args[0], ir.Nullary)
+        and value.args[0].name == "INKEY$"
+    )
+
 # Word count `local_init` reserves for a LOCAL DYNAMIC array's descriptor
 # template -- a fixed size regardless of rank or element type (witnessed
 # identical for rank-1 and rank-2 probes, q_localarr/q_locarr3); only 5 of
@@ -2131,19 +2142,14 @@ def _finalize(state: DecodeState, addr) -> Program:
             for do_idx, loop_idx in do_to_loop.items():
                 if out.addrs[do_idx] is not None:
                     continue  # a real (non-synthesized) Do -- untouched
-                metric_poll = (
-                    isinstance(out.stmts[loop_idx], ir.Loop)
-                    and isinstance(out.stmts[loop_idx].cond, ir.Call)
-                    and out.stmts[loop_idx].cond.name == "LEN"
-                    and len(out.stmts[loop_idx].cond.args) == 1
-                    and isinstance(out.stmts[loop_idx].cond.args[0], ir.Nullary)
-                    and out.stmts[loop_idx].cond.args[0].name == "INKEY$"
+                bare_len_loop = isinstance(out.stmts[loop_idx], ir.Loop) and _is_bare_len_poll(
+                    out.stmts[loop_idx].cond
                 )
                 host = out.addrs[do_idx + 1]
                 if host is None:
                     continue
                 host_off = host - img.start
-                if metric_poll:
+                if bare_len_loop:
                     # This calibrated empty loop has no orphan entry of its
                     # own; do not consume an unrelated DATA/DIM orphan merely
                     # because its first operation shares the offset pattern.
@@ -2155,19 +2161,13 @@ def _finalize(state: DecodeState, addr) -> Program:
                 loop_s = out.stmts[loop_idx]
                 assert isinstance(loop_s, ir.Loop)
                 if loop_s.kind == "UNTIL":
-                    # The wild metric poll is a calibrated empty loop whose
-                    # condition is the direct truth value of LEN(INKEY$).
+                    # A calibrated empty loop whose condition is the direct
+                    # truth value of LEN(INKEY$).
                     # Its self-edge and exact OR-AX template are distinctive;
                     # unlike a general UNTIL conversion this does not require
                     # guessing De Morgan's source spelling.
                     poll = loop_s.cond
-                    if (
-                        isinstance(poll, ir.Call)
-                        and poll.name == "LEN"
-                        and len(poll.args) == 1
-                        and isinstance(poll.args[0], ir.Nullary)
-                        and poll.args[0].name == "INKEY$"
-                    ):
+                    if _is_bare_len_poll(poll):
                         continue
                     # A LOOP UNTIL conversion needs De Morgan negation of a
                     # possibly-compound LogOp. No fixture witnesses that source
@@ -2362,7 +2362,7 @@ def _finalize(state: DecodeState, addr) -> Program:
                     # Every DATA statement needs at least one item. Any excess
                     # orphan entries are another payload-free codeless construct;
                     # canonicalize those to DefType. This also handles multiple
-                    # DATA clusters (wild metric.exe) because each recovered DATA
+                    # DATA clusters because each recovered DATA
                     # is inserted at its own borrowed offset below.
                     n = min(len(items), len(data_orphan_lines))
                     data_places = data_orphan_lines[:n]
@@ -2486,7 +2486,7 @@ def _finalize(state: DecodeState, addr) -> Program:
                     for s in out.stmts
                 ]
         # DATA reconstruction borrows the first code address after each
-        # codeless cluster. For metric's empty INKEY$ poll that address is the
+        # codeless cluster. For a bare LEN(INKEY$) poll that address is the
         # loop header, so the DATA item can temporarily land between the
         # synthesized DO and LOOP. Keep the calibrated zero-body pair adjacent
         # and leave the DATA statement immediately before it.
@@ -2498,11 +2498,7 @@ def _finalize(state: DecodeState, addr) -> Program:
                     j
                     for j in range(i + 1, len(out.stmts))
                     if isinstance(out.stmts[j], ir.Loop)
-                    and isinstance(out.stmts[j].cond, ir.Call)
-                    and out.stmts[j].cond.name == "LEN"
-                    and len(out.stmts[j].cond.args) == 1
-                    and isinstance(out.stmts[j].cond.args[0], ir.Nullary)
-                    and out.stmts[j].cond.args[0].name == "INKEY$"
+                    and _is_bare_len_poll(out.stmts[j].cond)
                 ),
                 None,
             )
@@ -2886,11 +2882,7 @@ def _finalize(state: DecodeState, addr) -> Program:
                                     candidate = out.stmts[j]
                                     if not (
                                         isinstance(candidate, ir.Loop)
-                                        and isinstance(candidate.cond, ir.Call)
-                                        and candidate.cond.name == "LEN"
-                                        and len(candidate.cond.args) == 1
-                                        and isinstance(candidate.cond.args[0], ir.Nullary)
-                                        and candidate.cond.args[0].name == "INKEY$"
+                                        and _is_bare_len_poll(candidate.cond)
                                     ):
                                         continue
                                     loop_addr = out.addrs[j]
@@ -3227,15 +3219,15 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         e.pend_cmp_str = True
     elif kind == "orax" and e.pend_cmp is None and m.ax is not None:
         # `or ax,ax`: a just-computed value's truthiness tested directly,
-        # with no preceding compare (wild metric.exe, an INKEY$ poll
-        # loop). A BACKWARD jcc right after is a DO-loop's own tail edge
+        # with no preceding compare (a bare LEN(INKEY$) poll loop). A
+        # BACKWARD jcc right after is a DO-loop's own tail edge
         # (same cc 75=WHILE/74=UNTIL mapping as _lift_do_tail), but with
         # no explicit compare to materialize first the LOOP condition is
         # the bare value itself, not an explicit "<> 0" -- byte-exact
         # check: `LOOP UNTIL LEN(K$) <> 0` recompiles DIFFERENT bytes
         # (the full movax-FFFF/jcc/incax materialize template) from
-        # `LOOP UNTIL LEN(K$)`, and only the bare form matches wild
-        # metric.exe (probe q_orax). A forward jcc (a plain `IF <value>
+        # `LOOP UNTIL LEN(K$)`, and only the bare form matches this
+        # operation shape (probe q_orax). A forward jcc (a plain `IF <value>
         # <> 0 THEN ...`) falls through to the generic pend_cmp path,
         # same as a real compare would feed it.
         nxt = img.ops[c.k + 1] if c.k + 1 < len(img.ops) else None
