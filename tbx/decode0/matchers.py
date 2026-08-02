@@ -397,21 +397,6 @@ def match_numeric_logical_value_group(
             stop=j + 6,
             operator="OR",
         )
-    # Numeric-led groups in older compiler revisions place the second
-    # materialization before the second strcmp's argument setup (kinder.exe),
-    # so the OR fold is not adjacent to the first strcmp tail.  The same
-    # materialization/jcc/incax evidence plus a nearby oraxbx is sufficient to
-    # stage the first term; the later fold is consumed by the regular handler.
-    if any(
-        ops[j][1] == "oraxbx"
-        for j in range(index + 3, min(index + 32, len(ops)))
-    ):
-        return BoolTermMatch(
-            template="numeric_logical_value_group_split",
-            start=index,
-            stop=index + 3,
-            operator="OR",
-        )
     return None
 
 

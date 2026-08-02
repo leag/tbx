@@ -1243,27 +1243,6 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             c.cur = None
             state.advance(ao + 6 + extra)
             return True
-        elif (
-            sik[1] == "movax_m"
-            and c.k + ao + 3 < len(img.ops)
-            and img.ops[c.k + ao + 2][1] == "xchgsi"
-            and img.ops[c.k + ao + 3][1] == "movm_ax"
-            and img.ops[c.k + ao + 3][2] == sik[2]
-        ):
-            # Near/static array SWAP variant: the peer element is addressed
-            # directly instead of through the ES alias (wild hebrew.exe).
-            state.put(ir.Swap(ref, state.loc(sik[2])), c.cur)
-            c.cur = None
-            # SINGLE elements carry a second word exchange immediately after
-            # the low-word tail; consume it as part of the same SWAP.
-            extra_words = (
-                c.k + ao + 7 < len(img.ops)
-                and img.ops[c.k + ao + 4][1] == "movax_m"
-                and img.ops[c.k + ao + 5][1] == "xchgsi2"
-                and img.ops[c.k + ao + 6][1] == "movm_ax"
-            )
-            state.advance(ao + (7 if extra_words else 4))
-            return True
         elif sik[1] in ("far_inc_si", "far_dec_si"):
             logger.warning("opaque by-ref element increment at %x", addr)
             state.advance(ao + 2 + element_extra)
