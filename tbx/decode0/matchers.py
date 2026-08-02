@@ -307,7 +307,7 @@ def match_string_logical_value_group(
         )
     if any(
         ops[j][1] == "oraxbx"
-        for j in range(index + 3, min(index + 80, len(ops)))
+        for j in range(index + 3, min(index + 36, len(ops)))
     ):
         return BoolTermMatch(
             template="string_logical_value_group_split",
@@ -320,7 +320,7 @@ def match_string_logical_value_group(
         and j + 3 < len(ops)
         and ops[j + 1][1] == "notax"
         and ops[j + 2][1] == "orax"
-        for j in range(index + 3, min(index + 80, len(ops)))
+        for j in range(index + 3, min(index + 36, len(ops)))
     ):
         return BoolTermMatch(
             template="string_logical_value_group_not",
