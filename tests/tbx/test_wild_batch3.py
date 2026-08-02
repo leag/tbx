@@ -109,15 +109,16 @@ def test_scan_wild_sabpcv3_clears_its_inline_subs():
     # prologue), carries it all the way into ordinary compiled SUB bodies --
     # and then relaying an array parameter onward carries it further still, to
     # an unrelated template.
-    import pytest
-
     from tbx import decode0
 
     from conftest import wild_hits_bytes
 
     exe = wild_hits_bytes("sabpcv3.exe")
     start, dialect = decode0.find_prologue(exe)
-    with pytest.raises(ValueError, match=r"unhandled byte 51 at 0xd30b"):
+    # The inline-sub contamination gap is closed; the scan now reaches the
+    # independent INT EC variant at the end of the program.
+    import pytest
+    with pytest.raises(ValueError, match=r"unhandled INT EC sub 02 at 0x11322"):
         decode0._scan(exe, start, dialect, set())
 
 
@@ -1807,14 +1808,12 @@ def test_wild_cvt2tb_opaque_helper_advances():
     # the rest of the family -- unlike BODY_11 (a known third-party
     # library, TBWINDOW), this one is unique to this one program, which
     # the fingerprint mechanism handles identically either way.
-    import pytest
-
-    from tbx import decode0
+    from tbx import decode0, emit0
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(ValueError, match=r"\[bp\+6\] outside the open LOCAL frame"):
-        decode0.decode_user_code(wild_hits_bytes("CVT2TB.EXE"))
+    program = decode0.decode_user_code(wild_hits_bytes("CVT2TB.EXE"))
+    assert program and emit0.emit(program)
 
 
 def test_wild_phone_opaque_helper_advances():
@@ -1827,14 +1826,12 @@ def test_wild_phone_opaque_helper_advances():
     # chain of jmp-to-jmp thunks landing on further helper-shaped code --
     # a genuinely different, unfamiliar trampoline/overlay structure not
     # attempted here; only this one confirmed closure is tested.
-    import pytest
-
-    from tbx import decode0
+    from tbx import decode0, emit0
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(ValueError, match=r"unhandled byte 33 at 0xa9ae"):
-        decode0.decode_user_code(wild_hits_bytes("phone.exe"))
+    program = decode0.decode_user_code(wild_hits_bytes("phone.exe"))
+    assert program and emit0.emit(program)
 
 
 def test_wild_filepatc_opaque_helpers_advance():
@@ -1848,17 +1845,12 @@ def test_wild_filepatc_opaque_helpers_advance():
     # the other opaque-helper closures, this is coverage-only recovery
     # (fingerprint match, not a byte pattern with an oracle-verifiable
     # source spelling), so it's tested as a wild-witness advance.
-    import pytest
-
-    from tbx import decode0
+    from tbx import decode0, emit0
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(
-        ValueError,
-        match=r"displacement 0x1054 is neither scalar nor array element",
-    ):
-        decode0.decode_user_code(wild_hits_bytes("filepatc.exe"))
+    program = decode0.decode_user_code(wild_hits_bytes("filepatc.exe"))
+    assert program and emit0.emit(program)
 
 
 def test_wild_mf_compound_if_far_exit_advances():
@@ -1872,17 +1864,16 @@ def test_wild_mf_compound_if_far_exit_advances():
     # segment-crossing jumps, so this is a wild-only witness, not an
     # oracle-verified fixture.
     import pytest
-
-    from tbx import decode0
+    from tbx import decode0, emit0
 
     from conftest import wild_hits_bytes
 
     # The runtime-grid layout now resolves; this advances mf.exe to its next
     # independent string-descriptor recovery gap.
-    with pytest.raises(
-        ValueError, match=r"bad string descriptor at \[0x05a0\]: 0x01b8"
-    ):
-        decode0.decode_user_code(wild_hits_bytes("mf.exe"))
+    program = decode0.decode_user_code(wild_hits_bytes("mf.exe"))
+    assert program
+    with pytest.raises(KeyError, match="60358"):
+        emit0.emit(program)
 
 
 def test_wild_mcmurphy_double_for_next_wraparound_advances():
