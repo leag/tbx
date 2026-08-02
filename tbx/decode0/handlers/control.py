@@ -91,7 +91,8 @@ def calls(state: DecodeState, op, addr, kind) -> bool:
                     continue
                 if i >= len(params):
                     raise ValueError(
-                        f"forwarded arg to unknown callee params at {addr:#x}"
+                        f"forwarded arg index {i} to callee {op[2]:#x} "
+                        f"with {len(params)} params at {addr:#x}"
                     )
                 sfx = params[i][-1] if params[i][-1] in "%$" else ""
                 off = a[1]

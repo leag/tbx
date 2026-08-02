@@ -722,7 +722,7 @@ def _lift_while(
             addrs.insert(idx, None)
             shift(idx, 1)
             put(ir.Loop(loop_kind, cond), cur)
-        elif exit_jcc[2] == 0x75:  # inline-IF (forward skip, by exclusion above)
+        elif exit_jcc[2] in (0x74, 0x75):  # inline-IF (forward skip, by exclusion above)
             flush()
             spelled_block = False
             if block_ifs is not None and isinstance(cond, ir.RelOp):

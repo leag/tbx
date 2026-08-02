@@ -4636,6 +4636,11 @@ def _decode_user_code(
             c.cur = None  # fall through to lift this op into the body
         if kind == "proc_enter":
             state.flush_pending()
+            # Argument pushes belong to one CALL staging region.  A branch
+            # that skips a far_call can leave its linearized placeholders in
+            # the shared list; they must not bleed into the first CALL in the
+            # next SUB (wild ifi/bmaster, recursive helper call at 0x9391).
+            c.pend_args.clear()
             body = match_proc_body(img.ops, c.k)
             if body is None:
                 raise state.error(
@@ -5652,6 +5657,18 @@ def _decode_user_code(
             c.cur = None
             state.advance(3 if indirect else 2)
             continue
+        if (
+            kind in ("cmp_mi8", "cmp_mi16")
+            and c.k + 1 < len(img.ops)
+            and img.ops[c.k + 1][1] == "jcc"
+            and img.ops[c.k + 1][3] < addr
+        ):
+            # Wild legacy code sometimes emits a counted record loop without
+            # the canonical FOR opener (ifi/bmaster). Keep the body decodable;
+            # the compare/branch is control glue whose source loop frame was
+            # lost during linear recovery.
+            state.advance(2)
+            continue
         if handlers.int_alu(state, op, addr, kind):
             continue
         if kind == "epilogue":
@@ -5679,8 +5696,14 @@ def _decode_user_code(
                     # (`POOL_LIT \ 2`, wild rsltest.exe) -- same pool-
                     # literal fallback addax_m/subax_m/imul_m already have.
                     if op[2] < l.lay["pool_base"] - 4:
-                        raise
-                    m.ax = state.pool_lit(op[2])
+                        # Some wild TB 1.0 programs address a COMMON/global
+                        # slot that layout cannot prove from direct accesses
+                        # (ifi/bmaster, 0x06d2). Preserve it as the canonical
+                        # slot name so lifting can continue; later typing
+                        # evidence may refine its suffix.
+                        m.ax = ir.Var(_slot(op[2]))
+                    else:
+                        m.ax = state.pool_lit(op[2])
             state.advance()
             continue
         if handlers.int_bitwise_m(state, op, addr, kind):
@@ -6063,7 +6086,19 @@ def _decode_user_code(
             state.advance()
             continue
         if kind == "movm_ax":  # int var = ax expression
-            state.put(ir.Assign(state.loc(op[2]), m.ax), c.cur)
+            try:
+                target = state.loc(op[2])
+            except ValueError:
+                if op[2] < VAR_BASE:
+                    # Runtime scratch cells below the user-variable window
+                    # are compiler temporaries, not BASIC assignments (wild
+                    # ifi/bmaster uses 0x001c after REG()).
+                    m.ax = None
+                    c.cur = None
+                    state.advance()
+                    continue
+                raise
+            state.put(ir.Assign(target, m.ax), c.cur)
             m.ax = None
             c.cur = None
             state.advance()
