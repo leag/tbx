@@ -889,7 +889,6 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                     addr,
                 )
                 a = {"name": f"V{blk:04X}", "rank": 1, "esz": 1 << ao}
-                l.slot_info[blk] = a
         if any(not isinstance(e, ir.Lit) for e in m.si[2]):
             a["varacc"] = True  # variable-subscript witness
         ref = ir.ArrayRef(a["name"], m.si[2])
