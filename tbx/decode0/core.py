@@ -380,7 +380,12 @@ class DecodeState:
         # those cells from a scalar declaration, but treating the displacement
         # as a stable variable keeps the surrounding source decodable without
         # pretending it is an array element.
-        if disp < 0x400:
+        # Keep pooled operands fail-through so fpval/fpval64/pool_lit can
+        # decode them.  Returning a synthetic variable here would shadow a
+        # literal (for example banker's 1E-8# at 0x0DE8), shifting canonical
+        # names for every subsequent variable and producing a byte-visible
+        # regression.
+        if disp < 0x400 or disp >= self.lay["pool_base"] - 4:
             raise ValueError(f"displacement {disp:#x} is neither scalar nor array element")
         logger.warning("unclassified displacement %s; treating as scalar", hex(disp))
         return ir.Var(_slot(disp))

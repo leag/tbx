@@ -347,6 +347,52 @@
    ],
    "instead": "Keep string logical-value recognition limited to the calibrated templates that preserve each explicit comparison Group. If a wild helper needs split materialization, add a hand-built matcher test and an oracle-calibrated fixture before broadening the range.",
    "source": "session 2026-08-01"
+  },
+  {
+   "id": "RO-POOL-DISP-SYNTHETIC-SCALAR",
+   "title": "Every unclassified displacement above 0x400 can be a synthetic scalar",
+   "disposition": "reverted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/banker.exe"
+   ],
+   "signatures": [
+    "banker emitted width regression",
+    "pooled double literal shadowed"
+   ],
+   "hypothesis": "When layout recovery cannot classify a displacement above 0x400, returning a synthetic scalar keeps wild decoding moving and is safe for floating-point operands.",
+   "negative_evidence": [
+    "Banker's `fld64 [0x0DE8]` is a pooled 1E-8# literal, not a variable; the permissive loc() fallback returned V0DE8 before fpval64() could perform its pool fallback.",
+    "That one shadowed literal shifted canonical variable names through the remainder of the program and changed the emitted source width from the pinned 97906 to 97897 bytes.",
+    "Raising for pool-range displacements while retaining synthetic scalars only below the pool restored the literal, variable names, and the 97906-byte width."
+   ],
+   "instead": "Preserve the fail-through contract for displacements at or above pool_base-4 so fpval, fpval64, and integer pool readers can classify literals. Restrict any synthetic scalar fallback to evidence outside the pool window and add a wild witness before widening it.",
+   "source": "session 2026-08-02"
+  },
+  {
+   "id": "RO-WILD-WIDTH-PIN-CODE-REGRESSION",
+   "title": "Current inv87/state width-pin deltas are caused by the decoder regression",
+   "disposition": "not-a-defect",
+   "confidence": "medium",
+   "files": [
+    "wild/hits/inv87.exe",
+    "wild/hits/invoice.exe",
+    "wild/hits/state.exe",
+    "wild/hits/state87.exe"
+   ],
+   "signatures": [
+    "inv87 emitted width 88301 vs pinned 88341",
+    "state emitted width 69172 vs pinned 69191",
+    "wild corpus fingerprint drift"
+   ],
+   "hypothesis": "The inv87/invoice/state width-pin differences are a decoder regression introduced by the current branch and should be fixed by changing decoder logic.",
+   "negative_evidence": [
+    "The current wild/hits corpus has 105 recognizable Turbo Basic executables, while the latest committed scan checkpoint records an 86-executable corpus; its fingerprint is therefore not the pinned artifact set.",
+    "The same 88301-byte inv87 output is produced by the historical 80b6e66 and 5caa71cf trees as well as the current tree, so this delta predates the present regression fix and is not introduced by the current working change.",
+    "Unlike banker.exe, whose 97906-byte pin is restored by the pool-range fix, the inv87/state widths remain unchanged across those historical decoder trees."
+   ],
+   "instead": "Do not re-record the width baseline to hide the mismatch. Recover the exact artifact fingerprint used when the pins were measured, or obtain an oracle/source diff that explains the 40/19-byte differences before changing decoder logic. Keep this evidence visible while the refreshed corpus is reconciled.",
+   "source": "session 2026-08-02"
   }
  ]
 }
