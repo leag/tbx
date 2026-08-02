@@ -305,6 +305,16 @@ def match_string_logical_value_group(
             polarity=ops[j + 6][2],
             short_circuit=ops[j + 7][2],
         )
+    if any(
+        ops[j][1] == "oraxbx"
+        for j in range(index + 3, min(index + 36, len(ops)))
+    ):
+        return BoolTermMatch(
+            template="string_logical_value_group_split",
+            start=index,
+            stop=index + 3,
+            operator="OR",
+        )
     return None
 
 

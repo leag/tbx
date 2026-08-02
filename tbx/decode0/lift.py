@@ -657,6 +657,28 @@ def _lift_while(
     with editing(stmts, "lift_while"):
         negate = k + 3 < len(ops) and ops[k + 3][1] == "notax"
         off = 1 if negate else 0
+        if (
+            negate
+            and k + 5 < len(ops)
+            and ops[k + 4][1] == "orax"
+            and ops[k + 5][1] == "jcc"
+            and ops[k + 5][2] in (0x74, 0x75)
+            and ops[k + 5][3] < ops[k][0]
+            and ops[k + 5][3] in addrs
+        ):
+            # Legacy string loops can use the materialized value's backward
+            # Jcc directly, omitting the usual forward-exit Jcc/JMP pair
+            # (wild kinder.exe). Treat the backward edge as a tail-tested
+            # loop and splice the byte-free DO at its target.
+            lhs, rhs = pend_cmp
+            cond = ir.Not(ir.RelOp(_JCC_RELOP_TRUE[ops[k + 1][2]], lhs, rhs))
+            loop_kind = "WHILE" if ops[k + 5][2] == 0x75 else "UNTIL"
+            idx = addrs.index(ops[k + 5][3])
+            stmts.insert(idx, ir.Do(None))
+            addrs.insert(idx, None)
+            shift(idx, 1)
+            put(ir.Loop(loop_kind, cond), cur)
+            return k + 6
         want = ["movax", "jcc", "incax"] + (["notax"] if negate else []) + [
             "orax",
             "jcc",
