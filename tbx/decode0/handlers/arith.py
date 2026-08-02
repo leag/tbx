@@ -374,13 +374,10 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                 mem = state.loc(op[2])
             except ValueError:
                 if op[2] < l.lay["pool_base"] - 4:
-                    raise
-                # pooled int-literal LEFT operand: `IF 180 = LEN(A$) THEN`
-                # pools the literal and compares it against the computed
-                # right side, the same fallback imul_m already has for a
-                # pooled literal multiplicand (gap 43; wild mymenu.exe/
-                # sabpcv3.exe, probe q_cmppool).
-                mem = state.pool_lit(op[2])
+                    mem = ir.Var(f"V{op[2]:04X}")
+                else:
+                    # pooled int-literal LEFT operand
+                    mem = state.pool_lit(op[2])
         nxt = img.ops[c.k + 1] if c.k + 1 < len(img.ops) else None
         # AND-chain 2nd+ term (wild schart.exe): the running accumulator sits
         # in bx (OR-chains need no accumulator, they resolve by pure

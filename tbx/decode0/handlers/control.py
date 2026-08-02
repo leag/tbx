@@ -90,10 +90,9 @@ def calls(state: DecodeState, op, addr, kind) -> bool:
                     args.append(ir.Var(f"P{off:02X}"))
                     continue
                 if i >= len(params):
-                    raise ValueError(
-                        f"forwarded arg index {i} to callee {op[2]:#x} "
-                        f"with {len(params)} params at {addr:#x}"
-                    )
+                    off = a[1]
+                    args.append(ir.Var(f"P{off:02X}"))
+                    continue
                 sfx = params[i][-1] if params[i][-1] in "%$" else ""
                 off = a[1]
                 if sfx == "%":

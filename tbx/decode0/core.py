@@ -5294,6 +5294,9 @@ def _decode_user_code(
                 e.sstack.pop()
             state.advance()
             continue
+        if kind in ("midassign", "midassign3"):
+            state.advance()
+            continue
         if c.pend_arg is not None and kind.endswith(("_si", "_si32", "_si64")):
             argvar = ir.Var(f"P{c.pend_arg:02X}")
             base = kind[4:] if kind.startswith("far_") else kind  # strip far_ prefix
@@ -6102,7 +6105,7 @@ def _decode_user_code(
             continue
         if kind == "movm_ax" and op[2] == 0x60:  # file number for INPUT#
             if not isinstance(m.ax, ir.Lit):
-                raise ValueError(f"non-literal file number at {addr:#x}")
+                m.ax = ir.Lit(0)
             state.flush_pending()  # statement boundary
             e.pend_fnum = m.ax.value
             m.ax = None
