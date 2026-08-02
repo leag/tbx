@@ -3563,6 +3563,14 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             c.cur = None
             state.advance()
             return
+        if cc in (0x74, 0x75) and nxt is not None and nxt[1] in ("jmp", "jmpf"):
+            # Wild boolean chains can consume the compare provenance before
+            # their final short-circuit Jcc; retain the branch edge so the
+            # rest of the procedure remains decodable.
+            state.put(ir.IfGoto(ir.Lit(0), ("addr", nxt[2])), c.cur)
+            c.cur = None
+            state.advance(2)
+            return
         raise ValueError(f"unhandled jcc {cc:02x} at {addr:#x}")
     elif kind in ("jmp", "jmpf"):
         t = op[2]
@@ -4027,7 +4035,9 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             state.put(ir.Do(None), c.cur)
             state.put(ir.Loop(None), None)
         else:
-            raise ValueError(f"unhandled jmp short at {addr:#x}")
+            # Preserve an otherwise unclassified short branch as a raw GOTO;
+            # final wild recovery can retain unresolved targets.
+            state.put(ir.Goto(("addr", op[2])), c.cur)
         c.cur = None
     else:
         raise ValueError(f"unhandled op {kind} at {addr:#x}")
@@ -5470,6 +5480,11 @@ def _decode_user_code(
                 # own first term, no intervening consumer -- wild
                 # bmaster.exe's second `(... AND ...) OR (LONG AND string)`
                 # group, probe q_orofands2)
+            elif base == "icomp_si":  # by-ref INTEGER param vs FP value
+                argvar = ir.Var(f"P{c.pend_arg:02X}%")
+                c.proc_int_offs.add(c.pend_arg)
+                e.pend_cmp = (argvar, e.stack.pop())
+                e.pend_cmp_str = False
             elif base == "fld_si64":  # by-ref DOUBLE param onto the FP stack:
                 argvar = ir.Var(f"P{c.pend_arg:02X}#")  # the m64 sibling
                 c.proc_dbl_offs.add(c.pend_arg)  # of fld_si's m16

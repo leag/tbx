@@ -790,6 +790,14 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         ):
             element_extra = 2
             sik = img.ops[c.k + ao + 3]
+        elif (
+            sik[1] == "movrr"
+            and c.k + ao + 4 < len(img.ops)
+            and img.ops[c.k + ao + 2][1] == "movrr"
+            and img.ops[c.k + ao + 3][1] == "movbxax"
+        ):
+            element_extra = 3
+            sik = img.ops[c.k + ao + 4]
         elif sik[1] == "movbxax" and c.k + ao + 2 < len(img.ops):
             m.bx, m.ax = m.ax, None
             element_extra = 1
