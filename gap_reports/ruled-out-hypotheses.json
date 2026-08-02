@@ -11,6 +11,27 @@
  ],
  "hypotheses": [
   {
+   "id": "RO-METRIC-DATA-ORDER",
+   "title": "metric.exe's round-trip delta is DATA descriptor ordering",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/metric.exe"
+   ],
+   "signatures": [
+    "metric round-trip delta",
+    "DATA/string-descriptor ordering"
+   ],
+   "hypothesis": "The 512-byte metric.exe round-trip growth is caused by reconstructed DATA statements being emitted in the wrong descriptor order.",
+   "negative_evidence": [
+    "The uncapped oracle report has identical scalar_base (288), pool_base (1268), scalar count (246), array layout, and complete pool-string multisets in the original and rebuilt images.",
+    "The first operation divergence is before any DATA payload: the original line-860 INKEY$/LEN test uses `orax`, while the rebuilt source produces an explicit zero load and `cmpax_bx`; the rebuilt operation stream has only four extra operations.",
+    "The 512-byte file-size delta is the image-alignment consequence of that earlier four-byte code-shape difference, not a DATA pool displacement change."
+   ],
+   "instead": "Investigate the INKEY$/LEN zero-test source-shape mismatch separately; do not alter DATA reconstruction for metric.exe.",
+   "source": "oracle roundtrip metric.exe, session 2026-08-01"
+  },
+  {
    "id": "RO-ELSE-DO-SKIP",
    "title": "Let the inline-IF guard skip address-less spliced DO headers",
    "disposition": "reverted",
