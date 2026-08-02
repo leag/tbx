@@ -224,13 +224,6 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             m.ax = None
             state.advance()
             return True
-        if m.si is None and isinstance(m.ax, ir.ArrayRef):
-            # Legacy computed-address code can restore SI from a saved CX
-            # immediately after reading an array element, leaving the normal
-            # index provenance absent (wild hebrew.exe). Preserve the value
-            # in AX and treat this address-only add as glue.
-            state.advance()
-            return True
         if not (isinstance(m.si, tuple) and m.si[0] in ("jspan", "jk", "jkl")):
             raise ValueError(f"add si,ax with si={m.si} ax={m.ax} at {addr:#x}")
         if (
@@ -812,6 +805,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             element_extra = 3
             sik = img.ops[c.k + ao + 4]
         elif sik[1] == "movbxax" and c.k + ao + 2 < len(img.ops):
+        if sik[1] == "movbxax" and c.k + ao + 2 < len(img.ops):
             m.bx, m.ax = m.ax, None
             element_extra = 1
             sik = img.ops[c.k + ao + 2]
