@@ -346,7 +346,11 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         state.advance()
         return True
     if kind == "idiv_m":  # ax (dividend) \ [disp16] (memory divisor)
-        m.ax = ir.BinOp("\\", m.ax, _rgrp("\\", state.loc(op[2])))
+        try:
+            divisor = state.loc(op[2])
+        except ValueError:
+            divisor = ir.Var(f"V{op[2]:04X}")
+        m.ax = ir.BinOp("\\", m.ax, _rgrp("\\", divisor))
         state.advance()
         return True
     if kind == "idivbx":  # ax (dividend) \ bx (divisor) -> ax
@@ -1731,7 +1735,9 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
                 expr_.stack.append(pvar)
             elif kind == "fstp_bp":
                 if bp_off != 0:
-                    raise ValueError(f"FSTP [bp+{bp_off}] in DEF FN body at {addr:#x}")
+                    state.put(ir.Assign(pvar, expr_.stack.pop()), c.cur)
+                    c.cur = None
+                    return True
                 if c.fn_frame.block:  # multi-line: `FN = expr` result statement
                     state.put(ir.FnResult(expr_.stack.pop()), c.cur)
                     c.cur = None

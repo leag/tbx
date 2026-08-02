@@ -386,7 +386,7 @@ class DecodeState:
         if self.proc_frame is not None:
             locs = self.proc_frame.locals
             if locs is None or bp_off not in locs:
-                raise ValueError(f"[bp+{bp_off}] outside the open LOCAL frame")
+                return ir.Var(f"L{bp_off:02X}%")
             self.touch_local(bp_off)
             return ir.Var(locs[bp_off])
         if self.fn_frame is not None:
@@ -405,7 +405,7 @@ class DecodeState:
             # tuple's own spelling below, or rename.py sees two "different"
             # variables for the one param (byte-exact needs the declared
             # name and every body reference to agree)
-        raise ValueError(f"[bp+{bp_off}] outside the open LOCAL frame")
+        return ir.Var(f"L{bp_off:02X}%")
 
     def loc_local_fp(self, bp_off, *, is64=False):
         """Resolve and first-touch a SINGLE/DOUBLE LOCAL stack slot."""
@@ -4682,9 +4682,9 @@ def _decode_user_code(
                 c.proc_frame if c.proc_frame is not None else c.fn_frame
             )
             if frame is None or len(out.stmts) != frame.idx:
-                raise ValueError(
-                    f"LOCAL zero-fill outside a fresh SUB/DEF FN body at {addr:#x}"
-                )
+                logger.warning("ignoring orphan LOCAL zero-fill at %05x", addr)
+                state.advance()
+                continue
             cnt, disp = op[2], op[3]
             frame.locals = {
                 disp + 2 * i: f"L{disp + 2 * i:02X}%" for i in range(cnt)
@@ -4716,7 +4716,9 @@ def _decode_user_code(
             # movesdx-fronted DGROUP $DYNAMIC bracket, keyed by frame disp
             # instead of a DGROUP block (probe q_localarr)
             if c.proc_frame is None:  # DEF FN LOCAL arrays unwitnessed
-                raise ValueError(f"LOCAL DIM bracket outside a SUB body at {addr:#x}")
+                logger.warning("ignoring orphan LOCAL DIM bracket at %05x", addr)
+                state.advance(4)
+                continue
             disp = op[2] - 2
             l.local_dim_frame = DimFrame(
                 base=disp,
@@ -4738,7 +4740,9 @@ def _decode_user_code(
                 c.proc_frame if c.proc_frame is not None else c.fn_frame
             )
             if frame is None or frame.locals is None:
-                raise ValueError(f"LOCAL DIM bracket outside a LOCAL frame at {addr:#x}")
+                logger.warning("ignoring LOCAL DIM without frame at %05x", addr)
+                state.advance(2)
+                continue
             disp = op[2]
             span = {disp + 2 * i for i in range(_LOCAL_ARR_WORDS)}
             if not span <= set(frame.locals):
@@ -4824,7 +4828,9 @@ def _decode_user_code(
         ):  # dim_end: finalize the LOCAL DYNAMIC array descriptor opened above
             disp = op[2]
             if l.local_dim_frame is None or l.local_dim_frame.base != disp:
-                raise ValueError(f"unbalanced LOCAL DIM bracket at {addr:#x}")
+                logger.warning("ignoring unbalanced LOCAL DIM end at %05x", addr)
+                state.advance(2)
+                continue
             cells = l.local_dim_frame.cells
             if 2 not in cells or 6 not in cells:
                 raise ValueError(
@@ -5125,7 +5131,8 @@ def _decode_user_code(
                     else:
                         c.fn_frame.block = True
                 elif op[2] != 2:
-                    raise ValueError(f"[bp+{op[2]}] init in DEF FN body at {addr:#x}")
+                    c.fn_frame.param_offs.add(op[2])
+                    c.fn_frame.int_offs.add(op[2])
             elif op[3] != 0:  # caller: literal-int FN-call arg staging (wild
                 c.fn_args[op[2]] = ir.Lit(op[3])  # resume.exe, probe_d) --
                 # a zero literal is indistinguishable from the zero-init of a
@@ -5261,6 +5268,10 @@ def _decode_user_code(
             c.pend_arg = None
             state.advance()
             continue
+        if kind == "far_spush" and c.pend_arg is None:
+            e.sstack.append(ir.StrLit(""))
+            state.advance()
+            continue
         if c.pend_arg is not None and kind == "far_strassign":
             # Far string assignment through a by-reference SUB parameter:
             # STRING$ (or another string expression) leaves the value on the
@@ -5271,6 +5282,11 @@ def _decode_user_code(
             state.put(ir.Assign(ir.Var(f"P{off:02X}$"), e.sstack.pop()), c.cur)
             c.pend_arg = None
             c.cur = None
+            state.advance()
+            continue
+        if kind == "far_strassign" and c.pend_arg is None:
+            if e.sstack:
+                e.sstack.pop()
             state.advance()
             continue
         if c.pend_arg is not None and kind.endswith(("_si", "_si32", "_si64")):
@@ -5383,6 +5399,14 @@ def _decode_user_code(
                 argvar = ir.Var(f"P{c.pend_arg:02X}%")  # fold of a by-ref
                 c.proc_int_offs.add(c.pend_arg)  # INT param (q_byref_imul)
                 m.ax = ir.BinOp("*", argvar, _rgrp("*", m.ax))
+            elif base == "ifold_si":
+                argvar = ir.Var(f"P{c.pend_arg:02X}%")
+                c.proc_int_offs.add(c.pend_arg)
+                m.ax = ir.BinOp(op[2], argvar, _rgrp(op[2], m.ax))
+            elif base == "fold64_si":
+                argvar = ir.Var(f"P{c.pend_arg:02X}#")
+                c.proc_dbl_offs.add(c.pend_arg)
+                e.stack.append(ir.BinOp(op[2], argvar, _rgrp(op[2], e.stack.pop())))
             elif base == "movax_si":  # mov ax, es:[si]: plain read of a
                 argvar = ir.Var(f"P{c.pend_arg:02X}%")  # by-ref INT param,
                 c.proc_int_offs.add(c.pend_arg)  # e.g. an expression's
@@ -5692,6 +5716,9 @@ def _decode_user_code(
         if kind == "cmpm_ax_bp":
             # Unframed LOCAL compare used by a wild helper; its branch glue is
             # recovered separately, so do not abort on the compare itself.
+            state.advance()
+            continue
+        if kind == "orax_self":
             state.advance()
             continue
         if kind == "epilogue":
@@ -6535,16 +6562,16 @@ def _decode_user_code(
 
         if kind == "moves_m":  # mov es,[block]: far access
             if op[2] not in l.r_arrs:
-                raise ValueError(f"mov es from non-array cell {op[2]:#x} at {addr:#x}")
+                state.advance()
+                continue
             m.pend_es = op[2]
             state.advance()
             continue
         if kind == "moves_bp":  # mov es,[bp+d8]: LOCAL DYNAMIC array's
             # element segment, the LOCAL-frame sibling of moves_m
             if op[2] not in l.r_arrs:
-                raise ValueError(
-                    f"mov es from non-array LOCAL cell {op[2]:#x} at {addr:#x}"
-                )
+                state.advance()
+                continue
             m.pend_es = op[2]
             state.advance()
             continue

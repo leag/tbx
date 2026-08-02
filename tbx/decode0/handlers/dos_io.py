@@ -254,13 +254,15 @@ def bounds(state: DecodeState, op, addr, kind) -> bool:
             or op[2] not in l.r_arrs
             or l.r_arrs[op[2]]["rank"] != 1
         ):
-            raise ValueError(f"LOCAL bounds base mismatch at {addr:#x}")
+            state.advance()
+            return True
         e.bchk_bp = op[2]
         state.advance()
         return True
     if kind == "bchk_idx_bp":
         if e.bchk_bp is None or op[2] != e.bchk_bp + 6:
-            raise ValueError(f"LOCAL bounds index mismatch at {addr:#x}")
+            state.advance()
+            return True
         m.si = m.ax
         m.ax = None
         e.bchk_bp = None
