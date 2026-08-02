@@ -389,6 +389,7 @@
    "negative_evidence": [
     "Although the full wild corpus has since grown from 86 to 105 recognizable executables, the four pinned inputs are byte-identical to their manifest entries: each current SHA-256 matches tests/fixtures/wild_roundtrip.json.",
     "The same 88301-byte inv87 output is produced by the historical 67e7485, 80b6e66, and 5caa71cf trees as well as the current tree, while the manifest pin was introduced later; this is an unreproducible baseline measurement, not a regression introduced by the current working change.",
+    "An unreachable WIP snapshot does emit 88341 bytes, but it also changes unrelated control-flow/source spellings; applying only its TAB boundary fragment to the current nested-USING logic leaves inv87 at 88301 and worsens banker.exe by 65 bytes, so it is not a safe fix.",
     "Unlike banker.exe, whose 97906-byte pin is restored by the pool-range fix, the inv87/state widths remain unchanged across those historical decoder trees. The external oracle accepts inv87's current source and measures a -16-byte EXE delta, but cannot recover the missing 40 source characters from the absent historical source."
    ],
    "instead": "Do not re-record the width baseline to hide the mismatch. Recover the exact artifact fingerprint used when the pins were measured, or obtain an oracle/source diff that explains the 40/19-byte differences before changing decoder logic. Keep this evidence visible while the refreshed corpus is reconciled.",
