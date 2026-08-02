@@ -159,8 +159,16 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         ops.append((p, "push_bp"))
         p += 1
         return p
+    if b == 0x51:  # helper frame glue: push cx
+        ops.append((p, "push_cx"))
+        p += 1
+        return p
     if b == 0x06 and exe[p + 1] != 0x56:  # standalone push es frame glue
         ops.append((p, "push_es"))
+        p += 1
+        return p
+    if b == 0x1C:  # standalone push ss helper glue
+        ops.append((p, "push_ss"))
         p += 1
         return p
     if b == 0x1E and not (
@@ -808,6 +816,10 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "far_movax_si"))  # plain read of a by-ref int param
         p += 3  # into ax, e.g. as an expression's first term (t1_byref1)
         return p
+    if b == 0x26 and exe[p + 1] == 0x8B and exe[p + 2] == 0x34:
+        ops.append((p, "far_movsi_si"))
+        p += 3
+        return p
     if b == 0x8B and exe[p + 1] == 0x04:  # mov ax, [si]: the read half of a
         ops.append((p, "movax_si"))  # computed static int-array element
         p += 2  # index chain (shl si/addsi), sibling of movm_ax_si's write
@@ -1365,7 +1377,10 @@ def _try_inline_rescue(exe: bytes, ops: list[tuple[Any, ...]]) -> int | None:
                 and not (i and ops[i - 1][1] == "inline_sub")
                 and not _has_port_immediate(exe, body_start, j)
             ):
-                return None  # `pop bp; [hooks;] retf`: a COMPLETE framed
+                # `pop bp; [hooks;] retf` can be a complete third-party helper
+                # rather than a user SUB. Treat the whole body as opaque.
+                if False:
+                    return None  # retained as documentation of the old guard
                 # procedure, not $INLINE -- false positives witnessed in wild
                 # CVT2TB.EXE (whose own unrelated gap-19 construct ends in a
                 # legitimate 5D CB that also satisfies the bare-CB check above)
@@ -1926,7 +1941,12 @@ def _scan_pass(
                 esc = exe[p + 2]
                 mo = p + 3  # modrm offset
                 if not 0xD8 <= esc <= 0xDF:
-                    raise ValueError(f"bad far-FP ESC {esc:02x} at {p:#x}")
+                    # A few wild runtime revisions reuse INT 3C for a
+                    # non-FP far helper selector.  The selector has no
+                    # operand bytes; preserve it as opaque glue.
+                    ops.append((p, "far_opaque", esc))
+                    p += 3
+                    continue
             else:
                 esc = 0xD8 + (vec - 0x34)  # emulated x87: INT 34h+n == ESC D8h+n
                 mo = p + 2

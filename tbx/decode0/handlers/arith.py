@@ -1868,10 +1868,14 @@ def stack_ops(state: DecodeState, op, addr, kind) -> bool:
         "les_si_ss_bx",
         "str_temp_free",
         "push_es",
+        "push_cx",
         "push_ds",
+        "push_ss",
         "mov_bp_sp",
         "str_free_temp",
         "bchk_base",  # Bounds: array-descriptor setup (F3.4)
+        "far_movsi_si",  # by-ref index glue used by wild pw.exe
+        "far_opaque",  # non-FP INT 3C helper selector
     ):
         if kind == "sub_sp" and c.cur is None:
             # `sub sp,N` reserving the outgoing-argument area OPENS a CALL
