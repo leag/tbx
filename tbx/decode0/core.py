@@ -3292,6 +3292,52 @@ def _fp_binary_ops(state: DecodeState, op, kind) -> bool:
     return True
 
 
+def _fp_store_ops(state: DecodeState, op, addr, kind) -> bool:
+    m, e, l, c = (
+        state.machine,
+        state.expr,
+        state.layout_state,
+        state.control,
+    )
+    if kind == "fstp64":  # m64 store: double var assign
+        v = e.stack.pop()
+        if v is _FREAD:
+            state._fread_target(state.loc(op[2]))
+        elif v is _READDATA:
+            state._readdata_target(state.loc(op[2]))
+        elif op[2] < VAR_BASE and op[2] not in l.lay["scalars"]:
+            m.fp64_bridge[op[2]] = v
+        else:
+            state.put(ir.Assign(state.loc(op[2]), v), c.cur)
+            c.cur = None
+    elif kind == "fstp" and op[2] in (0x88, 0x94, 0xA0, 0xAC):
+        e.color_cells[op[2]] = e.stack.pop()
+    elif kind == "fstp":
+        if e.stack:
+            v = e.stack.pop()
+        elif isinstance(m.ax, ir.Call):
+            v = m.ax
+            m.ax = None
+        else:
+            raise ValueError(f"fstp with empty FP stack at {addr:#x}")
+        if (
+            isinstance(v, ir.DblLit)
+            and l.lay["scalars"].get(op[2]) == 4
+            and op[2] not in l.lay["long_slots"]
+        ):
+            v = ir.SingleLit(v.value)
+        if v is _FREAD:
+            state._fread_target(state.loc(op[2]))
+        elif v is _READDATA:
+            state._readdata_target(state.loc(op[2]))
+        else:
+            state.put(ir.Assign(state.loc(op[2]), v), c.cur)
+        c.cur = None
+    else:
+        return False
+    return True
+
+
 def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     """FP-stack + control-flow instruction dispatch (fld/fst/fadd/.../fcomp/jcc/
     jmp/call/run/jmps + unhandled-op guard). Falls through to the default k-advance;
@@ -3308,32 +3354,8 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         pass
     elif _fp_binary_ops(state, op, kind):
         pass
-    elif kind == "fstp64":  # m64 store: double var assign
-        v = e.stack.pop()
-        if v is _FREAD:
-            state._fread_target(state.loc(op[2]))
-        elif v is _READDATA:
-            state._readdata_target(state.loc(op[2]))
-        elif op[2] < VAR_BASE and op[2] not in l.lay["scalars"]:
-            # Transient promote-once/compare-many scratch cell (see
-            # m.fp64_bridge's own comment) -- invisible in the source,
-            # not a real variable.
-            #
-            # `c.cur` is deliberately NOT cleared here: no statement was
-            # committed, so the address it holds still belongs to the
-            # statement the bridged value is about to be used by. The
-            # compiler can emit the promote ahead of that statement's own
-            # trace hook, and under event trapping the hook `c.cur` is
-            # holding may be the one a jump targets -- clearing it dropped
-            # the address entirely and the statement re-anchored on the
-            # NEXT hook, leaving the target owned by nothing (wild
-            # resume.exe 0xa1cb and rsltest.exe 0xac2e, both the tail jump
-            # of a block IF arm landing on the run of code-less-line hooks
-            # that precedes the promote).
-            m.fp64_bridge[op[2]] = v
-        else:
-            state.put(ir.Assign(state.loc(op[2]), v), c.cur)
-            c.cur = None
+    elif _fp_store_ops(state, op, addr, kind):
+        pass
     elif kind == "fold64":  # m64 arithmetic, mem LEFT
         e.stack.append(_orient(op[2], state.fpval64(op[3]), e.stack.pop()))
     elif kind == "fold_n64":  # m64 non-R: mem RIGHT
@@ -3341,37 +3363,6 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         if isinstance(top, ir.BinOp) and _PREC[top.op] < _PREC[op[2]]:
             top = ir.Group(top)
         e.stack.append(ir.BinOp(op[2], top, state.fpval64(op[3])))
-    elif kind == "fstp" and op[2] in (0x88, 0x94, 0xA0, 0xAC):
-        e.color_cells[op[2]] = e.stack.pop()  # WINDOW world-coord cell (FP leg)
-    elif kind == "fstp":
-        if e.stack:
-            v = e.stack.pop()
-        elif isinstance(m.ax, ir.Call):
-            # An ax-arg/ax-returning intrinsic (LOC(n): `movax n; fn_ax_ax`)
-            # feeding STRAIGHT into an FP-typed target with no explicit
-            # fistp/movmem_ax/fild bridge at all -- the compiler promotes
-            # ax to FP implicitly here rather than through the usual
-            # int->FP round trip (wild be.exe/styllist.exe, probe q_loc1).
-            v = m.ax
-            m.ax = None
-        else:
-            raise ValueError(f"fstp with empty FP stack at {addr:#x}")
-        # Implicit-single narrowing: a pooled f64 literal stored to a width-4
-        # non-long slot was an unsuffixed source literal (`A = 1.5`) -- render
-        # it plain (a `#` or `!` suffix would not be byte-faithful).
-        if (
-            isinstance(v, ir.DblLit)
-            and l.lay["scalars"].get(op[2]) == 4
-            and op[2] not in l.lay["long_slots"]
-        ):
-            v = ir.SingleLit(v.value)
-        if v is _FREAD:  # INPUT# near numeric target
-            state._fread_target(state.loc(op[2]))
-        elif v is _READDATA:  # READ numeric target
-            state._readdata_target(state.loc(op[2]))
-        else:
-            state.put(ir.Assign(state.loc(op[2]), v), c.cur)
-        c.cur = None
     elif kind == "fcomp":
         e.pend_cmp = (state.fpval(op[2]), e.stack.pop())
     elif kind == "icomp":  # m16 int var/pool-literal compare (mixed-type
