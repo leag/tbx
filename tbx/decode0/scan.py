@@ -1782,6 +1782,15 @@ def _scan_far_jump(exe, p, start, ops) -> int | None:
     return p + 5
 
 
+def _scan_vector(exe, p) -> int:
+    b = exe[p]
+    if b == 0x9B and 0xD8 <= exe[p + 1] <= 0xDF:
+        return 0x34 + (exe[p + 1] - 0xD8)
+    if b == 0xCD:
+        return exe[p + 1]
+    raise ValueError(f"unhandled byte {b:02x} at {p:#x}")
+
+
 def _scan(
     exe: bytes, start: int, dia: Dialect = TB11, commits: set[int] | None = None
 ) -> list[tuple[Any, ...]]:
@@ -1849,18 +1858,7 @@ def _scan_pass(
             p = jump
             continue
 
-        if b == 0x9B and 0xD8 <= exe[p + 1] <= 0xDF:
-            # 8087-required codegen (toggle '8', mask 0x80): FWAIT + the real ESC
-            # opcode in place of the emulation INT 34h+n, with identical modrm/
-            # displacement bytes and identical length -- a
-            # pure vocabulary alias onto the emulated-FP decode below. The far/
-            # ES-override form (emulation INT 3C) is unwitnessed under 8087 and
-            # still fails loudly.
-            vec = 0x34 + (exe[p + 1] - 0xD8)
-        elif b != 0xCD:
-            raise ValueError(f"unhandled byte {b:02x} at {p:#x}")
-        else:
-            vec = exe[p + 1]
+        vec = _scan_vector(exe, p)
         if vec == 0xEC:  # runtime statement dispatch
             raw_sub = exe[p + 2]
             # A second TB 1.0 dispatch table (catalog.exe and the cal/night
