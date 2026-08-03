@@ -2966,6 +2966,93 @@ def _fp_load_ops(state: DecodeState, op, addr, kind) -> bool:
     return True
 
 
+def _fp_string_ops(state: DecodeState, op, kind) -> bool:
+    m, e, l = state.machine, state.expr, state.layout_state
+    if kind == "strfn":  # string-result intrinsic
+        name = op[2]
+        if name in ("CHR$", "SPACE$", "MKI$", "INPUT$", "IOCTL$"):  # integer arg in ax
+            args = (m.ax,)
+            m.ax = None
+        elif name == "INPUT$F":  # INPUT$(n, f): n in bx (shuttled), f in ax
+            name = "INPUT$"
+            f = m.ax
+            m.ax = None
+            n = m.bx
+            m.bx = None
+            args = (n, f)
+        elif name == "STRING$S":  # STRING$(n, s$): n in ax, s$ on sstack
+            name = "STRING$"
+            n = m.ax
+            m.ax = None
+            args = (n, e.sstack.pop())
+        elif name == "MID$2":  # MID$(s$, start): s$ on sstack, start in ax
+            name = "MID$"
+            n = m.ax
+            m.ax = None
+            args = (e.sstack.pop(), n)
+        elif name in ("LEFT$", "RIGHT$"):  # string on sstack, count in ax
+            n = m.ax
+            m.ax = None
+            args = (e.sstack.pop(), n)
+        elif name == "MID$":  # s$ on sstack, start in bx, len in ax
+            ln = m.ax
+            m.ax = None
+            st = m.bx
+            m.bx = None
+            args = (e.sstack.pop(), st, ln)
+        elif name == "STRING$":  # n in bx (shuttled), ch in ax
+            ch = m.ax
+            m.ax = None
+            n = m.bx
+            m.bx = None
+            args = (n, ch)
+        elif name in (
+            "INKEY$",
+            "DATE$",
+            "TIME$",
+            "COMMAND$",
+            "ERDEV$",
+        ):  # zero-arg: bare keyword
+            e.sstack.append(ir.Nullary(name))
+            return True
+        elif name in ("UCASE$", "LCASE$", "ENVIRON$"):  # string arg via sstack
+            args = (e.sstack.pop(),)
+        else:  # STR$/HEX$/OCT$/BIN$/MKL$/MKS$/MKD$:
+            args = (e.stack.pop(),)  # numeric arg via the FP stack
+        e.sstack.append(ir.Call(name, args))
+    elif kind == "str2num":  # string-arg numeric intrinsic
+        if op[2] == "INSTR":
+            sub = e.sstack.pop()  # needle pushed last
+            hay = e.sstack.pop()
+            call = ir.Call("INSTR", (hay, sub))
+        else:
+            call = ir.Call(op[2], (e.sstack.pop(),))
+        if op[2] in ("VAL", "CVS", "CVD", "CVL"):
+            e.stack.append(call)  # result on the FP stack
+        else:
+            m.ax = call  # ASC/LEN/INSTR/CVI: result in ax
+    elif kind == "instr3":  # INSTR start in ax, strings pushed haystack first
+        needle = e.sstack.pop()
+        haystack = e.sstack.pop()
+        m.ax = ir.Call("INSTR", (m.ax, haystack, needle))
+    elif kind == "fre_str":  # FRE(s$): the operand compiles to
+        e.stack.append(
+            ir.Call(
+                "FRE",  # nothing -- variables render as
+                (
+                    (
+                        l.discard_strs.pop(0)
+                        if l.discard_strs  # FRE(""), pooled
+                        else ir.StrLit("")
+                    ),
+                ),
+            )
+        )  # literals are re-attached here
+    else:
+        return False
+    return True
+
+
 def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     """FP-stack + control-flow instruction dispatch (fld/fst/fadd/.../fcomp/jcc/
     jmp/call/run/jmps + unhandled-op guard). Falls through to the default k-advance;
@@ -2973,6 +3060,8 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     img, m, e, l, c, out = (state.image, state.machine, state.expr,
                             state.layout_state, state.control, state.output)
     if _fp_load_ops(state, op, addr, kind):
+        pass
+    elif _fp_string_ops(state, op, kind):
         pass
     elif kind == "fstp64":  # m64 store: double var assign
         v = e.stack.pop()
@@ -3032,74 +3121,6 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         e.stack.append(_orient(op[2], mem, e.stack.pop()))
     elif kind == "frndint":  # FRNDINT = CLNG intrinsic
         e.stack.append(ir.Call("CLNG", (e.stack.pop(),)))
-    elif kind == "strfn":  # string-result intrinsic
-        name = op[2]
-        if name in ("CHR$", "SPACE$", "MKI$", "INPUT$", "IOCTL$"):  # integer arg in ax
-            args = (m.ax,)
-            m.ax = None
-        elif name == "INPUT$F":  # INPUT$(n, f): n in bx (shuttled), f in ax
-            name = "INPUT$"
-            f = m.ax
-            m.ax = None
-            n = m.bx
-            m.bx = None
-            args = (n, f)
-        elif name == "STRING$S":  # STRING$(n, s$): n in ax, s$ on sstack
-            name = "STRING$"
-            n = m.ax
-            m.ax = None
-            args = (n, e.sstack.pop())
-        elif name == "MID$2":  # MID$(s$, start): s$ on sstack, start in ax
-            name = "MID$"
-            n = m.ax
-            m.ax = None
-            args = (e.sstack.pop(), n)
-        elif name in ("LEFT$", "RIGHT$"):  # string on sstack, count in ax
-            n = m.ax
-            m.ax = None
-            args = (e.sstack.pop(), n)
-        elif name == "MID$":  # s$ on sstack, start in bx, len in ax
-            ln = m.ax
-            m.ax = None
-            st = m.bx
-            m.bx = None
-            args = (e.sstack.pop(), st, ln)
-        elif name == "STRING$":  # n in bx (shuttled), ch in ax
-            ch = m.ax
-            m.ax = None
-            n = m.bx
-            m.bx = None
-            args = (n, ch)
-        elif name in (
-            "INKEY$",
-            "DATE$",
-            "TIME$",
-            "COMMAND$",
-            "ERDEV$",
-        ):  # zero-arg: bare keyword
-            e.sstack.append(ir.Nullary(name))
-            state.advance()
-            return
-        elif name in ("UCASE$", "LCASE$", "ENVIRON$"):  # string arg via sstack
-            args = (e.sstack.pop(),)
-        else:  # STR$/HEX$/OCT$/BIN$/MKL$/MKS$/MKD$:
-            args = (e.stack.pop(),)  # numeric arg via the FP stack
-        e.sstack.append(ir.Call(name, args))
-    elif kind == "str2num":  # string-arg numeric intrinsic
-        if op[2] == "INSTR":
-            sub = e.sstack.pop()  # needle pushed last
-            hay = e.sstack.pop()
-            call = ir.Call("INSTR", (hay, sub))
-        else:
-            call = ir.Call(op[2], (e.sstack.pop(),))
-        if op[2] in ("VAL", "CVS", "CVD", "CVL"):
-            e.stack.append(call)  # result on the FP stack
-        else:
-            m.ax = call  # ASC/LEN/INSTR/CVI: result in ax
-    elif kind == "instr3":  # INSTR start in ax, strings pushed haystack first
-        needle = e.sstack.pop()
-        haystack = e.sstack.pop()
-        m.ax = ir.Call("INSTR", (m.ax, haystack, needle))
     elif kind == "fchs":
         e.stack.append(ir.Neg(e.stack.pop()))
     elif kind == "fabs":
@@ -3123,19 +3144,6 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     elif kind == "fn_axfp":  # ax-arg, FP-stack-returning (FRE(n))
         e.stack.append(ir.Call(op[2], (m.ax,)))
         m.ax = None
-    elif kind == "fre_str":  # FRE(s$): the operand compiles to
-        e.stack.append(
-            ir.Call(
-                "FRE",  # nothing -- variables render as
-                (
-                    (
-                        l.discard_strs.pop(0)
-                        if l.discard_strs  # FRE(""), pooled
-                        else ir.StrLit("")
-                    ),
-                ),
-            )
-        )  # literals are re-attached here
     elif kind == "pmap":  # PMAP(x, n): x FP stack, n ax
         e.stack.append(ir.Call("PMAP", (e.stack.pop(), m.ax)))
         m.ax = None
