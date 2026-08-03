@@ -1503,6 +1503,28 @@ def _scan_runtime_io(exe, p, sub, ops) -> int | None:
     return None
 
 
+def _scan_runtime_files(p, sub, ops) -> int | None:
+    names = {
+        0x60: "kill",
+        0xB8: "reset",
+        0x44: "files",
+        0x42: "files_bare",
+        0x6E: "name",
+        0x0E: "chain",
+        0x10: "chdir",
+        0x34: "environ",
+        0x6A: "mkdir",
+        0xC2: "rmdir",
+        0xC4: "run_file",
+        0xCE: "shell",
+    }
+    name = names.get(sub)
+    if name is None:
+        return None
+    ops.append((p, name))
+    return p + 3
+
+
 def _scan(
     exe: bytes, start: int, dia: Dialect = TB11, commits: set[int] | None = None
 ) -> list[tuple[Any, ...]]:
@@ -1622,54 +1644,9 @@ def _scan_pass(
             if runtime is not None:
                 p = runtime
                 continue
-            if sub == 0x60:  # KILL file$
-                ops.append((p, "kill"))
-                p += 3
-                continue
-            if sub == 0xB8:  # RESET (close all files)
-                ops.append((p, "reset"))
-                p += 3
-                continue
-            if sub == 0x44:  # FILES f$ (pops spec string)
-                ops.append((p, "files"))
-                p += 3
-                continue
-            if sub == 0x42:  # bare FILES (no string operand)
-                ops.append((p, "files_bare"))
-                p += 3
-                continue
-            if sub == 0x6E:  # NAME a$ AS b$ (pops two strings)
-                ops.append((p, "name"))
-                p += 3
-                continue
-            if sub == 0x0E:  # CHAIN file$ (pops pushed string)
-                ops.append((p, "chain"))
-                p += 3
-                continue
-            if sub == 0x10:  # CHDIR p$ (pops pushed path)
-                ops.append((p, "chdir"))
-                p += 3
-                continue
-            if sub == 0x34:  # ENVIRON s$ (pops pushed var=value)
-                ops.append((p, "environ"))
-                p += 3
-                continue
-            if sub == 0x6A:  # MKDIR p$ (pops pushed path)
-                ops.append((p, "mkdir"))
-                p += 3
-                continue
-            if sub == 0xC2:  # RMDIR p$ (pops pushed path)
-                ops.append((p, "rmdir"))
-                p += 3
-                continue
-            if sub == 0xC4:  # RUN file$ (pops pushed name; distinct from bare
-                # RUN's raw jmp -- loads and runs a different program)
-                ops.append((p, "run_file"))
-                p += 3
-                continue
-            if sub == 0xCE:  # SHELL cmd$ (pops pushed cmd; empty = bare)
-                ops.append((p, "shell"))
-                p += 3
+            runtime = _scan_runtime_files(p, sub, ops)
+            if runtime is not None:
+                p = runtime
                 continue
             if sub in (0x74, 0x72):  # ON GOTO (74) / ON GOSUB (72)
                 count = exe[p + 3] | (exe[p + 4] << 8)
