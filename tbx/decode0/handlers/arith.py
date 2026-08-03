@@ -363,6 +363,14 @@ def _int_unary_ops(state: DecodeState, kind: str) -> bool:
     return True
 
 
+def _skip_shlsi_overflow(state: DecodeState, index: int) -> None:
+    img = state.image
+    while index < len(img.ops) and img.ops[index][1] == "into":
+        del img.ops[index]
+        if state.cursor is not None:
+            state.cursor.ops = tuple(img.ops)
+
+
 def int_alu(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addax_bp, addsiax, subax_m, imul_m, imul_bp, movax_bp, idivbx, cmpax_m, inc_m, dec_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
     img, m, expr_, l, c = (state.image, state.machine, state.expr,
@@ -592,18 +600,6 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         # valid, since it assumes strict shlsi/terminal adjacency otherwise
         # (wild mcmurphy.exe/rstprint.exe, probe q_ovfshl compiled with
         # --toggles O, byte-exact both dialects).
-        def _skip_into(i):
-            while i < len(img.ops) and img.ops[i][1] == "into":
-                del img.ops[i]
-                # `OpCursor` snapshots the operation tuple at begin().  These
-                # semantic-free overflow checks are removed only ahead of the
-                # current operation, so refresh that future window after each
-                # deletion; otherwise c.k and cursor.index still agree while
-                # cursor.peek() names an operation four slots earlier (wild
-                # CVT2TB's DELAY immediately after a bounds-checked array loop).
-                if state.cursor is not None:
-                    state.cursor.ops = tuple(img.ops)
-
         if (
             m.si is None
             and c.k + 2 < len(img.ops)
@@ -618,26 +614,26 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             state.advance()
             return True
 
-        _skip_into(c.k + 1)
+        _skip_shlsi_overflow(state, c.k + 1)
         if c.k + 1 >= len(img.ops):
             raise ValueError(f"shl si outside an element access at {addr:#x}")
         if img.ops[c.k + 1][1] == "shlsi":
-            _skip_into(c.k + 2)
+            _skip_shlsi_overflow(state, c.k + 2)
             if c.k + 2 < len(img.ops) and img.ops[c.k + 2][1] == "shlsi":
-                _skip_into(c.k + 3)
+                _skip_shlsi_overflow(state, c.k + 3)
                 ao = 3
             else:
                 ao = 2
         else:
             ao = 1
-        _skip_into(c.k + ao)
+        _skip_shlsi_overflow(state, c.k + ao)
         if c.k + ao + 1 >= len(img.ops) or img.ops[c.k + ao][1] not in (
             "moves_m",
             "moves_bp",  # LOCAL DYNAMIC array's ES load (probe q_localarr)
             "addsi",
         ):
             raise ValueError(f"shl si outside an element access at {addr:#x}")
-        _skip_into(c.k + ao + 1)
+        _skip_shlsi_overflow(state, c.k + ao + 1)
         far = img.ops[c.k + ao][1] in ("moves_m", "moves_bp")
         if far:
             blk = img.ops[c.k + ao][2]
