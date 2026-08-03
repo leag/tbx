@@ -1446,6 +1446,63 @@ def _scan_runtime_control(exe, p, sub, ops) -> int | None:
     return None
 
 
+def _scan_runtime_io(exe, p, sub, ops) -> int | None:
+    if sub == 0x4E:
+        d16, f16 = struct.unpack_from("<HH", exe, p + 3)
+        ops.append((p, "input", d16, f16))
+        return p + 7
+    if sub == 0x9A:
+        ops.append((p, "read_num"))
+        return p + 3
+    if sub == 0x9C:
+        ops.append((p, "read_str"))
+        return p + 3
+    if sub == 0xB2:
+        ops.append((p, "data_read_num"))
+        return p + 3
+    if sub == 0xB4:
+        ops.append((p, "data_read_str"))
+        return p + 3
+    if sub == 0x64:
+        d16 = struct.unpack_from("<H", exe, p + 3)[0]
+        flags = exe[p + 5]
+        if flags not in (0x40, 0xC0):
+            raise ValueError(f"LINE INPUT trailing byte {flags:02x} at {p:#x}")
+        ops.append((p, "line_input", d16, flags == 0xC0))
+        return p + 6
+    if sub == 0x66:
+        ops.append((p, "line_input_file"))
+        return p + 3
+    if sub == 0x82:
+        ops.append((p, "open"))
+        return p + 3
+    if sub == 0x9E:
+        ops.append((p, "read_file_num"))
+        return p + 3
+    if sub == 0xA0:
+        ops.append((p, "read_file_str"))
+        return p + 3
+    if sub == 0x18:
+        ops.append((p, "close"))
+        return p + 3
+    if sub == 0x16:
+        ops.append((p, "close_all"))
+        return p + 3
+    if sub == 0x2C:
+        ops.append((p, "dim_begin"))
+        return p + 3
+    if sub == 0x2E:
+        ops.append((p, "dim_end"))
+        return p + 3
+    if sub in (0x36, 0x38):
+        ops.append((p, "erase" if sub == 0x36 else "erase_static"))
+        return p + 3
+    if sub == 0x3A:
+        ops.append((p, "local_arr_free"))
+        return p + 3
+    return None
+
+
 def _scan(
     exe: bytes, start: int, dia: Dialect = TB11, commits: set[int] | None = None
 ) -> list[tuple[Any, ...]]:
@@ -1561,88 +1618,9 @@ def _scan_pass(
                     return ops
                 p = runtime
                 continue
-            if sub == 0x4E:  # INPUT <prompt_desc> <flags>
-                d16, f16 = struct.unpack_from("<HH", exe, p + 3)
-                ops.append((p, "input", d16, f16))
-                p += 7
-                continue
-            if sub == 0x9A:  # INPUT read: parse number -> FP push
-                ops.append((p, "read_num"))
-                p += 3
-                continue
-            if sub == 0x9C:  # INPUT read: line -> string stack
-                ops.append((p, "read_str"))
-                p += 3
-                continue
-            if sub == 0xB2:  # READ <numvar>: next DATA item -> FP push
-                ops.append((p, "data_read_num"))
-                p += 3
-                continue
-            if sub == 0xB4:  # READ <strvar>: next DATA item -> string stack
-                ops.append((p, "data_read_str"))
-                p += 3
-                continue
-            if sub == 0x64:  # LINE INPUT <prompt_desc> flags
-                d16 = struct.unpack_from("<H", exe, p + 3)[0]
-                flags = exe[p + 5]
-                if flags not in (0x40, 0xC0):
-                    raise ValueError(
-                        f"LINE INPUT trailing byte {flags:02x} at {p:#x}"
-                    )
-                ops.append((p, "line_input", d16, flags == 0xC0))
-                p += 6
-                continue
-            if sub == 0x66:  # LINE INPUT #n, var$: no prompt, [0060]=n
-                ops.append((p, "line_input_file"))
-                p += 3
-                continue
-            if sub == 0x82:  # OPEN
-                ops.append((p, "open"))
-                p += 3
-                continue
-            if sub == 0x9E:  # INPUT# numeric read
-                ops.append((p, "read_file_num"))
-                p += 3
-                continue
-            if sub == 0xA0:  # INPUT# string read
-                ops.append((p, "read_file_str"))
-                p += 3
-                continue
-            if sub == 0x18:  # CLOSE #ax
-                ops.append((p, "close"))
-                p += 3
-                continue
-            if sub == 0x16:  # bare CLOSE: close all channels (witnessed t1_close)
-                ops.append((p, "close_all"))
-                p += 3
-                continue
-            if sub == 0x2C:  # runtime DIM: begin bracket
-                ops.append((p, "dim_begin"))
-                p += 3
-                continue
-            if sub == 0x2E:  # runtime DIM: allocate
-                ops.append((p, "dim_end"))
-                p += 3
-                continue
-            if sub in (0x36, 0x38):  # ERASE (DIM-style prefix). 0x36 frees a
-                # DYNAMIC array's heap block; 0x38 is the STATIC-array routine,
-                # which re-initializes in place -- the compiler picks the vector
-                # from the array's own declaration (a variable bound makes it
-                # dynamic, a literal one static), so both lift to the same
-                # ir.Erase and the emitted DIM regenerates the right one
-                # (probe t1_erasestatic; wild tbd73.exe's `ERASE recarr$` after
-                # `DIM recarr$(5000)`, and gap 33's catalog/football/refund/
-                # varamort group).
-                ops.append((p, "erase" if sub == 0x36 else "erase_static"))
-                p += 3  # kept distinct because only the DYNAMIC form's movsi
-                # target is a runtime slot block -- the static form's is an
-                # ordinary static array slot, and layout keys on that.
-                continue
-            if sub == 0x3A:  # implicit free of a LOCAL DYNAMIC array's heap
-                # block at SUB exit (movsi <handle disp> precedes, no BASIC
-                # source spelling -- probe q_localarr)
-                ops.append((p, "local_arr_free"))
-                p += 3
+            runtime = _scan_runtime_io(exe, p, sub, ops)
+            if runtime is not None:
+                p = runtime
                 continue
             if sub == 0x60:  # KILL file$
                 ops.append((p, "kill"))
