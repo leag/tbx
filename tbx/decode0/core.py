@@ -2183,6 +2183,28 @@ def _finalize_sub_prefixes(state: DecodeState, shared_subs, local_dims) -> None:
             out.stmts[i] = ir.SubDef(stmt.name, stmt.params, tuple(prefix) + stmt.body)
 
 
+def _finalize_static_dims(state, dims, data_orphan_lines):
+    img, out = state.image, state.output
+    ins = 0  # static DIMs follow any proc definitions
+    while ins < len(out.stmts) and isinstance(
+        out.stmts[ins], (ir.SubDef, ir.DefFn)
+    ):
+        ins += 1
+    dim_lines: list[int] | None = None
+    if dims and data_orphan_lines and len(dims) == len(data_orphan_lines):
+        # Static DIMs with one shared orphan offset compiled inline at their
+        # original position; otherwise they use the canonical procedure-top
+        # insertion point.
+        offs = {o for o, _ in data_orphan_lines}
+        if len(offs) == 1:
+            ins = out.addrs.index(img.start + next(iter(offs)))
+            dim_lines = [ln for _, ln in data_orphan_lines]
+            data_orphan_lines = []
+    for offset, declaration in enumerate(dims):
+        state.reconstruct(ins + offset, declaration)
+    return ins, data_orphan_lines, dim_lines
+
+
 def _finalize(state: DecodeState, addr) -> Program:
     """Program epilogue: static-DIM re-emit, control-flow folds, target
     resolution and canonical rename -> the finished Program."""
@@ -2314,31 +2336,9 @@ def _finalize(state: DecodeState, addr) -> Program:
         shared_subs, sub_local_arrays = _scope_procs(state)
         dims, local_dims = _finalize_dimensions(state, sub_local_arrays)
         _finalize_sub_prefixes(state, shared_subs, local_dims)
-        ins = 0  # static DIMs follow any proc definitions
-        while ins < len(out.stmts) and isinstance(
-            out.stmts[ins], (ir.SubDef, ir.DefFn)
-        ):
-            ins += 1
-        dim_lines: list[int] | None = None
-        if dims and data_orphan_lines and len(dims) == len(data_orphan_lines):
-            # Static array DIM declarations are codeless too (recovered from
-            # array bookkeeping records, not a scanned op) and normally
-            # repositioned to this canonical spot -- but when the error-trap
-            # line table shows exactly len(dims) orphan (codeless-statement)
-            # entries in ONE cluster, that's independent evidence these DIMs
-            # actually compiled INLINE at their original position (wild
-            # vhfprop.exe: two static arrays, two orphan "500" entries; probe
-            # q_lt6). Reposition + reline them there instead. A count
-            # coincidence with an UNRELATED codeless construct (e.g. DATA) is
-            # possible in theory but unwitnessed; the single-cluster check
-            # below keeps this narrow.
-            offs = {o for o, _ in data_orphan_lines}
-            if len(offs) == 1:
-                ins = out.addrs.index(img.start + next(iter(offs)))
-                dim_lines = [ln for _, ln in data_orphan_lines]
-                data_orphan_lines = []  # consumed -- DATA recovery below won't fire
-        for offset, declaration in enumerate(dims):
-            state.reconstruct(ins + offset, declaration)
+        ins, data_orphan_lines, dim_lines = _finalize_static_dims(
+            state, dims, data_orphan_lines
+        )
         # DATA is codeless: re-emit as a block at the very top. Recover the pool
         # when the program consumes it (a READ/RESTORE) so a string-literal pool
         # frame is never misread as DATA -- OR when the error-trap line table
