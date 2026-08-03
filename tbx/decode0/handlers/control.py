@@ -247,6 +247,29 @@ def cargs(state: DecodeState, op, addr, kind) -> bool:
     return False
 
 
+def _runtime_using_emit(state: DecodeState, addr: int) -> bool:
+    i, e, c = state.image, state.expr, state.control
+    emit = match_using_emit(i.ops, c.k)
+    if e.pend_using is None or emit is None:
+        raise ValueError(f"stray USING emit at {addr:#x}")
+    lp = emit.leg == "printer"
+    f = e.pend_fnum if emit.leg == "file" else None
+    if emit.leg == "file" and f is None:
+        raise ValueError(f"file USING item without [0060] at {addr:#x}")
+    if e.pend_using.values and (
+        e.pend_using.file != f or e.pend_using.lprint != lp
+    ):
+        raise ValueError(f"USING console/file leg flip at {addr:#x}")
+    e.pend_using.file = f
+    e.pend_using.lprint = lp
+    e.pend_using.values.append(
+        e.stack.pop() if emit.numeric else e.sstack.pop()
+    )
+    c.cur = None
+    state.advance(2)
+    return True
+
+
 def runtime_call(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: rt."""
     i, e, c = state.image, state.expr, state.control
@@ -302,26 +325,7 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             # numeric off the FP stack, CC a string off the sstack (t1_using);
             # item vec BE = console, C0 = file, BF = printer (LPRINT USING,
             # witnessed t1_lpusing / wild vhfprop.exe)
-            emit = match_using_emit(i.ops, c.k)
-            if e.pend_using is None or emit is None:
-                raise ValueError(f"stray USING emit at {addr:#x}")
-            lp = emit.leg == "printer"
-            f = e.pend_fnum if emit.leg == "file" else None
-            if emit.leg == "file" and f is None:
-                raise ValueError(f"file USING item without [0060] at {addr:#x}")
-            if e.pend_using.values and (
-                e.pend_using.file != f
-                or e.pend_using.lprint != lp
-            ):
-                raise ValueError(f"USING console/file leg flip at {addr:#x}")
-            e.pend_using.file = f
-            e.pend_using.lprint = lp
-            e.pend_using.values.append(
-                e.stack.pop() if emit.numeric else e.sstack.pop()
-            )
-            c.cur = None
-            state.advance(2)
-            return True
+            return _runtime_using_emit(state, addr)
         if vec in (0xC1, 0xC2, 0xC3):  # PRINT comma: zone-advance separator
             # (C1 console / C2 printer / C3 file, witnessed t1_pcomma,
             # wild billadd/prtguide/rs, and t1_fileint); commas may
