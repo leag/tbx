@@ -3338,6 +3338,38 @@ def _fp_store_ops(state: DecodeState, op, addr, kind) -> bool:
     return True
 
 
+def _fp_compare_ops(state: DecodeState, op, kind) -> bool:
+    e, l = state.expr, state.layout_state
+    if kind == "fcomp":
+        e.pend_cmp = (state.fpval(op[2]), e.stack.pop())
+    elif kind == "icomp":
+        mem = (
+            state.loc(op[2]) if op[2] in l.lay["scalars"] else state.pool_lit(op[2])
+        )
+        e.pend_cmp = (mem, e.stack.pop())
+    elif kind == "icomp_bp":
+        e.pend_cmp = (state.loc_local(op[2]), e.stack.pop())
+    elif kind == "icomp32":
+        mem = (
+            state.loc(op[2])
+            if op[2] in l.lay["scalars"]
+            else state.pool_lit32(op[2])
+        )
+        e.pend_cmp = (mem, e.stack.pop())
+    elif kind == "fcomp64":
+        e.pend_cmp = (state.fpval64(op[2]), e.stack.pop())
+    elif kind == "fcompp":
+        rhs = e.stack.pop()
+        e.pend_cmp = (e.stack.pop(), rhs)
+    elif kind == "strcmp":
+        rhs = e.sstack.pop()
+        e.pend_cmp = (e.sstack.pop(), rhs)
+        e.pend_cmp_str = True
+    else:
+        return False
+    return True
+
+
 def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     """FP-stack + control-flow instruction dispatch (fld/fst/fadd/.../fcomp/jcc/
     jmp/call/run/jmps + unhandled-op guard). Falls through to the default k-advance;
@@ -3356,6 +3388,8 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         pass
     elif _fp_store_ops(state, op, addr, kind):
         pass
+    elif _fp_compare_ops(state, op, kind):
+        pass
     elif kind == "fold64":  # m64 arithmetic, mem LEFT
         e.stack.append(_orient(op[2], state.fpval64(op[3]), e.stack.pop()))
     elif kind == "fold_n64":  # m64 non-R: mem RIGHT
@@ -3363,36 +3397,6 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         if isinstance(top, ir.BinOp) and _PREC[top.op] < _PREC[op[2]]:
             top = ir.Group(top)
         e.stack.append(ir.BinOp(op[2], top, state.fpval64(op[3])))
-    elif kind == "fcomp":
-        e.pend_cmp = (state.fpval(op[2]), e.stack.pop())
-    elif kind == "icomp":  # m16 int var/pool-literal compare (mixed-type
-        # IF/loop test against an FP-stack value; wild grdscn.exe et al.)
-        mem = (
-            state.loc(op[2]) if op[2] in l.lay["scalars"] else state.pool_lit(op[2])
-        )
-        e.pend_cmp = (mem, e.stack.pop())
-    elif kind == "icomp_bp":  # LOCAL int compare (mixed-type IF/loop test
-        # against an FP-stack value; the bp-relative sibling of icomp, wild
-        # bmaster.exe/ifi.exe)
-        e.pend_cmp = (state.loc_local(op[2]), e.stack.pop())
-    elif kind == "icomp32":  # m32 long-int var/pool-literal compare: the
-        # LONG (`&`) sibling of icomp (`IF X& > 5.5 THEN`; wild stat.exe)
-        mem = (
-            state.loc(op[2])
-            if op[2] in l.lay["scalars"]
-            else state.pool_lit32(op[2])
-        )
-        e.pend_cmp = (mem, e.stack.pop())
-    elif kind == "fcomp64":  # m64 direct compare outside SELECT CASE (which
-        # consumes its own): double var or pooled f64 (witnessed t1_dblarr)
-        e.pend_cmp = (state.fpval64(op[2]), e.stack.pop())
-    elif kind == "fcompp":  # both sides FP-computed: LHS pushed first, so
-        rhs = e.stack.pop()  # flags (ST0 cmp ST1 = rhs cmp lhs) keep the
-        e.pend_cmp = (e.stack.pop(), rhs)  # reversed FP orientation
-    elif kind == "strcmp":  # string relational IF (outside SELECT CASE, which
-        rhs = e.sstack.pop()  # consumes its own strcmp ops): forward flags
-        e.pend_cmp = (e.sstack.pop(), rhs)
-        e.pend_cmp_str = True
     elif kind == "orax" and e.pend_cmp is None and m.ax is not None:
         # `or ax,ax`: a just-computed value's truthiness tested directly,
         # with no preceding compare (a bare LEN(INKEY$) poll loop). A
