@@ -2297,6 +2297,32 @@ def _prepare_decode_image(state, exe):
     layout.arrs = layout.lay["arrs"]
 
 
+def _initialize_lift_state(state):
+    machine, expr, control, output = (
+        state.machine,
+        state.expr,
+        state.control,
+        state.output,
+    )
+    expr.stack = []
+    output.stmts = RecordedStatements()
+    output.stmts.clock = lambda: len(state.events)
+    output.addrs = []
+    output.stmt_addr = AddressOwnership()
+    control.cur = None
+    expr.pend_cmp = None
+    control.fors = []
+    control.whiles = []
+    control.dos = []
+    control.exit_folds = []
+    control.cases = []
+    machine.ax = None
+    machine.bx = None
+    machine.dx = None
+    expr.pend_icmp = None
+    output.cc_hooks = set()
+
+
 def _finalize(state: DecodeState, addr) -> Program:
     """Program epilogue: static-DIM re-emit, control-flow folds, target
     resolution and canonical rename -> the finished Program."""
@@ -4265,27 +4291,7 @@ def _decode_user_code(
     state.validate_ownership()
     _prepare_decode_image(state, exe)
     _initialize_array_slots(state)
-    e.stack = []  # the emulated FP stack, as ir Expr nodes
-    out.stmts = RecordedStatements()
-    # Interleave the two logs: an edit records where in the event
-    # stream it happened, so a branch's list position is recoverable.
-    out.stmts.clock = lambda: len(state.events)
-    out.addrs = []  # addrs[k] = first-op address of stmts[k]
-    out.stmt_addr = AddressOwnership()  # statement -> its op address, retained
-    # fold (which drops body addrs) so the TRON lift can find
-    # a region that ends INSIDE a block body (t1_troffin)
-    c.cur = None  # start address of the statement being built
-    e.pend_cmp = None  # (lhs_expr, rhs_expr) from FLD y; FCOMP [x]
-    c.fors = []  # open FOR frames
-    c.whiles = []  # open WHILE frames
-    c.dos = []  # open head-test DO frames (DO WHILE/UNTIL ... LOOP)
-    c.exit_folds = []  # (exit_stmt, skip_addr, exit_addr): EXIT FOR/LOOP folds
-    c.cases = []  # open SELECT CASE frames (Task 3.4)
-    m.ax = None  # the integer accumulator, as an ir Expr
-    m.bx = None  # LOCATE's row register / int right operand
-    m.dx = None  # IMP's left operand register
-    e.pend_icmp = None  # (lhs, rhs) from cmp ax,[m]: relational value
-    out.cc_hooks = set()  # CC event-poll hook addrs ($EVENT regions)
+    _initialize_lift_state(state)
     m.cint_round = False  # fistp[2C]..fild[2C] round-trip = CINT(x)
     e.color_cells = {}  # pending COLOR stores: cell disp -> Lit
     e.sstack = []  # the string operand stack
