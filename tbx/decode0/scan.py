@@ -593,6 +593,64 @@ def _scan_direct2_integer_memory(exe, p, b, ops) -> int | None:
     return _scan_direct2_for_ops(exe, p, b, ops)
 
 
+def _scan_direct2_register_ops(exe, p, b, ops) -> int | None:
+    if b == 0x99:
+        ops.append((p, "cwd"))
+        return p + 1
+    if b == 0xF7 and exe[p + 1] == 0xFB:
+        ops.append((p, "idivbx"))
+        return p + 2
+    if b == 0xF7 and exe[p + 1] == 0x3E:
+        ops.append((p, "idiv_m", struct.unpack_from("<H", exe, p + 2)[0]))
+        return p + 4
+    if b == 0xF7 and exe[p + 1] == 0xEB:
+        ops.append((p, "imulbx"))
+        return p + 2
+    if b == 0xF7 and exe[p + 1] == 0xD0:
+        ops.append((p, "notax"))
+        return p + 2
+    if b == 0xF7 and exe[p + 1] == 0xD2:
+        ops.append((p, "notdx"))
+        return p + 2
+    if b == 0x8B and exe[p + 1] == 0xC2:
+        ops.append((p, "movaxdx"))
+        return p + 2
+    if b == 0x8B and exe[p + 1] == 0x16:
+        ops.append((p, "movdx_m", struct.unpack_from("<H", exe, p + 2)[0]))
+        return p + 4
+    if b == 0x0B and exe[p + 1] == 0xC3:
+        ops.append((p, "oraxbx"))
+        return p + 2
+    if b == 0x0B and exe[p + 1] == 0xC2:
+        ops.append((p, "oraxdx"))
+        return p + 2
+    if b == 0x33 and exe[p + 1] == 0xC3:
+        ops.append((p, "xoraxbx"))
+        return p + 2
+    if b == 0x03 and exe[p + 1] == 0xC3:
+        ops.append((p, "addaxbx"))
+        return p + 2
+    if b == 0x2B and exe[p + 1] == 0xC3:
+        ops.append((p, "subaxbx"))
+        return p + 2
+    if b == 0x23 and exe[p + 1] == 0x06:
+        ops.append((p, "andax_m", struct.unpack_from("<H", exe, p + 2)[0]))
+        return p + 4
+    if b == 0x0B and exe[p + 1] == 0x06:
+        ops.append((p, "orax_m", struct.unpack_from("<H", exe, p + 2)[0]))
+        return p + 4
+    if b == 0x33 and exe[p + 1] == 0x06:
+        ops.append((p, "xorax_m", struct.unpack_from("<H", exe, p + 2)[0]))
+        return p + 4
+    if b == 0x3B and exe[p + 1] == 0x06:
+        ops.append((p, "cmpax_m", struct.unpack_from("<H", exe, p + 2)[0]))
+        return p + 4
+    if b == 0x0B and exe[p + 1] == 0xC0:
+        ops.append((p, "orax_self"))
+        return p + 2
+    return None
+
+
 def _scan_direct2(exe, p, b, ops) -> int | None:
     """Byte-dispatch family split out of _scan. Returns the new
     cursor when it decodes the op at ``p``, else None."""
@@ -611,6 +669,9 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
     if np is not None:
         return np
     np = _scan_direct2_integer_memory(exe, p, b, ops)
+    if np is not None:
+        return np
+    np = _scan_direct2_register_ops(exe, p, b, ops)
     if np is not None:
         return np
     # There is deliberately NO `mov al,imm8; out imm8,al` op here. It used to
@@ -658,80 +719,6 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "movm_ds", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4  # near->far ES alias (SWAP of two array elements; probe q_arrswap)
         return p
-    if b == 0x99:  # cwd: sign-extend ax ahead of idiv
-        ops.append((p, "cwd"))
-        p += 1
-        return p
-    if b == 0xF7 and exe[p + 1] == 0xFB:  # idiv bx: ax \ bx -> ax (rem in dx)
-        ops.append((p, "idivbx"))
-        p += 2
-        return p
-    if b == 0xF7 and exe[p + 1] == 0x3E:  # idiv word [disp16]
-        ops.append((p, "idiv_m", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 4
-        return p
-    if b == 0xF7 and exe[p + 1] == 0xEB:  # imul bx (reg-reg combine)
-        ops.append((p, "imulbx"))
-        p += 2
-        return p
-    if b == 0xF7 and exe[p + 1] == 0xD0:  # not ax (unary NOT)
-        ops.append((p, "notax"))
-        p += 2
-        return p
-    if b == 0xF7 and exe[p + 1] == 0xD2:  # not dx (IMP left operand)
-        ops.append((p, "notdx"))
-        p += 2
-        return p
-    if b == 0x8B and exe[p + 1] == 0xC2:  # mov ax,dx: \ quotient -> MOD remainder
-        ops.append((p, "movaxdx"))
-        p += 2
-        return p
-    if b == 0x8B and exe[p + 1] == 0x16:  # mov dx, [disp16] (IMP left operand)
-        ops.append((p, "movdx_m", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 4
-        return p
-    if b == 0x0B and exe[p + 1] == 0xC3:  # or ax, bx (reg-reg combine)
-        ops.append((p, "oraxbx"))
-        p += 2
-        return p
-    if b == 0x0B and exe[p + 1] == 0xC2:  # or ax, dx (IMP combine)
-        ops.append((p, "oraxdx"))
-        p += 2
-        return p
-    if b == 0x33 and exe[p + 1] == 0xC3:  # xor ax, bx (reg-reg combine)
-        ops.append((p, "xoraxbx"))
-        p += 2
-        return p
-    if b == 0x03 and exe[p + 1] == 0xC3:  # add ax, bx (reg-reg combine)
-        ops.append((p, "addaxbx"))
-        p += 2
-        return p
-    if b == 0x2B and exe[p + 1] == 0xC3:  # sub ax, bx (reg-reg combine)
-        ops.append((p, "subaxbx"))
-        p += 2
-        return p
-    if b == 0x23 and exe[p + 1] == 0x06:  # and ax, [disp16] (int left-fold)
-        ops.append((p, "andax_m", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 4
-        return p
-    if b == 0x0B and exe[p + 1] == 0x06:  # or ax, [disp16] (int left-fold)
-        ops.append((p, "orax_m", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 4
-        return p
-    if b == 0x33 and exe[p + 1] == 0x06:  # xor ax, [disp16] (int left-fold)
-        ops.append((p, "xorax_m", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 4
-        return p
-    if b == 0x3B and exe[p + 1] == 0x06:  # cmp ax, [disp16] (relational value)
-        ops.append((p, "cmpax_m", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 4
-        return p
-    if b == 0x0B and exe[p + 1] == 0xC0:  # or ax,ax: sign test of a just-loaded
-        ops.append((p, "orax_self"))  # value with no memory write -- the
-        p += 2  # computed-STEP FOR-NEXT continuation gate (step's sign is
-        return p  # unknown at compile time, so both ascending/descending
-        # comparisons are emitted and this picks one at runtime;
-        # wild menu.exe/stat.exe, q_forvarstep)
     if b == 0x03 and exe[p + 1] == 0x46:  # add ax, [bp+d8]: fold a LOCAL int
         ops.append((p, "addax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
         p += 3  # into ax (witnessed q_loccmp)
