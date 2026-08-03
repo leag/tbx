@@ -2137,6 +2137,35 @@ def _finalize_line_table(state: DecodeState, addr):
     return table_active, data_orphan_lines, orphan_offs
 
 
+def _finalize_dimensions(state: DecodeState, sub_local_arrays):
+    lyt = state.layout_state
+    ob = lyt.option_base if lyt.option_base is not None else 0
+    dims, local_dims, cur_ob = [], {}, 0
+    for array in reversed(lyt.arrs):
+        if ob == 1 and set(array["lo"]) == {0} and array.get("varacc") and not array.get("subful"):
+            want, bounds = 0, tuple(array["hi"])
+        else:
+            want = ob if ob == 1 else cur_ob
+            bounds = tuple(
+                hi if lo == ob else (lo, hi)
+                for lo, hi in zip(array["lo"], array["hi"])
+            )
+        if array["name"] in sub_local_arrays:
+            if want != cur_ob:
+                raise ValueError("OPTION BASE change around a SUB-local array (no witness)")
+            local_dims.setdefault(sub_local_arrays[array["name"]], []).append(
+                ir.Dim(array["name"], bounds)
+            )
+            continue
+        if want != cur_ob:
+            dims.append(ir.OptionBase(want))
+            cur_ob = want
+        dims.append(ir.Dim(array["name"], bounds))
+    if lyt.option_base == 1 and cur_ob != 1:
+        dims.append(ir.OptionBase(1))
+    return dims, local_dims
+
+
 def _finalize(state: DecodeState, addr) -> Program:
     """Program epilogue: static-DIM re-emit, control-flow folds, target
     resolution and canonical rename -> the finished Program."""
@@ -2266,60 +2295,7 @@ def _finalize(state: DecodeState, addr) -> Program:
             do_lines = [do_idx_lines[i] for i in sorted(do_idx_lines)]
 
         shared_subs, sub_local_arrays = _scope_procs(state)
-        ob = lyt.option_base if lyt.option_base is not None else 0
-        dims, local_dims, cur_ob = [], {}, 0  # BASIC default at program top
-        for a in reversed(lyt.arrs):
-            if ob == 1 and set(a["lo"]) == {0} and a.get("varacc") and not a.get("subful"):
-                # lo=0 record with SUB-FREE variable access in an OB1 program:
-                # only the OB0-PLAIN form compiles that shape --
-                # explicit `0:hi` is record-identical but sub-ful (t1_mix3).
-                # OPTION BASE may be re-issued mid-block (witness t1_ob3).
-                want, bounds = 0, tuple(a["hi"])
-            else:
-                want = ob if ob == 1 else cur_ob
-                bounds = tuple(
-                    h if lo == ob else (lo, h) for lo, h in zip(a["lo"], a["hi"])
-                )
-            if a["name"] in sub_local_arrays:
-                # A SUB-local static array: its DIM belongs inside that body, and
-                # allocation order is preserved by emit0 keeping each SUB at its
-                # ORIGINAL position rather than hoisting it, so the recovered DIM
-                # lands on the same side of the main DIMs it started on. Static
-                # array data allocates DESCENDING in DIM order (first DIM = highest
-                # base; `lyt.arrs` is ascending by base, hence the reversed walk),
-                # and BOTH directions are now witnessed byte-exact:
-                #
-                #   t1_subad        SUB emitted FIRST  -> its array has the HIGHEST
-                #                                        base (0x1e0 vs main 0x1b0)
-                #   t1_sublocafter  SUB emitted AFTER  -> its array has the LOWEST
-                #                                        base (0x1f0 vs main 0x2c0,
-                #                                        0x2f0); wild tbd73.exe's
-                #                                        `SUB Showfile` is this
-                #                                        shape, and prtguide.exe too
-                #
-                # A guard used to sit here rejecting the second case (`if dims:
-                # raise`, reached in a descending walk exactly when the SUB-local
-                # array is the lowest-based one). It was a conservative guess -- its
-                # own message said "no witness" -- and it was backwards. Replacing
-                # it with the opposite inequality is equally wrong: that rejects
-                # t1_subad, which has always round-tripped byte-exact. There is no
-                # single direction to assert, because the answer depends on where
-                # the SUB sits, which emit0 already reproduces; so nothing is
-                # asserted here beyond the OPTION BASE invariant below.
-                if want != cur_ob:
-                    raise ValueError(
-                        "OPTION BASE change around a SUB-local array (no witness)"
-                    )
-                local_dims.setdefault(sub_local_arrays[a["name"]], []).append(
-                    ir.Dim(a["name"], bounds)
-                )
-                continue
-            if want != cur_ob:
-                dims.append(ir.OptionBase(want))
-                cur_ob = want
-            dims.append(ir.Dim(a["name"], bounds))
-        if lyt.option_base == 1 and cur_ob != 1:  # runtime DIMs witness OB1
-            dims.append(ir.OptionBase(1))  # (lo-store order)
+        dims, local_dims = _finalize_dimensions(state, sub_local_arrays)
         # Rebuild SUB bodies: SHARED declaration first, then local static DIMs,
         # then the decoded body (canonical order; verified byte-exact against the
         # t1_subsh/t1_subarr/t1_subad witnesses).
