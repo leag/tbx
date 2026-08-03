@@ -3,7 +3,7 @@ Turbo Basic oracle and feed each one straight back through decode0._scan,
 to search for which SOURCE SHAPE reproduces a specific decoder gap.
 
     uv run python tbx/tools/batch_probe.py PROBE_DIR [--want SUBSTRING]
-                                            [--dialect 1.0|1.1]
+                                            [--dialect 1.0|1.1|fr-1.1]
                                             [--jobs N] [--keep DIR]
 
 PROBE_DIR holds one candidate .bas file per variant (case name = filename

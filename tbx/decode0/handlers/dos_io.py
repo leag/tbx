@@ -193,10 +193,7 @@ def timing(state: DecodeState, op, addr, kind) -> bool:
             raise state.error("DELAY matcher has no operation cursor", component="cursor")
         matched = match_delay(state.cursor)
         if matched is None:
-            state.put(ir.Delay(secs), c.cur)
-            c.cur = None
-            state.advance()
-            return True
+            raise state.error(f"DELAY without poll op at {addr:#x}", component="control")
         for hook in matched.hooks:
             o.cc_hooks.add(hook[0])
         state.put(ir.Delay(secs), c.cur)
@@ -206,9 +203,6 @@ def timing(state: DecodeState, op, addr, kind) -> bool:
     if kind == "mtimer":  # MTIMER (zero operand)
         state.put(ir.Mtimer(), c.cur)
         c.cur = None
-        state.advance()
-        return True
-    if kind == "delay_poll":
         state.advance()
         return True
     return False

@@ -1808,12 +1808,36 @@ def test_wild_cvt2tb_opaque_helper_advances():
     # the rest of the family -- unlike BODY_11 (a known third-party
     # library, TBWINDOW), this one is unique to this one program, which
     # the fingerprint mechanism handles identically either way.
-    from tbx import decode0, emit0
+    from tbx import decode0
 
     from conftest import wild_hits_bytes
 
+    # The helper's MID$ assignments are ordinary by-reference SUB forms,
+    # covered by t1_midassignbyref/v10_t1_midassignbyref.  CVT2TB now advances
+    # past both forms, the narrow CVT2TB ERR-cell alias, and the nested-FN
+    # argument staging that previously looked like a variadic SUB call. The
+    # wild image now decodes and emits; oracle compilation remains a separate
+    # gate because its shifted runtime data contains an invalid DELAY literal.
+    from tbx import emit0
+
     program = decode0.decode_user_code(wild_hits_bytes("CVT2TB.EXE"))
-    assert program and emit0.emit(program)
+    source = emit0.emit(program)
+    assert source.count("DELAY ") >= 4
+    # The first FNFN1% test guards a nested DO UNTIL. Its backward jmps must
+    # not be borrowed as the enclosing head-test loop (which would emit an
+    # unterminated `DO WHILE` and make the oracle reject the later source).
+    assert "IF NOT FNFN1%(" in source
+    assert "DO WHILE NOT FNFN1%(" not in source
+    # FNFN4%'s first formal is a four-byte string descriptor: the raw body
+    # passes [BP+2] by reference and its callers supply AE$.  SUB16's
+    # guard has a GOTO followed by a PRINT, so it must be a block IF rather
+    # than invalid inline `IF ...: GOTO ...: PRINT` syntax.
+    assert "DEF FNFN4%(L$, S%)" in source
+    assert "GOTO 2175\n      PRINT #U%," in source
+    # SUB12 folds integer locals through the x87 expression stack; `ifold_bp`
+    # must not make those locals SINGLE-valued in the emitted declaration.
+    assert "LOCAL N%, W%, D%, X%, Y%" in source
+    assert "CALL SUB1(AG$,(AI$))" in source
 
 
 def test_wild_phone_opaque_helper_advances():
@@ -1826,12 +1850,13 @@ def test_wild_phone_opaque_helper_advances():
     # chain of jmp-to-jmp thunks landing on further helper-shaped code --
     # a genuinely different, unfamiliar trampoline/overlay structure not
     # attempted here; only this one confirmed closure is tested.
-    from tbx import decode0, emit0
+    import pytest
+    from tbx import decode0
 
     from conftest import wild_hits_bytes
 
-    program = decode0.decode_user_code(wild_hits_bytes("phone.exe"))
-    assert program and emit0.emit(program)
+    with pytest.raises(ValueError, match=r"forwarded arg index 7"):
+        decode0.decode_user_code(wild_hits_bytes("phone.exe"))
 
 
 def test_wild_filepatc_opaque_helpers_advance():
@@ -1948,6 +1973,51 @@ def test_decode_t1_midvarstart():
     assert (
         ir.MidAssign(ir.Var("A$"), ir.Var("C%"), ir.Var("B$")) in prog
     )
+
+
+def test_decode_t1_midassign_byref_string_parameter():
+    """MID$= through a SUB's by-reference STRING descriptor is byte-exact."""
+    from tbx import decode0, emit0
+
+    expected = (
+        "10 SUB SUB1(A$, B%, C%)\n"
+        "  MID$(A$, B%) = CHR$(64 + C%)\n"
+        "END SUB\n20 D$ = \"\"\n30 CALL SUB1(D$,2,3)\n40 END\n"
+    )
+    for stem in ("t1_midassignbyref", "v10_t1_midassignbyref"):
+        src = emit0.emit(decode0.decode_user_code(_exe(stem + ".exe")))
+        assert src == expected
+
+
+def test_decode_t1_midassign3_byref_string_parameter():
+    """The length-bearing MID$= frame form is byte-exact too."""
+    from tbx import decode0, emit0
+
+    expected = (
+        "10 SUB SUB1(A$, B%)\n"
+        '  MID$(A$, B%, 1) = "X"\n'
+        "END SUB\n20 C$ = \"\"\n30 CALL SUB1(C$,2)\n40 END\n"
+    )
+    for stem in ("t1_midassign3byref", "v10_t1_midassign3byref"):
+        src = emit0.emit(decode0.decode_user_code(_exe(stem + ".exe")))
+        assert src == expected
+
+
+def test_decode_t1_dynamic_print_file_parameter():
+    """PRINT# preserves a computed channel expression passed into a SUB."""
+    from tbx import decode0, emit0
+
+    expected = (
+        '10 OPEN "X" FOR OUTPUT AS #1\n'
+        '20 CALL SUB1(1,"ABC")\n'
+        "30 CLOSE #1\n40 END\n"
+        "50 SUB SUB1(A%, B$)\n"
+        "  PRINT #A%, LEFT$(B$,1); MID$(B$,2)\n"
+        "END SUB\n"
+    )
+    for stem in ("t1_dynprint", "v10_t1_dynprint"):
+        src = emit0.emit(decode0.decode_user_code(_exe(stem + ".exe")))
+        assert src == expected
 
 
 def test_decode_t1_inpfilearr():

@@ -28,6 +28,19 @@ Compiler floppy images (`*.img`) and generated outputs are intentionally
 gitignored and are not distributed. The v86 dependency is installed from
 `package-lock.json`.
 
+The harness also supports the alternate French 1.1 compiler as dialect
+`fr-1.1`. Provision `tb11_fr_floppy.img` locally with the French `TB.EXE` on a
+writable 1.44 MB FAT image; the original 360 KB distribution disk has too
+little free space for generated EXEs. Then select it with:
+
+```sh
+TBX_ORACLE=$PWD/vendor/turbo_basic_oracle \
+  uv run python -c 'from tbx.tools.oracle import compile_bas; print(len(compile_bas("probe.bas", dialect="fr-1.1")))'
+```
+
+The French IDE requires the main-file and executable-directory settings; the
+headless harness configures those automatically.
+
 ## Performance and concurrency
 
 The harness uses screen/disk readiness checks instead of fixed boot, load, and

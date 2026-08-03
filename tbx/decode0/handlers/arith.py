@@ -359,7 +359,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         state.advance()
         return True
     if kind == "cmpax_m":  # integer relational, mem side = source LHS
-        if op[2] == 0x74:  # runtime cells, not user slots: ERR = [0074],
+        if op[2] in (0x74, 0x76):  # ERR: canonical [0074], CVT2TB [0076]
             mem: Any = ir.Err()  # ERL = [0072] (IF ERR = n, witnessed
         elif op[2] == 0x72:  # t1_errcmp / wild inv87.exe)
             mem = ir.Erl()
@@ -368,10 +368,9 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                 mem = state.loc(op[2])
             except ValueError:
                 if op[2] < l.lay["pool_base"] - 4:
-                    mem = ir.Var(f"V{op[2]:04X}")
-                else:
-                    # pooled int-literal LEFT operand
-                    mem = state.pool_lit(op[2])
+                    raise
+                # pooled int-literal LEFT operand
+                mem = state.pool_lit(op[2])
         nxt = img.ops[c.k + 1] if c.k + 1 < len(img.ops) else None
         # AND-chain 2nd+ term (wild schart.exe): the running accumulator sits
         # in bx (OR-chains need no accumulator, they resolve by pure
@@ -693,6 +692,14 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         def _skip_into(i):
             while i < len(img.ops) and img.ops[i][1] == "into":
                 del img.ops[i]
+                # `OpCursor` snapshots the operation tuple at begin().  These
+                # semantic-free overflow checks are removed only ahead of the
+                # current operation, so refresh that future window after each
+                # deletion; otherwise c.k and cursor.index still agree while
+                # cursor.peek() names an operation four slots earlier (wild
+                # CVT2TB's DELAY immediately after a bounds-checked array loop).
+                if state.cursor is not None:
+                    state.cursor.ops = tuple(img.ops)
 
         if (
             m.si is None
@@ -1690,7 +1697,16 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
             # DOUBLE (fld_bp64/fstp_bp64/fold_bp64/fold_n_bp64, m64) is the
             # same first-touch convention over FOUR words instead of two
             # (wild filepatc.exe).
-            pvar = state.loc_local_fp(bp_off, is64=is64)
+            # `ifold_bp` is different: it converts an INTEGER local while
+            # building a floating-point expression.  The operand remains an
+            # INTEGER LOCAL; retyping it as SINGLE changes later stores and
+            # comparisons from the compiler's integer templates (wild
+            # CVT2TB SUB12).
+            pvar = (
+                state.loc_local(bp_off)
+                if kind == "ifold_bp"
+                else state.loc_local_fp(bp_off, is64=is64)
+            )
             if kind in ("fld_bp", "fld_bp64"):
                 expr_.stack.append(pvar)
             elif kind in ("fstp_bp", "fstp_bp64"):

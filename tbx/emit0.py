@@ -363,6 +363,7 @@ def emit(stmts, *, compact: bool = False) -> str:
             yield v
 
     body_targets: set[tuple[int, int]] = set()
+    end_sub_lines: dict[int, int] = {}
 
     def scan(n):
         for f in getattr(n, "__dataclass_fields__", ()):
@@ -406,6 +407,51 @@ def emit(stmts, *, compact: bool = False) -> str:
             line[i] = cur
             cur += max(10, max_phys.get(i, 0) + 1)
 
+    def jump_indices(node):
+        if isinstance(node, (ir.Goto, ir.IfGoto, ir.Gosub)):
+            if isinstance(node.target, int):
+                yield node.target
+        elif isinstance(node, (ir.Return, ir.OnError, ir.Resume)):
+            if isinstance(node.target, int):
+                yield node.target
+        elif isinstance(node, (ir.OnGoto, ir.OnGosub)):
+            yield from (target for target in node.targets if isinstance(target, int))
+        elif isinstance(node, ir.OnTrap) and isinstance(node.target, int):
+            yield node.target
+        for field in getattr(node, "__dataclass_fields__", ()):
+            value = getattr(node, field)
+            if isinstance(value, tuple):
+                for item in value:
+                    if hasattr(item, "__dataclass_fields__"):
+                        yield from jump_indices(item)
+            elif hasattr(value, "__dataclass_fields__"):
+                yield from jump_indices(value)
+
+    # Apply the INLINE-SUB return-label adjustment before any statement is
+    # rendered.  Doing this lazily from L() makes an earlier ON ERROR target
+    # retain the pre-shift line number (CVT2TB's handler exposes that mismatch).
+    for target in set(target for stmt in stmts for target in jump_indices(stmt)):
+        if (
+            target > 0
+            and target < len(stmts)
+            and isinstance(stmts[target - 1], ir.SubDef)
+            and len(stmts[target - 1].body) == 1
+            and isinstance(stmts[target - 1].body[0], (ir.Inline, ir.OpaqueHelper))
+        ):
+            previous_sub = next(
+                (
+                    i
+                    for i in range(target - 2, -1, -1)
+                    if isinstance(stmts[i], ir.SubDef)
+                ),
+                None,
+            )
+            if previous_sub is not None and previous_sub not in end_sub_lines:
+                target_line = line[target - 1]
+                for index in range(target - 1, len(stmts)):
+                    line[index] += 10
+                end_sub_lines[previous_sub] = target_line
+
     def L(t):
         if isinstance(t, ir.BodyLine):
             nxt = line.get(t.stmt + 1)
@@ -414,6 +460,33 @@ def emit(stmts, *, compact: bool = False) -> str:
                     f"body-line target {t} does not fit the line-number gap"
                 )
             return line[t.stmt] + t.phys
+        # A procedure return immediately before an INLINE SUB is represented
+        # by the next executable procedure address after the opaque inline
+        # body.  Turbo Basic source targets the numbered INLINE SUB line
+        # itself, which is the compiler's skip label for that return boundary
+        # (CVT2TB's outer guard is the witness).
+        if (
+            isinstance(t, int)
+            and t > 0
+            and isinstance(stmts[t - 1], ir.SubDef)
+            and len(stmts[t - 1].body) == 1
+            and isinstance(stmts[t - 1].body[0], (ir.Inline, ir.OpaqueHelper))
+        ):
+            previous_sub = next(
+                (
+                    i
+                    for i in range(t - 2, -1, -1)
+                    if isinstance(stmts[i], ir.SubDef)
+                ),
+                None,
+            )
+            if previous_sub is not None:
+                # Leave the INLINE SUB on its own canonical line and put the
+                # target label on the preceding procedure's END SUB line.
+                # Shift the inline tail first, otherwise the new END SUB label
+                # would sort before the preceding statements (CVT2TB).
+                return end_sub_lines.get(previous_sub, line[t - 1])
+            return line[t - 1]
         return line[t]
 
     def block_lines(body, render, col=0):
@@ -574,6 +647,10 @@ def emit(stmts, *, compact: bool = False) -> str:
         text = _join_line(
             [stmts[k] for k in range(i, j)], txt, len(f"{line[i]} ")
         )
+        if i in end_sub_lines:
+            physical = text.splitlines()
+            physical[-1] = f"{end_sub_lines[i]} {physical[-1].strip()}"
+            text = "\n".join(physical)
         if i in traced:
             body = text.split("\n")
             nt = partial.get(i, len(body))  # physical lines that carry a hook

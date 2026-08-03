@@ -364,7 +364,12 @@ def _print_item(item) -> str:
 def _us_output(s) -> str | None:
     """Render PRINT family, sound and misc actions; None if `s` is not one of them."""
     if isinstance(s, Print):
-        txt = "PRINT" + (f" #{s.file}," if s.file is not None else "")
+        fnum = (
+            None
+            if s.file is None
+            else str(s.file) if isinstance(s.file, int) else unparse(s.file)
+        )
+        txt = "PRINT" + (f" #{fnum}," if s.file is not None else "")
         cs = s.commas or (0,) * (len(s.items) + 1)
         if s.items:
             parts = []
@@ -387,7 +392,12 @@ def _us_output(s) -> str | None:
         return txt + ("," * cs[-1] if s.items and cs[-1] else ";")
     if isinstance(s, PrintUsing):
         kw = "LPRINT" if s.lprint else "PRINT"
-        pre = f"#{s.file}, " if s.file is not None else ""
+        fnum = (
+            None
+            if s.file is None
+            else str(s.file) if isinstance(s.file, int) else unparse(s.file)
+        )
+        pre = f"#{fnum}, " if s.file is not None else ""
         vals = "; ".join(unparse(v) for v in s.values)
         return f"{kw} {pre}USING {unparse(s.fmt)}; {vals}" + ("" if s.newline else ";")
     if isinstance(s, Kill):

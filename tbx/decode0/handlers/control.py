@@ -90,9 +90,10 @@ def calls(state: DecodeState, op, addr, kind) -> bool:
                     args.append(ir.Var(f"P{off:02X}"))
                     continue
                 if i >= len(params):
-                    off = a[1]
-                    args.append(ir.Var(f"P{off:02X}"))
-                    continue
+                    raise ValueError(
+                        f"forwarded arg index {i} to callee {op[2]:#x} "
+                        f"with {len(params)} params at {addr:#x}"
+                    )
                 sfx = params[i][-1] if params[i][-1] in "%$" else ""
                 off = a[1]
                 if sfx == "%":
@@ -284,7 +285,25 @@ def cargs(state: DecodeState, op, addr, kind) -> bool:
         state.advance(2)  # pointed it at the stack segment. Semantic-free glue.
         return True
     if kind == "arg_push_ref_bp":  # push a by-ref CALL arg, LOCAL-frame
-        c.pend_args.append(state.loc_local(op[2]))  # caller's var
+        if c.fn_frame is not None and not (
+            c.fn_frame.locals is not None and op[2] in c.fn_frame.locals
+        ) and any(
+            candidate[1] == "arg_ref"
+            and candidate[2] == op[2]
+            and c.k + 1 + j + 1 < len(i.ops)
+            and i.ops[c.k + 1 + j + 1][1] == "str_temp_free"
+            for j, candidate in enumerate(i.ops[c.k + 1 :])
+        ):
+            # In a DEF FN body, a by-reference BP argument is a formal
+            # parameter, not a LOCAL.  The reference push carries the
+            # parameter's four-byte STRING descriptor (FNFN4%: [bp+2] is
+            # passed to SUB6 and callers supply AE$); classify it before the
+            # generic integer fallback in DecodeState.loc_local.
+            c.fn_frame.param_offs.add(op[2])
+            c.fn_frame.str_offs.add(op[2])
+            c.pend_args.append(ir.Var(f"P{op[2]:02X}$"))
+        else:
+            c.pend_args.append(state.loc_local(op[2]))  # caller's var
         state.advance()
         return True
     if kind == "arg_push_fwd":  # forward the enclosing SUB's by-ref param as a
@@ -621,7 +640,7 @@ def errors_trap(state: DecodeState, op, addr, kind) -> bool:
 
 def string_ops(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: strconcat, str_store_temp."""
-    e, c = state.expr, state.control
+    e, c, m, i = state.expr, state.control, state.machine, state.image
     if kind == "strconcat":  # pops two strings, pushes concat
         rhs = e.sstack.pop()
         lhs = e.sstack.pop()
@@ -636,7 +655,26 @@ def string_ops(state: DecodeState, op, addr, kind) -> bool:
         # `jump target 0xf325`; the address reappeared at the `push_bp` two ops
         # later, 0xf352, which nothing names). Every sibling staging op --
         # `arg_push_temp`, `movm_ax_temp`, `mov_mem_sp` -- leaves it alone.
-        c.pend_args.append(e.sstack.pop())
+        value = e.sstack.pop()
+        nxt = i.ops[c.k + 1] if c.k + 1 < len(i.ops) else None
+        if nxt is not None and nxt[1] == "arg_push_temp":
+            # Ordinary SUB CALL argument: the explicit push marker drains the
+            # ordered pending list at far_call (probe t1_dynprint).  A direct
+            # variable reached this path through `movsi; rt 9C`, which is the
+            # compiler's encoding of a parenthesized string argument; retain
+            # that grouping or the emitter changes the descriptor push into a
+            # by-reference argument (wild CVT2TB's CALL SUB1).
+            if isinstance(value, ir.Var):
+                value = ir.Group(value)
+            c.pend_args.append(value)
+        else:
+            # A string argument to a nested DEF FN has no arg_push_temp.  Its
+            # temp slot is keyed by SI just like movm_ax_temp/fstp_temp; keep
+            # it in the FN argument map or it leaks into the next SUB CALL's
+            # pending list (wild CVT2TB, FNFN2$ inside the call at 0xc9c6).
+            if m.si is None:
+                raise ValueError(f"string temp without SI at {addr:#x}")
+            c.fn_args[m.si] = value
         state.advance()
         return True
     return False

@@ -3430,6 +3430,38 @@ the suite passed against the UNREGENERATED goldens first.
 `tbd73.exe` advances to `[bp+0] outside the open LOCAL frame` -- and note it is
 a fail-loud error again, not the raw KeyError flavor 2 produced.
 
+### 2026-08-02 — CVT2TB: by-reference MID$ and cursor synchronization
+
+`CVT2TB.EXE` was not evidence of a different runtime for its first two
+failures. Its `movsi_bp`, `moves_bp`, `midassign`/`midassign3` sequences are
+ordinary four-byte STRING parameters used by `MID$` assignment. Three small
+oracle probes reproduced the two-argument and three-argument forms; the
+decoder now consumes the three-operation templates and identifies the target
+from the procedure frame. Four fixtures (`t1_midassignbyref` and
+`t1_midassign3byref`, with `v10_` twins) verify byte-exactly in both dialects.
+
+The same wild file also exposed a real cursor invariant bug: removing
+semantic-free `into` operations from the mutable image without refreshing the
+`OpCursor` left future operations at the wrong indices. Synchronizing the
+cursor after that deletion lets CVT2TB pass its valid `DELAY` sequences.
+
+The repeated `[0076]` sequence is the calibrated `IF ERR = 101 OR ERR = 102`
+materialization template with the same two-byte runtime-table shift already
+observed in CVT2TB's COLOR cells. It is now normalized to `ERR`, and advances
+the wild file to a computed `PRINT#` channel. That second gap was reproduced
+by `probe_dynprint`; the decoder preserves the channel expression through
+`Print`, and the expression-aware rename/render path is covered by
+`t1_dynprint` and `v10_t1_dynprint`, byte-exact in both dialects.
+
+The apparent variadic call at `0xc6b4` was then closed as another decoder
+state bug: nested string DEF-FN temporaries had leaked into the outer SUB's
+pending argument list. CVT2TB now decodes and emits 203 statements. The
+oracle round-trip reaches the next real issue: four recovered `DELAY` values
+are denormal doubles formed from CVT2TB's shifted runtime/data layout, and
+Turbo Basic rejects the emitted `-4.172553...E-308#` spelling as Error 488.
+That data/layout issue is the current blocker; no value normalization has been
+added.
+
 ### 2026-07-24 — Round 26: bare value AND a parenthesized STRING-OR group (LANDED)
 
 Closes Round 24's diagnosis. `tbd73.exe`'s `materialization template mismatch
@@ -9384,6 +9416,32 @@ triggering BASIC construct is found (whatever compiles to this whole
 push-bp/mov-bp-sp/push-es/push-ds/les template), check which encoding
 IT produces and land that one first; the other encoding will still need
 its own separate witness if it doesn't naturally appear too.
+
+**CVT2TB string-data encoding (2026-08-02)**: the apparent garbage in the
+first `DATA` records is intentional ciphertext, not a wrong source encoding.
+CVT2TB's recovered `SUB12` treats a record beginning with byte `&HFE` as
+encoded, strips the marker, optionally shifts bytes into the printable range,
+then seeds `RANDOMIZE INT(LEN(C$) / 168) + 52` and applies the alternating
+per-character transform using `INT(RND * &H8002 + 200)`, `D% = (N% MOD 2) * 2
+- 200`, and the `X%`/`Y%` marker flags. The decoder/emitter already preserves
+these bytes exactly: the original and rebuilt CVT2TB DATA pools have identical
+63-item contents. Do not transcode these strings or replace them with their
+decrypted display text; that would change the program's runtime behavior and
+break byte-exact reconstruction. The remaining CVT2TB round-trip mismatch is
+therefore unrelated to string-data character encoding.
+
+The exact public `CVT2TB.ZIP` archive was also retrieved from a Simtel mirror
+and its `CVT2TB.EXE` SHA-256 matches `wild/hits/CVT2TB.EXE` exactly
+(`7121b5fb2881804dbf4103b835da4b3041659b7b7311fdd352c0cd89dc241db0`). Its
+`CVT2TB.LST` identifies this as the 54,166-byte Version 1.1a program, but the
+archive contains no BASIC source. It confirms the wild image is the released
+binary, not corpus corruption; it does not provide the older compiler needed
+to reproduce the `[02A6]` floating-pool coordinate. The repository's English
+and German 1.1 compiler images were both checked; the German image was already
+known to emit the same `[0356]` coordinate. CVT2TB's runtime-region build
+match against the English oracle is only 23%, so the remaining `SUB11` and
+direct-boolean template differences are part of the same unrepresented
+compiler/runtime revision, not string-pool corruption.
 
 ### The workflow (each gap, see gap 9–14 commits for examples)
 

@@ -1368,6 +1368,33 @@ def _respell_params(node, spell, stmt_addr=None):
     return new_node
 
 
+def _local_spelling(frame) -> dict[str, str]:
+    """Map provisional BP-local spellings to their settled frame names.
+
+    A zero-filled LOCAL frame starts untyped.  An FP access later retypes a
+    two- or four-byte slot in ``frame.locals``; statements decoded before that
+    access still carry the provisional ``Lxx%`` spelling, including a
+    reference to a descriptor's high word.  Keep those references in the
+    same source variable instead of letting the emitter create a DGROUP
+    global (wild CVT2TB SUB12, BP+16/BP+18).
+    """
+    locs = frame.locals or {}
+    spell: dict[str, str] = {}
+    for off, name in locs.items():
+        base = f"L{off:02X}"
+        for suffix in ("%", "!", "#", "&", "$"):
+            spell[base + suffix] = name
+        if name.endswith("!"):
+            for extra in (2,):
+                for suffix in ("%", "!"):
+                    spell[f"L{off + extra:02X}{suffix}"] = name
+        elif name.endswith("#"):
+            for extra in (2, 4, 6):
+                for suffix in ("%", "!", "#"):
+                    spell[f"L{off + extra:02X}{suffix}"] = name
+    return spell
+
+
 def _type_untyped_callee_params(stmts, stmt_addr=None):
     """Give an ordinary callee's untyped parameter the caller's evidence.
 
@@ -3325,7 +3352,20 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 state.advance(3)
                 return
             test_addr = _find_jmps_back(img.ops, img.ops[c.k + 2][2])
-            if test_addr is not None:
+            if (
+                test_addr is not None
+                # `_find_jmps_back` searches the whole following region for
+                # the structurally adjacent short jump.  A nested loop can
+                # therefore donate its back-edge to an enclosing bare-value
+                # guard (CVT2TB: the outer FNFN1% test at 45246 sees the inner
+                # DO UNTIL edge to 45253 and is emitted as an unterminated
+                # DO WHILE).  A genuine head-test poll returns to the current
+                # condition's first operation, or to the immediately-following
+                # trap hook (t1_whileinstat); a target after this test is a
+                # nested region, not this loop.
+                and c.cur is not None
+                and c.cur <= test_addr <= addr
+            ):
                 # HEAD-test DO/WHILE loop whose condition is a bare value
                 # with no materialization prefix -- the head-test sibling
                 # of the tail-test case just above (same "byte-exact bare
@@ -3418,6 +3458,16 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 # evidence to qualify (t1_bareiffn: `IF EOF(1) THEN`; wild
                 # pz.exe has four).
                 or prev_load[1] == "fn_ax_ax"
+                # Far-called DEF FN results can be spilled through the
+                # procedure frame before OR AX,AX.  In that shape the reload
+                # is separated from the call by the epilogue, so the
+                # prev_load template is not visible; the typed expression is
+                # still direct evidence of a source truth test (CVT2TB's
+                # FNFN1% guard).
+                or isinstance(
+                    m.ax.operand if isinstance(m.ax, ir.Not) else m.ax,
+                    ir.FnCall,
+                )
                 or (
                     prev_load[1] == "movax_m"
                     and prev_load[2] in l.lay["scalars"]
@@ -4042,6 +4092,32 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 raise ValueError(f"WEND exit mismatch at {addr:#x}")
             state.put(ir.Wend(), c.cur)
         elif op[2] < addr and back_idx is not None:  # bare backward jmps = infinite DO
+            # A numbered GOTO can target the first statement of a multiline
+            # IF body.  The compiler places that body immediately after the
+            # unconditional jump which skips the whole IF, so its target has
+            # a preceding `jmp` in the operation stream.  Do not reinterpret
+            # this as a codeless DO: the sibling GOTO at the loop tail then
+            # returns to the IF test.  (CVT2TB and the authored
+            # `goto_body` probe share this exact layout.)
+            target_i = next(
+                (i for i, candidate in enumerate(img.ops) if candidate[0] == op[2]),
+                None,
+            )
+            if (
+                target_i is not None
+                and target_i > 0
+                and img.ops[target_i - 1][1] == "jmp"
+                and (nxt is None or nxt[1] != "jmps")
+                and not any(
+                    candidate[0] == img.ops[target_i - 1][2]
+                    and candidate[1] == "proc_ret"
+                    for candidate in img.ops
+                )
+            ):
+                state.put(ir.Goto(("addr", op[2])), c.cur)
+                c.cur = None
+                state.advance()
+                return
             idx = back_idx  # splice `DO` before the body start
             with editing(out.stmts, "fold_loop_header"):
                 out.stmts.insert(idx, ir.Do(None))
@@ -4836,6 +4912,42 @@ def _decode_user_code(
             state.advance()
             continue
         if (
+            kind == "movsi_bp"
+            and c.k + 2 < len(img.ops)
+            and img.ops[c.k + 1][1] == "moves_bp"
+            and img.ops[c.k + 1][2] == op[2] + 2
+            and img.ops[c.k + 2][1] in ("midassign", "midassign3")
+        ):
+            # MID$ assignment through a four-byte STRING parameter.  The
+            # caller passes the descriptor as [bp+d]/[bp+d+2], so this is the
+            # frame-relative sibling of the DGROUP `movsi; movdx; movesdx`
+            # path below (oracle probes probe_midassign_byref*; CVT2TB).
+            frame = c.proc_frame if c.proc_frame is not None else c.fn_frame
+            if frame is None:
+                raise ValueError(f"frame MID$= outside a body at {addr:#x}")
+            d = op[2]
+            if frame.locals is not None and d in frame.locals:
+                target = state.loc_local_str(d)
+            elif c.proc_frame is not None:
+                c.proc_str_offs.add(d)
+                target = ir.Var(f"P{d:02X}$")
+            else:
+                c.fn_frame.param_offs.add(d)
+                c.fn_frame.str_offs.add(d)
+                target = ir.Var(f"P{d:02X}$")
+            source = e.sstack.pop()
+            op3 = img.ops[c.k + 2][1]
+            if op3 == "midassign3":
+                state.put(_mid3(state, target, source, addr), c.cur)
+            else:
+                if m.ax is None:
+                    raise ValueError(f"MID$= without start in ax at {addr:#x}")
+                state.put(ir.MidAssign(target, m.ax, source), c.cur)
+                m.ax = None
+            c.cur = None
+            state.advance(3)
+            continue
+        if (
             kind == "far_ref_bp"
             and c.k + 1 < len(img.ops)
             and img.ops[c.k + 1][1] == "midassign3"
@@ -4975,9 +5087,11 @@ def _decode_user_code(
                 out.stmts[i0:], out.addrs[i0:] = _fold_if(
                     out.stmts[i0:],
                     out.addrs[i0:],
+                    bound=c.proc_frame.exit,
                     targets=_jump_targets(out.stmts),
                     stmt_addr=out.stmt_addr,
                     block_ifs=c.block_if_addrs,
+                    procedure_guard=True,
                 )
             body = tuple(out.stmts[i0:])
             for st, ad in zip(body, out.addrs[i0:]):
@@ -4986,6 +5100,11 @@ def _decode_user_code(
             with editing(out.stmts, "fold_proc_body"):
                 del out.stmts[i0:], out.addrs[i0:]
             locs = c.proc_frame.locals
+            local_spell = _local_spelling(c.proc_frame)
+            if local_spell:
+                body = tuple(
+                    _respell_params(st, local_spell, out.stmt_addr) for st in body
+                )
             _retire_for_temps(c.proc_frame, locs)
             for d in c.proc_frame.hidden_locals:
                 if locs is not None:
@@ -5222,9 +5341,11 @@ def _decode_user_code(
                     out.stmts[i0:], out.addrs[i0:] = _fold_if(
                         out.stmts[i0:],
                         out.addrs[i0:],
+                        bound=c.fn_frame.exit,
                         targets=_jump_targets(out.stmts),
                         stmt_addr=out.stmt_addr,
                         block_ifs=c.block_if_addrs,
+                        procedure_guard=True,
                     )
                 body = tuple(out.stmts[i0:])
                 for st, ad in zip(body, out.addrs[i0:]):
@@ -5233,6 +5354,11 @@ def _decode_user_code(
                 with editing(out.stmts, "fold_proc_body"):
                     del out.stmts[i0:], out.addrs[i0:]
                 locs = c.fn_frame.locals
+                local_spell = _local_spelling(c.fn_frame)
+                if local_spell:
+                    body = tuple(
+                        _respell_params(st, local_spell, out.stmt_addr) for st in body
+                    )
                 _retire_for_temps(c.fn_frame, locs)
                 for d in c.fn_frame.hidden_locals:
                     if locs is not None:
@@ -5329,9 +5455,6 @@ def _decode_user_code(
         if kind == "far_strassign" and c.pend_arg is None:
             if e.sstack:
                 e.sstack.pop()
-            state.advance()
-            continue
-        if kind in ("midassign", "midassign3"):
             state.advance()
             continue
         if c.pend_arg is not None and kind.endswith(("_si", "_si32", "_si64")):
@@ -6141,10 +6264,14 @@ def _decode_user_code(
             state.advance()
             continue
         if kind == "movm_ax" and op[2] == 0x60:  # file number for INPUT#
-            if not isinstance(m.ax, ir.Lit):
-                m.ax = ir.Lit(0)
+            if m.ax is None or isinstance(m.ax, tuple):
+                raise ValueError(f"missing file number at {addr:#x}")
             state.flush_pending()  # statement boundary
-            e.pend_fnum = m.ax.value
+            # INPUT#/PRINT# may use a computed channel in a SUB (witnessed
+            # by CVT2TB and probe_dynprint); preserve the expression for the
+            # emitted statement instead of requiring a literal. Keep the
+            # established integer representation for literal channels.
+            e.pend_fnum = m.ax.value if isinstance(m.ax, ir.Lit) else m.ax
             m.ax = None
             state.advance()
             continue

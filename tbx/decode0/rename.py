@@ -163,14 +163,14 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.Print(
                 tuple(walk_item(i) for i in s.items),
                 newline=s.newline,
-                file=s.file,
+                file=None if s.file is None else walk(s.file),
                 commas=s.commas,
             )
         if isinstance(s, ir.PrintUsing):
             return ir.PrintUsing(
                 walk(s.fmt),
                 tuple(walk(v) for v in s.values),
-                file=s.file,
+                file=None if s.file is None else walk(s.file),
                 newline=s.newline,
                 lprint=s.lprint,
             )

@@ -1,7 +1,7 @@
 {
  "schema_version": 1,
  "document_type": "tbx.runtime_revision_assessments",
- "updated": "2026-07-31",
+ "updated": "2026-08-02",
  "corpus_fingerprint": "2043f80bf6bf929b0a8058ebb0b83e3ec6b63664855e4428b4781db63c4924a3",
  "evidence_classes": [
   "oracle-verified",
@@ -9,6 +9,7 @@
   "documentation-backed",
   "runtime-revision",
   "candidate-runtime-revision",
+  "decoder-side",
   "unresolved"
  ],
  "assessments": [
@@ -19,7 +20,7 @@
     "strfn INKEY$ + str2num LEN + orax",
     "metric round-trip delta"
    ],
-   "disposition": "candidate-runtime-revision",
+   "disposition": "candidate",
    "evidence_class": "candidate-runtime-revision",
    "confidence": "medium",
    "files": [
@@ -154,9 +155,9 @@
     "unhandled INT d4",
     "unhandled INT EC sub ee"
    ],
-   "disposition": "unresolved",
-   "evidence_class": "unresolved",
-   "confidence": "low",
+   "disposition": "candidate",
+   "evidence_class": "candidate-runtime-revision",
+   "confidence": "medium",
    "files": [],
    "assessment": "Dispatcher holes are plausible revision-specific entries, but they are equally likely to be ordinary statements or intrinsics not yet identified. Grouping them here is a triage hypothesis, not a shared semantic classification.",
    "promotion_criteria": "Record the complete calling convention and neighboring statement context for each sub independently; promote only entries with cross-file or external runtime evidence.",
@@ -316,26 +317,80 @@
   },
   {
    "id": "RR-CVT2TB-VARIADIC-SUB-CALL",
-   "title": "CVT2TB three-argument calls into two-parameter SUB16",
+   "title": "CVT2TB apparent variadic SUB call was nested-FN staging leakage (CLOSED)",
    "signatures": [
     "far_call target 0xc6b4 with three staged arguments",
     "SUB16 frame ret-pop proves two declared parameters",
     "oracle Error 413 for extra CALL arguments"
    ],
-   "disposition": "candidate-runtime-revision",
-   "evidence_class": "candidate-runtime-revision",
+   "disposition": "closed",
+   "evidence_class": "decoder-side",
    "confidence": "high",
    "files": [
     "wild/hits/CVT2TB.EXE"
    ],
-   "assessment": "The wild CVT2TB image contains calls to the procedure at 0xc6b4 with three staged values (a forwarded frame argument, LEFT$ result, and FNFN2$ result), while that procedure's proc_ret frame size is 0x12 with two local words, proving two declared four-byte parameters. The vendored Turbo Basic oracle rejects a source CALL with more actual arguments than the SUB declaration (Error 413). This is therefore not a DATA string/number classification issue and cannot be reproduced by the calibrated oracle spelling.",
+   "assessment": "The apparent extra arguments were not a runtime calling convention. Two `str_store_temp` values belonging to nested string DEF-FN arguments were incorrectly left in the shared SUB pending-argument list; CVT2TB then inherited them at the later far_call. The nested-FN form has no `arg_push_temp`, so it is now keyed into the FN argument map by its SI temp slot, while the immediate `arg_push_temp` form remains an ordinary SUB argument. CVT2TB advances past the former variadic-call gap.",
    "negative_evidence": [
-    "Clearing pending arguments at backward or unconditional branches removes some stale values but also drops a valid first argument in ordinary calls; no generic branch-clear fix was retained.",
-    "Replacing the call with two arguments makes the source syntactically plausible but changes the wild call shape and has no byte-exact oracle witness.",
-    "The oracle also rejects CVT2TB's four DELAY literals below its accepted exponent range before reaching this call site."
+    "A generic branch-time clear was unnecessary: the stale values originated in nested DEF-FN string staging, not a runtime arity convention.",
+    "The oracle's extra-argument rejection was a symptom of the decoder's leaked pending values, not evidence that CVT2TB used a different SUB calling convention."
    ],
-   "promotion_criteria": "Find the compiler revision or source construct that authorizes the extra actual arguments, or obtain an oracle/compiler build that accepts CVT2TB's wild calling convention.",
+   "promotion_criteria": "No further promotion is required; continue from CVT2TB's emitted-source DELAY literal gap.",
    "source": "oracle probes and CVT2TB op/frame audit, session 2026-08-02"
+  },
+  {
+   "id": "RR-CVT2TB-SYSTEM-CELL-76",
+   "title": "CVT2TB compare against DGROUP cell 0x76 after COLOR",
+   "signatures": [
+    "color_commit mask 06",
+    "cmpax_m displacement 0x76",
+    "materialized relational value"
+   ],
+   "disposition": "unresolved",
+   "evidence_class": "unresolved",
+   "confidence": "low",
+   "files": [
+    "wild/hits/CVT2TB.EXE"
+   ],
+   "assessment": "The sequence is the same six-operation cmpax_m/materialization template as the byte-exact t1_orchain ERR witness, with literals 101 and 102, and it occurs immediately after CVT2TB's uniformly +2-shifted COLOR cells 0x8a/0x96. This supports the narrow candidate that CVT2TB's ERR cell is shifted from canonical 0x74 to 0x76; the decoder normalizes it to ir.Err. The mapping remains a runtime-revision candidate, not a general low-cell fallback.",
+   "promotion_criteria": "Reproduce the exact shifted [0076] sequence with an authored oracle/compiler build or obtain authoritative Turbo Basic runtime-cell documentation; until then keep the alias narrow to cmpax_m.",
+   "source": "CVT2TB op trace after t1_midassignbyref, session 2026-08-02"
+  },
+  {
+   "id": "RR-CVT2TB-DELAY-POOL-678",
+   "title": "CVT2TB repeated DELAY reads non-IEEE DGROUP bytes at 0x2a6",
+   "signatures": [
+    "fld64 displacement 0x2a6",
+    "DELAY after LINE INPUT#",
+    "same denormal value at four sites"
+   ],
+   "disposition": "unresolved",
+   "evidence_class": "unresolved",
+   "confidence": "medium",
+   "files": [
+    "wild/hits/CVT2TB.EXE"
+   ],
+   "assessment": "After CVT2TB decodes and emits, the oracle rejects four recovered DELAY literals with Error 488: the emitted IEEE value is -4.1725535327594426E-308#. The raw bytes at the current file mapping for DS:02a6 are 32 00 2c 00 2a 00 6d 00, not an IEEE double. A second, stronger lead is now measurable: the only plausible pool double is 0.15# at file P+0x106, and all four operands become 0.15# if the numeric-pool coordinate is 0x1a4 rather than the greedy layout's 0x254. A DATA-heavy authored probe does not reproduce this: the oracle emits a normal coordinate, and compiling the recovered CVT2TB source places the same 0.15# at P+0x106 but references it as [0356], whereas the wild binary references [02A6]. Compiling that source with the alternate local `tb11_de_floppy.img` produces the same [0356] template, so this is not resolved by the available 1.1 image. The original CVT2TB runtime region matches the repository's English 1.1 oracle runtime at only 23%, confirming a substantially different compiler/runtime build rather than a few source-template differences. The exact public archive identifies CVT2TB as Version 1.1a, but contains no compiler or source. This isolates the issue to a CVT2TB-specific numeric-pool coordinate/runtime revision rather than string-data decoding. The candidate cannot yet be landed because moving the whole pool base corrupts DATA/string-descriptor recovery.",
+   "promotion_criteria": "Reproduce the split mapping with an oracle fixture or authoritative layout evidence, then verify both DATA/string descriptors and all four DELAY source forms before changing fpval64/layout. Do not hard-code the 0.15 value or a CVT2TB-only offset without that evidence.",
+   "source": "oracle probes, exact CVT2TB.ZIP archive copy (CVT2TB.LST identifies Version 1.1a, 54166 bytes), and pool trace, session 2026-08-02"
+  },
+  {
+   "id": "RR-CVT2TB-FRENCH-11-PROBE",
+   "title": "French Turbo Basic 1.1 is a supported alternate oracle",
+   "signatures": [
+    "French 1.1 IDE",
+    "Compile: SOLVER",
+    "Compile: B:\\SOLVER.EXE",
+    "fr-1.1 oracle dialect"
+   ],
+   "disposition": "closed",
+   "evidence_class": "runtime",
+   "confidence": "high",
+   "files": [
+    "wild/hits/CVT2TB.EXE"
+   ],
+   "assessment": "The French TB.EXE is a distinct 214424-byte build (SHA-256 d45256929e5dbf14cd13442f93a45251b29fe26488b95b679f2f0cbae5df81c8), separate from the English and German binaries. A writable 1.44 MB compiler image plus the localized main-file, executable-directory, and compile-to-EXE menu path now reproducibly produces SOLVER.EXE; the minimal probe is 34768 bytes and decodes as the existing 1.1 operation dialect. The public 360 KB disk was insufficient because it had only about 7 KB free.",
+   "promotion_criteria": "No further promotion is required for oracle support; compare CVT2TB against this build before attributing differences to the runtime revision.",
+   "source": "French 1.1 image fingerprint and byte-identifiable v86 compile, session 2026-08-02"
   }
  ]
 }

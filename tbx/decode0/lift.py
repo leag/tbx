@@ -850,7 +850,48 @@ def _body_has_target(body, targets, stmt_addr) -> bool:
     return False
 
 
-def _fold_body(body, targets=frozenset(), stmt_addr=None, block_ifs=None):
+def _contains_goto(body) -> bool:
+    """Whether a nested structured body contains a source-level GOTO."""
+    for statement in body:
+        if isinstance(statement, (ir.Goto, ir.IfGoto)):
+            return True
+        if isinstance(statement, ir.IfInline) and _contains_goto(statement.body):
+            return True
+        if isinstance(statement, ir.IfBlock):
+            if any(_contains_goto(arm) for _cond, arm in statement.arms):
+                return True
+            if statement.else_body and _contains_goto(statement.else_body):
+                return True
+    return False
+
+
+def _contains_bodyline_goto(body) -> bool:
+    """Whether a nested body contains a GOTO into a numbered body line."""
+    for statement in body:
+        if isinstance(statement, ir.Goto) and (
+            isinstance(statement.target, ir.BodyLine)
+            or (
+                isinstance(statement.target, tuple)
+                and statement.target
+                and statement.target[0] == "addr"
+            )
+        ):
+            return True
+        if isinstance(statement, ir.IfInline):
+            if _contains_bodyline_goto(statement.body) or (
+                statement.else_body is not None
+                and _contains_bodyline_goto(statement.else_body)
+            ):
+                return True
+        elif isinstance(statement, ir.IfBlock):
+            if any(_contains_bodyline_goto(arm) for _cond, arm in statement.arms):
+                return True
+            if statement.else_body and _contains_bodyline_goto(statement.else_body):
+                return True
+    return False
+
+
+def _fold_body(body, targets=frozenset(), stmt_addr=None, block_ifs=None, bound=None):
     """Recursively block-fold nested non-inline-safe IFs within an arm/else body
     (bodies carry no Goto-else marker; only the rendering split applies here) --
     also block-folds an inline-safe IfInline whose OWN body contains a jump
@@ -917,6 +958,48 @@ def _fold_body(body, targets=frozenset(), stmt_addr=None, block_ifs=None):
             body = tuple(folded)
         out = []
         for b in body:
+            if (
+                isinstance(b, ir.IfInline)
+                and isinstance(b.cond, ir.RelOp)
+                and bound is not None
+                and any(isinstance(x, ir.IfGoto) for x in b.body)
+            ):
+                # A nested condition whose skip is the enclosing procedure's
+                # exit is another leg of the same source guard. Keep it as a
+                # guard instead of materializing a block IF (SUB1's nested
+                # LEN tests have this exact shared exit).
+                guard = ir.IfGoto(_negate_cond(b.cond), ("addr", bound))
+                folded = _fold_body(
+                    b.body, targets, stmt_addr, block_ifs, bound=bound
+                )
+                if stmt_addr is not None:
+                    a = stmt_addr.get(id(b))
+                    if a is not None:
+                        stmt_addr.claim(guard, a)
+                out.append(guard)
+                out.extend(folded)
+                continue
+            if (
+                isinstance(b, ir.IfInline)
+                and isinstance(b.cond, ir.Var)
+                and any(isinstance(x, ir.Goto) for x in b.body[:-1])
+            ):
+                # Turbo Basic cannot parse an inline IF whose body contains a
+                # GOTO followed by another statement (`IF CI% THEN ...:
+                # GOTO 2176: PRINT ...`, CVT2TB).  The trailing statement is
+                # reachable only on the non-jump path, so the compiler's
+                # source form is a block IF with an explicit numeric test.
+                cond = ir.RelOp("<>", b.cond, ir.Lit(0))
+                new_b = ir.IfBlock(
+                    ((cond, _fold_body(b.body, targets, stmt_addr, block_ifs)),),
+                    None,
+                )
+                if stmt_addr is not None:
+                    a = stmt_addr.get(id(b))
+                    if a is not None:
+                        stmt_addr.claim(new_b, a)
+                out.append(new_b)
+                continue
             if isinstance(b, ir.IfInline) and (
                 not _inline_safe(b.body)
                 or _body_has_target(b.body, targets, stmt_addr)
@@ -1188,7 +1271,13 @@ def _closes_an_outer_loop(stmts) -> bool:
 
 
 def _fold_if(
-    stmts, addrs, bound=None, targets=frozenset(), stmt_addr=None, block_ifs=None
+    stmts,
+    addrs,
+    bound=None,
+    targets=frozenset(),
+    stmt_addr=None,
+    block_ifs=None,
+    procedure_guard=False,
 ):
     """Fold multi-line IF blocks, address-level (before target resolution).
     A block IF/ELSE is an IfInline whose body ends in a forward Goto past its own start
@@ -1207,6 +1296,41 @@ def _fold_if(
         i = 0
         while i < len(stmts):
             s, a = stmts[i], addrs[i]
+            if isinstance(s, ir.IfInline) and isinstance(s.cond, (ir.FnCall, ir.Not)):
+                # A bare function guard can enclose a real nested loop. Its
+                # first inner IfGoto is the guard's forward skip, while the
+                # body's final backward GOTO belongs to that nested loop. If
+                # the generic ELSE fold sees the latter first it manufactures
+                # an invalid bare block IF (CVT2TB's FNFN1% polling region).
+                forward = next(
+                    (
+                        b.target
+                        for b in s.body[:-1]
+                        if isinstance(b, ir.IfGoto)
+                        and isinstance(b.target, tuple)
+                        and b.target[0] == "addr"
+                        and a is not None
+                        and b.target[1] > a
+                    ),
+                    None,
+                )
+                tail = s.body[-1].target if s.body and isinstance(s.body[-1], ir.Goto) else None
+                if (
+                    forward is not None
+                    and isinstance(tail, tuple)
+                    and tail[0] == "addr"
+                    and tail[1] < forward[1]
+                ):
+                    guard = ir.IfGoto(s.cond, forward)
+                    if a is not None:
+                        stmt_addr.claim(guard, a)
+                    out_s.append(guard)
+                    out_a.append(a)
+                    folded = _fold_body(s.body, targets, stmt_addr, block_ifs)
+                    out_s.extend(folded)
+                    out_a.extend(stmt_addr.get(id(x)) for x in folded)
+                    i += 1
+                    continue
             if (
                 isinstance(s, ir.IfInline)
                 and s.body
@@ -1243,7 +1367,28 @@ def _fold_if(
                         and addrs[else_stop - 1] is None
                     ):
                         else_stop -= 1
-                    arms = [(s.cond, _fold_body(s.body[:-1], targets, stmt_addr, block_ifs))]
+                    folded_body = _fold_body(s.body[:-1], targets, stmt_addr, block_ifs)
+                    if (
+                        isinstance(s.cond, (ir.FnCall, ir.Not))
+                        and _contains_bodyline_goto(s.body[:-1])
+                    ):
+                        # A bare function truth test surrounding a numbered
+                        # interior loop line is a source guard, not a scanned
+                        # block IF. Turbo Basic rejects the latter with Error
+                        # 418; the raw forward skip and BodyLine back-edge
+                        # identify the guard topology (CVT2TB's FNFN1% poll).
+                        guard = ir.IfGoto(s.cond, ("addr", end))
+                        if a is not None:
+                            stmt_addr.claim(guard, a)
+                        out_s.append(guard)
+                        out_a.append(a)
+                        out_s.extend(folded_body)
+                        out_a.extend(stmt_addr.get(id(x)) for x in folded_body)
+                        out_s.extend(stmts[else_stop:end_idx])
+                        out_a.extend(addrs[else_stop:end_idx])
+                        i = end_idx
+                        continue
+                    arms = [(s.cond, folded_body)]
                     else_s, _ = _fold_if(
                         stmts[i + 1 : else_stop],
                         addrs[i + 1 : else_stop],
@@ -1287,10 +1432,36 @@ def _fold_if(
                 # Guard recovery is only sound for a single relational test,
                 # whose source spelling is otherwise indistinguishable.
                 and isinstance(s.cond, ir.RelOp)
-                and guard_at < len(stmts)
-                and addrs[guard_at] is not None
+                and (
+                    addrs[guard_at]
+                    if guard_at < len(stmts)
+                    else bound
+                ) is not None
                 and any(
                     isinstance(b, (ir.Loop, ir.Wend, ir.NextStmt))
+                    for b in s.body
+                )
+            ) or (
+                isinstance(s, ir.IfInline)
+                # A compiler guard can enclose a second block whose numbered
+                # interior is reached by a backward GOTO.  Folding the outer
+                # region as IfBlock makes TB reject the nested line reference
+                # (Error 470); the guard spelling is the byte-equivalent form
+                # (CVT2TB SUB12 and the guard_nested oracle probe).
+                and isinstance(s.cond, ir.RelOp)
+                and procedure_guard
+                and i == 0
+                and len(stmts) == 1
+                and (
+                    addrs[guard_at] if guard_at < len(stmts) else bound
+                ) is not None
+                and any(
+                    isinstance(b, (ir.IfInline, ir.IfBlock))
+                    and _contains_goto(
+                        b.body
+                        if isinstance(b, ir.IfInline)
+                        else tuple(x for _cond, arm in b.arms for x in arm)
+                    )
                     for b in s.body
                 )
             ):
@@ -1300,14 +1471,41 @@ def _fold_if(
                 # after`) followed by ordinary statements and the terminator,
                 # not from a structured IF body. Preserve that topology by
                 # unfolding the recorded region back into a guard plus body.
-                guard = ir.IfGoto(_negate_cond(s.cond), ("addr", addrs[guard_at]))
+                guard_target = (
+                    addrs[guard_at] if guard_at < len(stmts) else bound
+                )
+                guard = ir.IfGoto(_negate_cond(s.cond), ("addr", guard_target))
                 if a is not None:
                     stmt_addr.claim(guard, a)
                 out_s.append(guard)
                 out_a.append(a)
-                for body_stmt in s.body:
+                for body_stmt in _fold_body(
+                    s.body, targets, stmt_addr, block_ifs, bound=guard_target
+                ):
                     out_s.append(body_stmt)
                     out_a.append(stmt_addr.get(id(body_stmt)))
+                i += 1
+                continue
+            if (
+                isinstance(s, ir.IfInline)
+                and isinstance(s.cond, (ir.Var, ir.FnCall))
+                and any(isinstance(b, ir.Goto) for b in s.body)
+                and i + 1 < len(stmts)
+                and addrs[i + 1] is not None
+            ):
+                # Resolved backward targets are integer statement indices by
+                # this pass, so the generic non-inline-safe test cannot see
+                # that this bare numeric IF owns a numbered loop edge. Keep
+                # the source-level guard topology (`IF NOT value THEN after`)
+                # instead of emitting an invalid bare numeric block IF.
+                guard = ir.IfGoto(ir.Not(s.cond), ("addr", addrs[i + 1]))
+                if a is not None:
+                    stmt_addr.claim(guard, a)
+                out_s.append(guard)
+                out_a.append(a)
+                folded = _fold_body(s.body, targets, stmt_addr, block_ifs)
+                out_s.extend(folded)
+                out_a.extend(stmt_addr.get(id(x)) for x in folded)
                 i += 1
                 continue
             if isinstance(s, ir.IfInline) and (
@@ -1322,6 +1520,32 @@ def _fold_if(
                 # a block IF with a NUMBERED interior line jumped into from
                 # outside (witnessed t1_blkgoto / wild inv87.exe); the block form
                 # lets emit0 number that physical line (ir.BodyLine).
+                if (
+                    isinstance(s.cond, (ir.Var, ir.FnCall))
+                    and (
+                        _contains_bodyline_goto(s.body)
+                        or any(isinstance(b, ir.Goto) for b in s.body)
+                    )
+                    and i + 1 < len(stmts)
+                    and addrs[i + 1] is not None
+                ):
+                    # A bare numeric truth test with a numbered interior
+                    # jump is the guard spelling `IF NOT value THEN after`,
+                    # not a scanned block IF. Turbo Basic rejects the latter
+                    # with Error 418 (CVT2TB's BB% search loop).
+                    guard = ir.IfGoto(
+                        ir.Not(s.cond),
+                        ("addr", addrs[i + 1]),
+                    )
+                    if a is not None:
+                        stmt_addr.claim(guard, a)
+                    out_s.append(guard)
+                    out_a.append(a)
+                    folded = _fold_body(s.body, targets, stmt_addr, block_ifs)
+                    out_s.extend(folded)
+                    out_a.extend(stmt_addr.get(id(x)) for x in folded)
+                    i += 1
+                    continue
                 out_s.append(
                     ir.IfBlock(
                         ((s.cond, _fold_body(s.body, targets, stmt_addr, block_ifs)),),

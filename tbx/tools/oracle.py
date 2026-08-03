@@ -33,7 +33,11 @@ from pathlib import Path
 _REPO = Path(__file__).resolve().parent.parent.parent
 
 # dialect -> the oracle floppy image carrying that compiler
-_FLOPPIES = {"1.1": None, "1.0": "tb10_floppy.img"}  # None = oracle default
+_FLOPPIES = {
+    "1.1": None,              # English 1.1 oracle default
+    "1.0": "tb10_floppy.img",
+    "fr-1.1": "tb11_fr_floppy.img",
+}
 
 
 def preflight() -> None:

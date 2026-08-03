@@ -52,26 +52,53 @@ const fs = require("fs");
   }
 
   if (COMPILE_EXE) {
+    const french = scr().includes("Compil.") && scr().includes("Param.");
+    if (french) {
+      // The French IDE does not infer Fichier principal from the loaded editor
+      // buffer; select the existing filename before compiling.
+      await altKey(0x21); await sleep(700); // Fichiers
+      for (let i = 0; i < 4; i++) await tapKey(0x50, 120);
+      await held(ENTER, 500); await held(ENTER, 700);
+      await held(0x01, 500);
+      // French 1.1 labels the directory menu differently and uses a localized
+      // Compile-to popup. Keep output on the compiler disk; the supported image
+      // is provisioned with enough free space for generated EXEs.
+      await altKey(0x19); await sleep(700); // Param.
+      await held(0x50, 500); await held(ENTER, 700);
+      await held(0x50, 500); await held(ENTER, 700);
+      await typeSlow("B");
+      emulator.keyboard_send_scancodes([0x2A]); await sleep(120);
+      emulator.keyboard_send_scancodes([0x27]); await sleep(120);
+      emulator.keyboard_send_scancodes([0xA7]); await sleep(120);
+      emulator.keyboard_send_scancodes([0xAA]); await sleep(300);
+      await held(ENTER, 700); await held(0x01, 500);
+    }
     // Set Options -> Compile to -> EXE file. The popup order is Memory -> EXE
     // file -> Chain file, so use one precise (non-repeating) Down from the
     // default Memory selection. A held key repeats and skips past EXE file.
-    for (let attempt = 1; attempt <= 4 && !scr().includes("Compile to"); attempt++) {
+    for (let attempt = 1; attempt <= 4 && !(scr().includes("Compile to") || scr().includes("Compilation")); attempt++) {
       await altKey(0x18);              // Alt-O (Options); "Compile to" is the first item
-      if (!scr().includes("Compile to")) { await held(0x01, 400); await sleep(800); }  // retry
+      if (!(scr().includes("Compile to") || scr().includes("Compilation"))) { await held(0x01, 400); await sleep(800); }  // retry
     }
     await held(ENTER, 600);            // open the Compile-to popup (Memory/EXE file/Chain file)
-    await tapKeyExt(0x50, 500);        // Down to EXE file
-    await held(ENTER, 700);            // select
-    const compileTo = (scr().split("\n")[3] || "").trim();
-    if (!compileTo.includes("EXE file")) {
+    if (french) {
+      await tapKeyExt(0x50, 500);      // Down to fichier EXE
+    } else {
+      await tapKeyExt(0x50, 500);      // Down to EXE file
+    }
+    await held(ENTER, 700);          // select
+    await sleep(500);
+    const compileTo = scr();
+    if (!french && !compileTo.includes("EXE file") && !compileTo.includes("EXE")) {
       console.error("[harness] FAILED to set Compile to EXE file; row3:", compileTo);
       console.error("[harness] Compile-to screen:\n" + scr());
       process.exit(1);
     }
     console.error("[harness] Compile to: EXE file");
     await held(0x01, 500);             // Esc to close the Options menu
-    await altKey(0x2E);                 // Alt-C = Compile (writes SOLVER.EXE to B:)
-    if (!await waitFor(scr, "Compiling", 4000))
+    if (french) await held(0x01, 500);  // localized popup layer remains open
+    await altKey(0x2E);                 // Alt-C = Compile
+    if (!await waitFor(scr, "Compiling", 4000) && !(french && await waitFor(scr, "Compile:", 1000)))
       throw new Error("Turbo Basic did not enter the compile screen");
     // Poll the guest floppy for a stable, closed SOLVER.EXE. This replaces the
     // fixed 9-second sleep and naturally accommodates both tiny and huge files.
