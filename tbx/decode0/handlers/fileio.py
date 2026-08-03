@@ -159,91 +159,76 @@ def file_random(state: DecodeState, op, addr, kind) -> bool:
     return False
 
 
+def _read_numeric_input(state: DecodeState, addr) -> bool:
+    i, e, c = state.image, state.expr, state.control
+    nxt = i.ops[c.k + 1] if c.k + 1 < len(i.ops) else None
+    if e.pend_input is None or nxt is None:
+        raise ValueError(f"numeric INPUT read without target at {addr:#x}")
+    if nxt[1] in ("fstp", "fstp64"):
+        var, used = state.loc(nxt[2]), 2
+    elif nxt[1] == "fstp_bp":
+        var, used = state.loc_local_fp(nxt[2]), 2
+    elif nxt[1] == "fistp" and nxt[2] == 0x2C:
+        var, used = _numeric_bridge_target(state, addr)
+    elif _numeric_array_target(i.ops, c.k, nxt):
+        e.stack.append(_INPUTREAD)
+        state.advance()
+        return True
+    else:
+        raise ValueError(f"numeric INPUT read without FSTP at {addr:#x}")
+    state._input_target(var, is_str=False)
+    c.cur = None
+    state.advance(used)
+    return True
+
+
+def _numeric_bridge_target(state: DecodeState, addr):
+    i, c = state.image, state.control
+    j = c.k + 2
+    if j < len(i.ops) and i.ops[j][1] == "fwait":
+        j += 1
+    elif (
+        j + 1 < len(i.ops)
+        and i.ops[j][1] == "nop"
+        and i.ops[j + 1][1] == "nop"
+    ):
+        j += 2
+    else:
+        raise ValueError(f"numeric INPUT integer bridge mismatch at {addr:#x}")
+    if (
+        j + 1 >= len(i.ops)
+        or i.ops[j][1:] != ("movaxmem", 0x2C)
+        or i.ops[j + 1][1] not in ("movm_ax", "movm_ax_bp")
+    ):
+        raise ValueError(f"numeric INPUT integer bridge mismatch at {addr:#x}")
+    store = i.ops[j + 1]
+    var = state.loc(store[2]) if store[1] == "movm_ax" else state.loc_local(store[2])
+    return var, j + 2 - c.k
+
+
+def _numeric_array_target(ops, index, nxt) -> bool:
+    return nxt[1] in ("fld", "fild", "fld64") or (
+        nxt[1] == "moves_m"
+        and index + 2 < len(ops)
+        and ops[index + 2][1] in ("far_fstp", "far_fstp64")
+    )
+
+
+def _read_string_input(state: DecodeState) -> bool:
+    i, e, c = state.image, state.expr, state.control
+    nxt = i.ops[c.k + 1] if c.k + 1 < len(i.ops) else None
+    if nxt is not None and nxt[1] != "movsi":
+        e.sstack.append(_INPUTREAD)
+    state.advance()
+    return True
+
+
 def data_read(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: read_num, read_str."""
-    i, e, c = state.image, state.expr, state.control
-    if kind == "read_num":  # INPUT numeric read -> FSTP var
-        nxt = i.ops[c.k + 1] if c.k + 1 < len(i.ops) else None
-        if e.pend_input is None or nxt is None:
-            raise ValueError(f"numeric INPUT read without target at {addr:#x}")
-        if nxt[1] in ("fstp", "fstp64"):  # SINGLE/DOUBLE variable target
-            var, used = state.loc(nxt[2]), 2
-        elif nxt[1] == "fstp_bp":  # LOCAL SINGLE target
-            var, used = state.loc_local_fp(nxt[2]), 2
-        elif nxt[1] == "fistp" and nxt[2] == 0x2C:
-            # INTEGER target via the x87-to-AX bridge. FWAIT has a calibrated
-            # two-NOP spelling in this runtime family; the terminal store may
-            # name a DGROUP scalar or a BP-relative LOCAL.
-            j = c.k + 2
-            if j < len(i.ops) and i.ops[j][1] == "fwait":
-                j += 1
-            elif (
-                j + 1 < len(i.ops)
-                and i.ops[j][1] == "nop"
-                and i.ops[j + 1][1] == "nop"
-            ):
-                j += 2
-            else:
-                raise ValueError(f"numeric INPUT integer bridge mismatch at {addr:#x}")
-            if (
-                j + 1 >= len(i.ops)
-                or i.ops[j][1:] != ("movaxmem", 0x2C)
-                or i.ops[j + 1][1] not in ("movm_ax", "movm_ax_bp")
-            ):
-                raise ValueError(f"numeric INPUT integer bridge mismatch at {addr:#x}")
-            store = i.ops[j + 1]
-            var = (
-                state.loc(store[2])
-                if store[1] == "movm_ax"
-                else state.loc_local(store[2])
-            )
-            used = j + 2 - c.k
-        elif (
-            nxt[1] in ("fld", "fild", "fld64")
-            or (
-                nxt[1] == "moves_m"
-                and c.k + 2 < len(i.ops)
-                and i.ops[c.k + 2][1] in ("far_fstp", "far_fstp64")
-            )
-        ):
-            # Array-element target (t1_inparr, wild schart.exe): the index
-            # computation runs between the read and the element store, so the
-            # parsed value waits on the FP stack as a sentinel and the store
-            # terminal (fstp_si) names the target; pend_input stays open for
-            # it. A DOUBLE-valued dynamic-array index begins with fld64
-            # (t1_inpdynarr); a constant index starts directly with the
-            # descriptor load `moves_m` (t1_inpdynconst; wild rs.exe).
-            # Any other continuation still fails loudly below.
-            e.stack.append(_INPUTREAD)
-            state.advance()
-            return True
-        else:
-            raise ValueError(f"numeric INPUT read without FSTP at {addr:#x}")
-        state._input_target(var, is_str=False)
-        c.cur = None
-        state.advance(used)
-        return True
-    if kind == "read_str":  # INPUT string read (movsi+strassign
-        nxt = i.ops[c.k + 1] if c.k + 1 < len(i.ops) else None
-        if nxt is not None and nxt[1] != "movsi":
-            # Computed string-array-element target (wild invent.exe, probe
-            # q_inpsarr): the index expression's own evaluation runs
-            # between the read and the element store -- an FP-typed index
-            # needs the fistp/fwait/movaxmem bridge first (fld/fild
-            # starts it), an already-integer one loads straight into si
-            # (movsim/movsi_bp) -- so the parsed value waits on the
-            # STRING stack as a sentinel meanwhile, the string sibling of
-            # read_num's numeric _INPUTREAD case above. The only OTHER
-            # continuation is the plain scalar target (movsi + strassign,
-            # handled generically below); anything but a direct movsi at
-            # this position must be an index computation starting. The
-            # store terminal (the shlsi element-access handler's
-            # strassign branch) names the target; pend_input stays open.
-            e.sstack.append(_INPUTREAD)
-            state.advance()
-            return True
-        state.advance()  # plain scalar target; handled by the movsi case)
-        return True
+    if kind == "read_num":
+        return _read_numeric_input(state, addr)
+    if kind == "read_str":
+        return _read_string_input(state)
     return False
 
 
@@ -261,37 +246,45 @@ def data_read2(state: DecodeState, op, addr, kind) -> bool:
     return False
 
 
+def _write_file_separator(state: DecodeState, addr) -> bool:
+    e = state.expr
+    if (
+        e.pend_print is None
+        or e.pend_print.mode != "write"
+        or e.pend_print.file is None
+    ):
+        raise ValueError(f"WRITE# separator without open chain at {addr:#x}")
+    state.advance()
+    return True
+
+
+def _write_item(state: DecodeState) -> bool:
+    e, c = state.expr, state.control
+    item = e.stack.pop()
+    if e.pend_print is not None and e.pend_print.mode != "write":
+        state.flush_pending()
+    if e.pend_print is None:
+        e.pend_print = PrintChain(items=[], file=None, start=c.cur, mode="write")
+    e.pend_print.items.append(item)
+    c.cur = None
+    state.advance()
+    return True
+
+
+def _write_separator(state: DecodeState, addr) -> bool:
+    e = state.expr
+    if e.pend_print is None or e.pend_print.mode != "write":
+        raise ValueError(f"WRITE separator without open WRITE chain at {addr:#x}")
+    state.advance()
+    return True
+
+
 def write_ops(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: write_file_sep, write_item, write_sep."""
-    e, c = state.expr, state.control
-    if kind == "write_file_sep":  # WRITE# item separator
-        if (
-            e.pend_print is None
-            or e.pend_print.mode != "write"
-            or e.pend_print.file is None
-        ):
-            raise ValueError(f"WRITE# separator without open chain at {addr:#x}")
-        state.advance()
-        return True
-    if kind == "write_item":  # WRITE numeric item (FP stack)
-        item = e.stack.pop()
-        if e.pend_print is not None and e.pend_print.mode != "write":
-            state.flush_pending()
-        if e.pend_print is None:
-            e.pend_print = PrintChain(
-                items= [],
-                file= None,
-                start= c.cur,
-                mode= "write",
-            )
-        assert e.pend_print is not None  # just established above
-        e.pend_print.items.append(item)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "write_sep":  # WRITE comma separator
-        if e.pend_print is None or e.pend_print.mode != "write":
-            raise ValueError(f"WRITE separator without open WRITE chain at {addr:#x}")
-        state.advance()
-        return True
+    if kind == "write_file_sep":
+        return _write_file_separator(state, addr)
+    if kind == "write_item":
+        return _write_item(state)
+    if kind == "write_sep":
+        return _write_separator(state, addr)
     return False

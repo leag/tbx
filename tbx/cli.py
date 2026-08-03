@@ -80,7 +80,7 @@ def _dump_data(program: list[object]) -> str:
     return "\n".join(lines) + ("\n" if lines else "")
 
 
-def main(argv=None) -> int:
+def _parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="tbx",
         description="Byte-exact decompiler for Borland Turbo Basic 1.0/1.1 DOS EXEs.",
@@ -110,12 +110,61 @@ def main(argv=None) -> int:
         help="split source over 64 KiB into procedure-boundary .INC files "
         "(requires --output)",
     )
-    args = ap.parse_args(argv)
+    return ap
+
+
+def _validate_args(args: argparse.Namespace) -> bool:
     if args.ops and args.data:
         print("tbx: --ops and --data are mutually exclusive", file=sys.stderr)
-        return 1
+        return False
     if args.split and (args.output is None or args.ops or args.data):
         print("tbx: --split requires --output and cannot be used with --ops/--data", file=sys.stderr)
+        return False
+    return True
+
+
+def _decode_output(args: argparse.Namespace, exe: bytes):
+    if args.ops:
+        return _dump_ops(exe), None, None
+
+    prog = decode0.decode_user_code(exe)
+    if args.data:
+        return _dump_data(prog), None, prog
+
+    bundle = emit0.emit_split(prog, prefix=args.output.stem) if args.split else None
+    text = bundle.root if bundle is not None else emit0.emit(prog)
+    return text, bundle, prog
+
+
+def _write_output(args: argparse.Namespace, text: str, bundle) -> bool:
+    if not args.output:
+        sys.stdout.write(text)
+        return True
+
+    if bundle is not None:
+        collisions = [
+            args.output.parent / name
+            for name, _ in bundle.includes
+            if (args.output.parent / name).exists()
+        ]
+        if collisions:
+            names = ", ".join(p.name for p in collisions[:3])
+            print(
+                f"tbx: refusing to overwrite existing include file(s): {names}",
+                file=sys.stderr,
+            )
+            return False
+        for name, include in bundle.includes:
+            (args.output.parent / name).write_text(
+                include, encoding="latin-1", newline=""
+            )
+    args.output.write_text(text, encoding="latin-1", newline="")
+    return True
+
+
+def main(argv=None) -> int:
+    args = _parser().parse_args(argv)
+    if not _validate_args(args):
         return 1
 
     try:
@@ -123,56 +172,22 @@ def main(argv=None) -> int:
     except OSError as e:
         print(f"tbx: {e}", file=sys.stderr)
         return 1
-    bundle = None
     try:
-        if args.ops:
-            text = _dump_ops(exe)
-        else:
-            prog = decode0.decode_user_code(exe)
-            if args.data:
-                text = _dump_data(prog)
-            else:
-                bundle = (
-                    emit0.emit_split(prog, prefix=args.output.stem)
-                    if args.split
-                    else None
-                )
-                text = bundle.root if bundle is not None else emit0.emit(prog)
-            # IDE compiler toggles have no source form (see emit0); surface them
-            # out-of-band so `-o` output stays exactly the recompiling source.
-            toggles = getattr(prog, "toggles", "")
-            if toggles:
-                print(
-                    f"tbx: {args.exe}: compiled with Options toggles "
-                    f"{decode0.toggle_names(toggles)}",
-                    file=sys.stderr,
-                )
+        text, bundle, prog = _decode_output(args, exe)
+        # IDE compiler toggles have no source form (see emit0); surface them
+        # out-of-band so `-o` output stays exactly the recompiling source.
+        toggles = getattr(prog, "toggles", "") if prog is not None else ""
+        if toggles:
+            print(
+                f"tbx: {args.exe}: compiled with Options toggles "
+                f"{decode0.toggle_names(toggles)}",
+                file=sys.stderr,
+            )
     except ValueError as e:
         print(f"tbx: {args.exe}: {e}", file=sys.stderr)
         return 1
 
-    if args.output:
-        if bundle is not None:
-            collisions = [
-                args.output.parent / name
-                for name, _ in bundle.includes
-                if (args.output.parent / name).exists()
-            ]
-            if collisions:
-                names = ", ".join(p.name for p in collisions[:3])
-                print(
-                    f"tbx: refusing to overwrite existing include file(s): {names}",
-                    file=sys.stderr,
-                )
-                return 1
-            for name, include in bundle.includes:
-                (args.output.parent / name).write_text(
-                    include, encoding="latin-1", newline=""
-                )
-        args.output.write_text(text, encoding="latin-1", newline="")
-    else:
-        sys.stdout.write(text)
-    return 0
+    return 0 if _write_output(args, text, bundle) else 1
 
 
 if __name__ == "__main__":

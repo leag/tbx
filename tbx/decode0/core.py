@@ -99,6 +99,23 @@ def _is_bare_len_poll(value) -> bool:
 # the 30 words are ever written (handle, type/rank, esize, one bound pair),
 # the rest is dead padding sized for the worst case the runtime supports.
 _LOCAL_ARR_WORDS = 30
+_RELATION_OPS = frozenset(("=", "<>", "<", "<=", ">", ">="))
+_LOGICAL_OPS = frozenset(("AND", "OR"))
+
+
+def _logical_group(value):
+    lhs, rhs = _logical_condition(value.lhs), _logical_condition(value.rhs)
+    if lhs is None or rhs is None:
+        return None
+    # The integer fold has no node for the explicit outer parens in
+    # `(A OR B) AND C`; retain the grouping needed to regenerate its distinct
+    # short-circuit template (t1_nestedbool).
+    if value.op == "AND":
+        if isinstance(value.lhs, ir.BinOp) and value.lhs.op == "OR":
+            lhs = ir.Group(lhs)
+        if isinstance(value.rhs, ir.BinOp) and value.rhs.op == "OR":
+            rhs = ir.Group(rhs)
+    return ir.LogOp(value.op, lhs, rhs)
 
 
 def _logical_condition(value):
@@ -115,19 +132,10 @@ def _logical_condition(value):
     if isinstance(value, ir.Group):
         inner = _logical_condition(value.inner)
         return ir.Group(inner) if inner is not None else None
-    if isinstance(value, ir.BinOp) and value.op in ("=", "<>", "<", "<=", ">", ">="):
+    if isinstance(value, ir.BinOp) and value.op in _RELATION_OPS:
         return ir.RelOp(value.op, value.lhs, value.rhs)
-    if isinstance(value, ir.BinOp) and value.op in ("AND", "OR"):
-        lhs, rhs = _logical_condition(value.lhs), _logical_condition(value.rhs)
-        if lhs is not None and rhs is not None:
-            # The integer fold has no node for the explicit outer parens in
-            # `(A OR B) AND C`; retain the grouping needed to regenerate its
-            # distinct short-circuit template (t1_nestedbool).
-            if value.op == "AND" and isinstance(value.lhs, ir.BinOp) and value.lhs.op == "OR":
-                lhs = ir.Group(lhs)
-            if value.op == "AND" and isinstance(value.rhs, ir.BinOp) and value.rhs.op == "OR":
-                rhs = ir.Group(rhs)
-            return ir.LogOp(value.op, lhs, rhs)
+    if isinstance(value, ir.BinOp) and value.op in _LOGICAL_OPS:
+        return _logical_group(value)
     return None
 
 

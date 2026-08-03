@@ -280,6 +280,34 @@ def _unreferenced(addrs, counts) -> bool:
     return not any(counts.get(a, 0) for a in addrs if a is not None)
 
 
+def _fold_ifgoto_then(stmts, addrs, index, merge, counts):
+    if index + 1 >= len(stmts) or not _unreferenced(addrs[index + 1 :], counts):
+        return None
+    statement = stmts[index]
+    return ir.IfInline(_negate_cond(statement.cond), tuple(stmts[index + 1 :]), None)
+
+
+def _fold_ifgoto_else(stmts, addrs, index, target, merge, counts):
+    end = next(
+        (position for position in range(index + 1, len(stmts)) if addrs[position] == target),
+        None,
+    )
+    if end is None or end - 1 <= index:
+        return None
+    skip = stmts[end - 1]
+    if not isinstance(skip, ir.Goto) or _addr_target(skip.target) != merge:
+        return None
+    if counts.get(target, 0) != 1 or not _unreferenced(addrs[index + 1 : end - 1], counts):
+        return None
+    else_body, _ = _fold_region(stmts[end:], addrs[end:], merge, counts)
+    statement = stmts[index]
+    return ir.IfInline(
+        _negate_cond(statement.cond),
+        tuple(stmts[index + 1 : end - 1]),
+        tuple(else_body),
+    )
+
+
 def _fold_region(stmts, addrs, merge, counts):
     out_s, out_a = [], []
     i = 0
@@ -288,32 +316,11 @@ def _fold_region(stmts, addrs, merge, counts):
         target = _addr_target(s.target) if isinstance(s, ir.IfGoto) else None
         node = None
         if target is not None and a is not None and target > a:
-            if target == merge and i + 1 < len(stmts):
-                # `IF c THEN <rest of arm>`: the false branch leaves the arm.
-                if _unreferenced(addrs[i + 1 :], counts):
-                    node = ir.IfInline(
-                        _negate_cond(s.cond), tuple(stmts[i + 1 :]), None
-                    )
-            else:
-                j = next(
-                    (k for k in range(i + 1, len(stmts)) if addrs[k] == target), None
-                )
-                if (
-                    j is not None
-                    and j - 1 > i
-                    and isinstance(stmts[j - 1], ir.Goto)
-                    and _addr_target(stmts[j - 1].target) == merge
-                    and counts.get(target, 0) == 1  # only our own IfGoto
-                    and _unreferenced(addrs[i + 1 : j - 1], counts)
-                ):
-                    else_s, _ = _fold_region(
-                        stmts[j:], addrs[j:], merge, counts
-                    )
-                    node = ir.IfInline(
-                        _negate_cond(s.cond),
-                        tuple(stmts[i + 1 : j - 1]),
-                        tuple(else_s),
-                    )
+            node = (
+                _fold_ifgoto_then(stmts, addrs, i, merge, counts)
+                if target == merge
+                else _fold_ifgoto_else(stmts, addrs, i, target, merge, counts)
+            )
         if node is None:
             out_s.append(s)
             out_a.append(a)

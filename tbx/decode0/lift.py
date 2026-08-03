@@ -1060,81 +1060,73 @@ def _rewrite_exit_goto(statement, exit_addr, exit_stmt):
     return statement
 
 
+def _exit_scope(stmts, addrs, skip_addr, opener, closer):
+    if opener is None:
+        return None
+    for_stop = next((i for i, address in enumerate(addrs) if address == skip_addr), None)
+    if for_stop is None:
+        return None, None
+    depth = 0
+    for index in range(for_stop - 1, -1, -1):
+        if isinstance(stmts[index], closer):
+            depth += 1
+        elif isinstance(stmts[index], opener):
+            if depth == 0:
+                return index, for_stop
+            depth -= 1
+    return None, for_stop
+
+
+def _rewrite_exit_gotos(stmts, addrs, exit_stmt, exit_addr, scope, patch):
+    for index, statement in enumerate(stmts):
+        for_start = for_stop = None
+        if scope is not None:
+            for_start, for_stop = scope
+        in_scope = scope is None or (
+            for_start is not None and for_stop is not None and for_start < index < for_stop
+        )
+        if not in_scope:
+            continue
+        rewritten = _rewrite_exit_goto(statement, exit_addr, exit_stmt)
+        if rewritten is statement:
+            continue
+        if isinstance(statement, ir.Goto):
+            patch(index, rewritten)
+        stmts[index] = rewritten
+
+
+def _fold_exit_conditionals(stmts, addrs, skip_addr, exit_stmt):
+    index = 0
+    while index + 1 < len(stmts):
+        if (
+            isinstance(stmts[index], ir.IfGoto)
+            and stmts[index].target == ("addr", skip_addr)
+            and stmts[index + 1] == exit_stmt
+        ):
+            condition = stmts[index].cond
+            if not isinstance(condition, ir.RelOp):
+                raise ValueError(f"EXIT-IF fold: non-relational cond {condition!r}")
+            stmts[index] = ir.IfInline(
+                ir.RelOp(_NEGATE_REL[condition.op], condition.lhs, condition.rhs),
+                (exit_stmt,),
+            )
+            del stmts[index + 1], addrs[index + 1]
+        index += 1
+
+
 def _apply_exit_folds(stmts, addrs, exit_folds, patch=_nopatch):
     """EXIT FOR/LOOP/SUB/DEF folds: rewrite the early-exit GOTO to the
     loop/proc exit, then fold `IF c THEN <skip>` + EXIT into `IF negate(c) THEN EXIT`.
     """
     with editing(stmts, "apply_exit_folds"):
         for exit_stmt, skip_addr, exit_addr in exit_folds:
-            for_start = None
-            for_stop = None
             opener, closer = {
                 ir.ExitFor: (ir.For, ir.NextStmt),
                 ir.ExitLoop: (ir.Do, ir.Loop),
             }.get(type(exit_stmt), (None, None))
-            if opener is not None:
-                for_stop = next(
-                    (i for i, a in enumerate(addrs) if a == skip_addr), None
-                )
-                if for_stop is not None:
-                    depth = 0
-                    for j in range(for_stop - 1, -1, -1):
-                        if isinstance(stmts[j], closer):
-                            depth += 1
-                        elif isinstance(stmts[j], opener):
-                            if depth == 0:
-                                for_start = j
-                                break
-                            depth -= 1
-            for i, s in enumerate(stmts):
-                # An EXIT only rewrites a jump made from INSIDE the loop it
-                # leaves. Without that, every jump to the address just past a
-                # loop becomes an EXIT, including one that is not leaving it at
-                # all: a following loop whose body starts exactly there is
-                # entered by a BACKWARD jump to the same address, and rewriting
-                # its back-edge as `EXIT LOOP` both loses that loop and strands
-                # the EXIT outside any loop, which TB rejects with `Error 435:
-                # DO loop expected` (wild cal.exe, whose loop at 0x14d10 has
-                # two long-jmp back-edges to loop 2's own exit address).
-                # The span is found the same way for FOR and DO. If the
-                # enclosing construct cannot be located, this target is
-                # ambiguous (it may be a back-edge into an adjacent loop), so
-                # preserve the GOTO. Emitting EXIT LOOP without a proven DO
-                # produces invalid BASIC and Turbo Basic's misleading Error
-                # 435 (wild cal.exe/mcmurphy.exe).
-                in_scope = opener is None or (
-                    for_start is not None
-                    and for_stop is not None
-                    and for_start < i < for_stop
-                )
-                if in_scope:
-                    rewritten = _rewrite_exit_goto(s, exit_addr, exit_stmt)
-                    if rewritten is not s:
-                        # Only the whole-statement case is a revision the log
-                        # can carry: a top-level GOTO the walk committed
-                        # becoming the EXIT it always was. When the rewrite
-                        # happens INSIDE a body the statement replaced is a
-                        # fold product, which was assembled rather than
-                        # committed and so has no event to revise. `patch`
-                        # comes before the list edit as in `_lift_next`.
-                        if isinstance(s, ir.Goto):
-                            patch(i, rewritten)
-                        stmts[i] = rewritten
-            i = 0
-            while i + 1 < len(stmts):
-                if (
-                    isinstance(stmts[i], ir.IfGoto)
-                    and stmts[i].target == ("addr", skip_addr)
-                    and stmts[i + 1] == exit_stmt
-                ):
-                    c = stmts[i].cond
-                    if not isinstance(c, ir.RelOp):
-                        raise ValueError(f"EXIT-IF fold: non-relational cond {c!r}")
-                    stmts[i] = ir.IfInline(
-                        ir.RelOp(_NEGATE_REL[c.op], c.lhs, c.rhs), (exit_stmt,)
-                    )
-                    del stmts[i + 1], addrs[i + 1]
-                i += 1
+            scope = _exit_scope(stmts, addrs, skip_addr, opener, closer)
+            _rewrite_exit_gotos(stmts, addrs, exit_stmt, exit_addr, scope, patch)
+            _fold_exit_conditionals(stmts, addrs, skip_addr, exit_stmt)
 
 
 def _fold_body_ifgotos(body, end_addr, stmt_addr=None):

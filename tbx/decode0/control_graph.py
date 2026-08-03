@@ -80,42 +80,11 @@ class ControlGraph:
         address and so can never be a jump target.
         """
         events = tuple(events)
-        nodes = tuple(
-            ControlNode(event.seq, event.address) for event in events
+        return cls(
+            nodes=tuple(ControlNode(event.seq, event.address) for event in events),
+            edges=_event_edges(events),
+            addresses=frozenset(_event_addresses(events)),
         )
-        # An arrival names an address precisely because it may own no
-        # statement -- a procedure epilogue, an arm-close jmp. Letting one into
-        # the address set would make `validate_targets` accept a target nothing
-        # owns, which is the check's whole point.
-        known = {
-            e.address
-            for e in events
-            if e.address is not None and e.kind != "arrive"
-        }
-        # A revised statement is the one that matters: its first draft may
-        # name a target the decoder went on to correct.
-        from tbx.decode0.events import committed
-
-        final = {e.seq: e.payload for e in committed(events)}
-        edges: list[ControlEdge] = []
-        for event in events:
-            if event.kind in ("arrive", "patch"):
-                continue  # a moment, or a revision already folded into `final`
-            if event.kind == "branch":
-                # A recognised branch names its target directly; there is no
-                # committed statement to walk for an ("addr", n) operand. A
-                # frame whose exit is not yet known contributes a node but no
-                # edge -- inventing one would be a guessed target.
-                if event.payload.target is not None:
-                    edges.append(
-                        ControlEdge(
-                            event.seq, event.payload.target, event.payload.frame
-                        )
-                    )
-                continue
-            for kind, target in _address_targets(final.get(event.seq, event.payload)):
-                edges.append(ControlEdge(event.seq, target, kind))
-        return cls(nodes, tuple(edges), frozenset(known))
 
     def resolve(self, address: int | None) -> int | None:
         """The node owning ``address``, or None when no node does."""
@@ -128,6 +97,35 @@ class ControlGraph:
 
     def outgoing(self, source: int) -> tuple[ControlEdge, ...]:
         return tuple(edge for edge in self.edges if edge.source == source)
+
+
+def _event_addresses(events: tuple[Any, ...]) -> set[int]:
+    """Return addresses owned by event-backed graph nodes."""
+    return {
+        event.address
+        for event in events
+        if event.address is not None and event.kind != "arrive"
+    }
+
+
+def _event_edges(events: tuple[Any, ...]) -> tuple[ControlEdge, ...]:
+    """Build graph edges from final statements and direct branch events."""
+    from tbx.decode0.events import committed
+
+    final = {event.seq: event.payload for event in committed(events)}
+    edges: list[ControlEdge] = []
+    for event in events:
+        if event.kind in ("arrive", "patch"):
+            continue
+        if event.kind == "branch":
+            if event.payload.target is not None:
+                edges.append(
+                    ControlEdge(event.seq, event.payload.target, event.payload.frame)
+                )
+            continue
+        for kind, target in _address_targets(final.get(event.seq, event.payload)):
+            edges.append(ControlEdge(event.seq, target, kind))
+    return tuple(edges)
 
 
 def _address_targets(value: Any) -> tuple[tuple[str, int], ...]:
@@ -217,35 +215,47 @@ def classify_branches(program) -> tuple[BranchOutcome, ...]:
 
     frame_seqs = {e.seq for e in program.events if e.kind == "branch"}
     by_seq = {node.index: node for node in graph.nodes}
-    outcomes = []
-    for edge in graph.edges:
-        if edge.source in frame_seqs:
-            # A recognised frame: the handler decided the construct without
-            # committing a statement, so no statement edit can account for it.
-            outcome = "frame"
-        elif edge.source in absorbed:
-            outcome = "absorbed"
-        elif edge.source in rewritten:
-            outcome = "folded"
-        else:
-            outcome = "raw"
-        outcomes.append(
-            BranchOutcome(
-                seq=edge.source,
-                address=by_seq[edge.source].address,
-                target=edge.target,
-                outcome=outcome,
-                decided_by=(
-                    edge.kind
-                    if outcome == "frame"
-                    else _deciding_pass(program, edge.source)
-                    if outcome != "raw"
-                    else None
-                ),
-                resolvable=edge.target in graph.addresses,
-            )
-        )
-    return tuple(outcomes)
+    return tuple(
+        _classify_edge(edge, program, graph, by_seq, frame_seqs, absorbed, rewritten)
+        for edge in graph.edges
+    )
+
+
+def _classify_edge(
+    edge,
+    program,
+    graph: ControlGraph,
+    by_seq: dict[int, Any],
+    frame_seqs: set[int],
+    absorbed: frozenset[int],
+    rewritten: frozenset[int],
+) -> BranchOutcome:
+    """Classify one graph edge using reconciliation and edit-log evidence."""
+    if edge.source in frame_seqs:
+        # A recognised frame has no statement edit because it opened a
+        # construct without committing a branch statement.
+        outcome = "frame"
+    elif edge.source in absorbed:
+        outcome = "absorbed"
+    elif edge.source in rewritten:
+        outcome = "folded"
+    else:
+        outcome = "raw"
+    decided_by = (
+        edge.kind
+        if outcome == "frame"
+        else _deciding_pass(program, edge.source)
+        if outcome != "raw"
+        else None
+    )
+    return BranchOutcome(
+        seq=edge.source,
+        address=by_seq[edge.source].address,
+        target=edge.target,
+        outcome=outcome,
+        decided_by=decided_by,
+        resolvable=edge.target in graph.addresses,
+    )
 
 
 def _deciding_pass(program, seq: int) -> str | None:

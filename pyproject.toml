@@ -45,6 +45,10 @@ ignore = ["E701", "E702", "E741"]
 [dependency-groups]
 dev = [
     "iced-x86>=1.21.0",
+    "lizard>=1.17.10",
     "pytest>=9.0.0",
+    "radon>=5.1,<5.2",
     "ruff>=0.15.0",
+    "wily>=1.25.0",
+    "xenon>=0.9.3",
 ]

@@ -90,6 +90,46 @@ class SelectRegion:
     end_address: int
 
 
+@dataclass
+class _ConstructFoldState:
+    """Mutable coordinates shared while recorded constructs are folded."""
+
+    statements: list
+    addresses: list
+    stmt_addr: Any
+    block_ifs: set
+    selects: tuple[SelectRegion, ...]
+    shifts: list[tuple[int, int]]
+    arms: dict[int | None, list]
+
+    def shifted(self, position: int) -> int:
+        return position - sum(
+            size for at, size in self.shifts if position >= at
+        )
+
+    def replace(
+        self, start: int, stop: int, statement: Any, address: int | None, at: int
+    ) -> None:
+        self.statements[start:stop] = [statement]
+        self.addresses[start:stop] = [address]
+        if address is not None:
+            self.stmt_addr.claim(statement, address)
+        self.shifts.append((at, (stop - start) - 1))
+
+    def owner(self, arm: ArmRegion) -> int | None:
+        """Return the innermost SELECT containing an arm."""
+        enclosing = [
+            select
+            for select in self.selects
+            if select.start_address <= arm.start_address <= select.end_address
+        ]
+        return (
+            max(enclosing, key=lambda select: select.start_address).close
+            if enclosing
+            else None
+        )
+
+
 def _positions(program):
     """A map from event ``seq`` to how many statements had been committed."""
     commits = [event.seq for event in committed(program.events)]
@@ -230,6 +270,90 @@ def fold_inline_ifs(program) -> list:
     return statements
 
 
+def _construct_operations(program) -> list[tuple[int, int, Any]]:
+    operations = [(region.close, 0, region) for region in fold_regions(program)]
+    operations += [
+        (arm.close, 1 if arm.kind == "case_arm" else 2, arm)
+        for arm in arm_regions(program)
+    ]
+    operations += [(select.close, 3, select) for select in select_regions(program)]
+    return sorted(operations, key=lambda operation: (operation[0], operation[1]))
+
+
+def _apply_fold_region(state: _ConstructFoldState, region: FoldRegion) -> None:
+    from tbx.decode0.lift import _fold_body_ifgotos
+
+    start, stop = state.shifted(region.start), state.shifted(region.stop)
+    body = tuple(state.statements[start:stop])
+    if not body:
+        raise ValueError(f"empty inline-IF body for the branch at {region.address:#x}")
+    body = _fold_body_ifgotos(body, region.target, state.stmt_addr)
+    state.replace(
+        start,
+        stop,
+        ir.IfInline(region.cond, body),
+        region.address,
+        region.stop,
+    )
+
+
+def _apply_arm(state: _ConstructFoldState, arm: ArmRegion) -> None:
+    from tbx.decode0.lift import _fold_if, _jump_targets, _target_counts
+    from tbx.decode0.select_case import _fold_arm_ifgoto_else
+
+    start, stop = state.shifted(arm.start), state.shifted(arm.stop)
+    owner = state.owner(arm)
+    if arm.kind == "case_else":
+        taken = state.arms.get(owner, [])
+        start = max(
+            [start] + [state.shifted(item.start) + len(body) for item, body in taken]
+        )
+        stop = max(start, stop)
+    folded, folded_addrs = _fold_if(
+        state.statements[start:stop],
+        state.addresses[start:stop],
+        bound=arm.end_address,
+        targets=_jump_targets(state.statements),
+        stmt_addr=state.stmt_addr,
+        block_ifs=state.block_ifs,
+    )
+    folded, folded_addrs = _fold_arm_ifgoto_else(
+        folded,
+        folded_addrs,
+        arm.end_address,
+        _target_counts(state.statements),
+    )
+    state.statements[start:stop], state.addresses[start:stop] = folded, folded_addrs
+    state.shifts.append((arm.stop, (stop - start) - len(folded)))
+    state.arms.setdefault(owner, []).append((arm, tuple(folded)))
+
+
+def _apply_select(state: _ConstructFoldState, select: SelectRegion) -> None:
+    owned = state.arms.pop(select.close, [])
+    if not owned:
+        return
+    start = min(state.shifted(arm.start) for arm, _ in owned)
+    stop = max(state.shifted(arm.start) + len(body) for arm, body in owned)
+    case_else = next(
+        (body for arm, body in owned if arm.kind == "case_else"), None
+    )
+    state.replace(
+        start,
+        stop,
+        ir.SelectCase(
+            select.selector,
+            tuple(
+                ir.CaseArm(arm.guards, body)
+                for arm, body in owned
+                if arm.kind == "case_arm"
+            ),
+            case_else or None,
+        ),
+        select.start_address,
+        max(arm.stop for arm, _ in owned),
+    )
+
+
 def fold_constructs(program) -> list:
     """The committed statements with every recorded construct folded.
 
@@ -248,8 +372,6 @@ def fold_constructs(program) -> list:
     were committed at, and which IFs the bytes say were spelled multi-line.
     """
     from tbx.decode0.addresses import AddressOwnership
-    from tbx.decode0.lift import _fold_if, _jump_targets, _target_counts
-    from tbx.decode0.select_case import _fold_arm_ifgoto_else
 
     events = committed(program.events)
     statements = [event.payload for event in events]
@@ -268,132 +390,21 @@ def fold_constructs(program) -> list:
         if event.kind == "branch" and event.payload.block
     }
 
-    shifts: list[tuple[int, int]] = []
+    state = _ConstructFoldState(
+        statements=statements,
+        addresses=addresses,
+        stmt_addr=stmt_addr,
+        block_ifs=block_ifs,
+        selects=select_regions(program),
+        shifts=[],
+        arms={},
+    )
 
-    def shifted(position: int) -> int:
-        return position - sum(size for at, size in shifts if position >= at)
-
-    def replace(start: int, stop: int, statement, address, at: int) -> None:
-        statements[start:stop] = [statement]
-        addresses[start:stop] = [address]
-        if address is not None:
-            # The statement this pass just built owns the address too, and a
-            # later fold looks that up rather than carrying an address list
-            # into nested bodies: `_fold_body` reconstructs an ELSE arm from
-            # `stmt_addr.get(id(b))` for statements that are no longer top
-            # level. The walk claims here for the same reason.
-            stmt_addr.claim(statement, address)
-        # Keyed on where the region ended, never on where the splice landed:
-        # the two diverge after the first fold, and comparing an unshifted
-        # position against a shifted boundary makes a fold look as though it
-        # precedes a region nested inside it.
-        shifts.append((at, (stop - start) - 1))
-
-    arms: dict[int, list] = {}  # SELECT close -> the arms it owns, in order
-    selects = select_regions(program)
-
-    def owner(arm) -> int | None:
-        """The innermost SELECT whose address range holds this arm."""
-        enclosing = [
-            s
-            for s in selects
-            if s.start_address <= arm.start_address <= s.end_address
-        ]
-        return max(enclosing, key=lambda s: s.start_address).close if enclosing else None
-
-    operations = []
-    for region in fold_regions(program):
-        operations.append((region.close, 0, region))
-    for arm in arm_regions(program):
-        # A CASE ELSE closes after the arms, and has to: the walk opens one
-        # provisionally, whenever the op after an arm's jmp is not recognisably
-        # another arm header, and a real arm turning up next simply overwrites
-        # where the else body was thought to start. What is left of the else
-        # region once the arms inside it are folded away is empty, which is how
-        # the walk decides the source had no CASE ELSE at all.
-        operations.append((arm.close, 1 if arm.kind == "case_arm" else 2, arm))
-    for select in selects:
-        operations.append((select.close, 3, select))
-
-    for _, _, operation in sorted(operations, key=lambda o: (o[0], o[1])):
+    for _, _, operation in _construct_operations(program):
         if isinstance(operation, FoldRegion):
-            start, stop = shifted(operation.start), shifted(operation.stop)
-            body = tuple(statements[start:stop])
-            if not body:
-                raise ValueError(
-                    f"empty inline-IF body for the branch at {operation.address:#x}"
-                )
-            body = _fold_body_ifgotos(body, operation.target, stmt_addr)
-            replace(
-                start,
-                stop,
-                ir.IfInline(operation.cond, body),
-                operation.address,
-                operation.stop,
-            )
+            _apply_fold_region(state, operation)
         elif isinstance(operation, ArmRegion):
-            start, stop = shifted(operation.start), shifted(operation.stop)
-            if operation.kind == "case_else":
-                # Whatever the arms of this SELECT have already taken is not
-                # the else's, however far back its provisional start was put.
-                taken = arms.get(owner(operation), [])
-                start = max(
-                    [start] + [shifted(a.start) + len(body) for a, body in taken]
-                )
-                stop = max(start, stop)
-            folded, folded_addrs = _fold_if(
-                statements[start:stop],
-                addresses[start:stop],
-                bound=operation.end_address,
-                targets=_jump_targets(statements),
-                stmt_addr=stmt_addr,
-                block_ifs=block_ifs,
-            )
-            # The walk folds an arm's single-line IF/ELSE too, and this pass
-            # has to build the same arm it does -- `_fold_if` alone leaves the
-            # IfGoto spelling, which an arm cannot carry
-            # (select_case._fold_arm_ifgoto_else; t1_selarmifelse).
-            folded, folded_addrs = _fold_arm_ifgoto_else(
-                folded,
-                folded_addrs,
-                operation.end_address,
-                _target_counts(statements),
-            )
-            statements[start:stop], addresses[start:stop] = folded, folded_addrs
-            shifts.append((operation.stop, (stop - start) - len(folded)))
-            arms.setdefault(owner(operation), []).append(
-                (operation, tuple(folded))
-            )
-        else:  # a SELECT: its arms are folded, so its own span is theirs
-            owned = arms.pop(operation.close, [])
-            if not owned:
-                continue  # nothing recorded closed inside it; leave it alone
-            # The span the arms occupy *now*, recomputed rather than summed:
-            # a construct folded inside one of them has already shortened it,
-            # and assuming the arms are still contiguous overwrites whatever
-            # sits between them -- a nested SELECT, in wild tbd73.exe.
-            start = min(shifted(a.start) for a, _ in owned)
-            stop = max(shifted(a.start) + len(body) for a, body in owned)
-            case_else = next(
-                (body for a, body in owned if a.kind == "case_else"), None
-            )
-            replace(
-                start,
-                stop,
-                ir.SelectCase(
-                    operation.selector,
-                    tuple(
-                        ir.CaseArm(a.guards, body)
-                        for a, body in owned
-                        if a.kind == "case_arm"
-                    ),
-                    case_else or None,
-                ),
-                operation.start_address,
-                # In commit coordinates a SELECT ends where its last arm did.
-                # Its own `start`/`stop` above are already current positions,
-                # derived from the arms rather than from a recorded region, so
-                # they cannot key the shift.
-                max(a.stop for a, _ in owned),
-            )
-    return statements
+            _apply_arm(state, operation)
+        else:
+            _apply_select(state, operation)
+    return state.statements
