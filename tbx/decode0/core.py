@@ -1403,6 +1403,32 @@ def _local_spelling(frame) -> dict[str, str]:
     return spell
 
 
+def _callee_param_suffixes(subs):
+    """Collect unanimous suffix evidence forwarded into ordinary SUBs."""
+    wanted: dict[tuple[str, int], set[str]] = {}
+    for caller in subs.values():
+        spell = {
+            p.rstrip("%$&#"): p
+            for p in caller.params
+            if p.startswith("P") and not p.endswith("(1)") and p[-1] in "%$&#"
+        }
+        if not spell:
+            continue
+        for node in _walk_nodes(caller.body):
+            if not isinstance(node, ir.CallStmt) or node.name not in subs:
+                continue
+            callee = subs[node.name]
+            for i, arg in enumerate(node.args):
+                if not (isinstance(arg, ir.Var) and arg.name in spell):
+                    continue
+                if i >= len(callee.params):
+                    continue
+                if callee.params[i][-1] in "%$&#" or not callee.params[i].startswith("P"):
+                    continue
+                wanted.setdefault((node.name, i), set()).add(spell[arg.name][-1])
+    return {k: next(iter(v)) for k, v in wanted.items() if len(v) == 1}
+
+
 def _type_untyped_callee_params(stmts, stmt_addr=None):
     """Give an ordinary callee's untyped parameter the caller's evidence.
 
@@ -1435,30 +1461,7 @@ def _type_untyped_callee_params(stmts, stmt_addr=None):
         if isinstance(s, ir.SubDef) and s.name not in helpers
     }
 
-    # (callee, argpos) -> the suffixes callers forward there.
-    wanted: dict[tuple[str, int], set[str]] = {}
-    for caller in subs.values():
-        spell = {
-            p.rstrip("%$&#"): p
-            for p in caller.params
-            if p.startswith("P") and not p.endswith("(1)") and p[-1] in "%$&#"
-        }
-        if not spell:
-            continue
-        for node in _walk_nodes(caller.body):
-            if not isinstance(node, ir.CallStmt) or node.name not in subs:
-                continue
-            callee = subs[node.name]
-            for i, arg in enumerate(node.args):
-                if not (isinstance(arg, ir.Var) and arg.name in spell):
-                    continue
-                if i >= len(callee.params):
-                    continue
-                if callee.params[i][-1] in "%$&#" or not callee.params[i].startswith("P"):
-                    continue
-                wanted.setdefault((node.name, i), set()).add(spell[arg.name][-1])
-
-    retype = {k: next(iter(v)) for k, v in wanted.items() if len(v) == 1}
+    retype = _callee_param_suffixes(subs)
     if not retype:
         return stmts
 
