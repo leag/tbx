@@ -454,6 +454,49 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
     return None
 
 
+def _scan_direct2_arithmetic(exe, p, b, ops) -> int | None:
+    if b == 0x31 and exe[p + 1] == 0xC0:
+        ops.append((p, "xorax"))
+        return p + 2
+    if b == 0x31 and exe[p + 1] == 0xF6:
+        ops.append((p, "bchk0"))
+        return p + 2
+    if b == 0xD1 and exe[p + 1] == 0xE6:
+        ops.append((p, "shlsi"))
+        return p + 2
+    if b == 0x81 and exe[p + 1] == 0xC6:
+        ops.append((p, "addsi", struct.unpack_from("<H", exe, p + 2)[0]))
+        return p + 4
+    if b == 0xBE:
+        ops.append((p, "movsi", struct.unpack_from("<H", exe, p + 1)[0]))
+        return p + 3
+    if b == 0x8B and exe[p + 1] == 0x06:
+        ops.append((p, "movax_m", struct.unpack_from("<H", exe, p + 2)[0]))
+        return p + 4
+    if b == 0x03 and exe[p + 1] == 0x06:
+        ops.append((p, "addax_m", struct.unpack_from("<H", exe, p + 2)[0]))
+        return p + 4
+    if b == 0x26 and exe[p + 1] == 0x03 and exe[p + 2] == 0x06:
+        ops.append((p, "addax_m", struct.unpack_from("<H", exe, p + 3)[0]))
+        return p + 5
+    if b == 0x26 and exe[p + 1] == 0x8B and exe[p + 2] == 0x06:
+        ops.append((p, "movax_m", struct.unpack_from("<H", exe, p + 3)[0]))
+        return p + 5
+    if b == 0x03 and exe[p + 1] == 0x86:
+        ops.append((p, "addax_bp", struct.unpack_from("<H", exe, p + 2)[0]))
+        return p + 4
+    if b == 0xF7 and exe[p + 1] == 0xD8:
+        ops.append((p, "negax"))
+        return p + 2
+    if b == 0xF7 and exe[p + 1] == 0x2E:
+        ops.append((p, "imul_m", struct.unpack_from("<H", exe, p + 2)[0]))
+        return p + 4
+    if b == 0xF7 and exe[p + 1] == 0x6E:
+        ops.append((p, "imul_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        return p + 3
+    return None
+
+
 def _scan_direct2(exe, p, b, ops) -> int | None:
     """Byte-dispatch family split out of _scan. Returns the new
     cursor when it decodes the op at ``p``, else None."""
@@ -468,6 +511,9 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "str_free_temp"))
         p += 14
         return p
+    np = _scan_direct2_arithmetic(exe, p, b, ops)
+    if np is not None:
+        return np
     # There is deliberately NO `mov al,imm8; out imm8,al` op here. It used to
     # be read as a byte-constant OUT that the compiler had folded, which is not
     # a thing Turbo Basic does: `OUT 67, 116` emits the general mov-AX / mov-DX
@@ -477,58 +523,6 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
     # `_try_inline_rescue`, which now claims them -- and decoding them as an
     # OUT statement cost wild zip.exe 592 bytes and ziptest.exe 224 on the
     # round trip. Ledger RO-OUT-IMM-FOLD.
-    if b == 0x31 and exe[p + 1] == 0xC0:  # xor ax, ax (zero literal)
-        ops.append((p, "xorax"))
-        p += 2
-        return p
-    if b == 0x31 and exe[p + 1] == 0xF6:  # xor si,si: Bounds-check (toggle 'B')
-        ops.append((p, "bchk0"))  # zeroes si before the checked index runs;
-        p += 2  # semantic-free, the following bchk_idx sets si=ax (F3.4)
-        return p
-    if b == 0xD1 and exe[p + 1] == 0xE6:  # shl si, 1 (x2 = element size 4)
-        ops.append((p, "shlsi"))
-        p += 2
-        return p
-    if b == 0x81 and exe[p + 1] == 0xC6:  # add si, imm16 (array base)
-        ops.append((p, "addsi", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 4
-        return p
-    if b == 0xBE:  # mov si, imm16 (string descriptor)
-        ops.append((p, "movsi", struct.unpack_from("<H", exe, p + 1)[0]))
-        p += 3
-        return p
-    if b == 0x8B and exe[p + 1] == 0x06:  # mov ax, [disp16] (int var load)
-        ops.append((p, "movax_m", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 4
-        return p
-    if b == 0x03 and exe[p + 1] == 0x06:  # add ax, [disp16] (int left-fold)
-        ops.append((p, "addax_m", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 4
-        return p
-    if b == 0x26 and exe[p + 1] == 0x03 and exe[p + 2] == 0x06:
-        ops.append((p, "addax_m", struct.unpack_from("<H", exe, p + 3)[0]))
-        p += 5
-        return p
-    if b == 0x26 and exe[p + 1] == 0x8B and exe[p + 2] == 0x06:
-        ops.append((p, "movax_m", struct.unpack_from("<H", exe, p + 3)[0]))
-        p += 5
-        return p
-    if b == 0x03 and exe[p + 1] == 0x86:  # add ax,[bp+disp16]: large LOCAL
-        ops.append((p, "addax_bp", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 4  # integer left-fold (wild cleanup/reformat)
-        return p
-    if b == 0xF7 and exe[p + 1] == 0xD8:  # neg ax (int subtraction)
-        ops.append((p, "negax"))
-        p += 2
-        return p
-    if b == 0xF7 and exe[p + 1] == 0x2E:  # imul word [disp16]
-        ops.append((p, "imul_m", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 4
-        return p
-    if b == 0xF7 and exe[p + 1] == 0x6E:  # imul word [bp+disp8]: LOCAL int
-        ops.append((p, "imul_bp", struct.unpack_from("<b", exe, p + 2)[0]))
-        p += 3  # read as the right operand (witnessed t1_local2)
-        return p
     if b == 0xC7 and exe[p + 1] == 0x06:  # mov word [disp16], imm16
         d16, v16 = struct.unpack_from("<Hh", exe, p + 2)
         ops.append((p, "movm_imm", d16, v16))
