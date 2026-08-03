@@ -1948,62 +1948,50 @@ def _type_call_refinements(sub_defs, calls):
         for i, arg in enumerate(call.args):
             if i >= len(sub.params):
                 continue
-            param = sub.params[i]
-            if param.startswith("P") and not param.endswith("(1)"):
-                base = param.rstrip("%$&#")
-                suffix = None
-                # Numeric actuals may coerce to an unsuffixed SINGLE formal;
-                # string actuals cannot, so only `$` is safe evidence here.
-                if isinstance(arg, ir.Var) and arg.name[-1:] == "$":
-                    suffix = "$"
-                elif isinstance(arg, ir.ArrayRef) and arg.name[-1:] == "$":
-                    suffix = "$"
-                elif isinstance(arg, ir.StrLit):
-                    suffix = "$"
-                if suffix:
-                    want = f"{base}{suffix}"
-                    if want != param:
-                        refinements.setdefault(call.name, {})[param] = want
-
-            # Passing a string array element by reference proves the owner
-            # SUB's matching array formal, not just the descriptor push.
-            if (
-                owner in sub_defs
-                and param[-1:] == "$"
-                and isinstance(arg, ir.ArrayRef)
-                and arg.name.startswith("P")
-                and arg.name[-1:] != "$"
-            ):
-                owner_sub = sub_defs[owner]
-                array_param = next(
-                    (q for q in owner_sub.params if q == f"{arg.name}(1)"),
-                    None,
-                )
-                if array_param is not None:
-                    want = f"{arg.name}$(1)"
-                    if want != array_param:
-                        refinements.setdefault(owner, {})[array_param] = want
-
-            # A whole-array relay carries the descriptor type through another
-            # SUB boundary; this is direct evidence, unlike numeric coercion.
-            if (
-                owner in sub_defs
-                and param.endswith("$(1)")
-                and isinstance(arg, ir.ArrayRef)
-                and not arg.indices
-                and arg.name.startswith("P")
-                and arg.name[-1:] != "$"
-            ):
-                owner_sub = sub_defs[owner]
-                array_param = next(
-                    (q for q in owner_sub.params if q == f"{arg.name}(1)"),
-                    None,
-                )
-                if array_param is not None:
-                    want = f"{arg.name}$(1)"
-                    if want != array_param:
-                        refinements.setdefault(owner, {})[array_param] = want
+            _record_type_refinements(
+                refinements, owner, sub_defs, call.name, sub, sub.params[i], arg
+            )
     return refinements
+
+
+def _record_type_refinements(refinements, owner, sub_defs, call_name, sub, param, arg):
+    if param.startswith("P") and not param.endswith("(1)"):
+        base = param.rstrip("%$&#")
+        suffix = None
+        # Numeric actuals may coerce to an unsuffixed SINGLE formal;
+        # string actuals cannot, so only `$` is safe evidence here.
+        if isinstance(arg, ir.Var) and arg.name[-1:] == "$":
+            suffix = "$"
+        elif isinstance(arg, ir.ArrayRef) and arg.name[-1:] == "$":
+            suffix = "$"
+        elif isinstance(arg, ir.StrLit):
+            suffix = "$"
+        if suffix:
+            want = f"{base}{suffix}"
+            if want != param:
+                refinements.setdefault(call_name, {})[param] = want
+
+    if owner not in sub_defs or not isinstance(arg, ir.ArrayRef):
+        return
+    owner_sub = sub_defs[owner]
+    if (
+        param[-1:] == "$"
+        and arg.name.startswith("P")
+        and arg.name[-1:] != "$"
+    ) or (
+        param.endswith("$(1)")
+        and not arg.indices
+        and arg.name.startswith("P")
+        and arg.name[-1:] != "$"
+    ):
+        array_param = next(
+            (q for q in owner_sub.params if q == f"{arg.name}(1)"),
+            None,
+        )
+        if array_param is not None:
+            want = f"{arg.name}$(1)"
+            if want != array_param:
+                refinements.setdefault(owner, {})[array_param] = want
 
 
 def _propagate_call_types(stmts, stmt_addr=None):
