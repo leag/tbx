@@ -342,6 +342,27 @@ def _int_inc_dec(state: DecodeState, op, addr: int, kind: str) -> bool:
     return True
 
 
+def _int_unary_ops(state: DecodeState, kind: str) -> bool:
+    if kind not in ("negax", "notax", "notdx", "oraxdx", "xorax", "xorah"):
+        return False
+    m = state.machine
+    if kind == "negax":
+        m.ax = ir.Neg(m.ax)
+    elif kind == "notax":
+        m.ax = ir.Not(m.ax)
+    elif kind == "notdx":
+        m.dx = ir.Not(m.dx)
+    elif kind == "oraxdx":
+        m.ax = ir.BinOp("OR", m.dx, _rgrp("OR", m.ax))
+        m.dx = None
+    elif kind == "xorax":
+        m.ax = ir.Lit(0)
+    else:  # xorah: INP result widen, no semantic operation
+        pass
+    state.advance()
+    return True
+
+
 def int_alu(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addax_bp, addsiax, subax_m, imul_m, imul_bp, movax_bp, idivbx, cmpax_m, inc_m, dec_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
     img, m, expr_, l, c = (state.image, state.machine, state.expr,
@@ -553,29 +574,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         return True
     if _int_inc_dec(state, op, addr, kind):
         return True
-    if kind == "negax":  # subtraction setup
-        m.ax = ir.Neg(m.ax)
-        state.advance()
-        return True
-    if kind == "notax":  # unary NOT of the accumulator
-        m.ax = ir.Not(m.ax)
-        state.advance()
-        return True
-    if kind == "notdx":  # NOT the dx operand in place
-        m.dx = ir.Not(m.dx)
-        state.advance()
-        return True
-    if kind == "oraxdx":  # completes IMP as `(NOT A) OR B`
-        m.ax = ir.BinOp("OR", m.dx, _rgrp("OR", m.ax))
-        m.dx = None
-        state.advance()
-        return True
-    if kind == "xorax":  # xor ax,ax = literal 0
-        m.ax = ir.Lit(0)
-        state.advance()
-        return True
-    if kind == "xorah":  # INP result widen: lift no-op
-        state.advance()
+    if _int_unary_ops(state, kind):
         return True
     if kind == "shlsi":
         # `shl si[; shl si[; shl si]]; (moves_m blk | addsi base); <terminal>` --
