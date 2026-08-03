@@ -371,6 +371,66 @@ def _skip_shlsi_overflow(state: DecodeState, index: int) -> None:
             state.cursor.ops = tuple(img.ops)
 
 
+def _int_compare_mem(state: DecodeState, op, addr: int) -> bool:
+    img, m, expr_, l, c = (
+        state.image, state.machine, state.expr, state.layout_state, state.control
+    )
+    if op[2] in (0x74, 0x76):
+        mem: Any = ir.Err()
+    elif op[2] == 0x72:
+        mem = ir.Erl()
+    else:
+        try:
+            mem = state.loc(op[2])
+        except ValueError:
+            if op[2] < l.lay["pool_base"] - 4:
+                raise
+            mem = state.pool_lit(op[2])
+    nxt = img.ops[c.k + 1] if c.k + 1 < len(img.ops) else None
+    j = c.k + 1
+    while j < len(img.ops) and img.ops[j][1] in ("movrr", "movbxax"):
+        j += 1
+    shuffled = (
+        j > c.k + 1
+        and j < len(img.ops)
+        and img.ops[j][1] == "movax"
+        and img.ops[j][2] == 0xFFFF
+    )
+    if (nxt is not None and nxt[1] == "movax" and nxt[2] == 0xFFFF) or shuffled:
+        expr_.pend_icmp = (mem, m.ax)
+        m.ax = None
+        state.advance()
+        return True
+    if nxt is not None and nxt[1] == "jcc":
+        cc = nxt[2]
+        j2 = img.ops[c.k + 2] if c.k + 2 < len(img.ops) else None
+        if j2 is not None and j2[1] == "jmp" and nxt[3] == j2[0] + 3:
+            skiprel = {
+                0x74: "<>", 0x75: "=", 0x7F: ">=",
+                0x7D: ">", 0x7C: "<=", 0x7E: "<",
+            }
+            if cc not in skiprel:
+                raise ValueError(f"cmpax_m IF jcc {cc:02x} at {addr:#x}")
+            state.put(
+                ir.IfGoto(ir.RelOp(skiprel[cc], mem, m.ax), ("addr", j2[2])),
+                c.cur,
+            )
+            m.ax = None
+            c.cur = None
+            state.advance(3)
+            return True
+        if cc in _JCC_RELOP_VALUE:
+            state.put(
+                ir.IfGoto(ir.RelOp(_JCC_RELOP_VALUE[cc], mem, m.ax), ("addr", nxt[3])),
+                c.cur,
+            )
+            m.ax = None
+            c.cur = None
+            state.advance(2)
+            return True
+    raise ValueError(f"cmpax_m without a value/IF consumer at {addr:#x}")
+
+
 def int_alu(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addax_bp, addsiax, subax_m, imul_m, imul_bp, movax_bp, idivbx, cmpax_m, inc_m, dec_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
     img, m, expr_, l, c = (state.image, state.machine, state.expr,
@@ -411,79 +471,8 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         return _int_movax_bp(state, op, addr)
     if _int_div_ops(state, op, addr, kind):
         return True
-    if kind == "cmpax_m":  # integer relational, mem side = source LHS
-        if op[2] in (0x74, 0x76):  # ERR: canonical [0074], CVT2TB [0076]
-            mem: Any = ir.Err()  # ERL = [0072] (IF ERR = n, witnessed
-        elif op[2] == 0x72:  # t1_errcmp / wild inv87.exe)
-            mem = ir.Erl()
-        else:
-            try:
-                mem = state.loc(op[2])
-            except ValueError:
-                if op[2] < l.lay["pool_base"] - 4:
-                    raise
-                # pooled int-literal LEFT operand
-                mem = state.pool_lit(op[2])
-        nxt = img.ops[c.k + 1] if c.k + 1 < len(img.ops) else None
-        # AND-chain 2nd+ term (wild schart.exe): the running accumulator sits
-        # in bx (OR-chains need no accumulator, they resolve by pure
-        # short-circuit jumps -- t1_orchain). The compare's own flags survive
-        # a plain register shuttle, so the compiler round-trips ax<->bx
-        # (mov ax,bx; mov bx,ax -- a no-op restoring bx's value, byte-exact
-        # boilerplate) between the compare and the value materialization;
-        # skip over it and let the generic movrr/movbxax handlers process it.
-        j = c.k + 1
-        while j < len(img.ops) and img.ops[j][1] in ("movrr", "movbxax"):
-            j += 1
-        shuffled = (
-            j > c.k + 1
-            and j < len(img.ops)
-            and img.ops[j][1] == "movax"
-            and img.ops[j][2] == 0xFFFF
-        )
-        if (nxt is not None and nxt[1] == "movax" and nxt[2] == 0xFFFF) or shuffled:
-            expr_.pend_icmp = (mem, m.ax)  # relational-value form
-            m.ax = None
-            state.advance()
-            return True
-        # IF forms: cmp ax,[mem] flags are rhs-lhs (REVERSED, like the FP
-        # rows and unlike cmpax_bx's forward order) -- the skip map mirrors
-        # cmpax_bp's and the direct map coincides with _JCC_RELOP_VALUE;
-        # only "=" is witnessed (t1_errcmp direct, inv87 skip), the other
-        # rows follow the same orientation derivation
-        if nxt is not None and nxt[1] == "jcc":
-            cc = nxt[2]
-            j2 = img.ops[c.k + 2] if c.k + 2 < len(img.ops) else None
-            if j2 is not None and j2[1] == "jmp" and nxt[3] == j2[0] + 3:
-                skiprel = {
-                    0x74: "<>", 0x75: "=", 0x7F: ">=",
-                    0x7D: ">", 0x7C: "<=", 0x7E: "<",
-                }
-                if cc not in skiprel:
-                    raise ValueError(f"cmpax_m IF jcc {cc:02x} at {addr:#x}")
-                state.put(
-                    ir.IfGoto(
-                        ir.RelOp(skiprel[cc], mem, m.ax), ("addr", j2[2])
-                    ),
-                    c.cur,
-                )
-                m.ax = None
-                c.cur = None
-                state.advance(3)
-                return True
-            if cc in _JCC_RELOP_VALUE:  # direct: taken = THEN <line>
-                state.put(
-                    ir.IfGoto(
-                        ir.RelOp(_JCC_RELOP_VALUE[cc], mem, m.ax),
-                        ("addr", nxt[3]),
-                    ),
-                    c.cur,
-                )
-                m.ax = None
-                c.cur = None
-                state.advance(2)
-                return True
-        raise ValueError(f"cmpax_m without a value/IF consumer at {addr:#x}")
+    if kind == "cmpax_m":
+        return _int_compare_mem(state, op, addr)
     if _int_compare_state(state, op, addr, kind):
         return True
     if kind == "cmpax_bp":  # cmp ax,[bp+d8]: relational against a LOCAL int
