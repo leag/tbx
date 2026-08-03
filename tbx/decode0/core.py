@@ -2346,10 +2346,9 @@ def _move_data_before_poll_loops(state):
             out.addrs.insert(i, out.addrs.pop(j))
 
 
-def _prepare_string_pool(state, exe):
+def _string_descriptor_disps(state):
     img, l = state.image, state.layout_state
-    l.ss_base = None
-    l.desc_disps = sorted(
+    return sorted(
         (
             {
                 img.ops[i][2]
@@ -2372,12 +2371,11 @@ def _prepare_string_pool(state, exe):
             if o[1] in ("input", "line_input") and o[2] != l.lay["pool_base"] - 4
         }
     )
-    l.discard_strs = []
-    l.data_items = []
-    l.have_fre = any(o[1] == "fre_str" for o in img.ops)
-    if not l.desc_disps and not l.have_fre:
-        return
-    all_descs = []
+
+
+def _walk_string_descriptors(state, exe):
+    l = state.layout_state
+    descriptors = []
     d = l.lay["pool_base"] - 4
     w0, expect = struct.unpack_from("<HH", exe, l.dsd + d)
     if w0 == 0x8000:
@@ -2386,9 +2384,22 @@ def _prepare_string_pool(state, exe):
             w0, ptr = struct.unpack_from("<HH", exe, l.dsd + d)
             if not w0 & 0x8000 or ptr != expect:
                 break
-            all_descs.append((d, w0 & 0x7FFF, ptr))
+            descriptors.append((d, w0 & 0x7FFF, ptr))
             expect = ptr + (w0 & 0x7FFF)
             d += 4
+    return descriptors, d
+
+
+def _prepare_string_pool(state, exe):
+    img, l = state.image, state.layout_state
+    l.ss_base = None
+    l.desc_disps = _string_descriptor_disps(state)
+    l.discard_strs = []
+    l.data_items = []
+    l.have_fre = any(o[1] == "fre_str" for o in img.ops)
+    if not l.desc_disps and not l.have_fre:
+        return
+    all_descs, d = _walk_string_descriptors(state, exe)
     total = (
         sum(ln for _, ln, _ in all_descs)
         if all_descs
