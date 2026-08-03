@@ -2279,6 +2279,24 @@ def _initialize_array_slots(state):
             array["name"] += "#"
 
 
+def _prepare_decode_image(state, exe):
+    img, layout, out = state.image, state.layout_state, state.output
+    state.diagnostics.phase = "scan"
+    img.exe = exe
+    img.start, img.dia = find_prologue(exe)
+    out.metas = _meta_stmts(exe, img.start)
+    out.toggles = _toggles(exe, img.start)
+    out.commits = set()
+    img.ops = _scan(exe, img.start, img.dia, out.commits)
+    state.diagnostics.phase = "layout"
+    _normalize_trace_hooks(img, out)
+    _normalize_event_hooks(img)
+    layout.lay = _layout(exe, img.ops)
+    layout.ds = layout.lay["ds"]
+    layout.dsd = layout.ds - layout.lay["delta"]
+    layout.arrs = layout.lay["arrs"]
+
+
 def _finalize(state: DecodeState, addr) -> Program:
     """Program epilogue: static-DIM re-emit, control-flow folds, target
     resolution and canonical rename -> the finished Program."""
@@ -4245,28 +4263,7 @@ def _decode_user_code(
     img, m, e, l, c, out = (state.image, state.machine, state.expr,
                             state.layout_state, state.control, state.output)
     state.validate_ownership()
-    # The phase a failure reports is set as the pipeline crosses into it, so
-    # "where did this go wrong" is answered before anything else has to be.
-    # It defaulted to "lift" and was never assigned, which meant every report
-    # claimed lift -- including the layout failures that say so in their text.
-    state.diagnostics.phase = "scan"
-    img.exe = exe
-    img.start, img.dia = find_prologue(exe)
-    out.metas = _meta_stmts(
-        exe, img.start
-    )  # read now: `start` is rebound downstream
-    out.toggles = _toggles(exe, img.start)
-    out.commits = set()
-    img.ops = _scan(exe, img.start, img.dia, out.commits)
-    state.diagnostics.phase = "layout"
-    _normalize_trace_hooks(img, out)
-    _normalize_event_hooks(img)
-    l.lay = _layout(exe, img.ops)
-    l.ds = l.lay["ds"]
-    l.dsd = (
-        l.ds - l.lay["delta"]
-    )  # file base for pool/descriptor/string reads
-    l.arrs = l.lay["arrs"]  # static arrays (unified slot records)
+    _prepare_decode_image(state, exe)
     _initialize_array_slots(state)
     e.stack = []  # the emulated FP stack, as ir Expr nodes
     out.stmts = RecordedStatements()
