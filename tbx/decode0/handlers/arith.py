@@ -216,6 +216,29 @@ def _int_index_sub(state: DecodeState, op, addr: int) -> bool:
     raise ValueError(f"sub ax from unexpected cell offset {off:#x} at {addr:#x}")
 
 
+def _int_index_mul(state: DecodeState, op, addr: int) -> bool:
+    m, l = state.machine, state.layout_state
+    blk = next(
+        (b for b in l.slot_info if op[2] in (b + 0x0C, b + 0x12, b + 0x18)),
+        None,
+    )
+    if blk is not None:
+        if isinstance(m.ax, tuple) or m.ax is None:
+            raise ValueError(f"span imul of non-Expr ax at {addr:#x}")
+        off = op[2] - blk
+        m.ax = ({0x0C: "jspan", 0x12: "kspan", 0x18: "lspan"}[off], blk, m.ax)
+    else:
+        try:
+            mem = state.loc(op[2])
+        except ValueError:
+            if op[2] < l.lay["pool_base"] - 4:
+                raise
+            mem = state.pool_lit(op[2])
+        m.ax = ir.BinOp("*", mem, _rgrp("*", m.ax))
+    state.advance()
+    return True
+
+
 def int_alu(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addax_bp, addsiax, subax_m, imul_m, imul_bp, movax_bp, idivbx, cmpax_m, inc_m, dec_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
     img, m, expr_, l, c, o = (state.image, state.machine, state.expr,
@@ -229,32 +252,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
     if kind == "subax_m":
         return _int_index_sub(state, op, addr)
     if kind == "imul_m":
-        blk = next(
-            (b for b in l.slot_info if op[2] in (b + 0x0C, b + 0x12, b + 0x18)),
-            None,
-        )
-        if blk is not None:  # bare span multiply: OPTION BASE 0
-            if isinstance(m.ax, tuple) or m.ax is None:  # far-IDX j-leg
-                raise ValueError(f"span imul of non-Expr ax at {addr:#x}")
-            off = op[2] - blk
-            m.ax = (
-                {0x0C: "jspan", 0x12: "kspan", 0x18: "lspan"}[off],  # span3
-                blk,  # (dim 4, wild hfprop.exe): t1_dim3v/t1_dim4v
-                m.ax,
-            )
-        else:
-            try:
-                mem = state.loc(op[2])
-            except ValueError:
-                if op[2] < l.lay["pool_base"] - 4:
-                    raise
-                # pooled int-literal LEFT operand: `180 * (A > 0)` evaluates
-                # the materialized right first, then multiplies the literal
-                # from the const pool (witnessed t1_imulpool, wild schart.exe)
-                mem = state.pool_lit(op[2])
-            m.ax = ir.BinOp("*", mem, _rgrp("*", m.ax))
-        state.advance()
-        return True
+        return _int_index_mul(state, op, addr)
     if kind == "imul_bp":  # imul word [bp+d8]: LOCAL int as the right operand
         m.ax = ir.BinOp("*", state.loc_local(op[2]), _rgrp("*", m.ax))
         state.advance()
