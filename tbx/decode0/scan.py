@@ -676,6 +676,34 @@ def _scan_direct2_io_ops(exe, p, b, ops) -> int | None:
     return None
 
 
+def _scan_direct2_local_ops(exe, p, b, ops) -> int | None:
+    if b == 0x03 and exe[p + 1] == 0x46:
+        ops.append((p, "addax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        return p + 3
+    if b == 0x2B and exe[p + 1] == 0x46:
+        ops.append((p, "subax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        return p + 3
+    if b == 0x23 and exe[p + 1] == 0x46:
+        ops.append((p, "andax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        return p + 3
+    if b == 0x3B and exe[p + 1] == 0x46:
+        ops.append((p, "cmpax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        return p + 3
+    if b == 0x3B and exe[p + 1] == 0x86:
+        ops.append((p, "cmpax_bp", struct.unpack_from("<H", exe, p + 2)[0]))
+        return p + 4
+    if b == 0x3B and exe[p + 1] == 0xC3:
+        ops.append((p, "cmpax_bx"))
+        return p + 2
+    if b == 0x39 and exe[p + 1] == 0x06:
+        ops.append((p, "cmpm_ax", struct.unpack_from("<H", exe, p + 2)[0]))
+        return p + 4
+    if b == 0x39 and exe[p + 1] == 0x46:
+        ops.append((p, "cmpm_ax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        return p + 3
+    return None
+
+
 def _scan_direct2(exe, p, b, ops) -> int | None:
     """Byte-dispatch family split out of _scan. Returns the new
     cursor when it decodes the op at ``p``, else None."""
@@ -702,6 +730,9 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
     np = _scan_direct2_io_ops(exe, p, b, ops)
     if np is not None:
         return np
+    np = _scan_direct2_local_ops(exe, p, b, ops)
+    if np is not None:
+        return np
     # There is deliberately NO `mov al,imm8; out imm8,al` op here. It used to
     # be read as a byte-constant OUT that the compiler had folded, which is not
     # a thing Turbo Basic does: `OUT 67, 116` emits the general mov-AX / mov-DX
@@ -719,38 +750,6 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
         ops.append((p, "movm_ds", struct.unpack_from("<H", exe, p + 2)[0]))
         p += 4  # near->far ES alias (SWAP of two array elements; probe q_arrswap)
         return p
-    if b == 0x03 and exe[p + 1] == 0x46:  # add ax, [bp+d8]: fold a LOCAL int
-        ops.append((p, "addax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
-        p += 3  # into ax (witnessed q_loccmp)
-        return p
-    if b == 0x2B and exe[p + 1] == 0x46:  # sub ax,[bp+d8]: normalize a
-        ops.append((p, "subax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
-        p += 3  # rank-1 whole-array SUB parameter by its lower-bound cell
-        return p  # (probe arrayparam6; wild zip.exe)
-    if b == 0x23 and exe[p + 1] == 0x46:  # and ax, [bp+d8]: bitwise fold of a
-        ops.append((p, "andax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
-        p += 3  # LOCAL int, the bp-relative sibling of andax_m (wild filepatc.exe)
-        return p
-    if b == 0x3B and exe[p + 1] == 0x46:  # cmp ax, [bp+d8]: relational value
-        ops.append((p, "cmpax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
-        p += 3  # against a LOCAL int (witnessed q_loccmp)
-        return p
-    if b == 0x3B and exe[p + 1] == 0x86:  # cmp ax,[bp+disp16]: large LOCAL
-        ops.append((p, "cmpax_bp", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 4  # relational operand (wild cleanup/reformat)
-        return p
-    if b == 0x3B and exe[p + 1] == 0xC3:  # cmp ax, bx: integer relational where
-        ops.append((p, "cmpax_bx"))  # both sides are ax-computed -- source RHS
-        p += 2  # evaluates first and shuttles to bx (witnessed t1_cmpax)
-        return p
-    if b == 0x39 and exe[p + 1] == 0x06:  # cmp [disp16], ax: the integer FOR
-        ops.append((p, "cmpm_ax", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 4  # test with a VARIABLE limit (witnessed t1_fori)
-        return p
-    if b == 0x39 and exe[p + 1] == 0x46:  # cmp [bp+d8], ax: the LOCAL-frame
-        ops.append((p, "cmpm_ax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
-        p += 3  # mirror of cmpm_ax (a LOCAL int FOR test with a VARIABLE
-        return p  # limit, wild bmaster.exe/ifi.exe)
     if b == 0x26 and exe[p + 1] == 0x3B and exe[p + 2] == 0x04:  # cmp ax, es:[si]:
         ops.append((p, "far_cmpax_si"))  # relational against a by-ref param
         p += 3  # (witnessed t1_cmpfar)
