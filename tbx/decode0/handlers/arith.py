@@ -1519,98 +1519,95 @@ def _sync_len(ops, j) -> int | None:
     return None
 
 
+def _fp_math_fistp(state: DecodeState, op, addr: int) -> bool:
+    i, mach, e, l, c = (
+        state.image,
+        state.machine,
+        state.expr,
+        state.layout_state,
+        state.control,
+    )
+    if op[2] != 0x2C:
+        raise ValueError(f"FISTP to unexpected scratch [{op[2]:#x}]")
+    idx = e.stack.pop()
+    n = _sync_len(i.ops, c.k + 1)
+    if (
+        n is not None
+        and c.k + n + 2 < len(i.ops)
+        and i.ops[c.k + 1 + n][1] == "movaxmem"
+        and i.ops[c.k + 2 + n][1] == "movm_ax"
+    ):  # FP->int assign
+        if i.ops[c.k + 1 + n][2] != 0x2C:
+            raise ValueError(f"FP->int bridge mismatch at {addr:#x}")
+        tgt = i.ops[c.k + 2 + n][2]
+        if (
+            l.dim_frame is not None
+            and l.dim_frame.base <= tgt < l.dim_frame.base + ARR_BLOCK
+        ):
+            l.dim_frame.cells[tgt - l.dim_frame.base] = idx  # bound
+        elif tgt in (0x88, 0x94, 0xA0, 0xAC, 0xB8, 0xC4):  # COLOR/VIEW cell
+            e.color_cells[tgt] = idx  # rounded via CINT (a non-integer arg)
+        elif tgt in (0x8A, 0x96, 0xA2, 0xAE, 0xBA, 0xC6):  # shifted cell family
+            e.color_cells[tgt - 2] = idx  # +2 shifted (RR-COLORCELL-SHIFT)
+        elif idx is _FREAD:  # INPUT# int target via the bridge (t1_fileint)
+            state._fread_target(state.loc(tgt))
+            c.cur = None
+        elif idx is _READDATA:  # READ int target via the bridge
+            state._readdata_target(state.loc(tgt))
+            c.cur = None
+        else:
+            state.put(ir.Assign(state.loc(tgt), idx), c.cur)
+            c.cur = None
+        state.advance(n + 3)
+        return True
+    # Element-subscript bridge: optional spill shuttles (the a1 below clobbers
+    # ax, so in-flight tokens move through bx/cx first), then fwait + a1 2c
+    # lands the integer in ax; the symbolic machine takes it from there.
+    j = c.k + 1
+    while j < len(i.ops) and i.ops[j][1] in ("movrr", "movbxax"):
+        j += 1
+    m = _sync_len(i.ops, j)
+    mi = j + m if m is not None else None
+    nxt2 = i.ops[mi + 1][1] if mi is not None and mi + 1 < len(i.ops) else None
+    if (
+        mi is not None
+        and i.ops[mi][1] == "movaxmem"
+        and i.ops[mi][2] == 0x2C
+        and nxt2 != "movm_ax"
+    ):
+        # CINT(x): movmem_ax[0x2C]; fild[0x2C] is the round-trip tail.
+        if (
+            mi + 2 < len(i.ops)
+            and i.ops[mi + 1][1] == "movmem_ax"
+            and i.ops[mi + 1][2] == 0x2C
+            and i.ops[mi + 2][1] == "fild"
+            and i.ops[mi + 2][2] == 0x2C
+        ):
+            mach.cint_round = True
+        for sh in i.ops[c.k + 1 : j]:
+            regs = {
+                "ax": mach.ax,
+                "bx": mach.bx,
+                "cx": mach.cx,
+                "di": mach.di,
+                "si": mach.si,
+            }
+            dst, src = ("bx", "ax") if sh[1] == "movbxax" else (sh[2], sh[3])
+            regs[dst], regs[src] = regs[src], None
+            mach.ax, mach.bx, mach.cx, mach.di, mach.si = (
+                regs["ax"], regs["bx"], regs["cx"], regs["di"], regs["si"]
+            )
+        mach.ax = idx
+        state.seek(mi + 1)
+        return True
+    raise ValueError(f"IDX% bridge mismatch at {addr:#x}")
+
+
 def fp_math(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: fistp, fpow, fwait, fstp_temp."""
-    i, mach, e, l, c = (state.image, state.machine, state.expr,
-                        state.layout_state, state.control)
+    i, mach, e, c = state.image, state.machine, state.expr, state.control
     if kind == "fistp":  # IDX% scratch: array idx OR FP->int
-        if op[2] != 0x2C:
-            raise ValueError(f"FISTP to unexpected scratch [{op[2]:#x}]")
-        idx = e.stack.pop()
-        n = _sync_len(i.ops, c.k + 1)
-        if (
-            n is not None
-            and c.k + n + 2 < len(i.ops)
-            and i.ops[c.k + 1 + n][1] == "movaxmem"
-            and i.ops[c.k + 2 + n][1] == "movm_ax"
-        ):  # FP->int assign
-            if i.ops[c.k + 1 + n][2] != 0x2C:
-                raise ValueError(f"FP->int bridge mismatch at {addr:#x}")
-            tgt = i.ops[c.k + 2 + n][2]
-            if (
-                l.dim_frame is not None
-                and l.dim_frame.base
-                <= tgt
-                < l.dim_frame.base + ARR_BLOCK
-            ):
-                l.dim_frame.cells[tgt - l.dim_frame.base] = idx  # bound
-            elif tgt in (0x88, 0x94, 0xA0, 0xAC, 0xB8, 0xC4):  # COLOR/VIEW cell,
-                e.color_cells[tgt] = idx  # rounded via CINT (a non-integer arg)
-            elif tgt in (0x8A, 0x96, 0xA2, 0xAE, 0xBA, 0xC6):  # same cell family,
-                e.color_cells[tgt - 2] = idx  # +2 shifted (RR-COLORCELL-SHIFT)
-            elif idx is _FREAD:  # INPUT# int target via the bridge (t1_fileint)
-                state._fread_target(state.loc(tgt))
-                c.cur = None
-            elif idx is _READDATA:  # READ int target via the bridge
-                state._readdata_target(state.loc(tgt))
-                c.cur = None
-            else:
-                state.put(ir.Assign(state.loc(tgt), idx), c.cur)
-                c.cur = None
-            state.advance(n + 3)
-            return True
-        # Element-subscript bridge: optional spill shuttles (the a1 below clobbers
-        # ax, so in-flight tokens move through bx/cx first), then
-        # fwait + a1 2c lands the integer in ax; the symbolic machine (subax_m /
-        # movsiax / addsiax / shlsi) takes it from there, ending in either the
-        # far (moves_m) or the near static (addsi) terminal.
-        j = c.k + 1
-        while j < len(i.ops) and i.ops[j][1] in ("movrr", "movbxax"):
-            j += 1
-        m = _sync_len(i.ops, j)
-        mi = j + m if m is not None else None  # movaxmem's own index
-        nxt2 = (
-            i.ops[mi + 1][1] if mi is not None and mi + 1 < len(i.ops) else None
-        )
-        if (
-            mi is not None
-            and i.ops[mi][1] == "movaxmem"
-            and i.ops[mi][2] == 0x2C
-            and nxt2 != "movm_ax"
-        ):
-            # CINT(x): the round-trip tail is movmem_ax[0x2C]; fild[0x2C] (round
-            # FP->int->FP). Flag it so the movmem_ax bridge wraps the value in
-            # CINT(). A genuine subscript bridge continues with other ops here,
-            # and the ASC-style int bridge has no preceding fistp at all.
-            if (
-                mi + 2 < len(i.ops)
-                and i.ops[mi + 1][1] == "movmem_ax"
-                and i.ops[mi + 1][2] == 0x2C
-                and i.ops[mi + 2][1] == "fild"
-                and i.ops[mi + 2][2] == 0x2C
-            ):
-                mach.cint_round = True
-            for sh in i.ops[c.k + 1 : j]:  # apply the shuttles in order
-                regs = {
-                    "ax": mach.ax,
-                    "bx": mach.bx,
-                    "cx": mach.cx,
-                    "di": mach.di,
-                    "si": mach.si,
-                }
-                dst, src = ("bx", "ax") if sh[1] == "movbxax" else (sh[2], sh[3])
-                regs[dst], regs[src] = regs[src], None
-                mach.ax, mach.bx, mach.cx, mach.di, mach.si = (
-                    regs["ax"],
-                    regs["bx"],
-                    regs["cx"],
-                    regs["di"],
-                    regs["si"],
-                )
-            mach.ax = idx
-            state.seek(mi + 1)
-            return True
-        raise ValueError(f"IDX% bridge mismatch at {addr:#x}")
+        return _fp_math_fistp(state, op, addr)
     if kind == "fpow":  # ^ : top = base, below = exponent
         lhs = e.stack.pop()
         rhs = e.stack.pop()
