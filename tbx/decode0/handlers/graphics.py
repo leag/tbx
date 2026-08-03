@@ -219,10 +219,52 @@ def _graphics_color(state: DecodeState, op, addr: int) -> bool:
     return True
 
 
+def _graphics_locate(state: DecodeState, addr: int, kind: str) -> bool:
+    m, c, o = state.machine, state.control, state.output
+    if kind == "locate":  # LOCATE row(bx),col(ax)
+        state.put(ir.Locate(m.bx, m.ax), c.cur)
+        m.bx = m.ax = None
+    elif kind == "cursor":  # trailing cursor arg -> attach
+        if o.stmts and isinstance(o.stmts[-1], ir.Locate):
+            prev = o.stmts[-1]
+            if prev.cursor is not None:
+                # A wild 1.0 runtime variant encodes LOCATE's shape bounds as
+                # two consecutive cursor dispatches (start first, stop
+                # second) instead of using the dedicated cursor-shape vector.
+                # Preserve that statement shape when the first cursor value
+                # is already attached.
+                with editing(o.stmts, "patch_locate_cursor_shape"):
+                    state.patch(
+                        -1,
+                        ir.Locate(prev.row, prev.col, None, prev.cursor, m.ax),
+                    )
+            else:
+                with editing(o.stmts, "patch_locate"):
+                    state.patch(-1, ir.Locate(prev.row, prev.col, m.ax))
+        else:  # LOCATE ,,cursor: no row/column runtime call precedes it
+            state.put(ir.Locate(None, None, m.ax), c.cur)
+        m.ax = None
+    else:  # cursor_shape: trailing cursor start/stop -> attach
+        if o.stmts and isinstance(o.stmts[-1], ir.Locate):
+            prev = o.stmts[-1]
+            if prev.start is not None or prev.stop is not None:
+                raise ValueError(f"duplicate LOCATE cursor shape call at {addr:#x}")
+            with editing(o.stmts, "patch_locate"):
+                state.patch(
+                    -1, ir.Locate(prev.row, prev.col, prev.cursor, m.bx, m.ax)
+                )
+        else:  # LOCATE ,,,start,stop: the shape call is the whole statement
+            state.put(ir.Locate(None, None, None, m.bx, m.ax), c.cur)
+        m.bx = m.ax = None
+    c.cur = None
+    state.advance()
+    return True
+
+
 def graphics(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: screen, cls, line, pset, circle, paint, draw, palette,
     palette_using, color_commit, locate, cursor, width."""
-    m, e, c, o = state.machine, state.expr, state.control, state.output
+    m, e, c = state.machine, state.expr, state.control
     if kind == "screen":  # SCREEN m[,b][,a][,v]: cells by presence mask
         return _graphics_screen(state, op, addr)
     if kind == "cls":
@@ -254,58 +296,11 @@ def graphics(state: DecodeState, op, addr, kind) -> bool:
     if kind == "color_commit":  # COLOR fg(04)/bg(02)/border(01) mask
         return _graphics_color(state, op, addr)
     if kind == "locate":  # LOCATE row(bx),col(ax)
-        state.put(ir.Locate(m.bx, m.ax), c.cur)
-        m.bx = m.ax = None
-        c.cur = None
-        state.advance()
-        return True
+        return _graphics_locate(state, addr, kind)
     if kind == "cursor":  # trailing cursor arg -> attach
-        if o.stmts and isinstance(o.stmts[-1], ir.Locate):
-            prev = o.stmts[-1]
-            if prev.cursor is not None:
-                # A wild 1.0 runtime variant encodes LOCATE's shape bounds as
-                # two consecutive cursor dispatches (start first, stop
-                # second) instead of using the dedicated cursor-shape vector.
-                # Preserve that statement shape when the first cursor value
-                # is already attached.
-                with editing(o.stmts, "patch_locate_cursor_shape"):
-                    state.patch(
-                        -1,
-                        ir.Locate(
-                            prev.row,
-                            prev.col,
-                            None,
-                            prev.cursor,
-                            m.ax,
-                        ),
-                    )
-                m.ax = None
-                c.cur = None
-                state.advance()
-                return True
-            with editing(o.stmts, "patch_locate"):
-                state.patch(-1, ir.Locate(prev.row, prev.col, m.ax))
-        else:  # LOCATE ,,cursor: no row/column runtime call precedes it
-            state.put(ir.Locate(None, None, m.ax), c.cur)
-        m.ax = None
-        c.cur = None
-        state.advance()
-        return True
+        return _graphics_locate(state, addr, kind)
     if kind == "cursor_shape":  # trailing cursor start/stop -> attach
-        if o.stmts and isinstance(o.stmts[-1], ir.Locate):
-            prev = o.stmts[-1]
-            if prev.start is not None or prev.stop is not None:
-                raise ValueError(f"duplicate LOCATE cursor shape call at {addr:#x}")
-            with editing(o.stmts, "patch_locate"):
-                state.patch(
-                    -1, ir.Locate(prev.row, prev.col, prev.cursor, m.bx, m.ax)
-                )
-        else:  # LOCATE ,,,start,stop: the shape call is the whole statement
-            state.put(ir.Locate(None, None, None, m.bx, m.ax), c.cur)
-        m.bx = m.ax = None
-        c.cur = None
-        state.advance()
-        return True
+        return _graphics_locate(state, addr, kind)
     if kind == "width":  # WIDTH cols (ax)
         if m.ax is None or isinstance(m.ax, tuple):
             raise ValueError(f"WIDTH without an ax argument at {addr:#x}")
