@@ -3419,12 +3419,59 @@ def _fp_orax_loop(state, op, addr, nxt) -> bool:
     return True
 
 
+def _fp_orax_bool_ops(state, nxt) -> bool:
+    img, m, e, l, c = (
+        state.image,
+        state.machine,
+        state.expr,
+        state.layout_state,
+        state.control,
+    )
+    if (bare_term := match_bool_bare_term1(img.ops, c.k)) is not None:
+        e.pend_bool = BoolTerm(
+            r1=m.ax,
+            op=bare_term.operator,
+            sc=bare_term.short_circuit,
+            start=c.cur,
+        )
+        m.ax = None
+        state.advance(3)
+        return True
+    if nxt[2] == 0x75 and any(
+        op[0] == img.ops[c.k + 2][2] - 2 and op[1] == "andaxbx"
+        for op in img.ops
+    ):
+        e.direct_bool_gate = True
+        state.advance(3)
+        return True
+    prev_load = img.ops[c.k - 1] if c.k else None
+    if prev_load is not None and prev_load[1] == "notax" and c.k >= 2:
+        prev_load = img.ops[c.k - 2]
+    if prev_load is not None and (
+        prev_load[1] in ("far_movax_si", "fn_ax_ax")
+        or isinstance(m.ax.operand if isinstance(m.ax, ir.Not) else m.ax, ir.FnCall)
+        or (
+            prev_load[1] == "movax_m"
+            and prev_load[2] in l.lay["scalars"]
+            and prev_load[2] not in l.lay["guessed"]
+        )
+    ):
+        state.advance()
+        return True
+    return False
+
+
 def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     """FP-stack + control-flow instruction dispatch (fld/fst/fadd/.../fcomp/jcc/
     jmp/call/run/jmps + unhandled-op guard). Falls through to the default k-advance;
     branches that self-advanced return early."""
-    img, m, e, l, c, out = (state.image, state.machine, state.expr,
-                            state.layout_state, state.control, state.output)
+    img, m, e, c, out = (
+        state.image,
+        state.machine,
+        state.expr,
+        state.control,
+        state.output,
+    )
     if _fp_load_ops(state, op, addr, kind):
         pass
     elif _fp_string_ops(state, op, kind):
@@ -3463,106 +3510,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             and img.ops[c.k + 2][1] == "jmp"
             and nxt[3] == img.ops[c.k + 2][0] + 3
         ):
-            if (bare_term := match_bool_bare_term1(img.ops, c.k)) is not None:
-                # A bare-value (uncompared) compound first term (wild
-                # rsltest.exe: `PEEK(&H410) AND &H40 = 48`; cal.exe/cal87.exe:
-                # `NOT value OR array(index) = array(index)`) -- stage it as
-                # e.pend_bool exactly as match_bool_term1's caller
-                # does for a comparison-based term1, so the ordinary
-                # movax_family dispatch (control.py) folds term2's own
-                # materialization into it once reached.
-                e.pend_bool = BoolTerm(
-                    r1=m.ax,
-                    op=bare_term.operator,
-                    sc=bare_term.short_circuit,
-                    start=c.cur,
-                )
-                m.ax = None
-                state.advance(3)
-                return
-            if nxt[2] == 0x75 and any(
-                o[0] == img.ops[c.k + 2][2] - 2 and o[1] == "andaxbx"
-                for o in img.ops
-            ):
-                # A bare value as the LEFT operand of an ungrouped outer AND
-                # whose RIGHT operand is a parenthesized GROUP: `IF F% AND
-                # (A$ = CHR$(75) OR A$ = CHR$(77))` (t1_boolstrgroup; wild
-                # tbd73.exe's TBWINDOW `SUB Makevmenu`, `IF hmenuopen AND
-                # (ans1$ = CHR$(75) OR ans1$ = CHR$(77))`).
-                #
-                # `or ax,ax` self-tests the value WITHOUT destroying it, so
-                # unlike match_bool_bare_term1's flat-chain case just above
-                # this must NOT clear ax: the very next `movbxax` banks it in
-                # bx, the group is then computed in ax (parking bx in cx
-                # meanwhile), and a final `andaxbx` folds the two. That whole
-                # right-hand-group protocol is exactly what direct_bool_gate
-                # already drives for t1_nestedbool -- whose left operand is a
-                # folded group (`oraxbx`) rather than a bare value, and which
-                # therefore enters through the jcc handler's `direct_bool`
-                # test instead of here. So set the same flag and let the
-                # existing machinery run: arith's andaxbx branch reads it to
-                # put bx (this value) on the LEFT, and the jcc handler reads
-                # it to skip the extra Group wrapper before clearing it.
-                #
-                # Distinguished from the flat AND-chain above by WHERE the
-                # outer fold sits: a chain folds immediately after its second
-                # term's materialization, a group only after its own inner
-                # fold. Both agree the short-circuit lands two bytes past the
-                # outer `andaxbx`, so that is the anchor tested here. AND only
-                # (cc 75), matching match_bool_bare_term1's own restriction:
-                # a bare-value OR term1 stays unwitnessed.
-                e.direct_bool_gate = True
-                state.advance(3)
-                return
-            prev_load = img.ops[c.k - 1] if c.k else None
-            if (
-                prev_load is not None
-                and prev_load[1] == "notax"
-                and c.k >= 2
-            ):
-                # `IF NOT value THEN` keeps the same direct flag-test shape:
-                # load; NOT; OR AX,AX.  Look through the unary op when
-                # deciding whether AX came from an evidenced source scalar.
-                # Materializing `NOT value = 0` adds a compare sequence
-                # instead (wild tbd73.exe's four menu/demo loops).
-                prev_load = img.ops[c.k - 2]
-            if prev_load is not None and (
-                prev_load[1] == "far_movax_si"
-                # A function result is a source-level value by construction --
-                # the compiler never routes one of its own materialized
-                # booleans through a BASIC function -- so it needs no slot
-                # evidence to qualify (t1_bareiffn: `IF EOF(1) THEN`; wild
-                # pz.exe has four).
-                or prev_load[1] == "fn_ax_ax"
-                # Far-called DEF FN results can be spilled through the
-                # procedure frame before OR AX,AX.  In that shape the reload
-                # is separated from the call by the epilogue, so the
-                # prev_load template is not visible; the typed expression is
-                # still direct evidence of a source truth test (CVT2TB's
-                # FNFN1% guard).
-                or isinstance(
-                    m.ax.operand if isinstance(m.ax, ir.Not) else m.ax,
-                    ir.FnCall,
-                )
-                or (
-                    prev_load[1] == "movax_m"
-                    and prev_load[2] in l.lay["scalars"]
-                    and prev_load[2] not in l.lay["guessed"]
-                )
-            ):
-                # No loop or compound-boolean consumer claimed the template:
-                # a by-ref parameter or evidenced DGROUP scalar was tested
-                # directly by an inline `IF value THEN ...` false-skip. Keep AX live for the jcc
-                # handler's direct-flag path. Turning it into
-                # pend_cmp(value, 0) emits XOR/CMP instead of the witnessed
-                # OR self-test and shifts the constant pool
-                # (probe_bareif_negate; tbd73's repeated `IF flon THEN ...`).
-                #
-                # The slot evidence is load-bearing: a compiler-generated
-                # materialized boolean is also reloaded and OR-tested here,
-                # but from a BP/guessed DGROUP temp; treating that as source
-                # truthiness loses its loop-tail statement address.
-                state.advance()
+            if _fp_orax_bool_ops(state, nxt):
                 return
         e.pend_cmp = (m.ax, ir.Lit(0))
         m.ax = None
