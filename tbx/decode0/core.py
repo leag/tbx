@@ -1193,37 +1193,16 @@ def _scope_shared_declarations(
     shared_subs: dict[int, ir.Shared] = {}
     sub_local_arrays: dict[str, int] = {}
     for i, vs, ars in regions:
-        other_v = set(main_vars)
-        other_a = set(main_arrays)
-        for j, ovs, oars in regions:
-            if j != i:
-                other_v |= set(ovs)
-                other_a |= set(oars)
+        other_v, other_a = _scope_other_names(
+            regions, i, main_vars, main_arrays
+        )
         names = [v for v in vs if v in other_v]
         names += [a + "()" for a in ars if a in other_a]
-        private = [
-            v
-            for v in vs
-            if reconstruct_private_shared
-            and names
-            and v not in other_v
-            and v.startswith("V")
-            and not v.endswith("$")
-        ]
-        private_by_disp = sorted(private, key=lambda v: state.vdisp(ir.Var(v)))
-        bands: list[list[str]] = []
-        for v in private_by_disp:
-            d = state.vdisp(ir.Var(v))
-            if bands:
-                prev = bands[-1][-1]
-                pd = state.vdisp(ir.Var(prev))
-                width = state.layout_state.lay["scalars"].get(pd)
-                if width is not None and d == pd + width:
-                    bands[-1].append(v)
-                    continue
-            bands.append([v])
-        for band in (band for band in bands if len(band) >= 2):
-            names.extend(reversed(band))
+        names.extend(
+            _private_shared_names(
+                state, vs, other_v, names, reconstruct_private_shared
+            )
+        )
         if reconstruct_private_shared:
             scalar_names = [n for n in names if not n.endswith("()")]
             array_names = [n for n in names if n.endswith("()")]
@@ -1236,6 +1215,39 @@ def _scope_shared_declarations(
         if names:
             shared_subs[i] = ir.Shared(tuple(names))
     return shared_subs, sub_local_arrays
+
+
+def _scope_other_names(regions, index, main_vars, main_arrays):
+    other_v = set(main_vars)
+    other_a = set(main_arrays)
+    for j, vars_, arrays in regions:
+        if j != index:
+            other_v.update(vars_)
+            other_a.update(arrays)
+    return other_v, other_a
+
+
+def _private_shared_names(state, vars_, other_vars, names, enabled):
+    if not enabled or not names:
+        return []
+    private = [
+        v
+        for v in vars_
+        if v not in other_vars and v.startswith("V") and not v.endswith("$")
+    ]
+    private_by_disp = sorted(private, key=lambda v: state.vdisp(ir.Var(v)))
+    bands: list[list[str]] = []
+    for v in private_by_disp:
+        d = state.vdisp(ir.Var(v))
+        if bands:
+            prev = bands[-1][-1]
+            pd = state.vdisp(ir.Var(prev))
+            width = state.layout_state.lay["scalars"].get(pd)
+            if width is not None and d == pd + width:
+                bands[-1].append(v)
+                continue
+        bands.append([v])
+    return [v for band in bands if len(band) >= 2 for v in reversed(band)]
 
 
 def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, int]]:
