@@ -261,10 +261,35 @@ def _graphics_locate(state: DecodeState, addr: int, kind: str) -> bool:
     return True
 
 
+def _graphics_width(state: DecodeState, op, addr: int, kind: str) -> bool:
+    m, e, c = state.machine, state.expr, state.control
+    if kind == "width_file" and (
+        e.pend_fnum is None or m.ax is None or isinstance(m.ax, tuple)
+    ):
+        raise ValueError(
+            f"WIDTH # without file/ax arguments at {addr:#x} "
+            f"(fnum={e.pend_fnum}, ax={m.ax})"
+        )
+    if m.ax is None or isinstance(m.ax, tuple):
+        raise ValueError(f"WIDTH without an ax argument at {addr:#x}")
+    if kind == "width":
+        stmt = ir.Width(m.ax)
+    elif kind == "width_dev":
+        stmt = ir.Width(m.ax, e.sstack.pop())
+    else:
+        stmt = ir.Width(m.ax, file=e.pend_fnum)
+        e.pend_fnum = None
+    state.put(stmt, c.cur)
+    m.ax = None
+    c.cur = None
+    state.advance()
+    return True
+
+
 def graphics(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: screen, cls, line, pset, circle, paint, draw, palette,
     palette_using, color_commit, locate, cursor, width."""
-    m, e, c = state.machine, state.expr, state.control
+    e, c = state.expr, state.control
     if kind == "screen":  # SCREEN m[,b][,a][,v]: cells by presence mask
         return _graphics_screen(state, op, addr)
     if kind == "cls":
@@ -302,32 +327,11 @@ def graphics(state: DecodeState, op, addr, kind) -> bool:
     if kind == "cursor_shape":  # trailing cursor start/stop -> attach
         return _graphics_locate(state, addr, kind)
     if kind == "width":  # WIDTH cols (ax)
-        if m.ax is None or isinstance(m.ax, tuple):
-            raise ValueError(f"WIDTH without an ax argument at {addr:#x}")
-        state.put(ir.Width(m.ax), c.cur)
-        m.ax = None
-        c.cur = None
-        state.advance()
-        return True
+        return _graphics_width(state, op, addr, kind)
     if kind == "width_dev":  # WIDTH device$, cols (device string pushed, ax=cols)
-        if m.ax is None or isinstance(m.ax, tuple):
-            raise ValueError(f"WIDTH without an ax argument at {addr:#x}")
-        state.put(ir.Width(m.ax, e.sstack.pop()), c.cur)
-        m.ax = None
-        c.cur = None
-        state.advance()
-        return True
+        return _graphics_width(state, op, addr, kind)
     if kind == "width_file":  # WIDTH #filenum,cols ([0060] channel, ax=cols)
-        if e.pend_fnum is None or m.ax is None or isinstance(m.ax, tuple):
-            raise ValueError(
-                f"WIDTH # without file/ax arguments at {addr:#x} "
-                f"(fnum={e.pend_fnum}, ax={m.ax})"
-            )
-        state.put(ir.Width(m.ax, file=e.pend_fnum), c.cur)
-        e.pend_fnum = m.ax = None
-        c.cur = None
-        state.advance()
-        return True
+        return _graphics_width(state, op, addr, kind)
     return False
 
 
