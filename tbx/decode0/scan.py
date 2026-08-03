@@ -1579,6 +1579,35 @@ def _scan_runtime_record_ops(exe, p, sub, ops) -> int | None:
     return p + 3
 
 
+def _scan_runtime_events(exe, p, start, sub, ops) -> int | None:
+    names = {0x54: "key_on", 0x58: "key_macro", 0x52: "key_off", 0x56: "key_list"}
+    if sub in names:
+        ops.append((p, names[sub]))
+        return p + 3
+    if sub == 0xC6:
+        tag = exe[p + 3]
+        if tag not in (0x02, 0x03, 0x08, 0x0C, 0x0E, 0x0F):
+            raise ValueError(f"SCREEN bad tag at {p:#x}")
+        ops.append((p, "screen", tag))
+        return p + 4
+    if sub == 0x70:
+        off = struct.unpack_from("<i", exe, p + 3)[0]
+        ops.append((p, "on_error", None if off == -1 else start + off))
+        return p + 7
+    names = {0x3C: "error_stmt", 0xBC: "resume_pre", 0xBE: "resume_bare", 0xC0: "resume_next"}
+    if sub in names:
+        ops.append((p, names[sub]))
+        return p + 3
+    if sub in _TRAP_GOSUB:
+        off = struct.unpack_from("<i", exe, p + 3)[0]
+        ops.append((p, "on_trap", sub, start + off))
+        return p + 7
+    if sub in _TRAP_CTL:
+        ops.append((p, "trap_ctl", sub))
+        return p + 3
+    return None
+
+
 def _scan(
     exe: bytes, start: int, dia: Dialect = TB11, commits: set[int] | None = None
 ) -> list[tuple[Any, ...]]:
@@ -1702,6 +1731,10 @@ def _scan_pass(
             if runtime is not None:
                 p = runtime
                 continue
+            runtime = _scan_runtime_events(exe, p, start, sub, ops)
+            if runtime is not None:
+                p = runtime
+                continue
             runtime = _scan_runtime_files(p, sub, ops)
             if runtime is not None:
                 p = runtime
@@ -1709,66 +1742,6 @@ def _scan_pass(
             runtime = _scan_runtime_misc(exe, p, start, sub, ops)
             if runtime is not None:
                 p = runtime
-                continue
-            if sub == 0x54:  # KEY ON
-                ops.append((p, "key_on"))
-                p += 3
-                continue
-            if sub == 0x58:  # KEY n, s$: n in ax, macro on sstack (t1_key)
-                ops.append((p, "key_macro"))
-                p += 3
-                continue
-            if sub == 0x52:  # KEY OFF
-                ops.append((p, "key_off"))
-                p += 3
-                continue
-            if sub == 0xC6:  # SCREEN m[,b][,a][,v]: trailing presence mask
-                # 08 mode / 04 burst / 02 apage / 01 vpage (t1_screenb/p)
-                if p + 3 >= len(exe) or exe[p + 3] not in (
-                    0x02,  # SCREEN ,,apage (t1_screena; wild refund)
-                    0x03,  # SCREEN ,,apage,vpage (cleanup/reformat)
-                    0x08,
-                    0x0C,
-                    0x0E,
-                    0x0F,
-                ):
-                    raise ValueError(f"SCREEN bad tag at {p:#x}")
-                ops.append((p, "screen", exe[p + 3]))
-                p += 4
-                continue
-            if sub == 0x70:  # ON ERROR GOTO (i32 start-rel; -1 = GOTO 0)
-                off = struct.unpack_from("<i", exe, p + 3)[0]
-                ops.append((p, "on_error", None if off == -1 else start + off))
-                p += 7
-                continue
-            if sub == 0x3C:  # ERROR n (code in ax)
-                ops.append((p, "error_stmt"))
-                p += 3
-                continue
-            if sub == 0xBC:  # RESUME prefix (all three forms)
-                ops.append((p, "resume_pre"))
-                p += 3
-                continue
-            if sub == 0xBE:  # RESUME (bare) commit
-                ops.append((p, "resume_bare"))
-                p += 3
-                continue
-            if sub == 0xC0:  # RESUME NEXT commit
-                ops.append((p, "resume_next"))
-                p += 3
-                continue
-            if sub in _TRAP_GOSUB:  # ON <event>[(n)] GOSUB (i32 start-rel)
-                off = struct.unpack_from("<i", exe, p + 3)[0]
-                ops.append((p, "on_trap", sub, start + off))
-                p += 7
-                continue
-            if sub in _TRAP_CTL:  # <event>[(n)] ON|OFF|STOP
-                ops.append((p, "trap_ctl", sub))
-                p += 3
-                continue
-            if sub == 0x56:  # KEY LIST (zero operand)
-                ops.append((p, "key_list"))
-                p += 3
                 continue
             if sub == 0x4A:  # GET graphics blit (+ trail byte)
                 ops.append((p, "get_gfx", exe[p + 3]))
