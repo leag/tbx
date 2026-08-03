@@ -22,6 +22,39 @@ if TYPE_CHECKING:
     from tbx.decode0.core import DecodeState
 
 
+def _graphics_line(state: DecodeState, op, addr: int) -> bool:
+    e, c = state.expr, state.control
+    fl = op[2]
+    if fl & ~0x7F or (fl & 0x02 and not fl & 0x04):
+        raise ValueError(f"LINE flag {fl:02x} at {addr:#x} (unsupported)")
+    if not fl & 0x40 and fl & 0x20:
+        # STEP on an omitted first point is unwitnessed -- stay fail-loud
+        # rather than guess what it would even mean.
+        raise ValueError(f"LINE flag {fl:02x} at {addr:#x} (unsupported)")
+    color = e.color_cells.pop(0xA0) if fl & 0x08 else None
+    style = e.color_cells.pop(0xAC) if fl & 0x01 else None
+    if isinstance(style, ir.Lit):  # style word reads as a bit pattern
+        style = ir.HexLit(style.value & 0xFFFF)
+    box = ("BF" if fl & 0x02 else "B") if fl & 0x04 else ""
+    y2 = e.stack.pop()
+    x2 = e.stack.pop()
+    if fl & 0x40:
+        x1 = e.color_cells.pop(0x88)
+        y1 = e.color_cells.pop(0x94)
+    else:  # first point omitted entirely: `LINE -(x2,y2)` from the last
+        x1 = y1 = None  # graphics position (wild cal87.exe)
+    state.put(
+        ir.LineStmt(
+            x1, y1, x2, y2, color, box,
+            step1=bool(fl & 0x20), step2=bool(fl & 0x10), style=style,
+        ),
+        c.cur,
+    )
+    c.cur = None
+    state.advance()
+    return True
+
+
 def graphics(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: screen, cls, line, pset, circle, paint, draw, palette,
     palette_using, color_commit, locate, cursor, width."""
@@ -52,42 +85,7 @@ def graphics(state: DecodeState, op, addr, kind) -> bool:
         state.advance()
         return True
     if kind == "line":  # LINE [[STEP](..)]-[STEP](..)[,c][,B|BF][,style]
-        fl = op[2]
-        if fl & ~0x7F or (fl & 0x02 and not fl & 0x04):
-            raise ValueError(f"LINE flag {fl:02x} at {addr:#x} (unsupported)")
-        if not fl & 0x40 and fl & 0x20:
-            # STEP on an omitted first point is unwitnessed -- stay fail-loud
-            # rather than guess what it would even mean.
-            raise ValueError(f"LINE flag {fl:02x} at {addr:#x} (unsupported)")
-        color = e.color_cells.pop(0xA0) if fl & 0x08 else None
-        style = e.color_cells.pop(0xAC) if fl & 0x01 else None
-        if isinstance(style, ir.Lit):  # style word reads as a bit pattern
-            style = ir.HexLit(style.value & 0xFFFF)
-        box = ("BF" if fl & 0x02 else "B") if fl & 0x04 else ""
-        y2 = e.stack.pop()
-        x2 = e.stack.pop()
-        if fl & 0x40:
-            x1 = e.color_cells.pop(0x88)
-            y1 = e.color_cells.pop(0x94)
-        else:  # first point omitted entirely: `LINE -(x2,y2)` from the last
-            x1 = y1 = None  # graphics position (wild cal87.exe)
-        state.put(
-            ir.LineStmt(
-                x1,
-                y1,
-                x2,
-                y2,
-                color,
-                box,
-                step1=bool(fl & 0x20),
-                step2=bool(fl & 0x10),
-                style=style,
-            ),
-            c.cur,
-        )
-        c.cur = None
-        state.advance()
-        return True
+        return _graphics_line(state, op, addr)
     if kind == "pset":  # PSET/PRESET [STEP] (x,y)[, color]
         fl = op[2]
         # Exactly one of 01=PRESET / 02=PSET / 04=color (color drops the
