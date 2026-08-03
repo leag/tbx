@@ -476,6 +476,28 @@
    ],
    "instead": "Model the compiler's bare-value branch template at the IR/control-flow level, preserving the original target polarity and body topology before changing the emitted condition spelling.",
    "source": "three oracle probes and operation-stream comparison, session 2026-08-02"
+  },
+  {
+   "id": "RO-PALETTE-EXTRACTION-DELTA",
+   "title": "Palette-handler extraction causes t1_palette's four-byte oracle delta",
+   "disposition": "not-a-defect",
+   "confidence": "high",
+   "files": [
+    "tests/fixtures/corpus/t1_palette.exe"
+   ],
+   "signatures": [
+    "t1_palette: MISMATCH",
+    "34720 B vs 34720 B",
+    "~4 bytes differ"
+   ],
+   "hypothesis": "Extracting PALETTE and COLOR branches from graphics changes the emitted bytes for t1_palette.",
+   "negative_evidence": [
+    "The emitted source remains exactly `10 PALETTE 1, 2` followed by `20 END`.",
+    "The immediately preceding clean commit produces the same deterministic four-byte oracle delta when verified with the same vendored compiler path.",
+    "Focused palette, COLOR, and palette-reset tests pass, so the mismatch is not evidence of a state change introduced by the extraction."
+   ],
+   "instead": "Treat the t1_palette delta as a pre-existing baseline discrepancy; do not re-record it or use it to reject unrelated palette-handler complexity reductions. Revisit the compiler/template delta separately if byte-exact calibration is required.",
+   "source": "palette extraction comparison against ab138d6, session 2026-08-03"
   }
 ]
 }
