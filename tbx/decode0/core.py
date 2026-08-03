@@ -1918,6 +1918,96 @@ def _resolve_calls(
     return _propagate_call_types(resolved, stmt_addr)
 
 
+def _collect_type_calls(body, owner, sub_defs, calls):
+    for s in body:
+        if isinstance(s, ir.SubDef):
+            sub_defs[s.name] = s
+            _collect_type_calls(s.body, s.name, sub_defs, calls)
+        elif isinstance(s, ir.CallStmt):
+            calls.append((owner, s))
+        elif isinstance(s, ir.IfInline):
+            _collect_type_calls(s.body, owner, sub_defs, calls)
+        elif isinstance(s, ir.IfBlock):
+            for _, branch in s.arms:
+                _collect_type_calls(branch, owner, sub_defs, calls)
+            if s.else_body:
+                _collect_type_calls(s.else_body, owner, sub_defs, calls)
+        elif isinstance(s, ir.SelectCase):
+            for arm in s.arms:
+                _collect_type_calls(arm.body, owner, sub_defs, calls)
+            if s.case_else:
+                _collect_type_calls(s.case_else, owner, sub_defs, calls)
+        elif isinstance(s, ir.DefFn) and s.is_block:
+            _collect_type_calls(s.body, owner, sub_defs, calls)
+
+
+def _type_call_refinements(sub_defs, calls):
+    refinements: dict[str, dict[str, str]] = {}
+    for owner, call in calls:
+        if not isinstance(call.name, str) or call.name not in sub_defs:
+            continue
+        sub = sub_defs[call.name]
+        for i, arg in enumerate(call.args):
+            if i >= len(sub.params):
+                continue
+            param = sub.params[i]
+            if param.startswith("P") and not param.endswith("(1)"):
+                base = param.rstrip("%$&#")
+                suffix = None
+                # Numeric actuals may coerce to an unsuffixed SINGLE formal;
+                # string actuals cannot, so only `$` is safe evidence here.
+                if isinstance(arg, ir.Var) and arg.name[-1:] == "$":
+                    suffix = "$"
+                elif isinstance(arg, ir.ArrayRef) and arg.name[-1:] == "$":
+                    suffix = "$"
+                elif isinstance(arg, ir.StrLit):
+                    suffix = "$"
+                if suffix:
+                    want = f"{base}{suffix}"
+                    if want != param:
+                        refinements.setdefault(call.name, {})[param] = want
+
+            # Passing a string array element by reference proves the owner
+            # SUB's matching array formal, not just the descriptor push.
+            if (
+                owner in sub_defs
+                and param[-1:] == "$"
+                and isinstance(arg, ir.ArrayRef)
+                and arg.name.startswith("P")
+                and arg.name[-1:] != "$"
+            ):
+                owner_sub = sub_defs[owner]
+                array_param = next(
+                    (q for q in owner_sub.params if q == f"{arg.name}(1)"),
+                    None,
+                )
+                if array_param is not None:
+                    want = f"{arg.name}$(1)"
+                    if want != array_param:
+                        refinements.setdefault(owner, {})[array_param] = want
+
+            # A whole-array relay carries the descriptor type through another
+            # SUB boundary; this is direct evidence, unlike numeric coercion.
+            if (
+                owner in sub_defs
+                and param.endswith("$(1)")
+                and isinstance(arg, ir.ArrayRef)
+                and not arg.indices
+                and arg.name.startswith("P")
+                and arg.name[-1:] != "$"
+            ):
+                owner_sub = sub_defs[owner]
+                array_param = next(
+                    (q for q in owner_sub.params if q == f"{arg.name}(1)"),
+                    None,
+                )
+                if array_param is not None:
+                    want = f"{arg.name}$(1)"
+                    if want != array_param:
+                        refinements.setdefault(owner, {})[array_param] = want
+    return refinements
+
+
 def _propagate_call_types(stmts, stmt_addr=None):
     """Refine unsuffixed SubDef parameter placeholders ('Pxx') using caller
     argument type evidence from CallStmts across the program (e.g., a parameter
@@ -1927,109 +2017,12 @@ def _propagate_call_types(stmts, stmt_addr=None):
     sub_defs: dict[str, ir.SubDef] = {}
     calls: list[tuple[str | None, ir.CallStmt]] = []
 
-    def collect(body, owner=None):
-        for s in body:
-            if isinstance(s, ir.SubDef):
-                sub_defs[s.name] = s
-                collect(s.body, s.name)
-            elif isinstance(s, ir.CallStmt):
-                calls.append((owner, s))
-            elif isinstance(s, ir.IfInline):
-                collect(s.body, owner)
-            elif isinstance(s, ir.IfBlock):
-                for _, b in s.arms:
-                    collect(b, owner)
-                if s.else_body:
-                    collect(s.else_body, owner)
-            elif isinstance(s, ir.SelectCase):
-                for arm in s.arms:
-                    collect(arm.body, owner)
-                if s.case_else:
-                    collect(s.case_else, owner)
-            elif isinstance(s, ir.DefFn) and s.is_block:
-                collect(s.body, owner)
-
-    collect(stmts)
+    _collect_type_calls(stmts, None, sub_defs, calls)
 
     if not sub_defs or not calls:
         return stmts
 
-    refinements: dict[str, dict[str, str]] = {}
-
-    for owner, c in calls:
-        if not isinstance(c.name, str) or c.name not in sub_defs:
-            continue
-        sub = sub_defs[c.name]
-        for i, arg in enumerate(c.args):
-            if i >= len(sub.params):
-                continue
-            p = sub.params[i]
-            if p.startswith("P") and not p.endswith("(1)"):
-                base = p.rstrip("%$&#")
-                sfx = None
-                # A caller's numeric type does not determine a by-ref formal's
-                # spelling: TB accepts an INTEGER actual for an unsuffixed
-                # (SINGLE) parameter, so propagating `%`, `&`, or `#` here
-                # silently changes valid declarations.  Strings cannot undergo
-                # that numeric coercion, making `$` the only calibrated
-                # caller-side refinement (tbd73's Titlewin -> Titlebox INLINE).
-                if isinstance(arg, ir.Var) and arg.name[-1:] == "$":
-                    sfx = arg.name[-1:]
-                elif isinstance(arg, ir.ArrayRef) and arg.name[-1:] == "$":
-                    sfx = arg.name[-1:]
-                elif isinstance(arg, ir.StrLit):
-                    sfx = "$"
-                if sfx:
-                    want = f"{base}{sfx}"
-                    if want != p:
-                        refinements.setdefault(c.name, {})[p] = want
-
-            # Passing an array element by reference proves the element type
-            # when the receiving formal is already known.  The source array
-            # descriptor itself is typed in its owner SUB's header, so update
-            # that declaration (and its body references) rather than trying
-            # to infer a type from the descriptor push.  This is the direct
-            # `Drawlist(ptrarray$(...)) -> Printwin(..., strdat$)` chain in
-            # tbd73; only `$` is safe for the same coercion reason above.
-            if (
-                owner in sub_defs
-                and p[-1:] == "$"
-                and isinstance(arg, ir.ArrayRef)
-                and arg.name.startswith("P")
-                and arg.name[-1:] != "$"
-            ):
-                owner_sub = sub_defs[owner]
-                array_p = next(
-                    (q for q in owner_sub.params if q == f"{arg.name}(1)"),
-                    None,
-                )
-                if array_p is not None:
-                    want = f"{arg.name}$(1)"
-                    if want != array_p:
-                        refinements.setdefault(owner, {})[array_p] = want
-
-            # A whole-array relay carries the same descriptor type through
-            # another SUB boundary.  The callee's `$(1)` formal is direct
-            # evidence for the caller's matching array formal; unlike a
-            # scalar numeric actual, this is not a coercion.  tbd73's
-            # Makelmenu -> Drawlist relay is the witnessed shape.
-            if (
-                owner in sub_defs
-                and p.endswith("$(1)")
-                and isinstance(arg, ir.ArrayRef)
-                and not arg.indices
-                and arg.name.startswith("P")
-                and arg.name[-1:] != "$"
-            ):
-                owner_sub = sub_defs[owner]
-                array_p = next(
-                    (q for q in owner_sub.params if q == f"{arg.name}(1)"),
-                    None,
-                )
-                if array_p is not None:
-                    want = f"{arg.name}$(1)"
-                    if want != array_p:
-                        refinements.setdefault(owner, {})[array_p] = want
+    refinements = _type_call_refinements(sub_defs, calls)
 
     if not refinements:
         return stmts
