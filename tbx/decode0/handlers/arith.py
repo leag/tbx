@@ -132,6 +132,52 @@ def _int_add_ops(state: DecodeState, op, addr: int, kind: str) -> bool:
     return True
 
 
+def _int_index_add(state: DecodeState, addr: int) -> bool:
+    m = state.machine
+    # Accumulate index legs, highest dimension first (column-major).
+    if (
+        isinstance(m.si, tuple)
+        and m.si[0] == "lspan"
+        and isinstance(m.ax, tuple)
+        and m.ax[0] == "kspan"
+        and m.ax[1] == m.si[1]
+    ):
+        m.si = ("kl", m.si[1], (m.ax[2], m.si[2]))
+        m.ax = None
+    elif (
+        isinstance(m.si, tuple)
+        and m.si[0] == "kl"
+        and isinstance(m.ax, tuple)
+        and m.ax[0] == "jspan"
+        and m.ax[1] == m.si[1]
+    ):
+        m.si = ("jkl", m.si[1], (m.ax[2], *m.si[2]))
+        m.ax = None
+    elif (
+        isinstance(m.si, tuple)
+        and m.si[0] == "kspan"
+        and isinstance(m.ax, tuple)
+        and m.ax[0] == "jspan"
+        and m.ax[1] == m.si[1]
+    ):
+        m.si = ("jk", m.si[1], (m.ax[2], m.si[2]))
+        m.ax = None
+    else:
+        if not (isinstance(m.si, tuple) and m.si[0] in ("jspan", "jk", "jkl")):
+            raise ValueError(f"add si,ax with si={m.si} ax={m.ax} at {addr:#x}")
+        if isinstance(m.ax, tuple) and m.ax[0] == "inorm" and m.ax[1] == m.si[1]:
+            i_expr = m.ax[2]
+        elif not isinstance(m.ax, tuple) and m.ax is not None:
+            i_expr = m.ax
+        else:
+            raise ValueError(f"add si,ax with si={m.si} ax={m.ax} at {addr:#x}")
+        rest = m.si[2] if m.si[0] in ("jk", "jkl") else (m.si[2],)
+        m.si = ("idx", m.si[1], (i_expr, *rest))
+        m.ax = None
+    state.advance()
+    return True
+
+
 def int_alu(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addax_bp, addsiax, subax_m, imul_m, imul_bp, movax_bp, idivbx, cmpax_m, inc_m, dec_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
     img, m, expr_, l, c, o = (state.image, state.machine, state.expr,
@@ -141,62 +187,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
     if _int_add_ops(state, op, addr, kind):
         return True
     if kind == "addsiax":
-        # accumulate index legs, highest dim first (column-major):
-        # rank 2: si=jspan + ax=i -> idx(i, j)
-        # rank 3: si=kspan + ax=jspan -> jk(j, k); si=jk + ax=i -> idx(i, j, k)
-        # (rank-3 witnessed t1_dim3v)
-        # rank 4: si=lspan + ax=kspan -> kl(k, l); si=kl + ax=jspan -> jkl(j, k, l);
-        # si=jkl + ax=i -> idx(i, j, k, l) (wild hfprop.exe, probe q_dim4var)
-        if (
-            isinstance(m.si, tuple)
-            and m.si[0] == "lspan"
-            and isinstance(m.ax, tuple)
-            and m.ax[0] == "kspan"
-            and m.ax[1] == m.si[1]
-        ):
-            m.si = ("kl", m.si[1], (m.ax[2], m.si[2]))
-            m.ax = None
-            state.advance()
-            return True
-        if (
-            isinstance(m.si, tuple)
-            and m.si[0] == "kl"
-            and isinstance(m.ax, tuple)
-            and m.ax[0] == "jspan"
-            and m.ax[1] == m.si[1]
-        ):
-            m.si = ("jkl", m.si[1], (m.ax[2], *m.si[2]))
-            m.ax = None
-            state.advance()
-            return True
-        if (
-            isinstance(m.si, tuple)
-            and m.si[0] == "kspan"
-            and isinstance(m.ax, tuple)
-            and m.ax[0] == "jspan"
-            and m.ax[1] == m.si[1]
-        ):
-            m.si = ("jk", m.si[1], (m.ax[2], m.si[2]))
-            m.ax = None
-            state.advance()
-            return True
-        if not (isinstance(m.si, tuple) and m.si[0] in ("jspan", "jk", "jkl")):
-            raise ValueError(f"add si,ax with si={m.si} ax={m.ax} at {addr:#x}")
-        if (
-            isinstance(m.ax, tuple)
-            and m.ax[0] == "inorm"
-            and m.ax[1] == m.si[1]
-        ):
-            i_expr = m.ax[2]
-        elif not isinstance(m.ax, tuple) and m.ax is not None:
-            i_expr = m.ax  # base-0: no i-lo sub
-        else:
-            raise ValueError(f"add si,ax with si={m.si} ax={m.ax} at {addr:#x}")
-        rest = m.si[2] if m.si[0] in ("jk", "jkl") else (m.si[2],)
-        m.si = ("idx", m.si[1], (i_expr, *rest))
-        m.ax = None
-        state.advance()
-        return True
+        return _int_index_add(state, addr)
     if kind == "subax_m":
         blk = next((b for b in l.slot_info if b <= op[2] < b + ARR_BLOCK), None)
         if blk is None:
