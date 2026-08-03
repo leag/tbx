@@ -2940,12 +2940,8 @@ def _finalize(state: DecodeState, addr) -> Program:
         return prog
 
 
-def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
-    """FP-stack + control-flow instruction dispatch (fld/fst/fadd/.../fcomp/jcc/
-    jmp/call/run/jmps + unhandled-op guard). Falls through to the default k-advance;
-    branches that self-advanced return early."""
-    img, m, e, l, c, out = (state.image, state.machine, state.expr,
-                            state.layout_state, state.control, state.output)
+def _fp_load_ops(state: DecodeState, op, addr, kind) -> bool:
+    e, l = state.expr, state.layout_state
     if kind == "fld1":
         e.stack.append(ir.Lit(1))
     elif kind == "fldz":
@@ -2961,10 +2957,23 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             e.stack.append(state.loc(op[2]))  # integer variable read
         else:
             e.stack.append(state.pool_lit(op[2]))
-    elif kind == "fld":
+    elif kind == "fld":  # m32 load: single var or pooled f32
         e.stack.append(state.fpval(op[2]))
     elif kind == "fld64":  # m64 load: double var or pooled f64
         e.stack.append(state.fpval64(op[2]))
+    else:
+        return False
+    return True
+
+
+def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
+    """FP-stack + control-flow instruction dispatch (fld/fst/fadd/.../fcomp/jcc/
+    jmp/call/run/jmps + unhandled-op guard). Falls through to the default k-advance;
+    branches that self-advanced return early."""
+    img, m, e, l, c, out = (state.image, state.machine, state.expr,
+                            state.layout_state, state.control, state.output)
+    if _fp_load_ops(state, op, addr, kind):
+        pass
     elif kind == "fstp64":  # m64 store: double var assign
         v = e.stack.pop()
         if v is _FREAD:
