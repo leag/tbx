@@ -1722,6 +1722,51 @@ def _scan_esc_disp_ops(p, mo, esc, pre, reg, disp, ops) -> int | None:
     return None
 
 
+def _scan_esc_bp_ops(exe, p, mo, esc, pre, reg, mod, ops) -> int | None:
+    if mod == 1:
+        bp_off = struct.unpack_from("<b", exe, mo + 1)[0]
+    elif mod == 2:
+        bp_off = struct.unpack_from("<H", exe, mo + 1)[0]
+    else:
+        return None
+    if mod == 1:
+        kinds = {
+            (0xD9, 0): "fld_bp", (0xD9, 3): "fstp_bp",
+            (0xD8, 3): "fcomp_bp", (0xDF, 0): "fild_bp",
+            (0xDE, 3): "icomp_bp", (0xDD, 0): "fld_bp64",
+            (0xDD, 3): "fstp_bp64", (0xDC, 3): "fcomp_bp64",
+        }
+        kind = kinds.get((esc, reg))
+        if kind:
+            ops.append((p, pre + kind, bp_off))
+            return mo + 2
+        folds = (
+            (0xDE, _FOLD_OPS, "ifold_bp"),
+            (0xD8, _FOLD_OPS, "fold_bp"),
+            (0xD8, _FOLD_OPS_N, "fold_n_bp"),
+            (0xDC, _FOLD_OPS, "fold_bp64"),
+            (0xDC, _FOLD_OPS_N, "fold_n_bp64"),
+        )
+        for opcode, table, name in folds:
+            if esc == opcode and reg in table:
+                ops.append((p, pre + name, table[reg], bp_off))
+                return mo + 2
+        return None
+    if (esc, reg) == (0xD9, 0):
+        ops.append((p, pre + "fld_bp", bp_off))
+        return mo + 3
+    if (esc, reg) == (0xD9, 3):
+        ops.append((p, pre + "fstp_bp", bp_off))
+        return mo + 3
+    if (esc, reg) == (0xD8, 0):
+        ops.append((p, pre + "fold_bp", "+", bp_off))
+        return mo + 3
+    if (esc, reg) == (0xD8, 3):
+        ops.append((p, pre + "fcomp_bp", bp_off))
+        return mo + 3
+    return None
+
+
 def _scan(
     exe: bytes, start: int, dia: Dialect = TB11, commits: set[int] | None = None
 ) -> list[tuple[Any, ...]]:
@@ -1903,75 +1948,11 @@ def _scan_pass(
                     p = np
                     continue
                 raise ValueError(f"unhandled FP [disp16] op esc={esc:02x} modrm={modrm:02x} at {p:#x}")
-            if mod == 1 and rm == 6:  # [bp+disp8]: DEF FN body / call-arg temp frame
-                bp_off = struct.unpack_from("<b", exe, mo + 1)[
-                    0
-                ]  # signed displacement byte
-                kind = {
-                    (0xD9, 0): "fld_bp",
-                    (0xD9, 3): "fstp_bp",
-                    (0xD8, 3): "fcomp_bp",
-                    (0xDF, 0): "fild_bp",  # LOCAL int read onto the FP stack
-                    (0xDE, 3): "icomp_bp",  # LOCAL int compare (mixed-type
-                    # IF/loop test against an FP-stack value; the bp-relative
-                    # sibling of icomp/icomp_si32, wild bmaster.exe/ifi.exe)
-                    (0xDD, 0): "fld_bp64",  # DOUBLE LOCAL read (the m64
-                    (0xDD, 3): "fstp_bp64",  # sibling of fld_bp/fstp_bp's
-                    (0xDC, 3): "fcomp_bp64",  # SINGLE m32 forms; fcomp_bp64
-                    # is fcomp_bp's DOUBLE sibling too, wild filepatc.exe)
-                }.get((esc, reg))  # (PRINT of a local int, witnessed t1_local1)
-                if kind:
-                    ops.append((p, pre + kind, bp_off))
-                    p = mo + 2
+            if rm == 6:
+                np = _scan_esc_bp_ops(exe, p, mo, esc, pre, reg, mod, ops)
+                if np is not None:
+                    p = np
                     continue
-                if esc == 0xDE and reg in _FOLD_OPS:  # FIADD/FIMUL/FISUB/FIDIV
-                    # m16 [bp+d8]:
-                    # integer BP-frame operand folded as the left side of a
-                    # floating expression (FIMUL: probe_fimul_bp; both: CVT2TB).
-                    ops.append((p, pre + "ifold_bp", _FOLD_OPS[reg], bp_off))
-                    p = mo + 2
-                    continue
-                if esc == 0xD8 and reg in _FOLD_OPS:
-                    ops.append((p, pre + "fold_bp", _FOLD_OPS[reg], bp_off))
-                    p = mo + 2
-                    continue
-                if esc == 0xD8 and reg in _FOLD_OPS_N:
-                    ops.append((p, pre + "fold_n_bp", _FOLD_OPS_N[reg], bp_off))
-                    p = mo + 2
-                    continue
-                if esc == 0xDC and reg in _FOLD_OPS:
-                    # m64 arithmetic fold, LOCAL DOUBLE operand LEFT (the
-                    # DOUBLE sibling of fold_bp's SINGLE m32 form, wild
-                    # filepatc.exe).
-                    ops.append((p, pre + "fold_bp64", _FOLD_OPS[reg], bp_off))
-                    p = mo + 2
-                    continue
-                if esc == 0xDC and reg in _FOLD_OPS_N:
-                    ops.append((p, pre + "fold_n_bp64", _FOLD_OPS_N[reg], bp_off))
-                    p = mo + 2
-                    continue
-            if mod == 2 and rm == 6 and (esc, reg) in ((0xD9, 0), (0xD9, 3)):
-                # fld/fstp dword [bp+disp16]: SINGLE LOCAL beyond the signed
-                # disp8 range (both forms witnessed by cleanup.exe/reformat.exe).
-                bp_off = struct.unpack_from("<H", exe, mo + 1)[0]
-                kind = "fld_bp" if reg == 0 else "fstp_bp"
-                ops.append((p, pre + kind, bp_off))
-                p = mo + 3
-                continue
-            if mod == 2 and rm == 6 and (esc, reg) == (0xD8, 0):
-                # fadd dword [bp+disp16]: large SINGLE LOCAL as the left
-                # operand (wild cleanup.exe/reformat.exe).
-                bp_off = struct.unpack_from("<H", exe, mo + 1)[0]
-                ops.append((p, pre + "fold_bp", "+", bp_off))
-                p = mo + 3
-                continue
-            if mod == 2 and rm == 6 and (esc, reg) == (0xD8, 3):
-                # fcomp dword [bp+disp16]: compare against a large SINGLE
-                # LOCAL (wild cleanup.exe/reformat.exe variable-step FOR).
-                bp_off = struct.unpack_from("<H", exe, mo + 1)[0]
-                ops.append((p, pre + "fcomp_bp", bp_off))
-                p = mo + 3
-                continue
             raise ValueError(
                 f"unhandled FP op esc={esc:02x} modrm={modrm:02x} at {p:#x}"
             )
