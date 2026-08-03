@@ -331,81 +331,78 @@ def graphics_box(state: DecodeState, op, addr, kind) -> bool:
     return False
 
 
-def console(state: DecodeState, op, addr, kind) -> bool:
-    """Dispatch family: input, line_input, key_list, tabspc, swap."""
-    i, m, e, l, c = (state.image, state.machine, state.expr,
-                     state.layout_state, state.control)
-    if kind == "input":  # INPUT prologue
-        prompt = None if op[2] == l.lay["pool_base"] - 4 else state._pool_str(op[2])
-        flags = op[3]
-        count = flags & 0x3F  # extra targets beyond the first
-        tmask = 0  # per-position numeric-type bits, 0x4000 >> k
-        for i in range(count + 1):
-            tmask |= 0x4000 >> i
-        if flags & ~(0x00C0 | 0x3F | tmask):
-            raise ValueError(
-                f"INPUT flags {flags:#06x} with {count + 1} targets at {addr:#x}"
-            )
-        e.pend_input = InputChain(
-            prompt=prompt, flags=flags, want=count + 1, start=c.cur
+def _console_input(state: DecodeState, op, addr: int) -> bool:
+    l, e, c = state.layout_state, state.expr, state.control
+    prompt = None if op[2] == l.lay["pool_base"] - 4 else state._pool_str(op[2])
+    flags = op[3]
+    count = flags & 0x3F  # extra targets beyond the first
+    tmask = 0  # per-position numeric-type bits, 0x4000 >> k
+    for i in range(count + 1):
+        tmask |= 0x4000 >> i
+    if flags & ~(0x00C0 | 0x3F | tmask):
+        raise ValueError(
+            f"INPUT flags {flags:#06x} with {count + 1} targets at {addr:#x}"
         )
+    e.pend_input = InputChain(prompt=prompt, flags=flags, want=count + 1, start=c.cur)
+    state.advance()
+    return True
+
+
+def _console_line_input(state: DecodeState, op, addr: int) -> bool:
+    i, e, c = state.image, state.expr, state.control
+    prompt = (
+        None
+        if op[2] == state.layout_state.lay["pool_base"] - 4
+        else state._pool_str(op[2])
+    )
+    nxt = i.ops[c.k + 1] if c.k + 1 < len(i.ops) else None
+    if nxt is not None and nxt[1] != "movsi":
+        # Computed string-array-element target (wild cal87.exe), the
+        # LINE INPUT sibling of read_str's _INPUTREAD case.
+        e.pend_line_input = LineInputChain(prompt=prompt, semi=op[3], start=c.cur)
+        e.sstack.append(_LINEINPUTREAD)
         state.advance()
         return True
-    if kind == "line_input":  # LINE INPUT
-        prompt = None if op[2] == l.lay["pool_base"] - 4 else state._pool_str(op[2])
-        nxt = i.ops[c.k + 1] if c.k + 1 < len(i.ops) else None
-        if nxt is not None and nxt[1] != "movsi":
-            # Computed string-array-element target (wild cal87.exe), the
-            # LINE INPUT sibling of read_str's _INPUTREAD case: the index
-            # computation runs between the read and the element store, so
-            # the store (the shlsi element-access handler's strassign
-            # branch) names the target.
-            e.pend_line_input = LineInputChain(
-                prompt=prompt, semi=op[3], start=c.cur
-            )
-            e.sstack.append(_LINEINPUTREAD)
-            state.advance()
-            return True
-        if nxt is None or i.ops[c.k + 2][1] != "strassign":
-            raise ValueError(f"LINE INPUT template mismatch at {addr:#x}")
-        state.put(
-            ir.LineInput(prompt, state.loc(nxt[2]), semi=op[3]),
-            c.cur,
-        )
-        c.cur = None
-        state.advance(3)
-        return True
-    if kind == "line_input_file":  # LINE INPUT #n, var$
-        if e.pend_fnum is None:
-            raise ValueError(f"LINE INPUT # without a file number at {addr:#x}")
-        nxt1 = i.ops[c.k + 1] if c.k + 1 < len(i.ops) else None
-        if nxt1 is not None and nxt1[1] != "movsi":
-            # Computed string-array-element target -- `LINE INPUT #1,
-            # recarr$(rec)` (wild tbd73.exe, TBD73.BAS:394). Exactly the case
-            # the prompt-form sibling above already handles: the index
-            # computation runs between the read and the element store, so the
-            # store (the shlsi element-access handler's strassign branch) is
-            # what names the target. Stage it the same way, carrying the file
-            # number through so _lineinput_target can rebuild the `#n` form
-            # (t1_lineinparr).
-            e.pend_line_input = LineInputChain(start=c.cur, file=e.pend_fnum)
-            e.sstack.append(_LINEINPUTREAD)
-            e.pend_fnum = None
-            state.advance()
-            return True
-        nxt = [o[1] for o in i.ops[c.k + 1 : c.k + 3]]
-        if nxt != ["movsi", "strassign"]:
-            raise ValueError(f"LINE INPUT # template mismatch at {addr:#x}")
-        state.put(
-            ir.LineInput(
-                None, state.loc(i.ops[c.k + 1][2]), e.pend_fnum
-            ),
-            c.cur,
-        )
+    if nxt is None or i.ops[c.k + 2][1] != "strassign":
+        raise ValueError(f"LINE INPUT template mismatch at {addr:#x}")
+    state.put(ir.LineInput(prompt, state.loc(nxt[2]), semi=op[3]), c.cur)
+    c.cur = None
+    state.advance(3)
+    return True
+
+
+def _console_line_input_file(state: DecodeState, op, addr: int) -> bool:
+    i, e, c = state.image, state.expr, state.control
+    if e.pend_fnum is None:
+        raise ValueError(f"LINE INPUT # without a file number at {addr:#x}")
+    nxt1 = i.ops[c.k + 1] if c.k + 1 < len(i.ops) else None
+    if nxt1 is not None and nxt1[1] != "movsi":
+        # Computed string-array-element target; the index computation runs
+        # between the read and the element store.
+        e.pend_line_input = LineInputChain(start=c.cur, file=e.pend_fnum)
+        e.sstack.append(_LINEINPUTREAD)
         e.pend_fnum = None
-        c.cur = None
-        state.advance(3)
+        state.advance()
         return True
+    nxt = [o[1] for o in i.ops[c.k + 1 : c.k + 3]]
+    if nxt != ["movsi", "strassign"]:
+        raise ValueError(f"LINE INPUT # template mismatch at {addr:#x}")
+    state.put(ir.LineInput(None, state.loc(i.ops[c.k + 1][2]), e.pend_fnum), c.cur)
+    e.pend_fnum = None
+    c.cur = None
+    state.advance(3)
+    return True
+
+
+def console(state: DecodeState, op, addr, kind) -> bool:
+    """Dispatch family: input, line_input, key_list, tabspc, swap."""
+    i, m, e, c = state.image, state.machine, state.expr, state.control
+    if kind == "input":  # INPUT prologue
+        return _console_input(state, op, addr)
+    if kind == "line_input":  # LINE INPUT
+        return _console_line_input(state, op, addr)
+    if kind == "line_input_file":  # LINE INPUT #n, var$
+        return _console_line_input_file(state, op, addr)
     if kind == "key_list":  # KEY LIST
         state.put(ir.KeyList(), c.cur)
         c.cur = None
