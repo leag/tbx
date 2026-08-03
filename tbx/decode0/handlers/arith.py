@@ -1537,19 +1537,24 @@ def fp_math(state: DecodeState, op, addr, kind) -> bool:
     return False
 
 
+def _fp_bp_fild(state: DecodeState, op, addr: int) -> bool:
+    expr_, c = state.expr, state.control
+    if c.proc_frame is None and c.fn_frame is None:
+        raise ValueError(f"fild_bp outside a SUB/DEF FN body at {addr:#x}")
+    if c.cur is None:
+        c.cur = addr
+    expr_.stack.append(state.loc_local(op[2]))
+    state.advance()
+    return True
+
+
 def fp_bp(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: BP-frame floating-point loads, folds and compares."""
     expr_, c = state.expr, state.control
     if kind == "fild_bp":  # LOCAL (or DEF FN param) int onto the FP stack,
         # e.g. for PRINT, or an int LOCAL/param promoted into a float result
         # expression (wild resume.exe / probe_d)
-        if c.proc_frame is None and c.fn_frame is None:
-            raise ValueError(f"fild_bp outside a SUB/DEF FN body at {addr:#x}")
-        if c.cur is None:  # may open a statement (e.g. PRINT A% as an
-            c.cur = addr  # IF's skip-goto target, q_loccmp)
-        expr_.stack.append(state.loc_local(op[2]))
-        state.advance()
-        return True
+        return _fp_bp_fild(state, op, addr)
     if kind in (
         "fld_bp",
         "fstp_bp",
