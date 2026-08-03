@@ -2390,6 +2390,29 @@ def _walk_string_descriptors(state, exe):
     return descriptors, d
 
 
+def _find_string_char_base(state, exe, descriptors, after_disp):
+    l = state.layout_state
+    total = (
+        sum(ln for _, ln, _ in descriptors)
+        if descriptors
+        else sum(
+            struct.unpack_from("<H", exe, l.dsd + disp)[0] & 0x7FFF
+            for disp in l.desc_disps
+        )
+    )
+    hdr = struct.pack("<H", 0x8000 | total)
+    lo = (after_disp + 15) & ~15
+    for cand in range(lo, lo + 0x400, 16):
+        pos = l.dsd + cand + 0x10
+        if (
+            exe[pos : pos + 2] == hdr
+            and exe[pos + 2 : pos + 6] == b"\x00\x00\x00\x00"
+            and exe[pos + 6 + total : pos + 8 + total] == hdr
+        ):
+            return cand
+    raise ValueError("string char record not found")
+
+
 def _prepare_string_pool(state, exe):
     img, l = state.image, state.layout_state
     l.ss_base = None
@@ -2400,27 +2423,7 @@ def _prepare_string_pool(state, exe):
     if not l.desc_disps and not l.have_fre:
         return
     all_descs, d = _walk_string_descriptors(state, exe)
-    total = (
-        sum(ln for _, ln, _ in all_descs)
-        if all_descs
-        else sum(
-            struct.unpack_from("<H", exe, l.dsd + disp)[0] & 0x7FFF
-            for disp in l.desc_disps
-        )
-    )
-    hdr = struct.pack("<H", 0x8000 | total)
-    lo = (d + 15) & ~15
-    for cand in range(lo, lo + 0x400, 16):
-        pos = l.dsd + cand + 0x10
-        if (
-            exe[pos : pos + 2] == hdr
-            and exe[pos + 2 : pos + 6] == b"\x00\x00\x00\x00"
-            and exe[pos + 6 + total : pos + 8 + total] == hdr
-        ):
-            l.ss_base = cand
-            break
-    else:
-        raise ValueError("string char record not found")
+    l.ss_base = _find_string_char_base(state, exe, all_descs, d)
     unref = [(ln, ptr) for disp, ln, ptr in all_descs if disp not in l.desc_disps]
     if not unref:
         return
