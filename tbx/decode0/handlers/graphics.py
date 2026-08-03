@@ -55,6 +55,26 @@ def _graphics_line(state: DecodeState, op, addr: int) -> bool:
     return True
 
 
+def _graphics_pset(state: DecodeState, op, addr: int) -> bool:
+    e, c = state.expr, state.control
+    fl = op[2]
+    # Exactly one of 01=PRESET / 02=PSET / 04=color (color drops the
+    # PSET/PRESET bit -- explicit color overrides the default attr);
+    # 08=STEP composes with any of them.
+    if fl & ~0x0F or bin(fl & 0x07).count("1") != 1:
+        raise ValueError(f"PSET flag {fl:02x} at {addr:#x} (unsupported)")
+    color = e.color_cells.pop(0x88) if fl & 0x04 else None
+    y = e.stack.pop()
+    x = e.stack.pop()
+    state.put(
+        ir.Pset(x, y, color, preset=bool(fl & 0x01), step=bool(fl & 0x08)),
+        c.cur,
+    )
+    c.cur = None
+    state.advance()
+    return True
+
+
 def graphics(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: screen, cls, line, pset, circle, paint, draw, palette,
     palette_using, color_commit, locate, cursor, width."""
@@ -87,22 +107,7 @@ def graphics(state: DecodeState, op, addr, kind) -> bool:
     if kind == "line":  # LINE [[STEP](..)]-[STEP](..)[,c][,B|BF][,style]
         return _graphics_line(state, op, addr)
     if kind == "pset":  # PSET/PRESET [STEP] (x,y)[, color]
-        fl = op[2]
-        # Exactly one of 01=PRESET / 02=PSET / 04=color (color drops the
-        # PSET/PRESET bit -- explicit color overrides the default attr);
-        # 08=STEP composes with any of them.
-        if fl & ~0x0F or bin(fl & 0x07).count("1") != 1:
-            raise ValueError(f"PSET flag {fl:02x} at {addr:#x} (unsupported)")
-        color = e.color_cells.pop(0x88) if fl & 0x04 else None
-        y = e.stack.pop()
-        x = e.stack.pop()
-        state.put(
-            ir.Pset(x, y, color, preset=bool(fl & 0x01), step=bool(fl & 0x08)),
-            c.cur,
-        )
-        c.cur = None
-        state.advance()
-        return True
+        return _graphics_pset(state, op, addr)
     if kind == "circle":  # CIRCLE [STEP] (x,y), r[,c][,s][,e][,asp]
         fl = op[2]
         if fl & ~0x1F:
