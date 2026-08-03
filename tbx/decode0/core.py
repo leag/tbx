@@ -1183,39 +1183,24 @@ def _scope_proc_regions(
     return regions
 
 
-def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, int]]:
-    """Slot-scope attribution for SUB bodies (witnessed t1_subsh/t1_subarr/
-    t1_subad): TB gives every non-SHARED SUB variable/array its own local
-    static slot, so a slot referenced both inside a SUB body and anywhere
-    else can only be SHARED -- synthesize the declaration at body top.
-    Returns ({top index -> Shared statement for that SUB}, {array name ->
-    top index of the SUB it is local to} -- their synthesized DIM belongs
-    inside that body). DEF FN bodies need no treatment: their unlisted
-    variables are the main program's (existing DEF FN fixtures round-trip
-    with no declarations)."""
-    o = state.output
-    reconstruct_private_shared = _has_large_common_init(tuple(o.stmts))
-    regions = _scope_proc_regions(o.stmts)
-    main_stmts = [s for s in o.stmts if not isinstance(s, ir.SubDef)]
-    mvs, mars = _region_refs(tuple(main_stmts))
+def _scope_shared_declarations(
+    state: DecodeState,
+    regions: list[tuple[int, list[str], list[str]]],
+    main_vars: list[str],
+    main_arrays: list[str],
+    reconstruct_private_shared: bool,
+) -> tuple[dict[int, ir.Shared], dict[str, int]]:
     shared_subs: dict[int, ir.Shared] = {}
     sub_local_arrays: dict[str, int] = {}
     for i, vs, ars in regions:
-        other_v = set(mvs)
-        other_a = set(mars)
+        other_v = set(main_vars)
+        other_a = set(main_arrays)
         for j, ovs, oars in regions:
             if j != i:
                 other_v |= set(ovs)
                 other_a |= set(oars)
         names = [v for v in vs if v in other_v]
         names += [a + "()" for a in ars if a in other_a]
-        # An explicit SHARED declaration can be the only evidence for the
-        # allocation order of scalars used by just this SUB: the declaration
-        # itself is codeless, while first executable use may be in the opposite
-        # order.  Adjacent private DGROUP slots form an evidenced declaration
-        # band; list that band from high to low because TB allocates SHARED
-        # scalar names in reverse declaration order (wild tbd73.exe:
-        # `SHARED i,barpos`, whose first executable use is barpos).
         private = [
             v
             for v in vs
@@ -1237,8 +1222,7 @@ def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, in
                     bands[-1].append(v)
                     continue
             bands.append([v])
-        inferred_bands = [band for band in bands if len(band) >= 2]
-        for band in inferred_bands:
+        for band in (band for band in bands if len(band) >= 2):
             names.extend(reversed(band))
         if reconstruct_private_shared:
             scalar_names = [n for n in names if not n.endswith("()")]
@@ -1252,6 +1236,26 @@ def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, in
         if names:
             shared_subs[i] = ir.Shared(tuple(names))
     return shared_subs, sub_local_arrays
+
+
+def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, int]]:
+    """Slot-scope attribution for SUB bodies (witnessed t1_subsh/t1_subarr/
+    t1_subad): TB gives every non-SHARED SUB variable/array its own local
+    static slot, so a slot referenced both inside a SUB body and anywhere
+    else can only be SHARED -- synthesize the declaration at body top.
+    Returns ({top index -> Shared statement for that SUB}, {array name ->
+    top index of the SUB it is local to} -- their synthesized DIM belongs
+    inside that body). DEF FN bodies need no treatment: their unlisted
+    variables are the main program's (existing DEF FN fixtures round-trip
+    with no declarations)."""
+    o = state.output
+    reconstruct_private_shared = _has_large_common_init(tuple(o.stmts))
+    regions = _scope_proc_regions(o.stmts)
+    main_stmts = [s for s in o.stmts if not isinstance(s, ir.SubDef)]
+    mvs, mars = _region_refs(tuple(main_stmts))
+    return _scope_shared_declarations(
+        state, regions, mvs, mars, reconstruct_private_shared
+    )
 
 
 def _scalar_param_name(state, off) -> str:
