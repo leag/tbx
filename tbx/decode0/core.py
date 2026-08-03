@@ -3361,6 +3361,64 @@ def _fp_compare_ops(state: DecodeState, op, kind) -> bool:
     return True
 
 
+def _fp_orax_loop(state, op, addr, nxt) -> bool:
+    img, m, c, out = state.image, state.machine, state.control, state.output
+    if (
+        nxt is not None
+        and nxt[1] == "jcc"
+        and nxt[2] in (0x74, 0x75)
+        and ((nxt[3] < addr and nxt[3] in out.addrs) or nxt[3] == c.cur)
+    ):
+        loop_kind = "WHILE" if nxt[2] == 0x75 else "UNTIL"
+        empty_self_loop = nxt[3] == c.cur
+        if empty_self_loop:
+            state.flush_pending()
+        idx = len(out.stmts) if empty_self_loop else out.addrs.index(nxt[3])
+        with editing(out.stmts, "fold_loop_header"):
+            out.stmts.insert(idx, ir.Do(None))
+        out.addrs.insert(idx, None)
+        state.shift_pending(idx, 1)
+        state.put(ir.Loop(loop_kind, m.ax), c.cur)
+        m.ax = None
+        c.cur = None
+        state.advance(2)
+        return True
+    if not (
+        nxt is not None
+        and nxt[1] == "jcc"
+        and nxt[2] in (0x74, 0x75)
+        and c.k + 2 < len(img.ops)
+        and img.ops[c.k + 2][1] == "jmp"
+        and nxt[3] == img.ops[c.k + 2][0] + 3
+    ):
+        return False
+    retry = img.ops[c.k + 2][2]
+    if retry < addr and retry in out.addrs:
+        loop_kind = "UNTIL" if nxt[2] == 0x75 else "WHILE"
+        idx = out.addrs.index(retry)
+        with editing(out.stmts, "fold_loop_header"):
+            out.stmts.insert(idx, ir.Do(None))
+        out.addrs.insert(idx, None)
+        state.shift_pending(idx, 1)
+        state.put(ir.Loop(loop_kind, m.ax), c.cur)
+        m.ax = None
+        c.cur = None
+        state.advance(3)
+        return True
+    test_addr = _find_jmps_back(img.ops, img.ops[c.k + 2][2])
+    if test_addr is None or c.cur is None or not c.cur <= test_addr <= addr:
+        return False
+    loop_kind = "WHILE" if nxt[2] == 0x75 else "UNTIL"
+    state.put(ir.Do(loop_kind, m.ax), c.cur)
+    state.branch(
+        "loop", template="poll_loop", target=img.ops[c.k + 2][2], address=test_addr
+    )
+    c.dos.append(LoopFrame(test=test_addr, exit=img.ops[c.k + 2][2]))
+    m.ax = None
+    state.advance(3)
+    return True
+
+
 def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     """FP-stack + control-flow instruction dispatch (fld/fst/fadd/.../fcomp/jcc/
     jmp/call/run/jmps + unhandled-op guard). Falls through to the default k-advance;
@@ -3395,37 +3453,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         # <> 0 THEN ...`) falls through to the generic pend_cmp path,
         # same as a real compare would feed it.
         nxt = img.ops[c.k + 1] if c.k + 1 < len(img.ops) else None
-        # An empty `DO : LOOP UNTIL LEN(INKEY$)` has no body address: the
-        # conditional edge targets the test operation itself.  Ordinary loops
-        # land on an already committed statement, but this zero-length form
-        # must splice its byte-free DO immediately before the pending LOOP.
-        # The edge names the statement's first operation (INKEY$), while
-        # `addr` is the later OR-AX operation that performs the test.
-        empty_self_loop = nxt is not None and nxt[3] == c.cur
-        if (
-            nxt is not None
-            and nxt[1] == "jcc"
-            and nxt[2] in (0x74, 0x75)
-            and (
-                (nxt[3] < addr and nxt[3] in out.addrs)
-                or empty_self_loop
-            )
-        ):
-            loop_kind = "WHILE" if nxt[2] == 0x75 else "UNTIL"
-            if empty_self_loop:
-                # Flush the preceding expression/PRINT chain before inserting
-                # the byte-free opener; otherwise `put(Loop)` flushes it after
-                # the DO and leaves the pair separated in statement order.
-                state.flush_pending()
-            idx = len(out.stmts) if empty_self_loop else out.addrs.index(nxt[3])
-            with editing(out.stmts, "fold_loop_header"):
-                out.stmts.insert(idx, ir.Do(None))
-            out.addrs.insert(idx, None)
-            state.shift_pending(idx, 1)
-            state.put(ir.Loop(loop_kind, m.ax), c.cur)
-            m.ax = None
-            c.cur = None
-            state.advance(2)
+        if _fp_orax_loop(state, op, addr, nxt):
             return
         if (
             nxt is not None
@@ -3435,60 +3463,6 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             and img.ops[c.k + 2][1] == "jmp"
             and nxt[3] == img.ops[c.k + 2][0] + 3
         ):
-            retry = img.ops[c.k + 2][2]
-            if retry < addr and retry in out.addrs:
-                # Bare-value tail test with the mirror polarity: the jcc
-                # exits and the following JMP retries the body. This is
-                # `DO ... LOOP UNTIL value` for JNZ (WHILE for JZ), not a
-                # head-tested loop at the current address. The compound
-                # sibling is `_lift_bool_do_tail`'s trailing-jmp branch.
-                kind = "UNTIL" if nxt[2] == 0x75 else "WHILE"
-                idx = out.addrs.index(retry)
-                with editing(out.stmts, "fold_loop_header"):
-                    out.stmts.insert(idx, ir.Do(None))
-                out.addrs.insert(idx, None)
-                state.shift_pending(idx, 1)
-                state.put(ir.Loop(kind, m.ax), c.cur)
-                m.ax = None
-                c.cur = None
-                state.advance(3)
-                return
-            test_addr = _find_jmps_back(img.ops, img.ops[c.k + 2][2])
-            if (
-                test_addr is not None
-                # `_find_jmps_back` searches the whole following region for
-                # the structurally adjacent short jump.  A nested loop can
-                # therefore donate its back-edge to an enclosing bare-value
-                # guard (CVT2TB: the outer FNFN1% test at 45246 sees the inner
-                # DO UNTIL edge to 45253 and is emitted as an unterminated
-                # DO WHILE).  A genuine head-test poll returns to the current
-                # condition's first operation, or to the immediately-following
-                # trap hook (t1_whileinstat); a target after this test is a
-                # nested region, not this loop.
-                and c.cur is not None
-                and c.cur <= test_addr <= addr
-            ):
-                # HEAD-test DO/WHILE loop whose condition is a bare value
-                # with no materialization prefix -- the head-test sibling
-                # of the tail-test case just above (same "byte-exact bare
-                # form only" rule: a real comparison compiles the full
-                # movax-FFFF/jcc/incax template instead, handled by
-                # _lift_while). Structurally identical to _lift_while's own
-                # head-test branch, just without a pend_cmp to materialize
-                # first (wild rsltest.exe: `WHILE NOT INSTAT` / `WEND`, an
-                # empty-body busy-wait poll under active event trapping).
-                loop_kind = "WHILE" if nxt[2] == 0x75 else "UNTIL"
-                state.put(ir.Do(loop_kind, m.ax), c.cur)
-                state.branch(
-                    "loop", template="poll_loop",
-                    target=img.ops[c.k + 2][2], address=test_addr,
-                )
-                c.dos.append(
-                    LoopFrame(test=test_addr, exit=img.ops[c.k + 2][2])
-                )
-                m.ax = None
-                state.advance(3)
-                return
             if (bare_term := match_bool_bare_term1(img.ops, c.k)) is not None:
                 # A bare-value (uncompared) compound first term (wild
                 # rsltest.exe: `PEEK(&H410) AND &H40 = 48`; cal.exe/cal87.exe:
