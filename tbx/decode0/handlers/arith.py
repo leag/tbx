@@ -178,6 +178,44 @@ def _int_index_add(state: DecodeState, addr: int) -> bool:
     return True
 
 
+def _int_index_sub(state: DecodeState, op, addr: int) -> bool:
+    img, m, l, c = state.image, state.machine, state.layout_state, state.control
+    blk = next((b for b in l.slot_info if b <= op[2] < b + ARR_BLOCK), None)
+    if blk is None:
+        try:
+            mem = state.loc(op[2])
+        except ValueError:
+            if op[2] < l.lay["pool_base"] - 4:
+                raise
+            mem = state.pool_lit(op[2])
+        if isinstance(m.ax, tuple) or m.ax is None:
+            raise ValueError(f"sub ax,[{op[2]:#x}] with non-Expr ax at {addr:#x}")
+        m.ax = ir.BinOp("-", m.ax, _rgrp("-", mem))
+        state.advance()
+        return True
+    off = op[2] - blk
+    if isinstance(m.ax, tuple) or m.ax is None:
+        raise ValueError(f"far-IDX normalization of non-Expr ax at {addr:#x}")
+    if off in (0x0E, 0x14):
+        span_off = 0x0C if off == 0x0E else 0x12
+        if (
+            c.k + 1 >= len(img.ops)
+            or img.ops[c.k + 1][1] != "imul_m"
+            or img.ops[c.k + 1][2] != blk + span_off
+        ):
+            raise ValueError(f"jspan without imul at {addr:#x}")
+        l.slot_info[blk]["subful"] = True
+        m.ax = ("jspan" if off == 0x0E else "kspan", blk, m.ax)
+        state.advance(2)
+        return True
+    if off == 0x08:
+        l.slot_info[blk]["subful"] = True
+        m.ax = ("inorm", blk, m.ax)
+        state.advance()
+        return True
+    raise ValueError(f"sub ax from unexpected cell offset {off:#x} at {addr:#x}")
+
+
 def int_alu(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addax_bp, addsiax, subax_m, imul_m, imul_bp, movax_bp, idivbx, cmpax_m, inc_m, dec_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
     img, m, expr_, l, c, o = (state.image, state.machine, state.expr,
@@ -189,46 +227,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
     if kind == "addsiax":
         return _int_index_add(state, addr)
     if kind == "subax_m":
-        blk = next((b for b in l.slot_info if b <= op[2] < b + ARR_BLOCK), None)
-        if blk is None:
-            # Not a far-IDX lo-subscript normalization cell -- a plain
-            # subtraction fold instead (`<expr> - <mem>`), mem on the
-            # RIGHT (unlike addax_m's mem-LEFT convention, since SUB
-            # isn't commutative and `sub ax,[mem]` computes ax-mem
-            # directly). Same pool-literal fallback as addax_m/imul_m
-            # (wild resume.exe).
-            try:
-                mem = state.loc(op[2])
-            except ValueError:
-                if op[2] < l.lay["pool_base"] - 4:
-                    raise
-                mem = state.pool_lit(op[2])
-            if isinstance(m.ax, tuple) or m.ax is None:
-                raise ValueError(f"sub ax,[{op[2]:#x}] with non-Expr ax at {addr:#x}")
-            m.ax = ir.BinOp("-", m.ax, _rgrp("-", mem))
-            state.advance()
-            return True
-        off = op[2] - blk
-        if isinstance(m.ax, tuple) or m.ax is None:
-            raise ValueError(f"far-IDX normalization of non-Expr ax at {addr:#x}")
-        if off in (0x0E, 0x14):  # j - lo2 (or k - lo3), then * cumulative span
-            span_off = 0x0C if off == 0x0E else 0x12  # span1 / span2 cell
-            if (
-                c.k + 1 >= len(img.ops)
-                or img.ops[c.k + 1][1] != "imul_m"
-                or img.ops[c.k + 1][2] != blk + span_off
-            ):
-                raise ValueError(f"jspan without imul at {addr:#x}")
-            l.slot_info[blk]["subful"] = True  # lo-sub witness
-            m.ax = ("jspan" if off == 0x0E else "kspan", blk, m.ax)
-            state.advance(2)
-            return True
-        if off == 0x08:  # i - lo1
-            l.slot_info[blk]["subful"] = True  # lo-sub witness
-            m.ax = ("inorm", blk, m.ax)
-            state.advance()
-            return True
-        raise ValueError(f"sub ax from unexpected cell offset {off:#x} at {addr:#x}")
+        return _int_index_sub(state, op, addr)
     if kind == "imul_m":
         blk = next(
             (b for b in l.slot_info if op[2] in (b + 0x0C, b + 0x12, b + 0x18)),
