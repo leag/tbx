@@ -55,6 +55,28 @@ def _graphics_line(state: DecodeState, op, addr: int) -> bool:
     return True
 
 
+def _graphics_screen(state: DecodeState, op, addr: int) -> bool:
+    e, c = state.expr, state.control
+    tag = op[2]
+    mode = e.color_cells.pop(0x88, None) if tag & 0x08 else None
+    if tag & 0x08 and mode is None:
+        raise ValueError(f"SCREEN without [0x88] mode store at {addr:#x}")
+    burst = e.color_cells.pop(0x94, None) if tag & 0x04 else None
+    apage = e.color_cells.pop(0xA0, None) if tag & 0x02 else None
+    vpage = e.color_cells.pop(0xAC, None) if tag & 0x01 else None
+    if (
+        (tag & 0x04 and burst is None)
+        or (tag & 0x02 and apage is None)
+        or (tag & 0x01 and vpage is None)
+        or e.color_cells
+    ):
+        raise ValueError(f"SCREEN arg cell missing for tag {tag:#x} at {addr:#x}")
+    state.put(ir.Screen(mode, burst, apage, vpage), c.cur)
+    c.cur = None
+    state.advance()
+    return True
+
+
 def _graphics_pset(state: DecodeState, op, addr: int) -> bool:
     e, c = state.expr, state.control
     fl = op[2]
@@ -132,24 +154,7 @@ def graphics(state: DecodeState, op, addr, kind) -> bool:
     i, m, e, l, c, o = (state.image, state.machine, state.expr,
                         state.layout_state, state.control, state.output)
     if kind == "screen":  # SCREEN m[,b][,a][,v]: cells by presence mask
-        tag = op[2]
-        mode = e.color_cells.pop(0x88, None) if tag & 0x08 else None
-        if tag & 0x08 and mode is None:
-            raise ValueError(f"SCREEN without [0x88] mode store at {addr:#x}")
-        burst = e.color_cells.pop(0x94, None) if tag & 0x04 else None
-        apage = e.color_cells.pop(0xA0, None) if tag & 0x02 else None
-        vpage = e.color_cells.pop(0xAC, None) if tag & 0x01 else None
-        if (
-            (tag & 0x04 and burst is None)
-            or (tag & 0x02 and apage is None)
-            or (tag & 0x01 and vpage is None)
-            or e.color_cells
-        ):
-            raise ValueError(f"SCREEN arg cell missing for tag {tag:#x} at {addr:#x}")
-        state.put(ir.Screen(mode, burst, apage, vpage), c.cur)
-        c.cur = None
-        state.advance()
-        return True
+        return _graphics_screen(state, op, addr)
     if kind == "cls":
         state.put(ir.Cls(), c.cur)
         c.cur = None
