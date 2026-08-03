@@ -273,6 +273,24 @@ def _int_div_ops(state: DecodeState, op, addr: int, kind: str) -> bool:
     return True
 
 
+def _int_compare_state(state: DecodeState, op, addr: int, kind: str) -> bool:
+    if kind not in ("cmpm_ax", "cmpax_bx"):
+        return False
+    m, expr_ = state.machine, state.expr
+    if kind == "cmpm_ax":
+        if m.ax is None:
+            raise ValueError(f"cmpm_ax without ax operand at {addr:#x}")
+        expr_.pend_cmp = (state.loc(op[2]), m.ax)
+        expr_.pend_cmp_str = False
+        m.ax = None
+    else:
+        expr_.pend_cmp = (m.ax, m.bx)
+        expr_.pend_cmp_str = False
+        m.ax = m.bx = None
+    state.advance()
+    return True
+
+
 def int_alu(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addax_bp, addsiax, subax_m, imul_m, imul_bp, movax_bp, idivbx, cmpax_m, inc_m, dec_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
     img, m, expr_, l, c, o = (state.image, state.machine, state.expr,
@@ -386,13 +404,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                 state.advance(2)
                 return True
         raise ValueError(f"cmpax_m without a value/IF consumer at {addr:#x}")
-    if kind == "cmpm_ax":  # cmp [mem],ax outside the FOR/NEXT template
-        if m.ax is None:
-            raise ValueError(f"cmpm_ax without ax operand at {addr:#x}")
-        expr_.pend_cmp = (state.loc(op[2]), m.ax)
-        expr_.pend_cmp_str = False
-        m.ax = None
-        state.advance()
+    if _int_compare_state(state, op, addr, kind):
         return True
     if kind == "cmpax_bp":  # cmp ax,[bp+d8]: relational against a LOCAL int
         # (q_loccmp). The compiler evaluates the SOURCE RHS into ax and
@@ -486,14 +498,6 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
     if kind == "andax_bp":  # and ax,[bp+d8]: bitwise fold of a LOCAL int,
         # the bp-relative sibling of andax_m (wild filepatc.exe)
         m.ax = ir.BinOp("AND", state.loc_local(op[2]), _rgrp("AND", m.ax))
-        state.advance()
-        return True
-    if kind == "cmpax_bx":  # integer IF compare, both sides ax-computed: the
-        # source RHS evaluates first and shuttles to bx, LHS lands in ax, and
-        # the signed Jcc rides _JCC_RELOP's 7C-7F rows (witnessed t1_cmpax)
-        expr_.pend_cmp = (m.ax, m.bx)
-        expr_.pend_cmp_str = False  # replace any materialized string flags
-        m.ax = m.bx = None
         state.advance()
         return True
     if kind == "inc_m":
