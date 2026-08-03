@@ -149,131 +149,101 @@ def calls(state: DecodeState, op, addr, kind) -> bool:
     return False
 
 
-def cargs(state: DecodeState, op, addr, kind) -> bool:
-    """Dispatch family: arg_ref, arg_push_ref."""
-    i, l, c = state.image, state.layout_state, state.control
-    if kind == "arg_ref":  # les si,[bp+N]: by-ref param operand (offset)
-        if c.cur is None:
-            # A statement whose FIRST op is a by-ref param operand has to
-            # anchor its own address here: this family returns early, before
-            # core.py's generic top-of-statement `c.cur = addr` fallback,
-            # so otherwise the statement would be recorded at its SECOND op.
-            # That misses a loop-back edge landing on the arg_ref -- a head-
-            # test `WHILE MID$(S$, X%, 1) <> "1"` over by-ref params reads its
-            # string param first, and _has_jmps_back then fails to match the
-            # `jmps` target against the test address, so _lift_while
-            # misclassifies the loop as an inline-IF body skip and the
-            # backward jmps has nothing left to close (t1_whmidref; wild
-            # tbd73.exe's TBWINDOW `SUB Makevmenu`). Same anchoring the
-            # mov_mem_sp branch below already does for the same reason.
-            c.cur = addr
-        c.pend_arg = op[2]
-        state.advance()
-        return True
-    if kind == "arg_push_ref":  # push a by-ref CALL arg (caller's var)
-        if c.cur is None:
-            # With a small all-scalar argument list there is no preceding
-            # `sub sp,N` staging prologue: this first direct reference push is
-            # the CALL statement's address. Anchor it before this early-return
-            # handler advances, so an inline IF can skip to the following CALL
-            # (t1_ifbeforecallref; wild process.exe).
-            c.cur = addr
-        try:
-            if op[2] in l.lay.get("guessed", ()):
-                # Layout placed this slot but GUESSED its width -- its phantom-
-                # slot bridge assigns 2 bytes to a disp with no direct-access
-                # evidence, and a variable only ever forwarded by reference has
-                # none. Spelling it `%` on that guess emits an argument whose
-                # type disagrees with the callee's parameter, which TB rejects:
-                # `Error 475: Parameter mismatch`. Take the same deferral as a
-                # slot layout never placed at all (below) and let the callee's
-                # own signature type it (fixture t1_argrefonly; wild
-                # tbd73.exe, whose CALLs pass several such variables).
-                raise ValueError("by-ref slot width was guessed, not evidenced")
-            c.pend_args.append(state.loc(op[2]))
-        except ValueError:
-            # The disp is never accessed any other way in this program --
-            # only ever forwarded by address to a callee -- so layout's
-            # evidence-gathering pass (which infers scalar/array shape from
-            # direct read/write op patterns) has no type signal for it.
-            # Defer, mirroring arg_push_fwd's own "fwd" placeholder: the
-            # callee's own param list (known once its SUB has been decoded)
-            # supplies the type (wild rsltest.exe: TBMENU.INC's MAKEMENU is
-            # dead code, so its SHARED globals are only ever touched via
-            # exactly this by-ref relay into MakeWindow).
-            c.pend_args.append(("argref", op[2]))
-        state.advance()
-        return True
-    if kind == "arg_push_array_bp":  # forward a whole-array PARAMETER onward
-        # as a whole-array CALL argument. The relaying SUB never touches an
-        # element, so the ordinary element-access path that registers (and
-        # types) an array parameter never runs -- register it here from the
-        # descriptor's own frame offset, the same `blk` that path keys on.
-        # A pure relay carries no element-type evidence at all, so the name
-        # stays unsuffixed; the callee's own signature is where the type
-        # lives (probe t1_arrfwd, verified byte-exact either way).
-        if c.proc_frame is None:
-            raise ValueError(f"whole-array parameter push outside a SUB at {addr:#x}")
-        if c.cur is None:
-            c.cur = addr  # this push may OPEN the CALL statement -- see the
-            # `sub_sp` anchor in handlers.arith for the same reasoning. With few
-            # enough arguments TB pushes them directly instead of reserving an
-            # outgoing area first, so the array push, not `sub sp,N`, is the
-            # statement's first op (t1_ifbeforecall: an inline IF whose skip
-            # target is the CALL that follows it).
-        rec = c.proc_frame.array_params.setdefault(op[2], {"rank": 1})
-        # A pure relay carries no element-type evidence, but the SAME procedure
-        # may also index the array -- and then the type IS knowable and the
-        # spelling matters: for a STRING array `A$()` and `A()` are different
-        # variables and recompile to different bytes. So look ahead for a typed
-        # element access before falling back to the unsuffixed name (wild
-        # tbd73.exe's TBWINDOW `SUB Makehmenu` both forwards item$() onward and
-        # indexes it; t1_arrfwd's numeric array needs no suffix either way,
-        # which is why the unsuffixed fallback was byte-exact there).
-        rec.setdefault(
-            "name",
-            f"P{op[2]:02X}"
-            + array_param_suffix(i.ops, c.k, op[2]),
+def _arg_ref(state: DecodeState, op, addr) -> bool:
+    c = state.control
+    if c.cur is None:
+        c.cur = addr
+    c.pend_arg = op[2]
+    state.advance()
+    return True
+
+
+def _arg_push_ref(state: DecodeState, op, addr) -> bool:
+    l, c = state.layout_state, state.control
+    if c.cur is None:
+        c.cur = addr
+    try:
+        if op[2] in l.lay.get("guessed", ()):
+            raise ValueError("by-ref slot width was guessed, not evidenced")
+        c.pend_args.append(state.loc(op[2]))
+    except ValueError:
+        c.pend_args.append(("argref", op[2]))
+    state.advance()
+    return True
+
+
+def _arg_push_array_bp(state: DecodeState, op, addr) -> bool:
+    i, c = state.image, state.control
+    if c.proc_frame is None:
+        raise ValueError(f"whole-array parameter push outside a SUB at {addr:#x}")
+    if c.cur is None:
+        c.cur = addr
+    record = c.proc_frame.array_params.setdefault(op[2], {"rank": 1})
+    record.setdefault("name", f"P{op[2]:02X}" + array_param_suffix(i.ops, c.k, op[2]))
+    c.pend_args.append(ir.ArrayRef(record["name"], ()))
+    state.advance()
+    return True
+
+
+def _arg_push_ref_bp(state: DecodeState, op) -> bool:
+    i, c = state.image, state.control
+    is_fn_string_param = (
+        c.fn_frame is not None
+        and not (
+            c.fn_frame.locals is not None and op[2] in c.fn_frame.locals
         )
-        c.pend_args.append(ir.ArrayRef(rec["name"], ()))
-        state.advance()
-        return True
+        and any(
+            candidate[1] == "arg_ref"
+            and candidate[2] == op[2]
+            and c.k + 1 + offset + 1 < len(i.ops)
+            and i.ops[c.k + 1 + offset + 1][1] == "str_temp_free"
+            for offset, candidate in enumerate(i.ops[c.k + 1 :])
+        )
+    )
+    if is_fn_string_param:
+        c.fn_frame.param_offs.add(op[2])
+        c.fn_frame.str_offs.add(op[2])
+        c.pend_args.append(ir.Var(f"P{op[2]:02X}$"))
+    else:
+        c.pend_args.append(state.loc_local(op[2]))
+    state.advance()
+    return True
+
+
+def _arg_push_fwd(state: DecodeState, op) -> bool:
+    state.control.pend_args.append(("fwd", op[2]))
+    state.advance()
+    return True
+
+
+def _restore_array_ds(state: DecodeState, op) -> bool:
+    i, c = state.image, state.control
     if (
-        kind == "movdx"
+        op[1] == "movdx"
         and c.k + 1 < len(i.ops)
         and i.ops[c.k + 1][1] == "movdsdx"
         and c.k
         and i.ops[c.k - 1][1] == "arg_push_array_bp"
-    ):  # mov dx,<DGROUP>; mov ds,dx -- restores DS after the push above
-        state.advance(2)  # pointed it at the stack segment. Semantic-free glue.
+    ):
+        state.advance(2)
         return True
-    if kind == "arg_push_ref_bp":  # push a by-ref CALL arg, LOCAL-frame
-        if c.fn_frame is not None and not (
-            c.fn_frame.locals is not None and op[2] in c.fn_frame.locals
-        ) and any(
-            candidate[1] == "arg_ref"
-            and candidate[2] == op[2]
-            and c.k + 1 + j + 1 < len(i.ops)
-            and i.ops[c.k + 1 + j + 1][1] == "str_temp_free"
-            for j, candidate in enumerate(i.ops[c.k + 1 :])
-        ):
-            # In a DEF FN body, a by-reference BP argument is a formal
-            # parameter, not a LOCAL.  The reference push carries the
-            # parameter's four-byte STRING descriptor (FNFN4%: [bp+2] is
-            # passed to SUB6 and callers supply AE$); classify it before the
-            # generic integer fallback in DecodeState.loc_local.
-            c.fn_frame.param_offs.add(op[2])
-            c.fn_frame.str_offs.add(op[2])
-            c.pend_args.append(ir.Var(f"P{op[2]:02X}$"))
-        else:
-            c.pend_args.append(state.loc_local(op[2]))  # caller's var
-        state.advance()
+    return False
+
+
+def cargs(state: DecodeState, op, addr, kind) -> bool:
+    """Dispatch family: arg_ref, arg_push_ref."""
+    if kind == "arg_ref":
+        return _arg_ref(state, op, addr)
+    if kind == "arg_push_ref":
+        return _arg_push_ref(state, op, addr)
+    if kind == "arg_push_array_bp":
+        return _arg_push_array_bp(state, op, addr)
+    if kind == "movdx" and _restore_array_ds(state, op):
         return True
-    if kind == "arg_push_fwd":  # forward the enclosing SUB's by-ref param as a
-        # CALL arg; typed at far_call from the callee's signature (q_fwd)
-        c.pend_args.append(("fwd", op[2]))
-        state.advance()
-        return True
+    if kind == "arg_push_ref_bp":
+        return _arg_push_ref_bp(state, op)
+    if kind == "arg_push_fwd":
+        return _arg_push_fwd(state, op)
     return False
 
 
