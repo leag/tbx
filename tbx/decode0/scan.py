@@ -497,6 +497,102 @@ def _scan_direct2_arithmetic(exe, p, b, ops) -> int | None:
     return None
 
 
+def _scan_direct2_for_ops(exe, p, b, ops) -> int | None:
+    if b == 0xFF and exe[p + 1] == 0x06:
+        ops.append((p, "inc_m", struct.unpack_from("<H", exe, p + 2)[0]))
+        return p + 4
+    if b == 0xFF and exe[p + 1] == 0x46:
+        ops.append((p, "inc_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        return p + 3
+    if b == 0xFF and exe[p + 1] == 0x4E:
+        ops.append((p, "dec_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        return p + 3
+    if b == 0x83 and exe[p + 1] == 0x7E:
+        bp_off, i8 = struct.unpack_from("<bb", exe, p + 2)
+        ops.append((p, "cmp_bpi8", bp_off, i8))
+        return p + 4
+    if b == 0xFF and exe[p + 1] == 0x0E:
+        ops.append((p, "dec_m", struct.unpack_from("<H", exe, p + 2)[0]))
+        return p + 4
+    if b == 0x83 and exe[p + 1] == 0x3E:
+        d16, i8 = struct.unpack_from("<Hb", exe, p + 2)
+        ops.append((p, "cmp_mi8", d16, i8))
+        return p + 5
+    if b == 0x81 and exe[p + 1] == 0x3E:
+        d16, i16 = struct.unpack_from("<Hh", exe, p + 2)
+        ops.append((p, "cmp_mi16", d16, i16))
+        return p + 6
+    if b == 0x83 and exe[p + 1] == 0x06:
+        d16, i8 = struct.unpack_from("<Hb", exe, p + 2)
+        ops.append((p, "addm_i8", d16, i8))
+        return p + 5
+    return None
+
+
+def _scan_direct2_integer_memory(exe, p, b, ops) -> int | None:
+    if b == 0xC7 and exe[p + 1] == 0x06:
+        d16, v16 = struct.unpack_from("<Hh", exe, p + 2)
+        ops.append((p, "movm_imm", d16, v16))
+        return p + 6
+    if b == 0xC7 and exe[p + 1] == 0x46:
+        bp_off, v16 = struct.unpack_from("<bh", exe, p + 2)
+        ops.append((p, "mov_bp_imm", bp_off, v16))
+        return p + 5
+    if b == 0xC7 and exe[p + 1] == 0x86:
+        bp_off, v16 = struct.unpack_from("<Hh", exe, p + 2)
+        ops.append((p, "mov_bp_imm", bp_off, v16))
+        return p + 6
+    if b == 0x89 and exe[p + 1] == 0x06:
+        ops.append((p, "movm_ax", struct.unpack_from("<H", exe, p + 2)[0]))
+        return p + 4
+    if b == 0x89 and exe[p + 1] == 0x3E:
+        ops.append((p, "spill_store", "di", struct.unpack_from("<H", exe, p + 2)[0]))
+        return p + 4
+    if b == 0x8B and exe[p + 1] == 0x0E:
+        ops.append((p, "spill_load", "cx", struct.unpack_from("<H", exe, p + 2)[0]))
+        return p + 4
+    if b == 0x8B and exe[p + 1] == 0x3E:
+        ops.append((p, "spill_load", "di", struct.unpack_from("<H", exe, p + 2)[0]))
+        return p + 4
+    if b == 0x89 and exe[p + 1] == 0x04:
+        ops.append((p, "movm_ax_si"))
+        return p + 2
+    if b == 0x36 and exe[p + 1 : p + 3] == b"\x89\x04":
+        ops.append((p, "movm_ax_temp"))
+        return p + 3
+    if b == 0x36 and exe[p + 1 : p + 3] == b"\xc7\x04":
+        ops.append((p, "movm_imm_temp", struct.unpack_from("<H", exe, p + 3)[0]))
+        return p + 5
+    if b == 0x01 and exe[p + 1] == 0x06:
+        ops.append((p, "addm_ax", struct.unpack_from("<H", exe, p + 2)[0]))
+        return p + 4
+    if b == 0x29 and exe[p + 1] == 0x06:
+        ops.append((p, "subm_ax", struct.unpack_from("<H", exe, p + 2)[0]))
+        return p + 4
+    if b == 0x89 and exe[p + 1] == 0x46:
+        ops.append((p, "movm_ax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        return p + 3
+    if b == 0x89 and exe[p + 1] == 0x86:
+        ops.append((p, "movm_ax_bp", struct.unpack_from("<H", exe, p + 2)[0]))
+        return p + 4
+    if b == 0x01 and exe[p + 1] == 0x46:
+        ops.append((p, "addm_ax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        return p + 3
+    if b == 0x29 and exe[p + 1] == 0x46:
+        ops.append((p, "subm_ax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        return p + 3
+    if b == 0xA3:
+        ops.append((p, "movmem_ax", struct.unpack_from("<H", exe, p + 1)[0]))
+        return p + 3
+    if b == 0x8B and exe[p + 1] == 0x36:
+        ops.append((p, "movsim", struct.unpack_from("<H", exe, p + 2)[0]))
+        return p + 4
+    if b == 0x8B and exe[p + 1] == 0x76:
+        ops.append((p, "movsi_bp", struct.unpack_from("<b", exe, p + 2)[0]))
+        return p + 3
+    return _scan_direct2_for_ops(exe, p, b, ops)
+
+
 def _scan_direct2(exe, p, b, ops) -> int | None:
     """Byte-dispatch family split out of _scan. Returns the new
     cursor when it decodes the op at ``p``, else None."""
@@ -514,6 +610,9 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
     np = _scan_direct2_arithmetic(exe, p, b, ops)
     if np is not None:
         return np
+    np = _scan_direct2_integer_memory(exe, p, b, ops)
+    if np is not None:
+        return np
     # There is deliberately NO `mov al,imm8; out imm8,al` op here. It used to
     # be read as a byte-constant OUT that the compiler had folded, which is not
     # a thing Turbo Basic does: `OUT 67, 116` emits the general mov-AX / mov-DX
@@ -523,128 +622,6 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
     # `_try_inline_rescue`, which now claims them -- and decoding them as an
     # OUT statement cost wild zip.exe 592 bytes and ziptest.exe 224 on the
     # round trip. Ledger RO-OUT-IMM-FOLD.
-    if b == 0xC7 and exe[p + 1] == 0x06:  # mov word [disp16], imm16
-        d16, v16 = struct.unpack_from("<Hh", exe, p + 2)
-        ops.append((p, "movm_imm", d16, v16))
-        p += 6
-        return p
-    if (
-        b == 0xC7 and exe[p + 1] == 0x46
-    ):  # mov word [bp+disp8], imm16 (DEF FN result init)
-        bp_off, v16 = struct.unpack_from("<bh", exe, p + 2)
-        ops.append((p, "mov_bp_imm", bp_off, v16))
-        p += 5
-        return p
-    if b == 0xC7 and exe[p + 1] == 0x86:  # mov word [bp+disp16], imm16:
-        bp_off, v16 = struct.unpack_from("<Hh", exe, p + 2)
-        ops.append((p, "mov_bp_imm", bp_off, v16))
-        p += 6  # LOCAL beyond disp8 range (wild cleanup/reformat)
-        return p
-    if b == 0x89 and exe[p + 1] == 0x06:  # mov [disp16], ax (int store)
-        ops.append((p, "movm_ax", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 4
-        return p
-    if b == 0x89 and exe[p + 1] == 0x3E:  # mov [disp16], di: deep spill
-        ops.append((p, "spill_store", "di", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 4
-        return p
-    if b == 0x8B and exe[p + 1] == 0x0E:  # mov cx, [disp16]: restore spill
-        ops.append((p, "spill_load", "cx", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 4
-        return p
-    if b == 0x8B and exe[p + 1] == 0x3E:  # mov di, [disp16]: restore spill
-        ops.append((p, "spill_load", "di", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 4
-        return p
-    if b == 0x89 and exe[p + 1] == 0x04:  # mov [si], ax: the store half of a
-        ops.append((p, "movm_ax_si"))  # computed static int-array element
-        p += 2  # index chain (shl si/addsi), the write sibling of the
-        return p  # existing rt-0x9C read consumer (gap 32; wild number.exe)
-    if b == 0x36 and exe[p + 1 : p + 3] == b"\x89\x04":
-        ops.append((p, "movm_ax_temp"))  # mov ss:[si],ax: staged by-ref CALL arg
-        p += 3
-        return p
-    if b == 0x36 and exe[p + 1 : p + 3] == b"\xc7\x04":
-        # mov ss:[si],imm16: the literal-argument sibling of movm_ax_temp --
-        # a nested DEF FN call used as another call's own argument stages
-        # ITS OWN literal argument via SI+SP addressing (bp doesn't point at
-        # this temp frame yet), instead of going through ax first (witnessed
-        # t1_fnargcall: `FN Foo(A$, FN Bar(3))`).
-        ops.append((p, "movm_imm_temp", struct.unpack_from("<H", exe, p + 3)[0]))
-        p += 5
-        return p
-    if b == 0x01 and exe[p + 1] == 0x06:  # add [disp16], ax: int combine-store,
-        ops.append((p, "addm_ax", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 4  # e.g. `X% = X% + <expr>` (disp16 sibling of addm_ax_bp,
-        return p  # witnessed q_addimm)
-    if b == 0x29 and exe[p + 1] == 0x06:  # sub [disp16], ax: int combine-store,
-        ops.append((p, "subm_ax", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 4  # e.g. `X% = X% - <expr>` (subtract sibling of addm_ax;
-        return p  # wild number.exe)
-    if b == 0x89 and exe[p + 1] == 0x46:  # mov [bp+disp8], ax: LOCAL int store
-        ops.append((p, "movm_ax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
-        p += 3  # (witnessed t1_local2)
-        return p
-    if b == 0x89 and exe[p + 1] == 0x86:  # mov [bp+disp16],ax: large LOCAL
-        ops.append((p, "movm_ax_bp", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 4  # store (wild cleanup/reformat)
-        return p
-    if b == 0x01 and exe[p + 1] == 0x46:  # add [bp+disp8], ax: LOCAL int
-        ops.append((p, "addm_ax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
-        p += 3  # combine-store, e.g. `X% = X% + 1` (witnessed t1_local1)
-        return p
-    if b == 0x29 and exe[p + 1] == 0x46:  # sub [bp+disp8], ax: LOCAL int
-        ops.append((p, "subm_ax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
-        p += 3  # combine-store, e.g. `X% = X% - <expr>` (subtract sibling
-        return p  # of addm_ax_bp; wild horses.exe)
-    if b == 0xA3:  # mov [imm16], ax (scratch bridge)
-        ops.append((p, "movmem_ax", struct.unpack_from("<H", exe, p + 1)[0]))
-        p += 3
-        return p
-    if b == 0x8B and exe[p + 1] == 0x36:  # mov si, [disp16] (loop var -> index)
-        ops.append((p, "movsim", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 4
-        return p
-    if b == 0x8B and exe[p + 1] == 0x76:  # mov si, [bp+d8]: LOCAL int -> array
-        ops.append((p, "movsi_bp", struct.unpack_from("<b", exe, p + 2)[0]))
-        p += 3  # index (witnessed q_locidx)
-        return p
-    if b == 0xFF and exe[p + 1] == 0x06:  # inc word [disp16]: the integer FOR
-        ops.append((p, "inc_m", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 4  # step, OR a bare `X = X + 1` (INCR) outside a loop (t1_incr1)
-        return p
-    if b == 0xFF and exe[p + 1] == 0x46:  # inc word [bp+d8]: the LOCAL int
-        ops.append((p, "inc_bp", struct.unpack_from("<b", exe, p + 2)[0]))
-        p += 3  # FOR step (witnessed q_locidx)
-        return p
-    if b == 0xFF and exe[p + 1] == 0x4E:  # dec word [bp+d8]: the LOCAL int
-        ops.append((p, "dec_bp", struct.unpack_from("<b", exe, p + 2)[0]))
-        p += 3  # STEP -1 FOR-NEXT decrement, the descending sibling of
-        return p  # inc_bp (wild horses.exe, probe q_localforstepm1)
-    if b == 0x83 and exe[p + 1] == 0x7E:  # cmp word [bp+d8], imm8: the LOCAL
-        bp_off, i8 = struct.unpack_from("<bb", exe, p + 2)  # int FOR-NEXT
-        ops.append((p, "cmp_bpi8", bp_off, i8))  # limit test (q_locidx)
-        p += 4
-        return p
-    if b == 0xFF and exe[p + 1] == 0x0E:  # dec word [disp16]: bare `X = X - 1`
-        ops.append((p, "dec_m", struct.unpack_from("<H", exe, p + 2)[0]))
-        p += 4  # (DECR, witnessed t1_decr1)
-        return p
-    if b == 0x83 and exe[p + 1] == 0x3E:  # cmp word [disp16], imm8 (int FOR test)
-        d16, i8 = struct.unpack_from("<Hb", exe, p + 2)
-        ops.append((p, "cmp_mi8", d16, i8))
-        p += 5
-        return p
-    if b == 0x81 and exe[p + 1] == 0x3E:  # cmp word [disp16], imm16: the int FOR
-        d16, i16 = struct.unpack_from("<Hh", exe, p + 2)  # test when the limit
-        ops.append((p, "cmp_mi16", d16, i16))  # doesn't fit a signed imm8
-        p += 6  # (witnessed q_forbig)
-        return p
-    if b == 0x83 and exe[p + 1] == 0x06:  # add word [disp16], imm8: the integer
-        d16, i8 = struct.unpack_from("<Hb", exe, p + 2)  # FOR-NEXT increment for
-        ops.append((p, "addm_i8", d16, i8))  # a literal STEP other than +-1
-        p += 5  # (+-1 use inc_m/dec_m instead; witnessed q_forstep)
-        return p
     if b == 0x8B and exe[p + 1] == 0xD3:  # mov dx,bx (OUT port setup)
         ops.append((p, "movdxbx"))
         p += 2
