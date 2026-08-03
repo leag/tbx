@@ -431,6 +431,50 @@ def _int_compare_mem(state: DecodeState, op, addr: int) -> bool:
     raise ValueError(f"cmpax_m without a value/IF consumer at {addr:#x}")
 
 
+def _int_compare_local(state: DecodeState, op, addr: int) -> bool:
+    img, m, expr_, c = state.image, state.machine, state.expr, state.control
+    nxt = img.ops[c.k + 1] if c.k + 1 < len(img.ops) else None
+    local = state.loc_local(op[2])
+    j = c.k + 1
+    while j < len(img.ops) and img.ops[j][1] in ("movrr", "movbxax"):
+        j += 1
+    shuffled = (
+        j > c.k + 1
+        and j < len(img.ops)
+        and img.ops[j][1] == "movax"
+        and img.ops[j][2] == 0xFFFF
+    )
+    if (nxt is not None and nxt[1] == "movax" and nxt[2] == 0xFFFF) or shuffled:
+        expr_.pend_icmp = (local, m.ax)
+        m.ax = None
+        state.advance()
+        return True
+    skiprel = {
+        0x74: "<>", 0x75: "=", 0x7F: ">=", 0x7D: ">",
+        0x7C: "<=", 0x7E: "<",
+    }
+    if (
+        nxt is None
+        or nxt[1] != "jcc"
+        or nxt[2] not in skiprel
+        or c.k + 2 >= len(img.ops)
+        or img.ops[c.k + 2][1] != "jmp"
+        or nxt[3] != img.ops[c.k + 2][0] + 3
+    ):
+        raise ValueError(f"cmpax_bp without an IF jcc+skip-jmp at {addr:#x}")
+    state.put(
+        ir.IfGoto(
+            ir.RelOp(skiprel[nxt[2]], local, m.ax),
+            ("addr", img.ops[c.k + 2][2]),
+        ),
+        c.cur,
+    )
+    m.ax = None
+    c.cur = None
+    state.advance(3)
+    return True
+
+
 def int_alu(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addax_bp, addsiax, subax_m, imul_m, imul_bp, movax_bp, idivbx, cmpax_m, inc_m, dec_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
     img, m, expr_, l, c = (state.image, state.machine, state.expr,
@@ -475,54 +519,8 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         return _int_compare_mem(state, op, addr)
     if _int_compare_state(state, op, addr, kind):
         return True
-    if kind == "cmpax_bp":  # cmp ax,[bp+d8]: relational against a LOCAL int
-        # (q_loccmp). The compiler evaluates the SOURCE RHS into ax and
-        # compares the LOCAL as memory, so flags are rhs-vs-lhs; the emitted
-        # skip-goto must keep the LOCAL on the LEFT (byte-identical respell),
-        # which needs a mirrored negation map -- the shared _JCC_RELOP signed
-        # rows assume cmpax_bx's forward flag order, so the IF form consumes
-        # its own jcc+jmp here. Value form (movax FFFF follows) keeps
-        # cmpax_m's (mem, ax) source order.
-        nxt = img.ops[c.k + 1] if c.k + 1 < len(img.ops) else None
-        local = state.loc_local(op[2])
-        # AND-chain 2nd+ term (wild resume.exe): same ax<->bx no-op round
-        # trip as cmpax_m's own AND-chain case above -- skip over it and
-        # let the generic movrr/movbxax handlers process it.
-        j = c.k + 1
-        while j < len(img.ops) and img.ops[j][1] in ("movrr", "movbxax"):
-            j += 1
-        shuffled = (
-            j > c.k + 1
-            and j < len(img.ops)
-            and img.ops[j][1] == "movax"
-            and img.ops[j][2] == 0xFFFF
-        )
-        if (nxt is not None and nxt[1] == "movax" and nxt[2] == 0xFFFF) or shuffled:
-            expr_.pend_icmp = (local, m.ax)
-            m.ax = None
-            state.advance()
-            return True
-        skiprel = {0x74: "<>", 0x75: "=", 0x7F: ">=", 0x7D: ">", 0x7C: "<=", 0x7E: "<"}
-        if (
-            nxt is None
-            or nxt[1] != "jcc"
-            or nxt[2] not in skiprel
-            or c.k + 2 >= len(img.ops)
-            or img.ops[c.k + 2][1] != "jmp"
-            or nxt[3] != img.ops[c.k + 2][0] + 3
-        ):
-            raise ValueError(f"cmpax_bp without an IF jcc+skip-jmp at {addr:#x}")
-        state.put(
-            ir.IfGoto(
-                ir.RelOp(skiprel[nxt[2]], local, m.ax),
-                ("addr", img.ops[c.k + 2][2]),
-            ),
-            c.cur,
-        )
-        m.ax = None
-        c.cur = None
-        state.advance(3)
-        return True
+    if kind == "cmpax_bp":
+        return _int_compare_local(state, op, addr)
     if kind == "subax_bp":
         # Whole-array SUB parameters carry their declared lower bound at
         # descriptor offset +8. The machine subtraction normalizes the
