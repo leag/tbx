@@ -253,6 +253,26 @@ def _int_movax_bp(state: DecodeState, op, addr: int) -> bool:
     return True
 
 
+def _int_div_ops(state: DecodeState, op, addr: int, kind: str) -> bool:
+    if kind not in ("idiv_m", "idivbx"):
+        return False
+    m = state.machine
+    if kind == "idiv_m":
+        try:
+            divisor = state.loc(op[2])
+        except ValueError:
+            divisor = ir.Var(f"V{op[2]:04X}")
+        m.ax = ir.BinOp("\\", m.ax, _rgrp("\\", divisor))
+    else:
+        if m.bx is None:
+            logger.warning("idivbx without materialized divisor at %x", addr)
+            m.bx = ir.Var("V_DIV")
+        m.ax = ir.BinOp("\\", m.ax, _rgrp("\\", m.bx))
+        m.bx = None
+    state.advance()
+    return True
+
+
 def int_alu(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addax_bp, addsiax, subax_m, imul_m, imul_bp, movax_bp, idivbx, cmpax_m, inc_m, dec_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
     img, m, expr_, l, c, o = (state.image, state.machine, state.expr,
@@ -291,21 +311,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         # require an integer FnCall result to actually be waiting on the
         # stack, which is what makes the skip safe rather than a guess.
         return _int_movax_bp(state, op, addr)
-    if kind == "idiv_m":  # ax (dividend) \ [disp16] (memory divisor)
-        try:
-            divisor = state.loc(op[2])
-        except ValueError:
-            divisor = ir.Var(f"V{op[2]:04X}")
-        m.ax = ir.BinOp("\\", m.ax, _rgrp("\\", divisor))
-        state.advance()
-        return True
-    if kind == "idivbx":  # ax (dividend) \ bx (divisor) -> ax
-        if m.bx is None:
-            logger.warning("idivbx without materialized divisor at %x", addr)
-            m.bx = ir.Var("V_DIV")
-        m.ax = ir.BinOp("\\", m.ax, _rgrp("\\", m.bx))
-        m.bx = None
-        state.advance()
+    if _int_div_ops(state, op, addr, kind):
         return True
     if kind == "cmpax_m":  # integer relational, mem side = source LHS
         if op[2] in (0x74, 0x76):  # ERR: canonical [0074], CVT2TB [0076]
