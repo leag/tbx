@@ -1629,6 +1629,30 @@ def _scan_runtime_tail(exe, p, sub, ops) -> int | None:
     return p + 3
 
 
+def _scan_esc_stack_ops(p, mo, esc, modrm, ops) -> int | None:
+    names = {
+        0xE8: "fld1",
+        0xEE: "fldz",
+        0xE0: "fchs",
+        0xE1: "fabs",
+        0xFA: "fsqrt",
+        0xFC: "frndint",
+    }
+    if esc == 0xD9 and modrm in names:
+        ops.append((p, names[modrm]))
+        return mo + 1
+    if esc == 0xDE and modrm == 0xD9:
+        ops.append((p, "fcompp"))
+        return mo + 1
+    if esc == 0xDE and modrm in _POP_OPS_N:
+        ops.append((p, "popop_n", _POP_OPS_N[modrm]))
+        return mo + 1
+    if esc == 0xDE and modrm in _POP_OPS:
+        ops.append((p, "popop", _POP_OPS[modrm]))
+        return mo + 1
+    return None
+
+
 def _scan(
     exe: bytes, start: int, dia: Dialect = TB11, commits: set[int] | None = None
 ) -> list[tuple[Any, ...]]:
@@ -1793,41 +1817,9 @@ def _scan_pass(
             pre = "far_" if far else ""
             modrm = exe[mo]
             mod, reg, rm = modrm >> 6, (modrm >> 3) & 7, modrm & 7
-            if esc == 0xD9 and modrm == 0xE8:  # FLD1
-                ops.append((p, "fld1"))
-                p = mo + 1
-                continue
-            if esc == 0xD9 and modrm == 0xEE:  # FLDZ
-                ops.append((p, "fldz"))
-                p = mo + 1
-                continue
-            if esc == 0xD9 and modrm == 0xE0:  # FCHS
-                ops.append((p, "fchs"))
-                p = mo + 1
-                continue
-            if esc == 0xD9 and modrm == 0xE1:  # FABS (ABS intrinsic)
-                ops.append((p, "fabs"))
-                p = mo + 1
-                continue
-            if esc == 0xD9 and modrm == 0xFA:  # FSQRT (SQR intrinsic)
-                ops.append((p, "fsqrt"))
-                p = mo + 1
-                continue
-            if esc == 0xD9 and modrm == 0xFC:  # FRNDINT (CLNG intrinsic)
-                ops.append((p, "frndint"))
-                p = mo + 1
-                continue
-            if esc == 0xDE and modrm == 0xD9:  # FCOMPP: both sides FP-computed
-                ops.append((p, "fcompp"))  # (witnessed t1_fcmp)
-                p = mo + 1
-                continue
-            if esc == 0xDE and modrm in _POP_OPS_N:  # non-R FSUBP/FDIVP
-                ops.append((p, "popop_n", _POP_OPS_N[modrm]))
-                p = mo + 1
-                continue
-            if esc == 0xDE and modrm in _POP_OPS:  # FxxxP st(1),st
-                ops.append((p, "popop", _POP_OPS[modrm]))
-                p = mo + 1
+            np = _scan_esc_stack_ops(p, mo, esc, modrm, ops)
+            if np is not None:
+                p = np
                 continue
             if mod == 0 and rm == 4:  # [si] operand (IDX% array access)
                 kind = {
