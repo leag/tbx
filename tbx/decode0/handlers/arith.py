@@ -239,6 +239,20 @@ def _int_index_mul(state: DecodeState, op, addr: int) -> bool:
     return True
 
 
+def _int_movax_bp(state: DecodeState, op, addr: int) -> bool:
+    img, m, expr_, c = state.image, state.machine, state.expr, state.control
+    if (
+        match_fn_result_readback(img.ops, c.k) is not None
+        and expr_.stack
+        and isinstance(expr_.stack[-1], ir.FnCall)
+    ):
+        m.ax = expr_.stack.pop()
+    else:
+        m.ax = state.loc_local(op[2])
+    state.advance()
+    return True
+
+
 def int_alu(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addax_bp, addsiax, subax_m, imul_m, imul_bp, movax_bp, idivbx, cmpax_m, inc_m, dec_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
     img, m, expr_, l, c, o = (state.image, state.machine, state.expr,
@@ -276,16 +290,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         # reads the result). Skip that register-shuttle boilerplate, and
         # require an integer FnCall result to actually be waiting on the
         # stack, which is what makes the skip safe rather than a guess.
-        if (
-            match_fn_result_readback(img.ops, c.k) is not None
-            and expr_.stack
-            and isinstance(expr_.stack[-1], ir.FnCall)
-        ):
-            m.ax = expr_.stack.pop()
-        else:
-            m.ax = state.loc_local(op[2])
-        state.advance()
-        return True
+        return _int_movax_bp(state, op, addr)
     if kind == "idiv_m":  # ax (dividend) \ [disp16] (memory divisor)
         try:
             divisor = state.loc(op[2])
