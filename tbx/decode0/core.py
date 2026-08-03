@@ -3564,6 +3564,21 @@ def _fp_relational_jcc(state, addr, cc, t, nxt) -> bool:
     return False
 
 
+def _fp_jcc_fallback(state, addr, cc, t, nxt) -> None:
+    c = state.control
+    if cc in range(0x72, 0x80) and nxt is not None and nxt[1] in ("jmp", "jmpf"):
+        state.put(ir.IfGoto(ir.Lit(0), ("addr", nxt[2])), c.cur)
+        c.cur = None
+        state.advance(2)
+        return
+    if cc in range(0x72, 0x80) and t < addr:
+        state.put(ir.Goto(("addr", t)), c.cur)
+        c.cur = None
+        state.advance()
+        return
+    raise ValueError(f"unhandled jcc {cc:02x} at {addr:#x}")
+
+
 def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     """FP-stack + control-flow instruction dispatch (fld/fst/fadd/.../fcomp/jcc/
     jmp/call/run/jmps + unhandled-op guard). Falls through to the default k-advance;
@@ -3637,20 +3652,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             return
         if _fp_relational_jcc(state, addr, cc, t, nxt):
             return
-        if cc in range(0x72, 0x80) and nxt is not None and nxt[1] in ("jmp", "jmpf"):
-            # Wild boolean chains can consume the compare provenance before
-            # their final short-circuit Jcc; retain the branch edge so the
-            # rest of the procedure remains decodable.
-            state.put(ir.IfGoto(ir.Lit(0), ("addr", nxt[2])), c.cur)
-            c.cur = None
-            state.advance(2)
-            return
-        if cc in range(0x72, 0x80) and t < addr:
-            state.put(ir.Goto(("addr", t)), c.cur)
-            c.cur = None
-            state.advance()
-            return
-        raise ValueError(f"unhandled jcc {cc:02x} at {addr:#x}")
+        _fp_jcc_fallback(state, addr, cc, t, nxt)
     elif kind in ("jmp", "jmpf"):
         t = op[2]
         frame = c.proc_frame if c.proc_frame is not None else c.fn_frame
