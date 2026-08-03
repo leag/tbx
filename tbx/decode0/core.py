@@ -2509,6 +2509,101 @@ def _finalize_do_recovery(state, table_active, data_orphan_lines, orphan_offs):
     return do_lines, data_orphan_lines
 
 
+def _finalize_data_recovery(state, data_orphan_lines):
+    img, lyt, out = state.image, state.layout_state, state.output
+    data_lines: list[int] | None = None
+    deftype_lines: list[int] = []
+    if not (
+        any(isinstance(stmt, (ir.Read, ir.Restore)) for stmt in out.stmts)
+        or data_orphan_lines
+    ):
+        return data_lines, deftype_lines
+    items = lyt.data_items or _read_data_pool(img.exe)
+    if not items and data_orphan_lines:
+        for off, line in data_orphan_lines:
+            j = out.addrs.index(img.start + off)
+            state.reconstruct(j, ir.DefType())
+            deftype_lines.append(line)
+        return data_lines, deftype_lines
+    if not items:
+        return data_lines, deftype_lines
+    if data_orphan_lines:
+        if any(
+            isinstance(stmt, ir.Restore) and isinstance(stmt.target, int)
+            for stmt in out.stmts
+        ):
+            raise ValueError(
+                "codeless DATA statement alongside a RESTORE split is unsupported "
+                "(no witness)"
+            )
+        n = min(len(items), len(data_orphan_lines))
+        data_places = data_orphan_lines[:n]
+        deftype_places = data_orphan_lines[n:]
+        splits = set(range(n))
+        data_lines = [line for _, line in data_places]
+    else:
+        data_places = []
+        deftype_places = []
+        splits = {0} | {
+            stmt.target
+            for stmt in out.stmts
+            if isinstance(stmt, ir.Restore) and isinstance(stmt.target, int)
+        }
+    data_block, item_to_stmt, pending = [], {}, []
+    for i, item in enumerate(items):
+        if i in splits:
+            if pending:
+                data_block.append(ir.Data(tuple(pending)))
+                pending = []
+            item_to_stmt[i] = len(data_block)
+        pending.append(item)
+    if pending:
+        data_block.append(ir.Data(tuple(pending)))
+    if data_lines is not None:
+        for stmt, (off, _) in zip(data_block, data_places):
+            state.reconstruct(out.addrs.index(img.start + off), stmt)
+    else:
+        for offset, stmt in enumerate(data_block):
+            state.reconstruct(offset, stmt)
+    for off, line in deftype_places:
+        state.reconstruct(out.addrs.index(img.start + off), ir.DefType())
+        deftype_lines.append(line)
+    unplaced = sorted(
+        {
+            stmt.target
+            for stmt in out.stmts
+            if isinstance(stmt, ir.Restore) and isinstance(stmt.target, int)
+        }
+        - set(item_to_stmt)
+    )
+    if unplaced:
+        at = next(
+            (
+                address
+                for stmt, address in zip(out.stmts, out.addrs)
+                if isinstance(stmt, ir.Restore)
+                and stmt.target in unplaced
+                and address is not None
+            ),
+            img.start,
+        )
+        raise ValueError(
+            f"RESTORE item index {unplaced[0]} is past the {len(items)} "
+            "recovered DATA items (a DATA item sharing a descriptor with a "
+            "code string literal is dropped by exclusion-based pool recovery) "
+            f"at {at:#x}"
+        )
+    out.stmts[:] = [
+        (
+            ir.Restore(item_to_stmt[stmt.target])
+            if isinstance(stmt, ir.Restore) and isinstance(stmt.target, int)
+            else stmt
+        )
+        for stmt in out.stmts
+    ]
+    return data_lines, deftype_lines
+
+
 def _finalize(state: DecodeState, addr) -> Program:
     """Program epilogue: static-DIM re-emit, control-flow folds, target
     resolution and canonical rename -> the finished Program."""
@@ -2541,185 +2636,9 @@ def _finalize(state: DecodeState, addr) -> Program:
         ins, data_orphan_lines, dim_lines = _finalize_static_dims(
             state, dims, data_orphan_lines
         )
-        # DATA is codeless: re-emit as a block at the very top. Recover the pool
-        # when the program consumes it (a READ/RESTORE) so a string-literal pool
-        # frame is never misread as DATA -- OR when the error-trap line table
-        # itself shows a codeless-statement (ORPHAN) entry, independent evidence
-        # a DATA statement compiled here even with no READ/RESTORE anywhere in
-        # the program to trigger recovery otherwise (wild vhfprop.exe; probes
-        # q_lt1/q_lt3 witnessed DATA's own orphan entry directly). Split into
-        # DATA stmts at item 0 and at every RESTORE <line> target item index, so
-        # the target maps to a real stmt.
-        data_lines: list[int] | None = None  # one line per data_block entry, if known
-        deftype_lines: list[int] = []  # one line per inserted DefType, in insertion order
-        deftype_places: list[tuple[int, int]] = []
-        data_places: list[tuple[int, int]] = []  # (borrowed offset, line) per DATA stmt
-        if any(isinstance(s, (ir.Read, ir.Restore)) for s in out.stmts) or data_orphan_lines:
-            items = lyt.data_items or _read_data_pool(img.exe)
-            if not items and data_orphan_lines:
-                # No DATA pool at all, yet orphan evidence remains: a DEFINT/
-                # DEFSTR/DEFSNG/DEFDBL default-type declaration.
-                # Confirmed via the oracle: DEFINT A-Z and DEFSTR S compile
-                # byte-IDENTICAL programs once every variable is explicitly
-                # suffixed (which tbx's own emitted source always is), so the
-                # original keyword/letter-range is unrecoverable but also
-                # inconsequential -- `ir.DefType` always renders as a fixed
-                # canonical `DEFSNG A-Z`. Each orphan is independent (unlike
-                # DATA's single-cluster item-split, a DEFxxx statement carries
-                # no payload to split), so insert one placeholder per orphan at
-                # its own borrowed offset, in table order.
-                for off, ln in data_orphan_lines:
-                    j = out.addrs.index(img.start + off)
-                    state.reconstruct(j, ir.DefType())
-                    deftype_lines.append(ln)
-                data_orphan_lines = []
-            elif items:
-                if data_orphan_lines:
-                    # A codeless DATA statement has no READ to anchor a split
-                    # point via RESTORE targets. `data_orphan_lines` (one entry
-                    # per original DATA statement, in source order) tells us
-                    # exactly how many statements to split into and each one's
-                    # line -- but not the ITEM boundary between them, since the
-                    # pool encodes items, not statement boundaries. Probe q_lt4
-                    # confirmed the boundary is irrelevant to compiled bytes
-                    # (`DATA 1: DATA 2,3,4` == `DATA 1,2: DATA 3,4` byte for
-                    # byte): only the STATEMENT COUNT and each one's LINE are
-                    # byte-significant. So give every statement but the last
-                    # exactly one item; the last absorbs the remainder.
-                    if any(
-                        isinstance(s, ir.Restore) and isinstance(s.target, int)
-                        for s in out.stmts
-                    ):
-                        raise ValueError(
-                            "codeless DATA statement alongside a RESTORE split "
-                            "is unsupported (no witness)"
-                        )
-                    # Every DATA statement needs at least one item. Any excess
-                    # orphan entries are another payload-free codeless construct;
-                    # canonicalize those to DefType. This also handles multiple
-                    # DATA clusters because each recovered DATA
-                    # is inserted at its own borrowed offset below.
-                    n = min(len(items), len(data_orphan_lines))
-                    data_places = data_orphan_lines[:n]
-                    deftype_places = data_orphan_lines[n:]
-                    splits = set(range(n))
-                    data_lines = [ln for _, ln in data_places]
-                else:
-                    splits = {0} | {
-                        s.target
-                        for s in out.stmts
-                        if isinstance(s, ir.Restore) and isinstance(s.target, int)
-                    }
-                data_block, item_to_stmt, pending = [], {}, []
-                for i, it in enumerate(items):
-                    if i in splits:
-                        if pending:
-                            data_block.append(ir.Data(tuple(pending)))
-                            pending = []
-                        item_to_stmt[i] = len(data_block)  # this item opens block[len]
-                    pending.append(it)
-                if pending:
-                    data_block.append(ir.Data(tuple(pending)))
-                if data_lines is not None:
-                    # DATA compiles in TEXTUAL/compile order, not pool order
-                    # (probe q_lt3: prepending unconditionally byte-diffs the
-                    # line table once the DATA statements' own lines are
-                    # byte-significant) -- insert immediately before whatever
-                    # statement shares each entry's borrowed offset, matching
-                    # where the compiler actually placed multiple clusters.
-                    for s, (off, _) in zip(data_block, data_places):
-                        j = out.addrs.index(img.start + off)
-                        state.reconstruct(j, s)
-                else:
-                    for offset, s in enumerate(data_block):
-                        state.reconstruct(offset, s)  # prepend: block pos = final index
-                # Insert payload-free codeless declarations after DATA placement;
-                # when both borrow the same host offset this preserves table order.
-                for off, ln in deftype_places:
-                    j = out.addrs.index(img.start + off)
-                    state.reconstruct(j, ir.DefType())
-                    deftype_lines.append(ln)
-                unplaced = sorted(
-                    {
-                        s.target
-                        for s in out.stmts
-                        if isinstance(s, ir.Restore) and isinstance(s.target, int)
-                    }
-                    - set(item_to_stmt)
-                )
-                if unplaced:
-                    # A RESTORE <line> naming an item index past everything the
-                    # pool recovery found. `data_items` infers DATA items by
-                    # EXCLUSION -- pool descriptors that no code site
-                    # references -- and the compiler emits ONE descriptor for
-                    # one piece of text, so a DATA item whose text is identical
-                    # to a string literal used in code shares its descriptor,
-                    # counts as code-referenced, and drops out of the item list.
-                    # Every later index then shifts down and the highest targets
-                    # fall off the end. Reproduced in seven lines by probe
-                    # q_datadup (`DATA ONE` / `DATA TWO` / `PRINT "ONE"` /
-                    # `RESTORE 20`): 'ONE' is shared, one item is recovered
-                    # instead of two, and target 1 has nowhere to land.
-                    #
-                    # Exclusion is the wrong mechanism outright: the pool is in
-                    # source first-appearance order and INTERLEAVES DATA items
-                    # with code literals (probe_datamid puts a PRINT-only
-                    # literal between two DATA items), so RESTORE cannot be
-                    # indexing the pool at all -- no pool-order rule can work.
-                    # What it indexes is an explicit DATA pointer table: a word
-                    # per DATA item, in source order, holding its descriptor
-                    # disp, skipping code-only literals and INCLUDING shared
-                    # ones. Both authored probes carry one at DGROUP disp 0x100,
-                    # below var_base where nothing else is allocated;
-                    # probe_datamid's skips the PRINT-only literal and
-                    # probe_datadup's includes the shared item.
-                    #
-                    # That is confirmed on the PROBES ONLY. Where the wild
-                    # witnesses keep theirs is unknown: a >=88-entry table does
-                    # not fit below styled.exe's var_base, and only 8 bytes
-                    # separate the end of its variable storage from pool_base.
-                    # See PLAN.md -- including a run that looked like the table
-                    # and is not (the region is referenced as variables by
-                    # fld/fstp/movsi), and two locator searches that came up
-                    # empty. Do not build on it without resolving that first.
-                    #
-                    # Until then it must raise HERE: this used to be a bare
-                    # `KeyError`, which escaped `decode_user_code`'s ValueError
-                    # wrapper entirely and left the scan reporting the bare
-                    # index as its whole signature (wild styled.exe/
-                    # styllist.exe, both `87`).
-                    # Everything triage keys on goes BEFORE the ` at 0x...`:
-                    # `scan_wild.failure_signature` collapses a message from
-                    # that marker to the end, which is how a family stays one
-                    # group across programs. Carrying the address is the same
-                    # convention every other fail-loud message here follows --
-                    # without it the whole `[phase=...]` trailer survives into
-                    # the key and each witness reads as its own singleton.
-                    at = next(
-                        (
-                            a
-                            for s, a in zip(out.stmts, out.addrs)
-                            if isinstance(s, ir.Restore)
-                            and s.target in unplaced
-                            and a is not None
-                        ),
-                        img.start,
-                    )
-                    raise ValueError(
-                        f"RESTORE item index {unplaced[0]} is past the "
-                        f"{len(items)} recovered DATA items (a DATA item "
-                        "sharing a descriptor with a code string literal is "
-                        "dropped by exclusion-based pool recovery) "
-                        f"at {at:#x}"
-                    )
-                out.stmts[:] = [
-                    (
-                        ir.Restore(item_to_stmt[s.target])
-                        if isinstance(s, ir.Restore) and isinstance(s.target, int)
-                        else s
-                    )
-                    for s in out.stmts
-                ]
+        data_lines, deftype_lines = _finalize_data_recovery(
+            state, data_orphan_lines
+        )
         _move_data_before_poll_loops(state)
 
         # EXIT FOR/LOOP folds (Task 3.1): rewrite the early-exit GOTO to the loop
