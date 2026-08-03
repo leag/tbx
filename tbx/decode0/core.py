@@ -2205,6 +2205,62 @@ def _finalize_static_dims(state, dims, data_orphan_lines):
     return ins, data_orphan_lines, dim_lines
 
 
+def _normalize_trace_hooks(img, out):
+    out.trace_tbl = {}
+    out.hook_seq = []
+    if not any(o[1] == "trace_hook" for o in img.ops):
+        return
+    ops, pending, aliases = [], None, {}
+    for op in img.ops:
+        if op[1] == "trace_hook":
+            hook = op[0] if pending is None else pending
+            out.trace_tbl[hook] = op[2]
+            out.hook_seq.append(op[2])
+            aliases[op[0] + 4] = hook
+            pending = hook
+        else:
+            if pending is not None:
+                op = (pending,) + op[1:]
+                pending = None
+            ops.append(op)
+    img.ops = []
+    for op in ops:
+        if op[1] in ("jmp", "jmps") or (
+            op[1] == "on_error" and op[2] is not None
+        ):
+            op = (op[0], op[1], aliases.get(op[2], op[2]))
+        elif op[1] in ("jcc", "on_trap"):
+            op = op[:3] + (aliases.get(op[3], op[3]),)
+        img.ops.append(op)
+
+
+def _normalize_event_hooks(img):
+    hook_alias, entry_hook, run_first = {}, {}, None
+    for i, op in enumerate(img.ops):
+        if op[1] != "trap_hook":
+            run_first = None
+        elif run_first is None:
+            run_first = op[0]
+            if i + 1 < len(img.ops) and img.ops[i + 1][1] != "trap_hook":
+                entry_hook[img.ops[i + 1][0]] = op[0]
+        else:
+            hook_alias[op[0]] = run_first
+    if not hook_alias and not entry_hook:
+        return
+    ops = []
+    for op in img.ops:
+        if op[1] in ("jmp", "jmps") or (
+            op[1] == "on_error" and op[2] is not None
+        ):
+            target = entry_hook.get(op[2], op[2])
+            op = (op[0], op[1], hook_alias.get(target, target))
+        elif op[1] in ("jcc", "on_trap"):
+            target = entry_hook.get(op[3], op[3])
+            op = op[:3] + (hook_alias.get(target, target),) + op[4:]
+        ops.append(op)
+    img.ops = ops
+
+
 def _finalize(state: DecodeState, addr) -> Program:
     """Program epilogue: static-DIM re-emit, control-flow folds, target
     resolution and canonical rename -> the finished Program."""
@@ -4184,75 +4240,9 @@ def _decode_user_code(
     out.toggles = _toggles(exe, img.start)
     out.commits = set()
     img.ops = _scan(exe, img.start, img.dia, out.commits)
-    # TRON trace hooks are per-LINE position markers, not statements: fold each
-    # out of the op stream, re-stamping the FOLLOWING op with the hook's address
-    # (uniform "hooks keep cur" semantics -- statement starts land on the hook,
-    # so jump targets and the hook+4 alias behave as before) so that multi-op
-    # recognizers (IF folds, SELECT CASE) see uninterrupted patterns
-    # (t1_tronif/t1_troncase). Consecutive hooks are code-less source lines
-    # (END IF): they share the stamp address; trace_tbl keeps the LAST line for
-    # the statement pin and hook_seq keeps ALL lines in order -- emit0 numbers
-    # one physical line per hook inside traced statements.
     state.diagnostics.phase = "layout"
-    out.trace_tbl = {}  # hook stamp addr -> line number (last wins)
-    out.hook_seq = []  # every hook line, in address order
-    if any(o[1] == "trace_hook" for o in img.ops):
-        ops2, pend_hook, alias = [], None, {}
-        for o in img.ops:
-            if o[1] == "trace_hook":
-                h = o[0] if pend_hook is None else pend_hook
-                out.trace_tbl[h] = o[2]
-                out.hook_seq.append(o[2])
-                alias[o[0] + 4] = h  # a jump target past this hook -> its stamp
-                pend_hook = h
-            else:
-                if pend_hook is not None:
-                    o = (pend_hook,) + o[1:]
-                    pend_hook = None
-                ops2.append(o)
-        # Compiled jump targets point PAST a line's trace hook at its code
-        # (t1_tronerr RESUME n, t1_tronif else-skip, t1_troncase END SELECT);
-        # normalize them onto the stamps so every downstream address compare
-        # (folds, SELECT machinery, target resolution) is hook-blind. Plain
-        # GOTO targets the hook itself (t1_trongoto) and passes through.
-        img.ops = []
-        for o in ops2:
-            if o[1] in ("jmp", "jmps") or (o[1] == "on_error" and o[2] is not None):
-                o = (o[0], o[1], alias.get(o[2], o[2]))
-            elif o[1] in ("jcc", "on_trap"):
-                o = o[:3] + (alias.get(o[3], o[3]),)
-            img.ops.append(o)
-    # The same hook-blindness for EVENT-trap hooks, which (unlike trace hooks)
-    # stay in the stream: a code-less source line (END IF) still gets its own
-    # per-statement CC hook, so hooks pile up back-to-back ahead of the next
-    # real statement. `c.cur` takes the FIRST hook of such a run and keeps
-    # it, so that is the statement's address -- but the compiler's own block-IF
-    # arm tails jump to the LAST one, which then matches no statement and left
-    # the fold undone (a bare Goto surviving into _resolve_targets). Normalize
-    # those targets onto the run's first hook: every hook in a run precedes the
-    # same statement, so they resolve identically (probe t1_dblhook; wild
-    # rsltest.exe's TBWINDOW IF/ELSEIF/ELSE chain).
-    hook_alias, entry_hook, run_first = {}, {}, None
-    for i, o in enumerate(img.ops):
-        if o[1] != "trap_hook":
-            run_first = None
-        elif run_first is None:
-            run_first = o[0]
-            if i + 1 < len(img.ops) and img.ops[i + 1][1] != "trap_hook":
-                entry_hook[img.ops[i + 1][0]] = o[0]
-        else:
-            hook_alias[o[0]] = run_first
-    if hook_alias or entry_hook:
-        ops3 = []
-        for o in img.ops:
-            if o[1] in ("jmp", "jmps") or (o[1] == "on_error" and o[2] is not None):
-                target = entry_hook.get(o[2], o[2])
-                o = (o[0], o[1], hook_alias.get(target, target))
-            elif o[1] in ("jcc", "on_trap"):
-                target = entry_hook.get(o[3], o[3])
-                o = o[:3] + (hook_alias.get(target, target),) + o[4:]
-            ops3.append(o)
-        img.ops = ops3
+    _normalize_trace_hooks(img, out)
+    _normalize_event_hooks(img)
     l.lay = _layout(exe, img.ops)
     l.ds = l.lay["ds"]
     l.dsd = (
