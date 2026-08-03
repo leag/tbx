@@ -308,6 +308,45 @@ def _runtime_lprint_item(state: DecodeState, addr: int, vec: int) -> bool:
     return True
 
 
+def _runtime_lprint_flush(state: DecodeState, addr: int) -> bool:
+    e, c = state.expr, state.control
+    state.close_nested_using()  # an item of the chain, not a statement
+    if e.pend_using is not None:  # LPRINT USING closes on B9 too
+        pu, e.pend_using = e.pend_using, None
+        if not pu.lprint:
+            raise ValueError(f"b9 flush of a non-printer USING at {addr:#x}")
+        state.put(
+            ir.PrintUsing(
+                pu.fmt, tuple(pu.values), newline=True, lprint=True
+            ),
+            pu.start,
+        )
+        c.cur = None
+        state.advance()
+        return True
+    if e.pend_print is None:  # bare LPRINT: blank line (t1_lpstr)
+        state.put(ir.Lprint(()), c.cur)
+        c.cur = None
+        state.advance()
+        return True
+    if e.pend_print.mode != "lprint":
+        logger.warning(
+            "B9 flush closes non-printer print chain (%s) at %x",
+            e.pend_print.mode,
+            addr,
+        )
+        pp, e.pend_print = e.pend_print, None
+        state.put(ir.Lprint(tuple(pp.items), commas=_pp_commas(pp)), pp.start)
+        c.cur = None
+        state.advance()
+        return True
+    pp, e.pend_print = e.pend_print, None
+    state.put(ir.Lprint(tuple(pp.items), commas=_pp_commas(pp)), pp.start)
+    c.cur = None
+    state.advance()
+    return True
+
+
 def runtime_call(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: rt."""
     i, e, c = state.image, state.expr, state.control
@@ -405,47 +444,7 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             # FP stack, BF string off the sstack (witnessed t1_lpstr)
             return _runtime_lprint_item(state, addr, vec)
         if vec == 0xB9:  # LPRINT flush-newline
-            state.close_nested_using()  # an item of the chain, not a statement
-            if e.pend_using is not None:  # LPRINT USING closes on B9 too
-                pu, e.pend_using = e.pend_using, None
-                if not pu.lprint:
-                    raise ValueError(f"b9 flush of a non-printer USING at {addr:#x}")
-                state.put(
-                    ir.PrintUsing(
-                        pu.fmt,
-                        tuple(pu.values),
-                        newline=True,
-                        lprint=True,
-                    ),
-                    pu.start,
-                )
-                c.cur = None
-                state.advance()
-                return True
-            if e.pend_print is None:  # bare LPRINT: blank line (t1_lpstr)
-                state.put(ir.Lprint(()), c.cur)
-                c.cur = None
-                state.advance()
-                return True
-            if e.pend_print.mode != "lprint":
-                logger.warning(
-                    "B9 flush closes non-printer print chain (%s) at %x",
-                    e.pend_print.mode,
-                    addr,
-                )
-                pp, e.pend_print = e.pend_print, None
-                state.put(ir.Lprint(tuple(pp.items), commas=_pp_commas(pp)), pp.start)
-                c.cur = None
-                state.advance()
-                return True
-            pp, e.pend_print = e.pend_print, None
-            state.put(
-                ir.Lprint(tuple(pp.items), commas=_pp_commas(pp)),
-                pp.start,
-            )
-            c.cur = None
-            state.advance()
-            return True
+            return _runtime_lprint_flush(state, addr)
         if vec in (0xB8, 0xBA):  # flush-newline: statement complete
             want_file = vec == 0xBA
             state.close_nested_using()  # an item of the chain, see the B9 leg
