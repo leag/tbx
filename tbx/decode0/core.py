@@ -1155,6 +1155,34 @@ def _drop_local_descriptor_initializers(state, frame, span, addr) -> None:
     o.addrs[:] = [stmt_addr for _, stmt_addr in kept]
 
 
+def _scope_proc_regions(
+    stmts: list[ir.Stmt],
+) -> list[tuple[int, list[str], list[str]]]:
+    regions: list[tuple[int, list[str], list[str]]] = []
+    for i, stmt in enumerate(stmts):
+        if not isinstance(stmt, ir.SubDef):
+            continue
+        vs, ars = _region_refs(stmt.body)
+        # A SUB's formals are its own scope. Filter both scalar and array
+        # formals before comparing references across SUB regions.
+        vs = [v for v in vs if v not in stmt.params]
+        own = {p[: p.index("(")] for p in stmt.params if p.endswith("(1)")}
+        ars = [a for a in ars if a not in own]
+        # Locals are named from frame offsets, so different SUBs can have the
+        # same spelling without sharing storage. Exclude them from SHARED
+        # inference, including array locals written as NAME().
+        own_loc = {
+            name
+            for body_stmt in stmt.body
+            if isinstance(body_stmt, ir.Local)
+            for name in body_stmt.names
+        }
+        vs = [v for v in vs if v not in own_loc]
+        ars = [a for a in ars if f"{a}()" not in own_loc]
+        regions.append((i, vs, ars))
+    return regions
+
+
 def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, int]]:
     """Slot-scope attribution for SUB bodies (witnessed t1_subsh/t1_subarr/
     t1_subad): TB gives every non-SHARED SUB variable/array its own local
@@ -1167,41 +1195,7 @@ def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, in
     with no declarations)."""
     o = state.output
     reconstruct_private_shared = _has_large_common_init(tuple(o.stmts))
-    regions: list[tuple[int, list[str], list[str]]] = []
-    for i, s in enumerate(o.stmts):
-        if isinstance(s, ir.SubDef):
-            vs, ars = _region_refs(s.body)
-            # A SUB's formals are its own scope: two SUBs whose params share a
-            # bp offset get the same P-name, which must not read as a cross-
-            # region (SHARED) reference (q_fwd).
-            vs = [v for v in vs if v not in s.params]
-            # ...and the same for its ARRAY formals, spelled `NAME(1)` in the
-            # signature but referenced bare: two SUBs relaying the same array
-            # parameter share a bp offset and so the same P-name, which must
-            # not read as a cross-region SHARED reference (probe t1_arrfwd).
-            own = {p[: p.index("(")] for p in s.params if p.endswith("(1)")}
-            ars = [a for a in ars if a not in own]
-            # ...and the same, again, for its declared LOCALs. A LOCAL is named
-            # from its FRAME offset (`L52%`, `L6E$`), so two SUBs whose locals
-            # land on the same offset share a name -- and TWO SUBs declaring
-            # `LOCAL done, mloop, ans$, ans1$` is the ordinary case, not a rare
-            # one. Without this the cross-region test reads each SUB's own
-            # locals as SHARED and synthesizes a declaration that REPEATS them,
-            # which TB rejects outright: `Error 463: Duplicate variable
-            # declaration` (wild tbd73.exe -- TBW73.INC:440 and 551, whose
-            # `Makevmenu`/`Makehmenu` locals collide four ways, blocking the
-            # whole program's recompile). Array locals are spelled `NAME()` in
-            # the LOCAL statement, matching how `ars` names them.
-            #
-            # Only the SHARED synthesis is filtered: a genuinely SHARED
-            # variable is never also declared LOCAL, so nothing legitimate can
-            # be hidden by this (fixture t1_twosublocal).
-            own_loc = {
-                n for b in s.body if isinstance(b, ir.Local) for n in b.names
-            }
-            vs = [v for v in vs if v not in own_loc]
-            ars = [a for a in ars if f"{a}()" not in own_loc]
-            regions.append((i, vs, ars))
+    regions = _scope_proc_regions(o.stmts)
     main_stmts = [s for s in o.stmts if not isinstance(s, ir.SubDef)]
     mvs, mars = _region_refs(tuple(main_stmts))
     shared_subs: dict[int, ir.Shared] = {}
