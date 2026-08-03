@@ -347,6 +347,46 @@ def _runtime_lprint_flush(state: DecodeState, addr: int) -> bool:
     return True
 
 
+def _runtime_print_flush(state: DecodeState, addr: int, vec: int) -> bool:
+    e, c = state.expr, state.control
+    want_file = vec == 0xBA
+    state.close_nested_using()  # an item of the chain, see the B9 leg
+    if e.pend_using is not None:
+        pu, e.pend_using = e.pend_using, None
+        if (pu.file is not None) != want_file:
+            raise ValueError(f"USING flush leg mismatch at {addr:#x}")
+        state.put(
+            ir.PrintUsing(
+                pu.fmt, tuple(pu.values), file=pu.file, newline=True
+            ),
+            pu.start,
+        )
+    elif e.pend_print is not None:
+        pp, e.pend_print = e.pend_print, None
+        if (pp.file is not None) != want_file:
+            raise ValueError(f"print flush leg mismatch at {addr:#x}")
+        if pp.mode == "write":
+            state.put(ir.Write(tuple(pp.items), file=pp.file), pp.start)
+        else:
+            state.put(
+                ir.Print(
+                    tuple(pp.items), file=pp.file, commas=_pp_commas(pp)
+                ),
+                pp.start,
+            )
+    elif not want_file:
+        state.put(ir.Print(()), c.cur)  # bare PRINT (blank line)
+    else:
+        # bare `PRINT #n,` (wild be.exe/styllist.exe, probe q_fprintblank):
+        # a blank-line flush to a file channel, no staged pend_print.
+        state.put(ir.Print((), file=e.pend_fnum), c.cur)
+    if want_file:
+        e.pend_fnum = None
+    c.cur = None
+    state.advance()
+    return True
+
+
 def runtime_call(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: rt."""
     i, e, c = state.image, state.expr, state.control
@@ -446,50 +486,7 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
         if vec == 0xB9:  # LPRINT flush-newline
             return _runtime_lprint_flush(state, addr)
         if vec in (0xB8, 0xBA):  # flush-newline: statement complete
-            want_file = vec == 0xBA
-            state.close_nested_using()  # an item of the chain, see the B9 leg
-            if e.pend_using is not None:
-                pu, e.pend_using = e.pend_using, None
-                if (pu.file is not None) != want_file:
-                    raise ValueError(f"USING flush leg mismatch at {addr:#x}")
-                state.put(
-                    ir.PrintUsing(
-                        pu.fmt,
-                        tuple(pu.values),
-                        file=pu.file,
-                        newline=True,
-                    ),
-                    pu.start,
-                )
-            elif e.pend_print is not None:
-                pp, e.pend_print = e.pend_print, None
-                if (pp.file is not None) != want_file:
-                    raise ValueError(f"print flush leg mismatch at {addr:#x}")
-                if pp.mode == "write":
-                    state.put(
-                        ir.Write(tuple(pp.items), file=pp.file), pp.start
-                    )
-                else:
-                    state.put(
-                        ir.Print(
-                            tuple(pp.items),
-                            file=pp.file,
-                            commas=_pp_commas(pp),
-                        ),
-                        pp.start,
-                    )
-            elif not want_file:
-                state.put(ir.Print(()), c.cur)  # bare PRINT (blank line)
-            else:
-                # bare `PRINT #n,` (wild be.exe/styllist.exe, probe
-                # q_fprintblank): a blank-line flush to a file channel, no
-                # staged pend_print at all since there were no items.
-                state.put(ir.Print((), file=e.pend_fnum), c.cur)
-            if want_file:
-                e.pend_fnum = None
-            c.cur = None
-            state.advance()
-            return True
+            return _runtime_print_flush(state, addr, vec)
         raise ValueError(f"unhandled runtime INT {vec:02x} at {addr:#x}")
     return False
 
