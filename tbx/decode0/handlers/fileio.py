@@ -21,76 +21,80 @@ if TYPE_CHECKING:
     from tbx.decode0.core import DecodeState
 
 
+def _open_file(state: DecodeState, addr) -> bool:
+    m, e, c = state.machine, state.expr, state.control
+    for_as = e.pend_mode_lit is not None
+    need = 1 if for_as else 2
+    if e.pend_fnum is None or len(e.sstack) < need or m.ax is None:
+        raise ValueError(
+            f"OPEN state mismatch at {addr:#x} "
+            f"(fnum={e.pend_fnum}, sstack={len(e.sstack)}, ax={m.ax})"
+        )
+    reclen = None if m.ax == ir.Lit(0x80) else m.ax
+    if for_as:
+        mode, file = e.pend_mode_lit, e.sstack.pop()
+    else:
+        mode, file = e.sstack.pop(), e.sstack.pop()
+    state.put(ir.Open(mode, e.pend_fnum, file, reclen, for_as), c.cur)
+    e.pend_fnum = m.ax = e.pend_mode_lit = None
+    c.cur = None
+    state.advance()
+    return True
+
+
+def _close_file(state: DecodeState, addr) -> bool:
+    m, c = state.machine, state.control
+    if m.ax is None:
+        raise ValueError(f"CLOSE without a file number at {addr:#x}")
+    num = m.ax.value if isinstance(m.ax, ir.Lit) else m.ax
+    state.put(ir.Close(num), c.cur)
+    m.ax = None
+    c.cur = None
+    state.advance()
+    return True
+
+
+def _close_all(state: DecodeState) -> bool:
+    c = state.control
+    state.put(ir.Close(None), c.cur)
+    c.cur = None
+    state.advance()
+    return True
+
+
+def _begin_field(state: DecodeState, addr) -> bool:
+    e, c = state.expr, state.control
+    if e.pend_fnum is None:
+        raise ValueError(f"FIELD without file number at {addr:#x}")
+    e.pend_field = FieldChain(fnum=e.pend_fnum, start=c.cur)
+    e.pend_fnum = None
+    state.advance()
+    return True
+
+
+def _file_string_op(state: DecodeState, addr, statement_type, label) -> bool:
+    e, c = state.expr, state.control
+    if e.pend_fnum is None:
+        raise ValueError(f"{label} without a file number at {addr:#x}")
+    state.put(statement_type(e.pend_fnum, e.sstack.pop()), c.cur)
+    e.pend_fnum = None
+    c.cur = None
+    state.advance()
+    return True
+
+
 def fileio(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: open, close, field."""
-    m, e, c = state.machine, state.expr, state.control
-    if kind == "open":  # OPEN "m",#n,file[,reclen] -- ax = reclen, 0x80 default
-        for_as = e.pend_mode_lit is not None  # `OPEN f$ FOR mode AS #n`:
-        need = 1 if for_as else 2  # the keyword desugars to a shortstr-
-        if e.pend_fnum is None or len(e.sstack) < need or m.ax is None:
-            raise ValueError(
-                f"OPEN state mismatch at {addr:#x} "
-                f"(fnum={e.pend_fnum}, sstack={len(e.sstack)}, ax={m.ax})"
-            )
-        # reclen is usually a bare literal, but can be any numeric expression
-        # (`OPEN f$ FOR RANDOM AS #1 LEN = 18 - 50 * X%`, wild hebrew.exe).
-        reclen = None if m.ax == ir.Lit(0x80) else m.ax
-        if for_as:
-            mode, file = e.pend_mode_lit, e.sstack.pop()
-        else:
-            mode, file = e.sstack.pop(), e.sstack.pop()
-        state.put(ir.Open(mode, e.pend_fnum, file, reclen, for_as), c.cur)
-        e.pend_fnum = m.ax = e.pend_mode_lit = None
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "close":  # CLOSE #ax -- usually a literal; a variable/
-        # expression is passed through as-is (wild metric.exe, probe
-        # q_closevar)
-        if m.ax is None:
-            raise ValueError(f"CLOSE without a file number at {addr:#x}")
-        num = m.ax.value if isinstance(m.ax, ir.Lit) else m.ax
-        state.put(ir.Close(num), c.cur)
-        m.ax = None
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "close_all":  # bare CLOSE: all channels, no operands
-        state.put(ir.Close(None), c.cur)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "field":  # FIELD #n, w AS v$[, ...]
-        if e.pend_fnum is None:
-            raise ValueError(f"FIELD without file number at {addr:#x}")
-        # Each width (a bare literal or a computed expression, wild
-        # hebrew.exe) accumulates into m.ax through the ordinary per-op
-        # dispatch like any other expression; the movsi/movdx/movesdx/
-        # field_as terminal (core.py's main loop) closes out one AS-entry at
-        # a time and flush_pending emits the ir.Field once the FIELD chain
-        # is proven closed by the next statement, same lazy-close
-        # convention as READ/INPUT#/PRINT chains.
-        e.pend_field = FieldChain(fnum=e.pend_fnum, start=c.cur)
-        e.pend_fnum = None
-        state.advance()
-        return True
-    if kind == "ioctl":  # IOCTL #n, s$ -- filenum via [0060], string pushed
-        if e.pend_fnum is None:
-            raise ValueError(f"IOCTL without a file number at {addr:#x}")
-        state.put(ir.Ioctl(e.pend_fnum, e.sstack.pop()), c.cur)
-        e.pend_fnum = None
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "put_str":  # PUT$ #n, s$ -- filenum via [0060], string pushed
-        if e.pend_fnum is None:
-            raise ValueError(f"PUT$ without a file number at {addr:#x}")
-        state.put(ir.PutString(e.pend_fnum, e.sstack.pop()), c.cur)
-        e.pend_fnum = None
-        c.cur = None
-        state.advance()
-        return True
-    return False
+    handlers = {
+        "open": lambda: _open_file(state, addr),
+        "close": lambda: _close_file(state, addr),
+        "close_all": lambda: _close_all(state),
+        "field": lambda: _begin_field(state, addr),
+        "ioctl": lambda: _file_string_op(state, addr, ir.Ioctl, "IOCTL"),
+        "put_str": lambda: _file_string_op(state, addr, ir.PutString, "PUT$"),
+    }
+    handler = handlers.get(kind)
+    return handler() if handler is not None else False
 
 
 def file_write(state: DecodeState, op, addr, kind) -> bool:
