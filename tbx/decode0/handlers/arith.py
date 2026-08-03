@@ -534,15 +534,6 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         c.cur = None
         state.advance(3)
         return True
-    if kind == "addax_bp":  # add ax,[bp+d8]: fold a LOCAL int LEFT (q_loccmp)
-        if isinstance(m.ax, ir.Neg):
-            m.ax = ir.BinOp(
-                "-", state.loc_local(op[2]), _rgrp("-", m.ax.operand)
-            )
-        else:
-            m.ax = ir.BinOp("+", state.loc_local(op[2]), _rgrp("+", m.ax))
-        state.advance()
-        return True
     if kind == "subax_bp":
         # Whole-array SUB parameters carry their declared lower bound at
         # descriptor offset +8. The machine subtraction normalizes the
