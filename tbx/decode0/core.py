@@ -2166,6 +2166,23 @@ def _finalize_dimensions(state: DecodeState, sub_local_arrays):
     return dims, local_dims
 
 
+def _finalize_sub_prefixes(state: DecodeState, shared_subs, local_dims) -> None:
+    out = state.output
+    for i, stmt in enumerate(out.stmts):
+        if not isinstance(stmt, ir.SubDef):
+            continue
+        prefix = []
+        if i in shared_subs:
+            shared = shared_subs[i]
+            prefix.extend(
+                ir.Shared(tuple(shared.names[j : j + 10]))
+                for j in range(0, len(shared.names), 10)
+            )
+        prefix.extend(local_dims.get(i, ()))
+        if prefix:
+            out.stmts[i] = ir.SubDef(stmt.name, stmt.params, tuple(prefix) + stmt.body)
+
+
 def _finalize(state: DecodeState, addr) -> Program:
     """Program epilogue: static-DIM re-emit, control-flow folds, target
     resolution and canonical rename -> the finished Program."""
@@ -2296,27 +2313,7 @@ def _finalize(state: DecodeState, addr) -> Program:
 
         shared_subs, sub_local_arrays = _scope_procs(state)
         dims, local_dims = _finalize_dimensions(state, sub_local_arrays)
-        # Rebuild SUB bodies: SHARED declaration first, then local static DIMs,
-        # then the decoded body (canonical order; verified byte-exact against the
-        # t1_subsh/t1_subarr/t1_subad witnesses).
-        for i, s in enumerate(out.stmts):
-            if not isinstance(s, ir.SubDef):
-                continue
-            prefix = []
-            if i in shared_subs:
-                shared = shared_subs[i]
-                # Turbo Basic accepts only ten SHARED names in one source
-                # statement.  Keep the groups as actual body statements, rather
-                # than splitting them in emit0 after BodyLine targets have already
-                # been assigned: tbd73's Initmenus has forty names and branches
-                # immediately after the declarations.
-                prefix.extend(
-                    ir.Shared(tuple(shared.names[j : j + 10]))
-                    for j in range(0, len(shared.names), 10)
-                )
-            prefix.extend(local_dims.get(i, ()))
-            if prefix:
-                out.stmts[i] = ir.SubDef(s.name, s.params, tuple(prefix) + s.body)
+        _finalize_sub_prefixes(state, shared_subs, local_dims)
         ins = 0  # static DIMs follow any proc definitions
         while ins < len(out.stmts) and isinstance(
             out.stmts[ins], (ir.SubDef, ir.DefFn)
