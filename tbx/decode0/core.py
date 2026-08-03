@@ -3203,6 +3203,51 @@ def _fp_integer_ops(state: DecodeState, op, kind) -> bool:
     return True
 
 
+def _fp_intrinsic_ops(state: DecodeState, op, kind) -> bool:
+    m, e = state.machine, state.expr
+    if kind == "fchs":
+        e.stack.append(ir.Neg(e.stack.pop()))
+    elif kind == "fabs":
+        e.stack.append(ir.Call("ABS", (e.stack.pop(),)))
+    elif kind == "fsqrt":
+        e.stack.append(ir.Call("SQR", (e.stack.pop(),)))
+    elif kind == "fn":  # runtime intrinsic
+        e.stack.append(ir.Call(op[2], (e.stack.pop(),)))
+    elif kind == "fn_ax":  # ax-returning intrinsic
+        m.ax = ir.Call(op[2], (e.stack.pop(),))
+    elif kind == "fn_ax_ax":  # ax-arg ax-returning (REG(n))
+        m.ax = ir.Call(op[2], (m.ax,))
+    elif kind == "fn_ax0":  # zero-arg ax-returning; POS/PLAY
+        m.ax = (
+            ir.Call(op[2], (ir.Lit(0),))
+            if op[2] in ("POS", "PLAY")
+            else ir.Nullary(op[2])
+        )
+    elif kind == "fn_fp0":  # zero-arg FP-returning
+        e.stack.append(ir.Nullary(op[2]))
+    elif kind == "fn_axfp":  # ax-arg, FP-stack-returning (FRE(n))
+        e.stack.append(ir.Call(op[2], (m.ax,)))
+        m.ax = None
+    elif kind == "pmap":  # PMAP(x, n): x FP stack, n ax
+        e.stack.append(ir.Call("PMAP", (e.stack.pop(), m.ax)))
+        m.ax = None
+    elif kind == "movaxds":  # mov ax,ds: VARSEG of a DGROUP var
+        m.ax = ir.VarSeg()
+    elif kind == "fn_screen":  # SCREEN(row, col): bx, ax
+        m.ax = ir.Call("SCREEN", (m.bx, m.ax))
+        m.bx = None
+    elif kind == "fn_screen_color":  # SCREEN(row, col, color): cx, bx, ax
+        m.ax = ir.Call("SCREEN", (m.cx, m.bx, m.ax))
+        m.cx = m.bx = None
+    elif kind == "fn_ax2":  # two-FP-arg ax intrinsic (POINT)
+        y = e.stack.pop()
+        x = e.stack.pop()
+        m.ax = ir.Call(op[2], (x, y))
+    else:
+        return False
+    return True
+
+
 def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     """FP-stack + control-flow instruction dispatch (fld/fst/fadd/.../fcomp/jcc/
     jmp/call/run/jmps + unhandled-op guard). Falls through to the default k-advance;
@@ -3214,6 +3259,8 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     elif _fp_string_ops(state, op, kind):
         pass
     elif _fp_integer_ops(state, op, kind):
+        pass
+    elif _fp_intrinsic_ops(state, op, kind):
         pass
     elif kind == "fstp64":  # m64 store: double var assign
         v = e.stack.pop()
@@ -3248,44 +3295,6 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         if isinstance(top, ir.BinOp) and _PREC[top.op] < _PREC[op[2]]:
             top = ir.Group(top)
         e.stack.append(ir.BinOp(op[2], top, state.fpval64(op[3])))
-    elif kind == "fchs":
-        e.stack.append(ir.Neg(e.stack.pop()))
-    elif kind == "fabs":
-        e.stack.append(ir.Call("ABS", (e.stack.pop(),)))
-    elif kind == "fsqrt":
-        e.stack.append(ir.Call("SQR", (e.stack.pop(),)))
-    elif kind == "fn":  # runtime intrinsic
-        e.stack.append(ir.Call(op[2], (e.stack.pop(),)))
-    elif kind == "fn_ax":  # ax-returning intrinsic
-        m.ax = ir.Call(op[2], (e.stack.pop(),))
-    elif kind == "fn_ax_ax":  # ax-arg ax-returning (REG(n))
-        m.ax = ir.Call(op[2], (m.ax,))
-    elif kind == "fn_ax0":  # zero-arg ax-returning; POS/PLAY
-        m.ax = (
-            ir.Call(op[2], (ir.Lit(0),))  # keep their required dummy args
-            if op[2] in ("POS", "PLAY")
-            else ir.Nullary(op[2])
-        )
-    elif kind == "fn_fp0":  # zero-arg FP-returning
-        e.stack.append(ir.Nullary(op[2]))
-    elif kind == "fn_axfp":  # ax-arg, FP-stack-returning (FRE(n))
-        e.stack.append(ir.Call(op[2], (m.ax,)))
-        m.ax = None
-    elif kind == "pmap":  # PMAP(x, n): x FP stack, n ax
-        e.stack.append(ir.Call("PMAP", (e.stack.pop(), m.ax)))
-        m.ax = None
-    elif kind == "movaxds":  # mov ax,ds: VARSEG of a DGROUP var;
-        m.ax = ir.VarSeg()  # rendered against the assign target
-    elif kind == "fn_screen":  # SCREEN(row, col): bx, ax
-        m.ax = ir.Call("SCREEN", (m.bx, m.ax))
-        m.bx = None
-    elif kind == "fn_screen_color":  # SCREEN(row, col, color): cx, bx, ax
-        m.ax = ir.Call("SCREEN", (m.cx, m.bx, m.ax))
-        m.cx = m.bx = None
-    elif kind == "fn_ax2":  # two-FP-arg ax intrinsic (POINT)
-        y = e.stack.pop()
-        x = e.stack.pop()
-        m.ax = ir.Call(op[2], (x, y))
     elif kind == "popop":
         last = e.stack.pop()  # last-pushed is the textual LEFT
         first = e.stack.pop()  # (R-form FSUBRP: st1=st0-st1, and
