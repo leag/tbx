@@ -2112,6 +2112,31 @@ def _finalize_resolved_calls(state: DecodeState) -> None:
             out.stmts[index] = after
 
 
+def _finalize_line_table(state: DecodeState, addr):
+    img, out = state.image, state.output
+    data_orphan_lines: list[tuple[int, int]] = []
+    orphan_offs: set[int] = set()
+    table_active = False
+    if any(
+        o[1] in ("resume_pre", "on_error", "error_stmt")
+        or (o[1] == "movax_m" and o[2] in (0x72, 0x74))
+        for o in img.ops
+    ):
+        early = _line_table(
+            img.exe,
+            img.start,
+            out.addrs,
+            addr,
+            extra_offs={a + 4 - img.start for a in out.trace_tbl}
+            | {a - img.start for a in out.stmt_addr.values() if a is not None},
+        )
+        if early is not None:
+            table_active = True
+            data_orphan_lines = early[1]
+            orphan_offs = {offset for offset, _ in early[1]}
+    return table_active, data_orphan_lines, orphan_offs
+
+
 def _finalize(state: DecodeState, addr) -> Program:
     """Program epilogue: static-DIM re-emit, control-flow folds, target
     resolution and canonical rename -> the finished Program."""
@@ -2131,27 +2156,10 @@ def _finalize(state: DecodeState, addr) -> Program:
         # calls `_finalize` only once it's done). Gated the same as the final
         # lookup below: only probe when the ops show error-trap evidence, else
         # this linear EXE scan risks a spurious match in an unrelated program.
-        data_orphan_lines: list[tuple[int, int]] = []
-        orphan_offs: set[int] = set()  # every orphaned offset, independent of DATA/DIM
+        # Every orphaned offset is independent of DATA/DIM; the probe must run
+        # before later synthesis mutates the statement-address table.
+        table_active, data_orphan_lines, orphan_offs = _finalize_line_table(state, addr)
         do_lines: list[int] = []  # genuine (kept) synthesized DOs' own lines, in order
-        table_active = False
-        if any(
-            o[1] in ("resume_pre", "on_error", "error_stmt")
-            or (o[1] == "movax_m" and o[2] in (0x72, 0x74))
-            for o in img.ops
-        ):
-            _early = _line_table(
-                img.exe,
-                img.start,
-                out.addrs,
-                addr,
-                extra_offs={a + 4 - img.start for a in out.trace_tbl}
-                | {a - img.start for a in out.stmt_addr.values() if a is not None},
-            )
-            if _early is not None:
-                table_active = True
-                data_orphan_lines = _early[1]
-                orphan_offs = {o for o, _ in _early[1]}
 
         # A bare backward jmps with no head-test frame is ALWAYS canonicalized
         # to synthesized `DO ... LOOP` -- as a bare infinite `DO...LOOP` (core.py's
