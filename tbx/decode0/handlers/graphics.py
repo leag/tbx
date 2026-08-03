@@ -75,6 +75,29 @@ def _graphics_pset(state: DecodeState, op, addr: int) -> bool:
     return True
 
 
+def _graphics_circle(state: DecodeState, op, addr: int) -> bool:
+    e, c = state.expr, state.control
+    fl = op[2]
+    if fl & ~0x1F:
+        raise ValueError(f"CIRCLE flag {fl:02x} at {addr:#x} (unsupported)")
+    color = e.color_cells.pop(0x88) if fl & 0x08 else None
+    cstart = e.color_cells.pop(0x94) if fl & 0x04 else None
+    cend = e.color_cells.pop(0xA0) if fl & 0x02 else None
+    aspect = e.color_cells.pop(0xAC) if fl & 0x01 else None
+    if isinstance(aspect, ir.DblLit):  # unsuffixed source literal:
+        aspect = ir.SingleLit(aspect.value)  # pooled f64, rendered plain
+    r = e.stack.pop()
+    y = e.stack.pop()
+    x = e.stack.pop()
+    state.put(
+        ir.Circle(x, y, r, color, cstart, cend, aspect, step=bool(fl & 0x10)),
+        c.cur,
+    )
+    c.cur = None
+    state.advance()
+    return True
+
+
 def graphics(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: screen, cls, line, pset, circle, paint, draw, palette,
     palette_using, color_commit, locate, cursor, width."""
@@ -109,25 +132,7 @@ def graphics(state: DecodeState, op, addr, kind) -> bool:
     if kind == "pset":  # PSET/PRESET [STEP] (x,y)[, color]
         return _graphics_pset(state, op, addr)
     if kind == "circle":  # CIRCLE [STEP] (x,y), r[,c][,s][,e][,asp]
-        fl = op[2]
-        if fl & ~0x1F:
-            raise ValueError(f"CIRCLE flag {fl:02x} at {addr:#x} (unsupported)")
-        color = e.color_cells.pop(0x88) if fl & 0x08 else None
-        cstart = e.color_cells.pop(0x94) if fl & 0x04 else None
-        cend = e.color_cells.pop(0xA0) if fl & 0x02 else None
-        aspect = e.color_cells.pop(0xAC) if fl & 0x01 else None
-        if isinstance(aspect, ir.DblLit):  # unsuffixed source literal:
-            aspect = ir.SingleLit(aspect.value)  # pooled f64, rendered plain
-        r = e.stack.pop()
-        y = e.stack.pop()
-        x = e.stack.pop()
-        state.put(
-            ir.Circle(x, y, r, color, cstart, cend, aspect, step=bool(fl & 0x10)),
-            c.cur,
-        )
-        c.cur = None
-        state.advance()
-        return True
+        return _graphics_circle(state, op, addr)
     if kind == "paint":  # PAINT (x,y)[, paint][, border]
         if op[2] & ~0x03:
             raise ValueError(f"PAINT flag {op[2]:02x} at {addr:#x} (unsupported)")
