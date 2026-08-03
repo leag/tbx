@@ -1687,6 +1687,41 @@ def _scan_esc_si_ops(p, mo, esc, pre, reg, ops) -> int | None:
     return None
 
 
+def _scan_esc_disp_ops(p, mo, esc, pre, reg, disp, ops) -> int | None:
+    kinds = {
+        (0xDF, 0): "fild",
+        (0xDF, 3): "fistp",
+        (0xD9, 0): "fld",
+        (0xD9, 3): "fstp",
+        (0xD8, 3): "fcomp",
+        (0xDE, 3): "icomp",
+        (0xDA, 3): "icomp32",
+        (0xDD, 0): "fld64",
+        (0xDD, 3): "fstp64",
+        (0xDC, 3): "fcomp64",
+        (0xDB, 0): "fild32",
+        (0xDB, 3): "fistp32",
+    }
+    kind = kinds.get((esc, reg))
+    if kind:
+        ops.append((p, pre + kind, disp))
+        return mo + 3
+    folds = (
+        (0xD8, _FOLD_OPS, "fold"),
+        (0xDE, _FOLD_OPS, "ifold"),
+        (0xD8, _FOLD_OPS_N, "fold_n"),
+        (0xDE, _FOLD_OPS_N, "ifold_n"),
+        (0xDC, _FOLD_OPS, "fold64"),
+        (0xDC, _FOLD_OPS_N, "fold_n64"),
+        (0xDA, _FOLD_OPS, "ifold32"),
+    )
+    for opcode, table, name in folds:
+        if esc == opcode and reg in table:
+            ops.append((p, pre + name, table[reg], disp))
+            return mo + 3
+    return None
+
+
 def _scan(
     exe: bytes, start: int, dia: Dialect = TB11, commits: set[int] | None = None
 ) -> list[tuple[Any, ...]]:
@@ -1863,63 +1898,11 @@ def _scan_pass(
                 raise ValueError(f"unhandled FP [si] op esc={esc:02x} modrm={modrm:02x} at {p:#x}")
             if mod == 0 and rm == 6:  # [disp16] operand
                 disp = struct.unpack_from("<H", exe, mo + 1)[0]
-                kind = {
-                    (0xDF, 0): "fild",  # m16 const-pool literal push
-                    (0xDF, 3): "fistp",  # m16 integer store (IDX% scratch)
-                    (0xD9, 0): "fld",  # m32 scalar read
-                    (0xD9, 3): "fstp",  # m32 scalar store (assignment)
-                    (0xD8, 3): "fcomp",  # m32 compare (IF / loop tests)
-                    (0xDE, 3): "icomp",  # m16 int compare: int var or pool
-                    # literal vs. an FP-stack value (mixed-type IF/loop
-                    # test, e.g. `IF X% > Y THEN`; wild grdscn.exe et al.,
-                    # probe q_icomp)
-                    (0xDA, 3): "icomp32",  # m32 long-int compare: a plain
-                    # LONG (`&`) scalar var or pooled literal vs. an
-                    # FP-stack value (`IF X& > 5.5 THEN`) -- the disp16
-                    # sibling of icomp_si32's [si] form; wild stat.exe,
-                    # probe q_icomp32
-                    (0xDD, 0): "fld64",  # m64 load (SELECT CASE selector temp)
-                    (0xDD, 3): "fstp64",  # m64 store (SELECT CASE selector temp)
-                    (0xDC, 3): "fcomp64",  # m64 compare (SELECT CASE arm test)
-                    (0xDB, 0): "fild32",  # m32 integer load
-                    (0xDB, 3): "fistp32",  # m32 integer store
-                }.get((esc, reg))
-                if kind:
-                    ops.append((p, pre + kind, disp))
-                    p = mo + 3
+                np = _scan_esc_disp_ops(p, mo, esc, pre, reg, disp, ops)
+                if np is not None:
+                    p = np
                     continue
-                if esc == 0xD8 and reg in _FOLD_OPS:  # fold var as LEFT operand
-                    ops.append((p, pre + "fold", _FOLD_OPS[reg], disp))
-                    p = mo + 3
-                    continue
-                if esc == 0xDE and reg in _FOLD_OPS:  # fold int var / pool literal LEFT
-                    ops.append((p, pre + "ifold", _FOLD_OPS[reg], disp))
-                    p = mo + 3
-                    continue
-                if esc == 0xD8 and reg in _FOLD_OPS_N:  # non-R: mem is RIGHT operand
-                    ops.append((p, pre + "fold_n", _FOLD_OPS_N[reg], disp))
-                    p = mo + 3
-                    continue
-                if esc == 0xDE and reg in _FOLD_OPS_N:
-                    ops.append((p, pre + "ifold_n", _FOLD_OPS_N[reg], disp))
-                    p = mo + 3
-                    continue
-                if esc == 0xDC and reg in _FOLD_OPS:  # m64 arithmetic, mem LEFT
-                    ops.append((p, pre + "fold64", _FOLD_OPS[reg], disp))
-                    p = mo + 3
-                    continue
-                if esc == 0xDC and reg in _FOLD_OPS_N:  # m64 non-R: mem RIGHT
-                    ops.append((p, pre + "fold_n64", _FOLD_OPS_N[reg], disp))
-                    p = mo + 3
-                    continue
-                if (
-                    esc == 0xDA and reg in _FOLD_OPS
-                ):  # m32 int arithmetic (long), mem LEFT.
-                    # Only the R-form is modeled: the reversed form
-                    # would need opposite orientation and no fixture exercises it.
-                    ops.append((p, pre + "ifold32", _FOLD_OPS[reg], disp))
-                    p = mo + 3
-                    continue
+                raise ValueError(f"unhandled FP [disp16] op esc={esc:02x} modrm={modrm:02x} at {p:#x}")
             if mod == 1 and rm == 6:  # [bp+disp8]: DEF FN body / call-arg temp frame
                 bp_off = struct.unpack_from("<b", exe, mo + 1)[
                     0
