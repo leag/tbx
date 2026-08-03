@@ -291,10 +291,61 @@ def _int_compare_state(state: DecodeState, op, addr: int, kind: str) -> bool:
     return True
 
 
+def _int_inc_dec(state: DecodeState, op, addr: int, kind: str) -> bool:
+    if kind not in ("inc_m", "inc_bp", "dec_bp", "dec_m", "addm_i8"):
+        return False
+    img, c, o = state.image, state.control, state.output
+    in_for = c.fors and c.fors[-1].v == op[2]
+    if kind == "inc_m":
+        if in_for:
+            state.advance()
+            return True
+        var = state.loc(op[2])
+        state.put(ir.Assign(var, ir.BinOp("+", var, ir.Lit(1))), c.cur)
+    elif kind == "inc_bp":
+        if in_for:
+            state.advance()
+            return True
+        state.put(ir.Incr(state.loc_local(op[2])), c.cur)
+    elif kind in ("dec_bp", "dec_m"):
+        step_for = in_for and _next_real_addr(img, c.k + 1) == c.fors[-1].test
+        if step_for:
+            f = c.fors[-1]
+            old = o.stmts[f.idx]
+            with editing(o.stmts, "patch_for_step"):
+                state.patch(f.idx, ir.For(old.var, old.init, old.limit, ir.Lit(-1)))
+            f.step = -1
+            state.advance()
+            return True
+        if kind == "dec_bp":
+            state.put(ir.Decr(state.loc_local(op[2])), c.cur)
+        else:
+            var = state.loc(op[2])
+            state.put(ir.Assign(var, ir.BinOp("-", var, ir.Lit(1))), c.cur)
+    else:
+        step_for = in_for and _next_real_addr(img, c.k + 1) == c.fors[-1].test
+        if not step_for:
+            var = state.loc(op[2])
+            state.put(ir.Assign(var, ir.BinOp("+", var, ir.Lit(op[3]))), c.cur)
+            c.cur = None
+            state.advance()
+            return True
+        f = c.fors[-1]
+        old = o.stmts[f.idx]
+        with editing(o.stmts, "patch_for_step"):
+            state.patch(f.idx, ir.For(old.var, old.init, old.limit, ir.Lit(op[3])))
+        f.step = op[3]
+        state.advance()
+        return True
+    c.cur = None
+    state.advance()
+    return True
+
+
 def int_alu(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addax_bp, addsiax, subax_m, imul_m, imul_bp, movax_bp, idivbx, cmpax_m, inc_m, dec_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
-    img, m, expr_, l, c, o = (state.image, state.machine, state.expr,
-                              state.layout_state, state.control, state.output)
+    img, m, expr_, l, c = (state.image, state.machine, state.expr,
+                           state.layout_state, state.control)
     if _int_register_ops(state, op, addr, kind):
         return True
     if _int_add_ops(state, op, addr, kind):
@@ -500,113 +551,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         m.ax = ir.BinOp("AND", state.loc_local(op[2]), _rgrp("AND", m.ax))
         state.advance()
         return True
-    if kind == "inc_m":
-        if c.fors and c.fors[-1].v == op[2]:
-            # Integer FOR-NEXT increment -- implicit in BASIC; consume
-            # silently (the NEXT stmt is emitted on the cmp_mi8 guard above).
-            state.advance()
-            return True
-        # INCR normalization: bare INC [disp16] outside a FOR context
-        # compiles `X = X + 1` (witnessed t1_incr1)
-        var = state.loc(op[2])
-        state.put(ir.Assign(var, ir.BinOp("+", var, ir.Lit(1))), c.cur)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "inc_bp":
-        # LOCAL-var FOR-NEXT increment (q_locidx). Outside a FOR, `LOCAL X% =
-        # X% + 1` instead compiles to addm_ax_bp (t1_local1) -- unlike the
-        # DGROUP case, the two spellings are NOT byte-identical for a LOCAL
-        # target, so a bare INCR statement decodes as its own `ir.Incr` node
-        # rather than normalizing to an Assign (wild bmaster.exe/ifi.exe,
-        # probe q_localincr3).
-        if c.fors and c.fors[-1].v == op[2]:
-            state.advance()
-            return True
-        state.put(ir.Incr(state.loc_local(op[2])), c.cur)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "dec_bp":
-        # LOCAL-var STEP -1 FOR-NEXT decrement, the descending sibling of
-        # inc_bp -- same step patch-up as dec_m's FOR branch (the header
-        # folded a provisional Lit(1) step before this NEXT-side evidence
-        # was available). Outside a FOR, this is TB's explicit `DECR var`
-        # statement (the decrement sibling of `INCR`), NOT byte-identical
-        # to `LOCAL X% = X% - 1` (a generic subtract) the way the DGROUP
-        # case's two spellings are -- decodes as its own `ir.Decr` node
-        # (wild horses.exe, probe q_localdecr).
-        if (
-            c.fors
-            and c.fors[-1].v == op[2]
-            and _next_real_addr(img, c.k + 1) == c.fors[-1].test
-        ):
-            f = c.fors[-1]
-            old = o.stmts[f.idx]
-            with editing(o.stmts, "patch_for_step"):
-                state.patch(
-                    f.idx, ir.For(old.var, old.init, old.limit, ir.Lit(-1))
-                )
-            f.step = -1
-            state.advance()
-            return True
-        state.put(ir.Decr(state.loc_local(op[2])), c.cur)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "dec_m":
-        # DECR normalization: bare DEC [disp16] compiles `X = X - 1`. Inside
-        # an open FOR whose loop var this is, it's STEP -1's increment --
-        # the descending sibling of inc_m (STEP +1), both special-cased
-        # instead of the generic addm_i8 (any OTHER literal step). Same
-        # placeholder-patch as addm_i8: the header folded a provisional
-        # Lit(1) step before this NEXT-side evidence was available (wild
-        # bill.exe).
-        if (
-            c.fors
-            and c.fors[-1].v == op[2]
-            and _next_real_addr(img, c.k + 1) == c.fors[-1].test
-        ):
-            f = c.fors[-1]
-            old = o.stmts[f.idx]
-            with editing(o.stmts, "patch_for_step"):
-                state.patch(
-                    f.idx, ir.For(old.var, old.init, old.limit, ir.Lit(-1))
-                )
-            f.step = -1
-            state.advance()
-            return True
-        var = state.loc(op[2])
-        state.put(ir.Assign(var, ir.BinOp("-", var, ir.Lit(1))), c.cur)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "addm_i8":
-        # Integer FOR-NEXT increment for a literal STEP other than +-1 (those
-        # use inc_m/dec_m instead): `add word [I%], step` at the open FOR's
-        # test address. Rewrite the already-emitted ir.For statement's step
-        # in place -- it was provisionally Lit(1) when the header was folded,
-        # before this NEXT-side evidence was available (q_forstep/
-        # q_forstepneg). Outside a FOR this is the multi-unit sibling of
-        # inc_m: `X% = X% + literal` (wild number.exe).
-        if not (
-            c.fors
-            and c.fors[-1].v == op[2]
-            and _next_real_addr(img, c.k + 1) == c.fors[-1].test
-        ):
-            var = state.loc(op[2])
-            state.put(ir.Assign(var, ir.BinOp("+", var, ir.Lit(op[3]))), c.cur)
-            c.cur = None
-            state.advance()
-            return True
-        f = c.fors[-1]
-        old = o.stmts[f.idx]
-        with editing(o.stmts, "patch_for_step"):
-            state.patch(
-                f.idx, ir.For(old.var, old.init, old.limit, ir.Lit(op[3]))
-            )
-        f.step = op[3]
-        state.advance()
+    if _int_inc_dec(state, op, addr, kind):
         return True
     if kind == "negax":  # subtraction setup
         m.ax = ir.Neg(m.ax)
