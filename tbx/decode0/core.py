@@ -3053,6 +3053,38 @@ def _fp_string_ops(state: DecodeState, op, kind) -> bool:
     return True
 
 
+def _fp_integer_ops(state: DecodeState, op, kind) -> bool:
+    e, c = state.expr, state.control
+    if kind == "fild32":  # m32 int load: long var or pooled i32
+        if op[2] == 0x6E:  # runtime dword cell [006E]: ERADR
+            e.stack.append(ir.Nullary("ERADR"))
+        else:
+            try:
+                e.stack.append(state.loc(op[2]))
+            except ValueError:
+                e.stack.append(state.pool_lit32(op[2]))
+    elif kind == "fistp32":  # m32 int store: long var assign
+        v = e.stack.pop()
+        if v is _FREAD:
+            state._fread_target(state.loc(op[2]))
+        elif v is _READDATA:
+            state._readdata_target(state.loc(op[2]))
+        else:
+            state.put(ir.Assign(state.loc(op[2]), v), c.cur)
+        c.cur = None
+    elif kind == "ifold32":  # m32 long arithmetic, mem LEFT
+        try:
+            mem = state.loc(op[3])
+        except ValueError:
+            mem = state.pool_lit32(op[3])
+        e.stack.append(_orient(op[2], mem, e.stack.pop()))
+    elif kind == "frndint":  # FRNDINT = CLNG intrinsic
+        e.stack.append(ir.Call("CLNG", (e.stack.pop(),)))
+    else:
+        return False
+    return True
+
+
 def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     """FP-stack + control-flow instruction dispatch (fld/fst/fadd/.../fcomp/jcc/
     jmp/call/run/jmps + unhandled-op guard). Falls through to the default k-advance;
@@ -3062,6 +3094,8 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     if _fp_load_ops(state, op, addr, kind):
         pass
     elif _fp_string_ops(state, op, kind):
+        pass
+    elif _fp_integer_ops(state, op, kind):
         pass
     elif kind == "fstp64":  # m64 store: double var assign
         v = e.stack.pop()
@@ -3096,31 +3130,6 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         if isinstance(top, ir.BinOp) and _PREC[top.op] < _PREC[op[2]]:
             top = ir.Group(top)
         e.stack.append(ir.BinOp(op[2], top, state.fpval64(op[3])))
-    elif kind == "fild32":  # m32 int load: long var or pooled i32
-        if op[2] == 0x6E:  # runtime dword cell [006E]: ERADR
-            e.stack.append(ir.Nullary("ERADR"))
-        else:
-            try:
-                e.stack.append(state.loc(op[2]))
-            except ValueError:
-                e.stack.append(state.pool_lit32(op[2]))
-    elif kind == "fistp32":  # m32 int store: long var assign
-        v = e.stack.pop()
-        if v is _FREAD:
-            state._fread_target(state.loc(op[2]))
-        elif v is _READDATA:
-            state._readdata_target(state.loc(op[2]))
-        else:
-            state.put(ir.Assign(state.loc(op[2]), v), c.cur)
-        c.cur = None
-    elif kind == "ifold32":  # m32 long arithmetic, mem LEFT
-        try:
-            mem = state.loc(op[3])
-        except ValueError:
-            mem = state.pool_lit32(op[3])
-        e.stack.append(_orient(op[2], mem, e.stack.pop()))
-    elif kind == "frndint":  # FRNDINT = CLNG intrinsic
-        e.stack.append(ir.Call("CLNG", (e.stack.pop(),)))
     elif kind == "fchs":
         e.stack.append(ir.Neg(e.stack.pop()))
     elif kind == "fabs":
