@@ -1525,6 +1525,33 @@ def _scan_runtime_files(p, sub, ops) -> int | None:
     return p + 3
 
 
+def _scan_runtime_misc(exe, p, start, sub, ops) -> int | None:
+    if sub in (0x74, 0x72):
+        count = exe[p + 3] | (exe[p + 4] << 8)
+        targets = [
+            start + int.from_bytes(exe[p + 5 + i * 4 : p + 9 + i * 4], "little")
+            for i in range(count)
+        ]
+        ops.append((p, "on_goto" if sub == 0x74 else "on_gosub", *targets))
+        return p + 5 + count * 4
+    names = {
+        0x98: "play",
+        0x00: "beep",
+        0xB0: "randomize",
+        0x28: "delay_init",
+        0x2A: "delay_poll",
+        0xD0: "sound",
+        0xEC: "width",
+        0xEE: "width_dev",
+        0xF0: "width_file",
+    }
+    name = names.get(sub)
+    if name is None:
+        return None
+    ops.append((p, name))
+    return p + 3
+
+
 def _scan(
     exe: bytes, start: int, dia: Dialect = TB11, commits: set[int] | None = None
 ) -> list[tuple[Any, ...]]:
@@ -1648,52 +1675,9 @@ def _scan_pass(
             if runtime is not None:
                 p = runtime
                 continue
-            if sub in (0x74, 0x72):  # ON GOTO (74) / ON GOSUB (72)
-                count = exe[p + 3] | (exe[p + 4] << 8)
-                targets = []
-                for i in range(count):
-                    off = int.from_bytes(exe[p + 5 + i * 4 : p + 9 + i * 4], "little")
-                    targets.append(start + off)  # start-relative → absolute
-                name = "on_goto" if sub == 0x74 else "on_gosub"
-                ops.append((p, name, *targets))
-                p += 5 + count * 4
-                continue
-            if sub == 0x98:  # PLAY music$
-                ops.append((p, "play"))
-                p += 3
-                continue
-            if sub == 0x00:  # BEEP (zero operand)
-                ops.append((p, "beep"))
-                p += 3
-                continue
-            if sub == 0xB0:  # RANDOMIZE <expr>
-                ops.append((p, "randomize"))
-                p += 3
-                continue
-            if sub == 0x28:  # DELAY init (consumes FP count)
-                ops.append((p, "delay_init"))
-                p += 3
-                continue
-            if sub == 0x2A:  # DELAY poll-loop head
-                ops.append((p, "delay_poll"))
-                p += 3
-                continue
-            if sub == 0xD0:  # SOUND (ax freq + FP dur)
-                ops.append((p, "sound"))
-                p += 3
-                continue
-            if sub == 0xEC:  # WIDTH n (ax operand)
-                ops.append((p, "width"))
-                p += 3
-                continue
-            if sub == 0xEE:  # WIDTH device$, n: device string pushed, n in ax
-                # (t1_widthdev; wild cal.exe/cal87.exe/kinetics.exe)
-                ops.append((p, "width_dev"))
-                p += 3
-                continue
-            if sub == 0xF0:  # WIDTH #filenum,n: [0060] channel, n in ax
-                ops.append((p, "width_file"))  # (t1_widthfile; wild
-                p += 3  # cleanup.exe/reformat.exe)
+            runtime = _scan_runtime_misc(exe, p, start, sub, ops)
+            if runtime is not None:
+                p = runtime
                 continue
             if sub == 0x54:  # KEY ON
                 ops.append((p, "key_on"))
