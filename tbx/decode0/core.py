@@ -2449,6 +2449,66 @@ def _prepare_string_pool(state, exe):
         ]
 
 
+def _finalize_do_recovery(state, table_active, data_orphan_lines, orphan_offs):
+    if not table_active:
+        return [], data_orphan_lines
+    img, out = state.image, state.output
+    do_stack: list[tuple[int, bool]] = []
+    do_to_loop: dict[int, int] = {}
+    for i, stmt in enumerate(out.stmts):
+        if isinstance(stmt, ir.Do):
+            do_stack.append((i, stmt.kind is None and stmt.cond is None))
+        elif isinstance(stmt, ir.Loop) and do_stack:
+            do_idx, is_bare = do_stack.pop()
+            if is_bare:
+                do_to_loop[do_idx] = i
+    off_to_line = dict(data_orphan_lines)
+    drop: set[int] = set()
+    claimed_offs: set[int] = set()
+    do_idx_lines: dict[int, int] = {}
+    for do_idx, loop_idx in do_to_loop.items():
+        if out.addrs[do_idx] is not None:
+            continue
+        loop_stmt = out.stmts[loop_idx]
+        bare_len_loop = isinstance(loop_stmt, ir.Loop) and _is_bare_len_poll(
+            loop_stmt.cond
+        )
+        host = out.addrs[do_idx + 1]
+        if host is None or bare_len_loop:
+            continue
+        host_off = host - img.start
+        if host_off in orphan_offs:
+            claimed_offs.add(host_off)
+            do_idx_lines[do_idx] = off_to_line[host_off]
+            continue
+        assert isinstance(loop_stmt, ir.Loop)
+        if loop_stmt.kind == "UNTIL":
+            if _is_bare_len_poll(loop_stmt.cond):
+                continue
+            raise ValueError(
+                "codeless DO...LOOP UNTIL (no orphan evidence) has no "
+                "witnessed non-DO source construct to un-synthesize to"
+            )
+        if loop_stmt.kind == "WHILE":
+            state.patch(loop_idx, ir.IfGoto(loop_stmt.cond, ("addr", host)))
+            drop.add(do_idx)
+            continue
+        state.patch(loop_idx, ir.Goto(("addr", host)))
+        drop.add(do_idx)
+    if drop:
+        keep = [i for i in range(len(out.stmts)) if i not in drop]
+        out.stmts[:] = [out.stmts[i] for i in keep]
+        out.addrs[:] = [out.addrs[i] for i in keep]
+    if claimed_offs:
+        data_orphan_lines = [
+            (offset, line)
+            for offset, line in data_orphan_lines
+            if offset not in claimed_offs
+        ]
+    do_lines = [do_idx_lines[i] for i in sorted(do_idx_lines)]
+    return do_lines, data_orphan_lines
+
+
 def _finalize(state: DecodeState, addr) -> Program:
     """Program epilogue: static-DIM re-emit, control-flow folds, target
     resolution and canonical rename -> the finished Program."""
@@ -2471,111 +2531,9 @@ def _finalize(state: DecodeState, addr) -> Program:
         # Every orphaned offset is independent of DATA/DIM; the probe must run
         # before later synthesis mutates the statement-address table.
         table_active, data_orphan_lines, orphan_offs = _finalize_line_table(state, addr)
-        do_lines: list[int] = []  # genuine (kept) synthesized DOs' own lines, in order
-
-        # A bare backward jmps with no head-test frame is ALWAYS canonicalized
-        # to synthesized `DO ... LOOP` -- as a bare infinite `DO...LOOP` (core.py's
-        # dispatch loop, "bare backward jmps = infinite DO") or, via
-        # `_lift_do_tail`, as `DO...LOOP WHILE/UNTIL cond` -- since an explicit
-        # DO and a plain `<n> ... GOTO <n>` / `<n> ... IF cond THEN GOTO <n>`
-        # compile to byte-identical code and the decoder can't otherwise tell
-        # which the source used. But DO, like DATA/DIM, gets its OWN codeless
-        # line-table entry (probes q_do2/q_goto2/q_lt7: identical code either
-        # way, but only the DO form leaves an orphan entry sharing the loop
-        # body's offset) -- so once a table is active and shows NO orphan
-        # there, the DO spelling would recompile with an extra entry the
-        # original never had. wild vhfprop.exe: two such loops (one bare, one
-        # WHILE-tail-test), neither with orphan evidence -- both are plain
-        # GOTO/IfGoto loops. Un-synthesize them: drop the Do, retarget the
-        # paired Loop as a Goto (bare) or IfGoto (WHILE, same polarity as the
-        # tail test -- "continue if cond true" is exactly `IF cond THEN GOTO`;
-        # UNTIL would need De Morgan negation of a possibly-compound LogOp,
-        # unwitnessed, so it is left to raise below rather than guessed), all
-        # matched by nesting order (DO/LOOP pairs cannot cross in a
-        # well-formed program, so a stack pairs them correctly same as the
-        # loop's own runtime `c.dos` nesting would).
-        if table_active:
-            # Every Do (bare or head-test) is pushed, so a head-test DO's own
-            # closing (bare) Loop pops ITS Do and not some enclosing bare one --
-            # only a BARE Do's pairing is recorded for possible conversion.
-            do_stack: list[tuple[int, bool]] = []
-            do_to_loop: dict[int, int] = {}
-            for i, s in enumerate(out.stmts):
-                if isinstance(s, ir.Do):
-                    do_stack.append((i, s.kind is None and s.cond is None))
-                elif isinstance(s, ir.Loop) and do_stack:
-                    do_idx, is_bare = do_stack.pop()
-                    if is_bare:
-                        do_to_loop[do_idx] = i
-            off_to_line = dict(data_orphan_lines)
-            drop: set[int] = set()
-            claimed_offs: set[int] = set()  # genuine DO's own orphan entry
-            do_idx_lines: dict[int, int] = {}  # do_idx -> its line, genuine DOs only
-            for do_idx, loop_idx in do_to_loop.items():
-                if out.addrs[do_idx] is not None:
-                    continue  # a real (non-synthesized) Do -- untouched
-                bare_len_loop = isinstance(out.stmts[loop_idx], ir.Loop) and _is_bare_len_poll(
-                    out.stmts[loop_idx].cond
-                )
-                host = out.addrs[do_idx + 1]
-                if host is None:
-                    continue
-                host_off = host - img.start
-                if bare_len_loop:
-                    # This calibrated empty loop has no orphan entry of its
-                    # own; do not consume an unrelated DATA/DIM orphan merely
-                    # because its first operation shares the offset pattern.
-                    continue
-                if host_off in orphan_offs:
-                    claimed_offs.add(host_off)  # a genuine DO -- not DATA/DIM's to see
-                    do_idx_lines[do_idx] = off_to_line[host_off]
-                    continue
-                loop_s = out.stmts[loop_idx]
-                assert isinstance(loop_s, ir.Loop)
-                if loop_s.kind == "UNTIL":
-                    # A calibrated empty loop whose condition is the direct
-                    # truth value of LEN(INKEY$).
-                    # Its self-edge and exact OR-AX template are distinctive;
-                    # unlike a general UNTIL conversion this does not require
-                    # guessing De Morgan's source spelling.
-                    poll = loop_s.cond
-                    if _is_bare_len_poll(poll):
-                        continue
-                    # A LOOP UNTIL conversion needs De Morgan negation of a
-                    # possibly-compound LogOp. No fixture witnesses that source
-                    # shape, so fail loud rather than guess its canonical form.
-                    raise ValueError(
-                        "codeless DO...LOOP UNTIL (no orphan evidence) has no "
-                        "witnessed non-DO source construct to un-synthesize to"
-                    )
-                if loop_s.kind == "WHILE":
-                    # `IF cond THEN <body-line>` compiles to exactly the same
-                    # materialize-and-back-jcc shape as `LOOP WHILE cond`, but
-                    # has no codeless DO line-table entry (t1_iftailerr; wild
-                    # vhfprop.exe). The condition polarity is already identical.
-                    # Recorded as a revision of the LOOP that was committed
-                    # here, not as a fresh statement: the decision is "that
-                    # loop was really a tail-test IF", and the log should say
-                    # so rather than leave the replacement unaccounted for.
-                    state.patch(loop_idx, ir.IfGoto(loop_s.cond, ("addr", host)))
-                    drop.add(do_idx)
-                    continue
-                state.patch(loop_idx, ir.Goto(("addr", host)))
-                drop.add(do_idx)
-            if drop:
-                keep = [i for i in range(len(out.stmts)) if i not in drop]
-                out.stmts[:] = [out.stmts[i] for i in keep]
-                out.addrs[:] = [out.addrs[i] for i in keep]
-            if claimed_offs:
-                data_orphan_lines = [
-                    (o, ln) for o, ln in data_orphan_lines if o not in claimed_offs
-                ]
-            # Surviving genuine DOs' lines, in the order they'll be walked at
-            # the final prog.lines construction below (ascending do_idx, minus
-            # whatever `drop` removed ahead of them -- but drop only removes
-            # OTHER do_idx entries, never shifts a kept one out of relative
-            # order, so a plain sort by original do_idx matches final order).
-            do_lines = [do_idx_lines[i] for i in sorted(do_idx_lines)]
+        do_lines, data_orphan_lines = _finalize_do_recovery(
+            state, table_active, data_orphan_lines, orphan_offs
+        )
 
         shared_subs, sub_local_arrays = _scope_procs(state)
         dims, local_dims = _finalize_dimensions(state, sub_local_arrays)
