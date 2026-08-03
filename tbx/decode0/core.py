@@ -2509,6 +2509,29 @@ def _finalize_do_recovery(state, table_active, data_orphan_lines, orphan_offs):
     return do_lines, data_orphan_lines
 
 
+def _data_recovery_plan(state, items, data_orphan_lines):
+    out = state.output
+    if data_orphan_lines:
+        if any(
+            isinstance(stmt, ir.Restore) and isinstance(stmt.target, int)
+            for stmt in out.stmts
+        ):
+            raise ValueError(
+                "codeless DATA statement alongside a RESTORE split is unsupported "
+                "(no witness)"
+            )
+        n = min(len(items), len(data_orphan_lines))
+        places = data_orphan_lines[:n]
+        deftypes = data_orphan_lines[n:]
+        return places, deftypes, set(range(n)), [line for _, line in places]
+    splits = {0} | {
+        stmt.target
+        for stmt in out.stmts
+        if isinstance(stmt, ir.Restore) and isinstance(stmt.target, int)
+    }
+    return [], [], splits, None
+
+
 def _finalize_data_recovery(state, data_orphan_lines):
     img, lyt, out = state.image, state.layout_state, state.output
     data_lines: list[int] | None = None
@@ -2527,28 +2550,9 @@ def _finalize_data_recovery(state, data_orphan_lines):
         return data_lines, deftype_lines
     if not items:
         return data_lines, deftype_lines
-    if data_orphan_lines:
-        if any(
-            isinstance(stmt, ir.Restore) and isinstance(stmt.target, int)
-            for stmt in out.stmts
-        ):
-            raise ValueError(
-                "codeless DATA statement alongside a RESTORE split is unsupported "
-                "(no witness)"
-            )
-        n = min(len(items), len(data_orphan_lines))
-        data_places = data_orphan_lines[:n]
-        deftype_places = data_orphan_lines[n:]
-        splits = set(range(n))
-        data_lines = [line for _, line in data_places]
-    else:
-        data_places = []
-        deftype_places = []
-        splits = {0} | {
-            stmt.target
-            for stmt in out.stmts
-            if isinstance(stmt, ir.Restore) and isinstance(stmt.target, int)
-        }
+    data_places, deftype_places, splits, data_lines = _data_recovery_plan(
+        state, items, data_orphan_lines
+    )
     data_block, item_to_stmt, pending = [], {}, []
     for i, item in enumerate(items):
         if i in splits:
