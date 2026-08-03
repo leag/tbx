@@ -1552,6 +1552,33 @@ def _scan_runtime_misc(exe, p, start, sub, ops) -> int | None:
     return p + 3
 
 
+def _scan_runtime_record_ops(exe, p, sub, ops) -> int | None:
+    names = {
+        0xF4: "write_item",
+        0xF8: "write_sep",
+        0xFA: "write_file_num",
+        0xFC: "write_file_str",
+        0xFE: "write_file_sep",
+        0x48: "get",
+        0x4C: "get_str",
+        0xA8: "put",
+        0xCA: "seek",
+        0x06: "bload",
+        0x04: "bload0",
+        0x08: "bsave",
+        0x3E: "field",
+        0x40: "field_as",
+    }
+    if sub == 0xDC:
+        ops.append((p, "paint_tile", exe[p + 3]))
+        return p + 4
+    name = names.get(sub)
+    if name is None:
+        return None
+    ops.append((p, name))
+    return p + 3
+
+
 def _scan(
     exe: bytes, start: int, dia: Dialect = TB11, commits: set[int] | None = None
 ) -> list[tuple[Any, ...]]:
@@ -1671,6 +1698,10 @@ def _scan_pass(
             if runtime is not None:
                 p = runtime
                 continue
+            runtime = _scan_runtime_record_ops(exe, p, sub, ops)
+            if runtime is not None:
+                p = runtime
+                continue
             runtime = _scan_runtime_files(p, sub, ops)
             if runtime is not None:
                 p = runtime
@@ -1704,66 +1735,6 @@ def _scan_pass(
                     raise ValueError(f"SCREEN bad tag at {p:#x}")
                 ops.append((p, "screen", exe[p + 3]))
                 p += 4
-                continue
-            if sub == 0xF4:  # WRITE numeric item
-                ops.append((p, "write_item"))
-                p += 3
-                continue
-            if sub == 0xF8:  # WRITE comma separator
-                ops.append((p, "write_sep"))
-                p += 3
-                continue
-            if sub == 0xFA:  # WRITE# numeric item
-                ops.append((p, "write_file_num"))
-                p += 3
-                continue
-            if sub == 0xFC:  # WRITE# string item
-                ops.append((p, "write_file_str"))
-                p += 3
-                continue
-            if sub == 0xFE:  # WRITE# item separator
-                ops.append((p, "write_file_sep"))
-                p += 3
-                continue
-            if sub == 0x48:  # GET #n, rec
-                ops.append((p, "get"))
-                p += 3
-                continue
-            if sub == 0x4C:  # GET$ #n, count, string$
-                ops.append((p, "get_str"))
-                p += 3
-                continue
-            if sub == 0xA8:  # PUT #n, rec
-                ops.append((p, "put"))
-                p += 3
-                continue
-            if sub == 0xDC:  # PAINT tile variant: tile$ on sstack + flag byte
-                ops.append((p, "paint_tile", exe[p + 3]))  # (witnessed t1_paintt)
-                p += 4
-                continue
-            if sub == 0xCA:  # SEEK #n, pos
-                ops.append((p, "seek"))
-                p += 3
-                continue
-            if sub == 0x06:  # BLOAD f$, offset
-                ops.append((p, "bload"))
-                p += 3
-                continue
-            if sub == 0x04:  # BLOAD f$: the bare, no-offset form (distinct
-                ops.append((p, "bload0"))  # compiled shape, not merely a
-                p += 3  # default arg; wild varamort.exe, probe q_bload)
-                continue
-            if sub == 0x08:  # BSAVE f$, offset, length
-                ops.append((p, "bsave"))
-                p += 3
-                continue
-            if sub == 0x3E:  # FIELD #n begin
-                ops.append((p, "field"))
-                p += 3
-                continue
-            if sub == 0x40:  # FIELD AS-entry
-                ops.append((p, "field_as"))
-                p += 3
                 continue
             if sub == 0x70:  # ON ERROR GOTO (i32 start-rel; -1 = GOTO 0)
                 off = struct.unpack_from("<i", exe, p + 3)[0]
