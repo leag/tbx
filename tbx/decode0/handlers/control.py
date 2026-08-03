@@ -570,72 +570,83 @@ def on_control(state: DecodeState, op, addr, kind) -> bool:
     return False
 
 
+def _finish_control_statement(state: DecodeState, statement, steps=1) -> bool:
+    c = state.control
+    state.put(statement, c.cur)
+    c.cur = None
+    state.advance(steps)
+    return True
+
+
+def _on_error(state: DecodeState, op) -> bool:
+    target = None if op[2] is None else ("addr", op[2])
+    return _finish_control_statement(state, ir.OnError(target))
+
+
+def _on_trap(state: DecodeState, op) -> bool:
+    m, e = state.machine, state.expr
+    event = _TRAP_GOSUB[op[2]]
+    if event == "TIMER":
+        number = e.stack.pop()
+    elif event == "PEN":
+        number = None
+    else:
+        number, m.ax = m.ax, None
+    return _finish_control_statement(
+        state, ir.OnTrap(event, number, ("addr", op[3]))
+    )
+
+
+def _error_statement(state: DecodeState) -> bool:
+    m = state.machine
+    statement = ir.ErrorStmt(m.ax)
+    m.ax = None
+    return _finish_control_statement(state, statement)
+
+
+def _resume_statement(state: DecodeState, addr) -> bool:
+    i, c = state.image, state.control
+    nxt = i.ops[c.k + 1] if c.k + 1 < len(i.ops) else None
+    if nxt is not None and nxt[1] == "resume_bare":
+        statement = ir.Resume()
+    elif nxt is not None and nxt[1] == "resume_next":
+        statement = ir.Resume(next_=True)
+    elif nxt is not None and nxt[1] in ("jmps", "jmp", "jmpf"):
+        statement = ir.Resume(target=("addr", nxt[2]))
+    elif nxt is not None and nxt[1] == "run":
+        statement = ir.Resume(target=("addr", i.start + 3))
+    else:
+        raise ValueError(f"RESUME tail {nxt} at {addr:#x} (unsupported)")
+    return _finish_control_statement(state, statement, steps=2)
+
+
+def _trap_control(state: DecodeState, op) -> bool:
+    m = state.machine
+    event, mode = _TRAP_CTL[op[2]]
+    number = None
+    if event in ("COM", "KEY"):
+        number, m.ax = m.ax, None
+    return _finish_control_statement(state, ir.TrapCtl(event, number, mode))
+
+
+def _trap_hook(state: DecodeState) -> bool:
+    state.output.cc_hooks.add(state.control.cur)
+    state.advance()
+    return True
+
+
 def errors_trap(state: DecodeState, op, addr, kind) -> bool:
-    """Dispatch family: on_error, on_trap, error_stmt, resume_pre, trap_ctl, trap_hook."""
-    i, m, e, c, o = state.image, state.machine, state.expr, state.control, state.output
-    if kind == "on_error":  # ON ERROR GOTO <line|0>
-        state.put(ir.OnError(None if op[2] is None else ("addr", op[2])), c.cur)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "on_trap":  # ON <event>[(n)] GOSUB <line>
-        ev = _TRAP_GOSUB[op[2]]
-        if ev == "TIMER":
-            n = e.stack.pop()
-        elif ev == "PEN":
-            n = None
-        else:
-            n, m.ax = m.ax, None
-        state.put(ir.OnTrap(ev, n, ("addr", op[3])), c.cur)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "error_stmt":  # ERROR n
-        state.put(ir.ErrorStmt(m.ax), c.cur)
-        m.ax = None
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "resume_pre":  # RESUME [NEXT | <line>]
-        nxt = i.ops[c.k + 1] if c.k + 1 < len(i.ops) else None
-        if nxt is not None and nxt[1] == "resume_bare":
-            node = ir.Resume()
-        elif nxt is not None and nxt[1] == "resume_next":
-            node = ir.Resume(next_=True)
-        elif nxt is not None and nxt[1] in ("jmps", "jmp", "jmpf"):
-            node = ir.Resume(target=("addr", nxt[2]))
-        elif nxt is not None and nxt[1] == "run":
-            # RESUME <line>, where <line> is the program's very FIRST
-            # statement: the target address coincides exactly with a bare
-            # RUN's own jump-to-start byte pattern (TB 1.0's E9-near form
-            # canonicalizes any target == start+3, the first statement's
-            # own address, regardless of source construct), so the
-            # scanner tags it "run" instead of jmp/jmps (wild
-            # styllist.exe, probe q_resumestart3). RESUME can never
-            # trigger a genuine full-reset RUN (that would erase the
-            # error state it's resuming from), so this is always the
-            # plain first-statement target, start+3 in both dialects.
-            node = ir.Resume(target=("addr", i.start + 3))
-        else:
-            raise ValueError(f"RESUME tail {nxt} at {addr:#x} (unsupported)")
-        state.put(node, c.cur)
-        c.cur = None
-        state.advance(2)  # consume the form-selecting op
-        return True
-    if kind == "trap_ctl":  # <event>[(n)] ON|OFF|STOP
-        ev, mode = _TRAP_CTL[op[2]]
-        n = None
-        if ev in ("COM", "KEY"):
-            n, m.ax = m.ax, None
-        state.put(ir.TrapCtl(ev, n, mode), c.cur)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "trap_hook":  # per-statement event-poll hook:
-        o.cc_hooks.add(c.cur)  # jump targets point at the hook,
-        state.advance()  # so cur (set above) stays put;
-        return True
-    return False
+    """Dispatch family: error, resume, and event-trap statements."""
+    handlers = {
+        "on_error": lambda: _on_error(state, op),
+        "on_trap": lambda: _on_trap(state, op),
+        "error_stmt": lambda: _error_statement(state),
+        "resume_pre": lambda: _resume_statement(state, addr),
+        "trap_ctl": lambda: _trap_control(state, op),
+        "trap_hook": lambda: _trap_hook(state),
+    }
+    handler = handlers.get(kind)
+    return handler() if handler is not None else False
 
 
 def string_ops(state: DecodeState, op, addr, kind) -> bool:
