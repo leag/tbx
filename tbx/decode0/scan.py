@@ -1653,6 +1653,40 @@ def _scan_esc_stack_ops(p, mo, esc, modrm, ops) -> int | None:
     return None
 
 
+def _scan_esc_si_ops(p, mo, esc, pre, reg, ops) -> int | None:
+    kinds = {
+        (0xD9, 0): "fld_si",
+        (0xD9, 3): "fstp_si",
+        (0xD8, 3): "fcomp_si",
+        (0xDC, 3): "fcomp_si64",
+        (0xDA, 3): "icomp_si32",
+        (0xDD, 0): "fld_si64",
+        (0xDD, 3): "fstp_si64",
+        (0xDB, 0): "fild_si32",
+        (0xDB, 3): "fstp_si32",
+        (0xDF, 0): "fild_si",
+        (0xDE, 1): "imulax_si",
+        (0xDE, 3): "icomp_si",
+    }
+    kind = kinds.get((esc, reg))
+    if kind:
+        ops.append((p, pre + kind))
+        return mo + 1
+    folds = (
+        (0xD8, _FOLD_OPS, "fold_si"),
+        (0xDC, _FOLD_OPS, "fold64_si"),
+        (0xDC, _FOLD_OPS_N, "fold_n64_si"),
+        (0xD8, _FOLD_OPS_N, "fold_n_si"),
+        (0xDE, _FOLD_OPS, "ifold_si"),
+        (0xDE, _FOLD_OPS_N, "ifold_n_si"),
+    )
+    for opcode, table, name in folds:
+        if esc == opcode and reg in table:
+            ops.append((p, pre + name, table[reg]))
+            return mo + 1
+    return None
+
+
 def _scan(
     exe: bytes, start: int, dia: Dialect = TB11, commits: set[int] | None = None
 ) -> list[tuple[Any, ...]]:
@@ -1822,55 +1856,11 @@ def _scan_pass(
                 p = np
                 continue
             if mod == 0 and rm == 4:  # [si] operand (IDX% array access)
-                kind = {
-                    (0xD9, 0): "fld_si",
-                    (0xD9, 3): "fstp_si",
-                    (0xD8, 3): "fcomp_si",
-                    (0xDC, 3): "fcomp_si64",  # m64 compare (double array elem)
-                    (0xDA, 3): "icomp_si32",  # m32 long-int compare: a computed
-                    # LONG (`&`) array element vs. an FP-stack value (mixed-type
-                    # IF/loop test, e.g. `IF A&(J%) > 5 THEN`; the [si] sibling
-                    # of icomp's disp16 scalar form; wild bmaster.exe/ifi.exe,
-                    # probe q_licomp)
-                    (0xDD, 0): "fld_si64",
-                    (0xDD, 3): "fstp_si64",
-                    (0xDB, 0): "fild_si32",
-                    (0xDB, 3): "fstp_si32",
-                    (0xDF, 0): "fild_si",  # m16 int onto the FP stack, e.g. a
-                    (0xDE, 1): "imulax_si",  # FIMUL m16 by-ref integer
-                    (0xDE, 3): "icomp_si",  # m16 int compare: a computed
-                    # int-array element vs. an FP-stack value (mixed-type
-                    # IF/loop test; the [si] sibling of icomp's disp16 form
-                    # and icomp_si32's LONG form, wild hebrew.exe)
-                }.get((esc, reg))  # by-ref int param for PRINT (t1_byref1)
-                if kind:
-                    ops.append((p, pre + kind))
-                    p = mo + 1
+                np = _scan_esc_si_ops(p, mo, esc, pre, reg, ops)
+                if np is not None:
+                    p = np
                     continue
-                if esc == 0xD8 and reg in _FOLD_OPS:
-                    ops.append((p, pre + "fold_si", _FOLD_OPS[reg]))
-                    p = mo + 1
-                    continue
-                if esc == 0xDC and reg in _FOLD_OPS:
-                    ops.append((p, pre + "fold64_si", _FOLD_OPS[reg]))
-                    p = mo + 1
-                    continue
-                if esc == 0xDC and reg in _FOLD_OPS_N:
-                    ops.append((p, pre + "fold_n64_si", _FOLD_OPS_N[reg]))
-                    p = mo + 1
-                    continue
-                if esc == 0xD8 and reg in _FOLD_OPS_N:
-                    ops.append((p, pre + "fold_n_si", _FOLD_OPS_N[reg]))
-                    p = mo + 1
-                    continue
-                if esc == 0xDE and reg in _FOLD_OPS:  # int var/pool-literal
-                    ops.append((p, pre + "ifold_si", _FOLD_OPS[reg]))  # fold
-                    p = mo + 1  # LEFT via a computed index (wild filepatc.exe)
-                    continue
-                if esc == 0xDE and reg in _FOLD_OPS_N:
-                    ops.append((p, pre + "ifold_n_si", _FOLD_OPS_N[reg]))
-                    p = mo + 1
-                    continue
+                raise ValueError(f"unhandled FP [si] op esc={esc:02x} modrm={modrm:02x} at {p:#x}")
             if mod == 0 and rm == 6:  # [disp16] operand
                 disp = struct.unpack_from("<H", exe, mo + 1)[0]
                 kind = {
