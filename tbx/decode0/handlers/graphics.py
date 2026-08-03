@@ -148,11 +148,81 @@ def _graphics_paint_tile(state: DecodeState, op, addr: int) -> bool:
     return True
 
 
+def _graphics_palette_reset(state: DecodeState) -> bool:
+    c = state.control
+    state.put(ir.Palette(None, None), c.cur)
+    c.cur = None
+    state.advance()
+    return True
+
+
+def _graphics_palette(state: DecodeState) -> bool:
+    m, c = state.machine, state.control
+    state.put(ir.Palette(m.bx, m.ax), c.cur)
+    m.bx = m.ax = None
+    c.cur = None
+    state.advance()
+    return True
+
+
+def _graphics_palette_using(state: DecodeState, addr: int) -> bool:
+    i, m, l, c = (
+        state.image,
+        state.machine,
+        state.layout_state,
+        state.control,
+    )
+    # A constant zero subscript on a dynamic array is emitted as
+    # mov ES,[block]; xor SI,SI; EC/8A. The variable-index form is consumed
+    # by arith.shlsi, while static constant elements use core.py's continuation.
+    if (
+        m.pend_es is None
+        or c.k == 0
+        or i.ops[c.k - 1][1] != "bchk0"
+    ):
+        raise ValueError(f"PALETTE USING without array element at {addr:#x}")
+    a = l.r_arrs[m.pend_es]
+    if a.get("str") or a.get("esz") != 2 or a["rank"] != 1:
+        raise ValueError(
+            f"PALETTE USING non-INTEGER rank-{a['rank']} array at {addr:#x}"
+        )
+    state.put(
+        ir.PaletteUsing(ir.ArrayRef(a["name"], (ir.Lit(a["lo"][0]),))),
+        c.cur,
+    )
+    m.pend_es = None
+    c.cur = None
+    state.advance()
+    return True
+
+
+def _graphics_color(state: DecodeState, op, addr: int) -> bool:
+    e, c = state.expr, state.control
+    fg, bg, border = (
+        e.color_cells.pop(0x88, None),
+        e.color_cells.pop(0x94, None),
+        e.color_cells.pop(0xA0, None),
+    )
+    want_mask = (
+        (4 if fg is not None else 0)
+        | (2 if bg is not None else 0)
+        | (1 if border is not None else 0)
+    )
+    if op[2] != want_mask or e.color_cells:
+        raise ValueError(
+            f"COLOR mask {op[2]:02x} != cells {want_mask:02x} "
+            f"(+{e.color_cells}) at {addr:#x}"
+        )
+    state.put(ir.Color(fg, bg, border), c.cur)
+    c.cur = None
+    state.advance()
+    return True
+
+
 def graphics(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: screen, cls, line, pset, circle, paint, draw, palette,
     palette_using, color_commit, locate, cursor, width."""
-    i, m, e, l, c, o = (state.image, state.machine, state.expr,
-                        state.layout_state, state.control, state.output)
+    m, e, c, o = state.machine, state.expr, state.control, state.output
     if kind == "screen":  # SCREEN m[,b][,a][,v]: cells by presence mask
         return _graphics_screen(state, op, addr)
     if kind == "cls":
@@ -176,60 +246,13 @@ def graphics(state: DecodeState, op, addr, kind) -> bool:
         state.advance()
         return True
     if kind == "palette_reset":  # bare PALETTE: reset to default, no operands
-        state.put(ir.Palette(None, None), c.cur)
-        c.cur = None
-        state.advance()
-        return True
+        return _graphics_palette_reset(state)
     if kind == "palette":  # PALETTE attr(bx), color(ax)
-        state.put(ir.Palette(m.bx, m.ax), c.cur)
-        m.bx = m.ax = None
-        c.cur = None
-        state.advance()
-        return True
+        return _graphics_palette(state)
     if kind == "palette_using":
-        # A constant zero subscript on a dynamic array is emitted as
-        # mov ES,[block]; xor SI,SI; EC/8A.  The variable-index form is
-        # consumed by arith.shlsi, while static constant elements use the
-        # movsi continuation in core.py.
-        if (
-            m.pend_es is None
-            or c.k == 0
-            or i.ops[c.k - 1][1] != "bchk0"
-        ):
-            raise ValueError(f"PALETTE USING without array element at {addr:#x}")
-        a = l.r_arrs[m.pend_es]
-        if a.get("str") or a.get("esz") != 2 or a["rank"] != 1:
-            raise ValueError(
-                f"PALETTE USING non-INTEGER rank-{a['rank']} array at {addr:#x}"
-            )
-        state.put(
-            ir.PaletteUsing(ir.ArrayRef(a["name"], (ir.Lit(a["lo"][0]),))),
-            c.cur,
-        )
-        m.pend_es = None
-        c.cur = None
-        state.advance()
-        return True
+        return _graphics_palette_using(state, addr)
     if kind == "color_commit":  # COLOR fg(04)/bg(02)/border(01) mask
-        fg, bg, border = (
-            e.color_cells.pop(0x88, None),
-            e.color_cells.pop(0x94, None),
-            e.color_cells.pop(0xA0, None),
-        )
-        want_mask = (
-            (4 if fg is not None else 0)
-            | (2 if bg is not None else 0)
-            | (1 if border is not None else 0)
-        )
-        if op[2] != want_mask or e.color_cells:
-            raise ValueError(
-                f"COLOR mask {op[2]:02x} != cells {want_mask:02x} "
-                f"(+{e.color_cells}) at {addr:#x}"
-            )
-        state.put(ir.Color(fg, bg, border), c.cur)
-        c.cur = None
-        state.advance()
-        return True
+        return _graphics_color(state, op, addr)
     if kind == "locate":  # LOCATE row(bx),col(ax)
         state.put(ir.Locate(m.bx, m.ax), c.cur)
         m.bx = m.ax = None
