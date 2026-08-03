@@ -394,9 +394,52 @@ def _console_line_input_file(state: DecodeState, op, addr: int) -> bool:
     return True
 
 
+def _console_tabspc(state: DecodeState, op, addr: int) -> bool:
+    i, m, e, c = state.image, state.machine, state.expr, state.control
+    name, leg = _TABSPC_VECS[op[2]]
+    if m.ax is None or isinstance(m.ax, tuple):
+        raise ValueError(f"{name} without an ax argument at {addr:#x}")
+    if e.pend_using is not None:
+        # TAB/SPC is an item inside a PRINT USING chain only when another
+        # USING emit follows it. A trailing TAB starts the next statement
+        # in existing wild output, so retain the old lazy flush there.
+        if match_using_chain_continues(i.ops, c.k) is not None:
+            e.pend_using.values.append(ir.Call(name, (m.ax,)))
+            m.ax = None
+            c.cur = None
+            state.advance()
+            return True
+        # A TAB after a NESTED USING is an item of the chain that owns it,
+        # not the start of a statement (t1_usingtwice's TAB between the two
+        # USING clauses).
+        if not state.close_nested_using():
+            state.flush_pending()
+    if leg == "lprint":  # printer leg joins/opens an LPRINT chain (t1_ltab)
+        if e.pend_print is not None and e.pend_print.mode != "lprint":
+            state.flush_pending()
+        if e.pend_print is None:
+            e.pend_print = PrintChain(
+                items=[], file=None, start=c.cur, mode="lprint"
+            )
+    else:
+        f = e.pend_fnum if leg else None
+        if leg and f is None:
+            raise ValueError(f"file {name} without [0060] at {addr:#x}")
+        if e.pend_print is not None and e.pend_print.file != f:
+            state.flush_pending()  # console/file leg change = new stmt
+        if e.pend_print is None:
+            e.pend_print = PrintChain(file=f, start=c.cur)
+    assert e.pend_print is not None  # just established above
+    e.pend_print.items.append(ir.Call(name, (m.ax,)))
+    m.ax = None
+    c.cur = None
+    state.advance()
+    return True
+
+
 def console(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: input, line_input, key_list, tabspc, swap."""
-    i, m, e, c = state.image, state.machine, state.expr, state.control
+    c = state.control
     if kind == "input":  # INPUT prologue
         return _console_input(state, op, addr)
     if kind == "line_input":  # LINE INPUT
@@ -409,51 +452,7 @@ def console(state: DecodeState, op, addr, kind) -> bool:
         state.advance()
         return True
     if kind == "tabspc":  # TAB(n)/SPC(n) item
-        name, leg = _TABSPC_VECS[op[2]]
-        if m.ax is None or isinstance(m.ax, tuple):
-            raise ValueError(f"{name} without an ax argument at {addr:#x}")
-        if e.pend_using is not None:
-            # TAB/SPC is an item inside a PRINT USING chain only when another
-            # USING emit follows it. A trailing TAB starts the next statement
-            # in existing wild output, so retain the old lazy flush there.
-            if match_using_chain_continues(i.ops, c.k) is not None:
-                e.pend_using.values.append(ir.Call(name, (m.ax,)))
-                m.ax = None
-                c.cur = None
-                state.advance()
-                return True
-            # A TAB after a NESTED USING is an item of the chain that owns it,
-            # not the start of a statement (t1_usingtwice's TAB between the two
-            # USING clauses).
-            if not state.close_nested_using():
-                state.flush_pending()
-        if leg == "lprint":  # printer leg joins/opens an LPRINT chain (t1_ltab)
-            if (
-                e.pend_print is not None
-                and e.pend_print.mode != "lprint"
-            ):
-                state.flush_pending()
-            if e.pend_print is None:
-                e.pend_print = PrintChain(
-                    items= [],
-                    file= None,
-                    start= c.cur,
-                    mode= "lprint",
-                )
-        else:
-            f = e.pend_fnum if leg else None
-            if leg and f is None:
-                raise ValueError(f"file {name} without [0060] at {addr:#x}")
-            if e.pend_print is not None and e.pend_print.file != f:
-                state.flush_pending()  # console/file leg change = new stmt
-            if e.pend_print is None:
-                e.pend_print = PrintChain(file=f, start=c.cur)
-        assert e.pend_print is not None  # just established above
-        e.pend_print.items.append(ir.Call(name, (m.ax,)))
-        m.ax = None
-        c.cur = None
-        state.advance()
-        return True
+        return _console_tabspc(state, op, addr)
     if kind == "swap":  # SWAP a, b (two scalar displacements)
         state.put(ir.Swap(state.loc(op[2]), state.loc(op[3])), c.cur)
         c.cur = None
