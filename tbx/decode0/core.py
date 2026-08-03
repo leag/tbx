@@ -3522,6 +3522,48 @@ def _fp_direct_bool_jcc(state, op, addr, cc, t, nxt, prev, direct_bool) -> bool:
     return True
 
 
+def _fp_relational_jcc(state, addr, cc, t, nxt) -> bool:
+    e, c = state.expr, state.control
+    relop_map = _JCC_RELOP_STR if e.pend_cmp_str else _JCC_RELOP
+    if (
+        e.pend_cmp
+        and nxt
+        and nxt[1] in ("jmp", "jmpf")
+        and t == nxt[0] + (5 if nxt[1] == "jmpf" else 3)
+    ):
+        if cc not in relop_map:
+            raise ValueError(f"unhandled IF jcc {cc:02x} at {addr:#x}")
+        lhs, rhs = e.pend_cmp
+        e.pend_cmp = None
+        e.pend_cmp_str = False
+        if state.open_tail_if(nxt[2], ir.RelOp(_NEGATE_REL[relop_map[cc]], lhs, rhs)):
+            state.advance(2)
+            return True
+        state.put(ir.IfGoto(ir.RelOp(relop_map[cc], lhs, rhs), ("addr", nxt[2])), c.cur)
+        c.cur = None
+        state.advance(2)
+        return True
+    if e.pend_cmp_str:
+        true_str = _JCC_RELOP_STR_TRUE
+        if cc not in true_str:
+            raise ValueError(f"string compare jcc {cc:02x} without skip-jmp at {addr:#x}")
+        lhs, rhs = e.pend_cmp
+        e.pend_cmp = None
+        e.pend_cmp_str = False
+        state.put(ir.IfGoto(ir.RelOp(true_str[cc], lhs, rhs), ("addr", t)), c.cur)
+        c.cur = None
+        state.advance()
+        return True
+    if e.pend_cmp and cc in _JCC_RELOP_TRUE:
+        lhs, rhs = e.pend_cmp
+        e.pend_cmp = None
+        state.put(ir.IfGoto(ir.RelOp(_JCC_RELOP_TRUE[cc], lhs, rhs), ("addr", t)), c.cur)
+        c.cur = None
+        state.advance()
+        return True
+    return False
+
+
 def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     """FP-stack + control-flow instruction dispatch (fld/fst/fadd/.../fcomp/jcc/
     jmp/call/run/jmps + unhandled-op guard). Falls through to the default k-advance;
@@ -3593,64 +3635,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         )
         if _fp_direct_bool_jcc(state, op, addr, cc, t, nxt, prev, direct_bool):
             return
-        relop_map = _JCC_RELOP_STR if e.pend_cmp_str else _JCC_RELOP
-        if (
-            e.pend_cmp
-            and nxt
-            and nxt[1] in ("jmp", "jmpf")
-            and t == nxt[0] + (5 if nxt[1] == "jmpf" else 3)
-        ):
-            if cc not in relop_map:
-                raise ValueError(f"unhandled IF jcc {cc:02x} at {addr:#x}")
-            lhs, rhs = e.pend_cmp
-            e.pend_cmp = None
-            e.pend_cmp_str = False
-            # A tail IF closing the procedure has no statement after it to name
-            # as the skip target (see DecodeState.open_tail_if). `_JCC_RELOP` /
-            # `_JCC_RELOP_STR` give the relop under which the jcc is TAKEN, i.e.
-            # the source condition's negation; `_NEGATE_REL` recovers the source
-            # polarity for either map.
-            if state.open_tail_if(
-                nxt[2], ir.RelOp(_NEGATE_REL[relop_map[cc]], lhs, rhs)
-            ):
-                state.advance(2)
-                return
-            state.put(
-                ir.IfGoto(ir.RelOp(relop_map[cc], lhs, rhs), ("addr", nxt[2])),
-                c.cur,
-            )
-            c.cur = None
-            state.advance(2)
-            return
-        if e.pend_cmp_str:  # string direct conditional GOTO (taken = THEN):
-            # forward strcmp flags, so the TRUE map is _JCC_RELOP_STR's inverse
-            # (witnessed t1_strgodo `IF A$ = "X" THEN <line>` / wild schart.exe;
-            # only "="/"<>" seen, remaining rows by the same forward derivation)
-            true_str = _JCC_RELOP_STR_TRUE  # shared with the
-            # materialized-as-a-value string path (handlers.control)
-            if cc not in true_str:
-                raise ValueError(
-                    f"string compare jcc {cc:02x} without skip-jmp at {addr:#x}"
-                )
-            lhs, rhs = e.pend_cmp
-            e.pend_cmp = None
-            e.pend_cmp_str = False
-            state.put(
-                ir.IfGoto(ir.RelOp(true_str[cc], lhs, rhs), ("addr", t)),
-                c.cur,
-            )
-            c.cur = None
-            state.advance()
-            return
-        if e.pend_cmp and cc in _JCC_RELOP_TRUE:  # direct conditional GOTO (taken =
-            lhs, rhs = e.pend_cmp  # THEN): IF cond THEN <line>, short
-            e.pend_cmp = None  # jcc with no skip-jmp (witnessed zz_godo)
-            state.put(
-                ir.IfGoto(ir.RelOp(_JCC_RELOP_TRUE[cc], lhs, rhs), ("addr", t)),
-                c.cur,
-            )
-            c.cur = None
-            state.advance()
+        if _fp_relational_jcc(state, addr, cc, t, nxt):
             return
         if cc in range(0x72, 0x80) and nxt is not None and nxt[1] in ("jmp", "jmpf"):
             # Wild boolean chains can consume the compare provenance before
