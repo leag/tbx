@@ -41,10 +41,96 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from tbx.decode0.core import DecodeState
 
+
+def _forwarded_arg(state: DecodeState, op, addr, index, argument):
+    c = state.control
+    params = c.proc_params.get(op[2])
+    if params is None:
+        return ("fwdpending", op[2], index, argument[1])
+    if op[2] in c.inline_procs:
+        offset = argument[1]
+        c.fwd_inline_offs.add(offset)
+        return ir.Var(f"P{offset:02X}")
+    if index >= len(params):
+        raise ValueError(
+            f"forwarded arg index {index} to callee {op[2]:#x} "
+            f"with {len(params)} params at {addr:#x}"
+        )
+    suffix = params[index][-1] if params[index][-1] in "%$" else ""
+    offset = argument[1]
+    if suffix == "%":
+        c.proc_int_offs.add(offset)
+    elif suffix == "$":
+        c.proc_str_offs.add(offset)
+    return ir.Var(f"P{offset:02X}{suffix}")
+
+
+def _byref_arg(state: DecodeState, op, addr, index, argument):
+    l, c = state.layout_state, state.control
+    params = c.proc_params.get(op[2])
+    offset = argument[1]
+    if params is None:
+        try:
+            fallback = state.loc(offset)
+        except ValueError:
+            fallback = ir.Var(f"V{offset:04X}")
+        return ("argrefpending", op[2], index, offset, fallback)
+    if op[2] in c.inline_procs:
+        return state.loc(offset)
+    if index >= len(params):
+        raise ValueError(f"by-ref arg to unknown callee params at {addr:#x}")
+    suffix = params[index][-1] if params[index][-1] in "%$&#" else ""
+    if suffix == "%":
+        l.lay["scalars"][offset] = 2
+    elif suffix == "&":
+        l.lay["scalars"][offset] = 4
+        l.lay["long_slots"].add(offset)
+    elif suffix == "#":
+        l.lay["scalars"][offset] = 8
+    elif suffix == "$":
+        l.lay["strs"].add(offset)
+    else:
+        l.lay["scalars"][offset] = 4
+    return state.loc(offset)
+
+
+def _far_call(state: DecodeState, op, addr) -> bool:
+    c = state.control
+    args = tuple(
+        _forwarded_arg(state, op, addr, index, argument)
+        if isinstance(argument, tuple) and argument[0] == "fwd"
+        else _byref_arg(state, op, addr, index, argument)
+        if isinstance(argument, tuple) and argument[0] == "argref"
+        else argument
+        for index, argument in enumerate(c.pend_args)
+    )
+    c.pend_args.clear()
+    name = c.proc_names.get(op[2], ("addr", op[2]))
+    state.put(ir.CallStmt(name, args), c.cur if c.cur is not None else addr)
+    c.cur = None
+    state.advance()
+    return True
+
+
+def _fn_call(state: DecodeState, op) -> bool:
+    img, e, c = state.image, state.expr, state.control
+    args = tuple(c.fn_args[offset] for offset in sorted(c.fn_args))
+    c.fn_args.clear()
+    name = c.proc_names.get(op[2], ("addr", op[2]))
+    call = ir.FnCall(name, args)
+    nxt = img.ops[c.k + 1] if c.k + 1 < len(img.ops) else None
+    if nxt is not None and nxt[1] == "fnres_spush":
+        e.sstack.append(call)
+        state.advance(2)
+    else:
+        e.stack.append(call)
+        state.advance()
+    return True
+
+
 def calls(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: call_abs, call_int, far_call, fn_call."""
-    img, m, e, l, c = (state.image, state.machine, state.expr,
-                       state.layout_state, state.control)
+    m, e, c = state.machine, state.expr, state.control
     if kind == "call_abs":  # CALL ABSOLUTE addr
         state.put(ir.CallAbsolute(e.stack.pop()), c.cur)
         c.cur = None
@@ -57,132 +143,9 @@ def calls(state: DecodeState, op, addr, kind) -> bool:
         state.advance()
         return True
     if kind == "far_call":
-        args = []
-        for i, a in enumerate(c.pend_args):
-            if isinstance(a, tuple) and a[0] == "fwd":
-                # Forwarded by-ref param (arg_push_fwd): the far pointer pair
-                # carries no type, so take it from the callee's param in the
-                # same position -- and mark the enclosing SUB's param with the
-                # same type so both headers agree (q_fwd).
-                params = c.proc_params.get(op[2])
-                if params is None:
-                    # CALL to a SUB defined LATER in the file: the callee's
-                    # own param list isn't known yet either. Stage a second
-                    # placeholder (alongside the CallStmt name's own
-                    # ("addr", n) one below), resolved together once every
-                    # SUB has been decoded (wild resume.exe, extending the
-                    # existing forward-CALL machinery to forwarded args).
-                    args.append(("fwdpending", op[2], i, a[1]))
-                    continue
-                if op[2] in c.inline_procs:
-                    # A SUB ... INLINE declares no parameter list at all, yet
-                    # TB happily passes it arguments -- the $INLINE bytes read
-                    # them off the stack themselves (TBWINDOW's `SUB Openbox
-                    # INLINE` takes fifteen). So there is no callee signature to
-                    # take the type from; fall back to what the ENCLOSING SUB
-                    # already knows about this very parameter (probe
-                    # t1_fwdinline; wild tbd73.exe).
-                    off = a[1]
-                    c.fwd_inline_offs.add(off)  # reconciled at proc_ret,
-                    # once the enclosing SUB's own param types are settled --
-                    # the call can precede every other use of the parameter,
-                    # so its suffix is not knowable yet
-                    args.append(ir.Var(f"P{off:02X}"))
-                    continue
-                if i >= len(params):
-                    raise ValueError(
-                        f"forwarded arg index {i} to callee {op[2]:#x} "
-                        f"with {len(params)} params at {addr:#x}"
-                    )
-                sfx = params[i][-1] if params[i][-1] in "%$" else ""
-                off = a[1]
-                if sfx == "%":
-                    c.proc_int_offs.add(off)
-                elif sfx == "$":
-                    c.proc_str_offs.add(off)
-                args.append(ir.Var(f"P{off:02X}{sfx}"))
-            elif isinstance(a, tuple) and a[0] == "argref":
-                # A caller-side scalar only ever touched via this by-ref
-                # push (arg_push_ref's own ValueError deferral, above):
-                # take its type from the callee's param in the same
-                # position, same deferred-resolution shape as "fwd".
-                params = c.proc_params.get(op[2])
-                off = a[1]
-                if params is None:
-                    # Retain the layout spelling for a target that later turns
-                    # out to be INLINE: it has no signature to supersede that
-                    # fallback during final resolution.
-                    try:
-                        fallback = state.loc(off)
-                    except ValueError:
-                        fallback = ir.Var(f"V{off:04X}")
-                    args.append(("argrefpending", op[2], i, off, fallback))
-                    continue
-                if op[2] in c.inline_procs:
-                    # An INLINE SUB has no declared parameter list, so it
-                    # cannot type a guessed caller-side slot. Preserve the
-                    # layout spelling; this is the same no-signature case
-                    # handled above for forwarded frame parameters (tbd73's
-                    # Openbox call).
-                    args.append(state.loc(off))
-                    continue
-                if i >= len(params):
-                    raise ValueError(
-                        f"by-ref arg to unknown callee params at {addr:#x}"
-                    )
-                sfx = params[i][-1] if params[i][-1] in "%$&#" else ""
-                if sfx == "%":
-                    l.lay["scalars"][off] = 2
-                elif sfx == "&":
-                    l.lay["scalars"][off] = 4
-                    l.lay["long_slots"].add(off)
-                elif sfx == "#":
-                    l.lay["scalars"][off] = 8
-                elif sfx == "$":
-                    l.lay["strs"].add(off)
-                else:  # no suffix: TB's default (SINGLE) type
-                    l.lay["scalars"][off] = 4
-                args.append(state.loc(off))
-            else:
-                args.append(a)
-        c.pend_args.clear()
-        # A CALL to a SUB defined LATER in the file (address-ascending scan
-        # order) hasn't had its proc_ret processed yet, so proc_names has no
-        # entry for it (wild process.exe: SUB-to-SUB calls going both
-        # directions). Stage the raw target address as a placeholder,
-        # resolved once every SUB has been decoded (state._resolve_calls,
-        # the CallStmt sibling of ir.Restore's block-index epilogue
-        # resolution).
-        name = c.proc_names.get(op[2], ("addr", op[2]))
-        # c.cur, not addr: under active event trapping a CC poll hook
-        # precedes this op and claims c.cur as the statement's own
-        # address (trap_hook's handler, above) -- addr is the far_call
-        # instruction's OWN position, one hook-op later, which silently
-        # mismatched OutputState.cc_hooks and corrupted $EVENT ON/OFF metadata
-        # recovery (t1_fargosub). Without a preceding hook the two already
-        # coincide, so this is a pure correctness fix, not a behavior change
-        # for any already-passing fixture.
-        state.put(ir.CallStmt(name, tuple(args)), c.cur if c.cur is not None else addr)
-        c.cur = None
-        state.advance()
-        return True
+        return _far_call(state, op, addr)
     if kind == "fn_call":  # drain staged args (offset order) -> FnCall
-        args = tuple(c.fn_args[o] for o in sorted(c.fn_args))
-        c.fn_args.clear()
-        # A DEF FN body may appear later in the op stream. Mirror forward
-        # CallStmt staging and resolve the immutable expression during final
-        # program resolution once every definition has been named.
-        name = c.proc_names.get(op[2], ("addr", op[2]))
-        call = ir.FnCall(name, args)
-        nxt = img.ops[c.k + 1] if c.k + 1 < len(img.ops) else None
-        if nxt is not None and nxt[1] == "fnres_spush":
-            # string FN: INT 9F pushes the result descriptor (t1_fnstr)
-            e.sstack.append(call)
-            state.advance(2)
-        else:
-            e.stack.append(call)
-            state.advance()
-        return True
+        return _fn_call(state, op)
     return False
 
 
