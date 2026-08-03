@@ -1608,6 +1608,27 @@ def _scan_runtime_events(exe, p, start, sub, ops) -> int | None:
     return None
 
 
+def _scan_runtime_tail(exe, p, sub, ops) -> int | None:
+    if sub in (0x4A, 0xAA):
+        ops.append((p, "get_gfx" if sub == 0x4A else "put_gfx", exe[p + 3]))
+        return p + 4
+    names = {
+        0x6C: "mtimer",
+        0xB6: "reg_set",
+        0x0C: "call_int",
+        0x0A: "call_abs",
+        0x24: "dateset",
+        0xE0: "timeset",
+        0x50: "ioctl",
+        0xAC: "put_str",
+    }
+    name = names.get(sub)
+    if name is None:
+        return None
+    ops.append((p, name))
+    return p + 3
+
+
 def _scan(
     exe: bytes, start: int, dia: Dialect = TB11, commits: set[int] | None = None
 ) -> list[tuple[Any, ...]]:
@@ -1735,6 +1756,10 @@ def _scan_pass(
             if runtime is not None:
                 p = runtime
                 continue
+            runtime = _scan_runtime_tail(exe, p, sub, ops)
+            if runtime is not None:
+                p = runtime
+                continue
             runtime = _scan_runtime_files(p, sub, ops)
             if runtime is not None:
                 p = runtime
@@ -1742,46 +1767,6 @@ def _scan_pass(
             runtime = _scan_runtime_misc(exe, p, start, sub, ops)
             if runtime is not None:
                 p = runtime
-                continue
-            if sub == 0x4A:  # GET graphics blit (+ trail byte)
-                ops.append((p, "get_gfx", exe[p + 3]))
-                p += 4
-                continue
-            if sub == 0xAA:  # PUT graphics blit (+ action byte)
-                ops.append((p, "put_gfx", exe[p + 3]))
-                p += 4
-                continue
-            if sub == 0x6C:  # MTIMER (reset microtimer)
-                ops.append((p, "mtimer"))
-                p += 3
-                continue
-            if sub == 0xB6:  # REG index(ax), value(FP stack)
-                ops.append((p, "reg_set"))
-                p += 3
-                continue
-            if sub == 0x0C:  # CALL INTERRUPT n(ax)
-                ops.append((p, "call_int"))
-                p += 3
-                continue
-            if sub == 0x0A:  # CALL ABSOLUTE addr(FP stack)
-                ops.append((p, "call_abs"))
-                p += 3
-                continue
-            if sub == 0x24:  # DATE$ = s$ (pops string stack)
-                ops.append((p, "dateset"))
-                p += 3
-                continue
-            if sub == 0xE0:  # TIME$ = s$ (pops string stack)
-                ops.append((p, "timeset"))
-                p += 3
-                continue
-            if sub == 0x50:  # IOCTL #n, s$: filenum via the [0060] cell,
-                ops.append((p, "ioctl"))  # string pushed (t1_ioctl)
-                p += 3
-                continue
-            if sub == 0xAC:  # PUT$ #n, s$: filenum via the [0060] cell,
-                ops.append((p, "put_str"))  # string pushed (t1_putstr)
-                p += 3
                 continue
             raise ValueError(f"unhandled INT EC sub {sub:02x} at {p:#x}")
         vec = dia.canon_vec(vec)
