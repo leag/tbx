@@ -475,6 +475,30 @@ def _int_compare_local(state: DecodeState, op, addr: int) -> bool:
     return True
 
 
+def _int_array_param_sub(state: DecodeState, op, addr: int) -> bool:
+    img, c = state.image, state.control
+    if c.proc_frame is None or c.k + 3 >= len(img.ops):
+        raise ValueError(f"subax_bp outside array parameter at {addr:#x}")
+    j = c.k + 1
+    if img.ops[j][1] != "movsiax":
+        raise ValueError(f"subax_bp without movsiax at {addr:#x}")
+    while j + 1 < len(img.ops) and img.ops[j + 1][1] == "movrr":
+        j += 1
+    while j + 1 < len(img.ops) and img.ops[j + 1][1] == "shlsi":
+        j += 1
+    if (
+        j == c.k + 1
+        or j + 1 >= len(img.ops)
+        or img.ops[j + 1][1] != "moves_bp"
+        or img.ops[j + 1][2] + 8 != op[2]
+    ):
+        raise ValueError(f"subax_bp array-parameter shape mismatch at {addr:#x}")
+    rec = c.proc_frame.array_params.setdefault(img.ops[j + 1][2], {"rank": 1})
+    rec.setdefault("lo_off", op[2])
+    state.advance()
+    return True
+
+
 def int_alu(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addax_bp, addsiax, subax_m, imul_m, imul_bp, movax_bp, idivbx, cmpax_m, inc_m, dec_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
     img, m, expr_, l, c = (state.image, state.machine, state.expr,
@@ -522,37 +546,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
     if kind == "cmpax_bp":
         return _int_compare_local(state, op, addr)
     if kind == "subax_bp":
-        # Whole-array SUB parameters carry their declared lower bound at
-        # descriptor offset +8. The machine subtraction normalizes the
-        # address, but IR keeps the original source subscript.
-        if c.proc_frame is None or c.k + 3 >= len(img.ops):
-            raise ValueError(f"subax_bp outside array parameter at {addr:#x}")
-        j = c.k + 1
-        if img.ops[j][1] != "movsiax":
-            raise ValueError(f"subax_bp without movsiax at {addr:#x}")
-        while j + 1 < len(img.ops) and img.ops[j + 1][1] == "movrr":
-            j += 1  # preserve a staged boolean/arithmetic accumulator in AX
-            # while SI keeps this array subscript (wild zip.exe)
-        while j + 1 < len(img.ops) and img.ops[j + 1][1] == "shlsi":
-            j += 1
-        if (
-            j == c.k + 1
-            or j + 1 >= len(img.ops)
-            or img.ops[j + 1][1] != "moves_bp"
-            or img.ops[j + 1][2] + 8 != op[2]
-        ):
-            raise ValueError(f"subax_bp array-parameter shape mismatch at {addr:#x}")
-        rec = c.proc_frame.array_params.setdefault(
-            img.ops[j + 1][2], {"rank": 1}
-        )
-        rec.setdefault("lo_off", op[2])  # `setdefault` on the DICT alone leaves
-        # lo_off missing when a whole-array RELAY (arg_push_array_bp) registered
-        # the descriptor first -- that path knows the name but not the index
-        # base, and the element access here is where the base becomes known
-        # (wild tbd73.exe's TBWINDOW `SUB Makehmenu`, which forwards item$()
-        # onward AND indexes it; previously a raw KeyError on 'lo_off').
-        state.advance()
-        return True
+        return _int_array_param_sub(state, op, addr)
     if kind == "andax_bp":  # and ax,[bp+d8]: bitwise fold of a LOCAL int,
         # the bp-relative sibling of andax_m (wild filepatc.exe)
         m.ax = ir.BinOp("AND", state.loc_local(op[2]), _rgrp("AND", m.ax))
