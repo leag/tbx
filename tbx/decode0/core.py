@@ -2261,6 +2261,24 @@ def _normalize_event_hooks(img):
     img.ops = ops
 
 
+def _initialize_array_slots(state):
+    layout = state.layout_state
+    arrays = layout.arrs
+    layout.slot_info = {
+        layout.lay["static_base"] + ARR_BLOCK * i: array
+        for i, array in enumerate(arrays)
+    }
+    for array in arrays:
+        if array["str"] and not array["name"].endswith("$"):
+            array["name"] += "$"
+        if array["long"] and not array["name"].endswith("&"):
+            array["name"] += "&"
+        if array.get("int") and not array["name"].endswith("%"):
+            array["name"] += "%"
+        if array.get("dbl") and not array["name"].endswith("#"):
+            array["name"] += "#"
+
+
 def _finalize(state: DecodeState, addr) -> Program:
     """Program epilogue: static-DIM re-emit, control-flow folds, target
     resolution and canonical rename -> the finished Program."""
@@ -4249,25 +4267,7 @@ def _decode_user_code(
         l.ds - l.lay["delta"]
     )  # file base for pool/descriptor/string reads
     l.arrs = l.lay["arrs"]  # static arrays (unified slot records)
-    # Unified slot registry for the far/near index machine: static slots prefilled
-    # from their records; runtime blocks register at their DIM bracket.
-    # ...keyed at the grid's REAL start: `var_base` normally, but under COMMON
-    # the band pushes the statics out past it, and keying them at var_base put
-    # phantom slots on top of the COMMON blocks' own addresses -- a phantom's
-    # 0x36 window then shadowed a real block in the far-IDX lookups (wild
-    # tbd73.exe: slot 0x1c2 swallowed block 0x1e8's `lo1` cell).
-    l.slot_info = {
-        l.lay["static_base"] + ARR_BLOCK * i: a for i, a in enumerate(l.arrs)
-    }
-    for a in l.arrs:
-        if a["str"] and not a["name"].endswith("$"):
-            a["name"] += "$"  # element type from the record
-        if a["long"] and not a["name"].endswith("&"):
-            a["name"] += "&"  # long-integer arrays render with `&`
-        if a.get("int") and not a["name"].endswith("%"):
-            a["name"] += "%"  # integer arrays (type 00, esz 2) render with `%`
-        if a.get("dbl") and not a["name"].endswith("#"):
-            a["name"] += "#"  # double arrays (type 06, esz 8) render with `#`
+    _initialize_array_slots(state)
     e.stack = []  # the emulated FP stack, as ir Expr nodes
     out.stmts = RecordedStatements()
     # Interleave the two logs: an edit records where in the event
