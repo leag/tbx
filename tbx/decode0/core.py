@@ -2083,6 +2083,35 @@ def _propagate_call_types(stmts, stmt_addr=None):
 
 
 
+def _finalize_resolved_calls(state: DecodeState) -> None:
+    c, out = state.control, state.output
+    resolved = _resolve_calls(
+        out.stmts,
+        c.proc_names,
+        c.proc_params,
+        c.inline_procs,
+        c.proc_int_offs,
+        c.proc_long_offs,
+        c.proc_dbl_offs,
+        c.proc_str_offs,
+        out.stmt_addr,
+    )
+    resolved = _type_helper_forwards(resolved, out.stmt_addr)
+    resolved = _type_untyped_callee_params(resolved, out.stmt_addr)
+    if len(resolved) != len(out.stmts):
+        raise ValueError(
+            f"_resolve_calls changed the statement count "
+            f"({len(out.stmts)} -> {len(resolved)})"
+        )
+    for index, (before, after) in enumerate(zip(list(out.stmts), resolved)):
+        if before is after:
+            continue
+        if out.event_log is not None and out.event_log.committed(before):
+            state.patch(index, after)
+        else:
+            out.stmts[index] = after
+
+
 def _finalize(state: DecodeState, addr) -> Program:
     """Program epilogue: static-DIM re-emit, control-flow folds, target
     resolution and canonical rename -> the finished Program."""
@@ -2092,45 +2121,7 @@ def _finalize(state: DecodeState, addr) -> Program:
     with editing(state.output.stmts, "finalize"):
         img, lyt, c, out = (state.image, state.layout_state,
                             state.control, state.output)
-        resolved = _resolve_calls(
-            out.stmts,
-            c.proc_names,
-            c.proc_params,
-            c.inline_procs,
-            c.proc_int_offs,
-            c.proc_long_offs,
-            c.proc_dbl_offs,
-            c.proc_str_offs,
-            out.stmt_addr,
-        )
-        # Retyping a call REBUILDS the statement (frozen nodes), and a rebuilt
-        # node carries none of the original's identity, so the event that
-        # committed it no longer refers to anything in the list. Assigning the
-        # whole slice hid that: the edit log stayed lossless while `reconcile`
-        # read every rebuilt statement as `synthesized`, which is the report
-        # reserved for a statement that reached the program with no decision
-        # behind it. Record each as the revision it is instead. The pass is
-        # strictly 1:1 -- it retypes statements, never adds or drops one --
-        # which is what lets position stand for identity here.
-        resolved = _type_helper_forwards(resolved, out.stmt_addr)
-        resolved = _type_untyped_callee_params(resolved, out.stmt_addr)
-        if len(resolved) != len(out.stmts):
-            raise ValueError(
-                f"_resolve_calls changed the statement count "
-                f"({len(out.stmts)} -> {len(resolved)})"
-            )
-        for index, (before, after) in enumerate(zip(list(out.stmts), resolved)):
-            if before is after:
-                continue
-            if out.event_log is not None and out.event_log.committed(before):
-                state.patch(index, after)
-            else:
-                # A container the walk ASSEMBLED rather than decoded -- a
-                # SubDef, whose body statements each have their own event
-                # while the container has none. There is no commit to revise,
-                # and retyping it does not change that; it stays accounted for
-                # the way every assembled statement is.
-                out.stmts[index] = after
+        _finalize_resolved_calls(state)
         # Error-trap line table, probed early -- before DATA/dims/COMMON/TRON
         # synthesis below mutates out.addrs -- so a codeless DATA statement
         # with no READ/RESTORE anywhere to trigger its recovery (wild
