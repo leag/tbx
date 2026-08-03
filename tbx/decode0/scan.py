@@ -651,6 +651,31 @@ def _scan_direct2_register_ops(exe, p, b, ops) -> int | None:
     return None
 
 
+def _scan_direct2_io_ops(exe, p, b, ops) -> int | None:
+    if b == 0x8B and exe[p + 1] == 0xD3:
+        ops.append((p, "movdxbx"))
+        return p + 2
+    if b == 0x8B and exe[p + 1] == 0xD0:
+        ops.append((p, "movdxax"))
+        return p + 2
+    if b == 0xEE:
+        ops.append((p, "out"))
+        return p + 1
+    if b == 0xEC and exe[p + 1 : p + 5] == b"\x20\xd8\x74\xfb":
+        ops.append((p, "wait_poll"))
+        return p + 5
+    if b == 0xEC and exe[p + 1 : p + 7] == b"\x30\xd8\x20\xc8\x74\xf9":
+        ops.append((p, "wait_poll3"))
+        return p + 7
+    if b == 0xEC:
+        ops.append((p, "in_al"))
+        return p + 1
+    if b == 0x30 and exe[p + 1] == 0xE4:
+        ops.append((p, "xorah"))
+        return p + 2
+    return None
+
+
 def _scan_direct2(exe, p, b, ops) -> int | None:
     """Byte-dispatch family split out of _scan. Returns the new
     cursor when it decodes the op at ``p``, else None."""
@@ -674,6 +699,9 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
     np = _scan_direct2_register_ops(exe, p, b, ops)
     if np is not None:
         return np
+    np = _scan_direct2_io_ops(exe, p, b, ops)
+    if np is not None:
+        return np
     # There is deliberately NO `mov al,imm8; out imm8,al` op here. It used to
     # be read as a byte-constant OUT that the compiler had folded, which is not
     # a thing Turbo Basic does: `OUT 67, 116` emits the general mov-AX / mov-DX
@@ -683,34 +711,6 @@ def _scan_direct2(exe, p, b, ops) -> int | None:
     # `_try_inline_rescue`, which now claims them -- and decoding them as an
     # OUT statement cost wild zip.exe 592 bytes and ziptest.exe 224 on the
     # round trip. Ledger RO-OUT-IMM-FOLD.
-    if b == 0x8B and exe[p + 1] == 0xD3:  # mov dx,bx (OUT port setup)
-        ops.append((p, "movdxbx"))
-        p += 2
-        return p
-    if b == 0x8B and exe[p + 1] == 0xD0:  # mov dx,ax (WAIT/INP port setup)
-        ops.append((p, "movdxax"))
-        p += 2
-        return p
-    if b == 0xEE:  # out dx,al (OUT statement terminal)
-        ops.append((p, "out"))
-        p += 1
-        return p
-    if b == 0xEC and exe[p + 1 : p + 5] == b"\x20\xd8\x74\xfb":
-        ops.append((p, "wait_poll"))  # WAIT: in al,dx; and al,bl; jz back
-        p += 5
-        return p
-    if b == 0xEC and exe[p + 1 : p + 7] == b"\x30\xd8\x20\xc8\x74\xf9":
-        ops.append((p, "wait_poll3"))  # WAIT 3-arg: in; xor al,bl;
-        p += 7  # and al,cl; jz back
-        return p
-    if b == 0xEC:  # in al,dx (INP intrinsic terminal)
-        ops.append((p, "in_al"))
-        p += 1
-        return p
-    if b == 0x30 and exe[p + 1] == 0xE4:  # xor ah,ah (INP result widen)
-        ops.append((p, "xorah"))
-        p += 2
-        return p
     if b == 0x8C and exe[p + 1] == 0x1E and exe[p + 2 : p + 4] == b"\x1c\x00":
         ops.append((p, "defseg"))  # mov [001C],ds: bare DEF SEG
         p += 4
