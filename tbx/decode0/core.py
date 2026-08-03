@@ -3461,6 +3461,67 @@ def _fp_orax_bool_ops(state, nxt) -> bool:
     return False
 
 
+def _fp_direct_bool_jcc(state, op, addr, cc, t, nxt, prev, direct_bool) -> bool:
+    if cc == 0x75 and direct_bool and any(
+        candidate[0] == nxt[2] - 2 and candidate[1] == "andaxbx"
+        for candidate in state.image.ops[state.control.k + 2 :]
+    ):
+        state.expr.direct_bool_gate = True
+        state.advance(2)
+        return True
+    if cc == 0x74 and direct_bool:
+        e, c = state.expr, state.control
+        if e.direct_bool_logical:
+            c.block_if_addrs.add(c.cur)
+        state.put(
+            ir.IfGoto(
+                (_logical_condition(state.machine.ax) or state.machine.ax)
+                if e.direct_bool_logical
+                else state.machine.ax,
+                ("addr", nxt[2]),
+            ),
+            c.cur,
+        )
+        state.machine.ax = None
+        e.direct_bool_gate = False
+        e.direct_bool_group = None
+        e.direct_bool_logical = False
+        c.cur = None
+        state.advance(2)
+        return True
+    if not (
+        cc == 0x75
+        and direct_bool
+        and any(candidate[0] == nxt[2] for candidate in state.image.ops)
+    ):
+        return False
+    e, c = state.expr, state.control
+    state.flush_pending()
+    event = state.branch(
+        "if",
+        template="direct_flag_skip",
+        target=nxt[2],
+        address=c.cur,
+        cond=(
+            _logical_condition(state.machine.ax) or state.machine.ax
+            if e.direct_bool_logical
+            else (
+                state.machine.ax
+                if e.direct_bool_gate or prev[1] == "orax"
+                else ir.Group(state.machine.ax)
+            )
+        ),
+    )
+    c.ifs.append(IfFrame(seq=event.seq))
+    state.machine.ax = None
+    e.direct_bool_gate = False
+    e.direct_bool_group = None
+    e.direct_bool_logical = False
+    c.cur = None
+    state.advance(2)
+    return True
+
+
 def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     """FP-stack + control-flow instruction dispatch (fld/fst/fadd/.../fcomp/jcc/
     jmp/call/run/jmps + unhandled-op guard). Falls through to the default k-advance;
@@ -3530,85 +3591,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             and nxt[1] in ("jmp", "jmpf")
             and t == nxt[0] + (5 if nxt[1] == "jmpf" else 3)
         )
-        if cc == 0x75 and direct_bool and any(
-            candidate[0] == nxt[2] - 2 and candidate[1] == "andaxbx"
-            for candidate in img.ops[c.k + 2 :]
-        ):
-            # Short-circuit gate inside an ungrouped outer AND. The current
-            # logical value stays in AX while the right operand is evaluated;
-            # its movbxax/movrr spill sequence below preserves and combines it.
-            # The far target is the address immediately after that final AND,
-            # not a statement boundary (t1_nestedbool; wild styled/hfprop).
-            e.direct_bool_gate = True
-            state.advance(2)
-            return
-        if cc == 0x74 and direct_bool:
-            # Direct-GOTO sibling of the inline-body form: JZ skips the
-            # following jump when the completed value is false, so that jump
-            # itself is the source THEN target. This applies both to a folded
-            # logical value (t1_nestedgoto; wild styled) and a bare scalar
-            # truth test (v10_t1_bareifgoto; wild hebrew.exe).
-            # The materialized outer term is positive evidence for a block
-            # IF here: the equivalent one-line direct boolean form has no
-            # movax-FFFF header (probe_string_nested_and_or_block).
-            if e.direct_bool_logical:
-                c.block_if_addrs.add(c.cur)
-            state.put(
-                ir.IfGoto(
-                    (_logical_condition(m.ax) or m.ax)
-                    if e.direct_bool_logical
-                    else m.ax,
-                    ("addr", nxt[2]),
-                ),
-                c.cur,
-            )
-            m.ax = None
-            e.direct_bool_gate = False
-            e.direct_bool_group = None
-            e.direct_bool_logical = False
-            c.cur = None
-            state.advance(2)
-            return
-        if (
-            cc == 0x75
-            and direct_bool
-            # This witnessed inline body ends at a scanned op. A target in the middle
-            # of a later materialized expression is a nested short-circuit
-            # gate and needs its spill protocol preserved instead.
-            and any(candidate[0] == nxt[2] for candidate in img.ops)
-        ):
-            # A parenthesized logical value can feed JNZ directly: the final
-            # AX/BX fold already set ZF, so no separate `or ax,ax` or compare
-            # materialization appears.  JNZ skips the following far jump when
-            # the value is true; that far jump skips the inline body.  Keep the
-            # BinOp/Group tree as a bare truthiness condition: spelling it as
-            # `expr = 0` changes both its polarity and TB's lowering.
-            state.flush_pending()
-            event = state.branch(
-                "if",
-                template="direct_flag_skip",
-                target=nxt[2],
-                address=c.cur,
-                # The direct flag use is itself evidence that the complete
-                # logical value was parenthesized in source; without this
-                # outer Group TB chooses its short-circuit IF template.
-                cond=(
-                    _logical_condition(m.ax) or m.ax
-                    if e.direct_bool_logical
-                    else (
-                        m.ax
-                        if e.direct_bool_gate or prev[1] == "orax"
-                        else ir.Group(m.ax)
-                    )
-                ),
-            )
-            c.ifs.append(IfFrame(seq=event.seq))
-            m.ax = None
-            e.direct_bool_gate = False
-            e.direct_bool_group = None
-            e.direct_bool_logical = False
-            c.cur = None
-            state.advance(2)
+        if _fp_direct_bool_jcc(state, op, addr, cc, t, nxt, prev, direct_bool):
             return
         relop_map = _JCC_RELOP_STR if e.pend_cmp_str else _JCC_RELOP
         if (
