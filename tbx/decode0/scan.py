@@ -1767,6 +1767,21 @@ def _scan_esc_bp_ops(exe, p, mo, esc, pre, reg, mod, ops) -> int | None:
     return None
 
 
+def _scan_far_jump(exe, p, start, ops) -> int | None:
+    if exe[p] != 0xEA:
+        return None
+    off, seg = struct.unpack_from("<HH", exe, p + 1)
+    if off == 0 and seg == 0:
+        ops.append((p, "epilogue"))
+        return -1
+    if off == 0:
+        ops.append((p, "segjmp", start + seg * 16, seg))
+        return start + seg * 16
+    target = start + seg * 16 + off
+    ops.append((p, "jmpf", target, seg, off))
+    return p + 5
+
+
 def _scan(
     exe: bytes, start: int, dia: Dialect = TB11, commits: set[int] | None = None
 ) -> list[tuple[Any, ...]]:
@@ -1827,30 +1842,11 @@ def _scan_pass(
             p = np
             continue
 
-        if b == 0xEA:  # far JMP ptr16:16; segment-relative code target
-            off, seg = struct.unpack_from("<HH", exe, p + 1)
-            if off == 0 and seg == 0:
-                # Fixed runtime handoff used by the legacy cleanup/event tail.
-                ops.append((p, "epilogue"))
+        jump = _scan_far_jump(exe, p, start, ops)
+        if jump is not None:
+            if jump == -1:
                 return ops
-            if off == 0:
-                # $SEGMENT: the metacommand closes the current code segment and
-                # continues the program in the next paragraph-aligned one, which
-                # the compiler reaches with a far jump to its offset 0. Code, not
-                # a handoff -- scanning has to follow it or everything the
-                # metacommand moved (TBWINDOW puts every SUB there) is silently
-                # dropped (probe t1_segment; wild tbd73.exe).
-                ops.append((p, "segjmp", start + seg * 16, seg))
-                p = start + seg * 16
-                continue
-            # Far jumps use the user-code origin plus the segment's paragraph
-            # displacement. This is observable directly when a $SEGMENT
-            # handoff names the same segment:
-            # t1_resumefar's segment 2 begins at start+32, and wild wb.exe's
-            # segment 2603 begins at start+2603*16.
-            target = start + seg * 16 + off
-            ops.append((p, "jmpf", target, seg, off))
-            p += 5
+            p = jump
             continue
 
         if b == 0x9B and 0xD8 <= exe[p + 1] <= 0xDF:
