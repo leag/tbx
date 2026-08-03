@@ -1338,6 +1338,29 @@ def _reject_dropped_bool_term(state: DecodeState, addr: int) -> None:
             return
 
 
+def _fold_parenthesized_and(state: DecodeState, kind: str) -> bool:
+    m, e = state.machine, state.expr
+    if (
+        kind != "andaxbx"
+        or e.pend_bool is not None
+        or e.pend_bool_outer is None
+    ):
+        return False
+    # Explicitly parenthesized precedence group: `A OR (B AND C)`.
+    # match_bool_term1 has already staged A as pend_bool_outer. The group's
+    # register protocol evaluates B first into BX and C second into AX.
+    left = m.bx.inner if isinstance(m.bx, ir.Group) else m.bx
+    right = m.ax.inner if isinstance(m.ax, ir.Group) else m.ax
+    inner = ir.Group(ir.BinOp("AND", left, right))
+    m.ax = ir.BinOp(e.pend_bool_outer.op, e.pend_bool_outer.r1, inner)
+    e.pend_bool_outer = None
+    e.direct_bool_logical = True
+    e.reg_logical_results.append(m.ax)
+    m.bx = None
+    state.advance()
+    return True
+
+
 def int_bitwise_bx(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: andaxbx, oraxbx, xoraxbx, addaxbx, subaxbx, imulbx."""
     m, e = state.machine, state.expr
@@ -1359,32 +1382,7 @@ def int_bitwise_bx(state: DecodeState, op, addr, kind) -> bool:
             # placeholder rather than aborting the whole executable.
             m.ax = m.ax if m.ax is not None else ir.Lit(0)
             m.bx = m.bx if m.bx is not None else ir.Lit(0)
-        if (
-            kind == "andaxbx"
-            and e.pend_bool is None
-            and e.pend_bool_outer is not None
-        ):
-            # Explicitly parenthesized precedence group: `A OR (B AND C)`.
-            # match_bool_term1 has already staged A as pend_bool_outer. The
-            # group's register protocol evaluates B first into BX and C
-            # second into AX, the reverse of the ordinary arithmetic
-            # convention below. Preserve both that source order and the
-            # byte-significant parentheses, then let the following direct
-            # jcc/jmp pair emit the IF body (t1_parenorandgoto/
-            # t1_parenorandinline; wild file.exe, grdscn.exe, wb.exe).
-            left = m.bx.inner if isinstance(m.bx, ir.Group) else m.bx
-            right = m.ax.inner if isinstance(m.ax, ir.Group) else m.ax
-            inner = ir.Group(ir.BinOp("AND", left, right))
-            m.ax = ir.BinOp(
-                e.pend_bool_outer.op,
-                e.pend_bool_outer.r1,
-                inner,
-            )
-            e.pend_bool_outer = None
-            e.direct_bool_logical = True
-            e.reg_logical_results.append(m.ax)
-            m.bx = None
-            state.advance()
+        if _fold_parenthesized_and(state, kind):
             return True
         if kind == "andaxbx" and e.pend_bool is None:
             _reject_dropped_bool_term(state, addr)
