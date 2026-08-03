@@ -2346,6 +2346,95 @@ def _move_data_before_poll_loops(state):
             out.addrs.insert(i, out.addrs.pop(j))
 
 
+def _prepare_string_pool(state, exe):
+    img, l = state.image, state.layout_state
+    l.ss_base = None
+    l.desc_disps = sorted(
+        (
+            {
+                img.ops[i][2]
+                for i in range(len(img.ops))
+                if img.ops[i][1] == "movsi"
+                and img.ops[i][2] >= VAR_BASE
+                and not (
+                    i + 1 < len(img.ops)
+                    and img.ops[i + 1][1]
+                    in ("far_spush", "far_strassign", "add_si_sp")
+                )
+            }
+            - set(l.lay["scalars"])
+            - set(l.lay["rt_blocks"])
+            - set(l.slot_info)
+        )
+        | {
+            o[2]
+            for o in img.ops
+            if o[1] in ("input", "line_input") and o[2] != l.lay["pool_base"] - 4
+        }
+    )
+    l.discard_strs = []
+    l.data_items = []
+    l.have_fre = any(o[1] == "fre_str" for o in img.ops)
+    if not l.desc_disps and not l.have_fre:
+        return
+    all_descs = []
+    d = l.lay["pool_base"] - 4
+    w0, expect = struct.unpack_from("<HH", exe, l.dsd + d)
+    if w0 == 0x8000:
+        d += 4
+        while True:
+            w0, ptr = struct.unpack_from("<HH", exe, l.dsd + d)
+            if not w0 & 0x8000 or ptr != expect:
+                break
+            all_descs.append((d, w0 & 0x7FFF, ptr))
+            expect = ptr + (w0 & 0x7FFF)
+            d += 4
+    total = (
+        sum(ln for _, ln, _ in all_descs)
+        if all_descs
+        else sum(
+            struct.unpack_from("<H", exe, l.dsd + disp)[0] & 0x7FFF
+            for disp in l.desc_disps
+        )
+    )
+    hdr = struct.pack("<H", 0x8000 | total)
+    lo = (d + 15) & ~15
+    for cand in range(lo, lo + 0x400, 16):
+        pos = l.dsd + cand + 0x10
+        if (
+            exe[pos : pos + 2] == hdr
+            and exe[pos + 2 : pos + 6] == b"\x00\x00\x00\x00"
+            and exe[pos + 6 + total : pos + 8 + total] == hdr
+        ):
+            l.ss_base = cand
+            break
+    else:
+        raise ValueError("string char record not found")
+    unref = [(ln, ptr) for disp, ln, ptr in all_descs if disp not in l.desc_disps]
+    if not unref:
+        return
+    if not l.have_fre:
+        for ln, ptr in reversed(unref):
+            text = exe[l.dsd + l.ss_base + ptr : l.dsd + l.ss_base + ptr + ln].decode(
+                "latin-1"
+            )
+            try:
+                float(text)
+                is_str = False
+            except ValueError:
+                is_str = True
+            l.data_items.append(ir.DataItem(text, is_str))
+    else:
+        l.discard_strs = [
+            ir.StrLit(
+                exe[l.dsd + l.ss_base + ptr : l.dsd + l.ss_base + ptr + ln].decode(
+                    "latin-1"
+                )
+            )
+            for ln, ptr in reversed(unref)
+        ]
+
+
 def _finalize(state: DecodeState, addr) -> Program:
     """Program epilogue: static-DIM re-emit, control-flow folds, target
     resolution and canonical rename -> the finished Program."""
@@ -4381,121 +4470,7 @@ def _decode_user_code(
     c.proc_long_offs = set()  # bp_offs read as LONG (far_fild_si32 etc.)
     c.proc_dbl_offs = set()  # bp_offs read as DOUBLE (far_fld_si64 etc.)
 
-    # String-space base: ss_base = align16(pool end), but the pool can
-    # hold words the code never references (LOCATE/COLOR arg literals compile to
-    # immediates yet are still pooled), so a reference-based estimate undershoots.
-    # Anchor it instead on the char record itself, which is bracketed on BOTH sides by
-    # the word (sum_of_string_lens | 0x8000) with 4 zero bytes after the leading one:
-    # ds+ss_base+0x10: <hdr> 00 00 00 00 <chars...> <hdr>.
-    l.ss_base = None
-    # Pooled literal descriptors: movsi targets that aren't var slots, plus INPUT /
-    # LINE INPUT prompt words (excluding the resident empty-string desc and
-    # constant far-element offsets).
-    l.desc_disps = sorted(
-        (
-            {
-                img.ops[i][2]
-                for i in range(len(img.ops))
-                if img.ops[i][1] == "movsi"
-                and img.ops[i][2]
-                >= VAR_BASE  # sub-VAR_BASE = scratch (SELECT CASE str temp)
-                and not (
-                    i + 1 < len(img.ops)
-                    and img.ops[i + 1][1]
-                    in ("far_spush", "far_strassign", "add_si_sp")
-                )
-            }
-            - set(l.lay["scalars"])
-            - set(l.lay["rt_blocks"])
-            - set(l.slot_info)
-        )  # GET/PUT blit array-slot pushes (t1_getput)
-        | {
-            o[2]
-            for o in img.ops
-            if o[1] in ("input", "line_input") and o[2] != l.lay["pool_base"] - 4
-        }
-    )
-    # Discarded string literals (FRE(s$), witnessed t1_fres): the argument compiles to
-    # NOTHING -- bare ED 16 whatever the operand -- but a LITERAL operand still pools
-    # (descriptor + chars), so summing only code-referenced descriptors undershoots
-    # `total`. Walk the descriptor table itself instead: it starts at the resident
-    # empty-string desc (pool_base-4) and runs ascending with contiguous
-    # char pointers. Literals pool in REVERSE source order (witnessed t1_fres2:
-    # "Z","AA","BBB" in source lands as BBB/AA/Z), so the unreferenced ones are
-    # queued reversed and handed to fre_str sites in code order.
-    l.discard_strs = []
-    l.data_items = []
-    l.have_fre = any(o[1] == "fre_str" for o in img.ops)
-    if l.desc_disps or l.have_fre:
-        all_descs = []
-        d = l.lay["pool_base"] - 4
-        w0, expect = struct.unpack_from("<HH", exe, l.dsd + d)
-        if w0 == 0x8000:  # resident empty desc anchors the walk
-            d += 4
-            while True:
-                w0, ptr = struct.unpack_from("<HH", exe, l.dsd + d)
-                if not w0 & 0x8000 or ptr != expect:
-                    break
-                all_descs.append((d, w0 & 0x7FFF, ptr))
-                expect = ptr + (w0 & 0x7FFF)
-                d += 4
-        if all_descs:
-            total = sum(ln for _, ln, _ in all_descs)
-        else:  # no walkable table: referenced sum as before
-            total = sum(
-                struct.unpack_from("<H", exe, l.dsd + d)[0] & 0x7FFF
-                for d in l.desc_disps
-            )
-        hdr = struct.pack("<H", 0x8000 | total)
-        # `d` already sits just past the last matched descriptor (or at pool_base
-        # if none chained) -- anchor there rather than at pool_base itself, since
-        # a large descriptor table (e.g. a static string array's per-element
-        # descriptors chained into the same table, witnessed vhfprop.exe: 469
-        # descriptors) can run for well over 0x400 bytes past pool_base, pushing
-        # the char record's actual position outside the old fixed window.
-        lo = (d + 15) & ~15
-        for cand in range(lo, lo + 0x400, 16):
-            pos = l.dsd + cand + 0x10
-            if (
-                exe[pos : pos + 2] == hdr
-                and exe[pos + 2 : pos + 6] == b"\x00\x00\x00\x00"
-                and exe[pos + 6 + total : pos + 8 + total] == hdr
-            ):
-                l.ss_base = cand
-                break
-        else:
-            raise ValueError("string char record not found")
-        unref = [(ln, ptr) for d, ln, ptr in all_descs if d not in l.desc_disps]
-        if unref:
-            if not l.have_fre:
-                # Unreferenced descriptors without FRE sites are DATA items.
-                # The shared literal pool stores them in reverse source order;
-                # code-referenced literals were removed by desc_disps above.
-                for ln, ptr in reversed(unref):
-                    text = exe[
-                        l.dsd + l.ss_base + ptr : l.dsd
-                        + l.ss_base
-                        + ptr
-                        + ln
-                    ].decode("latin-1")
-                    try:
-                        float(text)
-                        is_str = False
-                    except ValueError:
-                        is_str = True
-                    l.data_items.append(ir.DataItem(text, is_str))
-            else:
-                l.discard_strs = [
-                    ir.StrLit(
-                        exe[
-                            l.dsd + l.ss_base + ptr : l.dsd
-                            + l.ss_base
-                            + ptr
-                            + ln
-                        ].decode("latin-1")
-                    )
-                    for ln, ptr in reversed(unref)
-                ]
+    _prepare_string_pool(state, exe)
 
     state.begin(img.ops)
     state.diagnostics.phase = "lift"
