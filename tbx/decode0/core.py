@@ -3248,6 +3248,50 @@ def _fp_intrinsic_ops(state: DecodeState, op, kind) -> bool:
     return True
 
 
+def _fp_binary_ops(state: DecodeState, op, kind) -> bool:
+    e, l = state.expr, state.layout_state
+    if kind == "popop":
+        last = e.stack.pop()  # last-pushed is the textual LEFT
+        first = e.stack.pop()
+        if (
+            op[2] in "+*"
+            and isinstance(last, ir.BinOp)
+            and _PREC[last.op] > _PREC[op[2]]
+            and isinstance(first, ir.BinOp)
+            and _PREC[first.op] >= _PREC[op[2]]
+        ):
+            e.stack.append(ir.BinOp(op[2], first, last))
+        else:
+            e.stack.append(ir.BinOp(op[2], _grp(last), _grp(first)))
+    elif kind == "popop_n":  # non-R: first-pushed is LEFT
+        rhs = e.stack.pop()
+        lhs = e.stack.pop()
+        e.stack.append(ir.BinOp(op[2], lhs, _grp(rhs)))
+    elif kind == "fold":
+        e.stack.append(_orient(op[2], state.fpval(op[3]), e.stack.pop()))
+    elif kind == "fold_n":  # non-R: mem is the RIGHT operand
+        top = e.stack.pop()
+        if isinstance(top, ir.BinOp) and _PREC[top.op] < _PREC[op[2]]:
+            top = ir.Group(top)
+        e.stack.append(ir.BinOp(op[2], top, state.fpval(op[3])))
+    elif kind == "ifold_n":
+        right = (
+            state.loc(op[3]) if op[3] in l.lay["scalars"] else state.pool_lit(op[3])
+        )
+        top = e.stack.pop()
+        if isinstance(top, ir.BinOp) and _PREC[top.op] < _PREC[op[2]]:
+            top = ir.Group(top)
+        e.stack.append(ir.BinOp(op[2], top, right))
+    elif kind == "ifold":  # int var or pool literal
+        mem = (
+            state.loc(op[3]) if op[3] in l.lay["scalars"] else state.pool_lit(op[3])
+        )
+        e.stack.append(_orient(op[2], mem, e.stack.pop()))
+    else:
+        return False
+    return True
+
+
 def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     """FP-stack + control-flow instruction dispatch (fld/fst/fadd/.../fcomp/jcc/
     jmp/call/run/jmps + unhandled-op guard). Falls through to the default k-advance;
@@ -3261,6 +3305,8 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     elif _fp_integer_ops(state, op, kind):
         pass
     elif _fp_intrinsic_ops(state, op, kind):
+        pass
+    elif _fp_binary_ops(state, op, kind):
         pass
     elif kind == "fstp64":  # m64 store: double var assign
         v = e.stack.pop()
@@ -3295,56 +3341,6 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         if isinstance(top, ir.BinOp) and _PREC[top.op] < _PREC[op[2]]:
             top = ir.Group(top)
         e.stack.append(ir.BinOp(op[2], top, state.fpval64(op[3])))
-    elif kind == "popop":
-        last = e.stack.pop()  # last-pushed is the textual LEFT
-        first = e.stack.pop()  # (R-form FSUBRP: st1=st0-st1, and
-        if (
-            op[2] in "+*"
-            and isinstance(last, ir.BinOp)
-            and _PREC[last.op] > _PREC[op[2]]
-            and isinstance(first, ir.BinOp)
-            and _PREC[first.op] >= _PREC[op[2]]
-        ):
-            # Two BARE fold chains (I*100 + J*10): TB evaluates these
-            # left-to-right, and they must re-emit without parens -- a
-            # grouped operand compiles right-first, so adding them would
-            # flip the push order (witnessed t1_dim3v; the grouped/call
-            # shapes below are tier1_expr/expr2, t1_fresx). The first-pushed
-            # chain may sit at EQUAL precedence (left-associativity keeps
-            # the parse): `B * 2 - 1 + 180 * (A > 0)` must not respell
-            # R-form, since the flipped textual order also flips int-pool
-            # allocation order (witnessed t1_imulpool, 5-byte diff).
-            e.stack.append(ir.BinOp(op[2], first, last))
-        else:
-            e.stack.append(ir.BinOp(op[2], _grp(last), _grp(first)))  # R-first
-    elif kind == "popop_n":  # non-R: first-pushed is LEFT
-        rhs = e.stack.pop()
-        lhs = e.stack.pop()
-        # lhs was built as a fold chain (no outer group) -- leaving it bare lets
-        # TB evaluate it left-first and emit FDIVP/FSUBP.
-        # Wrapping lhs in _grp would cause TB to reorder evaluation (right-first)
-        # and emit the R-form FDIVRP/FSUBRP instead.
-        e.stack.append(ir.BinOp(op[2], lhs, _grp(rhs)))
-    elif kind == "fold":
-        e.stack.append(_orient(op[2], state.fpval(op[3]), e.stack.pop()))
-    elif kind == "fold_n":  # non-R: mem is the RIGHT operand
-        top = e.stack.pop()
-        if isinstance(top, ir.BinOp) and _PREC[top.op] < _PREC[op[2]]:
-            top = ir.Group(top)  # (B + C) / D: parens required
-        e.stack.append(ir.BinOp(op[2], top, state.fpval(op[3])))
-    elif kind == "ifold_n":
-        right = (
-            state.loc(op[3]) if op[3] in l.lay["scalars"] else state.pool_lit(op[3])
-        )
-        top = e.stack.pop()
-        if isinstance(top, ir.BinOp) and _PREC[top.op] < _PREC[op[2]]:
-            top = ir.Group(top)
-        e.stack.append(ir.BinOp(op[2], top, right))
-    elif kind == "ifold":  # int var or pool literal
-        mem = (
-            state.loc(op[3]) if op[3] in l.lay["scalars"] else state.pool_lit(op[3])
-        )
-        e.stack.append(_orient(op[2], mem, e.stack.pop()))
     elif kind == "fstp" and op[2] in (0x88, 0x94, 0xA0, 0xAC):
         e.color_cells[op[2]] = e.stack.pop()  # WINDOW world-coord cell (FP leg)
     elif kind == "fstp":
