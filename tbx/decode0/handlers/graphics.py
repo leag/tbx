@@ -98,6 +98,34 @@ def _graphics_circle(state: DecodeState, op, addr: int) -> bool:
     return True
 
 
+def _graphics_paint(state: DecodeState, op, addr: int) -> bool:
+    e, c = state.expr, state.control
+    if op[2] & ~0x03:
+        raise ValueError(f"PAINT flag {op[2]:02x} at {addr:#x} (unsupported)")
+    paint = e.color_cells.pop(0x88) if op[2] & 0x02 else None
+    border = e.color_cells.pop(0x94) if op[2] & 0x01 else None
+    y = e.stack.pop()
+    x = e.stack.pop()
+    state.put(ir.Paint(x, y, paint, border), c.cur)
+    c.cur = None
+    state.advance()
+    return True
+
+
+def _graphics_paint_tile(state: DecodeState, op, addr: int) -> bool:
+    e, c = state.expr, state.control
+    if op[2] & ~0x01:
+        raise ValueError(f"PAINT tile flag {op[2]:02x} at {addr:#x} (unsupported)")
+    border = e.color_cells.pop(0x94) if op[2] & 0x01 else None
+    tile = e.sstack.pop()
+    y = e.stack.pop()
+    x = e.stack.pop()
+    state.put(ir.Paint(x, y, tile, border), c.cur)
+    c.cur = None
+    state.advance()
+    return True
+
+
 def graphics(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: screen, cls, line, pset, circle, paint, draw, palette,
     palette_using, color_commit, locate, cursor, width."""
@@ -134,27 +162,9 @@ def graphics(state: DecodeState, op, addr, kind) -> bool:
     if kind == "circle":  # CIRCLE [STEP] (x,y), r[,c][,s][,e][,asp]
         return _graphics_circle(state, op, addr)
     if kind == "paint":  # PAINT (x,y)[, paint][, border]
-        if op[2] & ~0x03:
-            raise ValueError(f"PAINT flag {op[2]:02x} at {addr:#x} (unsupported)")
-        paint = e.color_cells.pop(0x88) if op[2] & 0x02 else None
-        border = e.color_cells.pop(0x94) if op[2] & 0x01 else None
-        y = e.stack.pop()
-        x = e.stack.pop()
-        state.put(ir.Paint(x, y, paint, border), c.cur)
-        c.cur = None
-        state.advance()
-        return True
+        return _graphics_paint(state, op, addr)
     if kind == "paint_tile":  # PAINT (x,y), tile$[, border] (witnessed t1_paintt)
-        if op[2] & ~0x01:
-            raise ValueError(f"PAINT tile flag {op[2]:02x} at {addr:#x} (unsupported)")
-        border = e.color_cells.pop(0x94) if op[2] & 0x01 else None
-        tile = e.sstack.pop()
-        y = e.stack.pop()
-        x = e.stack.pop()
-        state.put(ir.Paint(x, y, tile, border), c.cur)
-        c.cur = None
-        state.advance()
-        return True
+        return _graphics_paint_tile(state, op, addr)
     if kind == "draw":  # DRAW cmd$
         state.put(ir.Draw(e.sstack.pop()), c.cur)
         c.cur = None
