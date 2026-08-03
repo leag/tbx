@@ -50,61 +50,37 @@ def _next_real_addr(img, i):
     return img.ops[i][0] if i < len(img.ops) else None
 
 
-def int_alu(state: DecodeState, op, addr, kind) -> bool:
-    """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addax_bp, addsiax, subax_m, imul_m, imul_bp, movax_bp, idivbx, cmpax_m, inc_m, dec_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
-    img, m, expr_, l, c, o = (state.image, state.machine, state.expr,
-                              state.layout_state, state.control, state.output)
-    if kind == "movdx_m":  # IMP left operand -> dx
+def _int_register_ops(state: DecodeState, op, addr: int, kind: str) -> bool:
+    img, m, c = state.image, state.machine, state.control
+    if kind == "movdx_m":
         m.dx = state.loc(op[2])
-        state.advance()
-        return True
-    if kind == "movdxax":  # WAIT/INP port: ax -> dx
+    elif kind == "movdxax":
         m.dx, m.ax = m.ax, None
-        state.advance()
-        return True
-    if kind == "movdxbx":  # OUT port: bx -> dx
+    elif kind == "movdxbx":
         m.dx, m.bx = m.bx, None
-        state.advance()
-        return True
-    if kind == "movbxax":  # LOCATE row -> bx
+    elif kind == "movbxax":
         m.bx, m.ax = m.ax, None
-        state.advance()
-        return True
-    if kind == "movaxdx":  # promote the \ quotient to MOD
+    elif kind == "movaxdx":
         if not (isinstance(m.ax, ir.BinOp) and m.ax.op == "\\"):
             raise ValueError(f"movaxdx not following idiv at {addr:#x}")
         m.ax = ir.BinOp("MOD", m.ax.lhs, m.ax.rhs)
-        state.advance()
-        return True
-    if kind == "movrr":  # spill-protocol shuttle
+    elif kind == "movrr":
         regs = {
-            "ax": m.ax,
-            "bx": m.bx,
-            "cx": m.cx,
-            "dx": m.dx,
-            "di": m.di,
-            "si": m.si,
+            "ax": m.ax, "bx": m.bx, "cx": m.cx,
+            "dx": m.dx, "di": m.di, "si": m.si,
         }
         regs[op[2]], regs[op[3]] = regs[op[3]], None
         m.ax, m.bx, m.cx, m.dx, m.di, m.si = (
-            regs["ax"],
-            regs["bx"],
-            regs["cx"],
-            regs["dx"],
-            regs["di"],
-            regs["si"],
+            regs["ax"], regs["bx"], regs["cx"],
+            regs["dx"], regs["di"], regs["si"],
         )
-        state.advance()
-        return True
-    if kind == "spill_store":
+    elif kind == "spill_store":
         value = {"di": m.di}[op[2]]
         if value is None:
             raise ValueError(f"empty {op[2]} spill at {addr:#x}")
         m.reg_spills[op[3]] = value
         m.di = None
-        state.advance()
-        return True
-    if kind == "spill_load":
+    elif kind == "spill_load":
         try:
             value = m.reg_spills.pop(op[3])
         except KeyError:
@@ -115,19 +91,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             m.di = value
         else:
             raise ValueError(f"unsupported spill target {op[2]} at {addr:#x}")
-        state.advance()
-        return True
-    if kind in ("movm_ax_temp", "movm_imm_temp"):
-        # mov ss:[si],ax / mov ss:[si],imm16: a temp-frame argument store.
-        # Two different callers drain this frame: a plain SUB CALL (an
-        # `arg_push_temp` follows immediately, ordered list -> pend_args) or
-        # a DEF FN call used AS another call's own argument (no
-        # arg_push_temp -- the frame closes straight into `mov_bp_sp;
-        # fn_call`, offset-keyed dict -> fn_args, keyed by the `si` offset
-        # this store's own address computed, i.e. the future bp offset once
-        # mov_bp_sp repoints bp here; t1_fnargcall). SUB CALL can't nest as
-        # an argument (CALL is a statement, not an expression), so this
-        # ordering split is exhaustive.
+    elif kind in ("movm_ax_temp", "movm_imm_temp"):
         value = ir.Lit(op[2]) if kind == "movm_imm_temp" else m.ax
         if kind == "movm_ax_temp" and m.ax is None:
             raise ValueError(f"empty integer temp argument at {addr:#x}")
@@ -137,27 +101,21 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         else:
             c.fn_args[m.si] = value
         m.ax = None
-        # No state.put() happens here -- this op stages one argument value
-        # mid-expression, inside a CALL/DEF-FN-call statement that's still
-        # open (its own address was already set when IT started, e.g. by
-        # the far-CALL argument-staging prologue). Clearing c.cur here
-        # unconditionally let the generic top-of-loop fallback re-stamp it
-        # with a LATER op's address once more ops ran, so the eventual
-        # far_call's put() recorded the wrong statement address -- a loop's
-        # own backward branch targeting the CALL's real start (its
-        # mov_mem_sp/push_bp prologue) then failed to resolve to any
-        # tracked statement (wild morcalc.exe).
-        state.advance()
-        return True
-    if kind == "movsim":
-        # mov si,[disp16]: FOR-loop variable as a raw element index.
+    elif kind == "movsim":
         m.si = state.loc(op[2])
-        state.advance()
-        return True
-    if kind == "movsi_bp":
-        # mov si,[bp+d8]: LOCAL int as a raw element index (q_locidx)
+    elif kind == "movsi_bp":
         m.si = state.loc_local(op[2])
-        state.advance()
+    else:
+        return False
+    state.advance()
+    return True
+
+
+def int_alu(state: DecodeState, op, addr, kind) -> bool:
+    """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addax_bp, addsiax, subax_m, imul_m, imul_bp, movax_bp, idivbx, cmpax_m, inc_m, dec_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
+    img, m, expr_, l, c, o = (state.image, state.machine, state.expr,
+                              state.layout_state, state.control, state.output)
+    if _int_register_ops(state, op, addr, kind):
         return True
     if kind == "addax_m":  # fold LEFT; neg-aware = subtraction
         try:
