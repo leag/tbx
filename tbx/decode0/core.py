@@ -2323,6 +2323,29 @@ def _initialize_lift_state(state):
     output.cc_hooks = set()
 
 
+def _move_data_before_poll_loops(state):
+    out = state.output
+    for i, stmt in list(enumerate(out.stmts)):
+        if not (isinstance(stmt, ir.Do) and stmt.kind is None):
+            continue
+        loop_idx = next(
+            (
+                j
+                for j in range(i + 1, len(out.stmts))
+                if isinstance(out.stmts[j], ir.Loop)
+                and _is_bare_len_poll(out.stmts[j].cond)
+            ),
+            None,
+        )
+        if loop_idx is None:
+            continue
+        for j in reversed(
+            [j for j in range(i + 1, loop_idx) if isinstance(out.stmts[j], ir.Data)]
+        ):
+            out.stmts.insert(i, out.stmts.pop(j))
+            out.addrs.insert(i, out.addrs.pop(j))
+
+
 def _finalize(state: DecodeState, addr) -> Program:
     """Program epilogue: static-DIM re-emit, control-flow folds, target
     resolution and canonical rename -> the finished Program."""
@@ -2636,30 +2659,7 @@ def _finalize(state: DecodeState, addr) -> Program:
                     )
                     for s in out.stmts
                 ]
-        # DATA reconstruction borrows the first code address after each
-        # codeless cluster. For a bare LEN(INKEY$) poll that address is the
-        # loop header, so the DATA item can temporarily land between the
-        # synthesized DO and LOOP. Keep the calibrated zero-body pair adjacent
-        # and leave the DATA statement immediately before it.
-        for i, stmt in list(enumerate(out.stmts)):
-            if not (isinstance(stmt, ir.Do) and stmt.kind is None):
-                continue
-            loop_idx = next(
-                (
-                    j
-                    for j in range(i + 1, len(out.stmts))
-                    if isinstance(out.stmts[j], ir.Loop)
-                    and _is_bare_len_poll(out.stmts[j].cond)
-                ),
-                None,
-            )
-            if loop_idx is None:
-                continue
-            for j in reversed(
-                [j for j in range(i + 1, loop_idx) if isinstance(out.stmts[j], ir.Data)]
-            ):
-                out.stmts.insert(i, out.stmts.pop(j))
-                out.addrs.insert(i, out.addrs.pop(j))
+        _move_data_before_poll_loops(state)
 
         # EXIT FOR/LOOP folds (Task 3.1): rewrite the early-exit GOTO to the loop
         # exit, then fold `IF c THEN <skip>` + EXIT into `IF negate(c) THEN EXIT`.
