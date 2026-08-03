@@ -270,6 +270,26 @@ def _runtime_using_emit(state: DecodeState, addr: int) -> bool:
     return True
 
 
+def _runtime_print_item(state: DecodeState, addr: int, vec: int) -> bool:
+    e, c = state.expr, state.control
+    if e.pend_using is not None:
+        if not state.close_nested_using():  # ...into its owner, if nested
+            state.flush_pending()
+    f = e.pend_fnum if vec in (0xBD, 0xC0) else None
+    if vec in (0xBD, 0xC0) and f is None:
+        raise ValueError(f"file print item without [0060] at {addr:#x}")
+    if e.pend_print is not None and e.pend_print.file != f:
+        state.flush_pending()  # console/file leg change = new stmt
+    if e.pend_print is None:
+        e.pend_print = PrintChain(file=f, start=c.cur)
+    e.pend_print.items.append(
+        e.sstack.pop() if vec in (0xBE, 0xC0) else e.stack.pop()
+    )
+    c.cur = None
+    state.advance()
+    return True
+
+
 def runtime_call(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: rt."""
     i, e, c = state.image, state.expr, state.control
@@ -362,22 +382,7 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             state.advance()
             return True
         if vec in (0xBB, 0xBE, 0xBD, 0xC0):  # item-eval vectors
-            if e.pend_using is not None:  # plain item closes a USING chain
-                if not state.close_nested_using():  # ...into its owner, if nested
-                    state.flush_pending()
-            f = e.pend_fnum if vec in (0xBD, 0xC0) else None
-            if vec in (0xBD, 0xC0) and f is None:
-                raise ValueError(f"file print item without [0060] at {addr:#x}")
-            if e.pend_print is not None and e.pend_print.file != f:
-                state.flush_pending()  # console/file leg change = new stmt
-            if e.pend_print is None:
-                e.pend_print = PrintChain(file=f, start=c.cur)
-            e.pend_print.items.append(
-                e.sstack.pop() if vec in (0xBE, 0xC0) else e.stack.pop()
-            )
-            c.cur = None
-            state.advance()
-            return True
+            return _runtime_print_item(state, addr, vec)
         if vec in (0xBC, 0xBF):  # LPRINT item-eval (printer): BC numeric off the
             # FP stack, BF string off the sstack (witnessed t1_lpstr)
             item = e.sstack.pop() if vec == 0xBF else e.stack.pop()
