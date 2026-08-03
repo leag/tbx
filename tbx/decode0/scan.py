@@ -1791,6 +1791,43 @@ def _scan_vector(exe, p) -> int:
     raise ValueError(f"unhandled byte {b:02x} at {p:#x}")
 
 
+def _scan_esc_dispatch(exe, p, vec, ops) -> int | None:
+    far = vec == 0x3C
+    if not (far or 0x34 <= vec <= 0x3B):
+        return None
+    if far:
+        esc = exe[p + 2]
+        mo = p + 3
+        if not 0xD8 <= esc <= 0xDF:
+            ops.append((p, "far_opaque", esc))
+            return p + 3
+    else:
+        esc = 0xD8 + (vec - 0x34)
+        mo = p + 2
+    pre = "far_" if far else ""
+    modrm = exe[mo]
+    mod, reg, rm = modrm >> 6, (modrm >> 3) & 7, modrm & 7
+    np = _scan_esc_stack_ops(p, mo, esc, modrm, ops)
+    if np is not None:
+        return np
+    if mod == 0 and rm == 4:
+        np = _scan_esc_si_ops(p, mo, esc, pre, reg, ops)
+        if np is not None:
+            return np
+        raise ValueError(f"unhandled FP [si] op esc={esc:02x} modrm={modrm:02x} at {p:#x}")
+    if mod == 0 and rm == 6:
+        disp = struct.unpack_from("<H", exe, mo + 1)[0]
+        np = _scan_esc_disp_ops(p, mo, esc, pre, reg, disp, ops)
+        if np is not None:
+            return np
+        raise ValueError(f"unhandled FP [disp16] op esc={esc:02x} modrm={modrm:02x} at {p:#x}")
+    if rm == 6:
+        np = _scan_esc_bp_ops(exe, p, mo, esc, pre, reg, mod, ops)
+        if np is not None:
+            return np
+    raise ValueError(f"unhandled FP op esc={esc:02x} modrm={modrm:02x} at {p:#x}")
+
+
 def _scan(
     exe: bytes, start: int, dia: Dialect = TB11, commits: set[int] | None = None
 ) -> list[tuple[Any, ...]]:
@@ -1907,49 +1944,10 @@ def _scan_pass(
             p = np
             continue
 
-        far = vec == 0x3C  # INT 3C: ES-override prefix; the
-        if far or 0x34 <= vec <= 0x3B:  # next byte is a raw ESC
-            if far:
-                esc = exe[p + 2]
-                mo = p + 3  # modrm offset
-                if not 0xD8 <= esc <= 0xDF:
-                    # A few wild runtime revisions reuse INT 3C for a
-                    # non-FP far helper selector.  The selector has no
-                    # operand bytes; preserve it as opaque glue.
-                    ops.append((p, "far_opaque", esc))
-                    p += 3
-                    continue
-            else:
-                esc = 0xD8 + (vec - 0x34)  # emulated x87: INT 34h+n == ESC D8h+n
-                mo = p + 2
-            pre = "far_" if far else ""
-            modrm = exe[mo]
-            mod, reg, rm = modrm >> 6, (modrm >> 3) & 7, modrm & 7
-            np = _scan_esc_stack_ops(p, mo, esc, modrm, ops)
-            if np is not None:
-                p = np
-                continue
-            if mod == 0 and rm == 4:  # [si] operand (IDX% array access)
-                np = _scan_esc_si_ops(p, mo, esc, pre, reg, ops)
-                if np is not None:
-                    p = np
-                    continue
-                raise ValueError(f"unhandled FP [si] op esc={esc:02x} modrm={modrm:02x} at {p:#x}")
-            if mod == 0 and rm == 6:  # [disp16] operand
-                disp = struct.unpack_from("<H", exe, mo + 1)[0]
-                np = _scan_esc_disp_ops(p, mo, esc, pre, reg, disp, ops)
-                if np is not None:
-                    p = np
-                    continue
-                raise ValueError(f"unhandled FP [disp16] op esc={esc:02x} modrm={modrm:02x} at {p:#x}")
-            if rm == 6:
-                np = _scan_esc_bp_ops(exe, p, mo, esc, pre, reg, mod, ops)
-                if np is not None:
-                    p = np
-                    continue
-            raise ValueError(
-                f"unhandled FP op esc={esc:02x} modrm={modrm:02x} at {p:#x}"
-            )
+        np = _scan_esc_dispatch(exe, p, vec, ops)
+        if np is not None:
+            p = np
+            continue
         raise ValueError(f"unhandled INT {vec:02x} at {p:#x}")
     raise ValueError("ran past end of image without the cleanup epilogue")
 
