@@ -1391,6 +1391,61 @@ def _try_inline_rescue(exe: bytes, ops: list[tuple[Any, ...]]) -> int | None:
     return None
 
 
+def _scan_runtime_control(exe, p, sub, ops) -> int | None:
+    if sub == 0x32:
+        ops.append((p, "end"))
+        return p + 3
+    if sub == 0xE8:
+        ops.append((p, "epilogue"))
+        return -1
+    if sub == 0x1A:
+        ops.append((p, "cls"))
+        return p + 3
+    if sub == 0x14:
+        ops.append((p, "clear"))
+        return p + 3
+    if sub == 0xA2:
+        ops.append((p, "poke"))
+        return p + 3
+    if sub == 0x26:
+        ops.append((p, "defseg_set"))
+        return p + 3
+    if sub == 0x86:
+        ops.append((p, "palette_reset"))
+        return p + 3
+    if sub == 0x88:
+        ops.append((p, "palette"))
+        return p + 3
+    if sub == 0x8A:
+        ops.append((p, "palette_using"))
+        return p + 3
+    if sub == 0xEA:
+        ops.append((p, "view", exe[p + 3]))
+        return p + 4
+    if sub == 0xF2:
+        ops.append((p, "window", exe[p + 3]))
+        return p + 4
+    if sub == 0xA4:
+        ops.append((p, "pset", exe[p + 3]))
+        return p + 4
+    if sub == 0x62:
+        ops.append((p, "line", exe[p + 3]))
+        return p + 4
+    if sub == 0x12:
+        ops.append((p, "circle", exe[p + 3]))
+        return p + 4
+    if sub == 0x84:
+        ops.append((p, "paint", exe[p + 3]))
+        return p + 4
+    if sub == 0x30:
+        ops.append((p, "draw"))
+        return p + 3
+    if sub == 0x22:
+        ops.append((p, "color_commit", exe[p + 3]))
+        return p + 4
+    return None
+
+
 def _scan(
     exe: bytes, start: int, dia: Dialect = TB11, commits: set[int] | None = None
 ) -> list[tuple[Any, ...]]:
@@ -1500,72 +1555,11 @@ def _scan_pass(
                 if dia.name == "1.0" and raw_sub == 0xA4
                 else dia.canon_sub(raw_sub, 0x28)
             )  # EC inserts at DELAY (v10_t1_delay)
-            if sub == 0x32:  # END (ordinary statement)
-                ops.append((p, "end"))
-                p += 3
-                continue
-            if sub == 0xE8:  # cleanup framework: end of user code
-                ops.append((p, "epilogue"))
-                return ops
-            if sub == 0x1A:  # CLS
-                ops.append((p, "cls"))
-                p += 3
-                continue
-            if sub == 0x14:  # CLEAR (zero operand)
-                ops.append((p, "clear"))
-                p += 3
-                continue
-            if sub == 0xA2:  # POKE addr(FP), value(ax)
-                ops.append((p, "poke"))
-                p += 3
-                continue
-            if sub == 0x26:  # DEF SEG = <fp>
-                ops.append((p, "defseg_set"))
-                p += 3
-                continue
-            if sub == 0x86:  # PALETTE (bare form: reset to default palette,
-                ops.append((p, "palette_reset"))  # zero operands; wild
-                p += 3  # rsltest.exe `7020 PALETTE`)
-                continue
-            if sub == 0x88:  # PALETTE attr(bx), color(ax)
-                ops.append((p, "palette"))
-                p += 3
-                continue
-            if sub == 0x8A:  # PALETTE USING integer-array element at ES:SI
-                ops.append((p, "palette_using"))
-                p += 3
-                continue
-            if sub == 0xEA:  # VIEW commit (+ flag byte)
-                ops.append((p, "view", exe[p + 3]))
-                p += 4
-                continue
-            if sub == 0xF2:  # WINDOW commit (+ flag byte)
-                ops.append((p, "window", exe[p + 3]))
-                p += 4
-                continue
-            if sub == 0xA4:  # PSET/PRESET commit (+ flag byte)
-                ops.append((p, "pset", exe[p + 3]))
-                p += 4
-                continue
-            if sub == 0x62:  # LINE commit (+ flag byte)
-                ops.append((p, "line", exe[p + 3]))
-                p += 4
-                continue
-            if sub == 0x12:  # CIRCLE commit (+ flag byte)
-                ops.append((p, "circle", exe[p + 3]))
-                p += 4
-                continue
-            if sub == 0x84:  # PAINT commit (+ flag byte)
-                ops.append((p, "paint", exe[p + 3]))
-                p += 4
-                continue
-            if sub == 0x30:  # DRAW cmd$ (string operand)
-                ops.append((p, "draw"))
-                p += 3
-                continue
-            if sub == 0x22:  # COLOR commit + presence mask
-                ops.append((p, "color_commit", exe[p + 3]))
-                p += 4
+            runtime = _scan_runtime_control(exe, p, sub, ops)
+            if runtime is not None:
+                if runtime == -1:
+                    return ops
+                p = runtime
                 continue
             if sub == 0x4E:  # INPUT <prompt_desc> <flags>
                 d16, f16 = struct.unpack_from("<HH", exe, p + 3)
