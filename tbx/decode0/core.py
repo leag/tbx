@@ -3250,7 +3250,14 @@ def _fp_intrinsic_ops(state: DecodeState, op, kind) -> bool:
 
 def _fp_binary_ops(state: DecodeState, op, kind) -> bool:
     e, l = state.expr, state.layout_state
-    if kind == "popop":
+    if kind == "fold64":  # m64 arithmetic, mem LEFT
+        e.stack.append(_orient(op[2], state.fpval64(op[3]), e.stack.pop()))
+    elif kind == "fold_n64":  # m64 non-R: mem RIGHT
+        top = e.stack.pop()
+        if isinstance(top, ir.BinOp) and _PREC[top.op] < _PREC[op[2]]:
+            top = ir.Group(top)
+        e.stack.append(ir.BinOp(op[2], top, state.fpval64(op[3])))
+    elif kind == "popop":
         last = e.stack.pop()  # last-pushed is the textual LEFT
         first = e.stack.pop()
         if (
@@ -3390,13 +3397,6 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         pass
     elif _fp_compare_ops(state, op, kind):
         pass
-    elif kind == "fold64":  # m64 arithmetic, mem LEFT
-        e.stack.append(_orient(op[2], state.fpval64(op[3]), e.stack.pop()))
-    elif kind == "fold_n64":  # m64 non-R: mem RIGHT
-        top = e.stack.pop()
-        if isinstance(top, ir.BinOp) and _PREC[top.op] < _PREC[op[2]]:
-            top = ir.Group(top)
-        e.stack.append(ir.BinOp(op[2], top, state.fpval64(op[3])))
     elif kind == "orax" and e.pend_cmp is None and m.ax is not None:
         # `or ax,ax`: a just-computed value's truthiness tested directly,
         # with no preceding compare (a bare LEN(INKEY$) poll loop). A
