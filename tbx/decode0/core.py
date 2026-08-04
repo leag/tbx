@@ -3579,6 +3579,43 @@ def _fp_jcc_fallback(state, addr, cc, t, nxt) -> None:
     raise ValueError(f"unhandled jcc {cc:02x} at {addr:#x}")
 
 
+def _jmp_target_context(state, addr, target):
+    img, out = state.image, state.output
+    # Near branch targets are canonicalized to their first 64 KiB window
+    # by the scanner.  A FOR test can live in a later file window, so use
+    # the matching IP nearest this branch (wild electron.exe).
+    test_k, cmp_at_t = min(
+        (
+            (i, candidate)
+            for i, candidate in enumerate(img.ops)
+            if _same_code_offset(candidate[0], target)
+        ),
+        key=lambda found: abs(found[1][0] - addr),
+        default=(None, None),
+    )
+    if (
+        test_k is not None
+        and img.ops[test_k][1] == "fwait"
+        and test_k + 1 < len(img.ops)
+        and img.ops[test_k + 1][1] == "testw_bp"
+    ):  # all-local SINGLE FOR may jump to an x87 synchronization op
+        test_k += 1  # immediately before the normal sign-word test
+    elif (
+        test_k is not None
+        and test_k + 2 < len(img.ops)
+        and img.ops[test_k][1] == "nop"
+        and img.ops[test_k + 1][1] == "nop"
+        and img.ops[test_k + 2][1] == "testw_bp"
+    ):  # runtime-revision alias of FWAIT, already calibrated for the
+        test_k += 2  # integer/FP conversion bridges (wild reformat.exe)
+    loose = (
+        match_loose_for_header(img.ops, test_k, out.stmts, state.vdisp)
+        if test_k is not None
+        else None
+    )
+    return test_k, cmp_at_t, loose
+
+
 def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     """FP-stack + control-flow instruction dispatch (fld/fst/fadd/.../fcomp/jcc/
     jmp/call/run/jmps + unhandled-op guard). Falls through to the default k-advance;
@@ -3656,38 +3693,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
     elif kind in ("jmp", "jmpf"):
         t = op[2]
         frame = c.proc_frame if c.proc_frame is not None else c.fn_frame
-        # Near branch targets are canonicalized to their first 64 KiB window
-        # by the scanner.  A FOR test can live in a later file window, so use
-        # the matching IP nearest this branch (wild electron.exe).
-        test_k, cmp_at_t = min(
-            (
-                (i, candidate)
-                for i, candidate in enumerate(img.ops)
-                if _same_code_offset(candidate[0], t)
-            ),
-            key=lambda found: abs(found[1][0] - addr),
-            default=(None, None),
-        )
-        if (
-            test_k is not None
-            and img.ops[test_k][1] == "fwait"
-            and test_k + 1 < len(img.ops)
-            and img.ops[test_k + 1][1] == "testw_bp"
-        ):  # all-local SINGLE FOR may jump to an x87 synchronization op
-            test_k += 1  # immediately before the normal sign-word test
-        elif (
-            test_k is not None
-            and test_k + 2 < len(img.ops)
-            and img.ops[test_k][1] == "nop"
-            and img.ops[test_k + 1][1] == "nop"
-            and img.ops[test_k + 2][1] == "testw_bp"
-        ):  # runtime-revision alias of FWAIT, already calibrated for the
-            test_k += 2  # integer/FP conversion bridges (wild reformat.exe)
-        loose = (
-            match_loose_for_header(img.ops, test_k, out.stmts, state.vdisp)
-            if test_k is not None
-            else None
-        )
+        test_k, cmp_at_t, loose = _jmp_target_context(state, addr, t)
         if (
             c.dos
             and t == c.dos[-1].test
