@@ -50,6 +50,22 @@ def _next_real_addr(img, i):
     return img.ops[i][0] if i < len(img.ops) else None
 
 
+def _apply_movrr(m, dest: str, src: str) -> None:
+    """Model `mov dest,src` (16-bit general regs): dest takes src's symbolic
+    value, src goes empty. Shared by the standalone `movrr` op and by the
+    shlsi element-access glue below, which consumes a `movrr`/`movbxax` pair
+    positionally without a further dispatch pass -- it has to apply the same
+    effect inline or a register a later, unconsumed op reads (e.g. the
+    outer index leg an element access saved off to survive the read) goes
+    stale (wild eco.exe/pfl.exe: `add si,ax` saw `si=None` because the `mov
+    cx,bx` that this glue skipped past was never modeled)."""
+    regs = {"ax": m.ax, "bx": m.bx, "cx": m.cx, "dx": m.dx, "di": m.di, "si": m.si}
+    regs[dest], regs[src] = regs[src], None
+    m.ax, m.bx, m.cx, m.dx, m.di, m.si = (
+        regs["ax"], regs["bx"], regs["cx"], regs["dx"], regs["di"], regs["si"],
+    )
+
+
 def _int_register_ops(state: DecodeState, op, addr: int, kind: str) -> bool:
     img, m, c = state.image, state.machine, state.control
     if kind == "movdx_m":
@@ -65,15 +81,7 @@ def _int_register_ops(state: DecodeState, op, addr: int, kind: str) -> bool:
             raise ValueError(f"movaxdx not following idiv at {addr:#x}")
         m.ax = ir.BinOp("MOD", m.ax.lhs, m.ax.rhs)
     elif kind == "movrr":
-        regs = {
-            "ax": m.ax, "bx": m.bx, "cx": m.cx,
-            "dx": m.dx, "di": m.di, "si": m.si,
-        }
-        regs[op[2]], regs[op[3]] = regs[op[3]], None
-        m.ax, m.bx, m.cx, m.dx, m.di, m.si = (
-            regs["ax"], regs["bx"], regs["cx"],
-            regs["dx"], regs["di"], regs["si"],
-        )
+        _apply_movrr(m, op[2], op[3])
     elif kind == "spill_store":
         value = {"di": m.di}[op[2]]
         if value is None:
@@ -672,6 +680,8 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             and c.k + ao + 3 < len(img.ops)
             and img.ops[c.k + ao + 2][1] == "movbxax"
         ):
+            _apply_movrr(m, sik[2], sik[3])
+            m.bx, m.ax = m.ax, None
             element_extra = 2
             sik = img.ops[c.k + ao + 3]
         elif (
@@ -680,6 +690,9 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             and img.ops[c.k + ao + 2][1] == "movrr"
             and img.ops[c.k + ao + 3][1] == "movbxax"
         ):
+            _apply_movrr(m, sik[2], sik[3])
+            _apply_movrr(m, img.ops[c.k + ao + 2][2], img.ops[c.k + ao + 2][3])
+            m.bx, m.ax = m.ax, None
             element_extra = 3
             sik = img.ops[c.k + ao + 4]
         if sik[1] == "movbxax" and c.k + ao + 2 < len(img.ops):

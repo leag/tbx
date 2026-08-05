@@ -498,6 +498,28 @@
    ],
    "instead": "Treat the t1_palette delta as a pre-existing baseline discrepancy; do not re-record it or use it to reject unrelated palette-handler complexity reductions. Revisit the compiler/template delta separately if byte-exact calibration is required.",
    "source": "palette extraction comparison against ab138d6, session 2026-08-03"
+  },
+  {
+   "id": "RO-INDEX-ADD-SI-ARRAYREF-AX",
+   "title": "add si,ax with si=None and a materialized ArrayRef in ax is a nested/mixed array subscript",
+   "disposition": "refuted",
+   "confidence": "medium",
+   "files": [
+    "wild/hits/eco.exe",
+    "wild/hits/pfl.exe"
+   ],
+   "signatures": [
+    "add si,ax with si=None ax=ArrayRef"
+   ],
+   "hypothesis": "The multi-dimension index accumulator (`_int_index_add`, arith.py) sees `add si,ax` with `si=None` and `ax` already a fully-materialized ArrayRef because the source subscript nests one array read inside another array's index expression -- either a bare nested subscript `A(B(i))`, a nested subscript inside a multi-dimension access `A(B(i), j)`, or an addition mixing a plain span and an array read within one dimension `A(k + B(i))`.",
+   "negative_evidence": [
+    "probe_nested_idx.bas (`A%(B%(3))`, rank-1 outer array) decodes cleanly with no `add si,ax` error; the nested read folds to an ordinary ArrayRef index with no leg accumulation needed for a rank-1 outer array.",
+    "probe_nested_idx2.bas (`A%(B%(3), 2)`, rank-2 outer array with one nested dimension) also decodes cleanly.",
+    "probe_nested_idx3.bas (`A%(2 + B%(3))`, addition mixing a literal and an array read within one subscript) also decodes cleanly, folding to a plain BinOp index.",
+    "probe_nested_idx4.bas (`A%(B%(3), 1, 2)`, rank-3 outer array so `_int_index_add`'s jspan/kspan/lspan leg chain is actually exercised, with one leg a nested array read) also decodes cleanly."
+   ],
+   "instead": "Plain nested/mixed integer-array subscripting at rank 1-3 is exhaustively ruled out (4 probes). Do not re-try that shape. The wild sites' `V9%`/`V21%` names and 0xa5b9/0x12d4a offsets suggest checking whether eco.exe/pfl.exe's outer array is FAR (DGROUP-external) rather than local, or whether the nested read is a STRING/DOUBLE array feeding an integer subscript (a type coercion path `_int_index_add` may not see) -- read the actual op stream around those offsets with `tbx FILE --ops` before writing another probe, rather than guessing a 5th BASIC shape blind.",
+   "source": "scan_wild triage, session 2026-08-04, 4 oracle probes (1.1 dialect) against wild/hits/eco.exe and wild/hits/pfl.exe's exact error shape"
   }
 ]
 }

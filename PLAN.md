@@ -7533,6 +7533,29 @@ writeup there with negative evidence already collected.
 
 ### Recently closed (this campaign, newest first)
 
+- **2026-08-04 — `mov cx,bx`/`mov bx,ax` glue inside a computed element read
+  was skipped, not modeled**: `int_alu`'s shlsi element-access chain matches
+  and positionally consumes a `movrr`/`movbxax` pair that intervenes between
+  the element-address computation and its terminal read/write (the compiler
+  stashes an in-flight register there while it materializes the element) --
+  but it only advanced the cursor past them, never applied their register
+  effect. When the stashed value was the OUTER index leg of a still-open
+  multi-dimension subscript (rather than the throwaway scalar the code was
+  originally written for), the later `mov si,cx` that restores it read a
+  register the model had never actually set, and `_int_index_add` raised
+  `add si,ax with si=None ax=ArrayRef(...)` on what should have been a
+  legitimate leg. Fixed by factoring the standalone `movrr` handler's
+  register-swap into `_apply_movrr` and calling it (plus the paired
+  `movbxax`'s real effect) at both skip sites instead of discarding them.
+  No fixture added -- this corrects the *symbolic modeling* of two
+  already-calibrated ops, not new byte-pattern recognition, and the full
+  1094-fixture golden/IR-snapshot suite is byte-for-byte unchanged. Closed
+  pfl.exe fully (was "advanced, not fully closed" in the 2026-07-20 entry
+  below); advanced eco.exe to a later `fild_si` gap. Four oracle probes for
+  plain nested/mixed subscripting at rank 1-3 came up clean before the real
+  register-modeling cause was found by reading the op trace directly --
+  recorded as `RO-INDEX-ADD-SI-ARRAYREF-AX` in `ruled-out-hypotheses.json`.
+
 - **Session summary, 8 more closures after the FOR-STEP/nop-fwait entry
   below** (2026-07-20, commits 8336d0f..f2ae494, wild 16->20 decode-ok):
   each is its own commit with the full byte-trace/probe writeup; this is
