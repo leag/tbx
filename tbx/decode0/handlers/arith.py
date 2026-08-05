@@ -1603,6 +1603,7 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
                     value = expr_.stack.pop() if expr_.stack else ir.Lit(0)
                     state.put(ir.Assign(pvar, value), c.cur)
                     c.cur = None
+                    state.advance()
                     return True
                 if c.fn_frame.block:  # multi-line: `FN = expr` result statement
                     state.put(ir.FnResult(expr_.stack.pop()), c.cur)
