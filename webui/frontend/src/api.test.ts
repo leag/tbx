@@ -40,4 +40,13 @@ describe('recompile', () => {
 
     expect(result).toEqual(body)
   })
+
+  it('throws the server error text on failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      json: () => Promise.resolve({ error: 'compiler rejected source' }),
+    }))
+
+    await expect(recompile('s1', '10 END')).rejects.toThrow('compiler rejected source')
+  })
 })

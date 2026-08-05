@@ -1,3 +1,5 @@
+export type ApiError = { error: string }
+
 export type IrNode = {
   type: string
   fields: Record<string, unknown>
@@ -26,7 +28,7 @@ export type RecompileResult = {
 async function unwrap<T>(response: Response): Promise<T> {
   const body = await response.json()
   if (!response.ok) {
-    throw new Error((body as { error?: string }).error ?? 'request failed')
+    throw new Error((body as ApiError).error ?? 'request failed')
   }
   return body as T
 }
