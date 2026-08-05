@@ -16,6 +16,11 @@ Repository = "https://github.com/leag/tbx"
 debug = [
     "iced-x86>=1.21.0",
 ]
+web = [
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+    "python-multipart>=0.0.9",
+]
 
 [project.scripts]
 tbx = "tbx.cli:main"
