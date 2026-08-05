@@ -20,7 +20,6 @@ web = [
     "fastapi>=0.110",
     "uvicorn>=0.27",
     "python-multipart>=0.0.9",
-    "httpx>=0.27",
 ]
 
 [project.scripts]
@@ -50,6 +49,7 @@ ignore = ["E701", "E702", "E741"]
 
 [dependency-groups]
 dev = [
+    "httpx>=0.27",
     "iced-x86>=1.21.0",
     "lizard>=1.17.10",
     "pytest>=9.0.0",

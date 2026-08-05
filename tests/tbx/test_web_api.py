@@ -75,6 +75,21 @@ def test_recompile_matching_source_reports_full_match():
     assert body["first_diff_offset"] is None
 
 
+def test_decompile_inline_fixture_with_raw_bytes_does_not_crash():
+    # t1_inline.exe contains a $INLINE block, whose ir.Inline node carries a
+    # raw `data: bytes` field that must not be passed to jsonable_encoder
+    # as-is (it is not UTF-8 and previously crashed with a bare 500).
+    inline_fixture = Path(__file__).parent.parent / "fixtures" / "corpus" / "t1_inline.exe"
+    exe_bytes = inline_fixture.read_bytes()
+
+    response = client.post("/api/decompile", files={"exe": ("t1_inline.exe", exe_bytes)})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert isinstance(body["ir"], list)
+    assert len(body["ir"]) > 0
+
+
 @pytest.mark.skipif(not _oracle_available(), reason="Turbo Basic oracle not provisioned locally")
 def test_recompile_invalid_source_returns_compiler_error():
     exe_bytes = FIXTURE.read_bytes()

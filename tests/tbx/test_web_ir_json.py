@@ -42,6 +42,17 @@ def test_tuple_of_children_field_nests_as_nodes_list():
     ]
 
 
+def test_bytes_field_is_hex_encoded_for_json_safety():
+    # ir.Inline carries raw machine code in `data: bytes`, which is not
+    # UTF-8 and must not be passed through to jsonable_encoder as-is.
+    node = ir.Inline(data=b"\x90\xcd")
+
+    result = to_json(node)
+
+    assert result["fields"]["data"] == "90cd"
+    assert isinstance(result["fields"]["data"], str)
+
+
 def test_program_to_json_converts_a_statement_list():
     program = [ir.Assign(target=ir.Var(name="A"), value=ir.Lit(value=1))]
 

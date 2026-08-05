@@ -871,13 +871,13 @@ debug = [
 ]
 web = [
     { name = "fastapi" },
-    { name = "httpx" },
     { name = "python-multipart" },
     { name = "uvicorn" },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "httpx" },
     { name = "iced-x86" },
     { name = "lizard" },
     { name = "pytest" },
@@ -890,7 +890,6 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", marker = "extra == 'web'", specifier = ">=0.110" },
-    { name = "httpx", marker = "extra == 'web'", specifier = ">=0.27" },
     { name = "iced-x86", marker = "extra == 'debug'", specifier = ">=1.21.0" },
     { name = "python-multipart", marker = "extra == 'web'", specifier = ">=0.0.9" },
     { name = "uvicorn", marker = "extra == 'web'", specifier = ">=0.27" },
@@ -899,6 +898,7 @@ provides-extras = ["debug", "web"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "httpx", specifier = ">=0.27" },
     { name = "iced-x86", specifier = ">=1.21.0" },
     { name = "lizard", specifier = ">=1.17.10" },
     { name = "pytest", specifier = ">=9.0.0" },

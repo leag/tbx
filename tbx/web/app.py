@@ -35,17 +35,19 @@ async def decompile(exe: UploadFile = File(...)) -> dict:
     try:
         stmts = decode0.decode_user_code(exe_bytes)
         _, dialect = decode0.find_prologue(exe_bytes)
+
+        source = emit0.emit(stmts)
+        session = _store.create(exe_bytes, dialect=dialect.name)
+        return {
+            "session_id": session.id,
+            "dialect": session.dialect,
+            "source": source,
+            "ir": program_to_json(stmts),
+        }
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
-
-    source = emit0.emit(stmts)
-    session = _store.create(exe_bytes, dialect=dialect.name)
-    return {
-        "session_id": session.id,
-        "dialect": session.dialect,
-        "source": source,
-        "ir": program_to_json(stmts),
-    }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}") from e
 
 
 class RecompileRequest(BaseModel):
@@ -67,7 +69,13 @@ def recompile(req: RecompileRequest) -> dict:
 
     with tempfile.TemporaryDirectory(prefix="tbx-web-recompile-") as workspace:
         bas_path = Path(workspace) / "EDITED.BAS"
-        bas_path.write_text(req.source, encoding="latin-1", newline="")
+        try:
+            bas_path.write_text(req.source, encoding="latin-1", newline="")
+        except UnicodeEncodeError as e:
+            raise HTTPException(
+                status_code=422,
+                detail=f"edited source contains a character that cannot be encoded: {e}",
+            ) from e
         try:
             recompiled = oracle.compile_bas(bas_path, dialect=session.dialect)
         except RuntimeError as e:
@@ -75,7 +83,7 @@ def recompile(req: RecompileRequest) -> dict:
 
     original = session.exe_path.read_bytes()
     ratio = difflib.SequenceMatcher(None, original, recompiled).ratio()
-    matched = ratio == 1.0
+    matched = original == recompiled
     first_diff_offset = None
     if not matched:
         for i, (a, b) in enumerate(zip(original, recompiled)):

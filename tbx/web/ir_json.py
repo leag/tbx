@@ -31,6 +31,8 @@ def to_json(node: Any) -> dict[str, Any]:
             children.append({"name": f.name, "node": to_json(value)})
         elif _is_ir_node_tuple(value):
             children.append({"name": f.name, "nodes": [to_json(v) for v in value]})
+        elif isinstance(value, (bytes, bytearray)):
+            fields[f.name] = value.hex()
         elif isinstance(value, (tuple, list)):
             fields[f.name] = list(value)
         else:
