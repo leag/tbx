@@ -121,6 +121,17 @@ a fix confirmed against one file's exact bytes can be an overfit, while a fix
 that closes several files at once is much stronger evidence it is the real
 mechanism.
 
+When more than one hypothesis fits the failing bytes, prefer the weaker one:
+the one that commits to fewer specifics of this file, not the one with the
+shortest diff. A hypothesis scoped to "this exact displacement, in this exact
+frame shape" explains the byte in front of you but predicts nothing else; a
+hypothesis scoped to "any BP-relative store of this kind, in this kind of
+frame" is falsifiable against more of the corpus and is what actually
+generalizes when the fix lands. Shortness and generality are different axes --
+a short special case is still a special case. Prefer the version that stakes
+out more ground and can still be shown wrong by a probe over the version that
+merely fits.
+
 When a hypothesis needs checking, build the oracle probe first and diff its
 op stream against the failing file's, rather than reading deeply into the
 surrounding decoder logic before writing anything. Verifying empirically is
