@@ -520,6 +520,33 @@
    ],
    "instead": "Plain nested/mixed integer-array subscripting at rank 1-3 is exhaustively ruled out (4 probes). Do not re-try that shape. The wild sites' `V9%`/`V21%` names and 0xa5b9/0x12d4a offsets suggest checking whether eco.exe/pfl.exe's outer array is FAR (DGROUP-external) rather than local, or whether the nested read is a STRING/DOUBLE array feeding an integer subscript (a type coercion path `_int_index_add` may not see) -- read the actual op stream around those offsets with `tbx FILE --ops` before writing another probe, rather than guessing a 5th BASIC shape blind.",
    "source": "scan_wild triage, session 2026-08-04, 4 oracle probes (1.1 dialect) against wild/hits/eco.exe and wild/hits/pfl.exe's exact error shape"
+  },
+  {
+   "id": "RO-CAL-STATEMENT-COUNT-GOTO-HEURISTIC",
+   "title": "cal.exe/cal87.exe/state.exe's statement-count regression is the same GOTO-vs-DO/LOOP heuristic that broke t1_erasepre",
+   "disposition": "refuted",
+   "confidence": "medium",
+   "files": [
+    "wild/hits/cal.exe",
+    "wild/hits/cal87.exe",
+    "wild/hits/state.exe",
+    "wild/hits/state87.exe",
+    "wild/hits/d-fix.exe",
+    "wild/hits/horses.exe"
+   ],
+   "signatures": [
+    "test_a_comparable_program_still_decodes_to_its_recorded_shape statement-count drift",
+    "test_a_known_over_long_program_has_not_got_worse size drift"
+   ],
+   "hypothesis": "The same core.py fp_dispatch heuristic fixed for t1_erasepre in `fix: don't reinterpret a DO-loop back-edge as a flat GOTO without a jcc present` -- a bare backward jmps whose landing address is preceded by an unrelated forward jmp gets reinterpreted as a plain Goto instead of a DO-loop back-edge -- also explains cal.exe's statement count dropping from the recorded 2348 to 2345 (and the parallel state.exe/horses.exe emitted-size drift), and tightening its guard (any jcc anywhere in the file, then a jcc whose target exactly equals the loop landing address) would fix it the same way.",
+   "negative_evidence": [
+    "Instrumented the heuristic's fire site for cal.exe: it fires exactly once, at addr=0x153ff target=0x15395, landing on a `cls` statement reached by a three-way jcc/jmp cascade -- a shape indistinguishable from a genuine multi-arm IF, not a loop entered via GOTO.",
+    "Adding the 'any jcc in file' guard changed cal.exe's count from 2345 to 2347 (2 of 3 missing statements recovered) without fixing t1_erasepre differently, so the guard has SOME effect -- but tightening it further to 'a jcc whose target equals op[2] exactly' (the more precise IF/ELSE-join signature) made NO further difference: reverting the whole hunk 4 special case back to its as-committed wip form ('any jcc in file'), the exact-target-refined form, and the pristine unmodified wip heuristic (no guard at all) all produce the identical statement count (2345) and identical oracle round-trip delta (-64 bytes) for cal.exe.",
+    "Since none of the three variants of this one heuristic change cal.exe's measured delta at all, the heuristic firing observed at 0x153ff is not the (or not the sole) cause of cal.exe's regression from the recorded -48-byte delta to the now-measured -64-byte delta; something else in the same 'wip' commit (9ab312c) -- most likely a combination of the untested-in-isolation core.py hunks (each hunk reverted alone from the fixed baseline also left the count at 2345, only a full revert of core.py restored 2348, implying a multi-hunk interaction rather than a single culprit) -- is responsible.",
+    "Per-hunk bisection against the pre-wip core.py baseline confirmed core.py (not lift.py, emit0.py, ir/render.py, rename.py, or the handlers/*.py files) is where the regression lives, and confirmed hunks 2 and 3 (fp_dispatch's head-test DO/WHILE bound check and the FnCall-typed OR-AX truth-test recognition) individually don't explain it either, but those two hunks were partially superseded by later non-wip commits (e6d3a02, 9d15702, 75dcc32) before this session, so a clean textual revert of their original wip form was not fully testable; the interaction may involve one of those later commits too."
+   ],
+   "instead": "Do not spend further probe budget assuming this is the t1_erasepre heuristic; it is refuted for cal.exe specifically. The next probe should bisect core.py's remaining un-isolated hunks (5-11: the movsi_bp MID$-by-reference block, the proc/fn-frame _fold_if bound= threading, the removed midassign/midassign3 early-continue, and the movm_ax INPUT#/PRINT# channel-expression change) against cal.exe directly with `uv run python -m tbx.tools.verify_wild cal.exe` as the ground truth (delta -48 is the target to restore), since single-hunk reverts from the fixed baseline were all insufficient and a combination is implicated. state.exe/state87.exe/horses.exe/d-fix.exe were not independently bisected and may share this cause or have a distinct one; check each before assuming they are the same regression.",
+   "source": "gap tracking session, 2026-08-05, full test-suite baseline recovery from 20 to 9 failures after the same wip commit's t1_erasepre and golden-fixture regressions were fixed; oracle round-trip measurement via verify_wild cal.exe"
   }
 ]
 }
