@@ -19,8 +19,11 @@ attempt to solve the licensing question of distributing Borland's compiler.
 
 Out of scope for this iteration:
 - Multi-file (`--split`) source editing.
-- An op-stream / IR debug panel.
+- An op-stream (`--ops`) debug panel.
 - Persistence beyond a single browser session's temp files.
+- The iced-x86-based CFG tooling (`tbx.tools.cfg`, the `debug` extra) — the
+  IR graph view (below) is a distinct visualization built from `tbx.ir`
+  statement nodes, not a reuse of that tooling.
 
 ## Architecture
 
@@ -31,9 +34,10 @@ Two new, independent pieces. Neither touches `tbx.decode0`, `tbx.ir`, or
   `tbx[web]` (alongside the existing `debug` extra: `iced-x86`). Depends on
   `fastapi`, `uvicorn`, and `python-multipart` (for file upload parsing).
   Imports `tbx.decode0`, `tbx.emit0`, and `tbx.tools.oracle`.
-- `webui/frontend/` — a React + Vite single-page app. Built to static assets
-  (`webui/frontend/dist/`) that the FastAPI app mounts and serves; no
-  server-side rendering.
+- `webui/frontend/` — a React + Vite single-page app, using CodeMirror for
+  the source editor and React Flow (with `dagre` for automatic tree layout)
+  for the IR graph view. Built to static assets (`webui/frontend/dist/`)
+  that the FastAPI app mounts and serves; no server-side rendering.
 
 ## API
 
@@ -45,10 +49,23 @@ Multipart EXE upload (field name `exe`).
   (`tempfile.mkdtemp()`, keyed by a UUID) and keeps the original bytes there
   for the later recompile step.
 - Runs `decode0.decode_user_code(exe)` then `emit0` to produce source.
-- Success (200): `{"session_id": str, "dialect": str, "source": str}`.
+- Also serializes the decoded IR statement list to JSON (see "IR
+  serialization" below) for the IR tab.
+- Success (200): `{"session_id": str, "dialect": str, "source": str, "ir": list[IRNode]}`.
 - Decode failure (422): `{"error": str}` where `error` is the
   `DecodeDiagnostics` report text (phase/offset/op/statement/recent), the
   same text the CLI prints — not a generic traceback.
+
+### IR serialization
+
+`tbx.ir` nodes are frozen dataclasses (`ir.If`, `ir.Data`, `ir.ArrayRef`,
+etc.) with no existing JSON form. `tbx/web/ir_json.py` adds a recursive
+converter: each node becomes `{"type": "If", "fields": {...}, "children":
+[...]}`, where `type` is the dataclass's class name (used by the frontend
+for color-coding) and nested IR nodes/tuples-of-nodes are recursed into as
+`children` rather than flattened into `fields`. This lives under `tbx/web/`,
+not `tbx.ir` itself, so the core IR package stays free of
+serialization/presentation concerns.
 
 ### `POST /api/recompile`
 
@@ -80,13 +97,27 @@ pattern already used by `batch_probe.py` and `oracle.compile_bas`.
 Single page:
 
 1. File drop/upload zone.
-2. On successful decompile, a CodeMirror editor pre-filled with the
-   recovered source.
-3. A "Recompile" button that POSTs the current editor contents to
-   `/api/recompile`.
-4. A result panel showing: match ratio as a percentage, first-diff byte
-   offset (if not matched), and the verbatim error text for any decode or
-   compile failure.
+2. On successful decompile, two tabs appear: **Source** and **IR**.
+   - **Source**: a CodeMirror editor pre-filled with the recovered source,
+     plus the "Recompile" button (POSTs the current editor contents to
+     `/api/recompile`) and the result panel: match ratio as a percentage,
+     first-diff byte offset (if not matched), and the verbatim error text
+     for any decode or compile failure.
+   - **IR**: a sub-toggle between two views of the same `ir` JSON returned
+     by `/api/decompile`:
+     - *Tree*: an indented text dump of the statement list, one line per
+       node, color-coded by `type` (e.g. `If` / `For` / `Data` in distinct
+       colors, literals and identifiers styled differently from
+       statements) — read-only, not connected to recompiling.
+     - *Graph*: the same nodes laid out as a node graph (React Flow +
+       dagre for auto-layout) — each IR node is a box labeled with its
+       type and key fields, edges connect a node to its children,
+       collapsible/pannable/zoomable like an IDA graph view.
+   The IR tab is purely a read/inspect view: editing happens only in the
+   Source tab, and IR does not regenerate on its own — it reflects the IR
+   from the most recent successful `/api/decompile`, not the edited source
+   (re-running IR against hand-edited source would require re-decoding a
+   compiled EXE, which recompiling doesn't produce).
 
 ## Error handling
 
@@ -102,6 +133,11 @@ Nothing is swallowed into a generic "something went wrong."
     (e.g. `tests/fixtures/corpus/f87_t1_beep.exe`).
   - `/api/decompile` error path with garbage bytes, asserting the
     diagnostics text is present in the response.
+  - `tbx/web/ir_json.py`'s converter against a small hand-built IR
+    statement (e.g. one `ir.If` wrapping a couple of leaf nodes), asserting
+    the resulting `type`/`fields`/`children` shape — independent of any
+    fixture, per the project's preference for matcher-style tests on
+    hand-built data.
   - `/api/recompile` happy-path and compiler-error-path tests are skipped
     when `oracle.preflight()` raises (no local compiler assets), following
     the project's existing pattern for oracle-dependent tests.
