@@ -1,16 +1,10 @@
 import dagre from 'dagre'
 import type { Node as RFNode, Edge as RFEdge } from 'reactflow'
 import type { IrNode } from './api'
-import { colorForType } from './irColors'
+import { colorForType, fieldsSummary } from './irColors'
 
 const NODE_WIDTH = 180
 const NODE_HEIGHT = 40
-
-function fieldsSummary(fields: Record<string, unknown>): string {
-  const entries = Object.entries(fields)
-  if (entries.length === 0) return ''
-  return '\n' + entries.map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(', ')
-}
 
 export function toGraph(roots: IrNode[]): { nodes: RFNode[]; edges: RFEdge[] } {
   const nodes: RFNode[] = []
@@ -21,7 +15,7 @@ export function toGraph(roots: IrNode[]): { nodes: RFNode[]; edges: RFEdge[] } {
     const id = `n${counter++}`
     nodes.push({
       id,
-      data: { label: irNode.type + fieldsSummary(irNode.fields) },
+      data: { label: irNode.type + fieldsSummary(irNode.fields, { prefix: '\n', sep: ', ' }) },
       position: { x: 0, y: 0 },
       style: { borderColor: colorForType(irNode.type), borderWidth: 2, width: NODE_WIDTH },
     })

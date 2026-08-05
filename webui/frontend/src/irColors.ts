@@ -10,3 +10,14 @@ export function colorForType(type: string): string {
   }
   return PALETTE[hash % PALETTE.length]
 }
+
+export function fieldsSummary(
+  fields: Record<string, unknown>,
+  opts?: { prefix?: string; sep?: string },
+): string {
+  const entries = Object.entries(fields)
+  if (entries.length === 0) return ''
+  const prefix = opts?.prefix ?? ' '
+  const sep = opts?.sep ?? ' '
+  return prefix + entries.map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(sep)
+}

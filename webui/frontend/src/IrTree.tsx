@@ -1,11 +1,5 @@
 import type { IrNode } from './api'
-import { colorForType } from './irColors'
-
-function fieldsSummary(fields: Record<string, unknown>): string {
-  const entries = Object.entries(fields)
-  if (entries.length === 0) return ''
-  return ' ' + entries.map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(' ')
-}
+import { colorForType, fieldsSummary } from './irColors'
 
 function TreeNode({ node, depth }: { node: IrNode; depth: number }) {
   return (
