@@ -12,6 +12,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from tbx import decode0, emit0
@@ -91,3 +92,9 @@ def recompile(req: RecompileRequest) -> dict:
         "original_len": len(original),
         "recompiled_len": len(recompiled),
     }
+
+
+# Mount the built frontend, if present
+_dist = Path(__file__).resolve().parent.parent.parent / "webui" / "frontend" / "dist"
+if _dist.is_dir():
+    app.mount("/", StaticFiles(directory=_dist, html=True), name="frontend")
