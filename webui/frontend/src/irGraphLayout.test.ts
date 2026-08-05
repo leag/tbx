@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { toGraph } from './irGraphLayout'
-import { IrNode } from './api'
+import type { IrNode } from './api'
 
 describe('toGraph', () => {
   it('creates one graph node per IR node and edges to nested children', () => {

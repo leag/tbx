@@ -1,6 +1,6 @@
 import dagre from 'dagre'
-import { Node as RFNode, Edge as RFEdge } from 'reactflow'
-import { IrNode } from './api'
+import type { Node as RFNode, Edge as RFEdge } from 'reactflow'
+import type { IrNode } from './api'
 import { colorForType } from './irColors'
 
 const NODE_WIDTH = 180

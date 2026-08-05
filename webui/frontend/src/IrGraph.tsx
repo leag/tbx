@@ -1,6 +1,6 @@
 import ReactFlow, { Background, Controls } from 'reactflow'
 import 'reactflow/dist/style.css'
-import { IrNode } from './api'
+import type { IrNode } from './api'
 import { toGraph } from './irGraphLayout'
 
 type Props = { nodes: IrNode[] }

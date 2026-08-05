@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import IrTree from './IrTree'
-import { IrNode } from './api'
+import type { IrNode } from './api'
 
 describe('IrTree', () => {
   it('renders a node type and its nested child', () => {

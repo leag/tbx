@@ -1,4 +1,4 @@
-import { IrNode } from './api'
+import type { IrNode } from './api'
 import { colorForType } from './irColors'
 
 function fieldsSummary(fields: Record<string, unknown>): string {

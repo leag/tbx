@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { IrNode } from './api'
+import type { IrNode } from './api'
 import IrTree from './IrTree'
 import IrGraph from './IrGraph'
 
