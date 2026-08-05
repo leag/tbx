@@ -383,7 +383,7 @@
     "fr-1.1 oracle dialect"
    ],
    "disposition": "closed",
-   "evidence_class": "runtime",
+   "evidence_class": "dialect-verified",
    "confidence": "high",
    "files": [
     "wild/hits/CVT2TB.EXE"

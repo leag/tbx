@@ -1,0 +1,31 @@
+# t1_midassign3byref dialect=1.1 start=087A0
+087A3:jmp:34757
+087A6:proc_enter
+087A9:arg_ref:6
+087AC:far_movax_si
+087AF:movbxax
+087B1:movax:1
+087B4:movsi:308
+087B7:rt:156
+087B9:movsi_bp:10
+087BC:moves_bp:12
+087BF:midassign3
+087C1:proc_ret:8
+087C5:movsi:304
+087C8:rt:156
+087CA:movsi:288
+087CD:strassign
+087CF:mov_mem_sp:102
+087D3:sub_sp:2
+087D6:arg_push_ref:288
+087DB:movax:2
+087DE:movsi:4
+087E1:add_si_sp
+087E3:movm_ax_temp
+087E6:arg_push_temp
+087E8:movm_imm:102:0
+087EE:far_call:34726
+087F3:add_sp:2
+087F6:end
+087F9:epilogue
+# commits

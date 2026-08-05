@@ -1,0 +1,31 @@
+# v10_t1_midassign3byref dialect=1.0 start=07150
+07153:jmp:29045
+07156:proc_enter
+07159:arg_ref:6
+0715C:far_movax_si
+0715F:movbxax
+07161:movax:1
+07164:movsi:308
+07167:rt:156
+07169:movsi_bp:10
+0716C:moves_bp:12
+0716F:midassign3
+07171:proc_ret:8
+07175:movsi:304
+07178:rt:156
+0717A:movsi:288
+0717D:strassign
+0717F:mov_mem_sp:102
+07183:sub_sp:2
+07186:arg_push_ref:288
+0718B:movax:2
+0718E:movsi:4
+07191:add_si_sp
+07193:movm_ax_temp
+07196:arg_push_temp
+07198:movm_imm:102:0
+0719E:far_call:29014
+071A3:add_sp:2
+071A6:end
+071A9:epilogue
+# commits

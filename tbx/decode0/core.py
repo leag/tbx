@@ -4113,6 +4113,13 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                     and candidate[1] == "proc_ret"
                     for candidate in img.ops
                 )
+                # A multiline IF body requires a conditional test somewhere in
+                # the stream; a program with no `jcc` at all cannot contain
+                # one, so a bare backward jump whose predecessor happens to be
+                # an unrelated forward `jmp` (e.g. a source GOTO skipping into
+                # a DO loop's middle) is a genuine loop, not this shape
+                # (t1_erasepre: `20 GOTO 60` into `DIM` inside a DO/LOOP).
+                and any(candidate[1] == "jcc" for candidate in img.ops)
             ):
                 state.put(ir.Goto(("addr", op[2])), c.cur)
                 c.cur = None
