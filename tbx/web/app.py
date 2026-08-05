@@ -37,7 +37,8 @@ async def decompile(exe: UploadFile = File(...)) -> dict:
         _, dialect = decode0.find_prologue(exe_bytes)
 
         source = emit0.emit(stmts)
-        session = _store.create(exe_bytes, dialect=dialect.name)
+        toggles = getattr(stmts, "toggles", "")
+        session = _store.create(exe_bytes, dialect=dialect.name, toggles=toggles)
         return {
             "session_id": session.id,
             "dialect": session.dialect,
@@ -77,7 +78,9 @@ def recompile(req: RecompileRequest) -> dict:
                 detail=f"edited source contains a character that cannot be encoded: {e}",
             ) from e
         try:
-            recompiled = oracle.compile_bas(bas_path, dialect=session.dialect)
+            recompiled = oracle.compile_bas(
+                bas_path, dialect=session.dialect, toggles=session.toggles
+            )
         except RuntimeError as e:
             raise HTTPException(status_code=422, detail=str(e)) from e
 

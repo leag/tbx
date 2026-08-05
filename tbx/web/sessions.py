@@ -13,6 +13,7 @@ class Session:
     id: str
     exe_path: Path
     dialect: str
+    toggles: str = ""
 
 
 class SessionStore:
@@ -26,12 +27,12 @@ class SessionStore:
         self._base_dir = base_dir
         self._sessions: dict[str, Session] = {}
 
-    def create(self, exe_bytes: bytes, dialect: str) -> Session:
+    def create(self, exe_bytes: bytes, dialect: str, toggles: str = "") -> Session:
         session_id = uuid.uuid4().hex
         workdir = Path(tempfile.mkdtemp(prefix=f"tbx-web-{session_id}-", dir=self._base_dir))
         exe_path = workdir / "original.exe"
         exe_path.write_bytes(exe_bytes)
-        session = Session(id=session_id, exe_path=exe_path, dialect=dialect)
+        session = Session(id=session_id, exe_path=exe_path, dialect=dialect, toggles=toggles)
         self._sessions[session_id] = session
         return session
 

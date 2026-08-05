@@ -19,3 +19,13 @@ def test_get_unknown_session_raises_key_error(tmp_path):
 
     with pytest.raises(KeyError):
         store.get("does-not-exist")
+
+
+def test_create_stores_toggles_defaulting_to_empty_string(tmp_path):
+    store = SessionStore(base_dir=tmp_path)
+
+    with_toggles = store.create(b"\x4d\x5a", dialect="1.1", toggles="8")
+    without_toggles = store.create(b"\x4d\x5a", dialect="1.1")
+
+    assert store.get(with_toggles.id).toggles == "8"
+    assert store.get(without_toggles.id).toggles == ""
