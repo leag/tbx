@@ -880,7 +880,9 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             c.cur = None
             state.advance(ao + 4 + sync)
             return True
-        elif sik[1] in (pre + "fld_si", pre + "fld_si64", pre + "fild_si32"):
+        elif sik[1] in (
+            pre + "fld_si", pre + "fld_si64", pre + "fild_si", pre + "fild_si32"
+        ):
             expr_.stack.append(ref)
         elif sik[1] in (pre + "fstp_si", pre + "fstp_si64", pre + "fstp_si32"):
             v = expr_.stack.pop()
