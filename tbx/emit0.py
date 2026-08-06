@@ -315,7 +315,7 @@ def _wrap_continued(head: str, items: list[str], col: int) -> str:
     return "\n".join(lines)
 
 
-def emit(stmts, *, compact: bool = False) -> str:
+def emit(stmts, *, compact: bool = False, line_starts: list[int] | None = None) -> str:
     def validate_loop_exits(body, do_depth=0, path=()):
         """Reject EXIT LOOP nodes that are not lexically inside a DO."""
         for index, stmt in enumerate(body):
@@ -644,6 +644,14 @@ def emit(stmts, *, compact: bool = False) -> str:
         j = i + 1
         while j < len(stmts) and line[j] == line[i]:
             j += 1
+        if line_starts is not None:
+            # 0-based index into the final source text of the first physical
+            # line this statement (or this line-grouped run of statements,
+            # e.g. "10 A=1:B=2") renders to. Statements sharing a line get
+            # the same start, matching how they're indistinguishable in the
+            # emitted text.
+            start = sum(fragment.count("\n") for fragment in out)
+            line_starts.extend([start] * (j - i))
         text = _join_line(
             [stmts[k] for k in range(i, j)], txt, len(f"{line[i]} ")
         )

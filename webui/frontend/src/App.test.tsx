@@ -11,7 +11,7 @@ describe('App', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({
-        session_id: 's1', dialect: '1.1', source: '10 PRINT "HI"', ir: [],
+        session_id: 's1', dialect: '1.1', toggles: '', source: '10 PRINT "HI"', ir: [], addresses: [], line_starts: [],
       }),
     }))
 
@@ -28,7 +28,7 @@ describe('App', () => {
       const editor = screen.getByLabelText(/source editor/i)
       expect(editor.textContent).toContain('10 PRINT "HI"')
     })
-    expect(screen.getByRole('tab', { name: /source/i })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /ir/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /edit.*compare/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^ir$/i })).toBeInTheDocument()
   })
 })

@@ -11,8 +11,8 @@ export default function UploadZone({ onFileSelected }: Props) {
   }
 
   return (
-    <div>
-      <label htmlFor="exe-upload">Upload EXE</label>
+    <div className="upload-zone">
+      <label htmlFor="exe-upload">📁 Upload EXE</label>
       <input id="exe-upload" type="file" accept=".exe" onChange={handleChange} />
     </div>
   )
