@@ -39,6 +39,9 @@ _FLOPPIES = {
     "fr-1.1": "tb11_fr_floppy.img",
 }
 
+#: Public: the `dialect` values `compile_bas` accepts.
+DIALECTS = tuple(_FLOPPIES)
+
 
 def preflight() -> None:
     """Fail early when the external oracle harness cannot run."""
@@ -74,8 +77,53 @@ def oracle_dir() -> Path:
     return cand
 
 
+def _floppy_name(dialect: str) -> str:
+    """The floppy filename `tb_v86_fast.js` keys snapshots by (never None)."""
+    return _FLOPPIES[dialect] or "tb_floppy.img"
+
+
+def _snapshot_path(dialect: str, toggles: str) -> Path:
+    return oracle_dir() / "snapshots" / f"{_floppy_name(dialect)}__{toggles or 'none'}.state"
+
+
+def has_snapshot(dialect: str = "1.1", toggles: str = "") -> bool:
+    """Whether `compile_bas(fast=True)` has a snapshot ready for this pair."""
+    return _snapshot_path(dialect, toggles).is_file()
+
+
+def prime_snapshot(dialect: str = "1.1", toggles: str = "", timeout: int = 300) -> Path:
+    """Prime a `compile_bas(fast=True)` snapshot for (dialect, toggles).
+
+    One-time setup per (dialect, toggles) pair: boots the oracle, sets the
+    given IDE Options toggles and "Compile to: EXE file" through the real
+    menus, then saves a v86 state snapshot that `compile_bas(fast=True)`
+    restores from on every subsequent call instead of rebooting -- cuts a
+    ~8s compile to ~4s. See `tb_v86_fast.js`'s module docstring for the
+    mechanism and why it's verified byte-identical to the plain path.
+    """
+    d = oracle_dir()
+    snap_path = _snapshot_path(dialect, toggles)
+    with tempfile.TemporaryDirectory(prefix="tbx-oracle-prime-") as workspace:
+        cmd = [
+            "node", "tb_v86_fast.js", "--prime",
+            "--floppy", _floppy_name(dialect),
+            "--snapshot-dir", str(snap_path.parent),
+            "--workspace", workspace,
+        ]
+        if toggles:
+            cmd += ["--toggles", toggles]
+        r = subprocess.run(cmd, cwd=d, capture_output=True, text=True, timeout=timeout)
+        if r.returncode:
+            raise RuntimeError(f"oracle prime failed:\n{r.stdout[-2000:]}\n{r.stderr[-2000:]}")
+    return snap_path
+
+
 def compile_bas(
-    bas: Path | str, dialect: str = "1.1", timeout: int = 300, toggles: str = ""
+    bas: Path | str,
+    dialect: str = "1.1",
+    timeout: int = 300,
+    toggles: str = "",
+    fast: bool = False,
 ) -> bytes:
     """Compile a .BAS with the real Turbo Basic compiler; return EXE bytes.
 
@@ -86,19 +134,43 @@ def compile_bas(
     they are all OFF by default), driven through the real Options menu the
     same way `--compile-exe` drives "Compile to EXE file". See
     `tb_v86_lib.setOptionsToggles`.
+
+    `fast=True` restores a pre-primed v86 snapshot instead of rebooting
+    FreeDOS and re-navigating the IDE menus on every call -- see
+    `prime_snapshot`, which must be called once for this exact
+    (dialect, toggles) pair before `fast=True` can be used; raises
+    RuntimeError naming the missing snapshot otherwise. Verified
+    byte-identical to the non-fast path across the fixture corpus and both
+    dialects; use it freely once primed.
     """
     d = oracle_dir()
     with tempfile.TemporaryDirectory(prefix="tbx-oracle-") as workspace:
         out = Path(workspace) / "SOLVER_v86.EXE"
-        cmd = [
-            "node", "tb_v86.js", str(Path(bas).resolve()), "--compile-exe",
-            "--workspace", workspace,
-        ]
-        if toggles:
-            cmd += ["--toggles", toggles]
-        floppy = _FLOPPIES[dialect]
-        if floppy:
-            cmd += ["--floppy", floppy]
+        if fast:
+            snap_path = _snapshot_path(dialect, toggles)
+            if not snap_path.is_file():
+                raise RuntimeError(
+                    f"no primed snapshot for dialect={dialect!r} toggles={toggles!r} "
+                    f"(expected {snap_path}); call oracle.prime_snapshot(dialect={dialect!r}, "
+                    f"toggles={toggles!r}) first"
+                )
+            cmd = [
+                "node", "tb_v86_fast.js", str(Path(bas).resolve()),
+                "--floppy", _floppy_name(dialect), "--snapshot-dir", str(snap_path.parent),
+                "--compile-exe", "--workspace", workspace,
+            ]
+            if toggles:
+                cmd += ["--toggles", toggles]
+        else:
+            cmd = [
+                "node", "tb_v86.js", str(Path(bas).resolve()), "--compile-exe",
+                "--workspace", workspace,
+            ]
+            if toggles:
+                cmd += ["--toggles", toggles]
+            floppy = _FLOPPIES[dialect]
+            if floppy:
+                cmd += ["--floppy", floppy]
         r = subprocess.run(cmd, cwd=d, capture_output=True, text=True, timeout=timeout)
         if not out.is_file():
             raise RuntimeError(
