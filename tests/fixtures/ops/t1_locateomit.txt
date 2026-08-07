@@ -1,0 +1,12 @@
+# t1_locateomit dialect=1.1 start=087C0
+087C3:movax:3
+087C6:movbxax
+087C8:movax:5
+087CB:locate
+087CD:movax:32768
+087D0:movbxax
+087D2:movax:7
+087D5:locate
+087D7:end
+087DA:epilogue
+# commits

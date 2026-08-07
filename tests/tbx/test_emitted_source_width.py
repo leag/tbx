@@ -49,11 +49,11 @@ EDITOR_FILE_LIMIT = 65536
 #: root and include files below.
 _OVER_LONG = {
     "banker.exe": 97906,
-    "horses.exe": 67394,
+    "horses.exe": 67393,
     "inv87.exe": 88301,
     "invoice.exe": 88301,
-    "state.exe": 69172,
-    "state87.exe": 69172,
+    "state.exe": 69152,
+    "state87.exe": 69152,
 }
 _SPLITTABLE = set(_OVER_LONG) - {"horses.exe"}
 

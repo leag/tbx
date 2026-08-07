@@ -89,29 +89,44 @@ def _all_source_includes(
     nested body line is rendered indented (`block_lines`' 2-space-per-level
     convention), so a line with no leading whitespace is the only place a
     cut can happen without splitting a block's scope across two files.
-    Deferring past the byte limit until the next top-level line is safe --
-    wild k.exe is the witness a cut that doesn't defer isn't: Turbo Basic's
-    own compiler desyncs many statements later in the file once a block's
-    body has been torn across an $INCLUDE boundary, surfacing as an
-    unrelated-looking syntax error far from the real cause.
+    Turbo Basic's own compiler desyncs many statements later in the file
+    once a block's body has been torn across an $INCLUDE boundary (wild
+    k.exe), surfacing as an unrelated-looking syntax error far from the real
+    cause -- so lines are first grouped into indivisible UNITS (a top-level
+    line plus every indented line that follows it, up to the next top-level
+    line), and chunks are packed one whole unit at a time. A unit is only
+    ever attributed to the chunk it started in, so packing greedily this way
+    can never overshoot `include_limit` the way deferring a byte-count
+    decision forward to "whichever top-level line comes next" can (that
+    approach can walk arbitrarily far past the limit before finding one).
     """
+    units: list[str] = []
+    current: list[str] = []
+    for line in source.splitlines(keepends=True):
+        if line == line.lstrip() and current:
+            units.append("".join(current))
+            current = []
+        current.append(line)
+    if current:
+        units.append("".join(current))
+
     chunks: list[str] = []
     pending: list[str] = []
     size = 0
-    for line in source.splitlines(keepends=True):
-        line_size = _source_bytes(line)
-        if line_size > include_limit:
+    for unit in units:
+        unit_size = _source_bytes(unit)
+        if unit_size > include_limit:
             raise ValueError(
-                f"one physical source line is {line_size} bytes; "
-                f"no line-boundary split fits the {include_limit}-byte limit"
+                f"one top-level statement (with its block body) is "
+                f"{unit_size} bytes; no line-boundary split fits the "
+                f"{include_limit}-byte limit"
             )
-        at_top_level = line == line.lstrip()
-        if pending and size + line_size > include_limit and at_top_level:
+        if pending and size + unit_size > include_limit:
             chunks.append("".join(pending))
             pending = []
             size = 0
-        pending.append(line)
-        size += line_size
+        pending.append(unit)
+        size += unit_size
     if pending:
         chunks.append("".join(pending))
     if len(chunks) > 999:
@@ -307,20 +322,40 @@ def _join_line(group, txt, col: int) -> str:
     return f"{head}{sep}{tail}"
 
 
-def _wrap_continued(head: str, items: list[str], col: int) -> str:
-    """`head` + comma list, folded over physical lines with `_` continuations.
+def _flatten_join_line(group, txt, col: int) -> tuple[list[str], list[str]]:
+    """(pieces, seps) for `_join_line`'s recursive `:`/` ELSE ` join, flattened.
+
+    `pieces[i]` is one statement's own rendering; `seps[i]` is what
+    `_join_line` puts between `pieces[i]` and `pieces[i + 1]` (so
+    `len(seps) == len(pieces) - 1`). Concatenating `pieces` and `seps`
+    alternately reproduces `_join_line(group, txt, col)` exactly.
+    """
+    pieces = [txt(group[0], col)]
+    seps = []
+    for k in range(len(group) - 1):
+        seps.append(" ELSE " if isinstance(group[k], ir.IfGoto) else ": ")
+        pieces.append(txt(group[k + 1], col))
+    return pieces, seps
+
+
+def _wrap_continued(head: str, items: list[str], col: int, sep=",") -> str:
+    """`head` + joined list, folded over physical lines with `_` continuations.
 
     Turbo Basic joins a line ending in ` _` to the next one before compiling,
     and the result is byte-identical to the unwrapped spelling. Continuation
     lines are indented to the caller's margin so the statement still reads as
-    one thing.
+    one thing. `sep` trails every item but the last: one string used
+    uniformly (`,` for a comma list, `" +"` for a concatenation chain -- see
+    `_flatten_plus_chain`), or a list of `len(items) - 1` per-item separators
+    (`:`/` ELSE ` for a colon-joined line -- see `_flatten_join_line`).
     """
+    seps = sep if isinstance(sep, list) else [sep] * (len(items) - 1)
     pad = " " * (col + 2)
     lines: list[str] = []
     cur = head
     first = True
     for i, item in enumerate(items):
-        piece = item + ("," if i < len(items) - 1 else "")
+        piece = item + (seps[i] if i < len(items) - 1 else "")
         candidate = cur + ("" if cur.endswith(" ") or not cur else " ") + piece
         width = (0 if first else len(pad)) + len(candidate) + 2  # room for ` _`
         if not first or col:
@@ -333,6 +368,22 @@ def _wrap_continued(head: str, items: list[str], col: int) -> str:
         cur = candidate if cur != head else head + piece
     lines.append(cur.rstrip())
     return "\n".join(lines)
+
+
+def _flatten_plus_chain(e) -> list[str]:
+    """Ordered operand texts of a left-associative `+` chain, one per leaf.
+
+    Recurses into `lhs` only while it is itself a `+` BinOp; every other node
+    (including a `+`-typed `rhs`, which needs its own parens if lower-
+    precedence content sits inside it) is rendered once via `ir.unparse` and
+    kept as a single atomic piece. Joining the result with `" + "` reproduces
+    `ir.unparse(e)` exactly -- `+` is uniform-precedence and left-assoc, so
+    `unparse`'s own minimal-parenthesization never inserts parens between
+    chain siblings, only (already-handled) inside a leaf.
+    """
+    if isinstance(e, ir.BinOp) and e.op == "+":
+        return _flatten_plus_chain(e.lhs) + [ir.unparse(e.rhs)]
+    return [ir.unparse(e)]
 
 
 def emit(stmts, *, compact: bool = False, line_starts: list[int] | None = None) -> str:
@@ -576,14 +627,29 @@ def emit(stmts, *, compact: bool = False, line_starts: list[int] | None = None) 
         if isinstance(s, ir.While):
             return f"WHILE {ir.unparse_cond(s.cond)}"
         if isinstance(s, ir.IfInline):
-            body = ": ".join(txt(b, col) for b in s.body)
-            inline = f"IF {ir.unparse_cond(s.cond)} THEN {body}"
+            head = f"IF {ir.unparse_cond(s.cond)} THEN "
+            body_pieces = [txt(b, col) for b in s.body]
+            body = ": ".join(body_pieces)
+            inline = f"{head}{body}"
             if s.else_body:
-                # The ELSE form has no block equivalent to fall back on: over a
-                # simple condition the two compile differently, so this stays
-                # one line however wide it gets (t1_selarmifelse).
-                tail = ": ".join(txt(b, col) for b in s.else_body)
-                return f"{inline} ELSE {tail}"
+                # The ELSE form has no BLOCK-IF equivalent to fall back on:
+                # over a simple condition the two compile differently
+                # (t1_selarmifelse). `_` continuation is a different lever,
+                # though -- it's a pure lexer-level line-splice (same
+                # mechanism as DATA/DIM/ON-GOSUB's folds), so it stays safe
+                # regardless of the condition shape or the ELSE.
+                tail_pieces = [txt(b, col) for b in s.else_body]
+                tail = ": ".join(tail_pieces)
+                out = f"{inline} ELSE {tail}"
+                if col + len(out) <= LINE_LIMIT:
+                    return out
+                pieces = body_pieces + tail_pieces
+                seps = (
+                    [": "] * (len(body_pieces) - 1)
+                    + [" ELSE "]
+                    + [": "] * (len(tail_pieces) - 1)
+                )
+                return _wrap_continued(head, pieces, col, sep=seps)
             if col + len(inline) > LINE_LIMIT and isinstance(s.cond, ir.LogOp):
                 # Too wide for the editor, and a compound condition -- for
                 # which the block spelling compiles to the same bytes, checked
@@ -591,8 +657,11 @@ def emit(stmts, *, compact: bool = False, line_starts: list[int] | None = None) 
                 # the emitter's to choose between, and only one of them is
                 # source Turbo Basic would accept. A simple condition is not
                 # interchangeable (its inline form does not materialize, which
-                # is what `decode0`'s `block_ifs` turns on) and stays as it is.
+                # is what `decode0`'s `block_ifs` turns on) -- fold with `_`
+                # continuation instead, below, same as the ELSE form above.
                 return txt(ir.IfBlock(((s.cond, tuple(s.body)),), None), col)
+            if col + len(inline) > LINE_LIMIT:
+                return _wrap_continued(head, body_pieces, col, sep=": ")
             return inline
         if isinstance(s, ir.IfBlock):
             out = []
@@ -655,6 +724,32 @@ def emit(stmts, *, compact: bool = False, line_starts: list[int] | None = None) 
                 for n, b in ((s.name, s.bounds), *s.also)
             ]
             return _wrap_continued(head, arrs, col)
+        if isinstance(s, ir.Assign):
+            out = ir.unparse_stmt(s)
+            if col + len(out) <= LINE_LIMIT:
+                return out
+            # Try the cheaper fix first: the whole-line compacting pass
+            # (`_compact_source_spacing`) that the emit loop below applies to
+            # any single-statement over-wide line already reaches most cases
+            # (t1-scale expressions rarely need more). Only fall through to
+            # `_` folding when compacting alone still doesn't fit.
+            narrowed = _compact_source_spacing(out)
+            if col + len(narrowed) <= LINE_LIMIT:
+                return narrowed
+            if not (isinstance(s.value, ir.BinOp) and s.value.op == "+"):
+                # Nothing safe to fold when it's over-wide but not a `+`
+                # chain (no witness for that shape); stays as-is.
+                return out
+            # A long string/expression concatenation is one statement with a
+            # single trailing commit marker, same as ir.Dim above -- `_`
+            # continuation folds it over physical lines without touching the
+            # statement boundary. Byte-identical to the unfolded spelling for
+            # the same reason DIM's fold is: TB joins a ` _`-terminated line
+            # to the next before compiling, so this is a pure line-layout
+            # choice, not a new construct. Wild pwinst.exe's 56-piece keymap
+            # string is 1022 characters unfolded, still over 900 compacted.
+            head = f"{ir.unparse(s.target)} = "
+            return _wrap_continued(head, _flatten_plus_chain(s.value), col, sep=" +")
         return ir.unparse_stmt(s)
 
     # Statements sharing an original line number (only possible when the error-trap
@@ -690,9 +785,8 @@ def emit(stmts, *, compact: bool = False, line_starts: list[int] | None = None) 
             # emitted text.
             start = sum(fragment.count("\n") for fragment in out)
             line_starts.extend([start] * (j - i))
-        text = _join_line(
-            [stmts[k] for k in range(i, j)], txt, len(f"{line[i]} ")
-        )
+        group = [stmts[k] for k in range(i, j)]
+        text = _join_line(group, txt, len(f"{line[i]} "))
         if i in end_sub_lines:
             physical = text.splitlines()
             physical[-1] = f"{end_sub_lines[i]} {physical[-1].strip()}"
@@ -739,6 +833,24 @@ def emit(stmts, *, compact: bool = False, line_starts: list[int] | None = None) 
                     narrowed = _compact_source_spacing(prefix + text)
                     if max(map(len, narrowed.splitlines())) <= LINE_LIMIT:
                         text = narrowed[len(prefix) :]
+            elif j > i + 1 and widest > LINE_LIMIT:
+                # Several statements sharing one original line number,
+                # `:`/` ELSE `-joined, too wide together even though each
+                # is short on its own (wild pwinst.exe, up to 467 chars).
+                # Compacting first, same as the single-statement case;
+                # if that alone doesn't fit, `_` continuation folds the
+                # line at a `:`/` ELSE ` boundary -- always a safe break
+                # point, since it never splits inside one statement's own
+                # text, and the join is a pure lexer-level line-splice
+                # like every other continuation fold here.
+                narrowed = _compact_source_spacing(prefix + text)
+                if max(map(len, narrowed.splitlines())) <= LINE_LIMIT:
+                    text = narrowed[len(prefix) :]
+                else:
+                    pieces, seps = _flatten_join_line(group, txt, len(prefix))
+                    text = _wrap_continued(prefix, pieces, len(prefix), sep=seps)[
+                        len(prefix) :
+                    ]
             out.append(f"{prefix}{text}\n")
         i = j
     if hooks:

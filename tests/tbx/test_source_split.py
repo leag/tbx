@@ -97,5 +97,5 @@ def test_single_line_def_fn_is_not_mistaken_for_a_block():
 
 
 def test_a_physical_line_larger_than_one_file_fails_loud():
-    with pytest.raises(ValueError, match="one physical source line"):
+    with pytest.raises(ValueError, match="one top-level statement"):
         emit0.split_source('10 PRINT "TOO LONG"\n', limit=10)
