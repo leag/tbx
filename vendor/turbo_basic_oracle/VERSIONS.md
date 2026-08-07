@@ -68,20 +68,24 @@ inside unused/uninitialized padding, not code:
   spelling `D:\DOSCOM~` (same phenomenon as above) plus one unrelated single
   byte at offset 59119. Not treated as a new build.
 
-## Tried, blocked (not obtained)
+## Checked via a human download (agent can't pass vetusware's login wall)
 
-- **vetusware.com "turbo basic 1.1 plus"** (claimed larger/"plus" 1.1
-  build, `turbo basic1.1 plus.zip`, CRC `0x95D02806`, 268565 bytes):
-  download requires a registered vetusware account (confirmed via the site's
-  own UI, 2026-08-06 — "Please login or register to download this file").
-  Account creation is out of policy scope for this session; if a human
-  wants to fetch it manually, the file is at
-  `vetusware.com/download/turbo%20basic%201.1%20plus%20unzipped%20completly%20type%20tb.exe%20.to%20run%201.1%20plus/?id=10642`.
-  Given the name and 1987 date, this is plausibly just a re-zipped copy of
-  known English 1.1 (not confirmed) rather than a new build — low priority.
+- **vetusware.com "turbo basic 1.1 plus"** (`turbo basic1.1 plus.zip`, CRC
+  `0x95D02806`, 268565 bytes): download requires a registered vetusware
+  account, which is out of scope for the agent to create or authenticate
+  into (2026-08-06/07 — confirmed blocked via curl, a real browser tab, and
+  explicitly declined even when the user offered session cookies, since a
+  session cookie authenticates the same way a password does). The user
+  downloaded it manually with their own account (2026-08-07) and handed
+  over the file. Extracted `TB.EXE`: 212844 bytes, PE date 1987-11-04,
+  sha256 `92fcff2f8980d7c80aed32bab8700942d4c18ad07013a427d4eba4d0c24ae16c`
+  — **byte-identical to the already-vendored English 1.1**. "1.1 Plus" was
+  just an uncompressed repack (the description's "much larger size... can
+  be unzipped easily" refers to the archive method, not a different
+  build). Confirmed not a new build; nothing to add to the oracle from it.
 - **vetusware.com "Borland Turbo Basic 1.0"** (`?id=16030` / `?id=11304`):
-  not attempted this session after the above hit the same login wall;
-  same caveat applies.
+  same login wall, not attempted since the sibling listing above already
+  resolved to a known duplicate — low expected value.
 
 ## Open: at least one unidentified runtime build, NOT resolved this session
 
