@@ -39,6 +39,20 @@ dated 1987-04-02, sha256 `e5970b8f...` — NOT a match for any previously
 known hash, and 48 bytes smaller than the 1987-04-20 English 1.0 already
 vendored.
 
+Booted it in v86 to check its own splash screen (no key input, just
+launching `tb.exe` with nothing loaded): it identifies itself as **"Turbo
+Basic version 1.0"**, byte-identical wording to the already-vendored
+1987-04-20 build's own splash. Borland never bumped the visible version
+number between these two internal builds — this really is a silent
+revision, the same phenomenon `wild-tb-corpus` memory already flagged for
+`REV.EXE`'s ~937-byte mismatch against the "standard" TB 1.0. There is no
+on-disk changelog or version-notes file distinguishing it either (only a
+generic Borland `README.COM 2.00` text-viewer utility, shared across many
+Borland products, with no TB-specific release notes inside) — the file
+timestamp (every file on the disk dated 1987-04-02, consistent with one
+real disk snapshot) and the runtime byte fingerprint are the only
+provenance evidence that exists for this build.
+
 This is the previously-unidentified "second TB 1.0 revision" from
 `gap_reports/runtime-revision-assessments.json`'s `RR-TB10-TWO-REVISIONS`
 (disposition was "closed" = investigated and shelved for lack of a real
