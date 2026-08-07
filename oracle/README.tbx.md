@@ -1,11 +1,11 @@
-# Vendored Turbo BASIC oracle
+# Turbo BASIC oracle
 
 This directory contains the headless v86 harness used by tbx for byte-exact
 probes. The repository includes the harness and patched emulator, but does not
 include Borland's proprietary `TB.EXE` or the compiler floppy images. Supply
 those ignored assets locally, then install the JavaScript dependency with
-`npm install` in this directory and set `TBX_ORACLE` to this path when invoking
-`tbx.tools.oracle`.
+`npm install` in this directory. `tbx.tools.oracle` uses this directory by
+default; set `TBX_ORACLE` only to point at a different (compatible) harness.
 
 The harness stages source-relative external `$INLINE "file"` operands into the
 compiler floppy before starting Turbo BASIC. This is required by Turbo BASIC's
@@ -15,8 +15,7 @@ The small `examples/inline_file_probe.bas` program and `examples/QPRINT.BIN`
 file are a smoke test for that behavior:
 
 ```sh
-TBX_ORACLE=$PWD/vendor/turbo_basic_oracle \
-  python -c 'from tbx.tools.oracle import compile_bas; compile_bas("vendor/turbo_basic_oracle/examples/inline_file_probe.bas")'
+python -c 'from tbx.tools.oracle import compile_bas; compile_bas("oracle/examples/inline_file_probe.bas")'
 ```
 
 `examples/opaque1_probe.bas` and `opaque2_probe.bas` use `OPQ1.BIN` and
@@ -34,8 +33,7 @@ writable 1.44 MB FAT image; the original 360 KB distribution disk has too
 little free space for generated EXEs. Then select it with:
 
 ```sh
-TBX_ORACLE=$PWD/vendor/turbo_basic_oracle \
-  uv run python -c 'from tbx.tools.oracle import compile_bas; print(len(compile_bas("probe.bas", dialect="fr-1.1")))'
+uv run python -c 'from tbx.tools.oracle import compile_bas; print(len(compile_bas("probe.bas", dialect="fr-1.1")))'
 ```
 
 The French IDE requires the main-file and executable-directory settings; the

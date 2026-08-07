@@ -1,5 +1,5 @@
 """Tests for the snapshot-based fast-compile path (oracle.prime_snapshot /
-compile_bas(fast=True)). See vendor/turbo_basic_oracle/tb_v86_fast.js's
+compile_bas(fast=True)). See oracle/tb_v86_fast.js's
 module docstring for the mechanism.
 """
 

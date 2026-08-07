@@ -193,7 +193,7 @@ positions or reconstruction, the wild report is the gate that matters.
 
 A new byte mapping needs a compiled fixture in `tests/fixtures/corpus/` and
 oracle verification. See `docs/release-checklist.md` and
-`vendor/turbo_basic_oracle/README.tbx.md`.
+`oracle/README.tbx.md`.
 `docs/hand-written-machine-code.md` works one uncalibrated mapping through from
 symptom to rule: how `$INLINE` bodies are told apart from compiler output, and
 how to find a program that decodes cleanly but rebuilds wrong.
