@@ -41,6 +41,16 @@ TBX_ORACLE=$PWD/vendor/turbo_basic_oracle \
 The French IDE requires the main-file and executable-directory settings; the
 headless harness configures those automatically.
 
+The harness also supports an earlier English TB 1.0 build (1987-04-02,
+204312-byte `TB.EXE`, sha256 `e5970b8f...`) as dialect `1.0-early` — this is
+the previously-unidentified second TB 1.0 runtime revision documented in
+`gap_reports/runtime-revision-assessments.json`'s `RR-TB10-TWO-REVISIONS`
+(9 wild programs went from 86-88% build match against the standard 1.0 to
+97-99% against this one). Provision `tb10_early_floppy.img` the same way as
+`tb10_floppy.img` but with the earlier `TB.EXE` copied in, then select it
+with `dialect="1.0-early"`. See `VERSIONS.md` for provenance and the full
+per-file wild-corpus results.
+
 ## Performance and concurrency
 
 The harness uses screen/disk readiness checks instead of fixed boot, load, and

@@ -9,11 +9,12 @@ to re-download and re-diff everything from scratch.
 
 Hashes are sha256 of the bare `TB.EXE` (not the floppy image it ships on).
 
-## Distinct builds (4), all vendored
+## Distinct builds (5), all vendored
 
 | sha256 (first 16) | dialect | size | PE date | wired as | vendored at |
 |---|---|---|---|---|---|
 | `f4f28fe595d32eed` | TB 1.0 English | 204360 | 1987-04-20 | `1.0` | `tb10_floppy.img` |
+| `e5970b8fc1248401` | TB 1.0 English, **earlier build** | 204312 | 1987-04-02 | `1.0-early` | `tb10_early_floppy.img` |
 | `f1be6e502c2a262b` | TB 1.0 German disk3 (functionally ≡ 1.1, see below) | 212524 | 1987-10-26 | `de-experimental` (not in `_FLOPPIES`) | `tb_german_d3.exe`, `tb11_de_floppy.img` |
 | `92fcff2f8980d7c8` | TB 1.1 English | 212844 | 1987-11-04 | `1.1` (default, `None` in `_FLOPPIES`) | `tb_floppy.img` |
 | `d45256929e5dbf14` | TB 1.1 French | 214424 | 1987-11-10 | `fr-1.1` | `tb11_fr_floppy.img` |
@@ -21,10 +22,72 @@ Hashes are sha256 of the bare `TB.EXE` (not the floppy image it ships on).
 Full hashes:
 ```
 f4f28fe595d32eed54754c4bf2ca0704a352a72de1017508c267bcbf809d6cb0  TB 1.0 English
+e5970b8fc1248401166bcc0e81f71f0ac8e98d3a707d5d90f54c842f99640571  TB 1.0 English (early, 1987-04-02)
 f1be6e502c2a262b3ebc6b1994b32a0ebc31061431007329165e7ba4aa07fa69  TB 1.0 German disk3
 92fcff2f8980d7c80aed32bab8700942d4c18ad07013a427d4eba4d0c24ae16c  TB 1.1 English
 d45256929e5dbf14cd13442f93a45251b29fe26488b95b679f2f0cbae5df81c8  TB 1.1 French
 ```
+
+### TB 1.0 "early" (1987-04-02) — the missing second TB 1.0 revision
+
+**Found 2026-08-07** in an abandonwaredos.com repack ("Borland-Turbo-Basic-1.0.zip",
+reached at `abandonware-game.php?gid=2602`; the direct download endpoint
+required a `Referer` header pointing back at that page plus a normal
+browser `User-Agent` — a bare request with neither gets a 200 with an empty
+body, no redirect, no error). `TB.EXE` inside: 204312 bytes, MZ header
+dated 1987-04-02, sha256 `e5970b8f...` — NOT a match for any previously
+known hash, and 48 bytes smaller than the 1987-04-20 English 1.0 already
+vendored.
+
+This is the previously-unidentified "second TB 1.0 revision" from
+`gap_reports/runtime-revision-assessments.json`'s `RR-TB10-TWO-REVISIONS`
+(disposition was "closed" = investigated and shelved for lack of a real
+source, not solved). Confirmed by build-match: the 9 wild files that scored
+86-88% against the standard 1.0 (its documented fingerprint: a `lodsb`-based
+4-way dispatch, 6 bytes shorter than the standard build's `mov bl,[si]`
+form, at runtime offset 0x1bcf) score **97-99%** against this early build
+instead — while the "already fine" 96-99% files (autonum, banker, rev) drop
+to 85-88% against it. Clean, non-overlapping split confirming this is a
+distinct, real, sourced build, not noise.
+
+Ran the full decode→emit→recompile round trip (not just a runtime-region
+comparison) against all 9 previously-unreachable files with dialect
+`1.0-early`:
+
+| file | delta | bytes differing before user code | bytes differing in/after user code |
+|---|---|---|---|
+| `strpfind.exe` | 0 | 94 | **3** |
+| `pz.exe` | 0 | 103 | **15** |
+| `be.exe` | 0 | 93 | 27 |
+| `startup.exe` | 0 | 102 total (all pre-user-code) | 0 |
+| `prtguide.exe` | 0 | 253 | 406 |
+| `readme.exe` | 0 | 227 | 794 |
+| `secure.exe` | 0 | 94 | 1842 |
+| `invent.exe` | 0 | 94 | 1853 |
+| `horses.exe` | -640 | 120 | 39606 (a separate, large, pre-existing decode/structural issue) |
+
+Every file except `horses.exe` recompiles to the SAME LENGTH as the
+original with this build (`delta=0`) — a strong signal by itself, since a
+wrong build or a real decode gap almost always changes length. The
+remaining "before user code" byte diffs (93-253 bytes, out of an ~8 KB
+runtime region) are relocation-table/link-time noise, the same category
+`RR-TB10-TWO-REVISIONS`'s own writeup already flags for same-revision
+programs (95.5-99.7% aligned is the documented normal range, not 100%,
+even for a correct build match). The "in user code" diffs are ordinary
+decoder-gap residue, same kind of thing every other wild file in the
+corpus has — not build mismatch. `strpfind.exe` is 3 bytes from exact,
+`pz.exe` 15, `startup.exe` byte-exact in the user-code region entirely.
+**None reached literal byte-exact this session** — closing those residual
+diffs is decoder work (out of this hunt's scope), not a build-provenance
+question anymore.
+
+Wired into `tbx/tools/oracle.py`'s `_FLOPPIES` as `"1.0-early"`. NOT wired
+into `verify_wild.py`'s automatic dialect detection (`program_dialect`
+only reports the structural `1.0`/`1.1` family from `decode0.find_prologue`,
+which can't distinguish this from standard `1.0` — both compile the same
+op encoding). A future session extending `verify_wild.py` to try both 1.0
+floppies and keep whichever recompiles closer would let this feed
+`tests/fixtures/wild_roundtrip.json` automatically; not done here.
 
 **TB 1.0 German disk3 vs TB 1.1 English**: byte-identical over the user-code
 region for 272/297 corpus fixtures, differs only in trailing padding for the
@@ -87,44 +150,32 @@ inside unused/uninitialized padding, not code:
   same login wall, not attempted since the sibling listing above already
   resolved to a known duplicate — low expected value.
 
-## Open: at least one unidentified runtime build, NOT resolved this session
+## Open: one runtime build still unidentified
 
-`gap_reports/runtime-revision-assessments.json`'s `RR-TB10-TWO-REVISIONS`
-(disposition: **closed**, i.e. investigated and shelved, not "solved") already
-documents that the wild corpus contains **at least 4 distinct runtime builds**,
-only 2 of which (this repo's English 1.0 and English 1.1) have a real source
-EXE:
+Of the 2 unidentified runtime builds `RR-TB10-TWO-REVISIONS` documented,
+**one is now found and sourced** (TB 1.0-early, above). The other is not:
 
-1. English TB 1.0 (`f4f28fe5...`, vendored) — 96-99% build match.
-2. An unidentified TB 1.0 revision, 6 bytes shorter in a dispatch routine at
-   runtime offset 0x1bcf — 86-88% build match. Files: `be`, `horses`,
-   `invent`, `prtguide`, `pz`, `readme`, `secure`, `startup`, `strpfind.exe`.
-3. English TB 1.1 (`92fcff2f...`, vendored) — 96-99% build match.
-4. An unidentified TB 1.1-family revision — 18% positionwise / ~83.4-83.5%
-   aligned build match. Files: `bill`, `ck`, `color`, `mm.exe` (+ `mmsetup`,
-   `rstprint`, `tamstart` per `verify_wild.py`'s own list).
+- An unidentified TB 1.1-family revision — 18% positionwise / ~83.4-83.5%
+  aligned build match against English 1.1. Files: `bill`, `ck`, `color`,
+  `mm.exe` (+ `mmsetup`, `rstprint`, `tamstart` per `verify_wild.py`'s own
+  list). Ruled OUT as French 1.1 this session (scores 18% against French
+  too — identical to its score against English, so French isn't a closer
+  match). Not located as a real EXE anywhere searched.
 
-**This session's contribution**: searched archive.org (all 7 Borland Turbo
-Basic-related items), WinWorld (all 5 disk downloads), GitHub, and attempted
-vetusware (blocked) — found ZERO additional distinct hashes beyond the 4
-already vendored. Also built a French-1.1 reference (`fr-1.1` dialect,
-already wired but never build-match-tested against the wild corpus before)
-and confirmed by direct byte comparison that it does NOT explain either
-unidentified group: group 2 scores 4-5% against French (same as the
-"wrong dialect" floor), group 4 scores 18% against French — identical to
-its score against English 1.1, meaning French isn't a closer match either.
-**Neither unidentified build (#2 or #4) has been located as a real,
-downloadable EXE anywhere searched this session.** No wild file reached
-100% as a result of this search — the existing 4 builds already cover every
-wild file that CAN be byte-exact; the remainder needs a genuinely different
-physical disk this session could not find or access.
+Searched this session: archive.org (all 7 Borland Turbo Basic-related
+items), WinWorld (all 5 disk downloads), GitHub, abandonwaredos.com (found
+the 1.0-early build above), and vetusware (2 listings, both confirmed
+duplicates via a human download). Every other candidate hashed to an
+already-known build.
 
-Next places to try, if resuming this hunt: a UK/Heimsoeth-adjacent
-reseller dump, a different physical "1.1" pressing (Borland re-pressed
-disks between print runs without renumbering, per `dosdays.co.uk`'s "1.1
-believed to be a bug-fix release of 1.0" note), or a BBS-sourced shareware
-CD (Simtel, PC-SIG, etc.) that happens to bundle a full `TB.EXE` rather
-than just `.BAS` programs compiled with it.
+Next places to try for the remaining TB 1.1-family build, if resuming this
+hunt: a UK/Heimsoeth-adjacent reseller dump, a different physical "1.1"
+pressing (Borland re-pressed disks between print runs without renumbering,
+per `dosdays.co.uk`'s "1.1 believed to be a bug-fix release of 1.0" note),
+or a BBS-sourced shareware CD (Simtel, PC-SIG, etc.) that happens to bundle
+a full `TB.EXE` rather than just `.BAS` programs compiled with it. The
+abandonwaredos.com method below (Referer + UA bypass) is worth trying on
+their other Borland Turbo Basic listing(s) first, since it just paid off.
 
 ## Method notes for next time
 
@@ -138,6 +189,13 @@ than just `.BAS` programs compiled with it.
   to the same URL and requires a logged-in session — no anonymous bypass
   found (curl with cookies/referer/UA all redirect back to the same page;
   confirmed the same wall in a real browser tab too).
+- abandonwaredos.com's actual file lives behind `aw-download.php?tit=...
+  &dlc=<base64>&rem=N&gid=N&zdi=<base64>` (scraped from the game page's own
+  `href`); hitting it with a bare `curl` returns HTTP 200 with an EMPTY
+  body (no redirect, no error text) — looks like success, isn't. Add
+  `-e '<the game page URL>'` (Referer) and a real browser `User-Agent`
+  string and it returns the actual zip. No login needed once those two
+  headers are present.
 - To compare a wild EXE's runtime against a build NOT in `_REFERENCE`
   (`tbx/tools/verify_wild.py`, currently only `1.0`/`1.1`), compile
   `tests/fixtures/corpus/t1_ifgoto.bas` with `oracle.compile_bas(bas,

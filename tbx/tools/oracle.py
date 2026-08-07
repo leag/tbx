@@ -36,6 +36,7 @@ _REPO = Path(__file__).resolve().parent.parent.parent
 _FLOPPIES = {
     "1.1": None,              # English 1.1 oracle default
     "1.0": "tb10_floppy.img",
+    "1.0-early": "tb10_early_floppy.img",  # 1987-04-02 TB.EXE, see VERSIONS.md
     "fr-1.1": "tb11_fr_floppy.img",
 }
 
@@ -144,6 +145,14 @@ def compile_bas(
     dialects; use it freely once primed.
     """
     d = oracle_dir()
+    # How long the harness polls for the compiled EXE to appear on the guest
+    # floppy after "Compiling" shows (waitForExe, itself a poll that returns
+    # as soon as the output stabilizes -- this is a ceiling, not a fixed
+    # wait). The CLI default (9s) was calibrated against fixture-sized
+    # sources; a very large one (k.exe, 24k statements) needs meaningfully
+    # longer under emulation. Scale with `timeout`, leaving 30s of margin
+    # for boot/load steps before the outer subprocess timeout would fire.
+    run_ms = max(9000, (timeout - 30) * 1000)
     with tempfile.TemporaryDirectory(prefix="tbx-oracle-") as workspace:
         out = Path(workspace) / "SOLVER_v86.EXE"
         if fast:
@@ -157,14 +166,14 @@ def compile_bas(
             cmd = [
                 "node", "tb_v86_fast.js", str(Path(bas).resolve()),
                 "--floppy", _floppy_name(dialect), "--snapshot-dir", str(snap_path.parent),
-                "--compile-exe", "--workspace", workspace,
+                "--compile-exe", "--workspace", workspace, "--run-ms", str(run_ms),
             ]
             if toggles:
                 cmd += ["--toggles", toggles]
         else:
             cmd = [
                 "node", "tb_v86.js", str(Path(bas).resolve()), "--compile-exe",
-                "--workspace", workspace,
+                "--workspace", workspace, "--run-ms", str(run_ms),
             ]
             if toggles:
                 cmd += ["--toggles", toggles]
