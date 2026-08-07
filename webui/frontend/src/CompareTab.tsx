@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import BinaryDiff from './BinaryDiff'
-import Disassembly from './Disassembly'
 import DisassemblyDiff from './DisassemblyDiff'
 import type { RecompileResult } from './api'
 
@@ -11,17 +10,38 @@ type Props = {
   statements: { address: number; text: string }[]
 }
 
-type View = 'both' | 'hex' | 'disasm' | 'diff'
+type View = 'both' | 'hex' | 'disasm'
 
 const VIEW_OPTIONS: { key: View; label: string }[] = [
   { key: 'both', label: 'Hex + Disassembly' },
   { key: 'hex', label: 'Hex only' },
-  { key: 'disasm', label: 'Disassembly only' },
-  { key: 'diff', label: 'Disassembly diff' },
+  { key: 'disasm', label: 'Disassembly' },
 ]
+
+// Small pie-chart glyph for the match ratio: a conic-gradient circle is
+// the cheapest way to draw a filled wedge without pulling in a chart lib
+// for a single stat this size.
+function MatchPie({ ratio }: { ratio: number }) {
+  const pct = Math.max(0, Math.min(1, ratio)) * 100
+  return (
+    <span
+      title={`${pct.toFixed(2)}% match`}
+      style={{
+        display: 'inline-block',
+        width: 12,
+        height: 12,
+        borderRadius: '50%',
+        marginRight: 5,
+        verticalAlign: 'middle',
+        background: `conic-gradient(var(--green, #a6e22e) ${pct}%, var(--border) ${pct}% 100%)`,
+      }}
+    />
+  )
+}
 
 export default function CompareTab({ sessionId, result, highlightRange, statements }: Props) {
   const [view, setView] = useState<View>('both')
+  const [diffStats, setDiffStats] = useState<{ changed: number; total: number } | null>(null)
 
   if (!result) {
     return <p>Recompile from the Edit tab to see a comparison here.</p>
@@ -29,11 +49,10 @@ export default function CompareTab({ sessionId, result, highlightRange, statemen
 
   const showHex = view === 'both' || view === 'hex'
   const showDisasm = view === 'both' || view === 'disasm'
-  const showDiff = view === 'diff'
   // Widen whichever side is shown alone; when both show, hex gets less
-  // room since two disassembly panes already cover a lot of width.
+  // room since the disassembly pane already covers a lot of width.
   const hexFlex = view === 'hex' ? '1 1 100%' : '1 1 40%'
-  const disasmFlex = view === 'disasm' ? '1 1 50%' : '1 1 30%'
+  const disasmFlex = view === 'disasm' ? '1 1 100%' : '1 1 60%'
 
   return (
     <div>
@@ -61,30 +80,13 @@ export default function CompareTab({ sessionId, result, highlightRange, statemen
           </div>
         )}
         {showDisasm && (
-          <>
-            <div style={{ flex: disasmFlex, minWidth: 0 }}>
-              <Disassembly
-                label="Original disassembly"
-                source={{ kind: 'session', sessionId }}
-                highlightRange={highlightRange}
-                statements={statements}
-              />
-            </div>
-            <div style={{ flex: disasmFlex, minWidth: 0 }}>
-              <Disassembly
-                label="Recompiled disassembly"
-                source={{ kind: 'bytes', dataB64: result.recompiled_b64 }}
-                highlightRange={highlightRange}
-                statements={statements}
-              />
-            </div>
-          </>
-        )}
-        {showDiff && (
-          <div style={{ flex: '1 1 100%', minWidth: 0 }}>
+          <div style={{ flex: disasmFlex, minWidth: 0 }}>
             <DisassemblyDiff
               originalSource={{ kind: 'session', sessionId }}
               recompiledSource={{ kind: 'bytes', dataB64: result.recompiled_b64 }}
+              highlightRange={highlightRange}
+              statements={statements}
+              onStats={setDiffStats}
             />
           </div>
         )}
@@ -104,8 +106,17 @@ export default function CompareTab({ sessionId, result, highlightRange, statemen
         }}
       >
         <span>
+          <MatchPie ratio={result.ratio} />
           Match: <strong style={{ color: 'var(--text-h)' }}>{(result.ratio * 100).toFixed(2)}%</strong>
-          {!result.matched && ` -- first diff at offset ${result.first_diff_offset}`}
+          {showHex && !result.matched && ` | first diff at offset ${result.first_diff_offset}`}
+          {showDisasm && diffStats && (
+            <>
+              {' | '}
+              {diffStats.changed === 0
+                ? 'Identical instruction streams'
+                : `${diffStats.changed} of ${diffStats.total} rows differ`}
+            </>
+          )}
         </span>
         <span>Click a line in the editor to highlight where it decoded from in the original binary.</span>
       </div>
