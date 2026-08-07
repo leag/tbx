@@ -5,10 +5,9 @@
       PRINT "three"
     CASE ELSE
       PRINT "other"
-      IF C% <= 2 THEN 20
-      PRINT "flon"
+      IF C% > 2 THEN PRINT "flon"
     END SELECT
-20 SELECT CASE B$
+    SELECT CASE B$
     CASE "a"
       PRINT "AA"
     CASE ELSE
@@ -16,8 +15,8 @@
     END SELECT
   END IF
 END SUB
-21 D% = 3
-31 E$ = "a"
-41 F% = 1
-51 CALL SUB1(D%,E$,F%)
-61 END
+20 D% = 3
+30 E$ = "a"
+40 F% = 1
+50 CALL SUB1(D%,E$,F%)
+60 END

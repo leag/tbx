@@ -1,0 +1,251 @@
+:root {
+  --bg: #1e1f1c;
+  --panel: #272822;
+  --panel-alt: #232420;
+  --text: #d6d2c4;
+  --text-h: #f8f8f2;
+  --text-dim: #75715e;
+  --border: #3e3d32;
+  --accent: #a6e22e;
+  --accent-dim: rgba(166, 226, 46, 0.15);
+  --pink: #f92672;
+  --cyan: #66d9ef;
+  --orange: #fd971f;
+  --purple: #ae81ff;
+  --shadow: rgba(0, 0, 0, 0.35) 0 8px 24px -8px;
+
+  --sans:
+    'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+
+  font: 15px/1.5 var(--sans);
+  color-scheme: dark;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+}
+
+#root {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  padding: 0 24px 24px;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--sans);
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+h1 {
+  font-size: 22px;
+  letter-spacing: -0.3px;
+  margin: 20px 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+h4 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--cyan);
+}
+
+code {
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--panel-alt);
+  color: var(--accent);
+}
+
+/* Upload zone -------------------------------------------------------- */
+
+.upload-zone {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: var(--panel);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.upload-zone label {
+  font-weight: 600;
+  color: var(--text-h);
+  font-size: 13px;
+}
+
+.upload-zone input[type='file'] {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+/* Tabs ----------------------------------------------------------------*/
+
+[role='tablist'] {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+
+[role='tab'] {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 10px 16px 8px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+[role='tab']:hover {
+  color: var(--text-h);
+}
+
+[role='tab'][aria-selected='true'] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* Buttons / inputs ------------------------------------------------------*/
+
+button {
+  appearance: none;
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--bg);
+  background: var(--accent);
+  border: none;
+  border-radius: 7px;
+  padding: 9px 18px;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.05s ease;
+}
+
+button:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button[role='tab'] {
+  color: inherit;
+  background: transparent;
+  border-radius: 0;
+  padding: 10px 16px 8px;
+}
+
+button[role='tab']:hover:not(:disabled) {
+  filter: none;
+}
+
+select {
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-h);
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+
+fieldset {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 0 0 12px;
+}
+
+fieldset legend {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  padding: 0 6px;
+}
+
+label {
+  font-size: 13px;
+}
+
+input[type='checkbox'] {
+  accent-color: var(--accent);
+}
+
+/* Panels ----------------------------------------------------------------*/
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+[role='alert'] {
+  color: var(--pink);
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+::selection {
+  background: rgba(166, 226, 46, 0.3);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+}

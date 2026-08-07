@@ -9,6 +9,46 @@ Read this file first. `PLAN.md` is 9000 lines and is now an **evidence
 archive**, not a work queue — go there for the reasoning behind a specific
 finding, not to find out what to do next.
 
+## Current mcmurphy investigation
+
+The command-dispatch string guards now survive decoding when a near branch's
+16-bit target names an operation in an earlier code window. `DecodeState.branch`
+canonicalizes that target to the matching operation in the active window before
+inline-IF frames close. The wild regression asserts all eleven previously
+missing literals (`xmaid`, `xbutler`, `x#z`, `xK`, `xZ`, `x6160`, `re30>75`,
+`x30>75`, `O`, `u>`, `u<`) remain in emitted source.
+
+Measured with the oracle using dialect `1.1` and toggles `KBOS`, the mcmurphy
+round trip improved from 127,313 to 129,697 bytes against a 129,710-byte
+original. Layout array bases and the complete string-pool multiset now match;
+the remaining 13-byte delta is a DATA/string-descriptor ordering issue, not a
+missing guard. Use `python -m tbx.tools.roundtrip_report` to reproduce the
+measurement.
+
+The residual was narrowed from the original descriptor table without another
+oracle compile: the descriptors classified as DATA are three non-contiguous
+runs (indices `570`, `572`, and `583..589`), interleaved with code-referenced
+strings. mcmurphy has no error-trap line table, so it carries no codeless DATA
+statement lines or boundaries that the decoder can recover. Emitting those
+runs as one top-level `DATA` statement is therefore the only evidence-backed
+canonicalization currently available; synthesizing source placement from pool
+order would be a guess and risks changing unrelated programs.
+
+The boolean folding gap is now closed for a calibrated shape: when a compound
+`IF` owns a `FOR/NEXT` body, `_fold_if` preserves the structured block instead
+of rewriting it as a negated `OR` guard. The rewrite changed Turbo Basic's
+short-circuit template (`AND`/`andaxbx` to `OR`), causing byte drift. The new
+`probe_compound_loop_block` fixture round-trips byte-for-byte (34,832 bytes).
+The mcmurphy measurement remains 129,697 versus 129,710 because its residual
+13-byte difference is in the separate DATA descriptor ordering issue.
+
+Artifact refresh (2026-08-01): `scan_wild --only mcmurphy.exe` reports one
+Turbo Basic 1.1 hit with 3,092 statements and no decode failures. A follow-up
+oracle report was attempted with an 800 MB virtual-memory cap; the vendored
+Node/V8 process failed before compilation while reserving its CodeRange. This
+is an infrastructure limit, not a decoder or source-compile result; the last
+uncapped oracle measurement remains 129,697 rebuilt bytes versus 129,710.
+
 ## Verified state on the park date
 
 Run on `release/0.1.0` at `b79a756`:
@@ -121,6 +161,59 @@ These are the threads with real diagnosis behind them. Each is a genuine
 stopping point, not an unexplored gap — read the cited entry before touching the
 code, because several were **tried and reverted** and the entry says why.
 
+- **`mcmurphy.exe` round-trip — unmatched `EXIT LOOP` (diagnosed 2026-08-01).**
+  The emitted source contains `EXIT LOOP` at BASIC line `7920` before the next
+  lexical `DO` (line `8010`), with the same shape recurring at `8300`, `10390`,
+  and `11130`. Turbo Basic consequently reports `Error 435: DO loop expected`
+  later, at physical include line 1840 (`18370 AI = 0`); that reported line is
+  only where the parser notices the earlier damage. The decoder-side cause is
+  `_apply_exit_folds()` in `tbx/decode0/lift.py`: it rewrites every GOTO whose
+  target equals an exit address when it cannot locate the enclosing loop
+  (`for_start is None`), because `in_for` deliberately falls back to `True`.
+  In this large state-machine shape, a following loop begins at the same
+  address as the preceding loop's exit; the backward edge into that following
+  loop is therefore mistaken for the preceding loop's exit and becomes
+  `ExitLoop` outside any `Do`. The existing guard comment documents the failure
+  for `cal.exe`; `mcmurphy.exe` is a second witness of the same ungated fallback.
+  The decoder fix now constrains the rewrite to a positively identified
+  enclosing `Do`; ambiguous targets remain `GOTO`s, and the emitter guard still
+  rejects any invalid `ExitLoop` that slips through. Both witnesses should be
+  recompiled through the oracle before this fix is treated as byte-exact.
+
+- **`mcmurphy.exe` round-trip — stack-test helper bytes (narrowed 2026-08-01).**
+  Calibrated `S` and `KBOS` probes show that a normal INT 8A payload is a
+  signed start-relative GOSUB target; the scanner now restores those as `call`
+  and keeps only out-of-image payloads as source-less `stack_call_runtime`.
+  This improves mcmurphy's rebuilt size from 123,920 to 127,313 bytes. The
+  remaining first structural divergence is operation 1384: the original has
+  an out-of-image INT 8A helper immediately before a valid checked GOSUB, while
+  the rebuilt image has only the GOSUB. That helper is not a source-level
+  target: its payload decodes to `0xe989b00`, and interpreting the words as a
+  far pointer lands at `0xe980`, whose bytes begin `INT 87`/runtime dispatch,
+  not a BASIC statement. It must not be guessed as a GOSUB. Establish whether
+  it is a compiler/runtime revision artifact or a reproducible KBOS helper
+  shape before adding preservation logic.
+
+  A tested follow-up hypothesis treated 220 relative-looking targets landing on
+  another `CD 8A` as helper chaining. The oracle rejects that change: split
+  source recompiles at 125,309 bytes versus 127,313 bytes with those targets
+  retained. The filter was reverted; those targets are not proven helpers.
+
+- **`mcmurphy.exe` 48-byte static-band shift — `$SEGMENT` hypothesis ruled out
+  (2026-08-01).** Removing the recovered `$SEGMENT` directive does not produce
+  the original allocation; Turbo Basic rejects the resulting source with
+  `Error 408: Segment exceeds 64k` at line 28220. The directive is required to
+  compile this large program, so it cannot be the missing 48-byte reservation.
+  With the oracle harness's Compile-to navigation fixed, the current split
+  source recompiles to 127,313 bytes. The first scanned-op mismatch is already
+  the first array access (`FILD 0x1378` in the original versus `0x134c` in the
+  rebuild); every scalar and pool slot remains aligned. Two oracle probes show
+  that adding twelve scalar slots shifts the array band by exactly 48 bytes,
+  but also shifts the pool, so that is not evidence for inserting twelve
+  speculative variables. The remaining cause is an untracked compiler-generated
+  pool/code-layout contribution and needs a source witness before changing
+  layout recovery.
+
 - **`tbd73.exe` round-trip** (`PLAN.md:2000`, round 47). Decodes end to end —
   906 lines, exit 0 — but does not recompile. Four defects were fixed; the
   recompile now stops at `Error 475: Parameter mismatch` with two diagnosed open
@@ -129,6 +222,36 @@ code, because several were **tried and reverted** and the entry says why.
   "typed by evidence" from "defaulted" — **not** another caller-side special
   case. This is the highest-value single thread in the repo, because it is the
   one wild file where a round trip is meaningful.
+- **`resume.exe` — 98.59%, was 80.14%** (2026-07-31). Both halves of the
+  forwarded-parameter typing are in: a helper callee takes the caller's type
+  (`_type_helper_forwards`), and an ORDINARY callee with an untyped parameter
+  is retyped at BOTH ends -- argument, header and body together
+  (`_type_untyped_callee_params`), which is what avoids the `Error 475` a
+  one-ended retype gives. What remains is 1365 unreproduced bytes and delta
+  +32, at 98.82% after the numeric SELECT CASE entry learned to skip an
+  event-trap poll stamp (ledger `RR-BYREF-INT-FP-COMPARE`, closed). What is
+  left is scattered rather than structural -- the op-kind diff no longer has a
+  dominant signal.
+- **`cal.exe`/`cal87.exe` — a loop closed too early** (2026-07-30). Two upstream
+  defects were found and fixed (commit `c2994a3`): a fold region started one
+  statement early when a codeless `DO` was spliced below its recorded boundary,
+  and the inline guard now skips those address-less headers. cal's decode now
+  matches its byte order — INPUT before the test, `IF BD >= 1 AND BD <= 80 THEN
+  <exit>`. It still does not compile. The remaining defect is precise: **two
+  `EXIT LOOP` statements stand outside any `DO...LOOP`** (bundle lines 20405 and
+  20435, immediately after the `LOOP` at 20345), which is what TB reports as
+  `Error 435: DO loop expected`. They belong to a loop the decoder closes too
+  early, so look for the missing enclosing `DO...LOOP` rather than at the EXITs
+  themselves. Ruled out along the way, in
+  `gap_reports/ruled-out-hypotheses.json`: `$INCLUDE` block spanning
+  (`RO-INCLUDE-BLOCK-SPAN`), jumping into a DO body (`RO-GOTO-INTO-DO`), and
+  six candidate source spellings (`RO-CAL-SOURCE-SHAPES`). A block-nesting
+  sweep will call this file clean — it cannot see an EXIT outside its block.
+- **`state.exe`/`state87.exe` — one loop/FOR crossing left** (2026-07-30). Three
+  of four were closed by teaching `_loop_back_in_scope` that a back-edge may not
+  span a `NEXT` whose FOR opened above it. The fourth survives because the
+  compound tail-test path bypasses that guard when `empty_body` is true
+  (`lift.py`, `_lift_bool_do_tail`). Still COMPILE-FAIL.
 - **Per-procedure TYPE resolution pre-pass** (`PLAN.md:60`, live checkpoint).
   Rounds 18 and 19 were single-pass state-ordering bugs — the decoder infers
   whole-procedure facts destructively *while* lifting, so results depend on which
@@ -153,7 +276,9 @@ code, because several were **tried and reverted** and the entry says why.
   `rsltest`.
 - **OR-flavored value-folded groups** (`PLAN.md:1775`). `(A AND B) OR (C OR D)`.
   **Tried and reverted** this campaign, no fixture landed, tree confirmed clean.
-  An oracle probe (`q_orofors3.bas`) does reproduce the shape. Affects `grdscn`,
+  An oracle probe reproducing the shape is described in that same entry, but it
+  was never committed to `wild/probes/`, so it must be re-authored from the
+  description before the evidence can be re-run. Affects `grdscn`,
   `kinder`, `kinetics`, `wb`.
 - **LOCAL slot reuse across FOR scratch temps** (`PLAN.md:1817`). Traced
   precisely with instrumented `core.py` (reverted, not committed): the
@@ -172,6 +297,10 @@ code, because several were **tried and reverted** and the entry says why.
   incomparable. Paths and diagnostics only, never executable bytes.
 - `gap_reports/runtime-revision-assessments.json` — `RR-*` ledger with
   hypothesis, evidence class, confidence and disposition per assessment.
+- `gap_reports/ruled-out-hypotheses.json` — `RO-*` ledger, the sibling for
+  decoder-side dead ends: a cause that was not the cause, or a fix written and
+  reverted. Read it before re-deriving a diagnosis; several entries exist
+  precisely because the obvious approach was tried and failed.
 - `wild/probes/` — authored probes that compiled, with `.bas` source and a
   recorded first failure.
 - `docs/release-checklist.md` — what a release would have required. Unused; no

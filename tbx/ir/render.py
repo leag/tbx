@@ -348,26 +348,56 @@ def _us_decl(s) -> str | None:
         return "COMMON " + ", ".join(s.names)
 
 
+def _print_item(item) -> str:
+    """One item of a PRINT/LPRINT list.
+
+    Usually an expression, but a `PrintUsing` sits here when a statement holds
+    more than one USING clause (t1_usingtwice). Its file/newline/lprint fields
+    belong to the owning chain and are not rendered.
+    """
+    if isinstance(item, PrintUsing):
+        vals = "; ".join(unparse(v) for v in item.values)
+        return f"USING {unparse(item.fmt)}; {vals}"
+    return unparse(item)
+
+
 def _us_output(s) -> str | None:
     """Render PRINT family, sound and misc actions; None if `s` is not one of them."""
     if isinstance(s, Print):
-        txt = "PRINT" + (f" #{s.file}," if s.file is not None else "")
+        fnum = (
+            None
+            if s.file is None
+            else str(s.file) if isinstance(s.file, int) else unparse(s.file)
+        )
+        txt = "PRINT" + (f" #{fnum}," if s.file is not None else "")
         cs = s.commas or (0,) * (len(s.items) + 1)
         if s.items:
             parts = []
             if cs[0]:
                 parts.append("," * cs[0] + " ")
             for i, item in enumerate(s.items):
-                parts.append(unparse(item))
+                parts.append(_print_item(item))
                 if i < len(s.items) - 1:
                     parts.append("," * cs[i + 1] + " " if cs[i + 1] else "; ")
             txt += " " + "".join(parts)
         if s.newline:
             return txt
+        if not s.items and cs[-1]:
+            # `PRINT ,,`: zone advances with nothing to print. The commas ARE
+            # the terminator -- a trailing comma suppresses the newline the way
+            # `;` does -- so this is not `PRINT ,,;` (t1_printcommatail; wild
+            # pz.exe lost two INT BBh calls here, because the zones only
+            # survive elsewhere by attaching to a following PRINT).
+            return txt + " " + "," * cs[-1]
         return txt + ("," * cs[-1] if s.items and cs[-1] else ";")
     if isinstance(s, PrintUsing):
         kw = "LPRINT" if s.lprint else "PRINT"
-        pre = f"#{s.file}, " if s.file is not None else ""
+        fnum = (
+            None
+            if s.file is None
+            else str(s.file) if isinstance(s.file, int) else unparse(s.file)
+        )
+        pre = f"#{fnum}, " if s.file is not None else ""
         vals = "; ".join(unparse(v) for v in s.values)
         return f"{kw} {pre}USING {unparse(s.fmt)}; {vals}" + ("" if s.newline else ";")
     if isinstance(s, Kill):
@@ -499,12 +529,14 @@ def _us_console(s) -> str | None:
             if cs[0]:
                 parts.append("," * cs[0] + " ")
             for i, item in enumerate(s.items):
-                parts.append(unparse(item))
+                parts.append(_print_item(item))
                 if i < len(s.items) - 1:
                     parts.append("," * cs[i + 1] + " " if cs[i + 1] else "; ")
             txt += " " + "".join(parts)
         if s.newline:
             return txt
+        if not s.items and cs[-1]:  # `LPRINT ,,` -- see the PRINT sibling
+            return txt + " " + "," * cs[-1]
         return txt + ("," * cs[-1] if s.items and cs[-1] else ";")
     if isinstance(s, Cls):
         return "CLS"
@@ -576,7 +608,7 @@ def _us_fileio(s) -> str | None:
     if isinstance(s, GetString):
         return f"GET$ #{s.num}, {unparse(s.count)}, {unparse(s.target)}"
     if isinstance(s, Put):
-        return f"PUT #{s.num}, {unparse(s.pos)}"
+        return f"PUT #{s.num}" if s.pos is None else f"PUT #{s.num}, {unparse(s.pos)}"
     if isinstance(s, PutString):
         return f"PUT$ #{s.num}, {unparse(s.text)}"
     if isinstance(s, Seek):
@@ -599,10 +631,31 @@ def _us_fileio(s) -> str | None:
     if isinstance(s, Rset):
         return f"RSET {unparse(s.target)} = {unparse(s.source)}"
     if isinstance(s, MidAssign):
-        return f"MID$({unparse(s.target)}, {unparse(s.start)}) = {unparse(s.source)}"
+        args = f"{unparse(s.target)}, {unparse(s.start)}"
+        if s.length is not None:
+            args += f", {unparse(s.length)}"
+        return f"MID$({args}) = {unparse(s.source)}"
 
 
 _INLINE_PER_LINE = 14
+
+
+def _without_appended_tail(data: bytes) -> bytes:
+    """A helper payload with the bytes the compiler re-appends removed.
+
+    Turbo Basic contributes the closing far RET (CB) itself, and under EVENT
+    trapping it also stamps a poll (CC) immediately before it. Both are the
+    compiler's, not the payload's, so re-emitting either makes the recompiled
+    body longer than the original by exactly that much -- which is enough to
+    miss `find_opaque_helpers`' exact-body match and leave our own output
+    unscannable (wild resume.exe: 113 bytes in, 114 back out, `unhandled byte
+    c4`).
+    """
+    if data.endswith(b"\xCB"):
+        data = data[:-1]
+    while data.endswith(b"\xCC"):
+        data = data[:-1]
+    return data
 
 
 def _inline_lines(data: bytes) -> str:
@@ -632,7 +685,7 @@ def _us_procdata(s) -> str | None:
         # `$INLINE "file"` payloads after linking.  The compiler contributes
         # the final far RET (CB), so emit the payload as byte-list INLINE and
         # let Turbo BASIC append CB again on recompilation.
-        data = s.data[:-1] if s.data.endswith(b"\xCB") else s.data
+        data = _without_appended_tail(s.data)
         return _inline_lines(data)
     if isinstance(s, CallStmt):
         if s.args:

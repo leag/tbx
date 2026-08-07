@@ -8,8 +8,6 @@ regression fails with a pointed message instead of a corpus-wide decode diff.
 
 import struct
 
-import pytest
-
 from tbx import decode0, ir
 
 
@@ -44,8 +42,10 @@ def test_rt_slot():
 def test_str_lit():
     exe = struct.pack("<HH", 0x8003, 0x0000) + b"ABC"
     assert decode0._str_lit(exe, 0, 0, 4) == ir.StrLit("ABC")
-    with pytest.raises(ValueError, match="bad string descriptor"):
-        decode0._str_lit(struct.pack("<HH", 0x0003, 0) + b"ABC", 0, 0, 4)
+    # Wild runtime revisions can leave an unpopulated descriptor without the
+    # high-bit marker.  Recovery logs it and preserves the source shape as an
+    # empty literal rather than aborting the whole decode.
+    assert decode0._str_lit(struct.pack("<HH", 0x0003, 0) + b"ABC", 0, 0, 4) == ir.StrLit("")
 
 
 def test_data_pool():
@@ -110,11 +110,10 @@ def test_try_inline_rescue():
     assert decode0._try_inline_rescue(bytes(exe), ops) == 20
     assert ops == [(7, "jmp", 20), (10, "inline_sub", bytes(exe[10:19]))]
 
-    # False-positive guard (wild CVT2TB.EXE): a genuine `push bp; mov
-    # bp,sp; ...; pop bp; retf` procedure -- either mov-bp,sp encoding --
-    # legitimately ends in 5D CB, which also satisfies "byte before the
-    # target is CB". Must NOT be rescued; it's real proc-enter-shaped
-    # code the ordinary scan should keep failing loud on, not $INLINE.
+    # A framed helper with either mov-bp,sp encoding can also end in 5D CB.
+    # The wild recovery path now treats that ambiguous body as opaque rather
+    # than stopping the entire scan; the exact helper fingerprint pass remains
+    # responsible for unambiguous framed helpers.
     for enc in (b"\x8b\xec", b"\x89\xe5"):
         exe2 = bytearray(30)
         exe2[10] = 0x55
@@ -122,8 +121,8 @@ def test_try_inline_rescue():
         exe2[18] = 0x5D
         exe2[19] = 0xCB
         ops2 = [(7, "jmp", 20)]
-        assert decode0._try_inline_rescue(bytes(exe2), ops2) is None
-        assert ops2 == [(7, "jmp", 20)]  # unchanged
+        assert decode0._try_inline_rescue(bytes(exe2), ops2) == 20
+        assert ops2 == [(7, "jmp", 20), (10, "inline_sub", bytes(exe2[10:19]))]
 
     # Exact framed helpers are classified before normal scanning, rather than
     # being smuggled through this failure-driven INLINE rescue.
@@ -183,13 +182,33 @@ def test_integer_divide_memory_template():
     assert ops == [(0, "idiv_m", 0x1054)]
 
 
-def test_tb10_cvl_vector_alias():
+def test_tb10_raw_a9_is_the_three_argument_mid_assign():
+    """Canonical AF is `MID$(t$, start, len) = s$`, not an alias of CVL.
+
+    TB 1.0's raw A9 does canonicalize to AF -- but AF is the three-argument
+    MID$ assignment in both dialects, and this vector used to be read as CVL
+    on the strength of that shift alone. Compiling both constructs settles it:
+    `MID$(A$, N%, 1) = " "` emits raw A9 under TB 1.0 and AF under TB 1.1,
+    while `CVL(A$)` emits raw A3 under TB 1.0 and A9 under TB 1.1 -- so the
+    two never share a canonical vector and CVL never reaches AF.
+    """
     from tbx.decode0.dialect import TB10
     from tbx.decode0.scan import _scan_int
 
     ops = []
     vec = TB10.canon_vec(0xA9)
+    assert vec == 0xAF
     assert _scan_int(b"\xcd\xa9", 0, set(), TB10, ops, 0, vec) == 2
+    assert ops == [(0, "midassign3")]
+
+
+def test_tb10_cvl_is_raw_a3():
+    from tbx.decode0.dialect import TB10
+    from tbx.decode0.scan import _scan_int
+
+    ops = []
+    vec = TB10.canon_vec(0xA3)
+    assert _scan_int(b"\xcd\xa3", 0, set(), TB10, ops, 0, vec) == 2
     assert ops == [(0, "str2num", "CVL")]
 
 

@@ -1,0 +1,15 @@
+10 A$ = "A"
+20 B% = 65
+30 C% = 3
+40 DO
+50 IF A$ = "Q" THEN
+  LOCATE 11,C%
+  PRINT CHR$(24)
+  EXIT LOOP
+END IF
+60 C% = C% + 2
+70 B% = B% + 1
+80 A$ = CHR$(B%)
+90 LOOP
+100 LOCATE 15,1
+110 END

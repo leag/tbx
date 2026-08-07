@@ -50,7 +50,7 @@ handful of sites; the module a failure comes from is the practical stand-in.
 
 ## State ownership
 
-`DecodeState` holds 99 persistent fields. They are partitioned across six
+`DecodeState` holds 100 persistent fields. They are partitioned across six
 views -- **total and disjoint**, enforced by `tests/tbx/test_state_parts.py`,
 which fails if a field gains a second owner or none. A view is an alias, not a
 copy, and writing an unowned name through one raises rather than shadowing it.
@@ -79,10 +79,10 @@ read somewhere, so nothing in the list is decoration.
 
     `arrs`, `data_items`, `desc_disps`, `dim_frame`, `discard_strs`, `ds`, `dsd`, `have_fre`, `lay`, `local_dim_frame`, `n_local_arrs`, `option_base`, `prev_dim_end`, `r_arrs`, `slot_info`, `ss_base`
 
-**`state.control`** (ControlState, 30 fields)
+**`state.control`** (ControlState, 31 fields)
 : Statement cursor and open structured-control/procedure frames.
 
-    `block_if_addrs`, `cases`, `cur`, `dos`, `exit_folds`, `fn_args`, `fn_args_stack`, `fn_frame`, `fold_plan`, `fors`, `fwd_inline_offs`, `has_procs`, `ifs`, `inline_procs`, `k`, `nfn`, `nsub`, `pend_arg`, `pend_args`, `pending_ifs`, `proc_dbl_offs`, `proc_frame`, `proc_int_offs`, `proc_long_offs`, `proc_names`, `proc_params`, `proc_str_offs`, `sp_save_cell`, `sp_save_stack`, `whiles`
+    `block_if_addrs`, `cases`, `cur`, `decl_skip_addr`, `dos`, `exit_folds`, `fn_args`, `fn_args_stack`, `fn_frame`, `fold_plan`, `fors`, `fwd_inline_offs`, `has_procs`, `ifs`, `inline_procs`, `k`, `nfn`, `nsub`, `pend_arg`, `pend_args`, `pending_ifs`, `proc_dbl_offs`, `proc_frame`, `proc_int_offs`, `proc_long_offs`, `proc_names`, `proc_params`, `proc_str_offs`, `sp_save_cell`, `sp_save_stack`, `whiles`
 
 **`state.output`** (OutputState, 11 fields)
 : Emitted statements, physical addresses, and output metadata.
@@ -164,6 +164,13 @@ constructs from them alone.
 | `python -m tbx.tools.scan_wild DIR` | decode a corpus, report every failure |
 | `python -m tbx.tools.verify_fixture STEM` | oracle round-trip, one fixture |
 | `python -m tbx.tools.verify_wild` | oracle round-trip, the comparable wild subset |
+| `python -m tbx.tools.roundtrip_report PROGRAM.EXE` | oracle round-trip with layout, first-op, and string-pool diffs |
+
+`roundtrip_report` keeps the emitted split source and rebuilt executable in
+`--outdir` (or a temporary directory) and prints JSON suitable for attaching
+to a gap report. It uses the source program's detected dialect and runtime
+toggles, so the report measures decoder differences rather than a mismatched
+compiler configuration.
 
 `pip install '.[debug]'` adds the iced-x86 CFG tools (`tbx.tools.cfg`).
 
@@ -187,3 +194,6 @@ positions or reconstruction, the wild report is the gate that matters.
 A new byte mapping needs a compiled fixture in `tests/fixtures/corpus/` and
 oracle verification. See `docs/release-checklist.md` and
 `vendor/turbo_basic_oracle/README.tbx.md`.
+`docs/hand-written-machine-code.md` works one uncalibrated mapping through from
+symptom to rule: how `$INLINE` bodies are told apart from compiler output, and
+how to find a program that decodes cleanly but rebuilds wrong.

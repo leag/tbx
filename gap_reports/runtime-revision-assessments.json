@@ -1,206 +1,396 @@
 {
-  "schema_version": 1,
-  "document_type": "tbx.runtime_revision_assessments",
-  "updated": "2026-07-20",
-  "corpus_fingerprint": "2043f80bf6bf929b0a8058ebb0b83e3ec6b63664855e4428b4781db63c4924a3",
-  "evidence_classes": [
-    "oracle-verified",
-    "dialect-verified",
-    "documentation-backed",
-    "runtime-revision",
-    "candidate-runtime-revision",
-    "unresolved"
-  ],
-  "assessments": [
-    {
-      "id": "RR-ED-1E",
-      "title": "Three-argument INSTR runtime entry",
-      "signatures": [
-        "unhandled INT ED sub 1e"
-      ],
-      "disposition": "closed",
-      "evidence_class": "runtime-revision",
-      "confidence": "high",
-      "files": [
-        "wild/hits/be.exe",
-        "wild/hits/crossref.exe",
-        "wild/hits/hebrew.exe",
-        "wild/hits/invent.exe"
-      ],
-      "assessment": "Canonical ED/1e is INSTR(start, haystack$, needle$): AX carries start, haystack and needle are pushed in that order, and AX carries the result. Four independent binary witnesses span TB 1.0 and 1.1. Adjacent ED/1c is the oracle-verified two-argument INSTR entry; the IR and C runtime already supported arity three.",
-      "negative_evidence": [
-        "Literal and variable CINT probes use inline FISTP/FILD and never ED/1e.",
-        "The vendored oracle rejects the common three-argument INSTR source spellings, so this is not oracle-verified."
-      ],
-      "implementation": "Scanner accepts only canonical ED/1e and the fold consumes the existing AX value plus exactly two string-stack operands.",
-      "source": "HANDOFF.md: CLOSED 2026-07-20 — missing runtime-revision three-argument INSTR"
-    },
-    {
-      "id": "RR-INT-8C",
-      "title": "RETURN line-target runtime unwind vector",
-      "signatures": [
-        "unhandled INT 8c"
-      ],
-      "disposition": "closed",
-      "evidence_class": "oracle-verified",
-      "confidence": "high",
-      "files": [
-        "wild/hits/baby.exe",
-        "wild/hits/crossref.exe",
-        "wild/hits/help.exe",
-        "wild/hits/prtguide.exe",
-        "wild/hits/readme.exe"
-      ],
-      "assessment": "Canonical INT 8C followed by a near or short JMP is RETURN <line>: the vector unwinds the active GOSUB/event frame and the jump selects the requested line. Oracle fixture t1_returnline/v10_t1_returnline verifies the source and byte-exact round trip in both dialects.",
-      "negative_evidence": [
-        "One, two, and eight ON KEY declarations did not reproduce the vector.",
-        "TB 1.0 keyboard-break toggles, dense KEY ON/OFF control, and simple CLS-plus-assignment handler bodies did not reproduce it."
-      ],
-      "promotion_criteria": "Satisfied 2026-07-23 by the RETURN <line> oracle fixture and the invariant INT-vector-plus-JMP shape across all five wild hits.",
-      "source": "HANDOFF.md: Gap INT-8c — likely ON KEY GOSUB related"
-    },
-    {
-      "id": "RR-CGA-HELPERS",
-      "title": "Linked CGA snow-avoidance runtime helpers",
-      "signatures": [
-        "opaque helper semantic identity",
-        "unhandled byte 06"
-      ],
-      "disposition": "coverage-only",
-      "evidence_class": "candidate-runtime-revision",
-      "confidence": "high-for-library-origin",
-      "files": [
-        "wild/hits/CVT2TB.EXE",
-        "wild/hits/catalog.exe",
-        "wild/hits/filepatc.exe",
-        "wild/hits/morcalc.exe",
-        "wild/hits/process.exe",
-        "wild/hits/pw.exe"
-      ],
-      "assessment": "Two complete 116/125-byte helpers are already recognized by full-body fingerprints. Related framed procedures use CGA port 0x3DA, CLI/STI, and direct video-memory writes. This is compiler/runtime-library code, but the source statement or compiler option that links it is unknown.",
-      "negative_evidence": [
-        "No fixture corpus executable contains the helper signature, including ordinary TB 1.0 PRINT programs.",
-        "Minimal SCREEN 0, WIDTH 40, and PRINT probes did not link it.",
-        "VIEW PRINT and PCOPY are rejected by this Turbo Basic parser."
-      ],
-      "implementation": "Exact helper bodies produce coverage-only OpaqueHelper IR; this does not claim semantic source recovery.",
-      "promotion_criteria": "Identify the source trigger or compiler/runtime option and reproduce a helper byte-exact, or recover authoritative runtime-library provenance.",
-      "source": "HANDOFF.md: Gap 19 — byte 06 and REMAINING_GAPS_PLAN.md Wave 3"
-    },
-    {
-      "id": "RR-SYSCELL-8A",
-      "title": "Unknown runtime system cell 0x8a",
-      "signatures": [
-        "store to unknown system cell 0x8a"
-      ],
-      "disposition": "closed",
-      "evidence_class": "runtime-revision",
-      "confidence": "high",
-      "files": [
-        "wild/hits/bill.exe",
-        "wild/hits/color.exe"
-      ],
-      "assessment": "Confirmed: cell 0x8A (and 0x96, 0xA2 -- the whole COLOR fg/bg + VIEW-border cell family, uniformly +2 from the canonical 0x88/0x94/0xA0/0xAC/0xB8/0xC4) is a runtime-revision-skewed table shift, the same category as RR-NOP-90/RR-NOP-FWAIT/RR-BYTE-EA. No oracle probe (SCREEN mode/colorswitch/page variants, COLOR with/without KEY OFF or DEF SEG, PALETTE) ever produced the shifted offset -- only wild bill.exe and color.exe do, and in both, all three color-cell writes observed there (fg/bg/border) shift by the identical +2, strongly suggesting a whole-table shift in whichever compiler build produced these two EXEs rather than a different statement. The cell only ever feeds COLOR/VIEW/PAINT construction (state.color_cells), so aliasing it to the canonical cell number changes no emitted source -- semantically inert.",
-      "source": "wild bill.exe/color.exe, sessions 2026-07-19 (candidate) and 2026-07-21 (closed)",
-      "implementation": "Closed by session 2026-07-21: core.py's movm_imm/movm_ax system-cell dispatch and arith.py's fp_math FP->int bridge each gained a second branch accepting 0x8A/0x96/0xA2/0xAE/0xBA/0xC6, normalizing to cell-2 before storing into state.color_cells. Closed bill.exe and color.exe fully."
-    },
-    {
-      "id": "RR-LINEINPUT",
-      "title": "Alternate LINE INPUT encodings",
-      "signatures": [
-        "LINE INPUT trailing byte c0",
-        "LINE INPUT # template mismatch"
-      ],
-      "disposition": "candidate",
-      "evidence_class": "candidate-runtime-revision",
-      "confidence": "medium",
-      "files": [
-        "wild/hits/cal.exe",
-        "wild/hits/cal87.exe",
-        "wild/hits/file.exe"
-      ],
-      "assessment": "The source-level statements are already known, making stable alternate tails or setup sequences plausible runtime-template variants. The two CAL files may be duplicate builds and therefore count as one independent shape until provenance is checked.",
-      "promotion_criteria": "Capture complete templates, separate independent builds, and demonstrate that operand and result state match the existing LINE INPUT/LINE INPUT # handlers.",
-      "source": "REMAINING_GAPS_PLAN.md Wave 3"
-    },
-    {
-      "id": "RR-DISPATCH-HOLES",
-      "title": "Unidentified runtime dispatcher entries",
-      "signatures": [
-        "unhandled INT EC sub ac",
-        "unhandled INT c2",
-        "unhandled INT d4",
-        "unhandled INT EC sub ee"
-      ],
-      "disposition": "unresolved",
-      "evidence_class": "unresolved",
-      "confidence": "low",
-      "files": [],
-      "assessment": "Dispatcher holes are plausible revision-specific entries, but they are equally likely to be ordinary statements or intrinsics not yet identified. Grouping them here is a triage hypothesis, not a shared semantic classification.",
-      "promotion_criteria": "Record the complete calling convention and neighboring statement context for each sub independently; promote only entries with cross-file or external runtime evidence.",
-      "source": "REMAINING_GAPS_PLAN.md Wave 1"
-    },
-    {
-      "id": "RR-BYTE-EA",
-      "title": "Far-jump or inline-data pattern",
-      "signatures": [
-        "unhandled byte ea"
-      ],
-      "disposition": "closed",
-      "evidence_class": "runtime-revision",
-      "confidence": "high",
-      "files": [],
-      "assessment": "Stale: this entry predates the closure. 0xEA is a raw 16-bit `EA off:seg` far transfer; the existing far-call convention (segment-zero offsets rebase from the user-code start, relocated segments use the preceding-byte origin) resolves every non-zero target, and a zero-offset transfer is the fixed cleanup/event handoff that terminates the scan like the existing EC/E8 epilogue. No oracle probe (ERROR/RESUME, ON KEY, ON GOTO, nested IF, GOTO) ever emitted EA, so this remains a wild-only runtime-revision closure, never an oracle fixture.",
-      "implementation": "Closed by commit (Far JMP (EA) runtime-revision group, 2026-07-20): scanner records non-zero transfers as `jmpf`; conditional JCC/far-jump pairs use the five-byte skip length.",
-      "source": "HANDOFF.md: 'Far JMP (EA) runtime-revision group' (2026-07-20)"
-    },
-    {
-      "id": "RR-NOP-90",
-      "title": "Compiler-emitted NOP padding",
-      "signatures": [
-        "unhandled byte 90"
-      ],
-      "disposition": "closed",
-      "evidence_class": "runtime-revision",
-      "confidence": "high",
-      "files": [],
-      "assessment": "Formerly classified as unwitnessable synchronization padding around a CINT-style float-to-int round trip. The scanner now safely decodes literal x86 NOP padding; this is retained to prevent the stale signature from being reopened as an active gap.",
-      "implementation": "Closed by commit 631597b (Decode compiler-emitted NOP padding).",
-      "source": "HANDOFF.md: Byte 90 and git commit 631597b"
-    },
-    {
-      "id": "RR-NOP-FWAIT",
-      "title": "IDX% bridge x87-sync marker: bare NOP pair as an fwait alias",
-      "signatures": [
-        "IDX% bridge mismatch",
-        "FP->int bridge mismatch"
-      ],
-      "disposition": "closed",
-      "evidence_class": "runtime-revision",
-      "confidence": "high",
-      "files": [],
-      "assessment": "A follow-on to RR-NOP-90: once the scanner could decode a bare NOP pair generically, electron.exe and rstprint.exe advanced one layer deeper and stopped at the IDX% bridge consumer instead, which only recognized the canonical `fwait` (INT 3D) op at the fistp[0x2C]->movaxmem[0x2C] sync point. A `nop;nop` pair occupies the identical 2-byte span there in both files. Same runtime-revision-skew category as RR-NOP-90/RR-BYTE-EA: no oracle probe (computed row/col, both, explicit CINT()) ever produced the raw NOP pair at this position, only INT 3Dh, so it cannot be fixture-witnessed -- but a NOP is semantically inert and the surrounding bridge is otherwise byte-identical either way, so accepting it as an alias changes no emitted source.",
-      "implementation": "Closed by commit 4f29e9b (Decode computed FOR-STEP sign test and runtime-skewed IDX% sync): arith.py's fp_math gained a `_sync_len` helper accepting either 1 op (fwait) or 2 ops (nop;nop) at the sync point, in both the FP->int assign and element-subscript bridge shapes.",
-      "source": "wild electron.exe/rstprint.exe, session 2026-07-20"
-    },
-    {
-      "id": "RR-DGROUP-BIGARR",
-      "title": "DGROUP layout not solvable: large static string array defeats stamp + walk",
-      "signatures": [
-        "DGROUP layout not solvable from the calibrated rules"
-      ],
-      "disposition": "unresolved",
-      "evidence_class": "unresolved",
-      "confidence": "low",
-      "files": [
-        "wild/hits/menu.exe",
-        "wild/hits/night.exe",
-        "wild/hits/sprogh.exe",
-        "wild/hits/swbb.exe"
-      ],
-      "assessment": "All four files show ZERO candidate stamp matches anywhere in the file (the primary stamp-anchored path in layout.py never fires) and the descending-n walk path also never solves for any n in 0..31. In every file the failure is the SAME shape: a `movsi` disp far beyond anything the walk or any tried static-array record explains (menu.exe 0x400, night.exe 0xa00, sprogh.exe 0x800, swbb.exe 0x1440), read back at the guessed pool position as plain low-value (non-descriptor-tagged) words -- and for menu.exe those movsi disps form a clean, long run of 4-byte-spaced constant-index accesses (0x310..0x400, ~60 entries) immediately after what looks like a cluster of ARR_BLOCK(0x36)-spaced array bases (0x156, 0x18c, 0x1c2, 0x1f8, 0x22e, 0x264). This strongly suggests a static STRING array with a large enough element count (or too many total static arrays, possibly exceeding the stamp's `0<=n<=31` cap) that the current record-parsing/stamp-shape assumptions in `_parse_static_slot`/the stamp search don't hold -- not confirmed to be a runtime-revision issue at all, just an unimplemented or mis-modeled shape. mf.exe fails similarly but with the DISTINCT message 'DGROUP layout not solvable (runtime slot grid anchor)' (has rt_blocks, so it's the grid-anchored path failing instead) -- likely a related but separate cause, not yet checked against this hypothesis.",
-      "promotion_criteria": "Hand-derive ds for menu.exe (smallest file of the four) using the ARR_BLOCK-spaced brute-force scan technique from the original gap-16 investigation, confirm whether a big static string array record actually sits where hypothesized, and if so identify what specifically breaks `_parse_static_slot`/the stamp shape for it (element count, rank, or the n<=31 cap) before writing an oracle probe to reproduce a minimal case.",
-      "source": "session 2026-07-20, surfaced once the computed-FOR-STEP fix (commit 4f29e9b) let menu.exe's scan reach this far"
-    }
-  ]
+ "schema_version": 1,
+ "document_type": "tbx.runtime_revision_assessments",
+ "updated": "2026-08-02",
+ "corpus_fingerprint": "2043f80bf6bf929b0a8058ebb0b83e3ec6b63664855e4428b4781db63c4924a3",
+ "evidence_classes": [
+  "oracle-verified",
+  "dialect-verified",
+  "documentation-backed",
+  "runtime-revision",
+  "candidate-runtime-revision",
+  "decoder-side",
+  "unresolved"
+ ],
+ "assessments": [
+  {
+   "id": "RR-METRIC-INKEY-LEN-TEST",
+   "title": "metric.exe optimized LEN(INKEY$)=0 zero test",
+   "signatures": [
+    "strfn INKEY$ + str2num LEN + orax",
+    "metric round-trip delta"
+   ],
+   "disposition": "candidate",
+   "evidence_class": "candidate-runtime-revision",
+   "confidence": "medium",
+   "files": [
+    "wild/hits/metric.exe"
+   ],
+   "assessment": "The source shape is a structured empty-key wait loop: `DO: LOOP UNTIL LEN(INKEY$)` (the same form appears again at the later wait loop). The Oracle reproduces the wild operation sequence exactly: `strfn; str2num; orax; JE` back to the loop header. Reconstructing both loops makes the operation stream byte-for-byte identical. Keeping the large DATA declaration as one logical statement (using physical continuations) removes its 26 spurious line-table entries and reduces the rebuild delta from 496 to 432 bytes. The residual is compiler/source-layout metadata: two extra table rows (8 bytes) plus a 424-byte DATA bookkeeping band that the oracle emits for the continuation spelling but the wild image does not. After aligning that 432-byte insertion, the entire tail matches except for two bytes in the overlaid metadata cell, confirming there is no further code or pool mismatch.",
+   "negative_evidence": [
+    "Explicit LEN(INKEY$)=0, integer-suffixed zero, INKEY$=\"\", and NOT/implicit truth variants were probed against the oracle; only DO...LOOP UNTIL LEN(INKEY$) produced the wild ORAX/JE back-edge.",
+    "Replacing both flattened guards with DO...LOOP UNTIL reproduces the complete operation stream; with DATA continuations the rebuilt image is 432 bytes larger, and the remaining raw mismatch is confined to the line-table/DATA bookkeeping band.",
+    "A line-numberless rebuild (labels, including a branch-target-only variant) changes the line fields to zero but retains the metadata delta. Joining the DATA continuations into one over-wide physical line is rejected by the oracle (Error 416), while BASIC continuations compile but allocate the extra 424-byte bookkeeping band. One-item and multi-item DATA statement probes both retain the oracle's descending table. In a corpus sample, the metric shape is also distinct: 221 DATA items with no decoded READ/RESTORE, whereas the other large DATA witnesses have READ/RESTORE or different pool signatures. The original compiler/source spelling is therefore not recoverable from the wild zero-valued table."
+   ],
+   "promotion_criteria": "Find a compiler revision or additional wild witness that emits the compact zero-test for an equality-zero self-loop before changing the emitter.",
+   "source": "oracle probes, session 2026-08-01"
+  },
+  {
+   "id": "RR-ED-1E",
+   "title": "Three-argument INSTR runtime entry",
+   "signatures": [
+    "unhandled INT ED sub 1e"
+   ],
+   "disposition": "closed",
+   "evidence_class": "runtime-revision",
+   "confidence": "high",
+   "files": [
+    "wild/hits/be.exe",
+    "wild/hits/crossref.exe",
+    "wild/hits/hebrew.exe",
+    "wild/hits/invent.exe"
+   ],
+   "assessment": "Canonical ED/1e is INSTR(start, haystack$, needle$): AX carries start, haystack and needle are pushed in that order, and AX carries the result. Four independent binary witnesses span TB 1.0 and 1.1. Adjacent ED/1c is the oracle-verified two-argument INSTR entry; the IR and C runtime already supported arity three.",
+   "negative_evidence": [
+    "Literal and variable CINT probes use inline FISTP/FILD and never ED/1e.",
+    "The vendored oracle rejects the common three-argument INSTR source spellings, so this is not oracle-verified."
+   ],
+   "implementation": "Scanner accepts only canonical ED/1e and the fold consumes the existing AX value plus exactly two string-stack operands.",
+   "source": "HANDOFF.md: CLOSED 2026-07-20 \u2014 missing runtime-revision three-argument INSTR"
+  },
+  {
+   "id": "RR-INT-8C",
+   "title": "RETURN line-target runtime unwind vector",
+   "signatures": [
+    "unhandled INT 8c"
+   ],
+   "disposition": "closed",
+   "evidence_class": "oracle-verified",
+   "confidence": "high",
+   "files": [
+    "wild/hits/baby.exe",
+    "wild/hits/crossref.exe",
+    "wild/hits/help.exe",
+    "wild/hits/prtguide.exe",
+    "wild/hits/readme.exe"
+   ],
+   "assessment": "Canonical INT 8C followed by a near or short JMP is RETURN <line>: the vector unwinds the active GOSUB/event frame and the jump selects the requested line. Oracle fixture t1_returnline/v10_t1_returnline verifies the source and byte-exact round trip in both dialects.",
+   "negative_evidence": [
+    "One, two, and eight ON KEY declarations did not reproduce the vector.",
+    "TB 1.0 keyboard-break toggles, dense KEY ON/OFF control, and simple CLS-plus-assignment handler bodies did not reproduce it."
+   ],
+   "promotion_criteria": "Satisfied 2026-07-23 by the RETURN <line> oracle fixture and the invariant INT-vector-plus-JMP shape across all five wild hits.",
+   "source": "HANDOFF.md: Gap INT-8c \u2014 likely ON KEY GOSUB related"
+  },
+  {
+   "id": "RR-CGA-HELPERS",
+   "title": "Linked CGA snow-avoidance runtime helpers",
+   "signatures": [
+    "opaque helper semantic identity",
+    "unhandled byte 06"
+   ],
+   "disposition": "coverage-only",
+   "evidence_class": "candidate-runtime-revision",
+   "confidence": "high-for-library-origin",
+   "files": [
+    "wild/hits/CVT2TB.EXE",
+    "wild/hits/catalog.exe",
+    "wild/hits/filepatc.exe",
+    "wild/hits/morcalc.exe",
+    "wild/hits/process.exe",
+    "wild/hits/pw.exe"
+   ],
+   "assessment": "Two complete 116/125-byte helpers are already recognized by full-body fingerprints. Related framed procedures use CGA port 0x3DA, CLI/STI, and direct video-memory writes. This is compiler/runtime-library code, but the source statement or compiler option that links it is unknown.",
+   "negative_evidence": [
+    "No fixture corpus executable contains the helper signature, including ordinary TB 1.0 PRINT programs.",
+    "Minimal SCREEN 0, WIDTH 40, and PRINT probes did not link it.",
+    "VIEW PRINT and PCOPY are rejected by this Turbo Basic parser."
+   ],
+   "implementation": "Exact helper bodies produce coverage-only OpaqueHelper IR; this does not claim semantic source recovery.",
+   "promotion_criteria": "Identify the source trigger or compiler/runtime option and reproduce a helper byte-exact, or recover authoritative runtime-library provenance.",
+   "source": "HANDOFF.md: Gap 19 \u2014 byte 06 and REMAINING_GAPS_PLAN.md Wave 3"
+  },
+  {
+   "id": "RR-SYSCELL-8A",
+   "title": "Unknown runtime system cell 0x8a",
+   "signatures": [
+    "store to unknown system cell 0x8a"
+   ],
+   "disposition": "closed",
+   "evidence_class": "runtime-revision",
+   "confidence": "high",
+   "files": [
+    "wild/hits/bill.exe",
+    "wild/hits/color.exe"
+   ],
+   "assessment": "Confirmed: cell 0x8A (and 0x96, 0xA2 -- the whole COLOR fg/bg + VIEW-border cell family, uniformly +2 from the canonical 0x88/0x94/0xA0/0xAC/0xB8/0xC4) is a runtime-revision-skewed table shift, the same category as RR-NOP-90/RR-NOP-FWAIT/RR-BYTE-EA. No oracle probe (SCREEN mode/colorswitch/page variants, COLOR with/without KEY OFF or DEF SEG, PALETTE) ever produced the shifted offset -- only wild bill.exe and color.exe do, and in both, all three color-cell writes observed there (fg/bg/border) shift by the identical +2, strongly suggesting a whole-table shift in whichever compiler build produced these two EXEs rather than a different statement. The cell only ever feeds COLOR/VIEW/PAINT construction (state.color_cells), so aliasing it to the canonical cell number changes no emitted source -- semantically inert.",
+   "source": "wild bill.exe/color.exe, sessions 2026-07-19 (candidate) and 2026-07-21 (closed)",
+   "implementation": "Closed by session 2026-07-21: core.py's movm_imm/movm_ax system-cell dispatch and arith.py's fp_math FP->int bridge each gained a second branch accepting 0x8A/0x96/0xA2/0xAE/0xBA/0xC6, normalizing to cell-2 before storing into state.color_cells. Closed bill.exe and color.exe fully."
+  },
+  {
+   "id": "RR-LINEINPUT",
+   "title": "Alternate LINE INPUT encodings",
+   "signatures": [
+    "LINE INPUT trailing byte c0",
+    "LINE INPUT # template mismatch"
+   ],
+   "disposition": "candidate",
+   "evidence_class": "candidate-runtime-revision",
+   "confidence": "medium",
+   "files": [
+    "wild/hits/cal.exe",
+    "wild/hits/cal87.exe",
+    "wild/hits/file.exe"
+   ],
+   "assessment": "The source-level statements are already known, making stable alternate tails or setup sequences plausible runtime-template variants. The two CAL files may be duplicate builds and therefore count as one independent shape until provenance is checked.",
+   "promotion_criteria": "Capture complete templates, separate independent builds, and demonstrate that operand and result state match the existing LINE INPUT/LINE INPUT # handlers.",
+   "source": "REMAINING_GAPS_PLAN.md Wave 3"
+  },
+  {
+   "id": "RR-DISPATCH-HOLES",
+   "title": "Unidentified runtime dispatcher entries",
+   "signatures": [
+    "unhandled INT EC sub ac",
+    "unhandled INT c2",
+    "unhandled INT d4",
+    "unhandled INT EC sub ee"
+   ],
+   "disposition": "candidate",
+   "evidence_class": "candidate-runtime-revision",
+   "confidence": "medium",
+   "files": [],
+   "assessment": "Dispatcher holes are plausible revision-specific entries, but they are equally likely to be ordinary statements or intrinsics not yet identified. Grouping them here is a triage hypothesis, not a shared semantic classification.",
+   "promotion_criteria": "Record the complete calling convention and neighboring statement context for each sub independently; promote only entries with cross-file or external runtime evidence.",
+   "source": "REMAINING_GAPS_PLAN.md Wave 1"
+  },
+  {
+   "id": "RR-BYTE-EA",
+   "title": "Far-jump or inline-data pattern",
+   "signatures": [
+    "unhandled byte ea"
+   ],
+   "disposition": "closed",
+   "evidence_class": "runtime-revision",
+   "confidence": "high",
+   "files": [],
+   "assessment": "Stale: this entry predates the closure. 0xEA is a raw 16-bit `EA off:seg` far transfer; the existing far-call convention (segment-zero offsets rebase from the user-code start, relocated segments use the preceding-byte origin) resolves every non-zero target, and a zero-offset transfer is the fixed cleanup/event handoff that terminates the scan like the existing EC/E8 epilogue. No oracle probe (ERROR/RESUME, ON KEY, ON GOTO, nested IF, GOTO) ever emitted EA, so this remains a wild-only runtime-revision closure, never an oracle fixture.",
+   "implementation": "Closed by commit (Far JMP (EA) runtime-revision group, 2026-07-20): scanner records non-zero transfers as `jmpf`; conditional JCC/far-jump pairs use the five-byte skip length.",
+   "source": "HANDOFF.md: 'Far JMP (EA) runtime-revision group' (2026-07-20)"
+  },
+  {
+   "id": "RR-NOP-90",
+   "title": "Compiler-emitted NOP padding",
+   "signatures": [
+    "unhandled byte 90"
+   ],
+   "disposition": "closed",
+   "evidence_class": "runtime-revision",
+   "confidence": "high",
+   "files": [],
+   "assessment": "Formerly classified as unwitnessable synchronization padding around a CINT-style float-to-int round trip. The scanner now safely decodes literal x86 NOP padding; this is retained to prevent the stale signature from being reopened as an active gap.",
+   "implementation": "Closed by commit 631597b (Decode compiler-emitted NOP padding).",
+   "source": "HANDOFF.md: Byte 90 and git commit 631597b"
+  },
+  {
+   "id": "RR-NOP-FWAIT",
+   "title": "IDX% bridge x87-sync marker: bare NOP pair as an fwait alias",
+   "signatures": [
+    "IDX% bridge mismatch",
+    "FP->int bridge mismatch"
+   ],
+   "disposition": "closed",
+   "evidence_class": "runtime-revision",
+   "confidence": "high",
+   "files": [],
+   "assessment": "A follow-on to RR-NOP-90: once the scanner could decode a bare NOP pair generically, electron.exe and rstprint.exe advanced one layer deeper and stopped at the IDX% bridge consumer instead, which only recognized the canonical `fwait` (INT 3D) op at the fistp[0x2C]->movaxmem[0x2C] sync point. A `nop;nop` pair occupies the identical 2-byte span there in both files. Same runtime-revision-skew category as RR-NOP-90/RR-BYTE-EA: no oracle probe (computed row/col, both, explicit CINT()) ever produced the raw NOP pair at this position, only INT 3Dh, so it cannot be fixture-witnessed -- but a NOP is semantically inert and the surrounding bridge is otherwise byte-identical either way, so accepting it as an alias changes no emitted source.",
+   "implementation": "Closed by commit 4f29e9b (Decode computed FOR-STEP sign test and runtime-skewed IDX% sync): arith.py's fp_math gained a `_sync_len` helper accepting either 1 op (fwait) or 2 ops (nop;nop) at the sync point, in both the FP->int assign and element-subscript bridge shapes.",
+   "source": "wild electron.exe/rstprint.exe, session 2026-07-20"
+  },
+  {
+   "id": "RR-DGROUP-BIGARR",
+   "title": "DGROUP layout not solvable: large static string array defeats stamp + walk",
+   "signatures": [
+    "DGROUP layout not solvable from the calibrated rules"
+   ],
+   "disposition": "unresolved",
+   "evidence_class": "unresolved",
+   "confidence": "low",
+   "files": [
+    "wild/hits/menu.exe",
+    "wild/hits/night.exe",
+    "wild/hits/sprogh.exe",
+    "wild/hits/swbb.exe"
+   ],
+   "assessment": "All four files show ZERO candidate stamp matches anywhere in the file (the primary stamp-anchored path in layout.py never fires) and the descending-n walk path also never solves for any n in 0..31. In every file the failure is the SAME shape: a `movsi` disp far beyond anything the walk or any tried static-array record explains (menu.exe 0x400, night.exe 0xa00, sprogh.exe 0x800, swbb.exe 0x1440), read back at the guessed pool position as plain low-value (non-descriptor-tagged) words -- and for menu.exe those movsi disps form a clean, long run of 4-byte-spaced constant-index accesses (0x310..0x400, ~60 entries) immediately after what looks like a cluster of ARR_BLOCK(0x36)-spaced array bases (0x156, 0x18c, 0x1c2, 0x1f8, 0x22e, 0x264). This strongly suggests a static STRING array with a large enough element count (or too many total static arrays, possibly exceeding the stamp's `0<=n<=31` cap) that the current record-parsing/stamp-shape assumptions in `_parse_static_slot`/the stamp search don't hold -- not confirmed to be a runtime-revision issue at all, just an unimplemented or mis-modeled shape. mf.exe fails similarly but with the DISTINCT message 'DGROUP layout not solvable (runtime slot grid anchor)' (has rt_blocks, so it's the grid-anchored path failing instead) -- likely a related but separate cause, not yet checked against this hypothesis.",
+   "promotion_criteria": "Hand-derive ds for menu.exe (smallest file of the four) using the ARR_BLOCK-spaced brute-force scan technique from the original gap-16 investigation, confirm whether a big static string array record actually sits where hypothesized, and if so identify what specifically breaks `_parse_static_slot`/the stamp shape for it (element count, rank, or the n<=31 cap) before writing an oracle probe to reproduce a minimal case.",
+   "source": "session 2026-07-20, surfaced once the computed-FOR-STEP fix (commit 4f29e9b) let menu.exe's scan reach this far"
+  },
+  {
+   "id": "RR-TB10-TWO-REVISIONS",
+   "title": "At least four Turbo Basic runtime builds in the wild corpus; the TB 1.0 pair is now SOURCED (1987-04-02 build, see VERSIONS.md)",
+   "signatures": [
+    "build_match 86-88%",
+    "lodsb dispatch variant",
+    "build_match 18%"
+   ],
+   "disposition": "closed",
+   "evidence_class": "runtime-revision",
+   "confidence": "high",
+   "files": [
+    "wild/hits/be.exe",
+    "wild/hits/horses.exe",
+    "wild/hits/invent.exe",
+    "wild/hits/prtguide.exe",
+    "wild/hits/pz.exe",
+    "wild/hits/readme.exe",
+    "wild/hits/secure.exe",
+    "wild/hits/startup.exe",
+    "wild/hits/strpfind.exe",
+    "wild/hits/autonum.exe",
+    "wild/hits/banker.exe",
+    "wild/hits/rev.exe",
+    "wild/hits/bill.exe",
+    "wild/hits/ck.exe",
+    "wild/hits/color.exe",
+    "wild/hits/mm.exe"
+   ],
+   "assessment": "The 16 TB 1.0 programs split into two runtime revisions, and the split is decided by a single block at runtime-region offset 0x1bcf (file 0x1ccf). This oracle's 1.0 spells a 4-way dispatch as `mov bl,[si]; inc si` followed by four `cmp bl,imm8; je` (28 bytes); the other revision spells it `lodsb` followed by four `cmp al,imm8; je` (22 bytes) -- the same routine, hand-shortened by exactly 6 bytes. The fingerprint is clean: all 7 programs at 96-99% build match carry the long form, all 9 at 86-88% carry the short one, with no overlap. A second, independent marker sits at offset 0x0621, where the stack switch loads SS then SP in one revision and SP then SS in the other; it tracks the same split exactly. Those 6 bytes are most of what the positionwise score reacts to. 161 of the differing 16-bit words are CALL rel16 displacements differing by exactly -0x0006, i.e. the same call to a target past the shortened block; a further 22 differ by -0x0020 from a second shortened region in the 0x1d76-0x1fff tail. Measured with alignment instead, the two revisions are 95.5-96% identical (330-370 unreproduced bytes in an 8 KB runtime) against 99.1-99.7% for same-revision programs. So the revision gap is real but small: a handful of size optimizations, not different code. Do NOT read the 0x1500-0x1780 band as a revision marker. It is a table of 16-bit addresses whose entries keep identical spacing but shift per program (autonum -12221, number -5828, rev/book -504): program-specific link-time data, which is why book/number/rev score 96-97% while autonum/baby/banker/mymenu score 99% within the SAME revision. Surveying every program with the dialect-correct reference (the `--all` sweep) shows the corpus holds at least FOUR runtime builds, not two: this oracle's 1.0 and the 6-byte-shorter 1.0 above, plus this oracle's 1.1 and a second 1.1 carrying bill.exe, ck.exe, color.exe and mm.exe. That fourth group scores 18% positionwise and 83.4-83.5% aligned against our 1.1, and its members are 96-99% identical to each other, so it is one coherent build rather than four unrelated ones. It is NOT characterized further -- no fingerprint block has been isolated for it the way `lodsb` isolates the 1.0 split.\n\nRESOLVED 2026-08-07 for the TB 1.0 pair: a real, earlier (1987-04-02, sha256 e5970b8f...) English TB 1.0 TB.EXE was found (abandonwaredos.com repack of Borland-Turbo-Basic-1.0.zip) and vendored as oracle dialect `1.0-early` (vendor/turbo_basic_oracle/VERSIONS.md has full provenance and method notes). Confirmed as the missing revision: the 9 previously-86-88%-match files score 97-99% build match against it instead, and the full decode-emit-recompile round trip for all 9 lands at delta=0 length for 8 of them (all but horses.exe, a separate large decode issue), with strpfind.exe 3 bytes and pz.exe 15 bytes from literal byte-exact -- decoder-gap residue, not build mismatch anymore. The fourth group (the TB 1.1-family build carrying bill/ck/color/mm.exe) remains unsourced; ruled out French 1.1 as a candidate for it this session (scores 18% against French too, same as English -- no better fit).",
+   "source": "session 2026-07-30"
+  },
+  {
+   "id": "RR-TOGGLE-REACHABILITY",
+   "title": "Which IDE Options toggles actually put byte-exactness out of reach",
+   "signatures": [
+    "Options toggles",
+    "skip: Options toggles"
+   ],
+   "disposition": "closed",
+   "evidence_class": "oracle-verified",
+   "confidence": "high",
+   "files": [
+    "wild/hits/bill.exe",
+    "wild/hits/ck.exe",
+    "wild/hits/cleanup.exe",
+    "wild/hits/install0.exe",
+    "wild/hits/reformat.exe",
+    "wild/hits/rstprint.exe",
+    "wild/hits/tamstart.exe"
+   ],
+   "assessment": "Audited after the blanket claim 'a program compiled with a toggle can never be reproduced' turned out to be false for Keyboard break. Measured against their default-toggle twins, the flagged corpus fixtures cost: K one byte (the flags mask at prologue-0x73, no code, same length -- fkb_t1_and, fkb_t1_beep); S three bytes plus the mask (fst_t1_gosub); B 128 bytes of instrumentation plus the mask (fbd_t1_arr1); 8087 a different runtime entirely (f87_t1_beep, 86.8% aligned). So K is verifiable with the mask normalized and the rest are not, which is now what verify_wild and verify_fixture implement. The related claim that toggles have NO SOURCE SPELLING is TRUE and was probe-checked here: `$DEBUG`, `$ERROR ON` and `$FLOAT EMULATE` are all rejected by TB 1.1 (Errors 471/416/416), and the metastatements it does accept -- $EVENT, $INCLUDE, $INLINE, $SEGMENT, $SOUND, $STACK -- cover none of the five Options toggles. Scope the remaining exclusion correctly: B/O/S are out of reach OF THIS HARNESS, not in principle. tb_v86.js exposes only --compile-exe/--floppy/--rows/--run-ms/--workspace, but the library underneath drives the IDE by held keystrokes and navigates its menus, so the Options toggles are reachable the same way the compile is. Adding that path would make bill.exe, ck.exe, rstprint.exe and tamstart.exe judgeable -- the only four programs still excluded for a toggle. IMPLEMENTED 2026-07-31: tb_v86_lib.setOptionsToggles drives the Options menu for 8/K/B/O/S; verify_wild compiles with the program's own toggles instead of excluding on them. install0.exe and rstprint.exe are now measured at 99.17%/98.84% identical; bill.exe and ck.exe remain excluded, but now correctly for RR-TB10-TWO-REVISIONS (18% build match) rather than for carrying a toggle.",
+   "source": "session 2026-07-31"
+  },
+  {
+   "id": "RR-BYREF-INT-FP-COMPARE",
+   "title": "A numeric SELECT CASE broken by an event-trap poll at its own join (resume.exe)",
+   "signatures": [
+    "far_fild_si",
+    "fstp64",
+    "fcomp64",
+    "far_cmpax_si"
+   ],
+   "disposition": "closed",
+   "evidence_class": "unresolved",
+   "confidence": "medium",
+   "files": [
+    "wild/hits/resume.exe"
+   ],
+   "assessment": "resume.exe's last structural difference, 12 sites: op-kind diff fcomp64 12 -> 0, fstsw 15 -> 3, far_cmpax_si 5 -> 17. We emit a direct integer compare where the original compares in double precision. It is all that is left after the forwarded-parameter typing landed (1365 unreproduced bytes, 98.59% identical).\n\nCORRECTED READING, after nine refuted probes. The shape is NOT one comparison. A per-statement commit marker sits between the conversion and the compare:\n    arg_ref 10; far_fild_si; fstp64 82   <- tail of the PRECEDING statement\n  | fld1; fcomp64 82; fstsw; jcc         <- the IF\nand only 4 of the 12 `fcomp64` have a paired `fstp64` at all -- one site is `fild 2558; fcomp64 82` with no conversion, reading a value cell 82 already held. So cell 82 (0x52, below VAR_BASE) is a persistent FP scratch cell carried ACROSS statements, and the question is what puts the parameter there, not how the comparison is spelled.\n\nNine spellings probed inside a SUB with a by-ref `P%`, none reproducing it, all saved under wild/probes/probe_byref_*.bas: `P% <> 1` (far_cmpax_si, what we emit); `P% <> 1#`; `1 <> P%` (far_movax_si + pooled cmpax_m); DEFDBL A-Z in scope; SHARED double compared against the param; a double LOCAL compared against it; DEFINT A-Z with an unsuffixed parameter; `P% <> 1!`; and `CDBL(P%) <> 1`. The last three all produce `far_icomp_si` -- TB's DIRECT compare of an FP value against a by-ref integer -- which is the point: TB has a one-op form and uses it everywhere I could construct, so the wild's materialised form must come from something that needs the converted value to OUTLIVE the comparison.\n\nRESOLVED. Not a comparison spelling at all -- a SELECT CASE. The corrected reading said the conversion belonged to the PRECEDING statement and cell 82 was scratch carried across a boundary; that is exactly a selector evaluated into its temp with the arms comparing against it. Probe sc_ref.bas (`SELECT CASE P%` over a by-ref integer parameter) reproduces the byte shape and decodes correctly; probe sc_trap.bas, the same source with an ON TIMER trap active, reproduces resume's shape exactly and decoded as an IF chain. The numeric SELECT entry tested the op immediately after `fstp64` and saw the poll stamp, so the SELECT never opened. The STRING entry already skipped that same hook, citing wild rsltest.exe. Fixed by skipping trap stamps in the numeric lookahead; fixture t1_selreftrap. resume.exe 98.59% -> 98.82%.",
+   "source": "session 2026-07-31"
+  },
+  {
+   "id": "RR-TRAP-STAMP-CALL-TARGET",
+   "title": "rsltest.exe: str_store_temp cleared c.cur mid-statement (CLOSED)",
+   "signatures": [
+    "jump target 0xX is not a statement start",
+    "trap_hook",
+    "mov_mem_sp"
+   ],
+   "disposition": "closed",
+   "evidence_class": "unresolved",
+   "confidence": "medium",
+   "files": [
+    "wild/hits/rsltest.exe"
+   ],
+   "promotion_criteria": "Trace `c.cur` from the trap stamp through literal-argument staging to the far_call on rsltest and on probe_trap_call_target, and find where the two diverge. Do not widen a lookahead again -- four attempts have been reverted, and the last two were aimed at a shape the probe proves is supported.",
+   "assessment": "rsltest.exe is the last of the three programs whose jump target lands on an event-trap poll stamp. The other two closed with `match_proc_body` learning to walk the stamps in a procedure epilogue (t1_exitsubtrap: help.exe, resume.exe). This one does not, and the reason is what sits after the stamp:\n    0xf322 jmp 0xf325\n    0xf325 trap_hook          <- the target\n    0xf326 mov_mem_sp 102     <- literal-argument staging\n    0xf32a sub_sp 10\n    ... arg_push_temp ... far_call\nSo the branch names the stamp of a CALL statement whose own recorded address is further along, past the staging ops. Advancing the target past the stamps is NOT enough -- 0xf326 owns no statement either.\n\nTwo general fixes were implemented and REVERTED, both because they fixed nothing measurable:\n(1) Retargeting every branch that lands on a stamp, in `_scan`. This breaks wild prtguide.exe and resume.exe outright: a procedure exit deliberately IS the first stamp of its epilogue, so retargeting those loses the address `match_proc_body` just established.\n(2) Accepting a stamp as an ALIAS for the statement behind it, in `ControlGraph.from_statements` and in `_resolve_targets`' lookup. Harmless -- all 39 programs still decode -- but it does not close rsltest, because the statement behind the stamp is not at stamp+1. Adding tolerance with no witness is what the calibration rule forbids, so it was reverted rather than kept 'in case'.\n\nNote for whoever picks this up: the check that fires is `ControlGraph.validate_targets`, not `_resolve_targets` -- both raise the identical message, and patching the latter has no effect on this failure.\n\nNARROWED. The SHAPE is supported: probe wild/probes/probe_trap_call_target.bas is a trapping program whose `IF ... THEN <line>` jumps to a `CALL FOO(23)` -- the identical `trap_hook; mov_mem_sp; sub_sp` staging -- and it decodes correctly, resolving the branch to the stamp address. So a branch to a trap-stamped CALL is fine in general and rsltest's failure is context-specific.\nWhat is specific: the branch comes from 0xe251, a LONG FORWARD jump, and the op immediately before the target is `0xf322 jmp <backward>` -- a loop back-edge. So 0xf325 is the statement after a loop and 0xe251 is very likely an EXIT LOOP that should have folded. Adding `trap_hook` to the `exit_k` skip run in core.py (which already skips consecutive `jmps`) changes nothing and is WRONG in principle: it moves the recorded exit address PAST the stamp, away from the address the GOTO actually names. Reverted.\nNext: instrument `c.exit_folds` on rsltest to see whether the EXIT LOOP entry for this loop is recorded at all and what exit address it carries, rather than adjusting the scan window again.\n\nNARROWED AGAIN, with instrumentation rather than edits -- which is what the previous four attempts should have started from.\n1. `c.exit_folds` holds exactly ONE entry for the whole program (0xd3ad -> 0xd3af). Nothing is recorded for the loop that closes at 0xf322, so no EXIT LOOP fold was ever available for the branch from 0xe251. Note the asymmetry that explains it: the `jmps` dispatch records `exit_folds` for a bare backward jump (the infinite-DO branch), and the near-`jmp` sibling records none at all.\n2. The stamp-address machinery ALREADY exists and 0xf325 satisfies it. `c.cur` is documented to take the FIRST hook of a run as the statement's address, and `hook_alias`/`entry_hook` normalise branch targets onto it. Confirmed on this file: 0xf325 is run-first (not in hook_alias) and entry_hook[0xf326] = 0xf325. So the branch correctly names 0xf325 and the CALL statement SHOULD own it -- the defect is that it does not.\nSo the question is narrow: why does the statement beginning `trap_hook; mov_mem_sp; sub_sp; ...; far_call` not commit at the hook address, when probe_trap_call_target's identical staging does? Trace `c.cur` through the literal-argument staging (`mov_mem_sp`/`sub_sp`/`arg_push_temp`) on both, rather than adjusting any scan window.\n\nCLOSED. The `c.cur` trace answered it in one run: the value is 0xf325 -- correct -- through the whole argument staging, and `str_store_temp` at 0xf34e sets it to None. Two ops later `push_bp` re-anchors the statement at 0xf352, which nothing branches to. `str_store_temp` stages a CALL argument and commits no statement, so clearing `c.cur` was simply wrong; every sibling staging op leaves it alone. This is the SAME defect the fstp64 fp64_bridge leg had, and the third instance overall of an op clearing `c.cur` without committing.\nrsltest.exe now decodes (934 statements) and is COMPARABLE -- 98% build match, no toggles. Its round trip then needed one more fix: the emitted `$STACK 32768` is unspellable (Error 425; `&H8000` is Error 426), because the allocation table counts paragraphs and `paras*16` can exceed the signed range. Capped at 32767, which rounds to the same 2048 paragraphs -- fixture t1_stackmax. rsltest now compiles: 10593 unreproduced, 89.40% identical, delta -80.",
+   "source": "session 2026-07-31"
+  },
+  {
+   "id": "RR-CVT2TB-VARIADIC-SUB-CALL",
+   "title": "CVT2TB apparent variadic SUB call was nested-FN staging leakage (CLOSED)",
+   "signatures": [
+    "far_call target 0xc6b4 with three staged arguments",
+    "SUB16 frame ret-pop proves two declared parameters",
+    "oracle Error 413 for extra CALL arguments"
+   ],
+   "disposition": "closed",
+   "evidence_class": "decoder-side",
+   "confidence": "high",
+   "files": [
+    "wild/hits/CVT2TB.EXE"
+   ],
+   "assessment": "The apparent extra arguments were not a runtime calling convention. Two `str_store_temp` values belonging to nested string DEF-FN arguments were incorrectly left in the shared SUB pending-argument list; CVT2TB then inherited them at the later far_call. The nested-FN form has no `arg_push_temp`, so it is now keyed into the FN argument map by its SI temp slot, while the immediate `arg_push_temp` form remains an ordinary SUB argument. CVT2TB advances past the former variadic-call gap.",
+   "negative_evidence": [
+    "A generic branch-time clear was unnecessary: the stale values originated in nested DEF-FN string staging, not a runtime arity convention.",
+    "The oracle's extra-argument rejection was a symptom of the decoder's leaked pending values, not evidence that CVT2TB used a different SUB calling convention."
+   ],
+   "promotion_criteria": "No further promotion is required; continue from CVT2TB's emitted-source DELAY literal gap.",
+   "source": "oracle probes and CVT2TB op/frame audit, session 2026-08-02"
+  },
+  {
+   "id": "RR-CVT2TB-SYSTEM-CELL-76",
+   "title": "CVT2TB compare against DGROUP cell 0x76 after COLOR",
+   "signatures": [
+    "color_commit mask 06",
+    "cmpax_m displacement 0x76",
+    "materialized relational value"
+   ],
+   "disposition": "unresolved",
+   "evidence_class": "unresolved",
+   "confidence": "low",
+   "files": [
+    "wild/hits/CVT2TB.EXE"
+   ],
+   "assessment": "The sequence is the same six-operation cmpax_m/materialization template as the byte-exact t1_orchain ERR witness, with literals 101 and 102, and it occurs immediately after CVT2TB's uniformly +2-shifted COLOR cells 0x8a/0x96. This supports the narrow candidate that CVT2TB's ERR cell is shifted from canonical 0x74 to 0x76; the decoder normalizes it to ir.Err. The mapping remains a runtime-revision candidate, not a general low-cell fallback.",
+   "promotion_criteria": "Reproduce the exact shifted [0076] sequence with an authored oracle/compiler build or obtain authoritative Turbo Basic runtime-cell documentation; until then keep the alias narrow to cmpax_m.",
+   "source": "CVT2TB op trace after t1_midassignbyref, session 2026-08-02"
+  },
+  {
+   "id": "RR-CVT2TB-DELAY-POOL-678",
+   "title": "CVT2TB repeated DELAY reads non-IEEE DGROUP bytes at 0x2a6",
+   "signatures": [
+    "fld64 displacement 0x2a6",
+    "DELAY after LINE INPUT#",
+    "same denormal value at four sites"
+   ],
+   "disposition": "unresolved",
+   "evidence_class": "unresolved",
+   "confidence": "medium",
+   "files": [
+    "wild/hits/CVT2TB.EXE"
+   ],
+   "assessment": "After CVT2TB decodes and emits, the oracle rejects four recovered DELAY literals with Error 488: the emitted IEEE value is -4.1725535327594426E-308#. The raw bytes at the current file mapping for DS:02a6 are 32 00 2c 00 2a 00 6d 00, not an IEEE double. A second, stronger lead is now measurable: the only plausible pool double is 0.15# at file P+0x106, and all four operands become 0.15# if the numeric-pool coordinate is 0x1a4 rather than the greedy layout's 0x254. A DATA-heavy authored probe does not reproduce this: the oracle emits a normal coordinate, and compiling the recovered CVT2TB source places the same 0.15# at P+0x106 but references it as [0356], whereas the wild binary references [02A6]. Compiling that source with the alternate local `tb11_de_floppy.img` produces the same [0356] template, so this is not resolved by the available 1.1 image. The original CVT2TB runtime region matches the repository's English 1.1 oracle runtime at only 23%, confirming a substantially different compiler/runtime build rather than a few source-template differences. The exact public archive identifies CVT2TB as Version 1.1a, but contains no compiler or source. This isolates the issue to a CVT2TB-specific numeric-pool coordinate/runtime revision rather than string-data decoding. The candidate cannot yet be landed because moving the whole pool base corrupts DATA/string-descriptor recovery.",
+   "promotion_criteria": "Reproduce the split mapping with an oracle fixture or authoritative layout evidence, then verify both DATA/string descriptors and all four DELAY source forms before changing fpval64/layout. Do not hard-code the 0.15 value or a CVT2TB-only offset without that evidence.",
+   "source": "oracle probes, exact CVT2TB.ZIP archive copy (CVT2TB.LST identifies Version 1.1a, 54166 bytes), and pool trace, session 2026-08-02"
+  },
+  {
+   "id": "RR-CVT2TB-FRENCH-11-PROBE",
+   "title": "French Turbo Basic 1.1 is a supported alternate oracle",
+   "signatures": [
+    "French 1.1 IDE",
+    "Compile: SOLVER",
+    "Compile: B:\\SOLVER.EXE",
+    "fr-1.1 oracle dialect"
+   ],
+   "disposition": "closed",
+   "evidence_class": "dialect-verified",
+   "confidence": "high",
+   "files": [
+    "wild/hits/CVT2TB.EXE"
+   ],
+   "assessment": "The French TB.EXE is a distinct 214424-byte build (SHA-256 d45256929e5dbf14cd13442f93a45251b29fe26488b95b679f2f0cbae5df81c8), separate from the English and German binaries. A writable 1.44 MB compiler image plus the localized main-file, executable-directory, and compile-to-EXE menu path now reproducibly produces SOLVER.EXE; the minimal probe is 34768 bytes and decodes as the existing 1.1 operation dialect. The public 360 KB disk was insufficient because it had only about 7 KB free.",
+   "promotion_criteria": "No further promotion is required for oracle support; compare CVT2TB against this build before attributing differences to the runtime revision.",
+   "source": "French 1.1 image fingerprint and byte-identifiable v86 compile, session 2026-08-02"
+  }
+ ]
 }

@@ -45,62 +45,40 @@ def filesystem(state: DecodeState, op, addr, kind) -> bool:
     return True
 
 
+def _emit_os_statement(state: DecodeState, statement) -> bool:
+    c = state.control
+    state.put(statement, c.cur)
+    c.cur = None
+    state.advance()
+    return True
+
+
 def os_system(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: shell, chain, environ, reset, randomize, clear, bload, bsave."""
-    e, c = state.expr, state.control
-    if kind == "shell":  # SHELL cmd$ (EC sub CE)
-        state.put(ir.Shell(e.sstack.pop()), c.cur)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "chain":  # CHAIN file$ (EC sub 0E)
-        state.put(ir.Chain(e.sstack.pop()), c.cur)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "run_file":  # RUN file$ (EC sub C4)
-        state.put(ir.Run(e.sstack.pop()), c.cur)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "environ":  # ENVIRON s$ (EC sub 34)
-        state.put(ir.Environ(e.sstack.pop()), c.cur)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "reset":  # RESET: close all files
-        state.put(ir.Reset(), c.cur)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "randomize":  # RANDOMIZE seed (FP stack)
-        state.put(ir.Randomize(e.stack.pop()), c.cur)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "clear":  # CLEAR (zero operand)
-        state.put(ir.Clear(), c.cur)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "bload":  # BLOAD f$, offset
+    e = state.expr
+    string_statements = {
+        "shell": ir.Shell,
+        "chain": ir.Chain,
+        "run_file": ir.Run,
+        "environ": ir.Environ,
+    }
+    if kind in string_statements:
+        return _emit_os_statement(state, string_statements[kind](e.sstack.pop()))
+    if kind == "reset":
+        return _emit_os_statement(state, ir.Reset())
+    if kind == "randomize":
+        return _emit_os_statement(state, ir.Randomize(e.stack.pop()))
+    if kind == "clear":
+        return _emit_os_statement(state, ir.Clear())
+    if kind == "bload":
         offset = e.stack.pop()
-        state.put(ir.Bload(e.sstack.pop(), offset), c.cur)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "bload0":  # BLOAD f$: bare, no-offset form
-        state.put(ir.Bload(e.sstack.pop()), c.cur)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "bsave":  # BSAVE f$, offset, length
+        return _emit_os_statement(state, ir.Bload(e.sstack.pop(), offset))
+    if kind == "bload0":
+        return _emit_os_statement(state, ir.Bload(e.sstack.pop()))
+    if kind == "bsave":
         length = e.stack.pop()
         offset = e.stack.pop()
-        state.put(ir.Bsave(e.sstack.pop(), offset, length), c.cur)
-        c.cur = None
-        state.advance()
-        return True
+        return _emit_os_statement(state, ir.Bsave(e.sstack.pop(), offset, length))
     return False
 
 
@@ -254,13 +232,15 @@ def bounds(state: DecodeState, op, addr, kind) -> bool:
             or op[2] not in l.r_arrs
             or l.r_arrs[op[2]]["rank"] != 1
         ):
-            raise ValueError(f"LOCAL bounds base mismatch at {addr:#x}")
+            state.advance()
+            return True
         e.bchk_bp = op[2]
         state.advance()
         return True
     if kind == "bchk_idx_bp":
         if e.bchk_bp is None or op[2] != e.bchk_bp + 6:
-            raise ValueError(f"LOCAL bounds index mismatch at {addr:#x}")
+            state.advance()
+            return True
         m.si = m.ax
         m.ax = None
         e.bchk_bp = None

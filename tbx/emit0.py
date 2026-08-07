@@ -33,6 +33,14 @@ FILE_LIMIT = 65535
 #: The compiler rejects a 64 KiB include with Error 495 even though the editor
 #: accepts a root BAS up to 64 KiB. Keep includes below the signed-word boundary.
 INCLUDE_LIMIT = 32767
+#: A GOTO/GOSUB target past this silently fails to compile (Error 417: Label
+#: / line number expected) even though the same number as a bare, unreferenced
+#: label is accepted -- probed empirically: 65530 compiles as a jump target,
+#: 65535 and 65536 do not. Keep well clear of that boundary rather than
+#: chase its exact value. Wild k.exe (24340 statements) is the witness: the
+#: free stride-10 renumbering below reaches into the 200,000s for a program
+#: this size, which no jump into that range can actually reach.
+MAX_LINE_NUMBER = 65529
 
 
 @dataclass(frozen=True)
@@ -75,7 +83,18 @@ def _compact_source_spacing(source: str) -> str:
 def _all_source_includes(
     source: str, clean: str, root_limit: int, include_limit: int
 ) -> SourceBundle:
-    """Pack complete physical BASIC lines; root contains only includes."""
+    """Pack complete physical BASIC lines; root contains only includes.
+
+    Never cuts inside an open block construct (IF/DO/WHILE/SELECT CASE): a
+    nested body line is rendered indented (`block_lines`' 2-space-per-level
+    convention), so a line with no leading whitespace is the only place a
+    cut can happen without splitting a block's scope across two files.
+    Deferring past the byte limit until the next top-level line is safe --
+    wild k.exe is the witness a cut that doesn't defer isn't: Turbo Basic's
+    own compiler desyncs many statements later in the file once a block's
+    body has been torn across an $INCLUDE boundary, surfacing as an
+    unrelated-looking syntax error far from the real cause.
+    """
     chunks: list[str] = []
     pending: list[str] = []
     size = 0
@@ -86,7 +105,8 @@ def _all_source_includes(
                 f"one physical source line is {line_size} bytes; "
                 f"no line-boundary split fits the {include_limit}-byte limit"
             )
-        if pending and size + line_size > include_limit:
+        at_top_level = line == line.lstrip()
+        if pending and size + line_size > include_limit and at_top_level:
             chunks.append("".join(pending))
             pending = []
             size = 0
@@ -163,7 +183,8 @@ def _split_list_statement(stmt, width: int):
     """A splittable list whose items do not fit one line, as several statements.
 
     DATA and COMMON are declarations for which the compiler is lossy about
-    source statement boundaries. A semicolon-separated PRINT list is likewise
+    source statement boundaries; DATA is folded with `_` continuations so a
+    width split does not invent extra codeless statements. A semicolon-separated PRINT list is likewise
     emitted as the same sequence of runtime item calls whether divided across
     physical PRINT statements (v10_t1_printphysical). So the division is the
     emitter's to choose, and it has to choose one that fits.
@@ -175,7 +196,14 @@ def _split_list_statement(stmt, width: int):
     Returns None when the statement is not a list of this kind or already fits.
     """
     if isinstance(stmt, ir.Data):
-        items, rebuild = stmt.items, lambda part: ir.Data(tuple(part))
+        # DATA's source statement boundary is byte-significant in the error
+        # line table.  Physical `DATA ...` continuation lines are joined by
+        # the compiler, whereas emitting each width-sized chunk as a new DATA
+        # statement creates one codeless line-table entry per chunk.  Keep the
+        # declaration logical and fold only its physical spelling.
+        rendered = [ir.unparse_stmt(ir.Data((item,))).removeprefix("DATA ")
+                    for item in stmt.items]
+        return _wrap_continued("DATA ", rendered, width)
     elif isinstance(stmt, ir.Common):
         items, rebuild = stmt.names, lambda part: ir.Common(tuple(part))
     elif (
@@ -235,7 +263,15 @@ def _name_fn_results(body, name):
         if isinstance(b, ir.FnResult):
             out.append(ir.Assign(ir.Var(name), b.value))
         elif isinstance(b, ir.IfInline):
-            out.append(ir.IfInline(b.cond, tuple(_name_fn_results(b.body, name))))
+            out.append(
+                ir.IfInline(
+                    b.cond,
+                    tuple(_name_fn_results(b.body, name)),
+                    None
+                    if b.else_body is None
+                    else tuple(_name_fn_results(b.else_body, name)),
+                )
+            )
         elif isinstance(b, ir.IfBlock):
             out.append(
                 ir.IfBlock(
@@ -251,7 +287,91 @@ def _name_fn_results(body, name):
             out.append(b)
     return out
 
-def emit(stmts, *, compact: bool = False) -> str:
+
+def _join_line(group, txt, col: int) -> str:
+    """Render one original line's statements, `:`-joined -- except after an IfGoto.
+
+    Turbo Basic ends a line at an `IF ... THEN <line>`: `IF c THEN 80: S` is
+    Error 431, End-of-line expected. So a statement the line table puts on the
+    same line as an IfGoto can only have come from that IF's ELSE clause -- the
+    fall-through path, which is exactly what IfGoto leaves to the next
+    statement. Everything after the ELSE belongs to it, so the tail is joined
+    the same way, nesting a further IfGoto inside the clause it falls into.
+    Witnessed on wild vhfprop.exe (28 such lines).
+    """
+    head = txt(group[0], col)
+    if len(group) == 1:
+        return head
+    tail = _join_line(group[1:], txt, col)
+    sep = " ELSE " if isinstance(group[0], ir.IfGoto) else ": "
+    return f"{head}{sep}{tail}"
+
+
+def _wrap_continued(head: str, items: list[str], col: int) -> str:
+    """`head` + comma list, folded over physical lines with `_` continuations.
+
+    Turbo Basic joins a line ending in ` _` to the next one before compiling,
+    and the result is byte-identical to the unwrapped spelling. Continuation
+    lines are indented to the caller's margin so the statement still reads as
+    one thing.
+    """
+    pad = " " * (col + 2)
+    lines: list[str] = []
+    cur = head
+    first = True
+    for i, item in enumerate(items):
+        piece = item + ("," if i < len(items) - 1 else "")
+        candidate = cur + ("" if cur.endswith(" ") or not cur else " ") + piece
+        width = (0 if first else len(pad)) + len(candidate) + 2  # room for ` _`
+        if not first or col:
+            width += col if first else 0
+        if cur not in (head, "") and width > LINE_LIMIT:
+            lines.append(cur.rstrip() + " _")
+            cur = pad + piece
+            first = False
+            continue
+        cur = candidate if cur != head else head + piece
+    lines.append(cur.rstrip())
+    return "\n".join(lines)
+
+
+def emit(stmts, *, compact: bool = False, line_starts: list[int] | None = None) -> str:
+    def validate_loop_exits(body, do_depth=0, path=()):
+        """Reject EXIT LOOP nodes that are not lexically inside a DO."""
+        for index, stmt in enumerate(body):
+            location = path + (index,)
+            if isinstance(stmt, ir.Do):
+                do_depth += 1
+                continue
+            if isinstance(stmt, ir.Loop):
+                do_depth = max(0, do_depth - 1)
+                continue
+            if isinstance(stmt, ir.ExitLoop) and do_depth == 0:
+                raise ValueError(
+                    "EXIT LOOP without an enclosing DO "
+                    f"at statement path {location}"
+                )
+            if isinstance(stmt, ir.IfInline):
+                validate_loop_exits(stmt.body, do_depth, location + ("then",))
+                if stmt.else_body is not None:
+                    validate_loop_exits(stmt.else_body, do_depth, location + ("else",))
+            elif isinstance(stmt, ir.IfBlock):
+                for arm, (_, arm_body) in enumerate(stmt.arms):
+                    validate_loop_exits(arm_body, do_depth, location + ("arm", arm))
+                if stmt.else_body is not None:
+                    validate_loop_exits(stmt.else_body, do_depth, location + ("else",))
+            elif isinstance(stmt, ir.SelectCase):
+                for arm, case in enumerate(stmt.arms):
+                    validate_loop_exits(case.body, do_depth, location + ("case", arm))
+                if stmt.case_else is not None:
+                    validate_loop_exits(stmt.case_else, do_depth, location + ("case-else",))
+            elif isinstance(stmt, ir.SubDef):
+                validate_loop_exits(stmt.body, 0, location + ("sub",))
+            elif isinstance(stmt, ir.DefFn) and stmt.is_block:
+                validate_loop_exits(stmt.body, 0, location + ("def",))
+
+    validate_loop_exits(stmts)
+
     # Jump targets INSIDE a SUB/DEF FN body (ir.BodyLine): physical line k of
     # the block at top-level index i is numbered line[i] + k, and only that
     # targeted line is emitted numbered (witnessed t1_subgsb).
@@ -263,6 +383,7 @@ def emit(stmts, *, compact: bool = False) -> str:
             yield v
 
     body_targets: set[tuple[int, int]] = set()
+    end_sub_lines: dict[int, int] = {}
 
     def scan(n):
         for f in getattr(n, "__dataclass_fields__", ()):
@@ -300,11 +421,74 @@ def emit(stmts, *, compact: bool = False) -> str:
         for stmt, phys in body_targets:
             if phys > max_phys.get(stmt, 0):
                 max_phys[stmt] = phys
-        line = {}
-        cur = 10
-        for i in range(len(stmts)):
-            line[i] = cur
-            cur += max(10, max_phys.get(i, 0) + 1)
+
+        def _number(stride: int) -> tuple[dict[int, int], int]:
+            numbering, cur = {}, 10
+            for i in range(len(stmts)):
+                numbering[i] = cur
+                cur += max(stride, max_phys.get(i, 0) + 1)
+            return numbering, cur
+
+        # The default stride is 10, purely for readability -- shrink it only
+        # when that would push a line number past MAX_LINE_NUMBER. A smaller
+        # uniform stride is still widened per-statement to fit any BodyLine
+        # target's own required gap, so nested-target correctness is
+        # unaffected; this only ever changes cosmetic spacing between lines.
+        line, final = _number(10)
+        if final > MAX_LINE_NUMBER:
+            stride = max(1, MAX_LINE_NUMBER // max(1, len(stmts)))
+            line, final = _number(stride)
+            if final > MAX_LINE_NUMBER:
+                raise ValueError(
+                    f"{len(stmts)} statements need line numbers up to {final} "
+                    f"even at a 1-per-line stride, past Turbo Basic's real "
+                    f"GOTO/GOSUB target ceiling ({MAX_LINE_NUMBER})"
+                )
+
+    def jump_indices(node):
+        if isinstance(node, (ir.Goto, ir.IfGoto, ir.Gosub)):
+            if isinstance(node.target, int):
+                yield node.target
+        elif isinstance(node, (ir.Return, ir.OnError, ir.Resume)):
+            if isinstance(node.target, int):
+                yield node.target
+        elif isinstance(node, (ir.OnGoto, ir.OnGosub)):
+            yield from (target for target in node.targets if isinstance(target, int))
+        elif isinstance(node, ir.OnTrap) and isinstance(node.target, int):
+            yield node.target
+        for field in getattr(node, "__dataclass_fields__", ()):
+            value = getattr(node, field)
+            if isinstance(value, tuple):
+                for item in value:
+                    if hasattr(item, "__dataclass_fields__"):
+                        yield from jump_indices(item)
+            elif hasattr(value, "__dataclass_fields__"):
+                yield from jump_indices(value)
+
+    # Apply the INLINE-SUB return-label adjustment before any statement is
+    # rendered.  Doing this lazily from L() makes an earlier ON ERROR target
+    # retain the pre-shift line number (CVT2TB's handler exposes that mismatch).
+    for target in set(target for stmt in stmts for target in jump_indices(stmt)):
+        if (
+            target > 0
+            and target < len(stmts)
+            and isinstance(stmts[target - 1], ir.SubDef)
+            and len(stmts[target - 1].body) == 1
+            and isinstance(stmts[target - 1].body[0], (ir.Inline, ir.OpaqueHelper))
+        ):
+            previous_sub = next(
+                (
+                    i
+                    for i in range(target - 2, -1, -1)
+                    if isinstance(stmts[i], ir.SubDef)
+                ),
+                None,
+            )
+            if previous_sub is not None and previous_sub not in end_sub_lines:
+                target_line = line[target - 1]
+                for index in range(target - 1, len(stmts)):
+                    line[index] += 10
+                end_sub_lines[previous_sub] = target_line
 
     def L(t):
         if isinstance(t, ir.BodyLine):
@@ -314,6 +498,33 @@ def emit(stmts, *, compact: bool = False) -> str:
                     f"body-line target {t} does not fit the line-number gap"
                 )
             return line[t.stmt] + t.phys
+        # A procedure return immediately before an INLINE SUB is represented
+        # by the next executable procedure address after the opaque inline
+        # body.  Turbo Basic source targets the numbered INLINE SUB line
+        # itself, which is the compiler's skip label for that return boundary
+        # (CVT2TB's outer guard is the witness).
+        if (
+            isinstance(t, int)
+            and t > 0
+            and isinstance(stmts[t - 1], ir.SubDef)
+            and len(stmts[t - 1].body) == 1
+            and isinstance(stmts[t - 1].body[0], (ir.Inline, ir.OpaqueHelper))
+        ):
+            previous_sub = next(
+                (
+                    i
+                    for i in range(t - 2, -1, -1)
+                    if isinstance(stmts[i], ir.SubDef)
+                ),
+                None,
+            )
+            if previous_sub is not None:
+                # Leave the INLINE SUB on its own canonical line and put the
+                # target label on the preceding procedure's END SUB line.
+                # Shift the inline tail first, otherwise the new END SUB label
+                # would sort before the preceding statements (CVT2TB).
+                return end_sub_lines.get(previous_sub, line[t - 1])
+            return line[t - 1]
         return line[t]
 
     def block_lines(body, render, col=0):
@@ -341,8 +552,18 @@ def emit(stmts, *, compact: bool = False) -> str:
             return f"RETURN {L(s.target)}"
         if isinstance(s, (ir.OnGoto, ir.OnGosub)):
             kw = "GOTO" if isinstance(s, ir.OnGoto) else "GOSUB"
-            lines = ", ".join(str(L(t)) for t in s.targets)
-            return f"ON {ir.unparse(s.selector)} {kw} {lines}"
+            head = f"ON {ir.unparse(s.selector)} {kw} "
+            targets = [str(L(t)) for t in s.targets]
+            out = head + ", ".join(targets)
+            if col + len(out) <= LINE_LIMIT:
+                return out
+            # Too wide for the editor, so fold it over physical lines with
+            # Turbo Basic's `_` continuation, which is byte-identical to the
+            # one-line spelling (probe probe_on_gosub_continuation). An ON
+            # GOSUB list is a single statement with nothing
+            # `_split_list_statement` can divide, so this is the only lever --
+            # wild help.exe's 56 targets are 364 characters on one line.
+            return _wrap_continued(head, targets, col)
         if isinstance(s, ir.OnError):
             return f"ON ERROR GOTO {0 if s.target is None else L(s.target)}"
         if isinstance(s, ir.OnTrap):
@@ -357,6 +578,12 @@ def emit(stmts, *, compact: bool = False) -> str:
         if isinstance(s, ir.IfInline):
             body = ": ".join(txt(b, col) for b in s.body)
             inline = f"IF {ir.unparse_cond(s.cond)} THEN {body}"
+            if s.else_body:
+                # The ELSE form has no block equivalent to fall back on: over a
+                # simple condition the two compile differently, so this stays
+                # one line however wide it gets (t1_selarmifelse).
+                tail = ": ".join(txt(b, col) for b in s.else_body)
+                return f"{inline} ELSE {tail}"
             if col + len(inline) > LINE_LIMIT and isinstance(s.cond, ir.LogOp):
                 # Too wide for the editor, and a compound condition -- for
                 # which the block spelling compiles to the same bytes, checked
@@ -410,6 +637,24 @@ def emit(stmts, *, compact: bool = False) -> str:
                 _name_fn_results(s.body, s.name), render_fn_body, col
             )
             return f"{header}\nEND DEF" if not inner else f"{header}\n{inner}\nEND DEF"
+        if isinstance(s, ir.Dim):
+            out = ir.unparse_stmt(s)
+            if col + len(out) <= LINE_LIMIT:
+                return out
+            # A DIM comma list is one statement with one trailing commit marker
+            # (ir.Dim), unlike DATA/COMMON where the compiler is lossy about
+            # where a list was divided -- so it cannot be split into several
+            # DIM statements the way `_split_list_statement` divides those.
+            # Turbo Basic's `_` continuation folds it over physical lines
+            # without changing the statement boundary, and compiles
+            # byte-identical (checked against the oracle on a 3-array DIM,
+            # folded vs. unfolded). Wild d-fix.exe's 30-array DIM is 296 chars.
+            head = "DIM DYNAMIC " if s.dynamic else "DIM "
+            arrs = [
+                ir.unparse_stmt(ir.Dim(n, b, dynamic=s.dynamic)).removeprefix(head)
+                for n, b in ((s.name, s.bounds), *s.also)
+            ]
+            return _wrap_continued(head, arrs, col)
         return ir.unparse_stmt(s)
 
     # Statements sharing an original line number (only possible when the error-trap
@@ -437,7 +682,21 @@ def emit(stmts, *, compact: bool = False) -> str:
         j = i + 1
         while j < len(stmts) and line[j] == line[i]:
             j += 1
-        text = ": ".join(txt(stmts[k], len(f"{line[i]} ")) for k in range(i, j))
+        if line_starts is not None:
+            # 0-based index into the final source text of the first physical
+            # line this statement (or this line-grouped run of statements,
+            # e.g. "10 A=1:B=2") renders to. Statements sharing a line get
+            # the same start, matching how they're indistinguishable in the
+            # emitted text.
+            start = sum(fragment.count("\n") for fragment in out)
+            line_starts.extend([start] * (j - i))
+        text = _join_line(
+            [stmts[k] for k in range(i, j)], txt, len(f"{line[i]} ")
+        )
+        if i in end_sub_lines:
+            physical = text.splitlines()
+            physical[-1] = f"{end_sub_lines[i]} {physical[-1].strip()}"
+            text = "\n".join(physical)
         if i in traced:
             body = text.split("\n")
             nt = partial.get(i, len(body))  # physical lines that carry a hook

@@ -116,6 +116,23 @@ def test_decode_int_string_nested_and_or_group():
     )
 
 
+def test_compound_block_if_owning_for_roundtrips_byte_exactly():
+    """A compound block IF must retain Turbo Basic's AND short-circuit shape."""
+    from tbx import decode0, emit0
+
+    exe_path = os.path.join(
+        _ROOT, "..", "wild", "probes", "probe_compound_loop_block.exe"
+    )
+    exe = open(exe_path, "rb").read()
+    assert emit0.emit(decode0.decode_user_code(exe)) == (
+        "10 A% = 1\n"
+        "20 B% = 1\n"
+        "30 C% = 1\n"
+        "40 IF A% = 1 AND B% = 1 AND C% = 1 THEN FOR D% = 1 TO 2: PRINT D%: NEXT D%\n"
+        "50 END\n"
+    )
+
+
 def test_decode_t1_and():
     from tbx import decode0
 

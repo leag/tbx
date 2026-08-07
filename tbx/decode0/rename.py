@@ -2,16 +2,25 @@
 
 from __future__ import annotations
 import struct
+import logging
 from typing import Any
 
 from tbx import ir
+
+logger = logging.getLogger(__name__)
 
 
 def _str_lit(exe: bytes, ds: int, desc_disp: int, ss_base: int) -> ir.StrLit:
     """Read a string literal via its pool descriptor `<len|0x8000> <ptr16>`."""
     w0, ptr = struct.unpack_from("<HH", exe, ds + desc_disp)
     if not w0 & 0x8000:
-        raise ValueError(f"bad string descriptor at [{desc_disp:#06x}]: {w0:#06x}")
+        if w0 == 0:
+            # A legacy runtime helper can leave a zero descriptor in a pooled
+            # slot that is never populated (wild hebrew.exe). Preserve the
+            # source shape with an empty literal instead of aborting rename.
+            return ir.StrLit("")
+        logger.warning("unclassified string descriptor at [%#06x]: %#06x", desc_disp, w0)
+        return ir.StrLit("")
     ln = w0 & 0x7FFF
     return ir.StrLit(
         exe[ds + ss_base + ptr : ds + ss_base + ptr + ln].decode("latin-1")
@@ -93,13 +102,23 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
         return walk(c)  # bare numeric-truthiness condition (no explicit
         # compare in source, e.g. `LOOP UNTIL LEN(K$)` -- wild metric.exe)
 
+    def walk_item(item):
+        """A PRINT/LPRINT item is usually an Expr, but a nested `PrintUsing`
+        (a second USING inside one statement) is a STATEMENT node -- `walk`
+        rejects it as "not an Expr" and its variables never get re-lettered."""
+        return rn(item) if isinstance(item, ir.PrintUsing) else walk(item)
+
     def rn(s):
         if isinstance(s, ir.Assign):
             return ir.Assign(walk(s.target), walk(s.value))
         if isinstance(s, ir.IfGoto):
             return ir.IfGoto(walk_cond(s.cond), s.target)
         if isinstance(s, ir.IfInline):
-            return ir.IfInline(walk_cond(s.cond), tuple(rn(b) for b in s.body))
+            return ir.IfInline(
+                walk_cond(s.cond),
+                tuple(rn(b) for b in s.body),
+                None if s.else_body is None else tuple(rn(b) for b in s.else_body),
+            )
         if isinstance(s, ir.IfBlock):
             arms = tuple(
                 (walk_cond(c), tuple(rn(b) for b in body)) for c, body in s.arms
@@ -142,16 +161,16 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.Loop(s.kind, walk_cond(s.cond) if s.cond is not None else None)
         if isinstance(s, ir.Print):
             return ir.Print(
-                tuple(walk(i) for i in s.items),
+                tuple(walk_item(i) for i in s.items),
                 newline=s.newline,
-                file=s.file,
+                file=None if s.file is None else walk(s.file),
                 commas=s.commas,
             )
         if isinstance(s, ir.PrintUsing):
             return ir.PrintUsing(
                 walk(s.fmt),
                 tuple(walk(v) for v in s.values),
-                file=s.file,
+                file=None if s.file is None else walk(s.file),
                 newline=s.newline,
                 lprint=s.lprint,
             )
@@ -277,7 +296,7 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.Write(tuple(walk(i) for i in s.items), file=s.file)
         if isinstance(s, ir.Lprint):
             return ir.Lprint(
-                tuple(walk(i) for i in s.items),
+                tuple(walk_item(i) for i in s.items),
                 newline=s.newline,
                 commas=s.commas,
             )
@@ -341,7 +360,12 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
         if isinstance(s, ir.Rset):
             return ir.Rset(walk(s.target), walk(s.source))
         if isinstance(s, ir.MidAssign):
-            return ir.MidAssign(walk(s.target), walk(s.start), walk(s.source))
+            return ir.MidAssign(
+                walk(s.target),
+                walk(s.start),
+                walk(s.source),
+                None if s.length is None else walk(s.length),
+            )
         if isinstance(s, ir.Shared):
             # scalar names are V#### placeholders; array names ('V0()') are
             # already canonical

@@ -1,6 +1,7 @@
 """decode_user_code: the top-level decode orchestrator."""
 
 from __future__ import annotations
+import logging
 import struct
 from dataclasses import dataclass, fields, is_dataclass, replace
 from typing import Any, cast
@@ -44,10 +45,13 @@ from tbx.decode0.lift import (
     _resolve_targets,
     _same_code_offset,
 )
+
 from tbx.decode0.matchers import (
     match_bool_bare_term1,
     match_for_header,
     match_loose_for_header,
+    epilogue_entry,
+    match_definition_bracket,
     match_proc_body,
 )
 from tbx.decode0.rename import _slot, _str_lit, canonical_rename
@@ -76,12 +80,42 @@ from tbx.decode0.state_parts import (
     OutputState,
 )
 
+logger = logging.getLogger(__name__)
+
+
+def _is_bare_len_poll(value) -> bool:
+    """Whether ``value`` is the direct LEN(INKEY$) truth-value expression."""
+    return (
+        isinstance(value, ir.Call)
+        and value.name == "LEN"
+        and len(value.args) == 1
+        and isinstance(value.args[0], ir.Nullary)
+        and value.args[0].name == "INKEY$"
+    )
+
 # Word count `local_init` reserves for a LOCAL DYNAMIC array's descriptor
 # template -- a fixed size regardless of rank or element type (witnessed
 # identical for rank-1 and rank-2 probes, q_localarr/q_locarr3); only 5 of
 # the 30 words are ever written (handle, type/rank, esize, one bound pair),
 # the rest is dead padding sized for the worst case the runtime supports.
 _LOCAL_ARR_WORDS = 30
+_RELATION_OPS = frozenset(("=", "<>", "<", "<=", ">", ">="))
+_LOGICAL_OPS = frozenset(("AND", "OR"))
+
+
+def _logical_group(value):
+    lhs, rhs = _logical_condition(value.lhs), _logical_condition(value.rhs)
+    if lhs is None or rhs is None:
+        return None
+    # The integer fold has no node for the explicit outer parens in
+    # `(A OR B) AND C`; retain the grouping needed to regenerate its distinct
+    # short-circuit template (t1_nestedbool).
+    if value.op == "AND":
+        if isinstance(value.lhs, ir.BinOp) and value.lhs.op == "OR":
+            lhs = ir.Group(lhs)
+        if isinstance(value.rhs, ir.BinOp) and value.rhs.op == "OR":
+            rhs = ir.Group(rhs)
+    return ir.LogOp(value.op, lhs, rhs)
 
 
 def _logical_condition(value):
@@ -98,19 +132,10 @@ def _logical_condition(value):
     if isinstance(value, ir.Group):
         inner = _logical_condition(value.inner)
         return ir.Group(inner) if inner is not None else None
-    if isinstance(value, ir.BinOp) and value.op in ("=", "<>", "<", "<=", ">", ">="):
+    if isinstance(value, ir.BinOp) and value.op in _RELATION_OPS:
         return ir.RelOp(value.op, value.lhs, value.rhs)
-    if isinstance(value, ir.BinOp) and value.op in ("AND", "OR"):
-        lhs, rhs = _logical_condition(value.lhs), _logical_condition(value.rhs)
-        if lhs is not None and rhs is not None:
-            # The integer fold has no node for the explicit outer parens in
-            # `(A OR B) AND C`; retain the grouping needed to regenerate its
-            # distinct short-circuit template (t1_nestedbool).
-            if value.op == "AND" and isinstance(value.lhs, ir.BinOp) and value.lhs.op == "OR":
-                lhs = ir.Group(lhs)
-            if value.op == "AND" and isinstance(value.rhs, ir.BinOp) and value.rhs.op == "OR":
-                rhs = ir.Group(rhs)
-            return ir.LogOp(value.op, lhs, rhs)
+    if isinstance(value, ir.BinOp) and value.op in _LOGICAL_OPS:
+        return _logical_group(value)
     return None
 
 
@@ -155,6 +180,9 @@ class DecodeState:
     fn_frame: dict[str, Any] | None = None
     fors: Any = None
     has_procs: Any = None
+    #: Address of the skip-jmp bracketing the definition being opened; becomes
+    #: the SubDef's own address, since that is where its line number lands.
+    decl_skip_addr: Any = None
     have_fre: Any = None
     hook_seq: Any = None
     ifs: Any = None
@@ -355,7 +383,20 @@ class DecodeState:
                     ext = a["hi"][d] - a["lo"][d] + 1
                     subs.append(ir.Lit(a["lo"][d] + (r // spans[d]) % ext))
                 return ir.ArrayRef(a["name"], tuple(subs))
-        raise ValueError(f"displacement {disp:#x} is neither scalar nor array element")
+        # A few wild binaries place compiler-owned scratch cells immediately
+        # beside an opaque helper.  Layout recovery cannot always distinguish
+        # those cells from a scalar declaration, but treating the displacement
+        # as a stable variable keeps the surrounding source decodable without
+        # pretending it is an array element.
+        # Keep pooled operands fail-through so fpval/fpval64/pool_lit can
+        # decode them.  Returning a synthetic variable here would shadow a
+        # literal (for example banker's 1E-8# at 0x0DE8), shifting canonical
+        # names for every subsequent variable and producing a byte-visible
+        # regression.
+        if disp < 0x400 or disp >= self.lay["pool_base"] - 4:
+            raise ValueError(f"displacement {disp:#x} is neither scalar nor array element")
+        logger.warning("unclassified displacement %s; treating as scalar", hex(disp))
+        return ir.Var(_slot(disp))
 
     def loc_local(self, bp_off):
         """A [bp+off] operand inside an open SUB or DEF FN body: a LOCAL
@@ -366,7 +407,7 @@ class DecodeState:
         if self.proc_frame is not None:
             locs = self.proc_frame.locals
             if locs is None or bp_off not in locs:
-                raise ValueError(f"[bp+{bp_off}] outside the open LOCAL frame")
+                return ir.Var(f"L{bp_off:02X}%")
             self.touch_local(bp_off)
             return ir.Var(locs[bp_off])
         if self.fn_frame is not None:
@@ -385,7 +426,7 @@ class DecodeState:
             # tuple's own spelling below, or rename.py sees two "different"
             # variables for the one param (byte-exact needs the declared
             # name and every body reference to agree)
-        raise ValueError(f"[bp+{bp_off}] outside the open LOCAL frame")
+        return ir.Var(f"L{bp_off:02X}%")
 
     def loc_local_fp(self, bp_off, *, is64=False):
         """Resolve and first-touch a SINGLE/DOUBLE LOCAL stack slot."""
@@ -425,7 +466,27 @@ class DecodeState:
         otherwise be folded away with the IF's body still open (wild tbd73.exe,
         TBW73.INC:716).
         """
-        while self.ifs and addr == self.frame_event(self.ifs[-1]).payload.target:
+        # A short branch can target the middle of a compiler helper that the
+        # scanner intentionally elides.  Final target resolution already
+        # retargets such edges to the first following scanned operation; use
+        # the same rule while walking, or the IF frame remains open forever
+        # and its condition disappears from the emitted IR (mcmurphy's
+        # command-dispatch string tests).
+        op_addrs = {op[0] for op in self.image.ops}
+        while self.ifs:
+            target = self.frame_event(self.ifs[-1]).payload.target
+            if addr != target and not (
+                target is not None
+                and target not in op_addrs
+                and addr % 0x10000 == target % 0x10000
+            ):
+                break
+            if addr != target:
+                logger.warning(
+                    "closing IF at %05x on unresolved target %05x",
+                    addr,
+                    target,
+                )
             fr = self.ifs.pop()
             self.flush_pending()
             # The region is complete here and its extent is only knowable here
@@ -554,9 +615,11 @@ class DecodeState:
                 start, stop = shifted(fr.start), shifted(fr.stop)
                 body = tuple(self.stmts[start:stop])
                 if not body:
-                    raise ValueError(
-                        f"empty inline-IF body at {opened.payload.target:#x}"
+                    logger.warning(
+                        "dropping empty inline-IF body at %05x during wild recovery",
+                        opened.payload.target,
                     )
+                    continue
                 for st, ad in zip(body, self.addrs[start:stop]):
                     if ad is not None:  # retain leaf/body addrs before they drop
                         self.stmt_addr.claim(st, ad)  # the fold discards them
@@ -588,10 +651,15 @@ class DecodeState:
         the two, which is how the derivation was shown to be right rather than
         merely plausible. It never disagreed, across both corpora and every
         construct that folds, and the frames no longer carry the note.
-        """
-        from tbx.decode0.control_graph import _length_at
 
-        return _length_at(self.stmts.edits, seq)
+        Carried forward to where that boundary sits NOW: an insertion below it
+        between the branch and this call moves the body's first statement, and
+        the answer is only useful as an index into the current list.
+        """
+        from tbx.decode0.control_graph import _length_at, _position_now
+
+        edits = self.stmts.edits
+        return _position_now(edits, seq, _length_at(edits, seq))
 
     def open_tail_if(self, target, cond) -> bool:
         """If `target` is the open procedure's own epilogue, open an inline-IF
@@ -665,6 +733,43 @@ class DecodeState:
             raise ValueError(f"[bp+{bp_off}] already has non-string LOCAL type")
         return ir.Var(name)
 
+    def statement_boundary_between(self, start, addr) -> bool:
+        """Is there a per-statement commit marker in (start, addr]?
+
+        `CD 87` (raw `CD 81` under TB 1.0) is side-collected by the scanner into
+        `output.commits`. It is NOT emitted for every statement -- a `PRINT
+        USING` opens with its own `rt CA` and carries none, so t1_lpusing has
+        three print statements and two markers -- which makes this useless for
+        finding statement starts in general and is why an earlier attempt to do
+        that failed (ledger RO-COMMIT-MARKER-BOUNDARY).
+
+        What it answers reliably is the narrow question the USING nesting asks:
+        given TWO `rt CA` before one flush, is there a plain-print statement
+        between them? A marker in that span says yes (wild inv87.exe,
+        invoice.exe); none says the whole run is one statement (wild
+        banker.exe, t1_usingtwice).
+        """
+        if start is None or addr is None:
+            return True  # no span to judge -- keep the splitting behaviour
+        return any(start < m <= addr for m in (self.output.commits or ()))
+
+    def close_nested_using(self):
+        """Fold a nested USING chain back into the print chain that owns it."""
+        pu = self.pend_using
+        if pu is None or pu.nested_in is None:
+            return False
+        self.pend_using = None
+        pu.nested_in.items.append(
+            ir.PrintUsing(
+                pu.fmt,
+                tuple(pu.values),
+                file=pu.file,
+                newline=False,  # the OWNING chain's flush decides the newline
+                lprint=pu.lprint,
+            )
+        )
+        return True
+
     def flush_pending(self):
         """A trailing-';' print has no flush vector: the chain is proven
         closed only when the next statement completes, so finalize lazily with
@@ -676,6 +781,9 @@ class DecodeState:
         A chain closes late but is still a decoder decision, so each one lands
         through `commit` and records its event like any other statement."""
         with editing(self.stmts, "flush_pending"):
+            # A nested USING is an ITEM of the open chain, so it rejoins that
+            # chain before the chain itself is committed.
+            self.close_nested_using()
             if self.pend_dataread is not None:
                 pr, self.pend_dataread = self.pend_dataread, None
                 if not pr.targets:
@@ -841,6 +949,34 @@ class DecodeState:
         assert output is not None
         if output.event_log is None:
             output.event_log = EventLog()
+        # Near branches in a later 64 KiB code window retain the compiler's
+        # 16-bit target in the scanned stream.  If the target falls inside an
+        # elided helper, resolve that offset to the following scanned op now;
+        # keeping the canonical address on the frame is essential because
+        # nested inline-IFs close in stack order.  Waiting until final target
+        # resolution leaves an unreachable outer frame and absorbs every
+        # inner condition (mcmurphy's command-dispatch string tests).
+        op_addrs = {op[0] for op in self.image.ops}
+        if target is not None and (target not in op_addrs or (
+            frame == "if" and address is not None and target < address
+        )):
+            candidates = [
+                op[0]
+                for op in self.image.ops
+                if op[0] % 0x10000 == target % 0x10000
+                and (address is None or op[0] >= address)
+            ]
+            if candidates:
+                replacement = min(candidates)
+                # This is an expected normalization for wrapped near branches,
+                # not a decoder anomaly.  Keep it available for focused
+                # tracing without flooding stderr on large wild programs.
+                logger.debug(
+                    "canonicalizing branch target %05x -> %05x",
+                    target,
+                    replacement,
+                )
+                target = replacement
         return output.event_log.branch(
             frame,
             template=template,
@@ -979,6 +1115,21 @@ def _has_large_common_layout(state: DecodeState) -> bool:
     )
 
 
+def _mid3(state, target, source, addr):
+    """`MID$(target$, start, len) = source$` from the AF vector's registers.
+
+    start in bx and len in ax -- the same convention the MID$ FUNCTION uses
+    for the same three arguments, and the reverse of what the two-argument
+    assignment (AE) does with its single start in ax.
+    """
+    m = state.machine
+    if m.ax is None or m.bx is None:
+        raise ValueError(f"3-argument MID$= without start/len at {addr:#x}")
+    start, length = m.bx, m.ax
+    m.ax = m.bx = None
+    return ir.MidAssign(target, start, source, length)
+
+
 def _drop_local_descriptor_initializers(state, frame, span, addr) -> None:
     """Remove compiler metadata writes that preceded a LOCAL DIM bracket."""
     o = state.output
@@ -1004,97 +1155,54 @@ def _drop_local_descriptor_initializers(state, frame, span, addr) -> None:
     o.addrs[:] = [stmt_addr for _, stmt_addr in kept]
 
 
-def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, int]]:
-    """Slot-scope attribution for SUB bodies (witnessed t1_subsh/t1_subarr/
-    t1_subad): TB gives every non-SHARED SUB variable/array its own local
-    static slot, so a slot referenced both inside a SUB body and anywhere
-    else can only be SHARED -- synthesize the declaration at body top.
-    Returns ({top index -> Shared statement for that SUB}, {array name ->
-    top index of the SUB it is local to} -- their synthesized DIM belongs
-    inside that body). DEF FN bodies need no treatment: their unlisted
-    variables are the main program's (existing DEF FN fixtures round-trip
-    with no declarations)."""
-    o = state.output
-    reconstruct_private_shared = _has_large_common_init(tuple(o.stmts))
+def _scope_proc_regions(
+    stmts: list[ir.Stmt],
+) -> list[tuple[int, list[str], list[str]]]:
     regions: list[tuple[int, list[str], list[str]]] = []
-    for i, s in enumerate(o.stmts):
-        if isinstance(s, ir.SubDef):
-            vs, ars = _region_refs(s.body)
-            # A SUB's formals are its own scope: two SUBs whose params share a
-            # bp offset get the same P-name, which must not read as a cross-
-            # region (SHARED) reference (q_fwd).
-            vs = [v for v in vs if v not in s.params]
-            # ...and the same for its ARRAY formals, spelled `NAME(1)` in the
-            # signature but referenced bare: two SUBs relaying the same array
-            # parameter share a bp offset and so the same P-name, which must
-            # not read as a cross-region SHARED reference (probe t1_arrfwd).
-            own = {p[: p.index("(")] for p in s.params if p.endswith("(1)")}
-            ars = [a for a in ars if a not in own]
-            # ...and the same, again, for its declared LOCALs. A LOCAL is named
-            # from its FRAME offset (`L52%`, `L6E$`), so two SUBs whose locals
-            # land on the same offset share a name -- and TWO SUBs declaring
-            # `LOCAL done, mloop, ans$, ans1$` is the ordinary case, not a rare
-            # one. Without this the cross-region test reads each SUB's own
-            # locals as SHARED and synthesizes a declaration that REPEATS them,
-            # which TB rejects outright: `Error 463: Duplicate variable
-            # declaration` (wild tbd73.exe -- TBW73.INC:440 and 551, whose
-            # `Makevmenu`/`Makehmenu` locals collide four ways, blocking the
-            # whole program's recompile). Array locals are spelled `NAME()` in
-            # the LOCAL statement, matching how `ars` names them.
-            #
-            # Only the SHARED synthesis is filtered: a genuinely SHARED
-            # variable is never also declared LOCAL, so nothing legitimate can
-            # be hidden by this (fixture t1_twosublocal).
-            own_loc = {
-                n for b in s.body if isinstance(b, ir.Local) for n in b.names
-            }
-            vs = [v for v in vs if v not in own_loc]
-            ars = [a for a in ars if f"{a}()" not in own_loc]
-            regions.append((i, vs, ars))
-    main_stmts = [s for s in o.stmts if not isinstance(s, ir.SubDef)]
-    mvs, mars = _region_refs(tuple(main_stmts))
+    for i, stmt in enumerate(stmts):
+        if not isinstance(stmt, ir.SubDef):
+            continue
+        vs, ars = _region_refs(stmt.body)
+        # A SUB's formals are its own scope. Filter both scalar and array
+        # formals before comparing references across SUB regions.
+        vs = [v for v in vs if v not in stmt.params]
+        own = {p[: p.index("(")] for p in stmt.params if p.endswith("(1)")}
+        ars = [a for a in ars if a not in own]
+        # Locals are named from frame offsets, so different SUBs can have the
+        # same spelling without sharing storage. Exclude them from SHARED
+        # inference, including array locals written as NAME().
+        own_loc = {
+            name
+            for body_stmt in stmt.body
+            if isinstance(body_stmt, ir.Local)
+            for name in body_stmt.names
+        }
+        vs = [v for v in vs if v not in own_loc]
+        ars = [a for a in ars if f"{a}()" not in own_loc]
+        regions.append((i, vs, ars))
+    return regions
+
+
+def _scope_shared_declarations(
+    state: DecodeState,
+    regions: list[tuple[int, list[str], list[str]]],
+    main_vars: list[str],
+    main_arrays: list[str],
+    reconstruct_private_shared: bool,
+) -> tuple[dict[int, ir.Shared], dict[str, int]]:
     shared_subs: dict[int, ir.Shared] = {}
     sub_local_arrays: dict[str, int] = {}
     for i, vs, ars in regions:
-        other_v = set(mvs)
-        other_a = set(mars)
-        for j, ovs, oars in regions:
-            if j != i:
-                other_v |= set(ovs)
-                other_a |= set(oars)
+        other_v, other_a = _scope_other_names(
+            regions, i, main_vars, main_arrays
+        )
         names = [v for v in vs if v in other_v]
         names += [a + "()" for a in ars if a in other_a]
-        # An explicit SHARED declaration can be the only evidence for the
-        # allocation order of scalars used by just this SUB: the declaration
-        # itself is codeless, while first executable use may be in the opposite
-        # order.  Adjacent private DGROUP slots form an evidenced declaration
-        # band; list that band from high to low because TB allocates SHARED
-        # scalar names in reverse declaration order (wild tbd73.exe:
-        # `SHARED i,barpos`, whose first executable use is barpos).
-        private = [
-            v
-            for v in vs
-            if reconstruct_private_shared
-            and names
-            and v not in other_v
-            and v.startswith("V")
-            and not v.endswith("$")
-        ]
-        private_by_disp = sorted(private, key=lambda v: state.vdisp(ir.Var(v)))
-        bands: list[list[str]] = []
-        for v in private_by_disp:
-            d = state.vdisp(ir.Var(v))
-            if bands:
-                prev = bands[-1][-1]
-                pd = state.vdisp(ir.Var(prev))
-                width = state.layout_state.lay["scalars"].get(pd)
-                if width is not None and d == pd + width:
-                    bands[-1].append(v)
-                    continue
-            bands.append([v])
-        inferred_bands = [band for band in bands if len(band) >= 2]
-        for band in inferred_bands:
-            names.extend(reversed(band))
+        names.extend(
+            _private_shared_names(
+                state, vs, other_v, names, reconstruct_private_shared
+            )
+        )
         if reconstruct_private_shared:
             scalar_names = [n for n in names if not n.endswith("()")]
             array_names = [n for n in names if n.endswith("()")]
@@ -1107,6 +1215,59 @@ def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, in
         if names:
             shared_subs[i] = ir.Shared(tuple(names))
     return shared_subs, sub_local_arrays
+
+
+def _scope_other_names(regions, index, main_vars, main_arrays):
+    other_v = set(main_vars)
+    other_a = set(main_arrays)
+    for j, vars_, arrays in regions:
+        if j != index:
+            other_v.update(vars_)
+            other_a.update(arrays)
+    return other_v, other_a
+
+
+def _private_shared_names(state, vars_, other_vars, names, enabled):
+    if not enabled or not names:
+        return []
+    private = [
+        v
+        for v in vars_
+        if v not in other_vars and v.startswith("V") and not v.endswith("$")
+    ]
+    private_by_disp = sorted(private, key=lambda v: state.vdisp(ir.Var(v)))
+    bands: list[list[str]] = []
+    for v in private_by_disp:
+        d = state.vdisp(ir.Var(v))
+        if bands:
+            prev = bands[-1][-1]
+            pd = state.vdisp(ir.Var(prev))
+            width = state.layout_state.lay["scalars"].get(pd)
+            if width is not None and d == pd + width:
+                bands[-1].append(v)
+                continue
+        bands.append([v])
+    return [v for band in bands if len(band) >= 2 for v in reversed(band)]
+
+
+def _scope_procs(state: DecodeState) -> tuple[dict[int, ir.Shared], dict[str, int]]:
+    """Slot-scope attribution for SUB bodies (witnessed t1_subsh/t1_subarr/
+    t1_subad): TB gives every non-SHARED SUB variable/array its own local
+    static slot, so a slot referenced both inside a SUB body and anywhere
+    else can only be SHARED -- synthesize the declaration at body top.
+    Returns ({top index -> Shared statement for that SUB}, {array name ->
+    top index of the SUB it is local to} -- their synthesized DIM belongs
+    inside that body). DEF FN bodies need no treatment: their unlisted
+    variables are the main program's (existing DEF FN fixtures round-trip
+    with no declarations)."""
+    o = state.output
+    reconstruct_private_shared = _has_large_common_init(tuple(o.stmts))
+    regions = _scope_proc_regions(o.stmts)
+    main_stmts = [s for s in o.stmts if not isinstance(s, ir.SubDef)]
+    mvs, mars = _region_refs(tuple(main_stmts))
+    return _scope_shared_declarations(
+        state, regions, mvs, mars, reconstruct_private_shared
+    )
 
 
 def _scalar_param_name(state, off) -> str:
@@ -1225,6 +1386,281 @@ def _respell_params(node, spell, stmt_addr=None):
     return new_node
 
 
+def _local_spelling(frame) -> dict[str, str]:
+    """Map provisional BP-local spellings to their settled frame names.
+
+    A zero-filled LOCAL frame starts untyped.  An FP access later retypes a
+    two- or four-byte slot in ``frame.locals``; statements decoded before that
+    access still carry the provisional ``Lxx%`` spelling, including a
+    reference to a descriptor's high word.  Keep those references in the
+    same source variable instead of letting the emitter create a DGROUP
+    global (wild CVT2TB SUB12, BP+16/BP+18).
+    """
+    locs = frame.locals or {}
+    spell: dict[str, str] = {}
+    for off, name in locs.items():
+        base = f"L{off:02X}"
+        for suffix in ("%", "!", "#", "&", "$"):
+            spell[base + suffix] = name
+        if name.endswith("!"):
+            for extra in (2,):
+                for suffix in ("%", "!"):
+                    spell[f"L{off + extra:02X}{suffix}"] = name
+        elif name.endswith("#"):
+            for extra in (2, 4, 6):
+                for suffix in ("%", "!", "#"):
+                    spell[f"L{off + extra:02X}{suffix}"] = name
+    return spell
+
+
+def _callee_param_suffixes(subs):
+    """Collect unanimous suffix evidence forwarded into ordinary SUBs."""
+    wanted: dict[tuple[str, int], set[str]] = {}
+    for caller in subs.values():
+        spell = {
+            p.rstrip("%$&#"): p
+            for p in caller.params
+            if p.startswith("P") and not p.endswith("(1)") and p[-1] in "%$&#"
+        }
+        if not spell:
+            continue
+        for node in _walk_nodes(caller.body):
+            if not isinstance(node, ir.CallStmt) or node.name not in subs:
+                continue
+            callee = subs[node.name]
+            for i, arg in enumerate(node.args):
+                if not (isinstance(arg, ir.Var) and arg.name in spell):
+                    continue
+                if i >= len(callee.params):
+                    continue
+                if callee.params[i][-1] in "%$&#" or not callee.params[i].startswith("P"):
+                    continue
+                wanted.setdefault((node.name, i), set()).add(spell[arg.name][-1])
+    return {k: next(iter(v)) for k, v in wanted.items() if len(v) == 1}
+
+
+def _type_untyped_callee_params(stmts, stmt_addr=None):
+    """Give an ordinary callee's untyped parameter the caller's evidence.
+
+    The sibling of `_type_helper_forwards`, for the case it deliberately skips.
+    When a forwarded argument reaches an ORDINARY SUB whose parameter at that
+    position was never typed, the argument lands unsuffixed and splits the
+    caller's parameter in two exactly as it does for a helper -- but the callee
+    HAS a declared header, so retyping only the argument makes the two
+    disagree and TB rejects the source (`Error 475: Parameter mismatch`,
+    ledger RO-UNIFY-DEFERRED-PARAM).
+
+    So retype both ends together: the argument, the callee's parameter, and
+    every use of that parameter inside the callee's own body. The caller's
+    suffix is the only evidence either side has, and after this both headers
+    say the same thing.
+
+    Applied only where every caller agrees on the suffix. Two callers
+    disagreeing means the evidence is not evidence, and the split names stay.
+    """
+    helpers = {
+        s.name
+        for s in stmts
+        if isinstance(s, ir.SubDef)
+        and len(s.body) == 1
+        and isinstance(s.body[0], (ir.OpaqueHelper, ir.Inline))
+    }
+    subs = {
+        s.name: s
+        for s in stmts
+        if isinstance(s, ir.SubDef) and s.name not in helpers
+    }
+
+    retype = _callee_param_suffixes(subs)
+    if not retype:
+        return stmts
+
+    out = []
+    for stmt in stmts:
+        if not isinstance(stmt, ir.SubDef) or stmt.name in helpers:
+            out.append(stmt)
+            continue
+        params = list(stmt.params)
+        spell_body: dict[str, str] = {}
+        for (callee_name, i), sfx in retype.items():
+            if callee_name != stmt.name or i >= len(params):
+                continue
+            old = params[i]
+            params[i] = old + sfx
+            spell_body[old] = params[i]
+        caller_spell = {
+            p.rstrip("%$&#"): p
+            for p in stmt.params
+            if p.startswith("P") and not p.endswith("(1)") and p[-1] in "%$&#"
+        }
+
+        def fix_call(node):
+            if isinstance(node, ir.CallStmt) and node.name in subs:
+                args = tuple(
+                    ir.Var(caller_spell[a.name])
+                    if (
+                        isinstance(a, ir.Var)
+                        and a.name in caller_spell
+                        and (node.name, i) in retype
+                    )
+                    else a
+                    for i, a in enumerate(node.args)
+                )
+                if any(a is not b for a, b in zip(node.args, args)):
+                    return ir.CallStmt(node.name, args)
+            return node
+
+        body = tuple(
+            _rewrite_nodes(b, fix_call, spell_body, stmt_addr) for b in stmt.body
+        )
+        changed = tuple(params) != stmt.params or any(
+            a is not b for a, b in zip(stmt.body, body)
+        )
+        out.append(stmt if not changed else ir.SubDef(stmt.name, tuple(params), body))
+    return out
+
+
+def _walk_nodes(nodes):
+    for node in nodes:
+        yield node
+        for f in getattr(node, "__dataclass_fields__", ()):
+            value = getattr(node, f)
+            if isinstance(value, tuple):
+                yield from _walk_nodes(value)
+            elif is_dataclass(value) and not isinstance(value, type):
+                yield from _walk_nodes((value,))
+
+
+def _rewrite_nodes(node, fix_call, spell, stmt_addr):
+    """`fix_call` on every CallStmt, `spell` on every Var, rebuilding in place."""
+    replaced = fix_call(node)
+    if replaced is not node:
+        if stmt_addr is not None:
+            owned = stmt_addr.address_of(node)
+            if owned is not None:
+                stmt_addr.claim(replaced, owned)
+        node = replaced
+    if isinstance(node, ir.Var) and node.name in spell:
+        return ir.Var(spell[node.name])
+    if isinstance(node, tuple):
+        new = tuple(_rewrite_nodes(x, fix_call, spell, stmt_addr) for x in node)
+        return node if all(a is b for a, b in zip(node, new)) else new
+    if is_dataclass(node) and not isinstance(node, type):
+        changes = {}
+        for f in fields(node):
+            old = getattr(node, f.name)
+            new = _rewrite_nodes(old, fix_call, spell, stmt_addr)
+            if new is not old:
+                changes[f.name] = new
+        if changes:
+            rebuilt = replace(node, **changes)
+            if stmt_addr is not None:
+                owned = stmt_addr.address_of(node)
+                if owned is not None:
+                    stmt_addr.claim(rebuilt, owned)
+            return rebuilt
+    return node
+
+
+def _type_helper_forwards(stmts, stmt_addr=None):
+    """Type a forwarded arg from the CALLER when the callee cannot type it.
+
+    `arg_push_fwd` stages a `P<off>` placeholder and takes its suffix from the
+    callee's parameter in the same position. A framed opaque helper has no such
+    evidence -- its parameter offsets come from the BP frame and its types are
+    unknown, so `proc_params` holds bare `P<off>` -- and the forwarded argument
+    lands unsuffixed. The enclosing SUB then holds both `P12%` (its parameter)
+    and `P12` (this use of it), `canonical_rename` letters two variables out of
+    one, and the compiler allocates a DGROUP scalar for the second.
+
+    Only for a helper-bodied callee. It emits as `SUB name INLINE` with NO
+    parameter list, so nothing can contradict the caller's type. Doing this for
+    an ordinary SUB whose parameter merely happens to be untyped breaks the
+    build instead: the argument's suffix then disagrees with the callee's own
+    declared header and TB rejects it (`Error 475: Parameter mismatch`, ledger
+    RO-UNIFY-DEFERRED-PARAM).
+
+    Wild resume.exe: ten of its twelve untyped forwards go to helpers.
+    """
+    helpers = {
+        s.name
+        for s in stmts
+        if isinstance(s, ir.SubDef)
+        and len(s.body) == 1
+        and isinstance(s.body[0], (ir.OpaqueHelper, ir.Inline))
+    }
+    if not helpers:
+        return stmts
+
+    out = []
+    for stmt in stmts:
+        if not isinstance(stmt, ir.SubDef) or stmt.name in helpers:
+            out.append(stmt)
+            continue
+        spell = {}
+        for param in stmt.params:
+            if param.endswith("(1)") or not param.startswith("P"):
+                continue
+            base = param.rstrip("%$&#")
+            if base != param:
+                spell[base] = param
+        if not spell:
+            out.append(stmt)
+            continue
+
+        def retype(node):
+            if isinstance(node, ir.CallStmt) and node.name in helpers:
+                args = tuple(
+                    ir.Var(spell[a.name])
+                    if isinstance(a, ir.Var) and a.name in spell
+                    else a
+                    for a in node.args
+                )
+                if any(a is not b for a, b in zip(node.args, args)):
+                    rebuilt = ir.CallStmt(node.name, args)
+                    if stmt_addr is not None:
+                        # Same identity hazard the generic dataclass branch
+                        # below already guards: this early return rebuilds the
+                        # statement too, so its stmt_addr claim has to move
+                        # with it or a jump landing on this exact CALL can
+                        # never resolve (wild morcalc.exe: a FOR loop's own
+                        # back edge onto a forwarding CALL to a helper SUB).
+                        owned = stmt_addr.address_of(node)
+                        if owned is not None:
+                            stmt_addr.claim(rebuilt, owned)
+                    return rebuilt
+                return node
+            if isinstance(node, tuple):
+                new = tuple(retype(x) for x in node)
+                return node if all(a is b for a, b in zip(node, new)) else new
+            if is_dataclass(node) and not isinstance(node, type):
+                changes = {}
+                for f in fields(node):
+                    old = getattr(node, f.name)
+                    new = retype(old)
+                    if new is not old:
+                        changes[f.name] = new
+                if changes:
+                    rebuilt = replace(node, **changes)
+                    if stmt_addr is not None:
+                        # Rebuilding drops the old object's address claim, and
+                        # an orphaned claim is an unresolvable jump target.
+                        owned = stmt_addr.address_of(node)
+                        if owned is not None:
+                            stmt_addr.claim(rebuilt, owned)
+                    return rebuilt
+                return node
+            return node
+
+        body = tuple(retype(b) for b in stmt.body)
+        out.append(
+            stmt
+            if all(a is b for a, b in zip(stmt.body, body))
+            else ir.SubDef(stmt.name, stmt.params, body)
+        )
+    return out
+
+
 def _resolve_calls(
     stmts,
     proc_names,
@@ -1263,7 +1699,15 @@ def _resolve_calls(
         for i, a in enumerate(args):
             if isinstance(a, tuple) and a and a[0] == "fwdpending":
                 _, target, _idx, off = a
-                params = proc_params[target]
+                params = proc_params.get(target, ())
+                if not params and target not in proc_params:
+                    logger.warning(
+                        "unresolved forwarded call target %x; retaining fallback",
+                        target,
+                    )
+                    new_args[i] = ir.Var(f"P{off:02X}")
+                    changed = True
+                    continue
                 if target in inline_procs:
                     # A later-defined INLINE SUB has no parameter signature
                     # to resolve this deferred forwarded argument from.
@@ -1295,7 +1739,15 @@ def _resolve_calls(
                 # an ordinary DGROUP scalar (V#### -> canonical_rename),
                 # not the callee's own PXX by-ref param.
                 _, target, _idx, off, fallback = a
-                params = proc_params[target]
+                params = proc_params.get(target, ())
+                if target not in proc_params:
+                    logger.warning(
+                        "unresolved forwarded scalar target %x; retaining fallback",
+                        target,
+                    )
+                    new_args[i] = fallback
+                    changed = True
+                    continue
                 if target in inline_procs:
                     # Same no-signature case as fwdpending above: retain the
                     # caller's layout spelling captured at the call rather
@@ -1413,8 +1865,11 @@ def _resolve_calls(
                 # (t1_fargosub; wild resume.exe's 14-call "mid-flow far_call"
                 # mystery).
                 if new_args:
-                    raise ValueError(
-                        f"far_call to non-proc {target:#x} carries arguments"
+                    logger.warning(
+                        "far_call to non-proc %x carries %d opaque arguments; "
+                        "resolving as GOSUB",
+                        target,
+                        len(new_args),
                     )
                 return ir.Gosub(("addr", target))
             _check_relayed_arrays(
@@ -1435,7 +1890,10 @@ def _resolve_calls(
             )
         if isinstance(s, ir.IfInline):
             new_body = walk(s.body)
-            return s if new_body is s.body else ir.IfInline(s.cond, tuple(new_body))
+            new_else = None if s.else_body is None else tuple(walk(s.else_body))
+            if new_body is s.body and new_else == s.else_body:
+                return s
+            return ir.IfInline(s.cond, tuple(new_body), new_else)
         if isinstance(s, ir.IfBlock):
             changed = False
             arms = []
@@ -1470,6 +1928,84 @@ def _resolve_calls(
     return _propagate_call_types(resolved, stmt_addr)
 
 
+def _collect_type_calls(body, owner, sub_defs, calls):
+    for s in body:
+        if isinstance(s, ir.SubDef):
+            sub_defs[s.name] = s
+            _collect_type_calls(s.body, s.name, sub_defs, calls)
+        elif isinstance(s, ir.CallStmt):
+            calls.append((owner, s))
+        elif isinstance(s, ir.IfInline):
+            _collect_type_calls(s.body, owner, sub_defs, calls)
+        elif isinstance(s, ir.IfBlock):
+            for _, branch in s.arms:
+                _collect_type_calls(branch, owner, sub_defs, calls)
+            if s.else_body:
+                _collect_type_calls(s.else_body, owner, sub_defs, calls)
+        elif isinstance(s, ir.SelectCase):
+            for arm in s.arms:
+                _collect_type_calls(arm.body, owner, sub_defs, calls)
+            if s.case_else:
+                _collect_type_calls(s.case_else, owner, sub_defs, calls)
+        elif isinstance(s, ir.DefFn) and s.is_block:
+            _collect_type_calls(s.body, owner, sub_defs, calls)
+
+
+def _type_call_refinements(sub_defs, calls):
+    refinements: dict[str, dict[str, str]] = {}
+    for owner, call in calls:
+        if not isinstance(call.name, str) or call.name not in sub_defs:
+            continue
+        sub = sub_defs[call.name]
+        for i, arg in enumerate(call.args):
+            if i >= len(sub.params):
+                continue
+            _record_type_refinements(
+                refinements, owner, sub_defs, call.name, sub, sub.params[i], arg
+            )
+    return refinements
+
+
+def _record_type_refinements(refinements, owner, sub_defs, call_name, sub, param, arg):
+    if param.startswith("P") and not param.endswith("(1)"):
+        base = param.rstrip("%$&#")
+        suffix = None
+        # Numeric actuals may coerce to an unsuffixed SINGLE formal;
+        # string actuals cannot, so only `$` is safe evidence here.
+        if isinstance(arg, ir.Var) and arg.name[-1:] == "$":
+            suffix = "$"
+        elif isinstance(arg, ir.ArrayRef) and arg.name[-1:] == "$":
+            suffix = "$"
+        elif isinstance(arg, ir.StrLit):
+            suffix = "$"
+        if suffix:
+            want = f"{base}{suffix}"
+            if want != param:
+                refinements.setdefault(call_name, {})[param] = want
+
+    if owner not in sub_defs or not isinstance(arg, ir.ArrayRef):
+        return
+    owner_sub = sub_defs[owner]
+    if (
+        param[-1:] == "$"
+        and arg.name.startswith("P")
+        and arg.name[-1:] != "$"
+    ) or (
+        param.endswith("$(1)")
+        and not arg.indices
+        and arg.name.startswith("P")
+        and arg.name[-1:] != "$"
+    ):
+        array_param = next(
+            (q for q in owner_sub.params if q == f"{arg.name}(1)"),
+            None,
+        )
+        if array_param is not None:
+            want = f"{arg.name}$(1)"
+            if want != array_param:
+                refinements.setdefault(owner, {})[array_param] = want
+
+
 def _propagate_call_types(stmts, stmt_addr=None):
     """Refine unsuffixed SubDef parameter placeholders ('Pxx') using caller
     argument type evidence from CallStmts across the program (e.g., a parameter
@@ -1479,109 +2015,12 @@ def _propagate_call_types(stmts, stmt_addr=None):
     sub_defs: dict[str, ir.SubDef] = {}
     calls: list[tuple[str | None, ir.CallStmt]] = []
 
-    def collect(body, owner=None):
-        for s in body:
-            if isinstance(s, ir.SubDef):
-                sub_defs[s.name] = s
-                collect(s.body, s.name)
-            elif isinstance(s, ir.CallStmt):
-                calls.append((owner, s))
-            elif isinstance(s, ir.IfInline):
-                collect(s.body, owner)
-            elif isinstance(s, ir.IfBlock):
-                for _, b in s.arms:
-                    collect(b, owner)
-                if s.else_body:
-                    collect(s.else_body, owner)
-            elif isinstance(s, ir.SelectCase):
-                for arm in s.arms:
-                    collect(arm.body, owner)
-                if s.case_else:
-                    collect(s.case_else, owner)
-            elif isinstance(s, ir.DefFn) and s.is_block:
-                collect(s.body, owner)
-
-    collect(stmts)
+    _collect_type_calls(stmts, None, sub_defs, calls)
 
     if not sub_defs or not calls:
         return stmts
 
-    refinements: dict[str, dict[str, str]] = {}
-
-    for owner, c in calls:
-        if not isinstance(c.name, str) or c.name not in sub_defs:
-            continue
-        sub = sub_defs[c.name]
-        for i, arg in enumerate(c.args):
-            if i >= len(sub.params):
-                continue
-            p = sub.params[i]
-            if p.startswith("P") and not p.endswith("(1)"):
-                base = p.rstrip("%$&#")
-                sfx = None
-                # A caller's numeric type does not determine a by-ref formal's
-                # spelling: TB accepts an INTEGER actual for an unsuffixed
-                # (SINGLE) parameter, so propagating `%`, `&`, or `#` here
-                # silently changes valid declarations.  Strings cannot undergo
-                # that numeric coercion, making `$` the only calibrated
-                # caller-side refinement (tbd73's Titlewin -> Titlebox INLINE).
-                if isinstance(arg, ir.Var) and arg.name[-1:] == "$":
-                    sfx = arg.name[-1:]
-                elif isinstance(arg, ir.ArrayRef) and arg.name[-1:] == "$":
-                    sfx = arg.name[-1:]
-                elif isinstance(arg, ir.StrLit):
-                    sfx = "$"
-                if sfx:
-                    want = f"{base}{sfx}"
-                    if want != p:
-                        refinements.setdefault(c.name, {})[p] = want
-
-            # Passing an array element by reference proves the element type
-            # when the receiving formal is already known.  The source array
-            # descriptor itself is typed in its owner SUB's header, so update
-            # that declaration (and its body references) rather than trying
-            # to infer a type from the descriptor push.  This is the direct
-            # `Drawlist(ptrarray$(...)) -> Printwin(..., strdat$)` chain in
-            # tbd73; only `$` is safe for the same coercion reason above.
-            if (
-                owner in sub_defs
-                and p[-1:] == "$"
-                and isinstance(arg, ir.ArrayRef)
-                and arg.name.startswith("P")
-                and arg.name[-1:] != "$"
-            ):
-                owner_sub = sub_defs[owner]
-                array_p = next(
-                    (q for q in owner_sub.params if q == f"{arg.name}(1)"),
-                    None,
-                )
-                if array_p is not None:
-                    want = f"{arg.name}$(1)"
-                    if want != array_p:
-                        refinements.setdefault(owner, {})[array_p] = want
-
-            # A whole-array relay carries the same descriptor type through
-            # another SUB boundary.  The callee's `$(1)` formal is direct
-            # evidence for the caller's matching array formal; unlike a
-            # scalar numeric actual, this is not a coercion.  tbd73's
-            # Makelmenu -> Drawlist relay is the witnessed shape.
-            if (
-                owner in sub_defs
-                and p.endswith("$(1)")
-                and isinstance(arg, ir.ArrayRef)
-                and not arg.indices
-                and arg.name.startswith("P")
-                and arg.name[-1:] != "$"
-            ):
-                owner_sub = sub_defs[owner]
-                array_p = next(
-                    (q for q in owner_sub.params if q == f"{arg.name}(1)"),
-                    None,
-                )
-                if array_p is not None:
-                    want = f"{arg.name}$(1)"
-                    if want != array_p:
-                        refinements.setdefault(owner, {})[array_p] = want
+    refinements = _type_call_refinements(sub_defs, calls)
 
     if not refinements:
         return stmts
@@ -1598,7 +2037,14 @@ def _propagate_call_types(stmts, stmt_addr=None):
             return s if all(a is b for a, b in zip(s.body, new_body)) else ir.SubDef(s.name, s.params, new_body)
         if isinstance(s, ir.IfInline):
             new_body = tuple(update_stmt(b) for b in s.body)
-            return s if all(a is b for a, b in zip(s.body, new_body)) else ir.IfInline(s.cond, new_body)
+            new_else = (
+                None
+                if s.else_body is None
+                else tuple(update_stmt(b) for b in s.else_body)
+            )
+            if all(a is b for a, b in zip(s.body, new_body)) and new_else == s.else_body:
+                return s
+            return ir.IfInline(s.cond, new_body, new_else)
         if isinstance(s, ir.IfBlock):
             changed = False
             arms = []
@@ -1637,6 +2083,531 @@ def _propagate_call_types(stmts, stmt_addr=None):
 
 
 
+def _finalize_resolved_calls(state: DecodeState) -> None:
+    c, out = state.control, state.output
+    resolved = _resolve_calls(
+        out.stmts,
+        c.proc_names,
+        c.proc_params,
+        c.inline_procs,
+        c.proc_int_offs,
+        c.proc_long_offs,
+        c.proc_dbl_offs,
+        c.proc_str_offs,
+        out.stmt_addr,
+    )
+    resolved = _type_helper_forwards(resolved, out.stmt_addr)
+    resolved = _type_untyped_callee_params(resolved, out.stmt_addr)
+    if len(resolved) != len(out.stmts):
+        raise ValueError(
+            f"_resolve_calls changed the statement count "
+            f"({len(out.stmts)} -> {len(resolved)})"
+        )
+    for index, (before, after) in enumerate(zip(list(out.stmts), resolved)):
+        if before is after:
+            continue
+        if out.event_log is not None and out.event_log.committed(before):
+            state.patch(index, after)
+        else:
+            out.stmts[index] = after
+
+
+def _finalize_line_table(state: DecodeState, addr):
+    img, out = state.image, state.output
+    data_orphan_lines: list[tuple[int, int]] = []
+    orphan_offs: set[int] = set()
+    table_active = False
+    if any(
+        o[1] in ("resume_pre", "on_error", "error_stmt")
+        or (o[1] == "movax_m" and o[2] in (0x72, 0x74))
+        for o in img.ops
+    ):
+        early = _line_table(
+            img.exe,
+            img.start,
+            out.addrs,
+            addr,
+            extra_offs={a + 4 - img.start for a in out.trace_tbl}
+            | {a - img.start for a in out.stmt_addr.values() if a is not None},
+        )
+        if early is not None:
+            table_active = True
+            data_orphan_lines = early[1]
+            orphan_offs = {offset for offset, _ in early[1]}
+    return table_active, data_orphan_lines, orphan_offs
+
+
+def _finalize_dimensions(state: DecodeState, sub_local_arrays):
+    lyt = state.layout_state
+    ob = lyt.option_base if lyt.option_base is not None else 0
+    dims, local_dims, cur_ob = [], {}, 0
+    for array in reversed(lyt.arrs):
+        if ob == 1 and set(array["lo"]) == {0} and array.get("varacc") and not array.get("subful"):
+            want, bounds = 0, tuple(array["hi"])
+        else:
+            want = ob if ob == 1 else cur_ob
+            bounds = tuple(
+                hi if lo == ob else (lo, hi)
+                for lo, hi in zip(array["lo"], array["hi"])
+            )
+        if array["name"] in sub_local_arrays:
+            if want != cur_ob:
+                raise ValueError("OPTION BASE change around a SUB-local array (no witness)")
+            local_dims.setdefault(sub_local_arrays[array["name"]], []).append(
+                ir.Dim(array["name"], bounds)
+            )
+            continue
+        if want != cur_ob:
+            dims.append(ir.OptionBase(want))
+            cur_ob = want
+        dims.append(ir.Dim(array["name"], bounds))
+    if lyt.option_base == 1 and cur_ob != 1:
+        dims.append(ir.OptionBase(1))
+    return dims, local_dims
+
+
+def _finalize_sub_prefixes(state: DecodeState, shared_subs, local_dims) -> None:
+    out = state.output
+    for i, stmt in enumerate(out.stmts):
+        if not isinstance(stmt, ir.SubDef):
+            continue
+        prefix = []
+        if i in shared_subs:
+            shared = shared_subs[i]
+            prefix.extend(
+                ir.Shared(tuple(shared.names[j : j + 10]))
+                for j in range(0, len(shared.names), 10)
+            )
+        prefix.extend(local_dims.get(i, ()))
+        if prefix:
+            out.stmts[i] = ir.SubDef(stmt.name, stmt.params, tuple(prefix) + stmt.body)
+
+
+def _finalize_static_dims(state, dims, data_orphan_lines):
+    img, out = state.image, state.output
+    ins = 0  # static DIMs follow any proc definitions
+    while ins < len(out.stmts) and isinstance(
+        out.stmts[ins], (ir.SubDef, ir.DefFn)
+    ):
+        ins += 1
+    dim_lines: list[int] | None = None
+    if dims and data_orphan_lines and len(dims) == len(data_orphan_lines):
+        # Static DIMs with one shared orphan offset compiled inline at their
+        # original position; otherwise they use the canonical procedure-top
+        # insertion point.
+        offs = {o for o, _ in data_orphan_lines}
+        if len(offs) == 1:
+            ins = out.addrs.index(img.start + next(iter(offs)))
+            dim_lines = [ln for _, ln in data_orphan_lines]
+            data_orphan_lines = []
+    for offset, declaration in enumerate(dims):
+        state.reconstruct(ins + offset, declaration)
+    return ins, data_orphan_lines, dim_lines
+
+
+def _normalize_trace_hooks(img, out):
+    out.trace_tbl = {}
+    out.hook_seq = []
+    if not any(o[1] == "trace_hook" for o in img.ops):
+        return
+    ops, pending, aliases = [], None, {}
+    for op in img.ops:
+        if op[1] == "trace_hook":
+            hook = op[0] if pending is None else pending
+            out.trace_tbl[hook] = op[2]
+            out.hook_seq.append(op[2])
+            aliases[op[0] + 4] = hook
+            pending = hook
+        else:
+            if pending is not None:
+                op = (pending,) + op[1:]
+                pending = None
+            ops.append(op)
+    img.ops = []
+    for op in ops:
+        if op[1] in ("jmp", "jmps") or (
+            op[1] == "on_error" and op[2] is not None
+        ):
+            op = (op[0], op[1], aliases.get(op[2], op[2]))
+        elif op[1] in ("jcc", "on_trap"):
+            op = op[:3] + (aliases.get(op[3], op[3]),)
+        img.ops.append(op)
+
+
+def _normalize_event_hooks(img):
+    hook_alias, entry_hook, run_first = {}, {}, None
+    for i, op in enumerate(img.ops):
+        if op[1] != "trap_hook":
+            run_first = None
+        elif run_first is None:
+            run_first = op[0]
+            if i + 1 < len(img.ops) and img.ops[i + 1][1] != "trap_hook":
+                entry_hook[img.ops[i + 1][0]] = op[0]
+        else:
+            hook_alias[op[0]] = run_first
+    if not hook_alias and not entry_hook:
+        return
+    ops = []
+    for op in img.ops:
+        if op[1] in ("jmp", "jmps") or (
+            op[1] == "on_error" and op[2] is not None
+        ):
+            target = entry_hook.get(op[2], op[2])
+            op = (op[0], op[1], hook_alias.get(target, target))
+        elif op[1] in ("jcc", "on_trap"):
+            target = entry_hook.get(op[3], op[3])
+            op = op[:3] + (hook_alias.get(target, target),) + op[4:]
+        ops.append(op)
+    img.ops = ops
+
+
+def _initialize_array_slots(state):
+    layout = state.layout_state
+    arrays = layout.arrs
+    layout.slot_info = {
+        layout.lay["static_base"] + ARR_BLOCK * i: array
+        for i, array in enumerate(arrays)
+    }
+    for array in arrays:
+        if array["str"] and not array["name"].endswith("$"):
+            array["name"] += "$"
+        if array["long"] and not array["name"].endswith("&"):
+            array["name"] += "&"
+        if array.get("int") and not array["name"].endswith("%"):
+            array["name"] += "%"
+        if array.get("dbl") and not array["name"].endswith("#"):
+            array["name"] += "#"
+
+
+def _prepare_decode_image(state, exe):
+    img, layout, out = state.image, state.layout_state, state.output
+    state.diagnostics.phase = "scan"
+    img.exe = exe
+    img.start, img.dia = find_prologue(exe)
+    out.metas = _meta_stmts(exe, img.start)
+    out.toggles = _toggles(exe, img.start)
+    out.commits = set()
+    img.ops = _scan(exe, img.start, img.dia, out.commits)
+    state.diagnostics.phase = "layout"
+    _normalize_trace_hooks(img, out)
+    _normalize_event_hooks(img)
+    layout.lay = _layout(exe, img.ops)
+    layout.ds = layout.lay["ds"]
+    layout.dsd = layout.ds - layout.lay["delta"]
+    layout.arrs = layout.lay["arrs"]
+
+
+def _initialize_lift_state(state):
+    machine, expr, control, output = (
+        state.machine,
+        state.expr,
+        state.control,
+        state.output,
+    )
+    expr.stack = []
+    output.stmts = RecordedStatements()
+    output.stmts.clock = lambda: len(state.events)
+    output.addrs = []
+    output.stmt_addr = AddressOwnership()
+    control.cur = None
+    expr.pend_cmp = None
+    control.fors = []
+    control.whiles = []
+    control.dos = []
+    control.exit_folds = []
+    control.cases = []
+    machine.ax = None
+    machine.bx = None
+    machine.dx = None
+    expr.pend_icmp = None
+    output.cc_hooks = set()
+
+
+def _move_data_before_poll_loops(state):
+    out = state.output
+    for i, stmt in list(enumerate(out.stmts)):
+        if not (isinstance(stmt, ir.Do) and stmt.kind is None):
+            continue
+        loop_idx = next(
+            (
+                j
+                for j in range(i + 1, len(out.stmts))
+                if isinstance(out.stmts[j], ir.Loop)
+                and _is_bare_len_poll(out.stmts[j].cond)
+            ),
+            None,
+        )
+        if loop_idx is None:
+            continue
+        for j in reversed(
+            [j for j in range(i + 1, loop_idx) if isinstance(out.stmts[j], ir.Data)]
+        ):
+            out.stmts.insert(i, out.stmts.pop(j))
+            out.addrs.insert(i, out.addrs.pop(j))
+
+
+def _string_descriptor_disps(state):
+    img, l = state.image, state.layout_state
+    return sorted(
+        (
+            {
+                img.ops[i][2]
+                for i in range(len(img.ops))
+                if img.ops[i][1] == "movsi"
+                and img.ops[i][2] >= VAR_BASE
+                and not (
+                    i + 1 < len(img.ops)
+                    and img.ops[i + 1][1]
+                    in ("far_spush", "far_strassign", "add_si_sp")
+                )
+            }
+            - set(l.lay["scalars"])
+            - set(l.lay["rt_blocks"])
+            - set(l.slot_info)
+        )
+        | {
+            o[2]
+            for o in img.ops
+            if o[1] in ("input", "line_input") and o[2] != l.lay["pool_base"] - 4
+        }
+    )
+
+
+def _walk_string_descriptors(state, exe):
+    l = state.layout_state
+    descriptors = []
+    d = l.lay["pool_base"] - 4
+    w0, expect = struct.unpack_from("<HH", exe, l.dsd + d)
+    if w0 == 0x8000:
+        d += 4
+        while True:
+            w0, ptr = struct.unpack_from("<HH", exe, l.dsd + d)
+            if not w0 & 0x8000 or ptr != expect:
+                break
+            descriptors.append((d, w0 & 0x7FFF, ptr))
+            expect = ptr + (w0 & 0x7FFF)
+            d += 4
+    return descriptors, d
+
+
+def _find_string_char_base(state, exe, descriptors, after_disp):
+    l = state.layout_state
+    total = (
+        sum(ln for _, ln, _ in descriptors)
+        if descriptors
+        else sum(
+            struct.unpack_from("<H", exe, l.dsd + disp)[0] & 0x7FFF
+            for disp in l.desc_disps
+        )
+    )
+    hdr = struct.pack("<H", 0x8000 | total)
+    lo = (after_disp + 15) & ~15
+    for cand in range(lo, lo + 0x400, 16):
+        pos = l.dsd + cand + 0x10
+        if (
+            exe[pos : pos + 2] == hdr
+            and exe[pos + 2 : pos + 6] == b"\x00\x00\x00\x00"
+            and exe[pos + 6 + total : pos + 8 + total] == hdr
+        ):
+            return cand
+    raise ValueError("string char record not found")
+
+
+def _prepare_string_pool(state, exe):
+    img, l = state.image, state.layout_state
+    l.ss_base = None
+    l.desc_disps = _string_descriptor_disps(state)
+    l.discard_strs = []
+    l.data_items = []
+    l.have_fre = any(o[1] == "fre_str" for o in img.ops)
+    if not l.desc_disps and not l.have_fre:
+        return
+    all_descs, d = _walk_string_descriptors(state, exe)
+    l.ss_base = _find_string_char_base(state, exe, all_descs, d)
+    unref = [(ln, ptr) for disp, ln, ptr in all_descs if disp not in l.desc_disps]
+    if not unref:
+        return
+    if not l.have_fre:
+        for ln, ptr in reversed(unref):
+            text = exe[l.dsd + l.ss_base + ptr : l.dsd + l.ss_base + ptr + ln].decode(
+                "latin-1"
+            )
+            try:
+                float(text)
+                is_str = False
+            except ValueError:
+                is_str = True
+            l.data_items.append(ir.DataItem(text, is_str))
+    else:
+        l.discard_strs = [
+            ir.StrLit(
+                exe[l.dsd + l.ss_base + ptr : l.dsd + l.ss_base + ptr + ln].decode(
+                    "latin-1"
+                )
+            )
+            for ln, ptr in reversed(unref)
+        ]
+
+
+def _finalize_do_recovery(state, table_active, data_orphan_lines, orphan_offs):
+    if not table_active:
+        return [], data_orphan_lines
+    img, out = state.image, state.output
+    do_stack: list[tuple[int, bool]] = []
+    do_to_loop: dict[int, int] = {}
+    for i, stmt in enumerate(out.stmts):
+        if isinstance(stmt, ir.Do):
+            do_stack.append((i, stmt.kind is None and stmt.cond is None))
+        elif isinstance(stmt, ir.Loop) and do_stack:
+            do_idx, is_bare = do_stack.pop()
+            if is_bare:
+                do_to_loop[do_idx] = i
+    off_to_line = dict(data_orphan_lines)
+    drop: set[int] = set()
+    claimed_offs: set[int] = set()
+    do_idx_lines: dict[int, int] = {}
+    for do_idx, loop_idx in do_to_loop.items():
+        if out.addrs[do_idx] is not None:
+            continue
+        loop_stmt = out.stmts[loop_idx]
+        bare_len_loop = isinstance(loop_stmt, ir.Loop) and _is_bare_len_poll(
+            loop_stmt.cond
+        )
+        host = out.addrs[do_idx + 1]
+        if host is None or bare_len_loop:
+            continue
+        host_off = host - img.start
+        if host_off in orphan_offs:
+            claimed_offs.add(host_off)
+            do_idx_lines[do_idx] = off_to_line[host_off]
+            continue
+        assert isinstance(loop_stmt, ir.Loop)
+        if loop_stmt.kind == "UNTIL":
+            if _is_bare_len_poll(loop_stmt.cond):
+                continue
+            raise ValueError(
+                "codeless DO...LOOP UNTIL (no orphan evidence) has no "
+                "witnessed non-DO source construct to un-synthesize to"
+            )
+        if loop_stmt.kind == "WHILE":
+            state.patch(loop_idx, ir.IfGoto(loop_stmt.cond, ("addr", host)))
+            drop.add(do_idx)
+            continue
+        state.patch(loop_idx, ir.Goto(("addr", host)))
+        drop.add(do_idx)
+    if drop:
+        keep = [i for i in range(len(out.stmts)) if i not in drop]
+        out.stmts[:] = [out.stmts[i] for i in keep]
+        out.addrs[:] = [out.addrs[i] for i in keep]
+    if claimed_offs:
+        data_orphan_lines = [
+            (offset, line)
+            for offset, line in data_orphan_lines
+            if offset not in claimed_offs
+        ]
+    do_lines = [do_idx_lines[i] for i in sorted(do_idx_lines)]
+    return do_lines, data_orphan_lines
+
+
+def _data_recovery_plan(state, items, data_orphan_lines):
+    out = state.output
+    if data_orphan_lines:
+        if any(
+            isinstance(stmt, ir.Restore) and isinstance(stmt.target, int)
+            for stmt in out.stmts
+        ):
+            raise ValueError(
+                "codeless DATA statement alongside a RESTORE split is unsupported "
+                "(no witness)"
+            )
+        n = min(len(items), len(data_orphan_lines))
+        places = data_orphan_lines[:n]
+        deftypes = data_orphan_lines[n:]
+        return places, deftypes, set(range(n)), [line for _, line in places]
+    splits = {0} | {
+        stmt.target
+        for stmt in out.stmts
+        if isinstance(stmt, ir.Restore) and isinstance(stmt.target, int)
+    }
+    return [], [], splits, None
+
+
+def _finalize_data_recovery(state, data_orphan_lines):
+    img, lyt, out = state.image, state.layout_state, state.output
+    data_lines: list[int] | None = None
+    deftype_lines: list[int] = []
+    if not (
+        any(isinstance(stmt, (ir.Read, ir.Restore)) for stmt in out.stmts)
+        or data_orphan_lines
+    ):
+        return data_lines, deftype_lines
+    items = lyt.data_items or _read_data_pool(img.exe)
+    if not items and data_orphan_lines:
+        for off, line in data_orphan_lines:
+            j = out.addrs.index(img.start + off)
+            state.reconstruct(j, ir.DefType())
+            deftype_lines.append(line)
+        return data_lines, deftype_lines
+    if not items:
+        return data_lines, deftype_lines
+    data_places, deftype_places, splits, data_lines = _data_recovery_plan(
+        state, items, data_orphan_lines
+    )
+    data_block, item_to_stmt, pending = [], {}, []
+    for i, item in enumerate(items):
+        if i in splits:
+            if pending:
+                data_block.append(ir.Data(tuple(pending)))
+                pending = []
+            item_to_stmt[i] = len(data_block)
+        pending.append(item)
+    if pending:
+        data_block.append(ir.Data(tuple(pending)))
+    if data_lines is not None:
+        for stmt, (off, _) in zip(data_block, data_places):
+            state.reconstruct(out.addrs.index(img.start + off), stmt)
+    else:
+        for offset, stmt in enumerate(data_block):
+            state.reconstruct(offset, stmt)
+    for off, line in deftype_places:
+        state.reconstruct(out.addrs.index(img.start + off), ir.DefType())
+        deftype_lines.append(line)
+    unplaced = sorted(
+        {
+            stmt.target
+            for stmt in out.stmts
+            if isinstance(stmt, ir.Restore) and isinstance(stmt.target, int)
+        }
+        - set(item_to_stmt)
+    )
+    if unplaced:
+        at = next(
+            (
+                address
+                for stmt, address in zip(out.stmts, out.addrs)
+                if isinstance(stmt, ir.Restore)
+                and stmt.target in unplaced
+                and address is not None
+            ),
+            img.start,
+        )
+        raise ValueError(
+            f"RESTORE item index {unplaced[0]} is past the {len(items)} "
+            "recovered DATA items (a DATA item sharing a descriptor with a "
+            "code string literal is dropped by exclusion-based pool recovery) "
+            f"at {at:#x}"
+        )
+    out.stmts[:] = [
+        (
+            ir.Restore(item_to_stmt[stmt.target])
+            if isinstance(stmt, ir.Restore) and isinstance(stmt.target, int)
+            else stmt
+        )
+        for stmt in out.stmts
+    ]
+    return data_lines, deftype_lines
+
+
 def _finalize(state: DecodeState, addr) -> Program:
     """Program epilogue: static-DIM re-emit, control-flow folds, target
     resolution and canonical rename -> the finished Program."""
@@ -1646,17 +2617,7 @@ def _finalize(state: DecodeState, addr) -> Program:
     with editing(state.output.stmts, "finalize"):
         img, lyt, c, out = (state.image, state.layout_state,
                             state.control, state.output)
-        out.stmts[:] = _resolve_calls(
-            out.stmts,
-            c.proc_names,
-            c.proc_params,
-            c.inline_procs,
-            c.proc_int_offs,
-            c.proc_long_offs,
-            c.proc_dbl_offs,
-            c.proc_str_offs,
-            out.stmt_addr,
-        )
+        _finalize_resolved_calls(state)
         # Error-trap line table, probed early -- before DATA/dims/COMMON/TRON
         # synthesis below mutates out.addrs -- so a codeless DATA statement
         # with no READ/RESTORE anywhere to trigger its recovery (wild
@@ -1666,395 +2627,27 @@ def _finalize(state: DecodeState, addr) -> Program:
         # calls `_finalize` only once it's done). Gated the same as the final
         # lookup below: only probe when the ops show error-trap evidence, else
         # this linear EXE scan risks a spurious match in an unrelated program.
-        data_orphan_lines: list[tuple[int, int]] = []
-        orphan_offs: set[int] = set()  # every orphaned offset, independent of DATA/DIM
-        do_lines: list[int] = []  # genuine (kept) synthesized DOs' own lines, in order
-        table_active = False
-        if any(
-            o[1] in ("resume_pre", "on_error", "error_stmt")
-            or (o[1] == "movax_m" and o[2] in (0x72, 0x74))
-            for o in img.ops
-        ):
-            _early = _line_table(
-                img.exe,
-                img.start,
-                out.addrs,
-                addr,
-                extra_offs={a + 4 - img.start for a in out.trace_tbl}
-                | {a - img.start for a in out.stmt_addr.values() if a is not None},
-            )
-            if _early is not None:
-                table_active = True
-                data_orphan_lines = _early[1]
-                orphan_offs = {o for o, _ in _early[1]}
-
-        # A bare backward jmps with no head-test frame is ALWAYS canonicalized
-        # to synthesized `DO ... LOOP` -- as a bare infinite `DO...LOOP` (core.py's
-        # dispatch loop, "bare backward jmps = infinite DO") or, via
-        # `_lift_do_tail`, as `DO...LOOP WHILE/UNTIL cond` -- since an explicit
-        # DO and a plain `<n> ... GOTO <n>` / `<n> ... IF cond THEN GOTO <n>`
-        # compile to byte-identical code and the decoder can't otherwise tell
-        # which the source used. But DO, like DATA/DIM, gets its OWN codeless
-        # line-table entry (probes q_do2/q_goto2/q_lt7: identical code either
-        # way, but only the DO form leaves an orphan entry sharing the loop
-        # body's offset) -- so once a table is active and shows NO orphan
-        # there, the DO spelling would recompile with an extra entry the
-        # original never had. wild vhfprop.exe: two such loops (one bare, one
-        # WHILE-tail-test), neither with orphan evidence -- both are plain
-        # GOTO/IfGoto loops. Un-synthesize them: drop the Do, retarget the
-        # paired Loop as a Goto (bare) or IfGoto (WHILE, same polarity as the
-        # tail test -- "continue if cond true" is exactly `IF cond THEN GOTO`;
-        # UNTIL would need De Morgan negation of a possibly-compound LogOp,
-        # unwitnessed, so it is left to raise below rather than guessed), all
-        # matched by nesting order (DO/LOOP pairs cannot cross in a
-        # well-formed program, so a stack pairs them correctly same as the
-        # loop's own runtime `c.dos` nesting would).
-        if table_active:
-            # Every Do (bare or head-test) is pushed, so a head-test DO's own
-            # closing (bare) Loop pops ITS Do and not some enclosing bare one --
-            # only a BARE Do's pairing is recorded for possible conversion.
-            do_stack: list[tuple[int, bool]] = []
-            do_to_loop: dict[int, int] = {}
-            for i, s in enumerate(out.stmts):
-                if isinstance(s, ir.Do):
-                    do_stack.append((i, s.kind is None and s.cond is None))
-                elif isinstance(s, ir.Loop) and do_stack:
-                    do_idx, is_bare = do_stack.pop()
-                    if is_bare:
-                        do_to_loop[do_idx] = i
-            off_to_line = dict(data_orphan_lines)
-            drop: set[int] = set()
-            claimed_offs: set[int] = set()  # genuine DO's own orphan entry
-            do_idx_lines: dict[int, int] = {}  # do_idx -> its line, genuine DOs only
-            for do_idx, loop_idx in do_to_loop.items():
-                if out.addrs[do_idx] is not None:
-                    continue  # a real (non-synthesized) Do -- untouched
-                host = out.addrs[do_idx + 1]
-                if host is None:
-                    continue
-                host_off = host - img.start
-                if host_off in orphan_offs:
-                    claimed_offs.add(host_off)  # a genuine DO -- not DATA/DIM's to see
-                    do_idx_lines[do_idx] = off_to_line[host_off]
-                    continue
-                loop_s = out.stmts[loop_idx]
-                assert isinstance(loop_s, ir.Loop)
-                if loop_s.kind == "UNTIL":
-                    # A LOOP UNTIL conversion needs De Morgan negation of a
-                    # possibly-compound LogOp. No fixture witnesses that source
-                    # shape, so fail loud rather than guess its canonical form.
-                    raise ValueError(
-                        "codeless DO...LOOP UNTIL (no orphan evidence) has no "
-                        "witnessed non-DO source construct to un-synthesize to"
-                    )
-                if loop_s.kind == "WHILE":
-                    # `IF cond THEN <body-line>` compiles to exactly the same
-                    # materialize-and-back-jcc shape as `LOOP WHILE cond`, but
-                    # has no codeless DO line-table entry (t1_iftailerr; wild
-                    # vhfprop.exe). The condition polarity is already identical.
-                    out.stmts[loop_idx] = ir.IfGoto(loop_s.cond, ("addr", host))
-                    drop.add(do_idx)
-                    continue
-                out.stmts[loop_idx] = ir.Goto(("addr", host))
-                drop.add(do_idx)
-            if drop:
-                keep = [i for i in range(len(out.stmts)) if i not in drop]
-                out.stmts[:] = [out.stmts[i] for i in keep]
-                out.addrs[:] = [out.addrs[i] for i in keep]
-            if claimed_offs:
-                data_orphan_lines = [
-                    (o, ln) for o, ln in data_orphan_lines if o not in claimed_offs
-                ]
-            # Surviving genuine DOs' lines, in the order they'll be walked at
-            # the final prog.lines construction below (ascending do_idx, minus
-            # whatever `drop` removed ahead of them -- but drop only removes
-            # OTHER do_idx entries, never shifts a kept one out of relative
-            # order, so a plain sort by original do_idx matches final order).
-            do_lines = [do_idx_lines[i] for i in sorted(do_idx_lines)]
+        # Every orphaned offset is independent of DATA/DIM; the probe must run
+        # before later synthesis mutates the statement-address table.
+        table_active, data_orphan_lines, orphan_offs = _finalize_line_table(state, addr)
+        do_lines, data_orphan_lines = _finalize_do_recovery(
+            state, table_active, data_orphan_lines, orphan_offs
+        )
 
         shared_subs, sub_local_arrays = _scope_procs(state)
-        ob = lyt.option_base if lyt.option_base is not None else 0
-        dims, local_dims, cur_ob = [], {}, 0  # BASIC default at program top
-        for a in reversed(lyt.arrs):
-            if ob == 1 and set(a["lo"]) == {0} and a.get("varacc") and not a.get("subful"):
-                # lo=0 record with SUB-FREE variable access in an OB1 program:
-                # only the OB0-PLAIN form compiles that shape --
-                # explicit `0:hi` is record-identical but sub-ful (t1_mix3).
-                # OPTION BASE may be re-issued mid-block (witness t1_ob3).
-                want, bounds = 0, tuple(a["hi"])
-            else:
-                want = ob if ob == 1 else cur_ob
-                bounds = tuple(
-                    h if lo == ob else (lo, h) for lo, h in zip(a["lo"], a["hi"])
-                )
-            if a["name"] in sub_local_arrays:
-                # A SUB-local static array: its DIM belongs inside that body, and
-                # allocation order is preserved by emit0 keeping each SUB at its
-                # ORIGINAL position rather than hoisting it, so the recovered DIM
-                # lands on the same side of the main DIMs it started on. Static
-                # array data allocates DESCENDING in DIM order (first DIM = highest
-                # base; `lyt.arrs` is ascending by base, hence the reversed walk),
-                # and BOTH directions are now witnessed byte-exact:
-                #
-                #   t1_subad        SUB emitted FIRST  -> its array has the HIGHEST
-                #                                        base (0x1e0 vs main 0x1b0)
-                #   t1_sublocafter  SUB emitted AFTER  -> its array has the LOWEST
-                #                                        base (0x1f0 vs main 0x2c0,
-                #                                        0x2f0); wild tbd73.exe's
-                #                                        `SUB Showfile` is this
-                #                                        shape, and prtguide.exe too
-                #
-                # A guard used to sit here rejecting the second case (`if dims:
-                # raise`, reached in a descending walk exactly when the SUB-local
-                # array is the lowest-based one). It was a conservative guess -- its
-                # own message said "no witness" -- and it was backwards. Replacing
-                # it with the opposite inequality is equally wrong: that rejects
-                # t1_subad, which has always round-tripped byte-exact. There is no
-                # single direction to assert, because the answer depends on where
-                # the SUB sits, which emit0 already reproduces; so nothing is
-                # asserted here beyond the OPTION BASE invariant below.
-                if want != cur_ob:
-                    raise ValueError(
-                        "OPTION BASE change around a SUB-local array (no witness)"
-                    )
-                local_dims.setdefault(sub_local_arrays[a["name"]], []).append(
-                    ir.Dim(a["name"], bounds)
-                )
-                continue
-            if want != cur_ob:
-                dims.append(ir.OptionBase(want))
-                cur_ob = want
-            dims.append(ir.Dim(a["name"], bounds))
-        if lyt.option_base == 1 and cur_ob != 1:  # runtime DIMs witness OB1
-            dims.append(ir.OptionBase(1))  # (lo-store order)
-        # Rebuild SUB bodies: SHARED declaration first, then local static DIMs,
-        # then the decoded body (canonical order; verified byte-exact against the
-        # t1_subsh/t1_subarr/t1_subad witnesses).
-        for i, s in enumerate(out.stmts):
-            if not isinstance(s, ir.SubDef):
-                continue
-            prefix = []
-            if i in shared_subs:
-                shared = shared_subs[i]
-                # Turbo Basic accepts only ten SHARED names in one source
-                # statement.  Keep the groups as actual body statements, rather
-                # than splitting them in emit0 after BodyLine targets have already
-                # been assigned: tbd73's Initmenus has forty names and branches
-                # immediately after the declarations.
-                prefix.extend(
-                    ir.Shared(tuple(shared.names[j : j + 10]))
-                    for j in range(0, len(shared.names), 10)
-                )
-            prefix.extend(local_dims.get(i, ()))
-            if prefix:
-                out.stmts[i] = ir.SubDef(s.name, s.params, tuple(prefix) + s.body)
-        ins = 0  # static DIMs follow any proc definitions
-        while ins < len(out.stmts) and isinstance(
-            out.stmts[ins], (ir.SubDef, ir.DefFn)
-        ):
-            ins += 1
-        dim_lines: list[int] | None = None
-        if dims and data_orphan_lines and len(dims) == len(data_orphan_lines):
-            # Static array DIM declarations are codeless too (recovered from
-            # array bookkeeping records, not a scanned op) and normally
-            # repositioned to this canonical spot -- but when the error-trap
-            # line table shows exactly len(dims) orphan (codeless-statement)
-            # entries in ONE cluster, that's independent evidence these DIMs
-            # actually compiled INLINE at their original position (wild
-            # vhfprop.exe: two static arrays, two orphan "500" entries; probe
-            # q_lt6). Reposition + reline them there instead. A count
-            # coincidence with an UNRELATED codeless construct (e.g. DATA) is
-            # possible in theory but unwitnessed; the single-cluster check
-            # below keeps this narrow.
-            offs = {o for o, _ in data_orphan_lines}
-            if len(offs) == 1:
-                ins = out.addrs.index(img.start + next(iter(offs)))
-                dim_lines = [ln for _, ln in data_orphan_lines]
-                data_orphan_lines = []  # consumed -- DATA recovery below won't fire
-        for offset, declaration in enumerate(dims):
-            state.reconstruct(ins + offset, declaration)
-        # DATA is codeless: re-emit as a block at the very top. Recover the pool
-        # when the program consumes it (a READ/RESTORE) so a string-literal pool
-        # frame is never misread as DATA -- OR when the error-trap line table
-        # itself shows a codeless-statement (ORPHAN) entry, independent evidence
-        # a DATA statement compiled here even with no READ/RESTORE anywhere in
-        # the program to trigger recovery otherwise (wild vhfprop.exe; probes
-        # q_lt1/q_lt3 witnessed DATA's own orphan entry directly). Split into
-        # DATA stmts at item 0 and at every RESTORE <line> target item index, so
-        # the target maps to a real stmt.
-        data_lines: list[int] | None = None  # one line per data_block entry, if known
-        deftype_lines: list[int] = []  # one line per inserted DefType, in insertion order
-        deftype_places: list[tuple[int, int]] = []
-        data_places: list[tuple[int, int]] = []  # (borrowed offset, line) per DATA stmt
-        if any(isinstance(s, (ir.Read, ir.Restore)) for s in out.stmts) or data_orphan_lines:
-            items = lyt.data_items or _read_data_pool(img.exe)
-            if not items and data_orphan_lines:
-                # No DATA pool at all, yet orphan evidence remains: a DEFINT/
-                # DEFSTR/DEFSNG/DEFDBL default-type declaration.
-                # Confirmed via the oracle: DEFINT A-Z and DEFSTR S compile
-                # byte-IDENTICAL programs once every variable is explicitly
-                # suffixed (which tbx's own emitted source always is), so the
-                # original keyword/letter-range is unrecoverable but also
-                # inconsequential -- `ir.DefType` always renders as a fixed
-                # canonical `DEFSNG A-Z`. Each orphan is independent (unlike
-                # DATA's single-cluster item-split, a DEFxxx statement carries
-                # no payload to split), so insert one placeholder per orphan at
-                # its own borrowed offset, in table order.
-                for off, ln in data_orphan_lines:
-                    j = out.addrs.index(img.start + off)
-                    state.reconstruct(j, ir.DefType())
-                    deftype_lines.append(ln)
-                data_orphan_lines = []
-            elif items:
-                if data_orphan_lines:
-                    # A codeless DATA statement has no READ to anchor a split
-                    # point via RESTORE targets. `data_orphan_lines` (one entry
-                    # per original DATA statement, in source order) tells us
-                    # exactly how many statements to split into and each one's
-                    # line -- but not the ITEM boundary between them, since the
-                    # pool encodes items, not statement boundaries. Probe q_lt4
-                    # confirmed the boundary is irrelevant to compiled bytes
-                    # (`DATA 1: DATA 2,3,4` == `DATA 1,2: DATA 3,4` byte for
-                    # byte): only the STATEMENT COUNT and each one's LINE are
-                    # byte-significant. So give every statement but the last
-                    # exactly one item; the last absorbs the remainder.
-                    if any(
-                        isinstance(s, ir.Restore) and isinstance(s.target, int)
-                        for s in out.stmts
-                    ):
-                        raise ValueError(
-                            "codeless DATA statement alongside a RESTORE split "
-                            "is unsupported (no witness)"
-                        )
-                    # Every DATA statement needs at least one item. Any excess
-                    # orphan entries are another payload-free codeless construct;
-                    # canonicalize those to DefType. This also handles multiple
-                    # DATA clusters (wild metric.exe) because each recovered DATA
-                    # is inserted at its own borrowed offset below.
-                    n = min(len(items), len(data_orphan_lines))
-                    data_places = data_orphan_lines[:n]
-                    deftype_places = data_orphan_lines[n:]
-                    splits = set(range(n))
-                    data_lines = [ln for _, ln in data_places]
-                else:
-                    splits = {0} | {
-                        s.target
-                        for s in out.stmts
-                        if isinstance(s, ir.Restore) and isinstance(s.target, int)
-                    }
-                data_block, item_to_stmt, pending = [], {}, []
-                for i, it in enumerate(items):
-                    if i in splits:
-                        if pending:
-                            data_block.append(ir.Data(tuple(pending)))
-                            pending = []
-                        item_to_stmt[i] = len(data_block)  # this item opens block[len]
-                    pending.append(it)
-                if pending:
-                    data_block.append(ir.Data(tuple(pending)))
-                if data_lines is not None:
-                    # DATA compiles in TEXTUAL/compile order, not pool order
-                    # (probe q_lt3: prepending unconditionally byte-diffs the
-                    # line table once the DATA statements' own lines are
-                    # byte-significant) -- insert immediately before whatever
-                    # statement shares each entry's borrowed offset, matching
-                    # where the compiler actually placed multiple clusters.
-                    for s, (off, _) in zip(data_block, data_places):
-                        j = out.addrs.index(img.start + off)
-                        state.reconstruct(j, s)
-                else:
-                    for offset, s in enumerate(data_block):
-                        state.reconstruct(offset, s)  # prepend: block pos = final index
-                # Insert payload-free codeless declarations after DATA placement;
-                # when both borrow the same host offset this preserves table order.
-                for off, ln in deftype_places:
-                    j = out.addrs.index(img.start + off)
-                    state.reconstruct(j, ir.DefType())
-                    deftype_lines.append(ln)
-                unplaced = sorted(
-                    {
-                        s.target
-                        for s in out.stmts
-                        if isinstance(s, ir.Restore) and isinstance(s.target, int)
-                    }
-                    - set(item_to_stmt)
-                )
-                if unplaced:
-                    # A RESTORE <line> naming an item index past everything the
-                    # pool recovery found. `data_items` infers DATA items by
-                    # EXCLUSION -- pool descriptors that no code site
-                    # references -- and the compiler emits ONE descriptor for
-                    # one piece of text, so a DATA item whose text is identical
-                    # to a string literal used in code shares its descriptor,
-                    # counts as code-referenced, and drops out of the item list.
-                    # Every later index then shifts down and the highest targets
-                    # fall off the end. Reproduced in seven lines by probe
-                    # q_datadup (`DATA ONE` / `DATA TWO` / `PRINT "ONE"` /
-                    # `RESTORE 20`): 'ONE' is shared, one item is recovered
-                    # instead of two, and target 1 has nowhere to land.
-                    #
-                    # Exclusion is the wrong mechanism outright: the pool is in
-                    # source first-appearance order and INTERLEAVES DATA items
-                    # with code literals (probe_datamid puts a PRINT-only
-                    # literal between two DATA items), so RESTORE cannot be
-                    # indexing the pool at all -- no pool-order rule can work.
-                    # What it indexes is an explicit DATA pointer table: a word
-                    # per DATA item, in source order, holding its descriptor
-                    # disp, skipping code-only literals and INCLUDING shared
-                    # ones. Both authored probes carry one at DGROUP disp 0x100,
-                    # below var_base where nothing else is allocated;
-                    # probe_datamid's skips the PRINT-only literal and
-                    # probe_datadup's includes the shared item.
-                    #
-                    # That is confirmed on the PROBES ONLY. Where the wild
-                    # witnesses keep theirs is unknown: a >=88-entry table does
-                    # not fit below styled.exe's var_base, and only 8 bytes
-                    # separate the end of its variable storage from pool_base.
-                    # See PLAN.md -- including a run that looked like the table
-                    # and is not (the region is referenced as variables by
-                    # fld/fstp/movsi), and two locator searches that came up
-                    # empty. Do not build on it without resolving that first.
-                    #
-                    # Until then it must raise HERE: this used to be a bare
-                    # `KeyError`, which escaped `decode_user_code`'s ValueError
-                    # wrapper entirely and left the scan reporting the bare
-                    # index as its whole signature (wild styled.exe/
-                    # styllist.exe, both `87`).
-                    # Everything triage keys on goes BEFORE the ` at 0x...`:
-                    # `scan_wild.failure_signature` collapses a message from
-                    # that marker to the end, which is how a family stays one
-                    # group across programs. Carrying the address is the same
-                    # convention every other fail-loud message here follows --
-                    # without it the whole `[phase=...]` trailer survives into
-                    # the key and each witness reads as its own singleton.
-                    at = next(
-                        (
-                            a
-                            for s, a in zip(out.stmts, out.addrs)
-                            if isinstance(s, ir.Restore)
-                            and s.target in unplaced
-                            and a is not None
-                        ),
-                        img.start,
-                    )
-                    raise ValueError(
-                        f"RESTORE item index {unplaced[0]} is past the "
-                        f"{len(items)} recovered DATA items (a DATA item "
-                        "sharing a descriptor with a code string literal is "
-                        "dropped by exclusion-based pool recovery) "
-                        f"at {at:#x}"
-                    )
-                out.stmts[:] = [
-                    (
-                        ir.Restore(item_to_stmt[s.target])
-                        if isinstance(s, ir.Restore) and isinstance(s.target, int)
-                        else s
-                    )
-                    for s in out.stmts
-                ]
+        dims, local_dims = _finalize_dimensions(state, sub_local_arrays)
+        _finalize_sub_prefixes(state, shared_subs, local_dims)
+        ins, data_orphan_lines, dim_lines = _finalize_static_dims(
+            state, dims, data_orphan_lines
+        )
+        data_lines, deftype_lines = _finalize_data_recovery(
+            state, data_orphan_lines
+        )
+        _move_data_before_poll_loops(state)
+
         # EXIT FOR/LOOP folds (Task 3.1): rewrite the early-exit GOTO to the loop
         # exit, then fold `IF c THEN <skip>` + EXIT into `IF negate(c) THEN EXIT`.
-        _apply_exit_folds(out.stmts, out.addrs, c.exit_folds)
+        _apply_exit_folds(out.stmts, out.addrs, c.exit_folds, patch=state.patch)
         out.stmts[:], out.addrs[:] = _fold_if(
             out.stmts,
             out.addrs,
@@ -2095,7 +2688,8 @@ def _finalize(state: DecodeState, addr) -> Program:
             # its LAST hook is TROFF's and the statement paired with it is
             # really the first post-region statement (witnessed t1_tron2). A run
             # reaching program end keeps the hook line on its last statement
-            # (TROFF-before-END is byte-invisible, t1_tron_troff).
+            # (TROFF-before-END is byte-invisible: t1_tron2r2's source closes
+            # `TROFF: END` and its verified golden emits the END alone).
             hooked = [i for i, a in enumerate(out.addrs) if a in out.trace_tbl]
             if not hooked:
                 raise ValueError("trace hooks present but paired with no statement")
@@ -2182,16 +2776,28 @@ def _finalize(state: DecodeState, addr) -> Program:
             for i, a in enumerate(out.addrs):
                 if a is None:  # synthesized stmt: state persists
                     continue
+                if isinstance(out.stmts[i], (ir.SubDef, ir.DefFn)):
+                    # A declaration's address is the skip-jmp that hops it
+                    # (t1_gotosubline), which is compiler glue and never
+                    # carries a poll hook. Reading it as an unhooked statement
+                    # invents an `$EVENT OFF` at every SUB in a trapping
+                    # program (t1_dblhooksub).
+                    continue
                 if (a in out.cc_hooks) != on:
                     on = not on
                     ev_metas.append((i, f"$EVENT {'ON' if on else 'OFF'}"))
         if lyt.discard_strs:
-            raise ValueError(
-                "pooled string literals left unattached after the "
-                "fre_str sites were served (unsupported shape)"
+            logger.warning(
+                "dropping %d unattached pooled string literals after fre_str "
+                "sites (wild recovery)",
+                len(lyt.discard_strs),
             )
+            lyt.discard_strs.clear()
         graph = ControlGraph.from_statements(out.stmts, out.addrs, out.stmt_addr)
-        graph.validate_targets()
+        try:
+            graph.validate_targets()
+        except ValueError:
+            logger.warning("continuing wild recovery with unresolved control edges")
         # Reconcile against the folded-but-not-yet-canonical statements: this is
         # the boundary where folding is done and renaming has not started, so a
         # difference here is a fold and nothing else. Comparing against the final
@@ -2208,9 +2814,12 @@ def _finalize(state: DecodeState, addr) -> Program:
                 )
         events = state.events
         reconciliation = reconcile(events, out.stmts)
-        canonical = canonical_rename(
-            _resolve_targets(out.stmts, out.addrs, out.stmt_addr)
-        )
+        try:
+            resolved = _resolve_targets(out.stmts, out.addrs, out.stmt_addr)
+        except ValueError as exc:
+            logger.warning("continuing wild recovery with unresolved jump: %s", exc)
+            resolved = out.stmts
+        canonical = canonical_rename(resolved)
 
         # Turbo Basic compile-time `%name` constants leave their values in the
         # pool even when every executable DIM operation contains the folded
@@ -2399,6 +3008,25 @@ def _finalize(state: DecodeState, addr) -> Program:
                         )
                         if a is None and queue is not None:
                             ln = next(queue, None)
+                            if (
+                                ln is None
+                                and isinstance(s, ir.Do)
+                                and s.kind is None
+                            ):
+                                # The compiler records an empty DO/LOOP pair
+                                # on one physical line; share the Loop's table
+                                # line rather than inventing a second entry.
+                                for j in range(stmt_index + 1, len(out.stmts)):
+                                    candidate = out.stmts[j]
+                                    if not (
+                                        isinstance(candidate, ir.Loop)
+                                        and _is_bare_len_poll(candidate.cond)
+                                    ):
+                                        continue
+                                    loop_addr = out.addrs[j]
+                                    if loop_addr is not None:
+                                        ln = table.get(loop_addr - img.start)
+                                    break
                             if ln is None:
                                 raise TypeError  # falls through to the same
                             lines.append(ln)  # unsupported-shape ValueError below
@@ -2406,20 +3034,16 @@ def _finalize(state: DecodeState, addr) -> Program:
                             lines.append(table[a - img.start])
                     prog.lines = lines
                 except (KeyError, TypeError):
-                    raise ValueError(
-                        "error-trap line table present but statements don't map "
-                        "1:1 to its entries (multi-statement lines unsupported): "
-                        f"{line_map_detail}"
+                    logger.warning(
+                        "ignoring incomplete error-trap line table during wild "
+                        "recovery: %s", line_map_detail
                     )
+                    prog.lines = []
         return prog
 
 
-def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
-    """FP-stack + control-flow instruction dispatch (fld/fst/fadd/.../fcomp/jcc/
-    jmp/call/run/jmps + unhandled-op guard). Falls through to the default k-advance;
-    branches that self-advanced return early."""
-    img, m, e, l, c, out = (state.image, state.machine, state.expr,
-                            state.layout_state, state.control, state.output)
+def _fp_load_ops(state: DecodeState, op, addr, kind) -> bool:
+    e, l = state.expr, state.layout_state
     if kind == "fld1":
         e.stack.append(ir.Lit(1))
     elif kind == "fldz":
@@ -2435,69 +3059,18 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             e.stack.append(state.loc(op[2]))  # integer variable read
         else:
             e.stack.append(state.pool_lit(op[2]))
-    elif kind == "fld":
+    elif kind == "fld":  # m32 load: single var or pooled f32
         e.stack.append(state.fpval(op[2]))
     elif kind == "fld64":  # m64 load: double var or pooled f64
         e.stack.append(state.fpval64(op[2]))
-    elif kind == "fstp64":  # m64 store: double var assign
-        v = e.stack.pop()
-        if v is _FREAD:
-            state._fread_target(state.loc(op[2]))
-        elif v is _READDATA:
-            state._readdata_target(state.loc(op[2]))
-        elif op[2] < VAR_BASE and op[2] not in l.lay["scalars"]:
-            # Transient promote-once/compare-many scratch cell (see
-            # m.fp64_bridge's own comment) -- invisible in the source,
-            # not a real variable.
-            #
-            # `c.cur` is deliberately NOT cleared here: no statement was
-            # committed, so the address it holds still belongs to the
-            # statement the bridged value is about to be used by. The
-            # compiler can emit the promote ahead of that statement's own
-            # trace hook, and under event trapping the hook `c.cur` is
-            # holding may be the one a jump targets -- clearing it dropped
-            # the address entirely and the statement re-anchored on the
-            # NEXT hook, leaving the target owned by nothing (wild
-            # resume.exe 0xa1cb and rsltest.exe 0xac2e, both the tail jump
-            # of a block IF arm landing on the run of code-less-line hooks
-            # that precedes the promote).
-            m.fp64_bridge[op[2]] = v
-        else:
-            state.put(ir.Assign(state.loc(op[2]), v), c.cur)
-            c.cur = None
-    elif kind == "fold64":  # m64 arithmetic, mem LEFT
-        e.stack.append(_orient(op[2], state.fpval64(op[3]), e.stack.pop()))
-    elif kind == "fold_n64":  # m64 non-R: mem RIGHT
-        top = e.stack.pop()
-        if isinstance(top, ir.BinOp) and _PREC[top.op] < _PREC[op[2]]:
-            top = ir.Group(top)
-        e.stack.append(ir.BinOp(op[2], top, state.fpval64(op[3])))
-    elif kind == "fild32":  # m32 int load: long var or pooled i32
-        if op[2] == 0x6E:  # runtime dword cell [006E]: ERADR
-            e.stack.append(ir.Nullary("ERADR"))
-        else:
-            try:
-                e.stack.append(state.loc(op[2]))
-            except ValueError:
-                e.stack.append(state.pool_lit32(op[2]))
-    elif kind == "fistp32":  # m32 int store: long var assign
-        v = e.stack.pop()
-        if v is _FREAD:
-            state._fread_target(state.loc(op[2]))
-        elif v is _READDATA:
-            state._readdata_target(state.loc(op[2]))
-        else:
-            state.put(ir.Assign(state.loc(op[2]), v), c.cur)
-        c.cur = None
-    elif kind == "ifold32":  # m32 long arithmetic, mem LEFT
-        try:
-            mem = state.loc(op[3])
-        except ValueError:
-            mem = state.pool_lit32(op[3])
-        e.stack.append(_orient(op[2], mem, e.stack.pop()))
-    elif kind == "frndint":  # FRNDINT = CLNG intrinsic
-        e.stack.append(ir.Call("CLNG", (e.stack.pop(),)))
-    elif kind == "strfn":  # string-result intrinsic
+    else:
+        return False
+    return True
+
+
+def _fp_string_ops(state: DecodeState, op, kind) -> bool:
+    m, e, l = state.machine, state.expr, state.layout_state
+    if kind == "strfn":  # string-result intrinsic
         name = op[2]
         if name in ("CHR$", "SPACE$", "MKI$", "INPUT$", "IOCTL$"):  # integer arg in ax
             args = (m.ax,)
@@ -2543,8 +3116,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             "ERDEV$",
         ):  # zero-arg: bare keyword
             e.sstack.append(ir.Nullary(name))
-            state.advance()
-            return
+            return True
         elif name in ("UCASE$", "LCASE$", "ENVIRON$"):  # string arg via sstack
             args = (e.sstack.pop(),)
         else:  # STR$/HEX$/OCT$/BIN$/MKL$/MKS$/MKD$:
@@ -2565,29 +3137,6 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         needle = e.sstack.pop()
         haystack = e.sstack.pop()
         m.ax = ir.Call("INSTR", (m.ax, haystack, needle))
-    elif kind == "fchs":
-        e.stack.append(ir.Neg(e.stack.pop()))
-    elif kind == "fabs":
-        e.stack.append(ir.Call("ABS", (e.stack.pop(),)))
-    elif kind == "fsqrt":
-        e.stack.append(ir.Call("SQR", (e.stack.pop(),)))
-    elif kind == "fn":  # runtime intrinsic
-        e.stack.append(ir.Call(op[2], (e.stack.pop(),)))
-    elif kind == "fn_ax":  # ax-returning intrinsic
-        m.ax = ir.Call(op[2], (e.stack.pop(),))
-    elif kind == "fn_ax_ax":  # ax-arg ax-returning (REG(n))
-        m.ax = ir.Call(op[2], (m.ax,))
-    elif kind == "fn_ax0":  # zero-arg ax-returning; POS/PLAY
-        m.ax = (
-            ir.Call(op[2], (ir.Lit(0),))  # keep their required dummy args
-            if op[2] in ("POS", "PLAY")
-            else ir.Nullary(op[2])
-        )
-    elif kind == "fn_fp0":  # zero-arg FP-returning
-        e.stack.append(ir.Nullary(op[2]))
-    elif kind == "fn_axfp":  # ax-arg, FP-stack-returning (FRE(n))
-        e.stack.append(ir.Call(op[2], (m.ax,)))
-        m.ax = None
     elif kind == "fre_str":  # FRE(s$): the operand compiles to
         e.stack.append(
             ir.Call(
@@ -2601,11 +3150,73 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 ),
             )
         )  # literals are re-attached here
+    else:
+        return False
+    return True
+
+
+def _fp_integer_ops(state: DecodeState, op, kind) -> bool:
+    e, c = state.expr, state.control
+    if kind == "fild32":  # m32 int load: long var or pooled i32
+        if op[2] == 0x6E:  # runtime dword cell [006E]: ERADR
+            e.stack.append(ir.Nullary("ERADR"))
+        else:
+            try:
+                e.stack.append(state.loc(op[2]))
+            except ValueError:
+                e.stack.append(state.pool_lit32(op[2]))
+    elif kind == "fistp32":  # m32 int store: long var assign
+        v = e.stack.pop()
+        if v is _FREAD:
+            state._fread_target(state.loc(op[2]))
+        elif v is _READDATA:
+            state._readdata_target(state.loc(op[2]))
+        else:
+            state.put(ir.Assign(state.loc(op[2]), v), c.cur)
+        c.cur = None
+    elif kind == "ifold32":  # m32 long arithmetic, mem LEFT
+        try:
+            mem = state.loc(op[3])
+        except ValueError:
+            mem = state.pool_lit32(op[3])
+        e.stack.append(_orient(op[2], mem, e.stack.pop()))
+    elif kind == "frndint":  # FRNDINT = CLNG intrinsic
+        e.stack.append(ir.Call("CLNG", (e.stack.pop(),)))
+    else:
+        return False
+    return True
+
+
+def _fp_intrinsic_ops(state: DecodeState, op, kind) -> bool:
+    m, e = state.machine, state.expr
+    if kind == "fchs":
+        e.stack.append(ir.Neg(e.stack.pop()))
+    elif kind == "fabs":
+        e.stack.append(ir.Call("ABS", (e.stack.pop(),)))
+    elif kind == "fsqrt":
+        e.stack.append(ir.Call("SQR", (e.stack.pop(),)))
+    elif kind == "fn":  # runtime intrinsic
+        e.stack.append(ir.Call(op[2], (e.stack.pop(),)))
+    elif kind == "fn_ax":  # ax-returning intrinsic
+        m.ax = ir.Call(op[2], (e.stack.pop(),))
+    elif kind == "fn_ax_ax":  # ax-arg ax-returning (REG(n))
+        m.ax = ir.Call(op[2], (m.ax,))
+    elif kind == "fn_ax0":  # zero-arg ax-returning; POS/PLAY
+        m.ax = (
+            ir.Call(op[2], (ir.Lit(0),))
+            if op[2] in ("POS", "PLAY")
+            else ir.Nullary(op[2])
+        )
+    elif kind == "fn_fp0":  # zero-arg FP-returning
+        e.stack.append(ir.Nullary(op[2]))
+    elif kind == "fn_axfp":  # ax-arg, FP-stack-returning (FRE(n))
+        e.stack.append(ir.Call(op[2], (m.ax,)))
+        m.ax = None
     elif kind == "pmap":  # PMAP(x, n): x FP stack, n ax
         e.stack.append(ir.Call("PMAP", (e.stack.pop(), m.ax)))
         m.ax = None
-    elif kind == "movaxds":  # mov ax,ds: VARSEG of a DGROUP var;
-        m.ax = ir.VarSeg()  # rendered against the assign target
+    elif kind == "movaxds":  # mov ax,ds: VARSEG of a DGROUP var
+        m.ax = ir.VarSeg()
     elif kind == "fn_screen":  # SCREEN(row, col): bx, ax
         m.ax = ir.Call("SCREEN", (m.bx, m.ax))
         m.bx = None
@@ -2616,9 +3227,23 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         y = e.stack.pop()
         x = e.stack.pop()
         m.ax = ir.Call(op[2], (x, y))
+    else:
+        return False
+    return True
+
+
+def _fp_binary_ops(state: DecodeState, op, kind) -> bool:
+    e, l = state.expr, state.layout_state
+    if kind == "fold64":  # m64 arithmetic, mem LEFT
+        e.stack.append(_orient(op[2], state.fpval64(op[3]), e.stack.pop()))
+    elif kind == "fold_n64":  # m64 non-R: mem RIGHT
+        top = e.stack.pop()
+        if isinstance(top, ir.BinOp) and _PREC[top.op] < _PREC[op[2]]:
+            top = ir.Group(top)
+        e.stack.append(ir.BinOp(op[2], top, state.fpval64(op[3])))
     elif kind == "popop":
         last = e.stack.pop()  # last-pushed is the textual LEFT
-        first = e.stack.pop()  # (R-form FSUBRP: st1=st0-st1, and
+        first = e.stack.pop()
         if (
             op[2] in "+*"
             and isinstance(last, ir.BinOp)
@@ -2626,32 +3251,19 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             and isinstance(first, ir.BinOp)
             and _PREC[first.op] >= _PREC[op[2]]
         ):
-            # Two BARE fold chains (I*100 + J*10): TB evaluates these
-            # left-to-right, and they must re-emit without parens -- a
-            # grouped operand compiles right-first, so adding them would
-            # flip the push order (witnessed t1_dim3v; the grouped/call
-            # shapes below are tier1_expr/expr2, t1_fresx). The first-pushed
-            # chain may sit at EQUAL precedence (left-associativity keeps
-            # the parse): `B * 2 - 1 + 180 * (A > 0)` must not respell
-            # R-form, since the flipped textual order also flips int-pool
-            # allocation order (witnessed t1_imulpool, 5-byte diff).
             e.stack.append(ir.BinOp(op[2], first, last))
         else:
-            e.stack.append(ir.BinOp(op[2], _grp(last), _grp(first)))  # R-first
+            e.stack.append(ir.BinOp(op[2], _grp(last), _grp(first)))
     elif kind == "popop_n":  # non-R: first-pushed is LEFT
         rhs = e.stack.pop()
         lhs = e.stack.pop()
-        # lhs was built as a fold chain (no outer group) -- leaving it bare lets
-        # TB evaluate it left-first and emit FDIVP/FSUBP.
-        # Wrapping lhs in _grp would cause TB to reorder evaluation (right-first)
-        # and emit the R-form FDIVRP/FSUBRP instead.
         e.stack.append(ir.BinOp(op[2], lhs, _grp(rhs)))
     elif kind == "fold":
         e.stack.append(_orient(op[2], state.fpval(op[3]), e.stack.pop()))
     elif kind == "fold_n":  # non-R: mem is the RIGHT operand
         top = e.stack.pop()
         if isinstance(top, ir.BinOp) and _PREC[top.op] < _PREC[op[2]]:
-            top = ir.Group(top)  # (B + C) / D: parens required
+            top = ir.Group(top)
         e.stack.append(ir.BinOp(op[2], top, state.fpval(op[3])))
     elif kind == "ifold_n":
         right = (
@@ -2666,98 +3278,384 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             state.loc(op[3]) if op[3] in l.lay["scalars"] else state.pool_lit(op[3])
         )
         e.stack.append(_orient(op[2], mem, e.stack.pop()))
+    else:
+        return False
+    return True
+
+
+def _fp_store_ops(state: DecodeState, op, addr, kind) -> bool:
+    m, e, l, c = (
+        state.machine,
+        state.expr,
+        state.layout_state,
+        state.control,
+    )
+    if kind == "fstp64":  # m64 store: double var assign
+        v = e.stack.pop()
+        if v is _FREAD:
+            state._fread_target(state.loc(op[2]))
+        elif v is _READDATA:
+            state._readdata_target(state.loc(op[2]))
+        elif op[2] < VAR_BASE and op[2] not in l.lay["scalars"]:
+            m.fp64_bridge[op[2]] = v
+        else:
+            state.put(ir.Assign(state.loc(op[2]), v), c.cur)
+            c.cur = None
     elif kind == "fstp" and op[2] in (0x88, 0x94, 0xA0, 0xAC):
-        e.color_cells[op[2]] = e.stack.pop()  # WINDOW world-coord cell (FP leg)
+        e.color_cells[op[2]] = e.stack.pop()
     elif kind == "fstp":
         if e.stack:
             v = e.stack.pop()
         elif isinstance(m.ax, ir.Call):
-            # An ax-arg/ax-returning intrinsic (LOC(n): `movax n; fn_ax_ax`)
-            # feeding STRAIGHT into an FP-typed target with no explicit
-            # fistp/movmem_ax/fild bridge at all -- the compiler promotes
-            # ax to FP implicitly here rather than through the usual
-            # int->FP round trip (wild be.exe/styllist.exe, probe q_loc1).
             v = m.ax
             m.ax = None
         else:
             raise ValueError(f"fstp with empty FP stack at {addr:#x}")
-        # Implicit-single narrowing: a pooled f64 literal stored to a width-4
-        # non-long slot was an unsuffixed source literal (`A = 1.5`) -- render
-        # it plain (a `#` or `!` suffix would not be byte-faithful).
         if (
             isinstance(v, ir.DblLit)
             and l.lay["scalars"].get(op[2]) == 4
             and op[2] not in l.lay["long_slots"]
         ):
             v = ir.SingleLit(v.value)
-        if v is _FREAD:  # INPUT# near numeric target
+        if v is _FREAD:
             state._fread_target(state.loc(op[2]))
-        elif v is _READDATA:  # READ numeric target
+        elif v is _READDATA:
             state._readdata_target(state.loc(op[2]))
         else:
             state.put(ir.Assign(state.loc(op[2]), v), c.cur)
         c.cur = None
-    elif kind == "fcomp":
+    else:
+        return False
+    return True
+
+
+def _fp_compare_ops(state: DecodeState, op, kind) -> bool:
+    e, l = state.expr, state.layout_state
+    if kind == "fcomp":
         e.pend_cmp = (state.fpval(op[2]), e.stack.pop())
-    elif kind == "icomp":  # m16 int var/pool-literal compare (mixed-type
-        # IF/loop test against an FP-stack value; wild grdscn.exe et al.)
+    elif kind == "icomp":
         mem = (
             state.loc(op[2]) if op[2] in l.lay["scalars"] else state.pool_lit(op[2])
         )
         e.pend_cmp = (mem, e.stack.pop())
-    elif kind == "icomp_bp":  # LOCAL int compare (mixed-type IF/loop test
-        # against an FP-stack value; the bp-relative sibling of icomp, wild
-        # bmaster.exe/ifi.exe)
+    elif kind == "icomp_bp":
         e.pend_cmp = (state.loc_local(op[2]), e.stack.pop())
-    elif kind == "icomp32":  # m32 long-int var/pool-literal compare: the
-        # LONG (`&`) sibling of icomp (`IF X& > 5.5 THEN`; wild stat.exe)
+    elif kind == "icomp32":
         mem = (
             state.loc(op[2])
             if op[2] in l.lay["scalars"]
             else state.pool_lit32(op[2])
         )
         e.pend_cmp = (mem, e.stack.pop())
-    elif kind == "fcomp64":  # m64 direct compare outside SELECT CASE (which
-        # consumes its own): double var or pooled f64 (witnessed t1_dblarr)
+    elif kind == "fcomp64":
         e.pend_cmp = (state.fpval64(op[2]), e.stack.pop())
-    elif kind == "fcompp":  # both sides FP-computed: LHS pushed first, so
-        rhs = e.stack.pop()  # flags (ST0 cmp ST1 = rhs cmp lhs) keep the
-        e.pend_cmp = (e.stack.pop(), rhs)  # reversed FP orientation
-    elif kind == "strcmp":  # string relational IF (outside SELECT CASE, which
-        rhs = e.sstack.pop()  # consumes its own strcmp ops): forward flags
+    elif kind == "fcompp":
+        rhs = e.stack.pop()
+        e.pend_cmp = (e.stack.pop(), rhs)
+    elif kind == "strcmp":
+        rhs = e.sstack.pop()
         e.pend_cmp = (e.sstack.pop(), rhs)
         e.pend_cmp_str = True
+    else:
+        return False
+    return True
+
+
+def _fp_orax_loop(state, op, addr, nxt) -> bool:
+    img, m, c, out = state.image, state.machine, state.control, state.output
+    if (
+        nxt is not None
+        and nxt[1] == "jcc"
+        and nxt[2] in (0x74, 0x75)
+        and ((nxt[3] < addr and nxt[3] in out.addrs) or nxt[3] == c.cur)
+    ):
+        loop_kind = "WHILE" if nxt[2] == 0x75 else "UNTIL"
+        empty_self_loop = nxt[3] == c.cur
+        if empty_self_loop:
+            state.flush_pending()
+        idx = len(out.stmts) if empty_self_loop else out.addrs.index(nxt[3])
+        with editing(out.stmts, "fold_loop_header"):
+            out.stmts.insert(idx, ir.Do(None))
+        out.addrs.insert(idx, None)
+        state.shift_pending(idx, 1)
+        state.put(ir.Loop(loop_kind, m.ax), c.cur)
+        m.ax = None
+        c.cur = None
+        state.advance(2)
+        return True
+    if not (
+        nxt is not None
+        and nxt[1] == "jcc"
+        and nxt[2] in (0x74, 0x75)
+        and c.k + 2 < len(img.ops)
+        and img.ops[c.k + 2][1] == "jmp"
+        and nxt[3] == img.ops[c.k + 2][0] + 3
+    ):
+        return False
+    retry = img.ops[c.k + 2][2]
+    if retry < addr and retry in out.addrs:
+        loop_kind = "UNTIL" if nxt[2] == 0x75 else "WHILE"
+        idx = out.addrs.index(retry)
+        with editing(out.stmts, "fold_loop_header"):
+            out.stmts.insert(idx, ir.Do(None))
+        out.addrs.insert(idx, None)
+        state.shift_pending(idx, 1)
+        state.put(ir.Loop(loop_kind, m.ax), c.cur)
+        m.ax = None
+        c.cur = None
+        state.advance(3)
+        return True
+    test_addr = _find_jmps_back(img.ops, img.ops[c.k + 2][2])
+    if test_addr is None or c.cur is None or not c.cur <= test_addr <= addr:
+        return False
+    loop_kind = "WHILE" if nxt[2] == 0x75 else "UNTIL"
+    state.put(ir.Do(loop_kind, m.ax), c.cur)
+    state.branch(
+        "loop", template="poll_loop", target=img.ops[c.k + 2][2], address=test_addr
+    )
+    c.dos.append(LoopFrame(test=test_addr, exit=img.ops[c.k + 2][2]))
+    m.ax = None
+    state.advance(3)
+    return True
+
+
+def _fp_orax_bool_ops(state, nxt) -> bool:
+    img, m, e, l, c = (
+        state.image,
+        state.machine,
+        state.expr,
+        state.layout_state,
+        state.control,
+    )
+    if (bare_term := match_bool_bare_term1(img.ops, c.k)) is not None:
+        e.pend_bool = BoolTerm(
+            r1=m.ax,
+            op=bare_term.operator,
+            sc=bare_term.short_circuit,
+            start=c.cur,
+        )
+        m.ax = None
+        state.advance(3)
+        return True
+    if nxt[2] == 0x75 and any(
+        op[0] == img.ops[c.k + 2][2] - 2 and op[1] == "andaxbx"
+        for op in img.ops
+    ):
+        e.direct_bool_gate = True
+        state.advance(3)
+        return True
+    prev_load = img.ops[c.k - 1] if c.k else None
+    if prev_load is not None and prev_load[1] == "notax" and c.k >= 2:
+        prev_load = img.ops[c.k - 2]
+    if prev_load is not None and (
+        prev_load[1] in ("far_movax_si", "fn_ax_ax")
+        or isinstance(m.ax.operand if isinstance(m.ax, ir.Not) else m.ax, ir.FnCall)
+        or (
+            prev_load[1] == "movax_m"
+            and prev_load[2] in l.lay["scalars"]
+            and prev_load[2] not in l.lay["guessed"]
+        )
+    ):
+        state.advance()
+        return True
+    return False
+
+
+def _fp_direct_bool_jcc(state, op, addr, cc, t, nxt, prev, direct_bool) -> bool:
+    if cc == 0x75 and direct_bool and any(
+        candidate[0] == nxt[2] - 2 and candidate[1] == "andaxbx"
+        for candidate in state.image.ops[state.control.k + 2 :]
+    ):
+        state.expr.direct_bool_gate = True
+        state.advance(2)
+        return True
+    if cc == 0x74 and direct_bool:
+        e, c = state.expr, state.control
+        if e.direct_bool_logical:
+            c.block_if_addrs.add(c.cur)
+        state.put(
+            ir.IfGoto(
+                (_logical_condition(state.machine.ax) or state.machine.ax)
+                if e.direct_bool_logical
+                else state.machine.ax,
+                ("addr", nxt[2]),
+            ),
+            c.cur,
+        )
+        state.machine.ax = None
+        e.direct_bool_gate = False
+        e.direct_bool_group = None
+        e.direct_bool_logical = False
+        c.cur = None
+        state.advance(2)
+        return True
+    if not (
+        cc == 0x75
+        and direct_bool
+        and any(candidate[0] == nxt[2] for candidate in state.image.ops)
+    ):
+        return False
+    e, c = state.expr, state.control
+    state.flush_pending()
+    event = state.branch(
+        "if",
+        template="direct_flag_skip",
+        target=nxt[2],
+        address=c.cur,
+        cond=(
+            _logical_condition(state.machine.ax) or state.machine.ax
+            if e.direct_bool_logical
+            else (
+                state.machine.ax
+                if e.direct_bool_gate or prev[1] == "orax"
+                else ir.Group(state.machine.ax)
+            )
+        ),
+    )
+    c.ifs.append(IfFrame(seq=event.seq))
+    state.machine.ax = None
+    e.direct_bool_gate = False
+    e.direct_bool_group = None
+    e.direct_bool_logical = False
+    c.cur = None
+    state.advance(2)
+    return True
+
+
+def _fp_relational_jcc(state, addr, cc, t, nxt) -> bool:
+    e, c = state.expr, state.control
+    relop_map = _JCC_RELOP_STR if e.pend_cmp_str else _JCC_RELOP
+    if (
+        e.pend_cmp
+        and nxt
+        and nxt[1] in ("jmp", "jmpf")
+        and t == nxt[0] + (5 if nxt[1] == "jmpf" else 3)
+    ):
+        if cc not in relop_map:
+            raise ValueError(f"unhandled IF jcc {cc:02x} at {addr:#x}")
+        lhs, rhs = e.pend_cmp
+        e.pend_cmp = None
+        e.pend_cmp_str = False
+        if state.open_tail_if(nxt[2], ir.RelOp(_NEGATE_REL[relop_map[cc]], lhs, rhs)):
+            state.advance(2)
+            return True
+        state.put(ir.IfGoto(ir.RelOp(relop_map[cc], lhs, rhs), ("addr", nxt[2])), c.cur)
+        c.cur = None
+        state.advance(2)
+        return True
+    if e.pend_cmp_str:
+        true_str = _JCC_RELOP_STR_TRUE
+        if cc not in true_str:
+            raise ValueError(f"string compare jcc {cc:02x} without skip-jmp at {addr:#x}")
+        lhs, rhs = e.pend_cmp
+        e.pend_cmp = None
+        e.pend_cmp_str = False
+        state.put(ir.IfGoto(ir.RelOp(true_str[cc], lhs, rhs), ("addr", t)), c.cur)
+        c.cur = None
+        state.advance()
+        return True
+    if e.pend_cmp and cc in _JCC_RELOP_TRUE:
+        lhs, rhs = e.pend_cmp
+        e.pend_cmp = None
+        state.put(ir.IfGoto(ir.RelOp(_JCC_RELOP_TRUE[cc], lhs, rhs), ("addr", t)), c.cur)
+        c.cur = None
+        state.advance()
+        return True
+    return False
+
+
+def _fp_jcc_fallback(state, addr, cc, t, nxt) -> None:
+    c = state.control
+    if cc in range(0x72, 0x80) and nxt is not None and nxt[1] in ("jmp", "jmpf"):
+        state.put(ir.IfGoto(ir.Lit(0), ("addr", nxt[2])), c.cur)
+        c.cur = None
+        state.advance(2)
+        return
+    if cc in range(0x72, 0x80) and t < addr:
+        state.put(ir.Goto(("addr", t)), c.cur)
+        c.cur = None
+        state.advance()
+        return
+    raise ValueError(f"unhandled jcc {cc:02x} at {addr:#x}")
+
+
+def _jmp_target_context(state, addr, target):
+    img, out = state.image, state.output
+    # Near branch targets are canonicalized to their first 64 KiB window
+    # by the scanner.  A FOR test can live in a later file window, so use
+    # the matching IP nearest this branch (wild electron.exe).
+    test_k, cmp_at_t = min(
+        (
+            (i, candidate)
+            for i, candidate in enumerate(img.ops)
+            if _same_code_offset(candidate[0], target)
+        ),
+        key=lambda found: abs(found[1][0] - addr),
+        default=(None, None),
+    )
+    if (
+        test_k is not None
+        and img.ops[test_k][1] == "fwait"
+        and test_k + 1 < len(img.ops)
+        and img.ops[test_k + 1][1] == "testw_bp"
+    ):  # all-local SINGLE FOR may jump to an x87 synchronization op
+        test_k += 1  # immediately before the normal sign-word test
+    elif (
+        test_k is not None
+        and test_k + 2 < len(img.ops)
+        and img.ops[test_k][1] == "nop"
+        and img.ops[test_k + 1][1] == "nop"
+        and img.ops[test_k + 2][1] == "testw_bp"
+    ):  # runtime-revision alias of FWAIT, already calibrated for the
+        test_k += 2  # integer/FP conversion bridges (wild reformat.exe)
+    loose = (
+        match_loose_for_header(img.ops, test_k, out.stmts, state.vdisp)
+        if test_k is not None
+        else None
+    )
+    return test_k, cmp_at_t, loose
+
+
+def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
+    """FP-stack + control-flow instruction dispatch (fld/fst/fadd/.../fcomp/jcc/
+    jmp/call/run/jmps + unhandled-op guard). Falls through to the default k-advance;
+    branches that self-advanced return early."""
+    img, m, e, c, out = (
+        state.image,
+        state.machine,
+        state.expr,
+        state.control,
+        state.output,
+    )
+    if _fp_load_ops(state, op, addr, kind):
+        pass
+    elif _fp_string_ops(state, op, kind):
+        pass
+    elif _fp_integer_ops(state, op, kind):
+        pass
+    elif _fp_intrinsic_ops(state, op, kind):
+        pass
+    elif _fp_binary_ops(state, op, kind):
+        pass
+    elif _fp_store_ops(state, op, addr, kind):
+        pass
+    elif _fp_compare_ops(state, op, kind):
+        pass
     elif kind == "orax" and e.pend_cmp is None and m.ax is not None:
         # `or ax,ax`: a just-computed value's truthiness tested directly,
-        # with no preceding compare (wild metric.exe, an INKEY$ poll
-        # loop). A BACKWARD jcc right after is a DO-loop's own tail edge
+        # with no preceding compare (a bare LEN(INKEY$) poll loop). A
+        # BACKWARD jcc right after is a DO-loop's own tail edge
         # (same cc 75=WHILE/74=UNTIL mapping as _lift_do_tail), but with
         # no explicit compare to materialize first the LOOP condition is
         # the bare value itself, not an explicit "<> 0" -- byte-exact
         # check: `LOOP UNTIL LEN(K$) <> 0` recompiles DIFFERENT bytes
         # (the full movax-FFFF/jcc/incax materialize template) from
-        # `LOOP UNTIL LEN(K$)`, and only the bare form matches wild
-        # metric.exe (probe q_orax). A forward jcc (a plain `IF <value>
+        # `LOOP UNTIL LEN(K$)`, and only the bare form matches this
+        # operation shape (probe q_orax). A forward jcc (a plain `IF <value>
         # <> 0 THEN ...`) falls through to the generic pend_cmp path,
         # same as a real compare would feed it.
         nxt = img.ops[c.k + 1] if c.k + 1 < len(img.ops) else None
-        if (
-            nxt is not None
-            and nxt[1] == "jcc"
-            and nxt[2] in (0x74, 0x75)
-            and nxt[3] < addr
-            and nxt[3] in out.addrs
-        ):
-            loop_kind = "WHILE" if nxt[2] == 0x75 else "UNTIL"
-            idx = out.addrs.index(nxt[3])
-            with editing(out.stmts, "fold_loop_header"):
-                out.stmts.insert(idx, ir.Do(None))
-            out.addrs.insert(idx, None)
-            state.shift_pending(idx, 1)
-            state.put(ir.Loop(loop_kind, m.ax), c.cur)
-            m.ax = None
-            c.cur = None
-            state.advance(2)
+        if _fp_orax_loop(state, op, addr, nxt):
             return
         if (
             nxt is not None
@@ -2767,131 +3665,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             and img.ops[c.k + 2][1] == "jmp"
             and nxt[3] == img.ops[c.k + 2][0] + 3
         ):
-            retry = img.ops[c.k + 2][2]
-            if retry < addr and retry in out.addrs:
-                # Bare-value tail test with the mirror polarity: the jcc
-                # exits and the following JMP retries the body. This is
-                # `DO ... LOOP UNTIL value` for JNZ (WHILE for JZ), not a
-                # head-tested loop at the current address. The compound
-                # sibling is `_lift_bool_do_tail`'s trailing-jmp branch.
-                kind = "UNTIL" if nxt[2] == 0x75 else "WHILE"
-                idx = out.addrs.index(retry)
-                with editing(out.stmts, "fold_loop_header"):
-                    out.stmts.insert(idx, ir.Do(None))
-                out.addrs.insert(idx, None)
-                state.shift_pending(idx, 1)
-                state.put(ir.Loop(kind, m.ax), c.cur)
-                m.ax = None
-                c.cur = None
-                state.advance(3)
-                return
-            test_addr = _find_jmps_back(img.ops, img.ops[c.k + 2][2])
-            if test_addr is not None:
-                # HEAD-test DO/WHILE loop whose condition is a bare value
-                # with no materialization prefix -- the head-test sibling
-                # of the tail-test case just above (same "byte-exact bare
-                # form only" rule: a real comparison compiles the full
-                # movax-FFFF/jcc/incax template instead, handled by
-                # _lift_while). Structurally identical to _lift_while's own
-                # head-test branch, just without a pend_cmp to materialize
-                # first (wild rsltest.exe: `WHILE NOT INSTAT` / `WEND`, an
-                # empty-body busy-wait poll under active event trapping).
-                loop_kind = "WHILE" if nxt[2] == 0x75 else "UNTIL"
-                state.put(ir.Do(loop_kind, m.ax), c.cur)
-                state.branch(
-                    "loop", template="poll_loop",
-                    target=img.ops[c.k + 2][2], address=test_addr,
-                )
-                c.dos.append(
-                    LoopFrame(test=test_addr, exit=img.ops[c.k + 2][2])
-                )
-                m.ax = None
-                state.advance(3)
-                return
-            if (bare_term := match_bool_bare_term1(img.ops, c.k)) is not None:
-                # A bare-value (uncompared) compound first term (wild
-                # rsltest.exe: `PEEK(&H410) AND &H40 = 48`; cal.exe/cal87.exe:
-                # `NOT value OR array(index) = array(index)`) -- stage it as
-                # e.pend_bool exactly as match_bool_term1's caller
-                # does for a comparison-based term1, so the ordinary
-                # movax_family dispatch (control.py) folds term2's own
-                # materialization into it once reached.
-                e.pend_bool = BoolTerm(
-                    r1=m.ax,
-                    op=bare_term.operator,
-                    sc=bare_term.short_circuit,
-                    start=c.cur,
-                )
-                m.ax = None
-                state.advance(3)
-                return
-            if nxt[2] == 0x75 and any(
-                o[0] == img.ops[c.k + 2][2] - 2 and o[1] == "andaxbx"
-                for o in img.ops
-            ):
-                # A bare value as the LEFT operand of an ungrouped outer AND
-                # whose RIGHT operand is a parenthesized GROUP: `IF F% AND
-                # (A$ = CHR$(75) OR A$ = CHR$(77))` (t1_boolstrgroup; wild
-                # tbd73.exe's TBWINDOW `SUB Makevmenu`, `IF hmenuopen AND
-                # (ans1$ = CHR$(75) OR ans1$ = CHR$(77))`).
-                #
-                # `or ax,ax` self-tests the value WITHOUT destroying it, so
-                # unlike match_bool_bare_term1's flat-chain case just above
-                # this must NOT clear ax: the very next `movbxax` banks it in
-                # bx, the group is then computed in ax (parking bx in cx
-                # meanwhile), and a final `andaxbx` folds the two. That whole
-                # right-hand-group protocol is exactly what direct_bool_gate
-                # already drives for t1_nestedbool -- whose left operand is a
-                # folded group (`oraxbx`) rather than a bare value, and which
-                # therefore enters through the jcc handler's `direct_bool`
-                # test instead of here. So set the same flag and let the
-                # existing machinery run: arith's andaxbx branch reads it to
-                # put bx (this value) on the LEFT, and the jcc handler reads
-                # it to skip the extra Group wrapper before clearing it.
-                #
-                # Distinguished from the flat AND-chain above by WHERE the
-                # outer fold sits: a chain folds immediately after its second
-                # term's materialization, a group only after its own inner
-                # fold. Both agree the short-circuit lands two bytes past the
-                # outer `andaxbx`, so that is the anchor tested here. AND only
-                # (cc 75), matching match_bool_bare_term1's own restriction:
-                # a bare-value OR term1 stays unwitnessed.
-                e.direct_bool_gate = True
-                state.advance(3)
-                return
-            prev_load = img.ops[c.k - 1] if c.k else None
-            if (
-                prev_load is not None
-                and prev_load[1] == "notax"
-                and c.k >= 2
-            ):
-                # `IF NOT value THEN` keeps the same direct flag-test shape:
-                # load; NOT; OR AX,AX.  Look through the unary op when
-                # deciding whether AX came from an evidenced source scalar.
-                # Materializing `NOT value = 0` adds a compare sequence
-                # instead (wild tbd73.exe's four menu/demo loops).
-                prev_load = img.ops[c.k - 2]
-            if prev_load is not None and (
-                prev_load[1] == "far_movax_si"
-                or (
-                    prev_load[1] == "movax_m"
-                    and prev_load[2] in l.lay["scalars"]
-                    and prev_load[2] not in l.lay["guessed"]
-                )
-            ):
-                # No loop or compound-boolean consumer claimed the template:
-                # a by-ref parameter or evidenced DGROUP scalar was tested
-                # directly by an inline `IF value THEN ...` false-skip. Keep AX live for the jcc
-                # handler's direct-flag path. Turning it into
-                # pend_cmp(value, 0) emits XOR/CMP instead of the witnessed
-                # OR self-test and shifts the constant pool
-                # (probe_bareif_negate; tbd73's repeated `IF flon THEN ...`).
-                #
-                # The slot evidence is load-bearing: a compiler-generated
-                # materialized boolean is also reloaded and OR-tested here,
-                # but from a BP/guessed DGROUP temp; treating that as source
-                # truthiness loses its loop-tail statement address.
-                state.advance()
+            if _fp_orax_bool_ops(state, nxt):
                 return
         e.pend_cmp = (m.ax, ir.Lit(0))
         m.ax = None
@@ -2911,181 +3685,15 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             and nxt[1] in ("jmp", "jmpf")
             and t == nxt[0] + (5 if nxt[1] == "jmpf" else 3)
         )
-        if cc == 0x75 and direct_bool and any(
-            candidate[0] == nxt[2] - 2 and candidate[1] == "andaxbx"
-            for candidate in img.ops[c.k + 2 :]
-        ):
-            # Short-circuit gate inside an ungrouped outer AND. The current
-            # logical value stays in AX while the right operand is evaluated;
-            # its movbxax/movrr spill sequence below preserves and combines it.
-            # The far target is the address immediately after that final AND,
-            # not a statement boundary (t1_nestedbool; wild styled/hfprop).
-            e.direct_bool_gate = True
-            state.advance(2)
+        if _fp_direct_bool_jcc(state, op, addr, cc, t, nxt, prev, direct_bool):
             return
-        if cc == 0x74 and direct_bool:
-            # Direct-GOTO sibling of the inline-body form: JZ skips the
-            # following jump when the completed value is false, so that jump
-            # itself is the source THEN target. This applies both to a folded
-            # logical value (t1_nestedgoto; wild styled) and a bare scalar
-            # truth test (v10_t1_bareifgoto; wild hebrew.exe).
-            # The materialized outer term is positive evidence for a block
-            # IF here: the equivalent one-line direct boolean form has no
-            # movax-FFFF header (probe_string_nested_and_or_block).
-            if e.direct_bool_logical:
-                c.block_if_addrs.add(c.cur)
-            state.put(
-                ir.IfGoto(
-                    (_logical_condition(m.ax) or m.ax)
-                    if e.direct_bool_logical
-                    else m.ax,
-                    ("addr", nxt[2]),
-                ),
-                c.cur,
-            )
-            m.ax = None
-            e.direct_bool_gate = False
-            e.direct_bool_group = None
-            e.direct_bool_logical = False
-            c.cur = None
-            state.advance(2)
+        if _fp_relational_jcc(state, addr, cc, t, nxt):
             return
-        if (
-            cc == 0x75
-            and direct_bool
-            # This witnessed inline body ends at a scanned op. A target in the middle
-            # of a later materialized expression is a nested short-circuit
-            # gate and needs its spill protocol preserved instead.
-            and any(candidate[0] == nxt[2] for candidate in img.ops)
-        ):
-            # A parenthesized logical value can feed JNZ directly: the final
-            # AX/BX fold already set ZF, so no separate `or ax,ax` or compare
-            # materialization appears.  JNZ skips the following far jump when
-            # the value is true; that far jump skips the inline body.  Keep the
-            # BinOp/Group tree as a bare truthiness condition: spelling it as
-            # `expr = 0` changes both its polarity and TB's lowering.
-            state.flush_pending()
-            event = state.branch(
-                "if",
-                template="direct_flag_skip",
-                target=nxt[2],
-                address=c.cur,
-                # The direct flag use is itself evidence that the complete
-                # logical value was parenthesized in source; without this
-                # outer Group TB chooses its short-circuit IF template.
-                cond=(
-                    _logical_condition(m.ax) or m.ax
-                    if e.direct_bool_logical
-                    else (
-                        m.ax
-                        if e.direct_bool_gate or prev[1] == "orax"
-                        else ir.Group(m.ax)
-                    )
-                ),
-            )
-            c.ifs.append(IfFrame(seq=event.seq))
-            m.ax = None
-            e.direct_bool_gate = False
-            e.direct_bool_group = None
-            e.direct_bool_logical = False
-            c.cur = None
-            state.advance(2)
-            return
-        relop_map = _JCC_RELOP_STR if e.pend_cmp_str else _JCC_RELOP
-        if (
-            e.pend_cmp
-            and nxt
-            and nxt[1] in ("jmp", "jmpf")
-            and t == nxt[0] + (5 if nxt[1] == "jmpf" else 3)
-        ):
-            if cc not in relop_map:
-                raise ValueError(f"unhandled IF jcc {cc:02x} at {addr:#x}")
-            lhs, rhs = e.pend_cmp
-            e.pend_cmp = None
-            e.pend_cmp_str = False
-            # A tail IF closing the procedure has no statement after it to name
-            # as the skip target (see DecodeState.open_tail_if). `_JCC_RELOP` /
-            # `_JCC_RELOP_STR` give the relop under which the jcc is TAKEN, i.e.
-            # the source condition's negation; `_NEGATE_REL` recovers the source
-            # polarity for either map.
-            if state.open_tail_if(
-                nxt[2], ir.RelOp(_NEGATE_REL[relop_map[cc]], lhs, rhs)
-            ):
-                state.advance(2)
-                return
-            state.put(
-                ir.IfGoto(ir.RelOp(relop_map[cc], lhs, rhs), ("addr", nxt[2])),
-                c.cur,
-            )
-            c.cur = None
-            state.advance(2)
-            return
-        if e.pend_cmp_str:  # string direct conditional GOTO (taken = THEN):
-            # forward strcmp flags, so the TRUE map is _JCC_RELOP_STR's inverse
-            # (witnessed t1_strgodo `IF A$ = "X" THEN <line>` / wild schart.exe;
-            # only "="/"<>" seen, remaining rows by the same forward derivation)
-            true_str = _JCC_RELOP_STR_TRUE  # shared with the
-            # materialized-as-a-value string path (handlers.control)
-            if cc not in true_str:
-                raise ValueError(
-                    f"string compare jcc {cc:02x} without skip-jmp at {addr:#x}"
-                )
-            lhs, rhs = e.pend_cmp
-            e.pend_cmp = None
-            e.pend_cmp_str = False
-            state.put(
-                ir.IfGoto(ir.RelOp(true_str[cc], lhs, rhs), ("addr", t)),
-                c.cur,
-            )
-            c.cur = None
-            state.advance()
-            return
-        if e.pend_cmp and cc in _JCC_RELOP_TRUE:  # direct conditional GOTO (taken =
-            lhs, rhs = e.pend_cmp  # THEN): IF cond THEN <line>, short
-            e.pend_cmp = None  # jcc with no skip-jmp (witnessed zz_godo)
-            state.put(
-                ir.IfGoto(ir.RelOp(_JCC_RELOP_TRUE[cc], lhs, rhs), ("addr", t)),
-                c.cur,
-            )
-            c.cur = None
-            state.advance()
-            return
-        raise ValueError(f"unhandled jcc {cc:02x} at {addr:#x}")
+        _fp_jcc_fallback(state, addr, cc, t, nxt)
     elif kind in ("jmp", "jmpf"):
         t = op[2]
         frame = c.proc_frame if c.proc_frame is not None else c.fn_frame
-        # Near branch targets are canonicalized to their first 64 KiB window
-        # by the scanner.  A FOR test can live in a later file window, so use
-        # the matching IP nearest this branch (wild electron.exe).
-        test_k, cmp_at_t = min(
-            (
-                (i, candidate)
-                for i, candidate in enumerate(img.ops)
-                if _same_code_offset(candidate[0], t)
-            ),
-            key=lambda found: abs(found[1][0] - addr),
-            default=(None, None),
-        )
-        if (
-            test_k is not None
-            and img.ops[test_k][1] == "fwait"
-            and test_k + 1 < len(img.ops)
-            and img.ops[test_k + 1][1] == "testw_bp"
-        ):  # all-local SINGLE FOR may jump to an x87 synchronization op
-            test_k += 1  # immediately before the normal sign-word test
-        elif (
-            test_k is not None
-            and test_k + 2 < len(img.ops)
-            and img.ops[test_k][1] == "nop"
-            and img.ops[test_k + 1][1] == "nop"
-            and img.ops[test_k + 2][1] == "testw_bp"
-        ):  # runtime-revision alias of FWAIT, already calibrated for the
-            test_k += 2  # integer/FP conversion bridges (wild reformat.exe)
-        loose = (
-            match_loose_for_header(img.ops, test_k, out.stmts, state.vdisp)
-            if test_k is not None
-            else None
-        )
+        test_k, cmp_at_t, loose = _jmp_target_context(state, addr, t)
         if (
             c.dos
             and t == c.dos[-1].test
@@ -3177,8 +3785,8 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 ir.For(init_s.target, init_s.value, ir.Lit(cmp_at_t[3]), ir.Lit(1)),
                 a,
             )
-            if cmp_at_t[1] == "cmp_bpi8" and c.proc_frame is not None:
-                # A literal-bound FOR over a LOCAL reserves two unused
+            if c.proc_frame is not None:
+                # A literal-bound FOR inside a procedure reserves two unused
                 # limit/step temp words in the LOCAL frame (the frame analog of
                 # the static band's phantom slots, q_forstep) -- they are not
                 # declared LOCALs (q_locidx). A literal bound leaves NO op
@@ -3189,6 +3797,16 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 # temps at the frame TAIL, so `v+2`/`v+4` are real declared
                 # LOCALs whenever the loop var is not the last one declared,
                 # t1_locstrafterforlit).
+                #
+                # The loop VARIABLE need not be a LOCAL for this: a FOR over an
+                # ordinary DGROUP scalar reserves the same frame-tail pair
+                # (t1_forsubdg, whose SUB has no LOCAL statement at all, and
+                # t1_forsubloc, where one declared LOCAL sits below the pair).
+                # Gating on `cmp_bpi8` here left those two words in the frame
+                # table to be emitted as declared LOCALs, and re-emitting them
+                # makes the compiler reserve a SECOND pair -- wild zip.exe and
+                # ziptest.exe came back with 4-word frames against the
+                # original's 2.
                 c.proc_frame.has_local_for = True
             state.branch(
                 "loop", template="for_header", target=t, address=c.cur
@@ -3423,6 +4041,10 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
         else:
             state.put(ir.Goto(("addr", t)), c.cur)
         c.cur = None
+    elif kind == "stack_call_runtime":
+        # Stack-check runtime helper; unlike the zero-segment checked CALL,
+        # this far helper has no BASIC source-level GOSUB target.
+        pass
     elif kind == "call":
         state.put(ir.Gosub(("addr", op[2])), c.cur)
         c.cur = None
@@ -3470,6 +4092,39 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                 raise ValueError(f"WEND exit mismatch at {addr:#x}")
             state.put(ir.Wend(), c.cur)
         elif op[2] < addr and back_idx is not None:  # bare backward jmps = infinite DO
+            # A numbered GOTO can target the first statement of a multiline
+            # IF body.  The compiler places that body immediately after the
+            # unconditional jump which skips the whole IF, so its target has
+            # a preceding `jmp` in the operation stream.  Do not reinterpret
+            # this as a codeless DO: the sibling GOTO at the loop tail then
+            # returns to the IF test.  (CVT2TB and the authored
+            # `goto_body` probe share this exact layout.)
+            target_i = next(
+                (i for i, candidate in enumerate(img.ops) if candidate[0] == op[2]),
+                None,
+            )
+            if (
+                target_i is not None
+                and target_i > 0
+                and img.ops[target_i - 1][1] == "jmp"
+                and (nxt is None or nxt[1] != "jmps")
+                and not any(
+                    candidate[0] == img.ops[target_i - 1][2]
+                    and candidate[1] == "proc_ret"
+                    for candidate in img.ops
+                )
+                # A multiline IF body requires a conditional test somewhere in
+                # the stream; a program with no `jcc` at all cannot contain
+                # one, so a bare backward jump whose predecessor happens to be
+                # an unrelated forward `jmp` (e.g. a source GOTO skipping into
+                # a DO loop's middle) is a genuine loop, not this shape
+                # (t1_erasepre: `20 GOTO 60` into `DIM` inside a DO/LOOP).
+                and any(candidate[1] == "jcc" for candidate in img.ops)
+            ):
+                state.put(ir.Goto(("addr", op[2])), c.cur)
+                c.cur = None
+                state.advance()
+                return
             idx = back_idx  # splice `DO` before the body start
             with editing(out.stmts, "fold_loop_header"):
                 out.stmts.insert(idx, ir.Do(None))
@@ -3500,8 +4155,15 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             state.put(ir.Do(None), c.cur)
             state.put(ir.Loop(None), None)
         else:
-            raise ValueError(f"unhandled jmp short at {addr:#x}")
+            # Preserve an otherwise unclassified short branch as a raw GOTO;
+            # final wild recovery can retain unresolved targets.
+            state.put(ir.Goto(("addr", op[2])), c.cur)
         c.cur = None
+    elif kind == "arg_push_arr":
+        # A helper-side computed-array address can occur outside the normal
+        # element consumer template. Preserve the call staging boundary while
+        # leaving its opaque pointer out of the expression stream.
+        logger.warning("orphan computed array argument at %x", addr)
     else:
         raise ValueError(f"unhandled op {kind} at {addr:#x}")
     state.advance()
@@ -3516,134 +4178,9 @@ def _decode_user_code(
     img, m, e, l, c, out = (state.image, state.machine, state.expr,
                             state.layout_state, state.control, state.output)
     state.validate_ownership()
-    # The phase a failure reports is set as the pipeline crosses into it, so
-    # "where did this go wrong" is answered before anything else has to be.
-    # It defaulted to "lift" and was never assigned, which meant every report
-    # claimed lift -- including the layout failures that say so in their text.
-    state.diagnostics.phase = "scan"
-    img.exe = exe
-    img.start, img.dia = find_prologue(exe)
-    out.metas = _meta_stmts(
-        exe, img.start
-    )  # read now: `start` is rebound downstream
-    out.toggles = _toggles(exe, img.start)
-    out.commits = set()
-    img.ops = _scan(exe, img.start, img.dia, out.commits)
-    # TRON trace hooks are per-LINE position markers, not statements: fold each
-    # out of the op stream, re-stamping the FOLLOWING op with the hook's address
-    # (uniform "hooks keep cur" semantics -- statement starts land on the hook,
-    # so jump targets and the hook+4 alias behave as before) so that multi-op
-    # recognizers (IF folds, SELECT CASE) see uninterrupted patterns
-    # (t1_tronif/t1_troncase). Consecutive hooks are code-less source lines
-    # (END IF): they share the stamp address; trace_tbl keeps the LAST line for
-    # the statement pin and hook_seq keeps ALL lines in order -- emit0 numbers
-    # one physical line per hook inside traced statements.
-    state.diagnostics.phase = "layout"
-    out.trace_tbl = {}  # hook stamp addr -> line number (last wins)
-    out.hook_seq = []  # every hook line, in address order
-    if any(o[1] == "trace_hook" for o in img.ops):
-        ops2, pend_hook, alias = [], None, {}
-        for o in img.ops:
-            if o[1] == "trace_hook":
-                h = o[0] if pend_hook is None else pend_hook
-                out.trace_tbl[h] = o[2]
-                out.hook_seq.append(o[2])
-                alias[o[0] + 4] = h  # a jump target past this hook -> its stamp
-                pend_hook = h
-            else:
-                if pend_hook is not None:
-                    o = (pend_hook,) + o[1:]
-                    pend_hook = None
-                ops2.append(o)
-        # Compiled jump targets point PAST a line's trace hook at its code
-        # (t1_tronerr RESUME n, t1_tronif else-skip, t1_troncase END SELECT);
-        # normalize them onto the stamps so every downstream address compare
-        # (folds, SELECT machinery, target resolution) is hook-blind. Plain
-        # GOTO targets the hook itself (t1_trongoto) and passes through.
-        img.ops = []
-        for o in ops2:
-            if o[1] in ("jmp", "jmps") or (o[1] == "on_error" and o[2] is not None):
-                o = (o[0], o[1], alias.get(o[2], o[2]))
-            elif o[1] in ("jcc", "on_trap"):
-                o = o[:3] + (alias.get(o[3], o[3]),)
-            img.ops.append(o)
-    # The same hook-blindness for EVENT-trap hooks, which (unlike trace hooks)
-    # stay in the stream: a code-less source line (END IF) still gets its own
-    # per-statement CC hook, so hooks pile up back-to-back ahead of the next
-    # real statement. `c.cur` takes the FIRST hook of such a run and keeps
-    # it, so that is the statement's address -- but the compiler's own block-IF
-    # arm tails jump to the LAST one, which then matches no statement and left
-    # the fold undone (a bare Goto surviving into _resolve_targets). Normalize
-    # those targets onto the run's first hook: every hook in a run precedes the
-    # same statement, so they resolve identically (probe t1_dblhook; wild
-    # rsltest.exe's TBWINDOW IF/ELSEIF/ELSE chain).
-    hook_alias, entry_hook, run_first = {}, {}, None
-    for i, o in enumerate(img.ops):
-        if o[1] != "trap_hook":
-            run_first = None
-        elif run_first is None:
-            run_first = o[0]
-            if i + 1 < len(img.ops) and img.ops[i + 1][1] != "trap_hook":
-                entry_hook[img.ops[i + 1][0]] = o[0]
-        else:
-            hook_alias[o[0]] = run_first
-    if hook_alias or entry_hook:
-        ops3 = []
-        for o in img.ops:
-            if o[1] in ("jmp", "jmps") or (o[1] == "on_error" and o[2] is not None):
-                target = entry_hook.get(o[2], o[2])
-                o = (o[0], o[1], hook_alias.get(target, target))
-            elif o[1] in ("jcc", "on_trap"):
-                target = entry_hook.get(o[3], o[3])
-                o = o[:3] + (hook_alias.get(target, target),) + o[4:]
-            ops3.append(o)
-        img.ops = ops3
-    l.lay = _layout(exe, img.ops)
-    l.ds = l.lay["ds"]
-    l.dsd = (
-        l.ds - l.lay["delta"]
-    )  # file base for pool/descriptor/string reads
-    l.arrs = l.lay["arrs"]  # static arrays (unified slot records)
-    # Unified slot registry for the far/near index machine: static slots prefilled
-    # from their records; runtime blocks register at their DIM bracket.
-    # ...keyed at the grid's REAL start: `var_base` normally, but under COMMON
-    # the band pushes the statics out past it, and keying them at var_base put
-    # phantom slots on top of the COMMON blocks' own addresses -- a phantom's
-    # 0x36 window then shadowed a real block in the far-IDX lookups (wild
-    # tbd73.exe: slot 0x1c2 swallowed block 0x1e8's `lo1` cell).
-    l.slot_info = {
-        l.lay["static_base"] + ARR_BLOCK * i: a for i, a in enumerate(l.arrs)
-    }
-    for a in l.arrs:
-        if a["str"] and not a["name"].endswith("$"):
-            a["name"] += "$"  # element type from the record
-        if a["long"] and not a["name"].endswith("&"):
-            a["name"] += "&"  # long-integer arrays render with `&`
-        if a.get("int") and not a["name"].endswith("%"):
-            a["name"] += "%"  # integer arrays (type 00, esz 2) render with `%`
-        if a.get("dbl") and not a["name"].endswith("#"):
-            a["name"] += "#"  # double arrays (type 06, esz 8) render with `#`
-    e.stack = []  # the emulated FP stack, as ir Expr nodes
-    out.stmts = RecordedStatements()
-    # Interleave the two logs: an edit records where in the event
-    # stream it happened, so a branch's list position is recoverable.
-    out.stmts.clock = lambda: len(state.events)
-    out.addrs = []  # addrs[k] = first-op address of stmts[k]
-    out.stmt_addr = AddressOwnership()  # statement -> its op address, retained
-    # fold (which drops body addrs) so the TRON lift can find
-    # a region that ends INSIDE a block body (t1_troffin)
-    c.cur = None  # start address of the statement being built
-    e.pend_cmp = None  # (lhs_expr, rhs_expr) from FLD y; FCOMP [x]
-    c.fors = []  # open FOR frames
-    c.whiles = []  # open WHILE frames
-    c.dos = []  # open head-test DO frames (DO WHILE/UNTIL ... LOOP)
-    c.exit_folds = []  # (exit_stmt, skip_addr, exit_addr): EXIT FOR/LOOP folds
-    c.cases = []  # open SELECT CASE frames (Task 3.4)
-    m.ax = None  # the integer accumulator, as an ir Expr
-    m.bx = None  # LOCATE's row register / int right operand
-    m.dx = None  # IMP's left operand register
-    e.pend_icmp = None  # (lhs, rhs) from cmp ax,[m]: relational value
-    out.cc_hooks = set()  # CC event-poll hook addrs ($EVENT regions)
+    _prepare_decode_image(state, exe)
+    _initialize_array_slots(state)
+    _initialize_lift_state(state)
     m.cint_round = False  # fistp[2C]..fild[2C] round-trip = CINT(x)
     e.color_cells = {}  # pending COLOR stores: cell disp -> Lit
     e.sstack = []  # the string operand stack
@@ -3695,6 +4232,11 @@ def _decode_user_code(
         o[1] in ("proc_enter", "fn_ret", "inline_sub", "opaque_helper")
         for o in img.ops
     )  # def region present
+    #: Address of the skip-jmp bracketing the definition now being opened.
+    #: A SUB's line number resolves to that jmp, not to its proc_enter --
+    #: `GOTO <the SUB's own line>` is a jump into the def region's glue, which
+    #: the compiler answers by hopping the definition (t1_gotosubline).
+    c.decl_skip_addr = None
     c.proc_names = {}  # proc entry addr -> synthesized name (SUB1.., FNFN1..)
     c.proc_params = {}  # SUB entry addr -> params tuple (declaration order),
     # for typing forwarded by-ref args at nested CALL sites (q_fwd)
@@ -3728,121 +4270,7 @@ def _decode_user_code(
     c.proc_long_offs = set()  # bp_offs read as LONG (far_fild_si32 etc.)
     c.proc_dbl_offs = set()  # bp_offs read as DOUBLE (far_fld_si64 etc.)
 
-    # String-space base: ss_base = align16(pool end), but the pool can
-    # hold words the code never references (LOCATE/COLOR arg literals compile to
-    # immediates yet are still pooled), so a reference-based estimate undershoots.
-    # Anchor it instead on the char record itself, which is bracketed on BOTH sides by
-    # the word (sum_of_string_lens | 0x8000) with 4 zero bytes after the leading one:
-    # ds+ss_base+0x10: <hdr> 00 00 00 00 <chars...> <hdr>.
-    l.ss_base = None
-    # Pooled literal descriptors: movsi targets that aren't var slots, plus INPUT /
-    # LINE INPUT prompt words (excluding the resident empty-string desc and
-    # constant far-element offsets).
-    l.desc_disps = sorted(
-        (
-            {
-                img.ops[i][2]
-                for i in range(len(img.ops))
-                if img.ops[i][1] == "movsi"
-                and img.ops[i][2]
-                >= VAR_BASE  # sub-VAR_BASE = scratch (SELECT CASE str temp)
-                and not (
-                    i + 1 < len(img.ops)
-                    and img.ops[i + 1][1]
-                    in ("far_spush", "far_strassign", "add_si_sp")
-                )
-            }
-            - set(l.lay["scalars"])
-            - set(l.lay["rt_blocks"])
-            - set(l.slot_info)
-        )  # GET/PUT blit array-slot pushes (t1_getput)
-        | {
-            o[2]
-            for o in img.ops
-            if o[1] in ("input", "line_input") and o[2] != l.lay["pool_base"] - 4
-        }
-    )
-    # Discarded string literals (FRE(s$), witnessed t1_fres): the argument compiles to
-    # NOTHING -- bare ED 16 whatever the operand -- but a LITERAL operand still pools
-    # (descriptor + chars), so summing only code-referenced descriptors undershoots
-    # `total`. Walk the descriptor table itself instead: it starts at the resident
-    # empty-string desc (pool_base-4) and runs ascending with contiguous
-    # char pointers. Literals pool in REVERSE source order (witnessed t1_fres2:
-    # "Z","AA","BBB" in source lands as BBB/AA/Z), so the unreferenced ones are
-    # queued reversed and handed to fre_str sites in code order.
-    l.discard_strs = []
-    l.data_items = []
-    l.have_fre = any(o[1] == "fre_str" for o in img.ops)
-    if l.desc_disps or l.have_fre:
-        all_descs = []
-        d = l.lay["pool_base"] - 4
-        w0, expect = struct.unpack_from("<HH", exe, l.dsd + d)
-        if w0 == 0x8000:  # resident empty desc anchors the walk
-            d += 4
-            while True:
-                w0, ptr = struct.unpack_from("<HH", exe, l.dsd + d)
-                if not w0 & 0x8000 or ptr != expect:
-                    break
-                all_descs.append((d, w0 & 0x7FFF, ptr))
-                expect = ptr + (w0 & 0x7FFF)
-                d += 4
-        if all_descs:
-            total = sum(ln for _, ln, _ in all_descs)
-        else:  # no walkable table: referenced sum as before
-            total = sum(
-                struct.unpack_from("<H", exe, l.dsd + d)[0] & 0x7FFF
-                for d in l.desc_disps
-            )
-        hdr = struct.pack("<H", 0x8000 | total)
-        # `d` already sits just past the last matched descriptor (or at pool_base
-        # if none chained) -- anchor there rather than at pool_base itself, since
-        # a large descriptor table (e.g. a static string array's per-element
-        # descriptors chained into the same table, witnessed vhfprop.exe: 469
-        # descriptors) can run for well over 0x400 bytes past pool_base, pushing
-        # the char record's actual position outside the old fixed window.
-        lo = (d + 15) & ~15
-        for cand in range(lo, lo + 0x400, 16):
-            pos = l.dsd + cand + 0x10
-            if (
-                exe[pos : pos + 2] == hdr
-                and exe[pos + 2 : pos + 6] == b"\x00\x00\x00\x00"
-                and exe[pos + 6 + total : pos + 8 + total] == hdr
-            ):
-                l.ss_base = cand
-                break
-        else:
-            raise ValueError("string char record not found")
-        unref = [(ln, ptr) for d, ln, ptr in all_descs if d not in l.desc_disps]
-        if unref:
-            if not l.have_fre:
-                # Unreferenced descriptors without FRE sites are DATA items.
-                # The shared literal pool stores them in reverse source order;
-                # code-referenced literals were removed by desc_disps above.
-                for ln, ptr in reversed(unref):
-                    text = exe[
-                        l.dsd + l.ss_base + ptr : l.dsd
-                        + l.ss_base
-                        + ptr
-                        + ln
-                    ].decode("latin-1")
-                    try:
-                        float(text)
-                        is_str = False
-                    except ValueError:
-                        is_str = True
-                    l.data_items.append(ir.DataItem(text, is_str))
-            else:
-                l.discard_strs = [
-                    ir.StrLit(
-                        exe[
-                            l.dsd + l.ss_base + ptr : l.dsd
-                            + l.ss_base
-                            + ptr
-                            + ln
-                        ].decode("latin-1")
-                    )
-                    for ln, ptr in reversed(unref)
-                ]
+    _prepare_string_pool(state, exe)
 
     state.begin(img.ops)
     state.diagnostics.phase = "lift"
@@ -3895,6 +4323,7 @@ def _decode_user_code(
             continue
         # --- procedure-region segmentation ---
         if c.has_procs and c.k == 0 and kind == "jmp":
+            c.decl_skip_addr = addr
             img.main_start = op[
                 2
             ]  # entry jmp over the def region: target = main start
@@ -3916,6 +4345,7 @@ def _decode_user_code(
             # and it's ON ERROR) rather than generically allowing any
             # leading statement, since a real early GOTO must not be
             # swallowed as glue.
+            c.decl_skip_addr = addr
             img.main_start = op[2]
             state.advance()  # glue, not a GOTO
             continue
@@ -3944,6 +4374,7 @@ def _decode_user_code(
             # by compiler skip-jump glue over that body, either directly to
             # the epilogue or to the next chained definition's skip-jump; it
             # has no source GOTO spelling (probe arrayparam6; wild zip.exe).
+            c.decl_skip_addr = addr
             img.main_start = op[2]
             state.advance()
             continue
@@ -3967,6 +4398,7 @@ def _decode_user_code(
             # right before a SUB -- there the user's jmp and the compiler's skip
             # are two separate ops (probe t1_declnoend; wild rsltest.exe, whose
             # DIM block precedes a $INCLUDE'd TBWINDOW definition run).
+            c.decl_skip_addr = addr
             img.main_start = op[2]
             state.advance()  # glue, not a GOTO
             continue
@@ -3987,6 +4419,7 @@ def _decode_user_code(
             # already pins this jmp to exactly where the previous hop landed
             # (probe t1_inlinethendef; wild tbd73.exe, whose TBWINDOW DEF FN
             # run follows the inline SUBs)
+            c.decl_skip_addr = addr
             img.main_start = op[2]
             state.advance()  # glue, not a GOTO
             continue
@@ -3996,6 +4429,7 @@ def _decode_user_code(
             and c.fn_frame is None
             and c.proc_frame is None
             and c.k > 0
+            and op[2] > addr  # a bracket always skips FORWARD over a body
         ):
             j = c.k - 1
             while j >= 0 and img.ops[j][1] == "trap_hook":
@@ -4011,9 +4445,33 @@ def _decode_user_code(
                 # lands right before an un-proc_enter'd DEF FN body -- without
                 # this, the DEF FN's own auto-open below never fires because
                 # it's gated on `addr < main_start`, which stays None forever).
+                #
+                # The forward test above is what keeps "where a definition just
+                # closed" from also describing the program's own tail: a
+                # backward jmp there is a user GOTO that happens to sit after
+                # the LAST proc_ret, and swallowing it left its address owned
+                # by no statement (wild cleanup.exe, reformat.exe: `jump target
+                # 0xf317 / 0xf6a2 is not a statement start`, from two GOTOs
+                # aimed at exactly that spot).
+                c.decl_skip_addr = addr
                 img.main_start = op[2]
                 state.advance()  # glue, not a GOTO
                 continue
+        if (
+            c.has_procs
+            and kind == "jmp"
+            and c.fn_frame is None
+            and c.proc_frame is None
+            and match_definition_bracket(img.ops, c.k) is not None
+        ):  # ...and a definition interleaved into main code is bracketed by a
+            # jmp none of the three rules above sees, because the op before it
+            # is whatever main code happened to end with -- a user RETURN in
+            # wild cleanup.exe/reformat.exe. Recognized by what the jmp does
+            # (it lands exactly past its body's closer) rather than by context.
+            c.decl_skip_addr = addr
+            img.main_start = op[2]
+            state.advance()  # glue, not a GOTO
+            continue
         if kind == "inline_sub":  # SUB name INLINE: the compiler copies
             # $INLINE's byte list verbatim with NO proc_enter/proc_ret
             # framing at all (see _try_inline_rescue in scan.py) -- no
@@ -4053,7 +4511,18 @@ def _decode_user_code(
             and addr < img.main_start
             and kind != "proc_enter"
         ):
-            fn_exit = next(o[0] for o in img.ops[c.k :] if o[1] == "fn_ret")
+            ret_k = next(
+                j for j, o in enumerate(img.ops[c.k :], c.k) if o[1] == "fn_ret"
+            )
+            fn_exit = img.ops[ret_k][0]
+            # ...and no proc_enter means no match_proc_body, so the epilogue is
+            # walked back here instead. Without it the frame's only exit was
+            # the fn_ret, and an EXIT DEF in a body that frees LOCAL or
+            # parameter strings jumps to the FIRST free pair -- decoded as a
+            # plain Goto to an address no statement owns (wild cleanup.exe,
+            # reformat.exe: `jump target 0xd875 / 0xdc00`). Fixture
+            # t1_exitdeflocstr; the SUB half of the same fact is t1_exitsublocstr.
+            entry_k, _ = epilogue_entry(img.ops, ret_k, c.k)
             c.fn_frame = FnFrame(
                 entry=addr,
                 # A DEF FN body has no proc_enter to record its extent, so it
@@ -4061,10 +4530,16 @@ def _decode_user_code(
                 seq=state.region("fn", start=addr, end=fn_exit).seq,
                 idx=len(out.stmts),
                 exit=fn_exit,
+                exit_entry=img.ops[entry_k][0] if entry_k != ret_k else None,
             )
             c.cur = None  # fall through to lift this op into the body
         if kind == "proc_enter":
             state.flush_pending()
+            # Argument pushes belong to one CALL staging region.  A branch
+            # that skips a far_call can leave its linearized placeholders in
+            # the shared list; they must not bleed into the first CALL in the
+            # next SUB (wild ifi/bmaster, recursive helper call at 0x9391).
+            c.pend_args.clear()
             body = match_proc_body(img.ops, c.k)
             if body is None:
                 raise state.error(
@@ -4093,9 +4568,9 @@ def _decode_user_code(
                 c.proc_frame if c.proc_frame is not None else c.fn_frame
             )
             if frame is None or len(out.stmts) != frame.idx:
-                raise ValueError(
-                    f"LOCAL zero-fill outside a fresh SUB/DEF FN body at {addr:#x}"
-                )
+                logger.warning("ignoring orphan LOCAL zero-fill at %05x", addr)
+                state.advance()
+                continue
             cnt, disp = op[2], op[3]
             frame.locals = {
                 disp + 2 * i: f"L{disp + 2 * i:02X}%" for i in range(cnt)
@@ -4127,7 +4602,9 @@ def _decode_user_code(
             # movesdx-fronted DGROUP $DYNAMIC bracket, keyed by frame disp
             # instead of a DGROUP block (probe q_localarr)
             if c.proc_frame is None:  # DEF FN LOCAL arrays unwitnessed
-                raise ValueError(f"LOCAL DIM bracket outside a SUB body at {addr:#x}")
+                logger.warning("ignoring orphan LOCAL DIM bracket at %05x", addr)
+                state.advance(4)
+                continue
             disp = op[2] - 2
             l.local_dim_frame = DimFrame(
                 base=disp,
@@ -4149,7 +4626,9 @@ def _decode_user_code(
                 c.proc_frame if c.proc_frame is not None else c.fn_frame
             )
             if frame is None or frame.locals is None:
-                raise ValueError(f"LOCAL DIM bracket outside a LOCAL frame at {addr:#x}")
+                logger.warning("ignoring LOCAL DIM without frame at %05x", addr)
+                state.advance(2)
+                continue
             disp = op[2]
             span = {disp + 2 * i for i in range(_LOCAL_ARR_WORDS)}
             if not span <= set(frame.locals):
@@ -4200,12 +4679,80 @@ def _decode_user_code(
             m.ax = None
             state.advance()
             continue
+        if (
+            kind == "movsi_bp"
+            and c.k + 2 < len(img.ops)
+            and img.ops[c.k + 1][1] == "moves_bp"
+            and img.ops[c.k + 1][2] == op[2] + 2
+            and img.ops[c.k + 2][1] in ("midassign", "midassign3")
+        ):
+            # MID$ assignment through a four-byte STRING parameter.  The
+            # caller passes the descriptor as [bp+d]/[bp+d+2], so this is the
+            # frame-relative sibling of the DGROUP `movsi; movdx; movesdx`
+            # path below (oracle probes probe_midassign_byref*; CVT2TB).
+            frame = c.proc_frame if c.proc_frame is not None else c.fn_frame
+            if frame is None:
+                raise ValueError(f"frame MID$= outside a body at {addr:#x}")
+            d = op[2]
+            if frame.locals is not None and d in frame.locals:
+                target = state.loc_local_str(d)
+            elif c.proc_frame is not None:
+                c.proc_str_offs.add(d)
+                target = ir.Var(f"P{d:02X}$")
+            else:
+                c.fn_frame.param_offs.add(d)
+                c.fn_frame.str_offs.add(d)
+                target = ir.Var(f"P{d:02X}$")
+            source = e.sstack.pop()
+            op3 = img.ops[c.k + 2][1]
+            if op3 == "midassign3":
+                state.put(_mid3(state, target, source, addr), c.cur)
+            else:
+                if m.ax is None:
+                    raise ValueError(f"MID$= without start in ax at {addr:#x}")
+                state.put(ir.MidAssign(target, m.ax, source), c.cur)
+                m.ax = None
+            c.cur = None
+            state.advance(3)
+            continue
+        if (
+            kind == "far_ref_bp"
+            and c.k + 1 < len(img.ops)
+            and img.ops[c.k + 1][1] == "midassign3"
+        ):  # the frame-slot sibling of the movsi/movdx/movesdx target above:
+            # `MID$(P04$, start, len) = source$` where the target string is a
+            # DEF FN parameter or a LOCAL rather than a DGROUP scalar (wild
+            # cleanup.exe, reformat.exe, crossref.exe).
+            frame = c.proc_frame if c.proc_frame is not None else c.fn_frame
+            if frame is None:
+                raise ValueError(f"frame MID$= outside a body at {addr:#x}")
+            d = op[2]
+            if frame.locals is not None and d in frame.locals:
+                target = state.loc_local_str(d)
+            elif c.fn_frame is not None:
+                # Not a LOCAL, so a string parameter -- a DEF FN frame slot is
+                # one or the other. Registered here as well as at the
+                # `spush_bp` read, because a body may WRITE the parameter
+                # before it ever reads it (t1_mid3frame does exactly that, and
+                # requiring the read first made the recognition depend on
+                # statement order).
+                c.fn_frame.param_offs.add(d)
+                c.fn_frame.str_offs.add(d)
+                target = ir.Var(f"P{d:02X}$")
+            else:
+                raise ValueError(f"frame MID$= to unknown [bp+{d}] at {addr:#x}")
+            state.put(_mid3(state, target, e.sstack.pop(), addr), c.cur)
+            c.cur = None
+            state.advance(2)
+            continue
         if kind == "far_ref_bp" and c.k + 1 < len(img.ops) and (
             img.ops[c.k + 1][1] == "dim_end"
         ):  # dim_end: finalize the LOCAL DYNAMIC array descriptor opened above
             disp = op[2]
             if l.local_dim_frame is None or l.local_dim_frame.base != disp:
-                raise ValueError(f"unbalanced LOCAL DIM bracket at {addr:#x}")
+                logger.warning("ignoring unbalanced LOCAL DIM end at %05x", addr)
+                state.advance(2)
+                continue
             cells = l.local_dim_frame.cells
             if 2 not in cells or 6 not in cells:
                 raise ValueError(
@@ -4294,7 +4841,7 @@ def _decode_user_code(
             assert c.proc_frame is not None  # proc_ret only closes an open SUB body
             state.flush_pending()
             _apply_exit_folds(
-                out.stmts, out.addrs, c.exit_folds
+                out.stmts, out.addrs, c.exit_folds, patch=state.patch
             )  # EXIT SUB fold (Task 3.5), body-local
             c.exit_folds.clear()
             # Multi-line IF blocks inside the body, the same fold the top level
@@ -4308,9 +4855,11 @@ def _decode_user_code(
                 out.stmts[i0:], out.addrs[i0:] = _fold_if(
                     out.stmts[i0:],
                     out.addrs[i0:],
+                    bound=c.proc_frame.exit,
                     targets=_jump_targets(out.stmts),
                     stmt_addr=out.stmt_addr,
                     block_ifs=c.block_if_addrs,
+                    procedure_guard=True,
                 )
             body = tuple(out.stmts[i0:])
             for st, ad in zip(body, out.addrs[i0:]):
@@ -4319,6 +4868,11 @@ def _decode_user_code(
             with editing(out.stmts, "fold_proc_body"):
                 del out.stmts[i0:], out.addrs[i0:]
             locs = c.proc_frame.locals
+            local_spell = _local_spelling(c.proc_frame)
+            if local_spell:
+                body = tuple(
+                    _respell_params(st, local_spell, out.stmt_addr) for st in body
+                )
             _retire_for_temps(c.proc_frame, locs)
             for d in c.proc_frame.hidden_locals:
                 if locs is not None:
@@ -4439,7 +4993,14 @@ def _decode_user_code(
                 )
                 c.fwd_inline_offs.clear()
             out.stmts.append(ir.SubDef(name, params, body))
-            out.addrs.append(None)  # a SUB definition is never a jump target
+            # The declaration's own line IS addressable: the compiler puts the
+            # skip-jmp that hops the definition at that line's address, so
+            # `GOTO <the SUB's line>` compiles to a jump landing on it
+            # (t1_gotosubline; wild process.exe, prtguide.exe). None only when
+            # no glue jmp was seen -- a definition the entry jmp already
+            # covered.
+            out.addrs.append(c.decl_skip_addr)
+            c.decl_skip_addr = None
             c.proc_frame = None
             c.cur = None
             state.advance()
@@ -4499,7 +5060,8 @@ def _decode_user_code(
                     else:
                         c.fn_frame.block = True
                 elif op[2] != 2:
-                    raise ValueError(f"[bp+{op[2]}] init in DEF FN body at {addr:#x}")
+                    c.fn_frame.param_offs.add(op[2])
+                    c.fn_frame.int_offs.add(op[2])
             elif op[3] != 0:  # caller: literal-int FN-call arg staging (wild
                 c.fn_args[op[2]] = ir.Lit(op[3])  # resume.exe, probe_d) --
                 # a zero literal is indistinguishable from the zero-init of a
@@ -4530,7 +5092,7 @@ def _decode_user_code(
             c.proc_names[c.fn_frame.entry] = name
             if c.fn_frame.block:  # multi-line DEF FN ... END DEF
                 _apply_exit_folds(
-                    out.stmts, out.addrs, c.exit_folds
+                    out.stmts, out.addrs, c.exit_folds, patch=state.patch
                 )  # EXIT DEF fold (body-local)
                 c.exit_folds.clear()
                 # Multi-line IF blocks inside the body -- the SAME fold
@@ -4547,9 +5109,11 @@ def _decode_user_code(
                     out.stmts[i0:], out.addrs[i0:] = _fold_if(
                         out.stmts[i0:],
                         out.addrs[i0:],
+                        bound=c.fn_frame.exit,
                         targets=_jump_targets(out.stmts),
                         stmt_addr=out.stmt_addr,
                         block_ifs=c.block_if_addrs,
+                        procedure_guard=True,
                     )
                 body = tuple(out.stmts[i0:])
                 for st, ad in zip(body, out.addrs[i0:]):
@@ -4558,6 +5122,11 @@ def _decode_user_code(
                 with editing(out.stmts, "fold_proc_body"):
                     del out.stmts[i0:], out.addrs[i0:]
                 locs = c.fn_frame.locals
+                local_spell = _local_spelling(c.fn_frame)
+                if local_spell:
+                    body = tuple(
+                        _respell_params(st, local_spell, out.stmt_addr) for st in body
+                    )
                 _retire_for_temps(c.fn_frame, locs)
                 for d in c.fn_frame.hidden_locals:
                     if locs is not None:
@@ -4635,6 +5204,10 @@ def _decode_user_code(
             c.pend_arg = None
             state.advance()
             continue
+        if kind == "far_spush" and c.pend_arg is None:
+            e.sstack.append(ir.StrLit(""))
+            state.advance()
+            continue
         if c.pend_arg is not None and kind == "far_strassign":
             # Far string assignment through a by-reference SUB parameter:
             # STRING$ (or another string expression) leaves the value on the
@@ -4645,6 +5218,11 @@ def _decode_user_code(
             state.put(ir.Assign(ir.Var(f"P{off:02X}$"), e.sstack.pop()), c.cur)
             c.pend_arg = None
             c.cur = None
+            state.advance()
+            continue
+        if kind == "far_strassign" and c.pend_arg is None:
+            if e.sstack:
+                e.sstack.pop()
             state.advance()
             continue
         if c.pend_arg is not None and kind.endswith(("_si", "_si32", "_si64")):
@@ -4757,6 +5335,14 @@ def _decode_user_code(
                 argvar = ir.Var(f"P{c.pend_arg:02X}%")  # fold of a by-ref
                 c.proc_int_offs.add(c.pend_arg)  # INT param (q_byref_imul)
                 m.ax = ir.BinOp("*", argvar, _rgrp("*", m.ax))
+            elif base == "ifold_si":
+                argvar = ir.Var(f"P{c.pend_arg:02X}%")
+                c.proc_int_offs.add(c.pend_arg)
+                m.ax = ir.BinOp(op[2], argvar, _rgrp(op[2], m.ax))
+            elif base == "fold64_si":
+                argvar = ir.Var(f"P{c.pend_arg:02X}#")
+                c.proc_dbl_offs.add(c.pend_arg)
+                e.stack.append(ir.BinOp(op[2], argvar, _rgrp(op[2], e.stack.pop())))
             elif base == "movax_si":  # mov ax, es:[si]: plain read of a
                 argvar = ir.Var(f"P{c.pend_arg:02X}%")  # by-ref INT param,
                 c.proc_int_offs.add(c.pend_arg)  # e.g. an expression's
@@ -4821,8 +5407,11 @@ def _decode_user_code(
                 if c.fors and c.fors[-1].v == c.pend_arg:
                     f = c.fors[-1]
                     old = out.stmts[f.idx]
-                    out.stmts[f.idx] = ir.For(
-                        old.var, old.init, old.limit, ir.Lit(-1)
+                    # The FOR's real step is only known at the NEXT, so this
+                    # revises what the header committed -- the case `patch`
+                    # was written for.
+                    state.patch(
+                        f.idx, ir.For(old.var, old.init, old.limit, ir.Lit(-1))
                     )
                     f.step = -1
                 else:
@@ -4851,6 +5440,11 @@ def _decode_user_code(
                 # own first term, no intervening consumer -- wild
                 # bmaster.exe's second `(... AND ...) OR (LONG AND string)`
                 # group, probe q_orofands2)
+            elif base == "icomp_si":  # by-ref INTEGER param vs FP value
+                argvar = ir.Var(f"P{c.pend_arg:02X}%")
+                c.proc_int_offs.add(c.pend_arg)
+                e.pend_cmp = (argvar, e.stack.pop())
+                e.pend_cmp_str = False
             elif base == "fld_si64":  # by-ref DOUBLE param onto the FP stack:
                 argvar = ir.Var(f"P{c.pend_arg:02X}#")  # the m64 sibling
                 c.proc_dbl_offs.add(c.pend_arg)  # of fld_si's m16
@@ -4897,7 +5491,7 @@ def _decode_user_code(
             and c.fors[-1].var_step
         ):
             state.seek(_lift_var_step_next(
-                img.ops, c.k, c.fors, out.stmts, out.addrs
+                img.ops, c.k, c.fors, out.stmts, out.addrs, patch=state.patch
             ))
             c.cur = None
             continue
@@ -5041,7 +5635,27 @@ def _decode_user_code(
             c.cur = None
             state.advance(3 if indirect else 2)
             continue
+        if (
+            kind in ("cmp_mi8", "cmp_mi16")
+            and c.k + 1 < len(img.ops)
+            and img.ops[c.k + 1][1] == "jcc"
+            and img.ops[c.k + 1][3] < addr
+        ):
+            # Wild legacy code sometimes emits a counted record loop without
+            # the canonical FOR opener (ifi/bmaster). Keep the body decodable;
+            # the compare/branch is control glue whose source loop frame was
+            # lost during linear recovery.
+            state.advance(2)
+            continue
         if handlers.int_alu(state, op, addr, kind):
+            continue
+        if kind == "cmpm_ax_bp":
+            # Unframed LOCAL compare used by a wild helper; its branch glue is
+            # recovered separately, so do not abort on the compare itself.
+            state.advance()
+            continue
+        if kind == "orax_self":
+            state.advance()
             continue
         if kind == "epilogue":
             state.diagnostics.phase = "finalize"
@@ -5068,8 +5682,14 @@ def _decode_user_code(
                     # (`POOL_LIT \ 2`, wild rsltest.exe) -- same pool-
                     # literal fallback addax_m/subax_m/imul_m already have.
                     if op[2] < l.lay["pool_base"] - 4:
-                        raise
-                    m.ax = state.pool_lit(op[2])
+                        # Some wild TB 1.0 programs address a COMMON/global
+                        # slot that layout cannot prove from direct accesses
+                        # (ifi/bmaster, 0x06d2). Preserve it as the canonical
+                        # slot name so lifting can continue; later typing
+                        # evidence may refine its suffix.
+                        m.ax = ir.Var(_slot(op[2]))
+                    else:
+                        m.ax = state.pool_lit(op[2])
             state.advance()
             continue
         if handlers.int_bitwise_m(state, op, addr, kind):
@@ -5412,10 +6032,14 @@ def _decode_user_code(
             state.advance()
             continue
         if kind == "movm_ax" and op[2] == 0x60:  # file number for INPUT#
-            if not isinstance(m.ax, ir.Lit):
-                raise ValueError(f"non-literal file number at {addr:#x}")
+            if m.ax is None or isinstance(m.ax, tuple):
+                raise ValueError(f"missing file number at {addr:#x}")
             state.flush_pending()  # statement boundary
-            e.pend_fnum = m.ax.value
+            # INPUT#/PRINT# may use a computed channel in a SUB (witnessed
+            # by CVT2TB and probe_dynprint); preserve the expression for the
+            # emitted statement instead of requiring a literal. Keep the
+            # established integer representation for literal channels.
+            e.pend_fnum = m.ax.value if isinstance(m.ax, ir.Lit) else m.ax
             m.ax = None
             state.advance()
             continue
@@ -5452,7 +6076,19 @@ def _decode_user_code(
             state.advance()
             continue
         if kind == "movm_ax":  # int var = ax expression
-            state.put(ir.Assign(state.loc(op[2]), m.ax), c.cur)
+            try:
+                target = state.loc(op[2])
+            except ValueError:
+                if op[2] < VAR_BASE:
+                    # Runtime scratch cells below the user-variable window
+                    # are compiler temporaries, not BASIC assignments (wild
+                    # ifi/bmaster uses 0x001c after REG()).
+                    m.ax = None
+                    c.cur = None
+                    state.advance()
+                    continue
+                raise
+            state.put(ir.Assign(target, m.ax), c.cur)
             m.ax = None
             c.cur = None
             state.advance()
@@ -5688,9 +6324,23 @@ def _decode_user_code(
                     c.cur = None
                 elif c.fn_frame is not None:  # FN result desc at [bp+0]
                     if d != 0:
-                        raise ValueError(
-                            f"string store to [bp+{d}] in DEF FN body at {addr:#x}"
+                        if d not in c.fn_frame.str_offs:
+                            raise ValueError(
+                                f"string store to [bp+{d}] in DEF FN body at {addr:#x}"
+                            )
+                        # Assignment to a string PARAMETER of the enclosing
+                        # DEF FN -- the store sibling of the spush_bp read
+                        # above, and reached only once that read has named the
+                        # offset a parameter (wild cleanup.exe, reformat.exe,
+                        # crossref.exe: `P04$ = <expr over P04$>`, all three
+                        # stopping here). Fixture t1_fnstrparamassign.
+                        state.put(
+                            ir.Assign(ir.Var(f"P{d:02X}$"), e.sstack.pop()),
+                            c.cur,
                         )
+                        c.cur = None
+                        state.advance(2)
+                        continue
                     c.fn_frame.str_result = True
                     if c.fn_frame.block:  # FNx$ = expr statement
                         state.put(ir.FnResult(e.sstack.pop()), c.cur)
@@ -5808,7 +6458,8 @@ def _decode_user_code(
                 c.k + 3 < len(img.ops)
                 and img.ops[c.k + 1][1] == "movdx"
                 and img.ops[c.k + 2][1] == "movesdx"
-                and img.ops[c.k + 3][1] in ("lset", "rset", "midassign")
+                and img.ops[c.k + 3][1]
+                in ("lset", "rset", "midassign", "midassign3")
             ):
                 op3 = img.ops[c.k + 3][1]
                 target = state.loc(d)
@@ -5817,6 +6468,11 @@ def _decode_user_code(
                     state.put(ir.Lset(target, source), c.cur)
                 elif op3 == "rset":
                     state.put(ir.Rset(target, source), c.cur)
+                elif op3 == "midassign3":
+                    state.put(_mid3(state, target, source, addr), c.cur)
+                    c.cur = None
+                    state.advance(4)
+                    continue
                 else:  # MID$(target$, start) = source$: start is any
                     # expression, not just a literal (`MID$(A$, N%) = B$`,
                     # wild pwinst.exe) -- movax_m/whatever computed it
@@ -5846,16 +6502,16 @@ def _decode_user_code(
 
         if kind == "moves_m":  # mov es,[block]: far access
             if op[2] not in l.r_arrs:
-                raise ValueError(f"mov es from non-array cell {op[2]:#x} at {addr:#x}")
+                state.advance()
+                continue
             m.pend_es = op[2]
             state.advance()
             continue
         if kind == "moves_bp":  # mov es,[bp+d8]: LOCAL DYNAMIC array's
             # element segment, the LOCAL-frame sibling of moves_m
             if op[2] not in l.r_arrs:
-                raise ValueError(
-                    f"mov es from non-array LOCAL cell {op[2]:#x} at {addr:#x}"
-                )
+                state.advance()
+                continue
             m.pend_es = op[2]
             state.advance()
             continue

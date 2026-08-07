@@ -1,0 +1,6 @@
+10 A# = 1.5#
+20 X$ = "AB"
+30 IF (A# = 1.5# OR X$ = "AB") THEN 50
+40 END
+50 PRINT "YES"
+60 END

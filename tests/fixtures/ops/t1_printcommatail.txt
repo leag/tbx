@@ -1,0 +1,18 @@
+# t1_printcommatail dialect=1.1 start=087C0
+087C3:movsi:296
+087C6:rt:156
+087C8:rt:190
+087CA:rt:184
+087CC:rt:193
+087CE:rt:193
+087D0:movax:5
+087D3:movbxax
+087D5:movax:5
+087D8:locate
+087DA:movsi:292
+087DD:rt:156
+087DF:rt:190
+087E1:rt:184
+087E3:end
+087E6:epilogue
+# commits

@@ -1,0 +1,8 @@
+10 A% = 1
+20 IF A% = 1 THEN 40
+30 PRINT "no"
+40 SUB S1
+50 PRINT "in sub"
+60 END SUB
+70 PRINT "after"
+80 END

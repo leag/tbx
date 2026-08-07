@@ -12,7 +12,7 @@ from tbx import ir
 from tbx.decode0.statement_log import editing
 from tbx.decode0.const import _IS_RELOP, VAR_BASE
 from tbx.decode0.frames import SelectFrame
-from tbx.decode0.lift import _fold_if, _jump_targets
+from tbx.decode0.lift import _fold_if, _jump_targets, _negate_cond, _target_counts
 
 
 def _kind_at(state, i):
@@ -31,6 +31,13 @@ def _is_is_mat_at(state, c):  # IS-relational materialized-boolean compare idiom
         and _kind_at(state, c + 6) == "fild"
         and _kind_at(state, c + 7) == "fcomp64"
     )
+
+
+def _skip_hooks(state, i):
+    """The first index at or after `i` that is not an event-trap poll stamp."""
+    while _kind_at(state, i) == "trap_hook":
+        i += 1
+    return i
 
 
 def _is_arm_header_at(state, i):
@@ -95,7 +102,7 @@ def _str_guard_arm(state, k, guard):
     i, c = state.image, state.control
     jcc = i.ops[k + 5]
     c.cases[-1].cur_guards.append(ir.CaseValue(guard))
-    if jcc[2] == 0x75:  # JNE: value-list non-final guard -- keep testing
+    if jcc[2] in (0x72, 0x73, 0x75, 0x76, 0x77):  # range/non-final guard
         state.seek(k + 7)
         c.cur = None
         return True
@@ -122,7 +129,21 @@ def _begin_body(state, body_i, next_test):
     while i < len(img.ops) and img.ops[i][0] < next_test:
         i += 1
     if i == body_i:
-        raise ValueError("SELECT CASE arm: empty body")
+        # Empty CASE arms are emitted by TB when adjacent guards share the
+        # same fall-through point (wild ifi/bmaster).  There is no statement
+        # region to fold; record a zero-width arm and let ``step`` append the
+        # empty CaseArm when it reaches the next guard/END SELECT.
+        fr = c.cases[-1]
+        fr.next_test = next_test
+        fr.body_idx = len(o.stmts)
+        fr.body_jmp = next_test
+        fr.body_seq = state.region(
+            "case_arm", start=next_test, end=next_test,
+            detail=tuple(fr.cur_guards),
+        ).seq
+        state.seek(body_i)
+        c.cur = None
+        return
     last_jmp_target = img.ops[i - 1][2] if img.ops[i - 1][1] == "jmp" else None
     fr = c.cases[-1]
     fr.next_test = next_test
@@ -133,7 +154,10 @@ def _begin_body(state, body_i, next_test):
             fr.end_select = last_jmp_target
     else:  # flow-through final arm (no trailing jmp)
         if fr.end_select == 0 or next_test != fr.end_select:
-            raise ValueError("SELECT CASE arm: flow-through without known END SELECT")
+            # Wild SELECT layouts can fall through directly into the next
+            # arm's test without the canonical closing jump. Use that test as
+            # the arm boundary so later arms remain decodable.
+            fr.end_select = next_test
         fr.body_jmp = next_test
     # The body's extent is known here and nowhere earlier: where it starts, and
     # the arm-close jmp it runs to. Recording it is what lets the snapshot read
@@ -195,10 +219,117 @@ def _fold_arm(state, frame, merge):
         stmt_addr=o.stmt_addr,
         block_ifs=c.block_if_addrs,
     )
+    stmts, addrs = _fold_arm_ifgoto_else(stmts, addrs, merge, _target_counts(o.stmts))
     o.stmts[body_idx:], o.addrs[body_idx:] = stmts, addrs
     body = tuple(o.stmts[body_idx:])
     _keep_addrs(state, body, body_idx)
     return body
+
+
+def _addr_target(t):
+    """The address an unresolved `("addr", a)` target names, else None."""
+    return t[1] if isinstance(t, tuple) and t and t[0] == "addr" else None
+
+
+def _fold_arm_ifgoto_else(stmts, addrs, merge, counts):
+    """Fold single-line IFs that `_fold_if` cannot see, inside a CASE arm.
+
+    A simple condition canonicalizes to `ir.IfGoto`, never to the `ir.IfInline`
+    `_fold_if` matches on, so `IF c THEN x [ELSE y]` reaches here as a
+    conditional GOTO plus loose statements:
+
+        IF c THEN x            IfGoto(NOT c, ->arm end)   <then...>
+        IF c THEN x ELSE y     IfGoto(NOT c, ->E)  <then...>  Goto(->arm end)
+                               E: <else...>
+
+    At top level both spellings are fine -- they emit as numbered lines and
+    recompile byte-for-byte, which is why this must NOT run there (t1_ifgoto).
+    In an arm they cannot be spelled: the skip targets the arm's own end, which
+    is the arm-close jmp and owns no statement, so the address never resolves
+    (`jump target 0x873e is not a statement start`).
+
+    Folding to `ir.IfBlock` would be wrong rather than merely ugly -- over a
+    simple condition the block spelling compiles to different bytes -- so this
+    reproduces the source's own single-line form via `IfInline.else_body`, with
+    the condition negated back into its source sense.
+
+    An ELSE run is folded recursively, which is what recovers a chained
+    `IF a THEN x ELSE IF b THEN y ELSE z`: every arm of the chain skips to the
+    same arm end, so `merge` stays fixed all the way down.
+
+    Only a branch to the arm end is rewritten. An IfGoto naming a real
+    statement inside the arm already resolves and already round-trips as a
+    numbered line, so it is left exactly as it is.
+    """
+    local = _target_counts(stmts)
+    if counts.get(merge, 0) != local.get(merge, 0):
+        # Something outside this arm jumps to its end; the arm-close address is
+        # not ours alone to consume.
+        return stmts, addrs
+    return _fold_region(stmts, addrs, merge, counts)
+
+
+def _unreferenced(addrs, counts) -> bool:
+    """No statement anywhere names one of these addresses.
+
+    A run about to be swallowed into an inline body stops being addressable, so
+    it may not hold a jump target -- the same rule `_fold_if` applies to an ELSE
+    region, and the reason a source that really did spell numbered lines is left
+    alone.
+    """
+    return not any(counts.get(a, 0) for a in addrs if a is not None)
+
+
+def _fold_ifgoto_then(stmts, addrs, index, merge, counts):
+    if index + 1 >= len(stmts) or not _unreferenced(addrs[index + 1 :], counts):
+        return None
+    statement = stmts[index]
+    return ir.IfInline(_negate_cond(statement.cond), tuple(stmts[index + 1 :]), None)
+
+
+def _fold_ifgoto_else(stmts, addrs, index, target, merge, counts):
+    end = next(
+        (position for position in range(index + 1, len(stmts)) if addrs[position] == target),
+        None,
+    )
+    if end is None or end - 1 <= index:
+        return None
+    skip = stmts[end - 1]
+    if not isinstance(skip, ir.Goto) or _addr_target(skip.target) != merge:
+        return None
+    if counts.get(target, 0) != 1 or not _unreferenced(addrs[index + 1 : end - 1], counts):
+        return None
+    else_body, _ = _fold_region(stmts[end:], addrs[end:], merge, counts)
+    statement = stmts[index]
+    return ir.IfInline(
+        _negate_cond(statement.cond),
+        tuple(stmts[index + 1 : end - 1]),
+        tuple(else_body),
+    )
+
+
+def _fold_region(stmts, addrs, merge, counts):
+    out_s, out_a = [], []
+    i = 0
+    while i < len(stmts):
+        s, a = stmts[i], addrs[i]
+        target = _addr_target(s.target) if isinstance(s, ir.IfGoto) else None
+        node = None
+        if target is not None and a is not None and target > a:
+            node = (
+                _fold_ifgoto_then(stmts, addrs, i, merge, counts)
+                if target == merge
+                else _fold_ifgoto_else(stmts, addrs, i, target, merge, counts)
+            )
+        if node is None:
+            out_s.append(s)
+            out_a.append(a)
+            i += 1
+            continue
+        out_s.append(node)
+        out_a.append(a)
+        i = len(stmts)  # the fold reaches the arm end by construction
+    return out_s, out_a
 
 
 def _keep_addrs(state, body, body_idx) -> None:
@@ -306,12 +437,20 @@ def step(state):
             return True
         in_body = bool(c.cases) and c.cases[-1].body_jmp is not None
         # (3) Numeric entry: fstp64 [temp] to a scratch slot, arm header following.
+        # An event-trapping poll hook lands at this join too, exactly as it does
+        # at the string entry below -- the selector evaluation and the first arm
+        # test are separate statements, so a trapping program stamps between
+        # them. Without skipping it the SELECT is never recognised and the arms
+        # decode as an IF chain, which recompiles to integer compares instead of
+        # the selector's FP scratch cell (t1_selreftrap; wild resume.exe, 12
+        # sites, and the whole of what was left of its round trip).
+        head = _skip_hooks(state, c.k + 1)
         if (
             not in_body
             and kind == "fstp64"
             and op[2] < VAR_BASE
-            and _is_arm_header_at(state, c.k + 1)
-            and _arm_temp_at(state, c.k + 1) == op[2]
+            and _is_arm_header_at(state, head)
+            and _arm_temp_at(state, head) == op[2]
         ):
             state.branch(
                 "case", template="select_header", target=None, address=c.cur
@@ -399,7 +538,7 @@ def step(state):
                 fr.pending_range_lo = val
                 state.advance(4)
                 c.cur = None
-            elif cc == 0x72:  # JB: range high bound -> emit Range, begin body
+            elif cc in (0x72, 0x73, 0x77):  # range high bound -> emit Range
                 lo = fr.pending_range_lo
                 fr.pending_range_lo = None
                 fr.cur_guards.append(ir.CaseRange(lo, val))

@@ -16,6 +16,11 @@ Repository = "https://github.com/leag/tbx"
 debug = [
     "iced-x86>=1.21.0",
 ]
+web = [
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+    "python-multipart>=0.0.9",
+]
 
 [project.scripts]
 tbx = "tbx.cli:main"
@@ -44,7 +49,12 @@ ignore = ["E701", "E702", "E741"]
 
 [dependency-groups]
 dev = [
+    "httpx>=0.27",
     "iced-x86>=1.21.0",
+    "lizard>=1.17.10",
     "pytest>=9.0.0",
+    "radon>=5.1,<5.2",
     "ruff>=0.15.0",
+    "wily>=1.25.0",
+    "xenon>=0.9.3",
 ]

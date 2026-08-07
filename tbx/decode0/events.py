@@ -239,6 +239,22 @@ class EventLog:
         self.events.append(event)
         return event
 
+    def committed(self, statement: Any) -> bool:
+        """Whether some event in the log put ``statement`` in the program.
+
+        The question `supersede` asks before it will revise anything, exposed
+        for a caller that has to decide. Not everything in the statement list
+        was committed: a SUB body is ASSEMBLED at its procedure's return from
+        statements already accounted for, so the container itself has no event
+        of its own, and a pass that retypes one has nothing to revise. Matched
+        by identity, exactly as `supersede` matches.
+        """
+        return any(
+            (event.kind == "statement" and event.payload is statement)
+            or (event.kind == "patch" and event.payload.statement is statement)
+            for event in self.events
+        )
+
     def supersede(self, previous: Any, statement: Any) -> DecodedEvent:
         """Record that ``previous`` was revised into ``statement``.
 
@@ -390,6 +406,11 @@ def _nested_statements(value: Any) -> set:
                 try:
                     found.add(item)
                 except TypeError:
+                    # Deliberate, and the one swallow in the decoder: an
+                    # unhashable payload cannot be looked up here, so it is
+                    # skipped and the caller reports it as rewritten. See this
+                    # function's docstring -- it is a conservative answer about
+                    # bookkeeping, never a decode that guessed.
                     pass
             for f in fields(item):
                 visit(getattr(item, f.name), False)
@@ -399,6 +420,65 @@ def _nested_statements(value: Any) -> set:
 
     visit(value, True)
     return found
+
+
+def _statement_positions(statements: list[Any]) -> dict[Any, deque]:
+    positions: dict[Any, deque] = {}
+    for index, statement in enumerate(statements):
+        try:
+            positions.setdefault(statement, deque()).append(index)
+        except TypeError:  # unhashable: never matched, reported as synthesized
+            continue
+    return positions
+
+
+def _match_events(
+    events: tuple[DecodedEvent, ...], positions: dict[Any, deque]
+) -> tuple[set[int], list[DecodedEvent]]:
+    matched_indices: set[int] = set()
+    unmatched: list[DecodedEvent] = []
+    cursor = 0
+    for event in events:
+        slots = positions.get(event.payload) if _hashable(event.payload) else None
+        while slots and slots[0] < cursor:
+            slots.popleft()
+        if slots:
+            index = slots.popleft()
+            matched_indices.add(index)
+            cursor = index + 1
+        else:
+            unmatched.append(event)
+    return matched_indices, unmatched
+
+
+def _absorbed_sequences(
+    unmatched: list[DecodedEvent], statements: list[Any]
+) -> frozenset[int]:
+    bodies: set = set()
+    for statement in statements:
+        bodies |= _nested_statements(statement)
+    return frozenset(
+        event.seq
+        for event in unmatched
+        if _hashable(event.payload) and event.payload in bodies
+    )
+
+
+def _classify_unmatched(
+    statements: list[Any],
+    matched_indices: set[int],
+    derived: dict[Any, int],
+) -> tuple[list[int], list[int]]:
+    synthesized, reconstructed = [], []
+    for index, statement in enumerate(statements):
+        if index in matched_indices:
+            continue
+        if _hashable(statement) and derived.get(statement):
+            derived[statement] -= 1
+            reconstructed.append(index)
+        else:
+            synthesized.append(index)
+    return synthesized, reconstructed
 
 
 def reconcile(
@@ -429,49 +509,18 @@ def reconcile(
     events = committed(events)
     statements = list(statements)
 
-    positions: dict[Any, deque] = {}
-    for index, statement in enumerate(statements):
-        try:
-            positions.setdefault(statement, deque()).append(index)
-        except TypeError:  # unhashable: never matched, reported as synthesized
-            continue
-
-    matched_indices: set[int] = set()
-    unmatched: list[DecodedEvent] = []
-    cursor = 0
-    for event in events:
-        slots = positions.get(event.payload) if _hashable(event.payload) else None
-        while slots and slots[0] < cursor:
-            slots.popleft()
-        if slots:
-            index = slots.popleft()
-            matched_indices.add(index)
-            cursor = index + 1
-        else:
-            unmatched.append(event)
-
-    bodies: set = set()
-    for statement in statements:
-        bodies |= _nested_statements(statement)
-    absorbed = tuple(
-        e.seq for e in unmatched if _hashable(e.payload) and e.payload in bodies
-    )
-    absorbed_seqs = frozenset(absorbed)
-    rewritten = tuple(e.seq for e in unmatched if e.seq not in absorbed_seqs)
+    positions = _statement_positions(statements)
+    matched_indices, unmatched = _match_events(events, positions)
+    absorbed_seqs = _absorbed_sequences(unmatched, statements)
+    absorbed = tuple(event.seq for event in unmatched if event.seq in absorbed_seqs)
+    rewritten = tuple(event.seq for event in unmatched if event.seq not in absorbed_seqs)
     # A statement no committed event matched is either something folding built
     # out of committed statements, or something finalization derived. The
     # reconstruction events say which, and are consumed one per statement so
     # two DATA blocks with identical items cannot both claim one event.
-    synthesized, reconstructed = [], []
-    for index in range(len(statements)):
-        if index in matched_indices:
-            continue
-        statement = statements[index]
-        if _hashable(statement) and derived.get(statement):
-            derived[statement] -= 1
-            reconstructed.append(index)
-        else:
-            synthesized.append(index)
+    synthesized, reconstructed = _classify_unmatched(
+        statements, matched_indices, derived
+    )
 
     return EventReconciliation(
         matched=len(events) - len(unmatched),

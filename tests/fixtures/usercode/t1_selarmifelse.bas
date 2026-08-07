@@ -1,0 +1,9 @@
+10 A% = 1
+20 SELECT CASE A%
+CASE 1
+  IF B% = 0 THEN B% = 64 ELSE B% = B% - 1
+CASE 2
+  IF B% = 64 THEN B% = 0 ELSE B% = B% + 1
+END SELECT
+30 PRINT B%
+40 END

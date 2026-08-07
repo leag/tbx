@@ -1,0 +1,24 @@
+# t1_gotosubline dialect=1.1 start=08700
+08703:movm_imm:288:1
+08709:movax:1
+0870C:cmpax_m:288
+08710:jcc:117:34581
+08712:jmp:34590
+08715:movsi:316
+08718:rt:156
+0871A:rt:190
+0871C:rt:184
+0871E:jmp:34607
+08721:proc_enter
+08724:movsi:312
+08727:rt:156
+08729:rt:190
+0872B:rt:184
+0872D:proc_ret:0
+0872F:movsi:308
+08732:rt:156
+08734:rt:190
+08736:rt:184
+08738:end
+0873B:epilogue
+# commits

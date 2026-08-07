@@ -1,6 +1,8 @@
 """Structured-control-flow lifting: FOR/DO/WHILE/IF folds and target resolution."""
 
 from __future__ import annotations
+import logging
+from dataclasses import replace
 from typing import Any
 
 from tbx import ir
@@ -8,6 +10,18 @@ from tbx.decode0.const import _JCC_RELOP_TRUE, _NEGATE_REL
 from tbx.decode0.control_graph import frame_for
 from tbx.decode0.frames import BoolTerm, IfFrame, LoopFrame
 from tbx.decode0.statement_log import editing
+
+logger = logging.getLogger(__name__)
+
+
+def _nopatch(index, statement):
+    """Revise a statement without recording it -- the isolated-test default.
+
+    The walk passes `state.patch`, the same way it passes `state.shift_pending`
+    to the loop lifts. A lift that rebuilds a statement the walk committed owes
+    the log an account of the revision, or `reconcile` reads the replacement as
+    a statement nothing decided.
+    """
 
 
 def _lift_next(ops, k, fors, stmts, addrs, exit_folds) -> int:
@@ -32,8 +46,20 @@ def _lift_next(ops, k, fors, stmts, addrs, exit_folds) -> int:
             return i + len(want)
 
         def jcc_body(i, cc, inv):
+            # `f.body` and a real jump target are both file-linear addresses,
+            # but a body that starts a later procedure can spell the same IP
+            # 64 KiB above the header's own window (wild electron.exe is
+            # `_same_code_offset`'s existing witness for this; wild
+            # mcmurphy.exe's DOUBLE FOR/NEXT template is the same wraparound,
+            # just reached through the long jcc-skip-jmp form instead of a
+            # direct short jcc).
             o = ops[i]
-            if o[1] == "jcc" and o[2] == cc and o[3] == f.body:
+            if (
+                o[1] == "jcc"
+                and o[2] == cc
+                and f.body is not None
+                and _same_code_offset(o[3], f.body)
+            ):
                 return i + 1
             if (
                 o[1] == "jcc"
@@ -41,7 +67,8 @@ def _lift_next(ops, k, fors, stmts, addrs, exit_folds) -> int:
                 and o[3] == o[0] + 5
                 and i + 1 < len(ops)
                 and ops[i + 1][1] == "jmp"
-                and ops[i + 1][2] == f.body
+                and f.body is not None
+                and _same_code_offset(ops[i + 1][2], f.body)
             ):
                 return i + 2
             raise ValueError(
@@ -106,7 +133,7 @@ def _lift_next(ops, k, fors, stmts, addrs, exit_folds) -> int:
         return i
 
 
-def _lift_var_step_next(ops, k, fors, stmts, addrs) -> int:
+def _lift_var_step_next(ops, k, fors, stmts, addrs, patch=_nopatch) -> int:
     """Consume the computed (variable) STEP FOR's NEXT template at ops[k]
     (an orax_self at the open FOR's test address): the increment `v = v +
     step` was already lifted as the preceding Assign -- fold it in, exactly
@@ -197,7 +224,13 @@ def _lift_var_step_next(ops, k, fors, stmts, addrs) -> int:
         del stmts[-1], addrs[-1]
 
         old = stmts[f.idx]
-        stmts[f.idx] = ir.For(old.var, old.init, ir.Lit(asc_lim), old.step)
+        revised = ir.For(old.var, old.init, ir.Lit(asc_lim), old.step)
+        # Before the list edit: `state.patch` reads the statement it is
+        # replacing out of the list, so assigning first would have it record
+        # the new node as superseding itself. The second assignment is
+        # idempotent there, and is what does the work under `_nopatch`.
+        patch(f.idx, revised)
+        stmts[f.idx] = revised
 
         stmts.append(ir.NextStmt(var))
         addrs.append(a)
@@ -338,7 +371,11 @@ def _lift_bool_tail(
         # `jmpf` (5 bytes, EA) instead of the near `jmp` (3 bytes, E9) here --
         # same op-kind breadth `direct_bool` already accepts for its own
         # dispatch-tail jmp.
-        if want[:5] == ["movax", "jcc", "incax", comb, "jcc"] and want[5] in (
+        if want[:3] == ["movax", "jcc", "incax"] and want[3] in (
+            comb,
+            "andaxbx",
+            "orax",
+        ) and want[4] == "jcc" and want[5] in (
             "jmp",
             "jmpf",
         ):
@@ -353,7 +390,11 @@ def _lift_bool_tail(
         jmp_len = 5 if f_jmp[1] == "jmpf" else 3
         if f_jcc[2] not in (0x74, 0x75) or f_jcc[3] != f_jmp[0] + jmp_len:
             raise ValueError(f"compound-IF tail: bad dispatch pair at {f_jcc[0]:#x}")
-        delta = 2 if pb.op == "AND" else 0
+        # The legacy helper variant chooses the boolean combine instruction
+        # from the dispatch polarity, not the source-level outer operator.
+        # Use the observed opcode when it differs from ``pb``.
+        observed_comb = want[3]
+        delta = 2 if observed_comb == "andaxbx" else 0
         if not _same_code_offset(pb.sc, ops[k + 3][0] + delta):
             raise ValueError(
                 f"compound-IF: short-circuit target mismatch at {ops[k][0]:#x}"
@@ -456,10 +497,23 @@ def _noshift(index, delta):
 
 
 def _loop_back_in_scope(back, stmts, addrs, scope_start) -> bool:
-    """A loop back-edge cannot cross a completed procedure declaration."""
+    """A loop back-edge cannot cross a completed procedure declaration.
+
+    Nor a completed FOR. Splicing the `DO` at the back-edge target puts the
+    header wherever that statement stands, and the `LOOP` goes at the end of
+    what has been decoded -- so if a `NEXT` closing a FOR opened ABOVE the
+    target falls between them, the emitted loop crosses that FOR and TB rejects
+    the NEXT (`Error 445: NEXT expected`; wild state.exe, the three
+    `LOOP WHILE` closers under the FOR at line 10200 whose NEXT is at 11490).
+    A body holding a WHOLE FOR is untouched, which is why this asks whether the
+    span closes something opened outside it rather than whether it contains a
+    NEXT at all.
+    """
     if back not in addrs:
         return False
     index = addrs.index(back)
+    if _closes_an_outer_loop(stmts[index:]):
+        return False
     return index >= scope_start and not any(
         isinstance(statement, (ir.SubDef, ir.DefFn))
         for statement in stmts[index:]
@@ -611,11 +665,35 @@ def _lift_while(
     with editing(stmts, "lift_while"):
         negate = k + 3 < len(ops) and ops[k + 3][1] == "notax"
         off = 1 if negate else 0
+        if (
+            negate
+            and k + 5 < len(ops)
+            and ops[k + 4][1] == "orax"
+            and ops[k + 5][1] == "jcc"
+            and ops[k + 5][2] in (0x74, 0x75)
+            and ops[k + 5][3] < ops[k][0]
+            and ops[k + 5][3] in addrs
+        ):
+            # Legacy string loops can use the materialized value's backward
+            # Jcc directly, omitting the usual forward-exit Jcc/JMP pair
+            # (wild kinder.exe). Treat the backward edge as a tail-tested
+            # loop and splice the byte-free DO at its target.
+            lhs, rhs = pend_cmp
+            cond = ir.Not(ir.RelOp(_JCC_RELOP_TRUE[ops[k + 1][2]], lhs, rhs))
+            loop_kind = "WHILE" if ops[k + 5][2] == 0x75 else "UNTIL"
+            idx = addrs.index(ops[k + 5][3])
+            stmts.insert(idx, ir.Do(None))
+            addrs.insert(idx, None)
+            shift(idx, 1)
+            put(ir.Loop(loop_kind, cond), cur)
+            return k + 6
         want = ["movax", "jcc", "incax"] + (["notax"] if negate else []) + [
             "orax",
             "jcc",
             "jmp",
         ]
+        if k + len(want) <= len(ops) and ops[k + 3 + off][1] == "andaxbx":
+            want[3 + off] = "andaxbx"
         if k + len(want) > len(ops) or [o[1] for o in ops[k : k + len(want)]] != want:
             raise ValueError(f"materialization template mismatch at {ops[k][0]:#x}")
         m_jcc, exit_jcc, exit_jmp = ops[k + 1], ops[k + 4 + off], ops[k + 5 + off]
@@ -676,7 +754,7 @@ def _lift_while(
             addrs.insert(idx, None)
             shift(idx, 1)
             put(ir.Loop(loop_kind, cond), cur)
-        elif exit_jcc[2] == 0x75:  # inline-IF (forward skip, by exclusion above)
+        elif exit_jcc[2] in (0x74, 0x75):  # inline-IF (forward skip, by exclusion above)
             flush()
             spelled_block = False
             if block_ifs is not None and isinstance(cond, ir.RelOp):
@@ -772,7 +850,48 @@ def _body_has_target(body, targets, stmt_addr) -> bool:
     return False
 
 
-def _fold_body(body, targets=frozenset(), stmt_addr=None, block_ifs=None):
+def _contains_goto(body) -> bool:
+    """Whether a nested structured body contains a source-level GOTO."""
+    for statement in body:
+        if isinstance(statement, (ir.Goto, ir.IfGoto)):
+            return True
+        if isinstance(statement, ir.IfInline) and _contains_goto(statement.body):
+            return True
+        if isinstance(statement, ir.IfBlock):
+            if any(_contains_goto(arm) for _cond, arm in statement.arms):
+                return True
+            if statement.else_body and _contains_goto(statement.else_body):
+                return True
+    return False
+
+
+def _contains_bodyline_goto(body) -> bool:
+    """Whether a nested body contains a GOTO into a numbered body line."""
+    for statement in body:
+        if isinstance(statement, ir.Goto) and (
+            isinstance(statement.target, ir.BodyLine)
+            or (
+                isinstance(statement.target, tuple)
+                and statement.target
+                and statement.target[0] == "addr"
+            )
+        ):
+            return True
+        if isinstance(statement, ir.IfInline):
+            if _contains_bodyline_goto(statement.body) or (
+                statement.else_body is not None
+                and _contains_bodyline_goto(statement.else_body)
+            ):
+                return True
+        elif isinstance(statement, ir.IfBlock):
+            if any(_contains_bodyline_goto(arm) for _cond, arm in statement.arms):
+                return True
+            if statement.else_body and _contains_bodyline_goto(statement.else_body):
+                return True
+    return False
+
+
+def _fold_body(body, targets=frozenset(), stmt_addr=None, block_ifs=None, bound=None):
     """Recursively block-fold nested non-inline-safe IFs within an arm/else body
     (bodies carry no Goto-else marker; only the rendering split applies here) --
     also block-folds an inline-safe IfInline whose OWN body contains a jump
@@ -839,6 +958,48 @@ def _fold_body(body, targets=frozenset(), stmt_addr=None, block_ifs=None):
             body = tuple(folded)
         out = []
         for b in body:
+            if (
+                isinstance(b, ir.IfInline)
+                and isinstance(b.cond, ir.RelOp)
+                and bound is not None
+                and any(isinstance(x, ir.IfGoto) for x in b.body)
+            ):
+                # A nested condition whose skip is the enclosing procedure's
+                # exit is another leg of the same source guard. Keep it as a
+                # guard instead of materializing a block IF (SUB1's nested
+                # LEN tests have this exact shared exit).
+                guard = ir.IfGoto(_negate_cond(b.cond), ("addr", bound))
+                folded = _fold_body(
+                    b.body, targets, stmt_addr, block_ifs, bound=bound
+                )
+                if stmt_addr is not None:
+                    a = stmt_addr.get(id(b))
+                    if a is not None:
+                        stmt_addr.claim(guard, a)
+                out.append(guard)
+                out.extend(folded)
+                continue
+            if (
+                isinstance(b, ir.IfInline)
+                and isinstance(b.cond, ir.Var)
+                and any(isinstance(x, ir.Goto) for x in b.body[:-1])
+            ):
+                # Turbo Basic cannot parse an inline IF whose body contains a
+                # GOTO followed by another statement (`IF CI% THEN ...:
+                # GOTO 2176: PRINT ...`, CVT2TB).  The trailing statement is
+                # reachable only on the non-jump path, so the compiler's
+                # source form is a block IF with an explicit numeric test.
+                cond = ir.RelOp("<>", b.cond, ir.Lit(0))
+                new_b = ir.IfBlock(
+                    ((cond, _fold_body(b.body, targets, stmt_addr, block_ifs)),),
+                    None,
+                )
+                if stmt_addr is not None:
+                    a = stmt_addr.get(id(b))
+                    if a is not None:
+                        stmt_addr.claim(new_b, a)
+                out.append(new_b)
+                continue
             if isinstance(b, ir.IfInline) and (
                 not _inline_safe(b.body)
                 or _body_has_target(b.body, targets, stmt_addr)
@@ -864,58 +1025,108 @@ def _fold_body(body, targets=frozenset(), stmt_addr=None, block_ifs=None):
         return tuple(out)
 
 
-def _apply_exit_folds(stmts, addrs, exit_folds):
+def _rewrite_exit_goto(statement, exit_addr, exit_stmt):
+    """Replace a GOTO to `exit_addr` with `exit_stmt`, inside bodies as well.
+
+    A fold entry is recorded when the loop's back-edge is reached, which is
+    after the region holding the early-exit GOTO may already have folded --
+    deferred folding drains a region as soon as the construct owning it
+    closes, so by the time this pass runs the GOTO can be a body statement
+    rather than a top-level one. It was top level under the eager fold, which
+    is the only reason scanning `stmts` alone ever sufficed; a GOTO missed here
+    survives as a bare `GOTO <line>` and takes a synthesized line number with
+    it (wild ziptest.exe SUB4, whose `EXIT LOOP` re-emerged as `GOTO 44`).
+    """
+    if isinstance(statement, ir.Goto) and statement.target == ("addr", exit_addr):
+        return exit_stmt
+    if isinstance(statement, ir.IfInline):
+        body = tuple(
+            _rewrite_exit_goto(b, exit_addr, exit_stmt) for b in statement.body
+        )
+        return statement if body == statement.body else replace(statement, body=body)
+    if isinstance(statement, ir.IfBlock):
+        arms = tuple(
+            (cond, tuple(_rewrite_exit_goto(b, exit_addr, exit_stmt) for b in arm))
+            for cond, arm in statement.arms
+        )
+        else_body = statement.else_body
+        if else_body is not None:
+            else_body = tuple(
+                _rewrite_exit_goto(b, exit_addr, exit_stmt) for b in else_body
+            )
+        if arms == statement.arms and else_body == statement.else_body:
+            return statement
+        return replace(statement, arms=arms, else_body=else_body)
+    return statement
+
+
+def _exit_scope(stmts, addrs, skip_addr, opener, closer):
+    if opener is None:
+        return None
+    for_stop = next((i for i, address in enumerate(addrs) if address == skip_addr), None)
+    if for_stop is None:
+        return None, None
+    depth = 0
+    for index in range(for_stop - 1, -1, -1):
+        if isinstance(stmts[index], closer):
+            depth += 1
+        elif isinstance(stmts[index], opener):
+            if depth == 0:
+                return index, for_stop
+            depth -= 1
+    return None, for_stop
+
+
+def _rewrite_exit_gotos(stmts, addrs, exit_stmt, exit_addr, scope, patch):
+    for index, statement in enumerate(stmts):
+        for_start = for_stop = None
+        if scope is not None:
+            for_start, for_stop = scope
+        in_scope = scope is None or (
+            for_start is not None and for_stop is not None and for_start < index < for_stop
+        )
+        if not in_scope:
+            continue
+        rewritten = _rewrite_exit_goto(statement, exit_addr, exit_stmt)
+        if rewritten is statement:
+            continue
+        if isinstance(statement, ir.Goto):
+            patch(index, rewritten)
+        stmts[index] = rewritten
+
+
+def _fold_exit_conditionals(stmts, addrs, skip_addr, exit_stmt):
+    index = 0
+    while index + 1 < len(stmts):
+        if (
+            isinstance(stmts[index], ir.IfGoto)
+            and stmts[index].target == ("addr", skip_addr)
+            and stmts[index + 1] == exit_stmt
+        ):
+            condition = stmts[index].cond
+            if not isinstance(condition, ir.RelOp):
+                raise ValueError(f"EXIT-IF fold: non-relational cond {condition!r}")
+            stmts[index] = ir.IfInline(
+                ir.RelOp(_NEGATE_REL[condition.op], condition.lhs, condition.rhs),
+                (exit_stmt,),
+            )
+            del stmts[index + 1], addrs[index + 1]
+        index += 1
+
+
+def _apply_exit_folds(stmts, addrs, exit_folds, patch=_nopatch):
     """EXIT FOR/LOOP/SUB/DEF folds: rewrite the early-exit GOTO to the
     loop/proc exit, then fold `IF c THEN <skip>` + EXIT into `IF negate(c) THEN EXIT`.
     """
     with editing(stmts, "apply_exit_folds"):
         for exit_stmt, skip_addr, exit_addr in exit_folds:
-            for_start = None
-            for_stop = None
-            if isinstance(exit_stmt, ir.ExitFor):
-                for_stop = next(
-                    (i for i, a in enumerate(addrs) if a == skip_addr), None
-                )
-                if for_stop is not None:
-                    depth = 0
-                    for j in range(for_stop - 1, -1, -1):
-                        if isinstance(stmts[j], ir.NextStmt):
-                            depth += 1
-                        elif isinstance(stmts[j], ir.For):
-                            if depth == 0:
-                                for_start = j
-                                break
-                            depth -= 1
-            for i, s in enumerate(stmts):
-                in_for = (
-                    not isinstance(exit_stmt, ir.ExitFor)
-                    or (
-                        for_start is not None
-                        and for_stop is not None
-                        and for_start < i < for_stop
-                    )
-                )
-                if (
-                    in_for
-                    and isinstance(s, ir.Goto)
-                    and s.target == ("addr", exit_addr)
-                ):
-                    stmts[i] = exit_stmt
-            i = 0
-            while i + 1 < len(stmts):
-                if (
-                    isinstance(stmts[i], ir.IfGoto)
-                    and stmts[i].target == ("addr", skip_addr)
-                    and stmts[i + 1] == exit_stmt
-                ):
-                    c = stmts[i].cond
-                    if not isinstance(c, ir.RelOp):
-                        raise ValueError(f"EXIT-IF fold: non-relational cond {c!r}")
-                    stmts[i] = ir.IfInline(
-                        ir.RelOp(_NEGATE_REL[c.op], c.lhs, c.rhs), (exit_stmt,)
-                    )
-                    del stmts[i + 1], addrs[i + 1]
-                i += 1
+            opener, closer = {
+                ir.ExitFor: (ir.For, ir.NextStmt),
+                ir.ExitLoop: (ir.Do, ir.Loop),
+            }.get(type(exit_stmt), (None, None))
+            scope = _exit_scope(stmts, addrs, skip_addr, opener, closer)
+            _rewrite_exit_gotos(stmts, addrs, exit_stmt, exit_addr, scope, patch)
+            _fold_exit_conditionals(stmts, addrs, skip_addr, exit_stmt)
 
 
 def _fold_body_ifgotos(body, end_addr, stmt_addr=None):
@@ -924,7 +1135,9 @@ def _fold_body_ifgotos(body, end_addr, stmt_addr=None):
     `THEN <line>`); when such an IfGoto inside an inline-IF body targets the
     body's own END address, the source was a nested inline IF whose skip-jcc
     merged with the enclosing close -- negate the compare and nest the tail
-    (witnessed t1_nestif / wild vhfprop.exe). Other targets are left alone
+    (witnessed by wild vhfprop.exe ONLY -- no corpus fixture reaches this
+    negation, so it has no byte-exact calibration behind it; authoring one is
+    an open task). Other targets are left alone
     (fail-loud at recompile until a fixture witnesses them). The negated
     IfInline occupies the CONSUMED IfGoto's own position, so its recorded
     address (if any) transfers to the new node -- otherwise a GOTO targeting
@@ -971,24 +1184,40 @@ def _jump_targets(stmts) -> frozenset[int]:
     SubDef/DefFn bodies are deliberately NOT walked: by the time a body is
     inside one, its own `_fold_if` pass at proc_ret/fn_ret has already run
     with its statements at top level, so its targets were collected then."""
-    out = set()
+    return frozenset(_target_counts(stmts))
+
+
+def _target_counts(stmts) -> dict[int, int]:
+    """`_jump_targets` with multiplicity: how many references each address has.
+
+    A membership test cannot tell "some other statement jumps here" from "the
+    statement I am about to fold away jumps here", and a fold that consumes its
+    own branch needs exactly that distinction -- see
+    `select_case._fold_arm_ifgoto_else`, whose region is delimited by the two
+    jumps it removes."""
+    out: dict[int, int] = {}
+
+    def hit(a):
+        out[a] = out.get(a, 0) + 1
 
     def walk(s):
         if isinstance(s, (ir.Goto, ir.IfGoto, ir.Gosub)):
             if isinstance(s.target, tuple) and s.target[0] == "addr":
-                out.add(s.target[1])
+                hit(s.target[1])
         elif isinstance(s, (ir.OnGoto, ir.OnGosub)):
             for tag, a in s.targets:
                 if tag == "addr":
-                    out.add(a)
+                    hit(a)
         elif isinstance(s, (ir.OnError, ir.Resume)) and s.target is not None:
             if isinstance(s.target, tuple) and s.target[0] == "addr":
-                out.add(s.target[1])
+                hit(s.target[1])
         elif isinstance(s, ir.OnTrap):
             if isinstance(s.target, tuple) and s.target[0] == "addr":
-                out.add(s.target[1])
+                hit(s.target[1])
         elif isinstance(s, ir.IfInline):
             for b in s.body:
+                walk(b)
+            for b in s.else_body or ():
                 walk(b)
         elif isinstance(s, ir.IfBlock):
             for _cond, arm in s.arms:
@@ -1005,11 +1234,42 @@ def _jump_targets(stmts) -> frozenset[int]:
 
     for s in stmts:
         walk(s)
-    return frozenset(out)
+    return out
+
+
+def _closes_an_outer_loop(stmts) -> bool:
+    """True if a loop terminator in `stmts` closes a loop opened before them.
+
+    The same rule the inline leg below already enforces on an IfInline body,
+    asked of a candidate ELSE region: `LOOP`/`WEND`/`NEXT` may stand in an arm
+    only alongside the header that opened it, because TB requires `END IF`
+    before the closer. A region that closes a loop begun outside itself is the
+    fall-through after `END IF` -- the else-skip Goto is an `EXIT LOOP`, not an
+    else -- and folding it into an arm emits source TB rejects with
+    `Error 441: END IF expected` (wild ziptest.exe SUB4; t1_exloopsub).
+
+    A region holding a WHOLE loop is untouched: its own header balances the
+    closer, which is why this counts depth rather than just looking for one.
+    """
+    depth = 0
+    for statement in stmts:
+        if isinstance(statement, (ir.Do, ir.While, ir.For)):
+            depth += 1
+        elif isinstance(statement, (ir.Loop, ir.Wend, ir.NextStmt)):
+            if depth == 0:
+                return True
+            depth -= 1
+    return False
 
 
 def _fold_if(
-    stmts, addrs, bound=None, targets=frozenset(), stmt_addr=None, block_ifs=None
+    stmts,
+    addrs,
+    bound=None,
+    targets=frozenset(),
+    stmt_addr=None,
+    block_ifs=None,
+    procedure_guard=False,
 ):
     """Fold multi-line IF blocks, address-level (before target resolution).
     A block IF/ELSE is an IfInline whose body ends in a forward Goto past its own start
@@ -1028,6 +1288,41 @@ def _fold_if(
         i = 0
         while i < len(stmts):
             s, a = stmts[i], addrs[i]
+            if isinstance(s, ir.IfInline) and isinstance(s.cond, (ir.FnCall, ir.Not)):
+                # A bare function guard can enclose a real nested loop. Its
+                # first inner IfGoto is the guard's forward skip, while the
+                # body's final backward GOTO belongs to that nested loop. If
+                # the generic ELSE fold sees the latter first it manufactures
+                # an invalid bare block IF (CVT2TB's FNFN1% polling region).
+                forward = next(
+                    (
+                        b.target
+                        for b in s.body[:-1]
+                        if isinstance(b, ir.IfGoto)
+                        and isinstance(b.target, tuple)
+                        and b.target[0] == "addr"
+                        and a is not None
+                        and b.target[1] > a
+                    ),
+                    None,
+                )
+                tail = s.body[-1].target if s.body and isinstance(s.body[-1], ir.Goto) else None
+                if (
+                    forward is not None
+                    and isinstance(tail, tuple)
+                    and tail[0] == "addr"
+                    and tail[1] < forward[1]
+                ):
+                    guard = ir.IfGoto(s.cond, forward)
+                    if a is not None:
+                        stmt_addr.claim(guard, a)
+                    out_s.append(guard)
+                    out_a.append(a)
+                    folded = _fold_body(s.body, targets, stmt_addr, block_ifs)
+                    out_s.extend(folded)
+                    out_a.extend(stmt_addr.get(id(x)) for x in folded)
+                    i += 1
+                    continue
             if (
                 isinstance(s, ir.IfInline)
                 and s.body
@@ -1047,6 +1342,10 @@ def _fold_if(
                     t in targets for t in addrs[i + 1 : end_idx] if t is not None
                 ):
                     end_idx = None  # targeted interior: not an ELSE region
+                if end_idx is not None and _closes_an_outer_loop(
+                    stmts[i + 1 : end_idx]
+                ):
+                    end_idx = None  # closes an outer loop: not an ELSE region
                 if end_idx is not None:
                     # Codeless DO headers inserted at the merge address belong
                     # before the statement the ELSE skip targets, not inside
@@ -1060,7 +1359,28 @@ def _fold_if(
                         and addrs[else_stop - 1] is None
                     ):
                         else_stop -= 1
-                    arms = [(s.cond, _fold_body(s.body[:-1], targets, stmt_addr, block_ifs))]
+                    folded_body = _fold_body(s.body[:-1], targets, stmt_addr, block_ifs)
+                    if (
+                        isinstance(s.cond, (ir.FnCall, ir.Not))
+                        and _contains_bodyline_goto(s.body[:-1])
+                    ):
+                        # A bare function truth test surrounding a numbered
+                        # interior loop line is a source guard, not a scanned
+                        # block IF. Turbo Basic rejects the latter with Error
+                        # 418; the raw forward skip and BodyLine back-edge
+                        # identify the guard topology (CVT2TB's FNFN1% poll).
+                        guard = ir.IfGoto(s.cond, ("addr", end))
+                        if a is not None:
+                            stmt_addr.claim(guard, a)
+                        out_s.append(guard)
+                        out_a.append(a)
+                        out_s.extend(folded_body)
+                        out_a.extend(stmt_addr.get(id(x)) for x in folded_body)
+                        out_s.extend(stmts[else_stop:end_idx])
+                        out_a.extend(addrs[else_stop:end_idx])
+                        i = end_idx
+                        continue
+                    arms = [(s.cond, folded_body)]
                     else_s, _ = _fold_if(
                         stmts[i + 1 : else_stop],
                         addrs[i + 1 : else_stop],
@@ -1080,13 +1400,60 @@ def _fold_if(
                     out_a.extend(addrs[else_stop:end_idx])
                     i = end_idx
                     continue
+            # The guard jumps to whatever follows the region, and a codeless DO
+            # header for the NEXT loop is spliced in exactly there, carrying no
+            # address of its own; the jump belongs past it, to the first real
+            # statement -- which is where the byte-level exit lands, since a DO
+            # generates no code. Two adjacent loops put one here (wild cal.exe,
+            # whose loop exits straight into the next loop's body at 0x14cab).
+            # The ELSE leg above makes the same skip from the other side with
+            # `else_stop`.
+            guard_at = i + 1
+            while (
+                guard_at < len(stmts)
+                and addrs[guard_at] is None
+                and isinstance(stmts[guard_at], ir.Do)
+            ):
+                guard_at += 1
             if (
                 isinstance(s, ir.IfInline)
-                and isinstance(s.cond, (ir.RelOp, ir.LogOp, ir.Group))
-                and i + 1 < len(stmts)
-                and addrs[i + 1] is not None
+                # Compound conditions are emitted by Turbo Basic as a
+                # structured block when their body owns a loop terminator.
+                # Unfolding those into a negated guard changes the compiler's
+                # short-circuit boolean template (and therefore the bytes).
+                # Guard recovery is only sound for a single relational test,
+                # whose source spelling is otherwise indistinguishable.
+                and isinstance(s.cond, ir.RelOp)
+                and (
+                    addrs[guard_at]
+                    if guard_at < len(stmts)
+                    else bound
+                ) is not None
                 and any(
                     isinstance(b, (ir.Loop, ir.Wend, ir.NextStmt))
+                    for b in s.body
+                )
+            ) or (
+                isinstance(s, ir.IfInline)
+                # A compiler guard can enclose a second block whose numbered
+                # interior is reached by a backward GOTO.  Folding the outer
+                # region as IfBlock makes TB reject the nested line reference
+                # (Error 470); the guard spelling is the byte-equivalent form
+                # (CVT2TB SUB12 and the guard_nested oracle probe).
+                and isinstance(s.cond, ir.RelOp)
+                and procedure_guard
+                and i == 0
+                and len(stmts) == 1
+                and (
+                    addrs[guard_at] if guard_at < len(stmts) else bound
+                ) is not None
+                and any(
+                    isinstance(b, (ir.IfInline, ir.IfBlock))
+                    and _contains_goto(
+                        b.body
+                        if isinstance(b, ir.IfInline)
+                        else tuple(x for _cond, arm in b.arms for x in arm)
+                    )
                     for b in s.body
                 )
             ):
@@ -1096,14 +1463,41 @@ def _fold_if(
                 # after`) followed by ordinary statements and the terminator,
                 # not from a structured IF body. Preserve that topology by
                 # unfolding the recorded region back into a guard plus body.
-                guard = ir.IfGoto(_negate_cond(s.cond), ("addr", addrs[i + 1]))
+                guard_target = (
+                    addrs[guard_at] if guard_at < len(stmts) else bound
+                )
+                guard = ir.IfGoto(_negate_cond(s.cond), ("addr", guard_target))
                 if a is not None:
                     stmt_addr.claim(guard, a)
                 out_s.append(guard)
                 out_a.append(a)
-                for body_stmt in s.body:
+                for body_stmt in _fold_body(
+                    s.body, targets, stmt_addr, block_ifs, bound=guard_target
+                ):
                     out_s.append(body_stmt)
                     out_a.append(stmt_addr.get(id(body_stmt)))
+                i += 1
+                continue
+            if (
+                isinstance(s, ir.IfInline)
+                and isinstance(s.cond, (ir.Var, ir.FnCall))
+                and any(isinstance(b, ir.Goto) for b in s.body)
+                and i + 1 < len(stmts)
+                and addrs[i + 1] is not None
+            ):
+                # Resolved backward targets are integer statement indices by
+                # this pass, so the generic non-inline-safe test cannot see
+                # that this bare numeric IF owns a numbered loop edge. Keep
+                # the source-level guard topology (`IF NOT value THEN after`)
+                # instead of emitting an invalid bare numeric block IF.
+                guard = ir.IfGoto(ir.Not(s.cond), ("addr", addrs[i + 1]))
+                if a is not None:
+                    stmt_addr.claim(guard, a)
+                out_s.append(guard)
+                out_a.append(a)
+                folded = _fold_body(s.body, targets, stmt_addr, block_ifs)
+                out_s.extend(folded)
+                out_a.extend(stmt_addr.get(id(x)) for x in folded)
                 i += 1
                 continue
             if isinstance(s, ir.IfInline) and (
@@ -1118,6 +1512,32 @@ def _fold_if(
                 # a block IF with a NUMBERED interior line jumped into from
                 # outside (witnessed t1_blkgoto / wild inv87.exe); the block form
                 # lets emit0 number that physical line (ir.BodyLine).
+                if (
+                    isinstance(s.cond, (ir.Var, ir.FnCall))
+                    and (
+                        _contains_bodyline_goto(s.body)
+                        or any(isinstance(b, ir.Goto) for b in s.body)
+                    )
+                    and i + 1 < len(stmts)
+                    and addrs[i + 1] is not None
+                ):
+                    # A bare numeric truth test with a numbered interior
+                    # jump is the guard spelling `IF NOT value THEN after`,
+                    # not a scanned block IF. Turbo Basic rejects the latter
+                    # with Error 418 (CVT2TB's BB% search loop).
+                    guard = ir.IfGoto(
+                        ir.Not(s.cond),
+                        ("addr", addrs[i + 1]),
+                    )
+                    if a is not None:
+                        stmt_addr.claim(guard, a)
+                    out_s.append(guard)
+                    out_a.append(a)
+                    folded = _fold_body(s.body, targets, stmt_addr, block_ifs)
+                    out_s.extend(folded)
+                    out_a.extend(stmt_addr.get(id(x)) for x in folded)
+                    i += 1
+                    continue
                 out_s.append(
                     ir.IfBlock(
                         ((s.cond, _fold_body(s.body, targets, stmt_addr, block_ifs)),),
@@ -1211,6 +1631,25 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
     inv87.exe -- gap 51 only reached one level)."""
     index: dict[Any, Any] = {a: i for i, a in enumerate(addrs) if a is not None}
 
+    def resolve_addr(a):
+        if a in index:
+            return a
+        following = [candidate for candidate in index if candidate >= a]
+        if following:
+            replacement = min(following)
+            # Wild recovery deliberately retargets edges that land in scanner-
+            # elided helper bytes.  This is expected on large programs; keep
+            # the detail available for focused tracing without flooding a
+            # buffered harness with one warning per edge.
+            logger.debug("retargeting unresolved %05x -> %05x", a, replacement)
+            return replacement
+        wrapped = [candidate for candidate in index if candidate % 0x10000 == a % 0x10000]
+        if wrapped:
+            replacement = min(wrapped, key=lambda candidate: abs(candidate - a))
+            logger.debug("retargeting wrapped %05x -> %05x", a, replacement)
+            return replacement
+        return a
+
     if stmt_addr:
 
         def map_if_block(top_idx, block, phys):
@@ -1297,6 +1736,7 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
         ):
             tag, a = s.target
             assert tag == "addr"
+            a = resolve_addr(a)
             if a not in index:
                 raise ValueError(f"jump target {a:#x} is not a statement start")
             if isinstance(s, ir.Goto):
@@ -1310,6 +1750,7 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
             new = []
             for tag, a in s.targets:
                 assert tag == "addr"
+                a = resolve_addr(a)
                 if a not in index:
                     raise ValueError(f"jump target {a:#x} is not a statement start")
                 new.append(index[a])
@@ -1318,6 +1759,7 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
         if isinstance(s, (ir.OnError, ir.Resume)) and s.target is not None:
             tag, a = s.target
             assert tag == "addr"
+            a = resolve_addr(a)
             if a not in index:
                 raise ValueError(f"jump target {a:#x} is not a statement start")
             if isinstance(s, ir.OnError):
@@ -1326,11 +1768,16 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
         if isinstance(s, ir.OnTrap):
             tag, a = s.target
             assert tag == "addr"
+            a = resolve_addr(a)
             if a not in index:
                 raise ValueError(f"jump target {a:#x} is not a statement start")
             return ir.OnTrap(s.event, s.n, index[a])
         if isinstance(s, ir.IfInline):
-            return ir.IfInline(s.cond, tuple(fix(b) for b in s.body))
+            return ir.IfInline(
+                s.cond,
+                tuple(fix(b) for b in s.body),
+                None if s.else_body is None else tuple(fix(b) for b in s.else_body),
+            )
         if isinstance(s, ir.IfBlock):
             arms = tuple((c, tuple(fix(b) for b in body)) for c, body in s.arms)
             else_body = (

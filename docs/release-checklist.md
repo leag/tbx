@@ -19,12 +19,33 @@ uv run python -m tbx.tools.verify_fixture t1_print t1_gosub t1_subsh \
 - The repository-vendored oracle is used by default. Set `TBX_ORACLE` only
   when pointing at a compatible harness; older sibling checkouts may not
   support the per-run workspace option used by `verify_fixture`.
-- Every line must end `ok` (or `skip: Options toggles ...` for `f*_`
-  stems, which compile with non-default IDE Options and can never match).
+- Every line must end `ok`, or `ok bar the Options flags byte` for an `fkb_`
+  stem -- Keyboard break leaves only the flags mask, one byte, so those ARE
+  verified. Only a toggle that emits code the oracle cannot be asked for
+  (`fbd_` Bounds +128 bytes, `fst_` Stack test +3, `f87_` a different runtime)
+  gives `skip: Options toggles ...`.
 - A full-corpus audit (`--all`, hours) is warranted after emitter-wide
   canonicalization changes, not for every release.
 
-## 2. Paper trail
+## 2. Wild round trip
+
+```sh
+uv run python -m tbx.tools.verify_wild          # comparable subset, gates the release
+uv run python -m tbx.tools.verify_wild --all    # every decoding program, ~an hour
+```
+
+- The default compiles only the programs that COULD be byte-exact; a
+  non-`exact` line there is a release blocker.
+- `--all` compiles the rest too and annotates them `[expected: ...]` with the
+  reason they cannot match (an IDE toggle, a different runtime revision).
+  Those never fail the run -- but their distance is the only place a bug in
+  user-code emission shows up for the two thirds of the corpus the default
+  cannot judge. Two emitter bugs hid there until 2026-07-30 precisely because
+  the tool used to skip them without compiling.
+- Worth running after any emitter change, and after anything touching PRINT,
+  conditions, or procedure layout.
+
+## 3. Paper trail
 
 - Golden regenerations in the release diff each trace to an intended
   decoder/emitter change (review them like code -- see CLAUDE.md).

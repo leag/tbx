@@ -8,46 +8,46 @@
    "statements": 144,
    "source_bytes": 4720,
    "toggles": "",
-   "build_match": 5,
+   "build_match": 99,
    "roundtrip": "filler-plus-metadata",
    "delta": 0,
-   "excluded": "compiled by a different Turbo Basic build (5% runtime match): its bytes can never be ours"
+   "excluded": null
   },
   {
    "name": "baby.exe",
    "sha256": "85524caddd73ad33db47a2405f6808e220c4e2c61d9db201fdb8d1f7293e0e3c",
    "bytes": 58769,
    "statements": 1051,
-   "source_bytes": 33495,
+   "source_bytes": 34257,
    "toggles": "K",
-   "build_match": 5,
-   "roundtrip": "code-or-metadata",
-   "delta": 304,
-   "excluded": "IDE Options toggles K: the oracle compiles with defaults"
+   "build_match": 99,
+   "roundtrip": "filler-plus-metadata",
+   "delta": 0,
+   "excluded": null
   },
   {
    "name": "banker.exe",
    "sha256": "c684bd6ea3c07f869a7a35fc72d59f93a10e67e73c6564d88607613a91976355",
    "bytes": 94088,
-   "statements": 3029,
-   "source_bytes": 98245,
+   "statements": 3002,
+   "source_bytes": 97906,
    "toggles": "K",
-   "build_match": 5,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
-   "excluded": "IDE Options toggles K: the oracle compiles with defaults"
+   "build_match": 99,
+   "roundtrip": "code-or-metadata",
+   "delta": 0,
+   "excluded": null
   },
   {
    "name": "be.exe",
    "sha256": "763843c04b073216de6c4135ee6b4697f1d2e33c558a5577710dc138fe7ce785",
    "bytes": 35472,
    "statements": 173,
-   "source_bytes": 4081,
+   "source_bytes": 4076,
    "toggles": "K",
-   "build_match": 5,
-   "roundtrip": "code-or-metadata",
-   "delta": 64,
-   "excluded": "IDE Options toggles K: the oracle compiles with defaults"
+   "build_match": 88,
+   "roundtrip": "filler-plus-metadata",
+   "delta": 0,
+   "excluded": "different Turbo Basic build (88% runtime match)"
   },
   {
    "name": "bill.exe",
@@ -58,8 +58,8 @@
    "toggles": "KBO",
    "build_match": 18,
    "roundtrip": "code-or-metadata",
-   "delta": -304,
-   "excluded": "IDE Options toggles KBO: the oracle compiles with defaults"
+   "delta": -288,
+   "excluded": "different Turbo Basic build (18% runtime match)"
   },
   {
    "name": "book.exe",
@@ -68,10 +68,34 @@
    "statements": 488,
    "source_bytes": 24760,
    "toggles": "",
-   "build_match": 5,
+   "build_match": 96,
    "roundtrip": "code-or-metadata",
    "delta": 0,
-   "excluded": "compiled by a different Turbo Basic build (5% runtime match): its bytes can never be ours"
+   "excluded": null
+  },
+  {
+   "name": "cal.exe",
+   "sha256": "ee35d1d6947a05f55fac24d0017034a9b02f0635a42fb00ef3e537a02426937c",
+   "bytes": 120774,
+   "statements": 2348,
+   "source_bytes": 81342,
+   "toggles": "",
+   "build_match": 97,
+   "roundtrip": "code-or-metadata",
+   "delta": -48,
+   "excluded": null
+  },
+  {
+   "name": "cal87.exe",
+   "sha256": "a27a88802e7a7dba84e96d9443991d713ebd0bd491cdc2d26bf7f3787f1de58a",
+   "bytes": 120774,
+   "statements": 2348,
+   "source_bytes": 81342,
+   "toggles": "",
+   "build_match": 99,
+   "roundtrip": "code-or-metadata",
+   "delta": -48,
+   "excluded": null
   },
   {
    "name": "ck.exe",
@@ -83,7 +107,19 @@
    "build_match": 18,
    "roundtrip": "code-or-metadata",
    "delta": -288,
-   "excluded": "IDE Options toggles KBO: the oracle compiles with defaults"
+   "excluded": "different Turbo Basic build (18% runtime match)"
+  },
+  {
+   "name": "cleanup.exe",
+   "sha256": "7a2e0a733cfeb4f7e43fa8bf5d15879ae083211faf6c253eba7135337035cca6",
+   "bytes": 71507,
+   "statements": 197,
+   "source_bytes": 19936,
+   "toggles": "KBOS",
+   "build_match": 96,
+   "roundtrip": "code-or-metadata",
+   "delta": -231,
+   "excluded": null
   },
   {
    "name": "color.exe",
@@ -94,31 +130,91 @@
    "toggles": "K",
    "build_match": 18,
    "roundtrip": "code-or-metadata",
-   "delta": 448,
-   "excluded": "IDE Options toggles K: the oracle compiles with defaults"
+   "delta": -32,
+   "excluded": "different Turbo Basic build (18% runtime match)"
+  },
+  {
+   "name": "d-fix.exe",
+   "sha256": "c8f58fe7f308e486a267b969096a17e0ea11803d7bcf70c4de09c6df60f9eeb2",
+   "bytes": 47556,
+   "statements": 730,
+   "source_bytes": 15880,
+   "toggles": "",
+   "build_match": 99,
+   "roundtrip": "code-or-metadata",
+   "delta": 0,
+   "excluded": null
+  },
+  {
+   "name": "day086.exe",
+   "sha256": "65da5791ea3b284f2f91b23e4ef08681f7fccda5ef79ef38c7177795432d46d8",
+   "bytes": 35075,
+   "statements": 138,
+   "source_bytes": 4572,
+   "toggles": "",
+   "build_match": 99,
+   "roundtrip": "code-or-metadata",
+   "delta": 0,
+   "excluded": null
+  },
+  {
+   "name": "day386.exe",
+   "sha256": "f35bb184a56a05838c7e0c254b7f933efb1e5927a51e25623a3ccd8c15c7e759",
+   "bytes": 35075,
+   "statements": 138,
+   "source_bytes": 4572,
+   "toggles": "",
+   "build_match": 99,
+   "roundtrip": "code-or-metadata",
+   "delta": 0,
+   "excluded": null
+  },
+  {
+   "name": "help.exe",
+   "sha256": "0f2eec5a36b1ceb49d5b9878227c5d8c34d8155bb75b653694be3d7d0de3a1d5",
+   "bytes": 73712,
+   "statements": 1308,
+   "source_bytes": 50934,
+   "toggles": "K",
+   "build_match": 88,
+   "roundtrip": "filler-plus-metadata",
+   "delta": 0,
+   "excluded": "different Turbo Basic build (88% runtime match)"
   },
   {
    "name": "horses.exe",
    "sha256": "4a28abb6b32123808e4c3f041edec6837735ed0e8edc0b22988c90041507dd86",
    "bytes": 79263,
    "statements": 192,
-   "source_bytes": 67425,
+   "source_bytes": 67394,
    "toggles": "K",
-   "build_match": 5,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
-   "excluded": "IDE Options toggles K: the oracle compiles with defaults"
+   "build_match": 88,
+   "roundtrip": "code-or-metadata",
+   "delta": -640,
+   "excluded": "different Turbo Basic build (88% runtime match)"
+  },
+  {
+   "name": "install0.exe",
+   "sha256": "db3e7617978b5113bad9f9ddd97dbe598a5552eca80e70d9706ecc1dbef8bd8d",
+   "bytes": 42319,
+   "statements": 397,
+   "source_bytes": 11537,
+   "toggles": "KBOS",
+   "build_match": 97,
+   "roundtrip": "code-or-metadata",
+   "delta": 0,
+   "excluded": null
   },
   {
    "name": "inv87.exe",
    "sha256": "5f17326f055c3633e43a6f14c582b7a08fbfb989e52f50bc88d6b3f596cbc2e1",
    "bytes": 119468,
-   "statements": 2800,
-   "source_bytes": 88391,
+   "statements": 2790,
+   "source_bytes": 88301,
    "toggles": "",
    "build_match": 97,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
+   "roundtrip": "code-or-metadata",
+   "delta": -16,
    "excluded": null
   },
   {
@@ -128,34 +224,34 @@
    "statements": 206,
    "source_bytes": 6077,
    "toggles": "K",
-   "build_match": 5,
+   "build_match": 88,
    "roundtrip": "code-or-metadata",
-   "delta": 144,
-   "excluded": "IDE Options toggles K: the oracle compiles with defaults"
+   "delta": 32,
+   "excluded": "different Turbo Basic build (88% runtime match)"
   },
   {
    "name": "invoice.exe",
    "sha256": "c282cfb652d6467a771c48214e768852301cc25de78e5db9b3876fe557229855",
    "bytes": 119468,
-   "statements": 2800,
-   "source_bytes": 88391,
+   "statements": 2790,
+   "source_bytes": 88301,
    "toggles": "",
    "build_match": 98,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
+   "roundtrip": "code-or-metadata",
+   "delta": -16,
    "excluded": null
   },
   {
    "name": "metric.exe",
    "sha256": "dfffbe525d25c41059a200102ec171720b2938b6b66ee335e95e4309ec2b0784",
    "bytes": 81891,
-   "statements": 1789,
-   "source_bytes": 52522,
+   "statements": 1791,
+   "source_bytes": 52883,
    "toggles": "K",
    "build_match": 99,
    "roundtrip": "code-or-metadata",
-   "delta": 1008,
-   "excluded": "IDE Options toggles K: the oracle compiles with defaults"
+   "delta": 512,
+   "excluded": null
   },
   {
    "name": "mm.exe",
@@ -166,8 +262,20 @@
    "toggles": "K",
    "build_match": 18,
    "roundtrip": "code-or-metadata",
-   "delta": 480,
-   "excluded": "IDE Options toggles K: the oracle compiles with defaults"
+   "delta": -288,
+   "excluded": "different Turbo Basic build (18% runtime match)"
+  },
+  {
+   "name": "mmsetup.exe",
+   "sha256": "332df5f38b0f3a5cd9060c847b677bc2f2befc4e2b0d237a1d5e1f82c0d265af",
+   "bytes": 61744,
+   "statements": 52,
+   "source_bytes": 2753,
+   "toggles": "K",
+   "build_match": 18,
+   "roundtrip": "code-or-metadata",
+   "delta": -288,
+   "excluded": "different Turbo Basic build (18% runtime match)"
   },
   {
    "name": "mymenu.exe",
@@ -176,21 +284,33 @@
    "statements": 212,
    "source_bytes": 7528,
    "toggles": "K",
-   "build_match": 5,
+   "build_match": 99,
    "roundtrip": "code-or-metadata",
    "delta": 0,
-   "excluded": "IDE Options toggles K: the oracle compiles with defaults"
+   "excluded": null
+  },
+  {
+   "name": "number.exe",
+   "sha256": "242b151c0db7701431ee63e24df73940804463a48ca65881c1f1a3532757ae07",
+   "bytes": 55526,
+   "statements": 1174,
+   "source_bytes": 29550,
+   "toggles": "K",
+   "build_match": 97,
+   "roundtrip": "code-or-metadata",
+   "delta": -160,
+   "excluded": null
   },
   {
    "name": "onelab87.exe",
    "sha256": "beb25ee16cd7b48b4e71af99fa9e182daa1071c8e8f9f481b32313035444480c",
    "bytes": 62003,
    "statements": 88,
-   "source_bytes": 2407,
+   "source_bytes": 2408,
    "toggles": "",
    "build_match": 96,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
+   "roundtrip": "code-or-metadata",
+   "delta": 0,
    "excluded": null
   },
   {
@@ -198,24 +318,48 @@
    "sha256": "b2f10231df811a5d1afa5735ee2258c445bfd18bb8f8c0754ae0b0774e7a2832",
    "bytes": 62003,
    "statements": 88,
-   "source_bytes": 2407,
+   "source_bytes": 2408,
    "toggles": "",
    "build_match": 96,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
+   "roundtrip": "code-or-metadata",
+   "delta": 0,
    "excluded": null
+  },
+  {
+   "name": "pcagent.exe",
+   "sha256": "14482906e3ab691f4608cc98cf9e78f4dfccd8952250968d59078394bc4f357b",
+   "bytes": 72652,
+   "statements": 1672,
+   "source_bytes": 37840,
+   "toggles": "",
+   "build_match": 87,
+   "roundtrip": "code-or-metadata",
+   "delta": -480,
+   "excluded": "different Turbo Basic build (87% runtime match)"
+  },
+  {
+   "name": "prtguide.exe",
+   "sha256": "844dd8eaf6e53e2be3765423c699f3baee1722acaf7b725fd2caf345aae20434",
+   "bytes": 75944,
+   "statements": 910,
+   "source_bytes": 51577,
+   "toggles": "K",
+   "build_match": 86,
+   "roundtrip": "code-or-metadata",
+   "delta": 0,
+   "excluded": "different Turbo Basic build (86% runtime match)"
   },
   {
    "name": "pz.exe",
    "sha256": "0ee729cb13c32be89266c28352bd7f41f7ccd11cde8b84cdeeae128b10587e3d",
    "bytes": 34752,
-   "statements": 146,
-   "source_bytes": 3305,
+   "statements": 144,
+   "source_bytes": 3288,
    "toggles": "K",
-   "build_match": 5,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
-   "excluded": "IDE Options toggles K: the oracle compiles with defaults"
+   "build_match": 88,
+   "roundtrip": "filler-plus-metadata",
+   "delta": 0,
+   "excluded": "different Turbo Basic build (88% runtime match)"
   },
   {
    "name": "r.exe",
@@ -236,10 +380,46 @@
    "statements": 129,
    "source_bytes": 6841,
    "toggles": "K",
-   "build_match": 4,
+   "build_match": 86,
    "roundtrip": "filler-plus-metadata",
    "delta": 0,
-   "excluded": "IDE Options toggles K: the oracle compiles with defaults"
+   "excluded": "different Turbo Basic build (86% runtime match)"
+  },
+  {
+   "name": "reformat.exe",
+   "sha256": "53fcd0b05f730a2a93d446aa86115c14a2dae8b453cfadf1007dbabfaaf50952",
+   "bytes": 72597,
+   "statements": 219,
+   "source_bytes": 20767,
+   "toggles": "KBOS",
+   "build_match": 96,
+   "roundtrip": "code-or-metadata",
+   "delta": -231,
+   "excluded": null
+  },
+  {
+   "name": "rescfg.exe",
+   "sha256": "85da774b9b39c8e654d22f727cfa3c674f06ccd107d71ceb5969fa7f9b89cd6f",
+   "bytes": 49436,
+   "statements": 131,
+   "source_bytes": 11697,
+   "toggles": "",
+   "build_match": 99,
+   "roundtrip": "code-or-metadata",
+   "delta": 48,
+   "excluded": null
+  },
+  {
+   "name": "resume.exe",
+   "sha256": "3a4a54ac96f13c7e4decc88be3a759845e371ad75ab28a80ba2c4960d03616fa",
+   "bytes": 95604,
+   "statements": 1903,
+   "source_bytes": 62046,
+   "toggles": "",
+   "build_match": 98,
+   "roundtrip": "code-or-metadata",
+   "delta": 32,
+   "excluded": null
   },
   {
    "name": "rev.exe",
@@ -248,34 +428,58 @@
    "statements": 78,
    "source_bytes": 3404,
    "toggles": "",
-   "build_match": 5,
+   "build_match": 96,
    "roundtrip": "code-or-metadata",
-   "delta": 304,
-   "excluded": "compiled by a different Turbo Basic build (5% runtime match): its bytes can never be ours"
+   "delta": 0,
+   "excluded": null
+  },
+  {
+   "name": "rsltest.exe",
+   "sha256": "6739e73ecc18b819018323f3c6b0164c321215fe5b19601a85445909ab686aa7",
+   "bytes": 99578,
+   "statements": 934,
+   "source_bytes": 58348,
+   "toggles": "",
+   "build_match": 98,
+   "roundtrip": "code-or-metadata",
+   "delta": -80,
+   "excluded": null
   },
   {
    "name": "rstprint.exe",
    "sha256": "7f484c2e7dde4015ff923e690ecf82aa8f95672e9ebe9f0efa98651c63338854",
    "bytes": 37734,
-   "statements": 58,
-   "source_bytes": 1305,
+   "statements": 59,
+   "source_bytes": 1313,
    "toggles": "KBOS",
    "build_match": 97,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
-   "excluded": "IDE Options toggles KBOS: the oracle compiles with defaults"
+   "roundtrip": "code-or-metadata",
+   "delta": 0,
+   "excluded": null
   },
   {
    "name": "schart.exe",
    "sha256": "ae00749ad6cd57c554c4f35004564d4fb20e521c532b1d0cff2557da3276abe1",
    "bytes": 69768,
-   "statements": 595,
-   "source_bytes": 17590,
+   "statements": 594,
+   "source_bytes": 17593,
    "toggles": "K",
    "build_match": 99,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
-   "excluded": "IDE Options toggles K: the oracle compiles with defaults"
+   "roundtrip": "code-or-metadata",
+   "delta": 64,
+   "excluded": null
+  },
+  {
+   "name": "secure.exe",
+   "sha256": "fd0670f3ab79efa302ad92a2d0ddd1d3617d3ab18cb35ee985dedd37a919d3ad",
+   "bytes": 38409,
+   "statements": 212,
+   "source_bytes": 6315,
+   "toggles": "",
+   "build_match": 88,
+   "roundtrip": "filler-plus-metadata",
+   "delta": 0,
+   "excluded": "different Turbo Basic build (88% runtime match)"
   },
   {
    "name": "startup.exe",
@@ -284,33 +488,33 @@
    "statements": 24,
    "source_bytes": 534,
    "toggles": "K",
-   "build_match": 5,
+   "build_match": 88,
    "roundtrip": "filler-plus-metadata",
    "delta": 0,
-   "excluded": "IDE Options toggles K: the oracle compiles with defaults"
+   "excluded": "different Turbo Basic build (88% runtime match)"
   },
   {
    "name": "state.exe",
    "sha256": "e43317d719be6a7f53221d57413169a241c014c8c20b080ee8c32192808f7699",
    "bytes": 102438,
-   "statements": 2328,
-   "source_bytes": 69220,
+   "statements": 2323,
+   "source_bytes": 69172,
    "toggles": "",
    "build_match": 98,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
+   "roundtrip": "code-or-metadata",
+   "delta": -16,
    "excluded": null
   },
   {
    "name": "state87.exe",
    "sha256": "6c3c0f5048f31a78e861c7e947e161d29942811b631e929bab8ceba2223ff23e",
    "bytes": 102438,
-   "statements": 2328,
-   "source_bytes": 69220,
+   "statements": 2323,
+   "source_bytes": 69172,
    "toggles": "",
    "build_match": 98,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
+   "roundtrip": "code-or-metadata",
+   "delta": -16,
    "excluded": null
   },
   {
@@ -320,10 +524,10 @@
    "statements": 38,
    "source_bytes": 739,
    "toggles": "",
-   "build_match": 5,
+   "build_match": 88,
    "roundtrip": "filler-plus-metadata",
    "delta": 0,
-   "excluded": "compiled by a different Turbo Basic build (5% runtime match): its bytes can never be ours"
+   "excluded": "different Turbo Basic build (88% runtime match)"
   },
   {
    "name": "tamstart.exe",
@@ -334,8 +538,8 @@
    "toggles": "KBOS",
    "build_match": 96,
    "roundtrip": "code-or-metadata",
-   "delta": -476,
-   "excluded": "IDE Options toggles KBOS: the oracle compiles with defaults"
+   "delta": -128,
+   "excluded": null
   },
   {
    "name": "tbd73.exe",
@@ -354,23 +558,47 @@
    "sha256": "28391f33a233b07d6cf1266312429e1b1a3600a60fe0508fc022616c9bc11bd2",
    "bytes": 67011,
    "statements": 715,
-   "source_bytes": 26802,
+   "source_bytes": 26918,
    "toggles": "K",
    "build_match": 99,
-   "roundtrip": "COMPILE-FAIL",
-   "delta": null,
-   "excluded": "IDE Options toggles K: the oracle compiles with defaults"
+   "roundtrip": "filler-plus-metadata",
+   "delta": 0,
+   "excluded": null
+  },
+  {
+   "name": "year086.exe",
+   "sha256": "f1b28761edf08a951f5f7bac3e737d3d61bd96c5c24bd003ebc08d47a964a440",
+   "bytes": 41203,
+   "statements": 168,
+   "source_bytes": 7841,
+   "toggles": "",
+   "build_match": 99,
+   "roundtrip": "filler-plus-metadata",
+   "delta": 0,
+   "excluded": null
+  },
+  {
+   "name": "year386.exe",
+   "sha256": "e37f24e60fa250da07083ed20932e87c07f0cd0e6477dc3d6000bff3be34fea9",
+   "bytes": 41203,
+   "statements": 168,
+   "source_bytes": 7841,
+   "toggles": "",
+   "build_match": 99,
+   "roundtrip": "filler-plus-metadata",
+   "delta": 0,
+   "excluded": null
   },
   {
    "name": "zip.exe",
    "sha256": "6f90d6235f9b983ad944297f0378e14ad133de80422a36c8bb9732f7c33df24b",
    "bytes": 39482,
    "statements": 96,
-   "source_bytes": 5652,
+   "source_bytes": 7768,
    "toggles": "",
    "build_match": 99,
    "roundtrip": "code-or-metadata",
-   "delta": 592,
+   "delta": 64,
    "excluded": null
   },
   {
@@ -378,13 +606,12 @@
    "sha256": "7a4247264a1becbfb57d45d0754d6a32eb075839bf1ce1d3edf861ddd5831732",
    "bytes": 44370,
    "statements": 309,
-   "source_bytes": 8830,
+   "source_bytes": 10683,
    "toggles": "",
    "build_match": 99,
    "roundtrip": "code-or-metadata",
-   "delta": 224,
-   "excluded": null,
-   "note": "source shrank by 2 bytes when folding moved: the eager fold emitted LOOP inside an ELSE arm while closing a DO opened outside the IF, which is crossed block nesting and not valid source. The deferred fold emits EXIT LOOP instead. It compiles now; it did not before."
+   "delta": -224,
+   "excluded": null
   }
  ]
 }

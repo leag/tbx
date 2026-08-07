@@ -667,6 +667,102 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
     raise ValueError("DGROUP layout not solvable from the calibrated rules")
 
 
+def _band_spans(com, ord_):
+    return [
+        (base, base + s_num, base + s_num + s_str)
+        for s_num, s_str, base in (com, ord_)
+    ]
+
+
+def _band_slot_kind(d, fp_disps, fp64_disps, long_disps0, int_disps0, fild_disps0):
+    if d in fp64_disps:
+        return 8, False, False
+    if d in long_disps0:
+        return 4, False, True
+    if d in fp_disps:
+        return 4, False, False
+    if d in int_disps0 or d in fild_disps0:
+        return 2, False, False
+    return 2, True, False
+
+
+def _fill_band_slots(spans, fp_disps, fp64_disps, long_disps0, int_disps0, fild_disps0):
+    run: dict[int, int] = {}
+    strs: set[int] = set()
+    guessed: set[int] = set()
+    long_slots: set[int] = set()
+    for lo, mid, _ in spans:
+        d = lo
+        while d < mid:
+            width, is_guessed, is_long = _band_slot_kind(
+                d, fp_disps, fp64_disps, long_disps0, int_disps0, fild_disps0
+            )
+            run[d] = width
+            if is_long:
+                long_slots.add(d)
+            if is_guessed:
+                guessed.add(d)
+            d += width
+        if d != mid:
+            return None
+    for _lo, mid, hi in spans:
+        for d in range(mid, hi, 4):
+            run[d] = 4
+            strs.add(d)
+    return run, strs, guessed, long_slots
+
+
+def _validate_integer_evidence(run, pool_base, int_disps0, fild_disps0):
+    for d in int_disps0 | fild_disps0:
+        if d >= 0x110 and not (run.get(d) == 2 or d >= pool_base - 4):
+            return False
+    return True
+
+
+def _validate_float_evidence(run, strs, pool_base, fp_disps, fp64_disps):
+    for d in fp_disps:
+        if d >= 0x110 and not (run.get(d) == 4 and d not in strs) and d < pool_base - 4:
+            return False
+    for d in fp64_disps:
+        if run.get(d) != 8 and d < pool_base - 4:
+            return False
+    return True
+
+
+def _validate_string_evidence(exe, pool_base, P, strs, movsi_disps, prompt_disps):
+    for d in movsi_disps | prompt_disps:
+        if d in strs or d == pool_base - 4:
+            continue
+        off = P + 4 + d - pool_base
+        if d < pool_base - 4 or off + 2 > len(exe):
+            return False
+        if not struct.unpack_from("<H", exe, off)[0] & 0x8000:
+            return False
+    return True
+
+
+def _validate_band_evidence(
+    exe,
+    pool_base,
+    P,
+    run,
+    strs,
+    fp_disps,
+    fp64_disps,
+    int_disps0,
+    fild_disps0,
+    movsi_disps,
+    prompt_disps,
+):
+    return _validate_integer_evidence(
+        run, pool_base, int_disps0, fild_disps0
+    ) and _validate_float_evidence(
+        run, strs, pool_base, fp_disps, fp64_disps
+    ) and _validate_string_evidence(
+        exe, pool_base, P, strs, movsi_disps, prompt_disps
+    )
+
+
 def _bands_layout(
     exe, com, ord_, pool_base, ds, P,
     fp_disps, fp64_disps, long_disps0, int_disps0, fild_disps0,
@@ -677,59 +773,27 @@ def _bands_layout(
     unreferenced numeric space (width mixes of equal size compile identically,
     so the filler choice is byte-safe -- witnessed t1_common1), '$' every 4
     bytes of string space. Returns None if any evidence contradicts the bands."""
-    run: dict[int, int] = {}
-    strs: set[int] = set()
-    guessed: set[int] = set()
-    long_slots: set[int] = set()
-    spans = []
-    for s_num, s_str, base in (com, ord_):
-        spans.append((base, base + s_num, base + s_num + s_str))
-    # numeric sub-bands: place evidenced widths, fill gaps with 2-byte ints
-    for lo, mid, _hi in spans:
-        d = lo
-        while d < mid:
-            if d in fp64_disps:
-                run[d] = 8
-                d += 8
-            elif d in long_disps0:
-                run[d] = 4
-                long_slots.add(d)
-                d += 4
-            elif d in fp_disps:
-                run[d] = 4
-                d += 4
-            elif d in int_disps0 or d in fild_disps0:
-                run[d] = 2
-                d += 2
-            else:  # unreferenced filler
-                run[d] = 2
-                guessed.add(d)
-                d += 2
-        if d != mid:
-            return None  # an evidenced width straddles the band edge
-    for _lo, mid, hi in spans:
-        for d in range(mid, hi, 4):
-            run[d] = 4
-            strs.add(d)
-    # every piece of evidence must land on a slot of the matching kind, or in
-    # the pool window past the marker
-    for d in int_disps0 | fild_disps0:
-        if d >= 0x110 and not (run.get(d) == 2 or d >= pool_base - 4):
-            return None
-    for d in fp_disps:
-        if d >= 0x110 and not (run.get(d) == 4 and d not in strs) and d < pool_base - 4:
-            return None
-    for d in fp64_disps:
-        if run.get(d) != 8 and d < pool_base - 4:
-            return None
-    for d in movsi_disps | prompt_disps:
-        if d in strs or d == pool_base - 4:
-            continue
-        off = P + 4 + d - pool_base
-        if d < pool_base - 4 or off + 2 > len(exe):
-            return None
-        if not struct.unpack_from("<H", exe, off)[0] & 0x8000:
-            return None
+    spans = _band_spans(com, ord_)
+    filled = _fill_band_slots(
+        spans, fp_disps, fp64_disps, long_disps0, int_disps0, fild_disps0
+    )
+    if filled is None:
+        return None
+    run, strs, guessed, long_slots = filled
+    if not _validate_band_evidence(
+        exe,
+        pool_base,
+        P,
+        run,
+        strs,
+        fp_disps,
+        fp64_disps,
+        int_disps0,
+        fild_disps0,
+        movsi_disps,
+        prompt_disps,
+    ):
+        return None
     com_slots = sorted(d for d in run if d < com[2] + com[0] + com[1])
     return {
         "ds": ds,

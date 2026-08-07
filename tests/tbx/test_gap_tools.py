@@ -5,7 +5,7 @@ from tbx import ir
 from tbx.decode0.core import DecodeState
 from tbx.decode0.handlers import arith
 from tbx.decode0.scan import _scan_direct2
-from tbx.tools import batch_probe
+from tbx.tools import batch_probe, oracle
 from tbx.tools.compare_gap_reports import compare
 
 
@@ -25,6 +25,10 @@ def _handler_state(**fields):
 
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_oracle_accepts_french_11_dialect():
+    assert oracle._FLOPPIES["fr-1.1"] == "tb11_fr_floppy.img"
 
 
 def report(hits=(), failures=()):
@@ -51,6 +55,20 @@ def test_compare_rejects_different_corpus():
     new["corpus_fingerprint"] = "different"
     with pytest.raises(ValueError, match="different corpus"):
         compare(old, new)
+
+
+def test_loc_keeps_unclassified_low_displacements_fail_loud():
+    """A missing slot is not permission to invent a scalar variable."""
+    state = DecodeState()
+    state.layout_state.lay = {
+        "strs": set(),
+        "scalars": {},
+        "pool_base": 0x800,
+    }
+    state.layout_state.arrs = []
+
+    with pytest.raises(ValueError, match="neither scalar nor array element"):
+        state.loc(0x120)
 
 
 def test_runtime_revision_assessment_ledger_is_well_formed():

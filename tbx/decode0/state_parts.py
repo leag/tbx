@@ -172,6 +172,7 @@ class ControlState(StateView):
             "exit_folds",
             "block_if_addrs",
             "has_procs",
+            "decl_skip_addr",
             "proc_frame",
             "fn_frame",
             "fn_args",

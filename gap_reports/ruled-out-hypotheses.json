@@ -1,0 +1,554 @@
+{
+ "schema_version": 1,
+ "document_type": "tbx.ruled_out_hypotheses",
+ "updated": "2026-08-01",
+ "note": "Decoder-side hypotheses that were investigated and REJECTED: a cause that turned out not to be the cause, or a fix that was written, tested and reverted. The sibling ledger runtime-revision-assessments.json covers the other class, where the answer is a property of the compiler rather than of our code; a pattern that is unwitnessable by our oracle belongs there, not here. The point of both is that a rejected hypothesis is expensive evidence and is otherwise lost the moment a session ends -- PLAN.md records them chronologically, and this is the deduplicated index into it. An entry earns its place by saying what was tried, what killed it, and what a re-attempt should do instead.",
+ "dispositions": [
+  "refuted",
+  "reverted",
+  "superseded",
+  "not-a-defect"
+ ],
+ "hypotheses": [
+  {
+   "id": "RO-METRIC-DATA-ORDER",
+   "title": "metric.exe's round-trip delta is DATA descriptor ordering",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/metric.exe"
+   ],
+   "signatures": [
+    "metric round-trip delta",
+    "DATA/string-descriptor ordering"
+   ],
+   "hypothesis": "The 512-byte metric.exe round-trip growth is caused by reconstructed DATA statements being emitted in the wrong descriptor order.",
+   "negative_evidence": [
+    "The uncapped oracle report has identical scalar_base (288), pool_base (1268), scalar count (246), array layout, and complete pool-string multisets in the original and rebuilt images.",
+    "The first operation divergence is before any DATA payload: the original line-860 INKEY$/LEN test uses `orax`, while the rebuilt source produces an explicit zero load and `cmpax_bx`; the rebuilt operation stream has only four extra operations.",
+    "The 512-byte file-size delta is the image-alignment consequence of that earlier four-byte code-shape difference, not a DATA pool displacement change."
+   ],
+   "instead": "Investigate the INKEY$/LEN zero-test source-shape mismatch separately; do not alter DATA reconstruction for metric.exe.",
+   "source": "oracle roundtrip metric.exe, session 2026-08-01"
+  },
+  {
+   "id": "RO-ELSE-DO-SKIP",
+   "title": "Let the inline-IF guard skip address-less spliced DO headers",
+   "disposition": "reverted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/cal.exe",
+    "wild/hits/cal87.exe"
+   ],
+   "signatures": [
+    "Error 435: DO loop expected"
+   ],
+   "hypothesis": "cal.exe emits a LOOP inside an inline IF because _fold_if's inline guard -- the leg that unfolds an IfInline containing a loop closer back into a guard plus body -- declines when the next statement is a codeless DO spliced in for the FOLLOWING loop, which carries no address. Teaching it to skip such headers, as the ELSE leg already does with else_stop, should let the unfold fire.",
+   "negative_evidence": [
+    "The premise is correct and was confirmed by instrumentation: of cal's four IfInline-with-loop-closer regions, i=383/2032/2097 have a real next address and unfold, and only i=2007 has next_type=Do next_addr=None.",
+    "The fix nonetheless produces WRONG source. cal's bytes run input at 0x14c61, fstp BD at 0x14c6b, then the compare at 0x14c72, but the emitted result becomes `IF BD >= 1 AND BD <= 80 THEN <exit>` FOLLOWED BY the INPUT -- testing a stale BD before reading it.",
+    "It also fixes nothing: recompiling the result through the oracle fails with the SAME Error 435 at the same line.",
+    "The full suite passed and a block-nesting sweep called cal clean, so neither signal detected either failure."
+   ],
+   "instead": "The defect is upstream of the guard. The recorded IfInline is addressed 0x14c72 but its body holds the Input from 0x14c61 -- a statement preceding its own address -- so the region absorbed the statement before it. Instrument whatever builds that region rather than repairing its consumers.",
+   "source": "session 2026-07-30; commit ed78a4f is the unrelated fix that shipped from the same session"
+  },
+  {
+   "id": "RO-CAL-SOURCE-SHAPES",
+   "title": "Six candidate source spellings for cal.exe's failing loop",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/cal.exe"
+   ],
+   "signatures": [
+    "Error 435: DO loop expected"
+   ],
+   "hypothesis": "cal's mis-folded loop can be reproduced by authoring the source shape it appears to have come from, giving a minimal fixture to calibrate against.",
+   "negative_evidence": [
+    "All six compiled clean through the oracle and DECODE CORRECTLY today, so none reproduces the defect: compound integer tail test (LOOP WHILE A% < 1 OR A% > 80); the same with a single-precision variable; IF ... THEN BEEP ELSE EXIT LOOP inside a DO; IF ... AND ... THEN EXIT LOOP followed by BEEP; two such loops adjacent, the second starting at the first's exit address; and an external IF x THEN <line> jumping into the loop body."
+   ],
+   "instead": "Stop guessing at the source. The trigger is not any of the obvious spellings, and four rounds of guessing cost more than the instrumentation that finally localized it.",
+   "source": "session 2026-07-30"
+  },
+  {
+   "id": "RO-GRID-ALIGN16",
+   "title": "Static-array grid offset is align16(scalar band width)",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/schart.exe"
+   ],
+   "signatures": [
+    "DGROUP layout not solvable from the calibrated rules"
+   ],
+   "hypothesis": "The array grid starts align16(scalar_band_width) past VAR_BASE, fitting three probe widths (38, 48, 62 -> 48, 48, 64) exactly.",
+   "negative_evidence": [
+    "All three data points shared n_static=10, so the fit was unconstrained. An n=11 probe gave 32/48/32 bytes at n=9/10/11 -- not a function of width at all.",
+    "The real mechanism is not a formula: the compiler stamps a self-describing ordinary-scalars band descriptor into the init image, and the record run floats past variable-length init data by up to 720 bytes."
+   ],
+   "instead": "When an offset refuses to fit a formula, hexdump the region and look for self-describing structure before curve-fitting. Two sessions of fitting were answered by one 30-line hexdump.",
+   "source": "PLAN.md Part III, gaps 27 and 28"
+  },
+  {
+   "id": "RO-OR-VALUE-FOLDED",
+   "title": "OR-flavored value-folded groups, (A AND B) OR (C OR D)",
+   "disposition": "reverted",
+   "confidence": "medium",
+   "files": [
+    "wild/hits/grdscn.exe",
+    "wild/hits/kinder.exe",
+    "wild/hits/kinetics.exe",
+    "wild/hits/wb.exe"
+   ],
+   "signatures": [
+    "materialization template mismatch"
+   ],
+   "hypothesis": "The mixed-precedence compound-IF folder can be extended to the OR-of-groups shape these four files need.",
+   "negative_evidence": [
+    "Tried and reverted within the campaign; no fixture landed and the tree was confirmed clean afterwards.",
+    "A probe named q_orofors3.bas is recorded as reproducing the shape, so the gap is real -- what failed was the fix, not the diagnosis. NOTE the probe itself was never committed to wild/probes, so that evidence cannot currently be re-run and would have to be re-authored."
+   ],
+   "instead": "Re-read PLAN.md:1775 before re-attempting; the entry says why the first attempt was abandoned.",
+   "source": "PLAN.md:1775"
+  },
+  {
+   "id": "RO-LOCAL-FOR-TEMPS",
+   "title": "LOCAL slot reuse across a FOR loop's scratch temps",
+   "disposition": "not-a-defect",
+   "confidence": "high",
+   "files": [
+    "wild/hits/bmaster.exe",
+    "wild/hits/ifi.exe"
+   ],
+   "signatures": [
+    "[bp+6] outside the open LOCAL frame"
+   ],
+   "hypothesis": "The failure is a bad LOCAL frame bound.",
+   "negative_evidence": [
+    "Traced precisely with an instrumented core.py, reverted and never committed: the variable-limit-FOR branch reserves a step/limit word pair that COLLIDES with a declared LOCAL. The frame bound is right; the reservation is what overlaps."
+   ],
+   "instead": "Fix the reservation, not the bound.",
+   "source": "PLAN.md:1817"
+  },
+  {
+   "id": "RO-INCLUDE-BLOCK-SPAN",
+   "title": "emit_split cuts DO/LOOP and FOR/NEXT across $INCLUDE boundaries",
+   "disposition": "not-a-defect",
+   "confidence": "high",
+   "files": [
+    "wild/hits/state.exe",
+    "wild/hits/inv87.exe",
+    "wild/hits/cal.exe"
+   ],
+   "signatures": [
+    "Error 435: DO loop expected",
+    "Error 445: NEXT expected"
+   ],
+   "hypothesis": "Oversized programs emit as a root plus $INCLUDE files, and the split is by size rather than by block structure, so a DO or FOR can open in one include and close in the next -- which would explain the block-structure compile errors on exactly the programs large enough to be split.",
+   "negative_evidence": [
+    "The imbalance is real: STATE001.INC has FOR=29 NEXT=27 and STATE003.INC has a NEXT with no FOR; INV87001/2/3 are unbalanced in both directions.",
+    "But TB's $INCLUDE is TEXTUAL, so a block may span files -- inv87.exe and invoice.exe compile successfully (delta -16) with badly unbalanced includes. That is proof, not inference.",
+    "cal.exe, which does NOT compile, is balanced within every include."
+   ],
+   "instead": "Do not block-align the splitter. Per-include balance is neither necessary nor sufficient, and the compile errors on these programs have other causes.",
+   "source": "session 2026-07-30"
+  },
+  {
+   "id": "RO-NESTCHECK-AUTHORITY",
+   "title": "A block-nesting sweep can stand in for the oracle on wild source",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/cal.exe"
+   ],
+   "signatures": [
+    "Error 435: DO loop expected"
+   ],
+   "hypothesis": "A cheap depth-counting check over emitted source can decide whether a wild program's structure is right, saving the minutes an oracle compile costs.",
+   "negative_evidence": [
+    "False positives: it flags colon-joined single-line blocks (`FOR C = 1 TO 9: PRINT: NEXT C` in vhfprop) because it never splits on ':'.",
+    "False NEGATIVES, which is worse: it called cal.exe clean -- all six DO/LOOP pairs nesting at depth 1, final depth 0, no colon-joined closers -- while TB still rejected the file with Error 435.",
+    "It cannot model what TB actually validates, which includes at least the block level of a line-number jump target."
+   ],
+   "instead": "Use it to FIND candidates and never as evidence a decode is right. The oracle byte compare is the only acceptance test, which is now written into CLAUDE.md.",
+   "source": "session 2026-07-30"
+  },
+  {
+   "id": "RO-GOTO-INTO-DO",
+   "title": "TB rejects an IF..THEN <line> that jumps into a DO...LOOP body",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/cal.exe"
+   ],
+   "signatures": [
+    "Error 435: DO loop expected"
+   ],
+   "hypothesis": "cal.exe's remaining Error 435 comes from `IF BD >= 1 AND BD <= 80 THEN 20295` jumping from outside into the NEXT loop's body, which TB would reject as a block-level violation.",
+   "negative_evidence": [
+    "Refuted by probe q_gotointoloop.bas: a DO/LOOP whose body is entered by an `IF c THEN <line>` from before the loop compiles clean through the oracle.",
+    "The real cause is elsewhere -- see the cal entry under 'Diagnosed but not landed' in STATUS.md: two EXIT LOOP statements stand outside any DO...LOOP."
+   ],
+   "instead": "A jump into a block body is legal; do not spend time making the emitter avoid it. Check block MEMBERSHIP of EXIT statements instead.",
+   "source": "session 2026-07-30"
+  },
+  {
+   "id": "RO-OUT-IMM-FOLD",
+   "title": "Turbo Basic folds a byte-constant OUT into MOV AL,imm; OUT imm8,AL",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/zip.exe",
+    "wild/hits/ziptest.exe"
+   ],
+   "signatures": [
+    "out_imm",
+    "b0 <val> e6 <port>"
+   ],
+   "hypothesis": "The `b0 <val> e6 <port>` pairs filling wild zip.exe's and ziptest.exe's per-setting procedures are an OUT statement whose port and value both fit a byte, which Turbo Basic compiles to a compact MOV AL,value; OUT port,AL instead of the general mov-AX / mov-DX / OUT-DX form. scan.py's `out_imm` op and tests/tbx/test_out_immediate.py were both written on this premise.",
+   "negative_evidence": [
+    "Refuted by oracle-compiled probes that all emit the GENERAL form and zero `b0/e6` bytes: wild/probes/probe_out_const_toplevel.bas (`OUT 67, 116` at top level, the exact port/value pair zip uses), wild/probes/probe_out_const_in_sub.bas (the same three OUTs inside a SUB, matching the shape in zip), and a DEF SEG + hex-literal variant. Turbo Basic 1.1 has no byte-constant OUT template; INP and OUT always route the port through DX (EC/EE).",
+    "The mapping was never calibrated: `out_imm` had no compiled fixture. t1_out.bas uses port 888 (>255) and t1_out2.bas a variable operand, so neither exercised it, and test_out_immediate.py asserted only the scanner's behaviour on hand-built bytes plus that zip decodes -- it never recompiled anything.",
+    "wild/probes/probe_inline_out_imm.bas shows what DOES produce those bytes: a `SUB name INLINE` with a `$INLINE &HB0,&H74,&HE6,&H43,...` list. The bodies are `55 8b ec` + 12 raw port bytes + `5d cb`, i.e. a $INLINE list carrying its own bp frame, with Turbo Basic appending the terminating CB (the skip-jmp spans 17 = 16 list bytes + 1).",
+    "What the code actually does, which the old `out_imm` comment got wrong by calling these 'tone' procedures: command byte 74h to port 43h selects PIT counter 1, mode 2, 16-bit binary, then a divisor goes to counter 1's data port 41h. Counter 1 is the DRAM refresh request generator, not the speaker (counter 2, port 42h) and not the system tick (counter 0, port 40h). zip.exe writes 26 such procedures to ZIPA.BIN..ZIPZ.BIN, one per divisor -- 9/12/15/18 then 30..240 by tens, against a stock IBM value of 18 -- so raising the divisor cuts refresh bursts and steals fewer bus cycles. It is a PC speed-up utility; ziptest.exe carries the 23 settings from 18 upward and probes how far the machine's RAM tolerates it.",
+    "Cost of the false mapping, measured through the oracle: emitting `OUT p, v` recompiles to the general form, so zip.exe grew +592 bytes (78 OUTs) and ziptest.exe +224 (69). They were the two least-identical comparable programs in the corpus (96.9% and 93.2%) entirely because of this."
+   ],
+   "instead": "Do not look for an OUT spelling that reproduces these bytes -- none exists. The bodies are source-level `SUB name INLINE` + `$INLINE`, which `ir.Inline` and emit0 already round-trip byte-exactly. FIXED the same session: `out_imm` is gone and `_try_inline_rescue` now claims a framed `55 8b ec ... 5d cb` body when its CONTENT holds an instruction sequence the compiler cannot emit -- currently `mov al,imm8; out imm8,al`, extensible as further such sequences are proved. Match whole sequences, never a bare opcode-range test: these bodies are not disassembled, and searching the E4-E7 port-I/O range accepted `89 e5`, the alternate `mov bp,sp`, in the prologue of the framed procedures the guard exists to reject (wild CVT2TB.EXE, phone.exe, which stay fail-loud). The check is one-way -- it only rules a body IN. Fixture t1_inlineport; zip.exe 96.87% -> 98.75% identical (delta +592 -> +64), ziptest.exe 93.17% -> 98.97% (+224 -> -224).",
+   "source": "session 2026-07-30"
+  },
+  {
+   "id": "RO-COMMIT-MARKER-BOUNDARY",
+   "title": "Reading CD 87 as every statement boundary (the USING nesting needs a narrower span)",
+   "disposition": "superseded",
+   "confidence": "high",
+   "files": [
+    "wild/hits/banker.exe",
+    "wild/hits/number.exe"
+   ],
+   "signatures": [
+    "CD 87",
+    "commit marker",
+    "USING"
+   ],
+   "hypothesis": "banker.exe recompiles 16 bytes long because 13 extra per-statement commit markers (`CD 87`; raw `CD 81` under TB 1.0) appear where the original has none, so `out.commits` -- which the scanner already collects -- can tell the decoder where the source really put its statement breaks. Specifically: a `USING` that begins while a print chain is open belongs to that chain when no marker separates them, and should be nested as an item rather than ending the statement.",
+   "negative_evidence": [
+    "The marker is NOT emitted per statement, which the whole idea depends on. Fixture t1_lpusing has three consecutive print statements on three numbered lines and only TWO markers: the middle one, `LPRINT USING \"##.##\"; B;`, has none. A `PRINT USING` opens with its own `rt CA` and carries no `CD 87`, so absence of a marker does not mean absence of a boundary.",
+    "Implemented anyway to see: `UsingChain.nested_in`, a `close_nested_using` that folds the chain back into its owner's item list, render support for a `PrintUsing` sitting in a print item list, and the rename walk taught to descend into it. It produced exactly the right source for the probe -- one statement, both USING clauses -- and REGRESSED t1_lpusing, merging its three statements into one. Reverted.",
+    "The narrower follow-up (leave `rt CA` alone; only let a TAB trailing an open USING chain stay in that chain, gated on the same marker test) does not regress anything and improves the probe from 20 to 15 bytes off, but it does NOT move banker.exe or number.exe at all -- their `pend_using.start` is None mid-statement, so the gate stays conservative -- while churning the emitted source of banker and horses. Reverted too: baseline churn with no measurable gain on any program.",
+    "What IS established: `LPRINT TAB(5); \"n \"; TAB(25); USING f1$; A#; TAB(37); USING f2$; B$` is one legal Turbo Basic statement compiling to one marker and two `rt CA` (wild/probes/probe_using_twice_one_stmt.bas, byte shape identical to banker's). The decoder splitting it into four is a real fidelity gap. Markers are also per statement and not per line where they DO appear -- a colon-joined `PRINT 1: PRINT 2` emits two (wild/probes/probe_commit_per_statement.bas).",
+    "Second attempt, with the payoff corrected (toggle K costs one byte, so banker IS comparable). Established by probe that the one-statement spelling is the ONLY byte-exact one: four splits of probe_using_twice_one_stmt come back 15-20 bytes off, so nesting is not optional. Also established that a SINGLE USING after items is spelling-free -- `LPRINT A$; USING f$; B;` and the same on two lines are byte-IDENTICAL, as are the TAB(5) forms -- so only the second and later USING matter.",
+    "Implemented with a bounded lookahead gate (another `rt CA` before the statement's flush) plus a branch-target span guard. banker.exe improves 155 -> 98 bytes off and delta +16 -> 0, and every USING fixture stays byte-exact. But wild inv87.exe and invoice.exe REGRESS: 649 -> 733 and 513 -> 597 bytes off, delta -16 -> -32, and without the span guard they stop decoding entirely (`jump target 0xc7af is not a statement start`, a statement inside the absorbed span being a jump target). Both are comparable programs, so this is a net loss. Reverted.",
+    "Four gates tried and rejected: commit markers (unsound -- CD 87 is not per statement); TAB trailing an open USING chain (no effect on banker, churns other sources); second-USING-before-flush with a branch-target span guard (the one above); and restricting to the printer leg (does not separate them -- inv87's chains are LPRINT too, nests stay at 18)."
+   ],
+   "instead": "SUPERSEDED -- the fix landed once the span was right. The marker is useless for finding statement starts in general (a `PRINT USING` opens with `rt CA` and carries none), but it answers the narrow question exactly: given TWO `rt CA` before one flush, a marker in the SPAN BETWEEN THEM means two statements, none means one. That separates wild banker.exe (merge; 155 -> 98 bytes off, delta +16 -> 0) from wild inv87.exe / invoice.exe (do not merge; they regress 649 -> 733 and 513 -> 597 if you do). The earlier attempts tested from the CHAIN's start, which is not the span the nesting absorbs. See t1_usingtwice and tests/tbx/test_using_nested_item.py.",
+   "source": "session 2026-07-30"
+  },
+  {
+   "id": "RO-UNIFY-DEFERRED-PARAM",
+   "title": "Unify a deferred forwarded-arg placeholder with the parameter at the same offset",
+   "disposition": "superseded",
+   "confidence": "high",
+   "files": [
+    "wild/hits/resume.exe"
+   ],
+   "signatures": [
+    "arg_push_fwd",
+    "arg_push_ref",
+    "Error 475: Parameter mismatch"
+   ],
+   "hypothesis": "resume.exe's numeric band is 24 bytes too wide because 64 `P<off>` placeholders reach canonical_rename unrespelled. Its SUB bodies hold BOTH `P12%` (the parameter) and `P12` (a forwarded use of the same offset): `arg_push_fwd` stages the placeholder, the enclosing SUB's respelling at proc_ret settles it, but a forward-reference call resolves later in `_resolve_calls` and -- when the callee is a `SUB ... INLINE`, which has no signature to take a suffix from -- lands unsuffixed. canonical_rename then letters two variables out of one parameter and the compiler allocates a DGROUP scalar for the second. Unifying the unsuffixed name with the suffixed parameter at the same offset should collapse them.",
+   "negative_evidence": [
+    "The diagnosis holds and is worth keeping: the op-kind diff is exactly complementary, `arg_push_fwd` 39 -> 18 and `arg_push_ref` 4 -> 25, and the six extra band slots at 0x30a..0x31e are read by nothing but `arg_push_ref`. 64 unsuffixed placeholders reach canonical_rename across four SUBs.",
+    "The FIX does not work. Respelling every unsuffixed `P<off>` to the suffixed parameter of the same offset makes all 39 wild programs still decode, but resume then fails to compile: `Error 475: Parameter mismatch`. Forcing the parameter's INTEGER suffix onto the forwarded argument contradicts what the callee expects at that position -- before the change the split-off variable was unsuffixed, i.e. a SINGLE, and the call compiled.",
+    "So the two names are not merely a spelling accident: the enclosing SUB's recovered parameter TYPE (integer) and the callee's expectation (single) disagree, and unification exposes that rather than fixing it. Also note the rebuild must carry `stmt_addr` through `_respell_params` -- omitting it orphaned a jump target immediately (`jump target 0x9d25 is not a statement start`)."
+   ],
+   "instead": "SUPERSEDED -- the fix landed once it was gated on the CALLEE. The two names are one parameter, but only a helper-bodied callee may take its type from the caller: a helper emits as `SUB name INLINE` with no parameter list, so nothing can contradict it. An ordinary SUB with an untyped parameter must NOT be retyped this way -- that is what produced `Error 475: Parameter mismatch`. Ten of resume's twelve untyped forwards go to helpers; retyping those took it from 80.14% to 95.53% identical. See `_type_helper_forwards` and tests/tbx/test_helper_forward_typing.py.",
+   "source": "session 2026-07-31"
+  },
+  {
+   "id": "RO-DISP-NOT-SCALAR-ONE-CAUSE",
+   "title": "The `displacement is neither scalar nor array element` bucket is one shared cause",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/billadd.exe",
+    "wild/hits/filepatc.exe",
+    "wild/hits/crossref.exe"
+   ],
+   "signatures": [
+    "displacement 0x76 is neither scalar nor array element",
+    "displacement 0x1054 is neither scalar nor array element",
+    "displacement 0x324 is neither scalar nor array element"
+   ],
+   "hypothesis": "Three wild programs stop on the same message from the same line (DecodeState.loc), so the three unclassified displacements share a cause and one classification rule closes all three.",
+   "negative_evidence": "They do not even fall in the same DGROUP region. billadd's 0x76 is BELOW VAR_BASE (0x110), a runtime system cell reached by `movax_m`. filepatc's 0x1054 is ABOVE pool_base (0xa04) and below the first array base (0x1060), reached by `idiv_m` as the divisor of a MOD; a probe compiling `(X% \\ 32) MOD 16` shows the compiler routes a LITERAL divisor through bx with a cx spill and never emits `idiv_m`, so that displacement is a memory VARIABLE the layout did not recover, not a pooled constant. crossref's 0x324 sits inside the static region below pool_base (0x374) and is reached through a `far_call` argument path. Three regions, three access paths, three causes.",
+   "instead": "Treat the message as a symptom of layout recovery, not a bucket. filepatc is a DGROUP layout gap (see RR-DGROUP-BIGARR); billadd needs the runtime system cell at 0x76 named, the way cmpax_m already special-cases ERR at 0x74 and ERL at 0x72; crossref needs its own investigation. Bucketing wild failures by message text overstates how much one fix can close -- count distinct causes before promising a bucket.",
+   "source": "session 2026-07-31"
+  },
+  {
+   "id": "RO-MCMURPHY-INT8A-CHAIN",
+   "title": "Relative INT 8A targets landing on CD 8A are compiler helpers",
+   "disposition": "reverted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/mcmurphy.exe"
+   ],
+   "signatures": [
+    "INT 8A target begins with CD 8A",
+    "mcmurphy round-trip delta"
+   ],
+   "hypothesis": "The 220 relative-looking INT 8A payloads whose targets begin with another INT 8A are helper chaining and should remain source-less rather than becoming GOSUB calls.",
+   "negative_evidence": [
+    "With the filter, the correctly split source compiled through the oracle to 125,309 bytes; retaining the calls compiled to 127,313 bytes, so the proposed classification regresses the byte delta by 2,004 bytes.",
+    "The ordinary INT 8A probe still requires relative targets to decode as GOSUBs, and no independent oracle witness proves that a CD 8A target is helper-only."
+   ],
+   "instead": "Keep the calibrated relative-target rule. Investigate the remaining structural divergence using the split-source oracle measurement and a probe that reproduces the multi-toggle helper bytes, rather than classifying by target opcode prefix.",
+   "source": "session 2026-08-01"
+  },
+  {
+   "id": "RO-MCMURPHY-DATA-END-PLACEMENT",
+   "title": "Moving the reconstructed DATA block to a later source segment restores the pool",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/mcmurphy.exe"
+   ],
+   "signatures": [
+    "DATA/string-descriptor ordering",
+    "mcmurphy round-trip delta"
+   ],
+   "hypothesis": "The nine recovered DATA items are emitted at the top only because their original codeless statement was later in the included source. Moving the canonical DATA statement to the end of the program, or to the end of MCMUR001, should put its descriptors before the tail code literals and restore the byte layout.",
+   "negative_evidence": [
+    "Moving DATA to the end of MCMUR003 compiled successfully but produced 130,065 bytes, 355 bytes longer than the 129,710-byte original.",
+    "Moving DATA to the end of MCMUR001 (line 12145, the last available line before MCMUR002) compiled successfully but produced 130,081 bytes, 371 bytes longer than the original.",
+    "The uncapped canonical report remains 129,697 bytes with identical scalar/array bases and pool-string multisets; placement alone is not the missing mechanism."
+   ],
+   "instead": "Do not add a source-position heuristic. Recover the compiler's DATA statement metadata or a wild witness for its pointer/boundary table first; the mcmurphy EXE has no error-trap line table, and arbitrary placement changes unrelated allocation metadata.",
+   "source": "session 2026-08-01"
+  },
+  {
+   "id": "RO-STRING-GROUP-SPLIT-MATCH",
+   "title": "A broad string materialization match can represent a nested OR group",
+   "disposition": "reverted",
+   "confidence": "high",
+   "files": [
+    "wild/probes/probe_string_nested_and_or_block.exe"
+   ],
+   "signatures": [
+    "missing per-term group parentheses",
+    "compound IF round-trip regression"
+   ],
+   "hypothesis": "When a string logical-value header is followed by `oraxbx` or `andaxbx` materialization, recognizing the whole span as a split materialization group is sufficient; the nested comparisons can be represented by one outer Group.",
+   "negative_evidence": [
+    "The matcher produced one Group around `B$ = \"B\" OR C$ = \"C\"` instead of the two source-faithful per-term Groups.",
+    "The emitted source changed from `((B$ = \"B\") OR (C$ = \"C\"))` to `(B$ = \"B\" OR C$ = \"C\")`, and the focused compound suite fell from 21 passing tests to 20.",
+    "Removing the broad split and negated materialization branches restored the original nested IR and all 21 compound tests pass."
+   ],
+   "instead": "Keep string logical-value recognition limited to the calibrated templates that preserve each explicit comparison Group. If a wild helper needs split materialization, add a hand-built matcher test and an oracle-calibrated fixture before broadening the range.",
+   "source": "session 2026-08-01"
+  },
+  {
+   "id": "RO-POOL-DISP-SYNTHETIC-SCALAR",
+   "title": "Every unclassified displacement above 0x400 can be a synthetic scalar",
+   "disposition": "reverted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/banker.exe"
+   ],
+   "signatures": [
+    "banker emitted width regression",
+    "pooled double literal shadowed"
+   ],
+   "hypothesis": "When layout recovery cannot classify a displacement above 0x400, returning a synthetic scalar keeps wild decoding moving and is safe for floating-point operands.",
+   "negative_evidence": [
+    "Banker's `fld64 [0x0DE8]` is a pooled 1E-8# literal, not a variable; the permissive loc() fallback returned V0DE8 before fpval64() could perform its pool fallback.",
+    "That one shadowed literal shifted canonical variable names through the remainder of the program and changed the emitted source width from the pinned 97906 to 97897 bytes.",
+    "Raising for pool-range displacements while retaining synthetic scalars only below the pool restored the literal, variable names, and the 97906-byte width."
+   ],
+   "instead": "Preserve the fail-through contract for displacements at or above pool_base-4 so fpval, fpval64, and integer pool readers can classify literals. Restrict any synthetic scalar fallback to evidence outside the pool window and add a wild witness before widening it.",
+   "source": "session 2026-08-02"
+  },
+  {
+   "id": "RO-WILD-WIDTH-PIN-CODE-REGRESSION",
+   "title": "Current inv87/state width-pin deltas are caused by the decoder regression",
+   "disposition": "superseded",
+   "confidence": "medium",
+   "files": [
+    "wild/hits/inv87.exe",
+    "wild/hits/invoice.exe",
+    "wild/hits/state.exe",
+    "wild/hits/state87.exe"
+   ],
+   "signatures": [
+    "inv87 emitted width 88301 vs pinned 88341",
+    "state emitted width 69172 vs pinned 69191",
+    "wild corpus fingerprint drift"
+   ],
+   "hypothesis": "The inv87/invoice/state width-pin differences are a decoder regression introduced by the current branch and should be fixed by changing decoder logic.",
+   "negative_evidence": [
+    "Although the full wild corpus has since grown from 86 to 105 recognizable executables, the four pinned inputs are byte-identical to their manifest entries: each current SHA-256 matches tests/fixtures/wild_roundtrip.json.",
+    "The same 88301-byte inv87 output is produced by the historical 67e7485, 80b6e66, and 5caa71cf trees as well as the current tree, while the manifest pin was introduced later; this is an unreproducible baseline measurement, not a regression introduced by the current working change.",
+    "An unreachable WIP snapshot does emit 88341 bytes, but it also changes unrelated control-flow/source spellings; applying only its TAB boundary fragment to the current nested-USING logic leaves inv87 at 88301 and worsens banker.exe by 65 bytes, so it is not a safe fix.",
+    "Unlike banker.exe, whose 97906-byte pin is restored by the pool-range fix, the inv87/state widths remain unchanged across those historical decoder trees. The external oracle accepts inv87's current source and measures a -16-byte EXE delta, but cannot recover the missing 40 source characters from the absent historical source.",
+    "The baseline was corrected after review: tests and wild_roundtrip now record the reproducible committed-tree widths (88301 and 69172). This is a source-format measurement correction after an intended decoder change, not a relaxed byte-roundtrip expectation."
+   ],
+   "instead": "Keep source-width pins synchronized with the committed decoder tree, while retaining the manifest's oracle round-trip category and delta as the acceptance evidence. Do not infer a decoder regression from a historical source-length measurement that cannot be reproduced.",
+   "source": "session 2026-08-02"
+  },
+  {
+   "id": "RO-CVT2TB-NESTED-LOOP-FOLD",
+   "title": "Recursively unfolding CVT2TB's nested loop closer fixes SUB12",
+   "disposition": "reverted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/CVT2TB.EXE"
+   ],
+   "signatures": [
+    "Error 470 at SUB12 END IF"
+   ],
+   "hypothesis": "The bare DO/LOOP introduced in SUB12 is only nested one IF too deeply; recursively treating a nested loop terminator as an outer guard, then lifting the closer beside or after that IF, should make the emitted source compile.",
+   "negative_evidence": [
+    "The recursive guard edit moved `IF N% <= LEN(C$) THEN` to a guard form but the oracle still rejected the enclosing SUB12 at `END IF`.",
+    "Lifting the closer beside the nested IF produced an invalid loop body; deferring it to the enclosing GOTO still left the loop crossing the source-level boundary and produced the same Error 470.",
+    "Replacing the four DELAY literals with a legal probe value was sufficient to reach this control-flow error, so the hypothesis was tested independently of the unresolved DELAY pool interpretation."
+   ],
+   "instead": "Compare the complete CVT2TB loop region with an oracle probe that includes the same backward target and procedure boundary; do not broaden recursive IF folding until that byte shape is reproduced.",
+   "source": "oracle probes and CVT2TB control-flow trace, session 2026-08-02"
+  },
+  {
+   "id": "RO-CVT2TB-NESTED-GOTO-SPELLING",
+   "title": "A direct numbered GOTO spelling is sufficient for CVT2TB SUB12",
+   "disposition": "rejected",
+   "confidence": "high",
+   "files": [
+    "wild/hits/CVT2TB.EXE"
+   ],
+   "signatures": [
+    "Error 470 at SUB12 END IF"
+   ],
+   "hypothesis": "Reclassifying the backward jmps as a numbered GOTO, matching an authored probe's raw target shape, will make the nested SUB12 source compile.",
+   "negative_evidence": [
+    "The authored probe confirms the raw distinction: a numbered GOTO targets the first statement after an unconditional IF-skip jump, while a head-test DO targets the condition start.",
+    "Applying that distinction changes CVT2TB to the expected GOTO 253 / GOTO 252 topology, but Turbo Basic still rejects the nested numbered-line source at the enclosing END IF.",
+    "A minimal nested outer-IF probe with the same numbered body target fails earlier with Error 441, so the remaining gap is line/region reconstruction rather than the bare jmps classification alone."
+   ],
+   "instead": "Investigate how the original nested block's line references are represented; keep the raw GOTO discriminator narrow and require a compiling nested probe before broadening it.",
+   "source": "oracle probes and CVT2TB control-flow trace, session 2026-08-02"
+  },
+  {
+   "id": "RO-CVT2TB-NUMBERED-BLOCK-TARGET-GENERAL",
+   "title": "Any numbered jump target inside a block IF is rejected",
+   "disposition": "rejected",
+   "confidence": "high",
+   "files": [
+    "wild/hits/CVT2TB.EXE"
+   ],
+   "signatures": [
+    "Error 470 at SUB12 END IF"
+   ],
+   "hypothesis": "The compiler error is caused by the mere presence of a numbered GOTO target inside a block IF.",
+   "negative_evidence": [
+    "A minimal block IF with a numbered interior target compiled successfully.",
+    "A nested block/ELSEIF with GOTO to a numbered statement outside the inner arm also compiled successfully.",
+    "The exact isolated SUB11/SUB12 source, including the numbered loop target and CALL/MID$/INCR body, compiled successfully; the full-program failure therefore depends on a larger region or line-table interaction."
+   ],
+   "instead": "Trace BodyLine targets through the complete top-level region and compare the generated line map with the raw jump addresses before changing block folding.",
+   "source": "oracle probes and CVT2TB control-flow trace, session 2026-08-02"
+  },
+  {
+   "id": "RO-CVT2TB-BARE-NOT-SPELLING",
+   "title": "Rewrite CVT2TB bare NOT tests as zero or positive comparisons",
+   "disposition": "rejected",
+   "confidence": "high",
+   "files": [
+    "wild/hits/CVT2TB.EXE"
+   ],
+   "signatures": [
+    "original movax_m/orax/jcc versus emitted notax/orax/jcc"
+   ],
+   "hypothesis": "The remaining branch mismatch is fixed by spelling `IF NOT AX%` as `IF AX% = 0`, `IF AX%`, `IF AX% <> 0`, or a positive branch to the next line.",
+   "negative_evidence": [
+    "The explicit zero form compiles through the oracle but emits xorax/cmpax_m, not the original movax_m/orax template.",
+    "Positive and nonzero forms remove NOT but select the opposite conditional opcode or add a different jump topology; the raw branch target and subsequent body do not match.",
+    "The source-level NOT condition remains semantically aligned with the original control flow, so changing polarity would be speculative.",
+    "Two minimal oracle probes confirm that both `IF NOT A% THEN line` and the equivalent positive `IF A% THEN line` use the current oracle's NOT or opposite-jcc templates; neither produces the wild executable's direct `orax; jnz; jmp` sequence. This is evidence of a compiler-template/revision difference, not a missing source spelling."
+   ],
+   "instead": "Model the compiler's bare-value branch template at the IR/control-flow level, preserving the original target polarity and body topology before changing the emitted condition spelling.",
+   "source": "three oracle probes and operation-stream comparison, session 2026-08-02"
+  },
+  {
+   "id": "RO-PALETTE-EXTRACTION-DELTA",
+   "title": "Palette-handler extraction causes t1_palette's four-byte oracle delta",
+   "disposition": "not-a-defect",
+   "confidence": "high",
+   "files": [
+    "tests/fixtures/corpus/t1_palette.exe"
+   ],
+   "signatures": [
+    "t1_palette: MISMATCH",
+    "34720 B vs 34720 B",
+    "~4 bytes differ"
+   ],
+   "hypothesis": "Extracting PALETTE and COLOR branches from graphics changes the emitted bytes for t1_palette.",
+   "negative_evidence": [
+    "The emitted source remains exactly `10 PALETTE 1, 2` followed by `20 END`.",
+    "The immediately preceding clean commit produces the same deterministic four-byte oracle delta when verified with the same vendored compiler path.",
+    "Focused palette, COLOR, and palette-reset tests pass, so the mismatch is not evidence of a state change introduced by the extraction."
+   ],
+   "instead": "Treat the t1_palette delta as a pre-existing baseline discrepancy; do not re-record it or use it to reject unrelated palette-handler complexity reductions. Revisit the compiler/template delta separately if byte-exact calibration is required.",
+   "source": "palette extraction comparison against ab138d6, session 2026-08-03"
+  },
+  {
+   "id": "RO-INDEX-ADD-SI-ARRAYREF-AX",
+   "title": "add si,ax with si=None and a materialized ArrayRef in ax is a nested/mixed array subscript",
+   "disposition": "refuted",
+   "confidence": "medium",
+   "files": [
+    "wild/hits/eco.exe",
+    "wild/hits/pfl.exe"
+   ],
+   "signatures": [
+    "add si,ax with si=None ax=ArrayRef"
+   ],
+   "hypothesis": "The multi-dimension index accumulator (`_int_index_add`, arith.py) sees `add si,ax` with `si=None` and `ax` already a fully-materialized ArrayRef because the source subscript nests one array read inside another array's index expression -- either a bare nested subscript `A(B(i))`, a nested subscript inside a multi-dimension access `A(B(i), j)`, or an addition mixing a plain span and an array read within one dimension `A(k + B(i))`.",
+   "negative_evidence": [
+    "probe_nested_idx.bas (`A%(B%(3))`, rank-1 outer array) decodes cleanly with no `add si,ax` error; the nested read folds to an ordinary ArrayRef index with no leg accumulation needed for a rank-1 outer array.",
+    "probe_nested_idx2.bas (`A%(B%(3), 2)`, rank-2 outer array with one nested dimension) also decodes cleanly.",
+    "probe_nested_idx3.bas (`A%(2 + B%(3))`, addition mixing a literal and an array read within one subscript) also decodes cleanly, folding to a plain BinOp index.",
+    "probe_nested_idx4.bas (`A%(B%(3), 1, 2)`, rank-3 outer array so `_int_index_add`'s jspan/kspan/lspan leg chain is actually exercised, with one leg a nested array read) also decodes cleanly."
+   ],
+   "instead": "Plain nested/mixed integer-array subscripting at rank 1-3 is exhaustively ruled out (4 probes). Do not re-try that shape. The wild sites' `V9%`/`V21%` names and 0xa5b9/0x12d4a offsets suggest checking whether eco.exe/pfl.exe's outer array is FAR (DGROUP-external) rather than local, or whether the nested read is a STRING/DOUBLE array feeding an integer subscript (a type coercion path `_int_index_add` may not see) -- read the actual op stream around those offsets with `tbx FILE --ops` before writing another probe, rather than guessing a 5th BASIC shape blind.",
+   "source": "scan_wild triage, session 2026-08-04, 4 oracle probes (1.1 dialect) against wild/hits/eco.exe and wild/hits/pfl.exe's exact error shape"
+  },
+  {
+   "id": "RO-CAL-STATEMENT-COUNT-GOTO-HEURISTIC",
+   "title": "cal.exe/cal87.exe/state.exe's statement-count regression is the same GOTO-vs-DO/LOOP heuristic that broke t1_erasepre",
+   "disposition": "refuted",
+   "confidence": "medium",
+   "files": [
+    "wild/hits/cal.exe",
+    "wild/hits/cal87.exe",
+    "wild/hits/state.exe",
+    "wild/hits/state87.exe",
+    "wild/hits/d-fix.exe",
+    "wild/hits/horses.exe",
+    "wild/hits/rs.exe"
+   ],
+   "signatures": [
+    "test_a_comparable_program_still_decodes_to_its_recorded_shape statement-count drift",
+    "test_a_known_over_long_program_has_not_got_worse size drift"
+   ],
+   "hypothesis": "The same core.py fp_dispatch heuristic fixed for t1_erasepre in `fix: don't reinterpret a DO-loop back-edge as a flat GOTO without a jcc present` -- a bare backward jmps whose landing address is preceded by an unrelated forward jmp gets reinterpreted as a plain Goto instead of a DO-loop back-edge -- also explains cal.exe's statement count dropping from the recorded 2348 to 2345 (and the parallel state.exe/horses.exe emitted-size drift), and tightening its guard (any jcc anywhere in the file, then a jcc whose target exactly equals the loop landing address) would fix it the same way.",
+   "negative_evidence": [
+    "Instrumented the heuristic's fire site for cal.exe: it fires exactly once, at addr=0x153ff target=0x15395, landing on a `cls` statement reached by a three-way jcc/jmp cascade -- a shape indistinguishable from a genuine multi-arm IF, not a loop entered via GOTO.",
+    "Adding the 'any jcc in file' guard changed cal.exe's count from 2345 to 2347 (2 of 3 missing statements recovered) without fixing t1_erasepre differently, so the guard has SOME effect -- but tightening it further to 'a jcc whose target equals op[2] exactly' (the more precise IF/ELSE-join signature) made NO further difference: reverting the whole hunk 4 special case back to its as-committed wip form ('any jcc in file'), the exact-target-refined form, and the pristine unmodified wip heuristic (no guard at all) all produce the identical statement count (2345) and identical oracle round-trip delta (-64 bytes) for cal.exe.",
+    "Since none of the three variants of this one heuristic change cal.exe's measured delta at all, the heuristic firing observed at 0x153ff is not the (or not the sole) cause of cal.exe's regression from the recorded -48-byte delta to the now-measured -64-byte delta; something else in the same 'wip' commit (9ab312c) -- most likely a combination of the untested-in-isolation core.py hunks (each hunk reverted alone from the fixed baseline also left the count at 2345, only a full revert of core.py restored 2348, implying a multi-hunk interaction rather than a single culprit) -- is responsible.",
+    "Per-hunk bisection against the pre-wip core.py baseline confirmed core.py (not lift.py, emit0.py, ir/render.py, rename.py, or the handlers/*.py files) is where the regression lives, and confirmed hunks 2 and 3 (fp_dispatch's head-test DO/WHILE bound check and the FnCall-typed OR-AX truth-test recognition) individually don't explain it either, but those two hunks were partially superseded by later non-wip commits (e6d3a02, 9d15702, 75dcc32) before this session, so a clean textual revert of their original wip form was not fully testable; the interaction may involve one of those later commits too.",
+    "The exact-jcc-target refinement was committed (`fix: require the jcc to target the loop landing address exactly`) because it independently recovered d-fix.exe and horses.exe's recorded shapes, but the full suite then showed it newly breaking tests/tbx/test_lprint_comma.py's rs.exe case (2332 statements decoded vs the pinned 2329 -- MORE statements than expected, the opposite direction from cal.exe's under-count): rs.exe has a genuine GOTO-into-block-IF-body shape where the guarding jcc does not target the loop landing address exactly, so the tighter guard suppressed a correct heuristic firing there. Reverted back to the looser 'any jcc in file' guard, which passes rs.exe, d-fix.exe, and horses.exe (the latter two apparently for reasons independent of this specific refinement, since the loose guard alone already fixed them once retested) and does not regress anything; only cal.exe/cal87.exe/state.exe/state87.exe remain open."
+   ],
+   "instead": "Do not spend further probe budget assuming this is the t1_erasepre heuristic; it is refuted for cal.exe specifically, and the more precise 'exact jcc target' variant is refuted outright (it regresses rs.exe). The next probe should bisect core.py's remaining un-isolated hunks (5-11: the movsi_bp MID$-by-reference block, the proc/fn-frame _fold_if bound= threading, the removed midassign/midassign3 early-continue, and the movm_ax INPUT#/PRINT# channel-expression change) against cal.exe directly with `uv run python -m tbx.tools.verify_wild cal.exe` as the ground truth (delta -48 is the target to restore), since single-hunk reverts from the fixed baseline were all insufficient and a combination is implicated. state.exe/state87.exe were not independently bisected and may share this cause or have a distinct one; check before assuming they are the same regression. Do not re-attempt the exact-jcc-target guard without also running the full suite (not just the wild-subset/emitted-width tests) -- rs.exe's regression was only visible there.",
+   "source": "gap tracking session, 2026-08-05, full test-suite baseline recovery from 20 to 9 failures after the same wip commit's t1_erasepre and golden-fixture regressions were fixed; oracle round-trip measurement via verify_wild cal.exe"
+  }
+]
+}

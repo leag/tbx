@@ -32,9 +32,7 @@ def test_undimensioned_local_array_cleanup(stem):
 @pytest.mark.parametrize(
     ("stem", "exc", "next_gap"),
     [
-        ("cleanup.exe", ValueError, "LOCAL zero-fill outside a fresh SUB/DEF FN body at 0xd0ca"),
-        ("crossref.exe", ValueError, "string BP push outside DEF FN at 0xb081"),
-        ("reformat.exe", ValueError, "LOCAL zero-fill outside a fresh SUB/DEF FN body at 0xd455"),
+        ("crossref.exe", ValueError, r"string store to \[bp\+68\] in DEF FN body"),
     ],
 )
 def test_wild_local_bounds_remain_closed(stem, exc, next_gap):

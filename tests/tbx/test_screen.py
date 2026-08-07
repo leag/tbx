@@ -39,6 +39,24 @@ def test_decode_t1_scr2():
     assert decode0.decode_user_code(_exe("t1_scr2.exe")) == want
 
 
+def test_decode_t1_locateomit():
+    """`LOCATE ,col` (row omitted) loads the compiler's own 0x8000 sentinel
+    into bx before the same 2-arg runtime call `LOCATE row,col` uses --
+    reading it back as a literal instead of an omitted row does not
+    recompile byte-identical to the source that produced it (probed via
+    the oracle; wild k.exe, whose LOCATE-heavy screen-drawing code hits
+    this every few statements, is the witness this was found from)."""
+    from tbx import decode0
+
+    L = ir.Lit
+    want = [
+        ir.Locate(L(3), L(5)),
+        ir.Locate(None, L(7)),
+        ir.End(),
+    ]
+    assert decode0.decode_user_code(_exe("t1_locateomit.exe")) == want
+
+
 def test_screen_optional_args():
     # SCREEN's trailing tag byte is a presence mask (08 mode / 04 burst /
     # 02 apage / 01 vpage) with args in cells [88]/[94]/[A0]/[AC] --

@@ -1,0 +1,28 @@
+# t1_inputfilelocal dialect=1.1 start=08D10
+08D13:jmp:36202
+08D16:proc_enter
+08D19:local_init:2:6
+08D2D:movsi:292
+08D30:rt:156
+08D32:movm_imm:46:18689
+08D38:shortstr
+08D3A:movm_imm:96:1
+08D40:movax:128
+08D43:open
+08D46:movax:1
+08D49:movm_ax:96
+08D4D:read_file_num
+08D50:fstp_bp:6
+08D56:movax:1
+08D59:close
+08D5C:fld_bp:6
+08D60:rt:187
+08D62:rt:184
+08D66:proc_ret:4
+08D6A:sub_sp:4
+08D6D:far_call:36118
+08D72:end
+08D75:epilogue
+# commits
+08D54
+08D64

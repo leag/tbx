@@ -308,6 +308,75 @@ def match_string_logical_value_group(
     return None
 
 
+def match_numeric_logical_value_group(
+    ops, index: int | None = None
+) -> BoolTermMatch | None:
+    """Mirror of :func:`match_string_logical_value_group`: a NUMERIC-led
+    relational ``AND|OR`` value group whose second term is a string relation.
+
+    Same non-short-circuiting shape (both relations always materialize, only
+    the completed value feeds the final jcc/jmp), just with the leading
+    relation numeric instead of string -- ``ops[index]`` is the numeric
+    term's own ``movax FFFF`` materialization (no ``orax`` tail, unlike an
+    ordinary short-circuit chain's first term), and the tail's own second
+    term is a raw ``strcmp`` rather than the numeric ``fstsw`` the string-led
+    matcher's tail also accepts. Wild kinder.exe: `IF A# = B# OR C$ = D$
+    THEN <line>` (probe q_numstrvaluegroup).
+
+    A 3rd (or later) term chains flat off the same tail shape with no
+    closing ``jcc;jmp`` of its own -- just more term-staging leading into
+    the NEXT ``strcmp``/fold (wild kinder.exe's real witness is a 3-term
+    `A# = B# OR C$ = D$ OR C$ = E$`, probe q_numstr3chain) -- so only the
+    fold through ``oraxbx`` is required here; whether that closes the whole
+    expression or continues is for the caller's downstream fold (the
+    ``direct_bool_gate``/``reg_logical_results`` chain machinery) to decide,
+    not this recognizer.
+
+    OR only: the combine-time fold this feeds (``arith.py``'s ``oraxbx and
+    e.direct_bool_group is not None`` branch) has no AND counterpart -- the
+    sibling ``andaxbx`` branch belongs to a DIFFERENT feature
+    (``match_bool_outer_and_group``) that happens to share the
+    ``direct_bool_gate`` flag but not the register orientation this shape
+    needs, so accepting AND here would silently fold with the wrong operand
+    order (checked: probed `A# = B# AND C$ = D$` this way emits a misplaced
+    Group and does not recompile byte-identical).
+    """
+    ops, index = _window(ops, index)
+    if (
+        index + 3 >= len(ops)
+        or ops[index][1:] != ("movax", 0xFFFF)
+        or ops[index + 1][1] != "jcc"
+        or ops[index + 1][2] not in _JCC_RELOP_TRUE
+        or ops[index + 2][1] != "incax"
+        or ops[index + 1][3] != ops[index + 3][0]
+    ):
+        return None
+    for j in range(index + 3, min(index + 14, len(ops) - 6)):
+        if any(
+            op[1] in ("jcc", "jmp", "jmpf", "jmps")
+            for op in ops[index + 3 : j]
+        ):
+            # An intervening dispatch closes the first term as an ordinary
+            # short-circuit chain; do not reach across it into a later
+            # materialization.
+            continue
+        tail = [o[1] for o in ops[j : j + 6]]
+        if (
+            tail != ["strcmp", "movbxax", "movax", "jcc", "incax", "oraxbx"]
+            or ops[j + 2][2] != 0xFFFF
+            or ops[j + 3][2] not in _JCC_RELOP_TRUE
+            or ops[j + 3][3] != ops[j + 5][0]
+        ):
+            continue
+        return BoolTermMatch(
+            template="numeric_logical_value_group",
+            start=index,
+            stop=j + 6,
+            operator="OR",
+        )
+    return None
+
+
 def match_bool_bare_term1(ops, index: int | None = None) -> BoolTermMatch | None:
     """Sibling of :func:`match_bool_term1` for a bare-value compound term.
 
@@ -534,7 +603,7 @@ def match_loose_for_header(ops, index, stmts, vdisp) -> ForHeaderMatch | None:
         return None
     i += 3
     if i < len(ops) and ops[i][1] == "jcc" and ops[i][2] == 0x76:
-        if ops[i][3] != body:
+        if not _same_code_offset(ops[i][3], body):
             return None
     elif (
         i + 1 < len(ops)
@@ -542,8 +611,14 @@ def match_loose_for_header(ops, index, stmts, vdisp) -> ForHeaderMatch | None:
         and ops[i][2] == 0x77
         and ops[i][3] == ops[i][0] + 5
         and ops[i + 1][1] == "jmp"
-        and ops[i + 1][2] == body
+        # The scanner canonicalizes near targets to the branch's first
+        # 64-KiB window.  A long FOR body can therefore be named by the
+        # equivalent offset in the current window (wild mcmurphy.exe).
+        and _same_code_offset(ops[i + 1][2], body)
     ):
+        # Keep the branch's own canonical target for downstream FOR-frame
+        # bookkeeping; it is the address later operations will use.
+        body = ops[i + 1][2]
         i += 2
     else:
         return None
@@ -576,6 +651,49 @@ def match_loose_for_header(ops, index, stmts, vdisp) -> ForHeaderMatch | None:
 _REGISTER_SHUTTLE = frozenset({"movbxax", "movrr"})
 
 
+def epilogue_entry(ops, closer: int, floor: int = 0) -> tuple[int, int]:
+    """(index an EXIT lands on, count of strings freed) for the body closing at
+    ``closer``.
+
+    A body's epilogue is the run immediately before its return: one
+    ``arg_ref <disp>; str_temp_free`` pair per LOCAL/parameter string, one
+    ``movsi <disp>; local_arr_free`` pair per LOCAL dynamic array, plus the
+    ``trap_hook`` poll stamps a trapping build leaves there. All of it is a
+    no-op to the lift, so it produces no statement -- but it IS where an EXIT
+    SUB / EXIT DEF jumps, and the address it jumps to is the FIRST op of the
+    run, not the return.
+
+    Shared by ``match_proc_body`` and the block DEF FN frame, which has no
+    ``proc_enter`` to be matched and so has to walk its own epilogue back.
+    """
+    i, freed = closer, 0
+    while i > floor:
+        if ops[i - 1][1] == "trap_hook":
+            i -= 1
+            continue
+        if (
+            i - 2 >= floor
+            and ops[i - 1][1] == "str_temp_free"
+            and ops[i - 2][1] == "arg_ref"
+        ):
+            i -= 2
+            freed += 1
+            continue
+        if (
+            i - 2 >= floor
+            and ops[i - 1][1] == "local_arr_free"
+            and ops[i - 2][1] == "movsi"
+        ):  # a LOCAL dynamic array's heap block, released the same way and in
+            # the same place (wild cleanup.exe, reformat.exe, whose three EXIT
+            # SUBs each aim at the stamp ahead of this pair). Counted apart
+            # from the strings: `freed_strings` is what the retf pop
+            # arithmetic reads, and an array block is not a string descriptor.
+            i -= 2
+            continue
+        break
+    return i, freed
+
+
 def match_proc_body(ops, index: int | None = None) -> ProcBodyMatch | None:
     """Extent of the SUB/DEF FN body opened by ``proc_enter`` at ``index``.
 
@@ -585,6 +703,11 @@ def match_proc_body(ops, index: int | None = None) -> ProcBodyMatch | None:
     so the run produces no statement -- but it IS where an ``EXIT SUB`` jumps,
     so the frame's exit address has to name the FIRST pair, not the
     ``proc_ret``.
+
+    Under event trapping the epilogue also carries ``trap_hook`` stamps, which
+    are no-ops to the lift in the same way, and the EXIT SUB jumps to the first
+    of those (wild help.exe, resume.exe, rsltest.exe -- ``jump target 0x8b06 /
+    0xa3d7 / 0xae3a is not a statement start``). Fixture t1_exitsubtrap.
 
     Recognizing only the ``proc_ret`` left the EXIT SUB decoded as a plain Goto
     to an address no statement owns (wild tbd73.exe, TBW73.INC:452: ``EXIT
@@ -602,20 +725,14 @@ def match_proc_body(ops, index: int | None = None) -> ProcBodyMatch | None:
     )
     if ret is None:
         return None
-    epilogue = ret
-    while (
-        epilogue - 2 >= index
-        and ops[epilogue - 1][1] == "str_temp_free"
-        and ops[epilogue - 2][1] == "arg_ref"
-    ):
-        epilogue -= 2
+    epilogue, freed = epilogue_entry(ops, ret, index)
     return ProcBodyMatch(
         template="proc_body",
         start=index,
         stop=ret + 1,
         ret_address=ops[ret][0],
         exit_address=ops[epilogue][0],
-        freed_strings=(ret - epilogue) // 2,
+        freed_strings=freed,
     )
 
 
@@ -733,6 +850,32 @@ def match_using_emit(ops, index: int | None = None) -> UsingEmitMatch | None:
 _USING_CHAIN_LOOKAHEAD = 18
 
 
+def match_second_using_before_flush(ops, index: int | None = None):
+    """Another `USING` begin before this statement's flush, if there is one.
+
+    Turbo Basic accepts more than one USING in a single print statement
+    (`LPRINT TAB(5); USING f1$; A#; TAB(37); USING f2$; B$`), and that form is
+    not interchangeable with any split spelling -- only the one-statement
+    source reproduces the bytes, the four candidate splits coming back 15-20
+    bytes off (t1_usingtwice). Two `rt CA` before one flush vector is what says
+    so. A SINGLE USING after items is byte-identical split off, so this fires
+    only on the second.
+
+    The match points at the second `rt CA`, which the caller needs: two USING
+    begins are necessary but not sufficient, and the span between them is where
+    the deciding evidence sits.
+    """
+    ops, index = _window(ops, index)
+    for j in range(index + 1, min(index + _USING_CHAIN_LOOKAHEAD * 2, len(ops))):
+        if ops[j][1] != "rt":
+            continue
+        if ops[j][2] == 0xCA:
+            return TemplateMatch(template="second_using", start=j, stop=j + 1)
+        if ops[j][2] in (0xB8, 0xB9, 0xBA):  # statement flush: chain is over
+            return None
+    return None
+
+
 def match_using_chain_continues(
     ops, index: int | None = None
 ) -> TemplateMatch | None:
@@ -790,3 +933,57 @@ def match_delay(ops, index: int | None = None) -> DelayMatch | None:
         hooks=tuple(hooks),
         loop_back=loop_back,
     )
+
+
+def match_definition_bracket(ops, index: int | None = None) -> TargetMatch | None:
+    """A ``jmp`` at ``index`` that brackets the framed definition right after it.
+
+    The compiler brackets every SUB/DEF FN with a jmp over its body, and the
+    decoder normally recognizes that jmp by what PRECEDES it: the entry jmp at
+    op 0, a jmp landed on by the previous bracket, or a jmp sitting where a
+    definition just closed. None of those hold when a definition is interleaved
+    into main code behind an ordinary subroutine, where the op before the
+    bracket is a user ``RETURN`` -- and the decoder then lifts the bracket as a
+    user ``GOTO`` and never opens the body's frame (wild cleanup.exe,
+    reformat.exe: ``LOCAL zero-fill outside a fresh SUB/DEF FN body at 0xd0ca /
+    0xd455``).
+
+    So this recognizes the bracket by what it DOES instead, which needs no
+    context at all: the next op begins a framed body -- ``proc_enter``, or the
+    ``mov [bp+0],0`` result-slot zero-fill that opens a block DEF FN -- and the
+    jmp's target is the op right after that body's own closer, modulo the
+    ``trap_hook`` stamps event trapping puts there. A jmp that lands exactly
+    past the closer of the body it opens is skipping that body and nothing
+    else. Fixture t1_gosubthendef.
+
+    The unframed forms (``inline_sub``, ``opaque_helper``) are deliberately not
+    here: they have no closer to measure a bracket against.
+    """
+    index = 0 if index is None else index
+    if index + 1 >= len(ops) or ops[index][1] != "jmp":
+        return None
+    head = ops[index + 1]
+    if head[1] == "proc_enter":
+        closer = "proc_ret"
+    elif head[1] == "mov_bp_imm" and head[2] == 0 and head[3] == 0:
+        closer = "fn_ret"
+    else:
+        return None
+    target = ops[index][2]
+    if target <= ops[index][0]:  # a bracket always jumps forward
+        return None
+    for j in range(index + 1, len(ops)):
+        if ops[j][1] != closer:
+            continue
+        j += 1
+        while j < len(ops) and ops[j][1] == "trap_hook" and ops[j][0] < target:
+            j += 1
+        if j < len(ops) and ops[j][0] == target:
+            return TargetMatch(
+                template="definition_bracket",
+                start=index,
+                stop=index + 1,
+                target=target,
+            )
+        return None
+    return None

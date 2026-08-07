@@ -7,6 +7,7 @@ the shared :class:`~tbx.decode0.core.DecodeState` plus the current
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from tbx import ir
@@ -26,20 +27,110 @@ from tbx.decode0.lift import (
     _lift_while,
 )
 from tbx.decode0.matchers import (
+    match_second_using_before_flush,
     array_param_suffix,
     match_bool_outer_and_group,
     match_bool_term1,
+    match_numeric_logical_value_group,
     match_string_logical_value_group,
     match_using_emit,
 )
 
+logger = logging.getLogger(__name__)
+
 if TYPE_CHECKING:
     from tbx.decode0.core import DecodeState
 
+
+def _forwarded_arg(state: DecodeState, op, addr, index, argument):
+    c = state.control
+    params = c.proc_params.get(op[2])
+    if params is None:
+        return ("fwdpending", op[2], index, argument[1])
+    if op[2] in c.inline_procs:
+        offset = argument[1]
+        c.fwd_inline_offs.add(offset)
+        return ir.Var(f"P{offset:02X}")
+    if index >= len(params):
+        raise ValueError(
+            f"forwarded arg index {index} to callee {op[2]:#x} "
+            f"with {len(params)} params at {addr:#x}"
+        )
+    suffix = params[index][-1] if params[index][-1] in "%$" else ""
+    offset = argument[1]
+    if suffix == "%":
+        c.proc_int_offs.add(offset)
+    elif suffix == "$":
+        c.proc_str_offs.add(offset)
+    return ir.Var(f"P{offset:02X}{suffix}")
+
+
+def _byref_arg(state: DecodeState, op, addr, index, argument):
+    l, c = state.layout_state, state.control
+    params = c.proc_params.get(op[2])
+    offset = argument[1]
+    if params is None:
+        try:
+            fallback = state.loc(offset)
+        except ValueError:
+            fallback = ir.Var(f"V{offset:04X}")
+        return ("argrefpending", op[2], index, offset, fallback)
+    if op[2] in c.inline_procs:
+        return state.loc(offset)
+    if index >= len(params):
+        raise ValueError(f"by-ref arg to unknown callee params at {addr:#x}")
+    suffix = params[index][-1] if params[index][-1] in "%$&#" else ""
+    if suffix == "%":
+        l.lay["scalars"][offset] = 2
+    elif suffix == "&":
+        l.lay["scalars"][offset] = 4
+        l.lay["long_slots"].add(offset)
+    elif suffix == "#":
+        l.lay["scalars"][offset] = 8
+    elif suffix == "$":
+        l.lay["strs"].add(offset)
+    else:
+        l.lay["scalars"][offset] = 4
+    return state.loc(offset)
+
+
+def _far_call(state: DecodeState, op, addr) -> bool:
+    c = state.control
+    args = tuple(
+        _forwarded_arg(state, op, addr, index, argument)
+        if isinstance(argument, tuple) and argument[0] == "fwd"
+        else _byref_arg(state, op, addr, index, argument)
+        if isinstance(argument, tuple) and argument[0] == "argref"
+        else argument
+        for index, argument in enumerate(c.pend_args)
+    )
+    c.pend_args.clear()
+    name = c.proc_names.get(op[2], ("addr", op[2]))
+    state.put(ir.CallStmt(name, args), c.cur if c.cur is not None else addr)
+    c.cur = None
+    state.advance()
+    return True
+
+
+def _fn_call(state: DecodeState, op) -> bool:
+    img, e, c = state.image, state.expr, state.control
+    args = tuple(c.fn_args[offset] for offset in sorted(c.fn_args))
+    c.fn_args.clear()
+    name = c.proc_names.get(op[2], ("addr", op[2]))
+    call = ir.FnCall(name, args)
+    nxt = img.ops[c.k + 1] if c.k + 1 < len(img.ops) else None
+    if nxt is not None and nxt[1] == "fnres_spush":
+        e.sstack.append(call)
+        state.advance(2)
+    else:
+        e.stack.append(call)
+        state.advance()
+    return True
+
+
 def calls(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: call_abs, call_int, far_call, fn_call."""
-    img, m, e, l, c = (state.image, state.machine, state.expr,
-                       state.layout_state, state.control)
+    m, e, c = state.machine, state.expr, state.control
     if kind == "call_abs":  # CALL ABSOLUTE addr
         state.put(ir.CallAbsolute(e.stack.pop()), c.cur)
         c.cur = None
@@ -52,238 +143,248 @@ def calls(state: DecodeState, op, addr, kind) -> bool:
         state.advance()
         return True
     if kind == "far_call":
-        args = []
-        for i, a in enumerate(c.pend_args):
-            if isinstance(a, tuple) and a[0] == "fwd":
-                # Forwarded by-ref param (arg_push_fwd): the far pointer pair
-                # carries no type, so take it from the callee's param in the
-                # same position -- and mark the enclosing SUB's param with the
-                # same type so both headers agree (q_fwd).
-                params = c.proc_params.get(op[2])
-                if params is None:
-                    # CALL to a SUB defined LATER in the file: the callee's
-                    # own param list isn't known yet either. Stage a second
-                    # placeholder (alongside the CallStmt name's own
-                    # ("addr", n) one below), resolved together once every
-                    # SUB has been decoded (wild resume.exe, extending the
-                    # existing forward-CALL machinery to forwarded args).
-                    args.append(("fwdpending", op[2], i, a[1]))
-                    continue
-                if op[2] in c.inline_procs:
-                    # A SUB ... INLINE declares no parameter list at all, yet
-                    # TB happily passes it arguments -- the $INLINE bytes read
-                    # them off the stack themselves (TBWINDOW's `SUB Openbox
-                    # INLINE` takes fifteen). So there is no callee signature to
-                    # take the type from; fall back to what the ENCLOSING SUB
-                    # already knows about this very parameter (probe
-                    # t1_fwdinline; wild tbd73.exe).
-                    off = a[1]
-                    c.fwd_inline_offs.add(off)  # reconciled at proc_ret,
-                    # once the enclosing SUB's own param types are settled --
-                    # the call can precede every other use of the parameter,
-                    # so its suffix is not knowable yet
-                    args.append(ir.Var(f"P{off:02X}"))
-                    continue
-                if i >= len(params):
-                    raise ValueError(
-                        f"forwarded arg to unknown callee params at {addr:#x}"
-                    )
-                sfx = params[i][-1] if params[i][-1] in "%$" else ""
-                off = a[1]
-                if sfx == "%":
-                    c.proc_int_offs.add(off)
-                elif sfx == "$":
-                    c.proc_str_offs.add(off)
-                args.append(ir.Var(f"P{off:02X}{sfx}"))
-            elif isinstance(a, tuple) and a[0] == "argref":
-                # A caller-side scalar only ever touched via this by-ref
-                # push (arg_push_ref's own ValueError deferral, above):
-                # take its type from the callee's param in the same
-                # position, same deferred-resolution shape as "fwd".
-                params = c.proc_params.get(op[2])
-                off = a[1]
-                if params is None:
-                    # Retain the layout spelling for a target that later turns
-                    # out to be INLINE: it has no signature to supersede that
-                    # fallback during final resolution.
-                    args.append(("argrefpending", op[2], i, off, state.loc(off)))
-                    continue
-                if op[2] in c.inline_procs:
-                    # An INLINE SUB has no declared parameter list, so it
-                    # cannot type a guessed caller-side slot. Preserve the
-                    # layout spelling; this is the same no-signature case
-                    # handled above for forwarded frame parameters (tbd73's
-                    # Openbox call).
-                    args.append(state.loc(off))
-                    continue
-                if i >= len(params):
-                    raise ValueError(
-                        f"by-ref arg to unknown callee params at {addr:#x}"
-                    )
-                sfx = params[i][-1] if params[i][-1] in "%$&#" else ""
-                if sfx == "%":
-                    l.lay["scalars"][off] = 2
-                elif sfx == "&":
-                    l.lay["scalars"][off] = 4
-                    l.lay["long_slots"].add(off)
-                elif sfx == "#":
-                    l.lay["scalars"][off] = 8
-                elif sfx == "$":
-                    l.lay["strs"].add(off)
-                else:  # no suffix: TB's default (SINGLE) type
-                    l.lay["scalars"][off] = 4
-                args.append(state.loc(off))
-            else:
-                args.append(a)
-        c.pend_args.clear()
-        # A CALL to a SUB defined LATER in the file (address-ascending scan
-        # order) hasn't had its proc_ret processed yet, so proc_names has no
-        # entry for it (wild process.exe: SUB-to-SUB calls going both
-        # directions). Stage the raw target address as a placeholder,
-        # resolved once every SUB has been decoded (state._resolve_calls,
-        # the CallStmt sibling of ir.Restore's block-index epilogue
-        # resolution).
-        name = c.proc_names.get(op[2], ("addr", op[2]))
-        # c.cur, not addr: under active event trapping a CC poll hook
-        # precedes this op and claims c.cur as the statement's own
-        # address (trap_hook's handler, above) -- addr is the far_call
-        # instruction's OWN position, one hook-op later, which silently
-        # mismatched OutputState.cc_hooks and corrupted $EVENT ON/OFF metadata
-        # recovery (t1_fargosub). Without a preceding hook the two already
-        # coincide, so this is a pure correctness fix, not a behavior change
-        # for any already-passing fixture.
-        state.put(ir.CallStmt(name, tuple(args)), c.cur if c.cur is not None else addr)
-        c.cur = None
-        state.advance()
-        return True
+        return _far_call(state, op, addr)
     if kind == "fn_call":  # drain staged args (offset order) -> FnCall
-        args = tuple(c.fn_args[o] for o in sorted(c.fn_args))
-        c.fn_args.clear()
-        # A DEF FN body may appear later in the op stream. Mirror forward
-        # CallStmt staging and resolve the immutable expression during final
-        # program resolution once every definition has been named.
-        name = c.proc_names.get(op[2], ("addr", op[2]))
-        call = ir.FnCall(name, args)
-        nxt = img.ops[c.k + 1] if c.k + 1 < len(img.ops) else None
-        if nxt is not None and nxt[1] == "fnres_spush":
-            # string FN: INT 9F pushes the result descriptor (t1_fnstr)
-            e.sstack.append(call)
-            state.advance(2)
-        else:
-            e.stack.append(call)
-            state.advance()
+        return _fn_call(state, op)
+    return False
+
+
+def _arg_ref(state: DecodeState, op, addr) -> bool:
+    c = state.control
+    if c.cur is None:
+        c.cur = addr
+    c.pend_arg = op[2]
+    state.advance()
+    return True
+
+
+def _arg_push_ref(state: DecodeState, op, addr) -> bool:
+    l, c = state.layout_state, state.control
+    if c.cur is None:
+        c.cur = addr
+    try:
+        if op[2] in l.lay.get("guessed", ()):
+            raise ValueError("by-ref slot width was guessed, not evidenced")
+        c.pend_args.append(state.loc(op[2]))
+    except ValueError:
+        c.pend_args.append(("argref", op[2]))
+    state.advance()
+    return True
+
+
+def _arg_push_array_bp(state: DecodeState, op, addr) -> bool:
+    i, c = state.image, state.control
+    if c.proc_frame is None:
+        raise ValueError(f"whole-array parameter push outside a SUB at {addr:#x}")
+    if c.cur is None:
+        c.cur = addr
+    record = c.proc_frame.array_params.setdefault(op[2], {"rank": 1})
+    record.setdefault("name", f"P{op[2]:02X}" + array_param_suffix(i.ops, c.k, op[2]))
+    c.pend_args.append(ir.ArrayRef(record["name"], ()))
+    state.advance()
+    return True
+
+
+def _arg_push_ref_bp(state: DecodeState, op) -> bool:
+    i, c = state.image, state.control
+    is_fn_string_param = (
+        c.fn_frame is not None
+        and not (
+            c.fn_frame.locals is not None and op[2] in c.fn_frame.locals
+        )
+        and any(
+            candidate[1] == "arg_ref"
+            and candidate[2] == op[2]
+            and c.k + 1 + offset + 1 < len(i.ops)
+            and i.ops[c.k + 1 + offset + 1][1] == "str_temp_free"
+            for offset, candidate in enumerate(i.ops[c.k + 1 :])
+        )
+    )
+    if is_fn_string_param:
+        c.fn_frame.param_offs.add(op[2])
+        c.fn_frame.str_offs.add(op[2])
+        c.pend_args.append(ir.Var(f"P{op[2]:02X}$"))
+    else:
+        c.pend_args.append(state.loc_local(op[2]))
+    state.advance()
+    return True
+
+
+def _arg_push_fwd(state: DecodeState, op) -> bool:
+    state.control.pend_args.append(("fwd", op[2]))
+    state.advance()
+    return True
+
+
+def _restore_array_ds(state: DecodeState, op) -> bool:
+    i, c = state.image, state.control
+    if (
+        op[1] == "movdx"
+        and c.k + 1 < len(i.ops)
+        and i.ops[c.k + 1][1] == "movdsdx"
+        and c.k
+        and i.ops[c.k - 1][1] == "arg_push_array_bp"
+    ):
+        state.advance(2)
         return True
     return False
 
 
 def cargs(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: arg_ref, arg_push_ref."""
-    i, l, c = state.image, state.layout_state, state.control
-    if kind == "arg_ref":  # les si,[bp+N]: by-ref param operand (offset)
-        if c.cur is None:
-            # A statement whose FIRST op is a by-ref param operand has to
-            # anchor its own address here: this family returns early, before
-            # core.py's generic top-of-statement `c.cur = addr` fallback,
-            # so otherwise the statement would be recorded at its SECOND op.
-            # That misses a loop-back edge landing on the arg_ref -- a head-
-            # test `WHILE MID$(S$, X%, 1) <> "1"` over by-ref params reads its
-            # string param first, and _has_jmps_back then fails to match the
-            # `jmps` target against the test address, so _lift_while
-            # misclassifies the loop as an inline-IF body skip and the
-            # backward jmps has nothing left to close (t1_whmidref; wild
-            # tbd73.exe's TBWINDOW `SUB Makevmenu`). Same anchoring the
-            # mov_mem_sp branch below already does for the same reason.
-            c.cur = addr
-        c.pend_arg = op[2]
-        state.advance()
+    if kind == "arg_ref":
+        return _arg_ref(state, op, addr)
+    if kind == "arg_push_ref":
+        return _arg_push_ref(state, op, addr)
+    if kind == "arg_push_array_bp":
+        return _arg_push_array_bp(state, op, addr)
+    if kind == "movdx" and _restore_array_ds(state, op):
         return True
-    if kind == "arg_push_ref":  # push a by-ref CALL arg (caller's var)
-        if c.cur is None:
-            # With a small all-scalar argument list there is no preceding
-            # `sub sp,N` staging prologue: this first direct reference push is
-            # the CALL statement's address. Anchor it before this early-return
-            # handler advances, so an inline IF can skip to the following CALL
-            # (t1_ifbeforecallref; wild process.exe).
-            c.cur = addr
-        try:
-            if op[2] in l.lay.get("guessed", ()):
-                # Layout placed this slot but GUESSED its width -- its phantom-
-                # slot bridge assigns 2 bytes to a disp with no direct-access
-                # evidence, and a variable only ever forwarded by reference has
-                # none. Spelling it `%` on that guess emits an argument whose
-                # type disagrees with the callee's parameter, which TB rejects:
-                # `Error 475: Parameter mismatch`. Take the same deferral as a
-                # slot layout never placed at all (below) and let the callee's
-                # own signature type it (fixture t1_byrefonlyarg; wild
-                # tbd73.exe, whose CALLs pass several such variables).
-                raise ValueError("by-ref slot width was guessed, not evidenced")
-            c.pend_args.append(state.loc(op[2]))
-        except ValueError:
-            # The disp is never accessed any other way in this program --
-            # only ever forwarded by address to a callee -- so layout's
-            # evidence-gathering pass (which infers scalar/array shape from
-            # direct read/write op patterns) has no type signal for it.
-            # Defer, mirroring arg_push_fwd's own "fwd" placeholder: the
-            # callee's own param list (known once its SUB has been decoded)
-            # supplies the type (wild rsltest.exe: TBMENU.INC's MAKEMENU is
-            # dead code, so its SHARED globals are only ever touched via
-            # exactly this by-ref relay into MakeWindow).
-            c.pend_args.append(("argref", op[2]))
-        state.advance()
-        return True
-    if kind == "arg_push_array_bp":  # forward a whole-array PARAMETER onward
-        # as a whole-array CALL argument. The relaying SUB never touches an
-        # element, so the ordinary element-access path that registers (and
-        # types) an array parameter never runs -- register it here from the
-        # descriptor's own frame offset, the same `blk` that path keys on.
-        # A pure relay carries no element-type evidence at all, so the name
-        # stays unsuffixed; the callee's own signature is where the type
-        # lives (probe t1_arrfwd, verified byte-exact either way).
-        if c.proc_frame is None:
-            raise ValueError(f"whole-array parameter push outside a SUB at {addr:#x}")
-        if c.cur is None:
-            c.cur = addr  # this push may OPEN the CALL statement -- see the
-            # `sub_sp` anchor in handlers.arith for the same reasoning. With few
-            # enough arguments TB pushes them directly instead of reserving an
-            # outgoing area first, so the array push, not `sub sp,N`, is the
-            # statement's first op (t1_ifbeforecall: an inline IF whose skip
-            # target is the CALL that follows it).
-        rec = c.proc_frame.array_params.setdefault(op[2], {"rank": 1})
-        # A pure relay carries no element-type evidence, but the SAME procedure
-        # may also index the array -- and then the type IS knowable and the
-        # spelling matters: for a STRING array `A$()` and `A()` are different
-        # variables and recompile to different bytes. So look ahead for a typed
-        # element access before falling back to the unsuffixed name (wild
-        # tbd73.exe's TBWINDOW `SUB Makehmenu` both forwards item$() onward and
-        # indexes it; t1_arrfwd's numeric array needs no suffix either way,
-        # which is why the unsuffixed fallback was byte-exact there).
-        rec.setdefault(
-            "name",
-            f"P{op[2]:02X}"
-            + array_param_suffix(i.ops, c.k, op[2]),
-        )
-        c.pend_args.append(ir.ArrayRef(rec["name"], ()))
-        state.advance()
-        return True
-    if (
-        kind == "movdx"
-        and c.k + 1 < len(i.ops)
-        and i.ops[c.k + 1][1] == "movdsdx"
-        and c.k
-        and i.ops[c.k - 1][1] == "arg_push_array_bp"
-    ):  # mov dx,<DGROUP>; mov ds,dx -- restores DS after the push above
-        state.advance(2)  # pointed it at the stack segment. Semantic-free glue.
-        return True
-    if kind == "arg_push_ref_bp":  # push a by-ref CALL arg, LOCAL-frame
-        c.pend_args.append(state.loc_local(op[2]))  # caller's var
-        state.advance()
-        return True
-    if kind == "arg_push_fwd":  # forward the enclosing SUB's by-ref param as a
-        # CALL arg; typed at far_call from the callee's signature (q_fwd)
-        c.pend_args.append(("fwd", op[2]))
-        state.advance()
-        return True
+    if kind == "arg_push_ref_bp":
+        return _arg_push_ref_bp(state, op)
+    if kind == "arg_push_fwd":
+        return _arg_push_fwd(state, op)
     return False
+
+
+def _runtime_using_emit(state: DecodeState, addr: int) -> bool:
+    i, e, c = state.image, state.expr, state.control
+    emit = match_using_emit(i.ops, c.k)
+    if e.pend_using is None or emit is None:
+        raise ValueError(f"stray USING emit at {addr:#x}")
+    lp = emit.leg == "printer"
+    f = e.pend_fnum if emit.leg == "file" else None
+    if emit.leg == "file" and f is None:
+        raise ValueError(f"file USING item without [0060] at {addr:#x}")
+    if e.pend_using.values and (
+        e.pend_using.file != f or e.pend_using.lprint != lp
+    ):
+        raise ValueError(f"USING console/file leg flip at {addr:#x}")
+    e.pend_using.file = f
+    e.pend_using.lprint = lp
+    e.pend_using.values.append(
+        e.stack.pop() if emit.numeric else e.sstack.pop()
+    )
+    c.cur = None
+    state.advance(2)
+    return True
+
+
+def _runtime_print_item(state: DecodeState, addr: int, vec: int) -> bool:
+    e, c = state.expr, state.control
+    if e.pend_using is not None:
+        if not state.close_nested_using():  # ...into its owner, if nested
+            state.flush_pending()
+    f = e.pend_fnum if vec in (0xBD, 0xC0) else None
+    if vec in (0xBD, 0xC0) and f is None:
+        raise ValueError(f"file print item without [0060] at {addr:#x}")
+    if e.pend_print is not None and e.pend_print.file != f:
+        state.flush_pending()  # console/file leg change = new stmt
+    if e.pend_print is None:
+        e.pend_print = PrintChain(file=f, start=c.cur)
+    e.pend_print.items.append(
+        e.sstack.pop() if vec in (0xBE, 0xC0) else e.stack.pop()
+    )
+    c.cur = None
+    state.advance()
+    return True
+
+
+def _runtime_lprint_item(state: DecodeState, addr: int, vec: int) -> bool:
+    e, c = state.expr, state.control
+    item = e.sstack.pop() if vec == 0xBF else e.stack.pop()
+    if e.pend_using is not None:
+        if not state.close_nested_using():  # ...into its owner, if nested
+            state.flush_pending()
+    if e.pend_print is not None and e.pend_print.mode != "lprint":
+        state.flush_pending()
+    if e.pend_print is None:
+        e.pend_print = PrintChain(
+            items=[], file=None, start=c.cur, mode="lprint"
+        )
+    e.pend_print.items.append(item)
+    c.cur = None
+    state.advance()
+    return True
+
+
+def _runtime_lprint_flush(state: DecodeState, addr: int) -> bool:
+    e, c = state.expr, state.control
+    state.close_nested_using()  # an item of the chain, not a statement
+    if e.pend_using is not None:  # LPRINT USING closes on B9 too
+        pu, e.pend_using = e.pend_using, None
+        if not pu.lprint:
+            raise ValueError(f"b9 flush of a non-printer USING at {addr:#x}")
+        state.put(
+            ir.PrintUsing(
+                pu.fmt, tuple(pu.values), newline=True, lprint=True
+            ),
+            pu.start,
+        )
+        c.cur = None
+        state.advance()
+        return True
+    if e.pend_print is None:  # bare LPRINT: blank line (t1_lpstr)
+        state.put(ir.Lprint(()), c.cur)
+        c.cur = None
+        state.advance()
+        return True
+    if e.pend_print.mode != "lprint":
+        logger.warning(
+            "B9 flush closes non-printer print chain (%s) at %x",
+            e.pend_print.mode,
+            addr,
+        )
+        pp, e.pend_print = e.pend_print, None
+        state.put(ir.Lprint(tuple(pp.items), commas=_pp_commas(pp)), pp.start)
+        c.cur = None
+        state.advance()
+        return True
+    pp, e.pend_print = e.pend_print, None
+    state.put(ir.Lprint(tuple(pp.items), commas=_pp_commas(pp)), pp.start)
+    c.cur = None
+    state.advance()
+    return True
+
+
+def _runtime_print_flush(state: DecodeState, addr: int, vec: int) -> bool:
+    e, c = state.expr, state.control
+    want_file = vec == 0xBA
+    state.close_nested_using()  # an item of the chain, see the B9 leg
+    if e.pend_using is not None:
+        pu, e.pend_using = e.pend_using, None
+        if (pu.file is not None) != want_file:
+            raise ValueError(f"USING flush leg mismatch at {addr:#x}")
+        state.put(
+            ir.PrintUsing(
+                pu.fmt, tuple(pu.values), file=pu.file, newline=True
+            ),
+            pu.start,
+        )
+    elif e.pend_print is not None:
+        pp, e.pend_print = e.pend_print, None
+        if (pp.file is not None) != want_file:
+            raise ValueError(f"print flush leg mismatch at {addr:#x}")
+        if pp.mode == "write":
+            state.put(ir.Write(tuple(pp.items), file=pp.file), pp.start)
+        else:
+            state.put(
+                ir.Print(
+                    tuple(pp.items), file=pp.file, commas=_pp_commas(pp)
+                ),
+                pp.start,
+            )
+    elif not want_file:
+        state.put(ir.Print(()), c.cur)  # bare PRINT (blank line)
+    else:
+        # bare `PRINT #n,` (wild be.exe/styllist.exe, probe q_fprintblank):
+        # a blank-line flush to a file channel, no staged pend_print.
+        state.put(ir.Print((), file=e.pend_fnum), c.cur)
+    if want_file:
+        e.pend_fnum = None
+    c.cur = None
+    state.advance()
+    return True
 
 
 def runtime_call(state: DecodeState, op, addr, kind) -> bool:
@@ -291,9 +392,49 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
     i, e, c = state.image, state.expr, state.control
     if kind == "rt":  # PRINT chains
         vec = op[2]
+        logger.debug("runtime vector %02x at %05x; pending_print=%s", vec, addr, e.pend_print is not None)
+        if vec == 0x9C and c.k > 0 and i.ops[c.k - 1][1] == "movsi":
+            # String descriptor push reached the generic runtime dispatcher
+            # after a checked-call helper in a large wild program.
+            d = i.ops[c.k - 1][2]
+            is_local = d in state.layout_state.lay["strs"] or any(
+                a["str"] and a["base"] <= d < a["base"] + a["esz"] * a["count"]
+                for a in state.layout_state.arrs
+            )
+            e.sstack.append(state.loc(d) if is_local else state._pool_str(d))
+            state.advance()
+            return True
         if vec == 0xCA:  # USING begin: fmt off the sstack
-            state.flush_pending()
-            e.pend_using = UsingChain(fmt=e.sstack.pop(), start=c.cur)
+            # More than one USING can live in ONE print statement, and that
+            # form has no byte-equal split spelling (t1_usingtwice), so the
+            # USING has to become an ITEM of the open chain rather than end it.
+            # Two conditions, both necessary:
+            #   - another `rt CA` before this statement's flush, and
+            #   - NO per-statement commit marker in the span between them.
+            # The marker is what separates wild banker.exe (none in the span,
+            # one statement) from wild inv87.exe / invoice.exe (a marker before
+            # the second clause, so genuinely two). Checking the span is the
+            # point: an earlier attempt tested from the CHAIN's start instead
+            # and merged statements that were never one, ledger
+            # RO-COMMIT-MARKER-BOUNDARY.
+            outer = e.pend_print
+            multi = False
+            if outer is not None:
+                if any(isinstance(x, ir.PrintUsing) for x in outer.items):
+                    multi = True  # already inside a multi-USING statement
+                else:
+                    second = match_second_using_before_flush(i.ops, c.k)
+                    multi = second is not None and not (
+                        state.statement_boundary_between(
+                            addr, i.ops[second.start][0]
+                        )
+                    )
+            if not multi:
+                state.flush_pending()
+                outer = None
+            e.pend_using = UsingChain(
+                fmt=e.sstack.pop(), start=c.cur, nested_in=outer
+            )
             c.cur = None
             state.advance()
             return True
@@ -301,26 +442,7 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             # numeric off the FP stack, CC a string off the sstack (t1_using);
             # item vec BE = console, C0 = file, BF = printer (LPRINT USING,
             # witnessed t1_lpusing / wild vhfprop.exe)
-            emit = match_using_emit(i.ops, c.k)
-            if e.pend_using is None or emit is None:
-                raise ValueError(f"stray USING emit at {addr:#x}")
-            lp = emit.leg == "printer"
-            f = e.pend_fnum if emit.leg == "file" else None
-            if emit.leg == "file" and f is None:
-                raise ValueError(f"file USING item without [0060] at {addr:#x}")
-            if e.pend_using.values and (
-                e.pend_using.file != f
-                or e.pend_using.lprint != lp
-            ):
-                raise ValueError(f"USING console/file leg flip at {addr:#x}")
-            e.pend_using.file = f
-            e.pend_using.lprint = lp
-            e.pend_using.values.append(
-                e.stack.pop() if emit.numeric else e.sstack.pop()
-            )
-            c.cur = None
-            state.advance(2)
-            return True
+            return _runtime_using_emit(state, addr)
         if vec in (0xC1, 0xC2, 0xC3):  # PRINT comma: zone-advance separator
             # (C1 console / C2 printer / C3 file, witnessed t1_pcomma,
             # wild billadd/prtguide/rs, and t1_fileint); commas may
@@ -357,118 +479,14 @@ def runtime_call(state: DecodeState, op, addr, kind) -> bool:
             state.advance()
             return True
         if vec in (0xBB, 0xBE, 0xBD, 0xC0):  # item-eval vectors
-            if e.pend_using is not None:  # plain item closes a USING chain
-                state.flush_pending()
-            f = e.pend_fnum if vec in (0xBD, 0xC0) else None
-            if vec in (0xBD, 0xC0) and f is None:
-                raise ValueError(f"file print item without [0060] at {addr:#x}")
-            if e.pend_print is not None and e.pend_print.file != f:
-                state.flush_pending()  # console/file leg change = new stmt
-            if e.pend_print is None:
-                e.pend_print = PrintChain(file=f, start=c.cur)
-            e.pend_print.items.append(
-                e.sstack.pop() if vec in (0xBE, 0xC0) else e.stack.pop()
-            )
-            c.cur = None
-            state.advance()
-            return True
+            return _runtime_print_item(state, addr, vec)
         if vec in (0xBC, 0xBF):  # LPRINT item-eval (printer): BC numeric off the
             # FP stack, BF string off the sstack (witnessed t1_lpstr)
-            item = e.sstack.pop() if vec == 0xBF else e.stack.pop()
-            if e.pend_using is not None:  # plain item closes a USING chain
-                state.flush_pending()
-            if (
-                e.pend_print is not None
-                and e.pend_print.mode != "lprint"
-            ):
-                state.flush_pending()
-            if e.pend_print is None:
-                e.pend_print = PrintChain(
-                    items= [],
-                    file= None,
-                    start= c.cur,
-                    mode= "lprint",
-                )
-            e.pend_print.items.append(item)
-            c.cur = None
-            state.advance()
-            return True
+            return _runtime_lprint_item(state, addr, vec)
         if vec == 0xB9:  # LPRINT flush-newline
-            if e.pend_using is not None:  # LPRINT USING closes on B9 too
-                pu, e.pend_using = e.pend_using, None
-                if not pu.lprint:
-                    raise ValueError(f"b9 flush of a non-printer USING at {addr:#x}")
-                state.put(
-                    ir.PrintUsing(
-                        pu.fmt,
-                        tuple(pu.values),
-                        newline=True,
-                        lprint=True,
-                    ),
-                    pu.start,
-                )
-                c.cur = None
-                state.advance()
-                return True
-            if e.pend_print is None:  # bare LPRINT: blank line (t1_lpstr)
-                state.put(ir.Lprint(()), c.cur)
-                c.cur = None
-                state.advance()
-                return True
-            if e.pend_print.mode != "lprint":
-                raise ValueError(f"b9 flush without open LPRINT chain at {addr:#x}")
-            pp, e.pend_print = e.pend_print, None
-            state.put(
-                ir.Lprint(tuple(pp.items), commas=_pp_commas(pp)),
-                pp.start,
-            )
-            c.cur = None
-            state.advance()
-            return True
+            return _runtime_lprint_flush(state, addr)
         if vec in (0xB8, 0xBA):  # flush-newline: statement complete
-            want_file = vec == 0xBA
-            if e.pend_using is not None:
-                pu, e.pend_using = e.pend_using, None
-                if (pu.file is not None) != want_file:
-                    raise ValueError(f"USING flush leg mismatch at {addr:#x}")
-                state.put(
-                    ir.PrintUsing(
-                        pu.fmt,
-                        tuple(pu.values),
-                        file=pu.file,
-                        newline=True,
-                    ),
-                    pu.start,
-                )
-            elif e.pend_print is not None:
-                pp, e.pend_print = e.pend_print, None
-                if (pp.file is not None) != want_file:
-                    raise ValueError(f"print flush leg mismatch at {addr:#x}")
-                if pp.mode == "write":
-                    state.put(
-                        ir.Write(tuple(pp.items), file=pp.file), pp.start
-                    )
-                else:
-                    state.put(
-                        ir.Print(
-                            tuple(pp.items),
-                            file=pp.file,
-                            commas=_pp_commas(pp),
-                        ),
-                        pp.start,
-                    )
-            elif not want_file:
-                state.put(ir.Print(()), c.cur)  # bare PRINT (blank line)
-            else:
-                # bare `PRINT #n,` (wild be.exe/styllist.exe, probe
-                # q_fprintblank): a blank-line flush to a file channel, no
-                # staged pend_print at all since there were no items.
-                state.put(ir.Print((), file=e.pend_fnum), c.cur)
-            if want_file:
-                e.pend_fnum = None
-            c.cur = None
-            state.advance()
-            return True
+            return _runtime_print_flush(state, addr, vec)
         raise ValueError(f"unhandled runtime INT {vec:02x} at {addr:#x}")
     return False
 
@@ -489,77 +507,88 @@ def on_control(state: DecodeState, op, addr, kind) -> bool:
     return False
 
 
+def _finish_control_statement(state: DecodeState, statement, steps=1) -> bool:
+    c = state.control
+    state.put(statement, c.cur)
+    c.cur = None
+    state.advance(steps)
+    return True
+
+
+def _on_error(state: DecodeState, op) -> bool:
+    target = None if op[2] is None else ("addr", op[2])
+    return _finish_control_statement(state, ir.OnError(target))
+
+
+def _on_trap(state: DecodeState, op) -> bool:
+    m, e = state.machine, state.expr
+    event = _TRAP_GOSUB[op[2]]
+    if event == "TIMER":
+        number = e.stack.pop()
+    elif event == "PEN":
+        number = None
+    else:
+        number, m.ax = m.ax, None
+    return _finish_control_statement(
+        state, ir.OnTrap(event, number, ("addr", op[3]))
+    )
+
+
+def _error_statement(state: DecodeState) -> bool:
+    m = state.machine
+    statement = ir.ErrorStmt(m.ax)
+    m.ax = None
+    return _finish_control_statement(state, statement)
+
+
+def _resume_statement(state: DecodeState, addr) -> bool:
+    i, c = state.image, state.control
+    nxt = i.ops[c.k + 1] if c.k + 1 < len(i.ops) else None
+    if nxt is not None and nxt[1] == "resume_bare":
+        statement = ir.Resume()
+    elif nxt is not None and nxt[1] == "resume_next":
+        statement = ir.Resume(next_=True)
+    elif nxt is not None and nxt[1] in ("jmps", "jmp", "jmpf"):
+        statement = ir.Resume(target=("addr", nxt[2]))
+    elif nxt is not None and nxt[1] == "run":
+        statement = ir.Resume(target=("addr", i.start + 3))
+    else:
+        raise ValueError(f"RESUME tail {nxt} at {addr:#x} (unsupported)")
+    return _finish_control_statement(state, statement, steps=2)
+
+
+def _trap_control(state: DecodeState, op) -> bool:
+    m = state.machine
+    event, mode = _TRAP_CTL[op[2]]
+    number = None
+    if event in ("COM", "KEY"):
+        number, m.ax = m.ax, None
+    return _finish_control_statement(state, ir.TrapCtl(event, number, mode))
+
+
+def _trap_hook(state: DecodeState) -> bool:
+    state.output.cc_hooks.add(state.control.cur)
+    state.advance()
+    return True
+
+
 def errors_trap(state: DecodeState, op, addr, kind) -> bool:
-    """Dispatch family: on_error, on_trap, error_stmt, resume_pre, trap_ctl, trap_hook."""
-    i, m, e, c, o = state.image, state.machine, state.expr, state.control, state.output
-    if kind == "on_error":  # ON ERROR GOTO <line|0>
-        state.put(ir.OnError(None if op[2] is None else ("addr", op[2])), c.cur)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "on_trap":  # ON <event>[(n)] GOSUB <line>
-        ev = _TRAP_GOSUB[op[2]]
-        if ev == "TIMER":
-            n = e.stack.pop()
-        elif ev == "PEN":
-            n = None
-        else:
-            n, m.ax = m.ax, None
-        state.put(ir.OnTrap(ev, n, ("addr", op[3])), c.cur)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "error_stmt":  # ERROR n
-        state.put(ir.ErrorStmt(m.ax), c.cur)
-        m.ax = None
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "resume_pre":  # RESUME [NEXT | <line>]
-        nxt = i.ops[c.k + 1] if c.k + 1 < len(i.ops) else None
-        if nxt is not None and nxt[1] == "resume_bare":
-            node = ir.Resume()
-        elif nxt is not None and nxt[1] == "resume_next":
-            node = ir.Resume(next_=True)
-        elif nxt is not None and nxt[1] in ("jmps", "jmp", "jmpf"):
-            node = ir.Resume(target=("addr", nxt[2]))
-        elif nxt is not None and nxt[1] == "run":
-            # RESUME <line>, where <line> is the program's very FIRST
-            # statement: the target address coincides exactly with a bare
-            # RUN's own jump-to-start byte pattern (TB 1.0's E9-near form
-            # canonicalizes any target == start+3, the first statement's
-            # own address, regardless of source construct), so the
-            # scanner tags it "run" instead of jmp/jmps (wild
-            # styllist.exe, probe q_resumestart3). RESUME can never
-            # trigger a genuine full-reset RUN (that would erase the
-            # error state it's resuming from), so this is always the
-            # plain first-statement target, start+3 in both dialects.
-            node = ir.Resume(target=("addr", i.start + 3))
-        else:
-            raise ValueError(f"RESUME tail {nxt} at {addr:#x} (unsupported)")
-        state.put(node, c.cur)
-        c.cur = None
-        state.advance(2)  # consume the form-selecting op
-        return True
-    if kind == "trap_ctl":  # <event>[(n)] ON|OFF|STOP
-        ev, mode = _TRAP_CTL[op[2]]
-        n = None
-        if ev in ("COM", "KEY"):
-            n, m.ax = m.ax, None
-        state.put(ir.TrapCtl(ev, n, mode), c.cur)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "trap_hook":  # per-statement event-poll hook:
-        o.cc_hooks.add(c.cur)  # jump targets point at the hook,
-        state.advance()  # so cur (set above) stays put;
-        return True
-    return False
+    """Dispatch family: error, resume, and event-trap statements."""
+    handlers = {
+        "on_error": lambda: _on_error(state, op),
+        "on_trap": lambda: _on_trap(state, op),
+        "error_stmt": lambda: _error_statement(state),
+        "resume_pre": lambda: _resume_statement(state, addr),
+        "trap_ctl": lambda: _trap_control(state, op),
+        "trap_hook": lambda: _trap_hook(state),
+    }
+    handler = handlers.get(kind)
+    return handler() if handler is not None else False
 
 
 def string_ops(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: strconcat, str_store_temp."""
-    e, c = state.expr, state.control
+    e, c, m, i = state.expr, state.control, state.machine, state.image
     if kind == "strconcat":  # pops two strings, pushes concat
         rhs = e.sstack.pop()
         lhs = e.sstack.pop()
@@ -567,8 +596,33 @@ def string_ops(state: DecodeState, op, addr, kind) -> bool:
         state.advance()
         return True
     if kind == "str_store_temp":  # CD A3: materialized string literal CALL arg
-        c.pend_args.append(e.sstack.pop())
-        c.cur = None
+        # Staging an argument, NOT ending a statement: keep `c.cur`. Clearing
+        # it discarded the address the statement had already taken -- under
+        # event trapping that is the poll stamp the whole run starts at, so a
+        # branch to the CALL then matched no statement (wild rsltest.exe,
+        # `jump target 0xf325`; the address reappeared at the `push_bp` two ops
+        # later, 0xf352, which nothing names). Every sibling staging op --
+        # `arg_push_temp`, `movm_ax_temp`, `mov_mem_sp` -- leaves it alone.
+        value = e.sstack.pop()
+        nxt = i.ops[c.k + 1] if c.k + 1 < len(i.ops) else None
+        if nxt is not None and nxt[1] == "arg_push_temp":
+            # Ordinary SUB CALL argument: the explicit push marker drains the
+            # ordered pending list at far_call (probe t1_dynprint).  A direct
+            # variable reached this path through `movsi; rt 9C`, which is the
+            # compiler's encoding of a parenthesized string argument; retain
+            # that grouping or the emitter changes the descriptor push into a
+            # by-reference argument (wild CVT2TB's CALL SUB1).
+            if isinstance(value, ir.Var):
+                value = ir.Group(value)
+            c.pend_args.append(value)
+        else:
+            # A string argument to a nested DEF FN has no arg_push_temp.  Its
+            # temp slot is keyed by SI just like movm_ax_temp/fstp_temp; keep
+            # it in the FN argument map or it leaks into the next SUB CALL's
+            # pending list (wild CVT2TB, FNFN2$ inside the call at 0xc9c6).
+            if m.si is None:
+                raise ValueError(f"string temp without SI at {addr:#x}")
+            c.fn_args[m.si] = value
         state.advance()
         return True
     return False
@@ -669,6 +723,32 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             e.pend_cmp_str = False
             e.direct_bool_gate = True
             e.direct_bool_group = "string_value"
+            e.direct_bool_logical = True
+            state.advance(3)
+            return True
+        if (
+            e.pend_cmp
+            and not e.pend_cmp_str
+            and match_numeric_logical_value_group(i.ops, c.k) is not None
+        ):
+            # Mirror of the string-led value group just above, numeric first
+            # and a string relation second (wild kinder.exe): the shared tail
+            # (strcmp; movbxax; movax FFFF; jcc; incax; oraxbx; ...) folds
+            # the same way regardless of which side led, EXCEPT the operand
+            # order: string-led banks term1(string) to bx then materializes
+            # term2(numeric) into ax, so its fold puts ax(term2) first --
+            # numeric-led is the mirror image (bx=term1 numeric, ax=term2
+            # string), so ITS fold must put bx(term1) first instead, or a
+            # 3+-term chain nests the wrong operand order once this fold's
+            # result itself becomes an operand of the next one (checked:
+            # sharing "string_value" here reproduced byte-exact for an
+            # isolated 2-term probe -- OR being commutative hid it -- but
+            # broke a 3-term chain's inner nesting, probe q_numstr3chain).
+            e.direct_bool_group = "numeric_value"
+            lhs, rhs = e.pend_cmp
+            m.ax = ir.BinOp(_JCC_RELOP_TRUE[i.ops[c.k + 1][2]], lhs, rhs)
+            e.pend_cmp = None
+            e.direct_bool_gate = True
             e.direct_bool_logical = True
             state.advance(3)
             return True

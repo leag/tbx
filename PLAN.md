@@ -2592,6 +2592,405 @@ four.
 reconstruction for its nested DEF FN IFs is still open, and is now the only
 thing between it and the next gap.
 
+### 2026-08-01 — Round 44: slimmer.exe's `unhandled FP op esc=db modrm=5e` (LOCAL LONG store) — triaged, source trigger unresolved
+
+Surveyed the untriaged `TB-BUT-FAILS ... unhandled byte NN [phase=scan]`
+singleton gaps left over from the wild scan (lmaster.exe, nvg.exe,
+pcdcfile.exe, pgmsarc.exe, phone.exe, pw.exe, sabpcv3.exe, slimmer.exe,
+smenu0.exe). Triage first: `lmaster.exe`, `pcdcfile.exe`, `pgmsarc.exe` all
+fail at `start+3` -- the very first byte scanned after the prologue -- which
+is suspicious rather than promising (a real first statement after runtime
+init should look like an ordinary template, not an arbitrary opcode like
+`21` = `AND Ev,Gv`); these look like coincidental `cd ec b8`/`cd ec ba`
+byte matches inside data preceding the true prologue, or non-TB EXEs, not
+genuine vocabulary gaps. Left untouched. `nvg.exe` fails deep inside what
+turns out to be a large `inline_sub`-rescued machine-code blob (an
+INT-hooking/DTA-pattern routine, hundreds of bytes, clearly hand-written
+ASM via `INLINE`/`CALL ABSOLUTE`, not a template gap) -- expensive and
+not it. `smenu0.exe`'s `unhandled INT EC sub 46` is the same "guess which
+BASIC keyword produces this dispatch number" search catalog.exe's sub 0xA6
+(round 42) and pwinst.exe's sub 0x4A (HANDOFF gap) already showed is
+expensive; deferred, not attempted.
+
+`slimmer.exe`'s gap looked cheapest: `esc=db modrm=5e` at 0xc815 decodes as
+`FISTP32 [bp+08]` (mod=01/reg=011/rm=110, i.e. store the FP-stack top as a
+32-bit int into a LOCAL frame slot) immediately after an `FLDZ`. The
+non-bp-relative sibling (`fistp32`/`fild32` into a DGROUP long var) is
+already handled in `scan.py`/`core.py`; the `[bp+disp8]` LOCAL-frame kind
+dict in `_scan_direct`'s FP dispatch (`tbx/decode0/scan.py:2040-2086`,
+alongside `fld_bp`/`fstp_bp`/`fld_bp64`/`fstp_bp64`) is simply missing the
+`(0xDB, 0)`/`(0xDB, 3)` cases (`fild32_bp`/`fistp32_bp`), and
+`handlers/arith.py:fp_bp` has no LONG-typed counterpart to
+`loc_local_fp`'s SINGLE/DOUBLE first-touch retyping (`core.py:395`) --
+would need a `loc_local_long`-style method retyping the slot's `%` suffix
+to `&` and dropping one phantom word, mirroring the existing SINGLE path
+exactly.
+
+Before writing that, tried to reproduce the exact byte shape (a `FISTP32
+[bp+d8]` right after an `FLDZ`, i.e. what looks like a LOCAL LONG variable
+being explicitly zeroed) with 1.0-dialect probes compiled through the
+oracle, budgeted at 2-3 attempts per the triage rule:
+
+- `SUB F(X!) ... LOCAL Y& ... Y = 100000` / `Y = X` (a LONG local assigned
+  a literal or an FP expression): the compiler does NOT allocate the LOCAL
+  frame slot at all for these -- it round-trips through a DGROUP scratch
+  cell (`fild32`/`fstp 288` or `far_fld_si`/`fstp 288`) and a runtime call
+  for the PRINT, never touching `[bp+off]` with an ESC opcode.
+- `LOCAL A$, Y&` followed by `Y = 0`: rejected by the compiler itself
+  (`Error 418: Numeric expression requires relational operator`) --  a
+  probe authoring mistake (likely the multi-type `LOCAL` list or the `Y&`
+  spelling in that position), not evidence about the runtime.
+
+None of the 3 probes reproduced an actual `[bp+off]` FISTP32/FLDZ pair, so
+per the triage budget this stops here rather than continuing to guess.
+Not written to `ruled-out-hypotheses.json` (no fix was written and
+reverted, and this isn't a runtime-revision question) -- same status as
+catalog.exe's round-42 entry: a real, narrow, well-understood vocabulary
+gap (the scan-table and `loc_local_fp`-mirroring implementation shape is
+already clear) whose triggering BASIC source is still unfound. Next
+session should try: a LONG LOCAL referenced across multiple statements
+in a loop (forcing real stack storage instead of the scratch-cell
+optimization seen above), or a LONG LOCAL in a DEF FN body/multi-param
+SUB signature that couldn't fold through a DGROUP temp because of
+recursion/re-entrancy.
+
+Suite untouched (no code changed this round); ruff not run (no files
+edited).
+
+### 2026-08-01 — Round 43: a NUMERIC-led boolean value group, landed as a new feature -- but NOT kinder.exe's own shape
+
+Deep-dived the compound-boolean-materialization territory that rounds 37/41/
+42 kept landing back in (kinder.exe/grdscn.exe/hebrew.exe/file.exe's second
+gap all sit somewhere in it). Traced kinder.exe's own failure
+(`materialization template mismatch at 0xbace`) to a genuinely missing
+FEATURE, not a bug: `match_string_logical_value_group` (an existing,
+calibrated matcher for `(A$ = "M" OR X$ = "N")`-style relations that
+ALWAYS both evaluate, no short-circuit dispatch, string term leading) has
+no mirror for the numeric-led order -- `(A# = B# OR C$ = D$)`, numeric
+first, string second. `_lift_while` misread the string term's own
+materialization as a loop/inline-IF header and raised.
+
+Added `match_numeric_logical_value_group` (matchers.py) plus a control.py
+call site mirroring the string-led one, gated on `e.pend_cmp` (not
+`e.pend_cmp_str`) and restricted to OR -- the AND combine-time fold this
+would feed has no calibrated counterpart at all (checked: it silently
+mis-groups and does not recompile byte-identical, so AND is deliberately
+rejected by the matcher rather than guessed).
+
+**Chasing the real wild witness surfaced it needs N-term chaining, not just
+2**: kinder.exe's actual construct is a 3-term chain (`A# = B# OR C$ = D$ OR
+C$ = E$`), which the naive 2-term-only port of the string-led matcher can't
+recognize (its tail requires an immediate closing jcc/jmp; a mid-chain term
+has none). Fixed in three steps, each verified against its own oracle
+probe:
+1. Relaxed the matcher's tail check to stop requiring the closing jcc/jmp
+   (the caller never used those fields anyway) -- `q_numstr3chain.bas`.
+2. Found `arith.py`'s `oraxbx` combine-time fold cleared `direct_bool_gate`/
+   `direct_bool_group` unconditionally right after the FIRST fold -- fine
+   for exactly 2 terms (the flags are also cleared, harmlessly-redundantly,
+   by the eventual closing jcc), but it silently misroutes a 3rd term
+   through an unrelated feature's flat-chain branch, which doesn't unwrap
+   this shape's Groups and leaves a spurious extra one. Left both flags set
+   after an intermediate fold; only the final closing jcc (which already
+   does this for every other shape) clears them.
+3. The fold's own left/right operand order matters once nested: an
+   ISOLATED 2-term probe compiled byte-identical either way (OR is
+   commutative there) which is what let a register-role mixup slip through
+   at first -- string-led banks term1 to bx then materializes term2 into ax
+   (so ax-then-bx is correct order), numeric-led is the mirror image
+   (bx-then-ax) -- getting this backwards only shows up once the fold's own
+   result becomes an operand of a 3rd term's fold, nesting the wrong inner
+   order. Split into two markers (`"string_value"` / `"numeric_value"`) so
+   each gets its own correct operand order.
+
+Promoted `tests/fixtures/corpus/t1_numstrvaluegroup` (2-term) and
+`t1_numstr3chain` (3-term), both oracle-verified byte-exact, pinned by
+`test_decode_t1_numstrvaluegroup`/`test_decode_t1_numstr3chain`, both
+confirmed to fail on the pre-fix code -- and re-verified the EXISTING
+`t1_stringorvalueif` fixture still passes throughout (it broke twice during
+this work, from the operand-order and premature-flag-clear mistakes above,
+both caught before landing).
+
+**kinder.exe itself is still NOT fixed**: its real 3-term instance defers
+ALL THREE materializations before combining at all -- an extra `movrr
+cx,bx` register shuffle appears between term2's own fold and term3's
+staging that this flat-chain model's byte shape doesn't reproduce (checked
+directly against kinder.exe's own ops: `match_numeric_logical_value_group`
+returns `None` at the real failure site, because position `index+12` is
+`movsi` -- more term-staging -- not `oraxbx`, i.e. terms 1+2 are NOT folded
+before term3 stages, unlike this round's probe). This is a distinct,
+still-open shape needing its own dedicated tracing next time -- do not
+assume the fix above resolves kinder.exe; it doesn't, confirmed by direct
+re-test after landing. grdscn.exe/hebrew.exe/football.exe/copyall.exe/
+file.exe's second gap were also re-checked after landing and are
+UNCHANGED -- all distinct instances within the same broader family, none
+sharing this exact cause.
+
+Full suite 3069 passed / 2 skipped, ruff clean.
+
+### 2026-08-01 — Round 42: catalog.exe's `unhandled INT EC sub a6` — ruled out a dozen candidates, unresolved
+
+`catalog.exe` (dialect 1.0) fails at scan phase on canonical EC sub 0xA6
+(raw 0xA4, dialect 1.0's `canon_sub` shift +2 above the DELAY floor) --
+a gap in the dispatch table between POKE (0xA2) and PSET/PRESET commit
+(0xA4 raw / same canonical since no other sub sits between).
+
+Tried compiling and decoding a dozen plausible candidate statements at 1.1
+(canonical numbering is dialect-independent) to see which one's raw EC sub
+comes out as 0xA6: `OUT`, `WAIT`, `WINDOW`, `VIEW (...)`, `CIRCLE`, `SOUND`,
+`RANDOMIZE n`, `KILL`, `CHDIR`, `RESET`, `WIDTH` -- every one already
+decodes via an existing dedicated op (`out`, `wait_poll`, `window`,
+`circle`, `sound`, `randomize`, `kill`, `chdir`, `clear`, ordinary `movm`),
+none produced the missing sub. `VIEW PRINT`/`LOCK`/`UNLOCK`/`CLEAR ,,n`
+didn't even compile under the oracle (rejected or timed out) so they're
+ruled out as candidates too, not just untested.
+
+The failure site's surrounding bytes (a DGROUP read, `int ADh`, an ES:SI
+far-pointer setup via `int 9Eh`, then a literal `2` staged into the shared
+scratch cell at disp 0x60 before the mystery `int EC,A6`) suggest a
+FAR-STRING-argument statement, narrowing the search but not resolving it --
+would need either TB's own statement table (unavailable) or a slower,
+more systematic sweep of the remaining BASIC keyword list against this
+exact byte signature. Not chased further this round; a fresh session
+should start from the byte-signature clue above rather than re-guessing
+keywords blind.
+
+### 2026-08-01 — Round 41: pwinst.exe's `unhandled jcc 74` — traced, deliberately not landed
+
+`pwinst.exe` stops at `andax_m:504` directly followed by `jcc 0x74` with no
+intervening compare -- `core.py`'s big jcc dispatch (~line 3360-3419) only
+recognizes a pending compare set by `fcomp`/`strcmp`/an explicit `cmp`, or
+`orax`'s own extensively-calibrated self-test convention; a bitwise fold
+(`andax_m`/`orax_m`/`xorax_m`) never sets `e.pend_cmp`, so a jcc testing
+ITS OWN flags directly (no separate self-test op) falls through to the
+final `raise`.
+
+Reproduced cleanly: `IF A% AND B% AND C% THEN` (`q_andflagsif6.bas`, oracle
+1.1) compiles the first operand with the usual `orax` truthiness pre-check,
+but the SECOND fold (`andax_m` combining with C%) is followed DIRECTLY by
+`jcc 0x75` -- a short-circuit AND chain's non-first operand tests its own
+just-computed flags, exactly pwinst.exe's shape. (`IF A% AND 1 THEN` also
+reaches this jcc, but hits an unrelated pool-constant layout gap first --
+not useful as the isolating probe; the 3-operand chain is.)
+
+**Deliberately not fixed this round**: `orax`'s sibling handling in
+`core.py` (~line 3090-3260+) is one of the most heavily cross-calibrated
+areas in the decoder -- DO/WHILE polling loops, bare-value compound terms
+(`match_bool_bare_term1`), a parenthesized-group AND (`direct_bool_gate`),
+a `NOT`-prefixed lookbehind, and a slot-evidence gate all interact through
+`e.pend_cmp`/`m.ax`/`e.pend_bool`/`e.direct_bool_gate` in this one function.
+The mechanically obvious fix -- having `andax_m`/`orax_m`/`xorax_m` also set
+`e.pend_cmp = (m.ax, ir.Lit(0))` -- risks colliding with any of that
+machinery, or with the PURE-VALUE use of these same ops (`C% = A% AND B%`,
+no boolean context at all), and I don't have enough calibration coverage to
+tell which without risking a regression like round 36's own (bill.exe).
+Next session: start from `match_bool_bare_term1` and `_JCC_RELOP`'s own
+call sites to see whether a narrower, position-gated version (only when the
+IMMEDIATELY PRECEDING op was itself `andax_m`/`orax_m`/`xorax_m`, mirroring
+this round's `_next_real_addr` adjacency-checking) can be threaded through
+without touching the `orax` branch at all.
+
+### 2026-08-01 — Round 40: round 36's own fix regressed bill.exe — FIXED (an `into` between `dec_m` and its test)
+
+Re-scanning after round 39 turned up `bill.exe: int NEXT: expected JLE/JBE/JGE
+to body at 0xe8e3` -- a file that decoded fine before this session. Bisected:
+it decoded successfully as of `b8fea5d` (before round 36's `dec_m`/`dec_bp`/
+`addm_i8` adjacency guard) and broke exactly at that commit.
+
+Root cause: bill.exe carries the Overflow ('O') IDE toggle, which inserts a
+semantic-free `into` check after arithmetic that can overflow -- including
+right after a STEP -1 loop's own closing `dec_m`, before its `cmp_mi8` test.
+Round 36's guard checked `img.ops[c.k + 1][0] == f.test` -- the address of
+the LITERAL next op -- which is `into`'s address here, not the test's, so
+the guard rejected the loop's own genuine step-defining decrement.
+
+**Fixed** with `_next_real_addr`, a small helper that skips `into`/
+`stack_chk` (both already handled as no-ops by the main dispatch loop
+generically) before taking the adjacency address, used by all three guarded
+branches. Verified: bill.exe decodes again (22 statements, matching
+pre-round-36); the original round-36 fix still holds (file.exe's probe still
+round-trips byte-exact). Promoted `tests/fixtures/corpus/t1_forstepm1_ovf`
+(`FOR I%=5 TO 1 STEP -1`, compiled with `--toggles O`) -- byte-exact against
+`oracle.compile_bas(toggles="O")` directly, since `verify_fixture` still only
+drives `FLAGS_ONLY_TOGGLES` (K) and skips anything else -- pinned by
+`test_decode_t1_forstepm1_ovf`, confirmed to fail against round 36's
+unpatched guard. An earlier attempt at this fixture used a mid-body DECR on
+an ASCENDING loop and passed even against the buggy guard, because an
+ascending loop's real NEXT is `inc_m` (no guard, so nothing to break) --
+worth remembering: only a STEP -1 loop's own `dec_m` exercises this path.
+Full suite green, ruff clean.
+
+### 2026-08-01 — Round 39: kinetics.exe's `INPUT# chain closed without any stored target` — LANDED (LOCAL fstp_bp never threaded the sentinel)
+
+`core.py`'s DGROUP `fstp` handler already threads the `_FREAD`/`_READDATA`
+sentinels through to `state._fread_target`/`_readdata_target` when the
+popped expression-stack value is one of them (an `INPUT #n, v` or `READ v`
+target). Its LOCAL-frame sibling in `handlers/arith.py` -- the `fstp_bp`/
+`fstp_bp64` branch reached when the target displacement is inside an open
+SUB/DEF FN's LOCAL frame -- built a plain `ir.Assign(pvar, expr_.stack.pop())`
+unconditionally, never checking for either sentinel. So `INPUT #1, A` (or
+`READ A`) into a LOCAL SINGLE/DOUBLE variable silently built a bogus Assign
+whose "value" was the sentinel tuple, and never appended to the open chain's
+targets -- which then closed empty at whatever unrelated LATER statement's
+`flush_pending()` discovered it, same "reported far from the real cause"
+shape as rounds 35/36/38. Found by tracing kinetics.exe's `read_file_num` op
+back from the failing flush to the actual `fstp_bp` op three bytes later.
+
+**Fixed** by adding the same three-way branch (`_FREAD`/`_READDATA`/plain
+value) the DGROUP case already has. Verified with an oracle-compiled probe
+(`SUB` with `LOCAL A!`, `OPEN ... INPUT`, `INPUT #1, A!`) -- decodes and
+recompiles byte-exact -- promoted as `tests/fixtures/corpus/
+t1_inputfilelocal`, pinned by `test_decode_t1_inputfilelocal`, confirmed to
+fail without the fix. kinetics.exe now advances to a distinct, later,
+unrelated gap (`string BP push outside DEF FN`). Full suite green, ruff
+clean.
+
+### 2026-07-31 — Round 38: mcmurphy.exe's `NEXT template mismatch` — LANDED (`jcc_body` skipped the wraparound-tolerant compare)
+
+`lift._lift_next`'s inner `jcc_body(i, cc, inv)` helper compares a jcc/jmp
+target against the open FOR's `f.body` with plain `==` in both its direct
+and long (jcc-skip-jmp) forms. But two lines below, in the SAME function,
+the negative-path target check already uses `_same_code_offset` -- a body
+that starts a later procedure can spell the same IP 64 KiB above the
+header's own window (calibrated on wild electron.exe). `jcc_body` never got
+that treatment, so mcmurphy.exe's DOUBLE-precision FOR/NEXT (reached through
+the long form: `jcc 0x72` skip + `jmp`) raised `NEXT template mismatch`
+because its `jmp` target was `f.body`'s low 16 bits, not `f.body` itself.
+
+**Fixed** by routing both `jcc_body` comparisons through `_same_code_offset`,
+matching the sibling check. A dedicated oracle probe is impractical here --
+reproducing a genuine 64 KiB code-offset wraparound needs tens of thousands
+of statements -- so, like the project's other established wraparound/far-
+jump closures (`test_wild_mf_compound_if_far_exit_advances`,
+`test_wild_filepatc_...`), this is a wild-only witness: pinned by
+`test_wild_mcmurphy_double_for_next_wraparound_advances`, which asserts
+mcmurphy.exe now progresses to a distinct, later, unrelated failure
+(confirmed to still be the OLD message without the fix). Full suite green,
+ruff clean.
+
+### 2026-07-31 — Round 37: two gaps set aside after real tracing, not landed
+
+Two candidates chased this round, both traced far enough to know they are
+NOT quick wins, deliberately not force-fixed:
+
+**`bmaster.exe`'s `forwarded arg to unknown callee params at 0x9391`** --
+instrumented `handlers.control.calls`'s `far_call` branch: at the raise,
+`c.pend_args` holds 18 entries for a callee with only 6 declared params, and
+a debug print on every SUCCESSFUL `c.pend_args.clear()` shows THIS is the
+first `far_call` reached in the whole decode -- so the 18 entries are not
+leftover from an improperly-cleared EARLIER call (there is no earlier one),
+they are genuinely staged before ever reaching a `far_call` dispatch. The
+staged values look like three separate CALLs' worth of arguments
+concatenated (heterogeneous LOCAL/DGROUP/string-literal mix, `('fwd', 6)` /
+`('fwd', 42)` / `('fwd', 38)` interleaved with plain vars). Not yet
+determined: which earlier op sequence emits arg-staging ops
+(`arg_push_ref`/`arg_push_fwd`) without a `far_call` (or equivalent) ever
+draining them -- candidates not yet checked: a forward-referenced callee's
+CALL recognized under a different kind than plain `far_call`, or a runtime
+(`rt`) dispatch that ALSO stages through the same `arg_push_*` family for a
+non-CALL builtin. Needs the SAME kind of `commit()`-level instrumentation
+morcalc.exe's round 35 used, walking backward from the SUB's `proc_enter` to
+find where the first orphaned `arg_push_*` sequence begins.
+
+**`file.exe`'s `ax,bx combine with empty regs`** (a second, LATER instance
+in the same file, distinct from the one round 36 fixed) -- this is the
+SAME open gap already flagged in Round 26/`probe_fnintarith_param`
+(2026-07-24-ish): a `DEF FN(param)` call's argument-staging frame does not
+preserve a register value computed before the call across the call itself.
+Traced the exact bytes of `probe_fnintarith_param` (`A% = FNBar%(2) - 7`):
+no `push ax` exists anywhere between the pre-call `mov ax,7` and the
+post-call `movbxax`/`movax_bp:0` pair, so whatever value the compiler
+intends to preserve must ride in a stack CELL this decoder isn't currently
+attributing correctly -- but the probe's own operands (7 and 2+5=7) are
+numerically identical, which would mask a wrong-operand-order bug even if
+one were "fixed" blind. Next session: rebuild the probe with DISTINCT
+operand values (e.g. `FNBar%(2) - 100`) before touching the decoder, so a
+fix can actually be checked instead of coincidentally passing.
+
+### 2026-07-31 — Round 36: file.exe's `int NEXT (var limit): expected JLE to body` — LANDED (a mid-body DECR hijacking STEP)
+
+`file.exe` raised inside the SAME "movax_m + cmpm_ax" variable-limit NEXT
+branch morcalc.exe calibrates (core.py:5356-5396), but for a different
+reason: `f.step` was `-1` at the failing test even though the loop's real
+NEXT increments (`inc_m`, STEP +1). Traced by printing the open `ForFrame`
+at the raise site.
+
+Root cause: `handlers/arith.py`'s `dec_m`/`dec_bp`/`addm_i8` cases patch the
+open FOR's step (and rewrite its already-emitted `ir.For` header) the moment
+they see an op targeting the loop variable's displacement -- with NO check
+that this op is actually the loop's own closing NEXT rather than an ordinary,
+unrelated statement earlier in the body that happens to touch the same
+variable (`DECR I%` mid-loop, byte-identical to `I% = I% - 1`, is valid BASIC
+and file.exe's SUB does exactly this before the loop's real `inc_m` NEXT).
+`inc_m`'s sibling case has the identical shape but is harmless (it just
+silently consumes the op, no patch) -- that asymmetry is what let this exist
+for four templates but only bite the three with a side effect.
+
+**Fixed** by requiring the op immediately following the dec/step op to sit at
+the FOR's own recorded `test` address (the same adjacency the "int NEXT"
+branches downstream already check, `addr == f.test`) before treating it as
+the loop's step -- otherwise it falls through to the ordinary
+`ir.Decr`/`Assign` path, unchanged. Verified with a probe
+(`FOR I%=1 TO 5: DECR I%: PRINT I%: NEXT I%`) that reproduced the crash before
+the fix and decodes + emits + recompiles byte-exact after; promoted as
+`tests/fixtures/corpus/t1_fordecrmidbody`, with
+`test_decode_t1_fordecrmidbody` in `test_wild_batch3.py` pinning both the
+unchanged `Lit(1)` step and the exact emitted source, and confirmed it fails
+without the fix. `file.exe` now advances past this to a different, unrelated,
+already-known gap family ("ax,bx combine with empty regs", same bucket as
+copyall.exe/football.exe) -- out of scope here. Full suite 3056 passed / 2
+skipped, ruff clean.
+
+### 2026-07-31 — Round 35: morcalc.exe's `jump target 0x9298` — LANDED (a rebuild dropping `stmt_addr`, not a missing NEXT shape)
+
+`morcalc.exe` still failed after the earlier `mov_mem_sp`/`arg_ref` anchoring
+fix (2026-07-23, same file, same reported address) closed a DIFFERENT bug at
+this same coincidental address. The first hypothesis this round (a missing
+fifth variable-limit-NEXT branch for `movax_bp`+`cmpm_ax`, LOCAL limit/DGROUP
+var) was WRONG -- disproved by building two probes reproducing that exact op
+shape byte-for-byte (`movm_ax_bp` limit-stash, `movax_bp`+`cmpm_ax`+`jcc`
+retest): both decoded fine, because that combination was never routed through
+`c.fors`/NEXT recognition at all in EITHER the wild file or the probes -- it
+resolves as a plain `Assign`/`Goto`/body/`IfGoto` sequence, same as any other
+loop-as-GOTO shape, and that ordinary path already handles its jump target.
+
+The real cause, found by instrumenting `commit()` and walking the FINAL tree
+by identity (`AddressOwnership._by_id`, not just "is some address claimed
+somewhere"): the CALL at 0x9298 -- the loop body's first statement, forwarding
+several of the enclosing SUB's own by-ref params onward to a callee -- commits
+and gets claimed correctly, and stays correctly claimed through
+`_resolve_calls`/`_type_untyped_callee_params`. But `_type_helper_forwards`'s
+local `retype()` closure (`core.py:1485-1516`) has an early-return branch for
+a CALL to a helper-bodied (`SUB ... INLINE`) callee that rebuilds the
+statement -- respelling an untyped forwarded arg to the caller's suffix --
+and returns the new object directly, without the `stmt_addr.claim` carry its
+own sibling branch (the generic dataclass path two lines below) and
+`_type_untyped_callee_params`'s `_rewrite_nodes` both already do. So the
+rebuilt CALL silently lost its claim, and the FOR loop's own back-edge (the
+only reference to 0x9298 in the whole op stream) had nothing left to resolve
+against by the time `_resolve_targets` ran -- reported at a totally unrelated,
+much later offset, since `_resolve_targets` walks the whole program, not the
+neighborhood of the missing target.
+
+**Fixed** by adding the same three-line carry to that branch (mirroring the
+generic path immediately below it). Verified against two hand-built oracle
+probes reproducing the exact shape (a `FOR`-loop over a by-ref SUB parameter
+forwarding that loop variable to an INLINE-SUB helper) -- both decode
+correctly now -- and a synthetic unit test,
+`test_retyping_a_jump_targeted_call_carries_its_address` in
+`test_helper_forward_typing.py`, that constructs the IR directly (this is an
+identity-preservation bug in existing internal state-tracking, not a new byte
+mapping, so a direct `_type_helper_forwards` unit test is the right guard, the
+same way `test_helper_callees_are_the_only_ones_retyped` already is one
+function up) and confirmed it fails without the fix. `morcalc.exe` now decodes
+in full (2667 statements, was raising). It cannot be promoted to
+`wild_roundtrip.json`'s comparable subset even so: its `build_match` is 87%
+(below the 90% floor -- a different Turbo Basic build, per
+`RR-TB10-TWO-REVISIONS`), and it separately hits an unrelated pre-existing
+emitter gap on `OPEN ... FOR RANDOM AS` (`unsupported FOR-AS OPEN mode 'R'`,
+`emit0`/`ir/render.py:579`) -- both out of scope for this fix. Full suite
+3053 passed / 2 skipped, ruff clean.
+
 ### 2026-07-31 — Round 34: block-IF vs inline-IF is BYTE-SIGNIFICANT — discriminator FOUND, blocked on line accounting
 
 Chasing tbd73's residual ELSE-arm gap led somewhere more consequential: the
@@ -3030,6 +3429,38 @@ the suite passed against the UNREGENERATED goldens first.
 
 `tbd73.exe` advances to `[bp+0] outside the open LOCAL frame` -- and note it is
 a fail-loud error again, not the raw KeyError flavor 2 produced.
+
+### 2026-08-02 — CVT2TB: by-reference MID$ and cursor synchronization
+
+`CVT2TB.EXE` was not evidence of a different runtime for its first two
+failures. Its `movsi_bp`, `moves_bp`, `midassign`/`midassign3` sequences are
+ordinary four-byte STRING parameters used by `MID$` assignment. Three small
+oracle probes reproduced the two-argument and three-argument forms; the
+decoder now consumes the three-operation templates and identifies the target
+from the procedure frame. Four fixtures (`t1_midassignbyref` and
+`t1_midassign3byref`, with `v10_` twins) verify byte-exactly in both dialects.
+
+The same wild file also exposed a real cursor invariant bug: removing
+semantic-free `into` operations from the mutable image without refreshing the
+`OpCursor` left future operations at the wrong indices. Synchronizing the
+cursor after that deletion lets CVT2TB pass its valid `DELAY` sequences.
+
+The repeated `[0076]` sequence is the calibrated `IF ERR = 101 OR ERR = 102`
+materialization template with the same two-byte runtime-table shift already
+observed in CVT2TB's COLOR cells. It is now normalized to `ERR`, and advances
+the wild file to a computed `PRINT#` channel. That second gap was reproduced
+by `probe_dynprint`; the decoder preserves the channel expression through
+`Print`, and the expression-aware rename/render path is covered by
+`t1_dynprint` and `v10_t1_dynprint`, byte-exact in both dialects.
+
+The apparent variadic call at `0xc6b4` was then closed as another decoder
+state bug: nested string DEF-FN temporaries had leaked into the outer SUB's
+pending argument list. CVT2TB now decodes and emits 203 statements. The
+oracle round-trip reaches the next real issue: four recovered `DELAY` values
+are denormal doubles formed from CVT2TB's shifted runtime/data layout, and
+Turbo Basic rejects the emitted `-4.172553...E-308#` spelling as Error 488.
+That data/layout issue is the current blocker; no value normalization has been
+added.
 
 ### 2026-07-24 — Round 26: bare value AND a parenthesized STRING-OR group (LANDED)
 
@@ -7102,6 +7533,29 @@ writeup there with negative evidence already collected.
 
 ### Recently closed (this campaign, newest first)
 
+- **2026-08-04 — `mov cx,bx`/`mov bx,ax` glue inside a computed element read
+  was skipped, not modeled**: `int_alu`'s shlsi element-access chain matches
+  and positionally consumes a `movrr`/`movbxax` pair that intervenes between
+  the element-address computation and its terminal read/write (the compiler
+  stashes an in-flight register there while it materializes the element) --
+  but it only advanced the cursor past them, never applied their register
+  effect. When the stashed value was the OUTER index leg of a still-open
+  multi-dimension subscript (rather than the throwaway scalar the code was
+  originally written for), the later `mov si,cx` that restores it read a
+  register the model had never actually set, and `_int_index_add` raised
+  `add si,ax with si=None ax=ArrayRef(...)` on what should have been a
+  legitimate leg. Fixed by factoring the standalone `movrr` handler's
+  register-swap into `_apply_movrr` and calling it (plus the paired
+  `movbxax`'s real effect) at both skip sites instead of discarding them.
+  No fixture added -- this corrects the *symbolic modeling* of two
+  already-calibrated ops, not new byte-pattern recognition, and the full
+  1094-fixture golden/IR-snapshot suite is byte-for-byte unchanged. Closed
+  pfl.exe fully (was "advanced, not fully closed" in the 2026-07-20 entry
+  below); advanced eco.exe to a later `fild_si` gap. Four oracle probes for
+  plain nested/mixed subscripting at rank 1-3 came up clean before the real
+  register-modeling cause was found by reading the op trace directly --
+  recorded as `RO-INDEX-ADD-SI-ARRAYREF-AX` in `ruled-out-hypotheses.json`.
+
 - **Session summary, 8 more closures after the FOR-STEP/nop-fwait entry
   below** (2026-07-20, commits 8336d0f..f2ae494, wild 16->20 decode-ok):
   each is its own commit with the full byte-trace/probe writeup; this is
@@ -8985,6 +9439,32 @@ triggering BASIC construct is found (whatever compiles to this whole
 push-bp/mov-bp-sp/push-es/push-ds/les template), check which encoding
 IT produces and land that one first; the other encoding will still need
 its own separate witness if it doesn't naturally appear too.
+
+**CVT2TB string-data encoding (2026-08-02)**: the apparent garbage in the
+first `DATA` records is intentional ciphertext, not a wrong source encoding.
+CVT2TB's recovered `SUB12` treats a record beginning with byte `&HFE` as
+encoded, strips the marker, optionally shifts bytes into the printable range,
+then seeds `RANDOMIZE INT(LEN(C$) / 168) + 52` and applies the alternating
+per-character transform using `INT(RND * &H8002 + 200)`, `D% = (N% MOD 2) * 2
+- 200`, and the `X%`/`Y%` marker flags. The decoder/emitter already preserves
+these bytes exactly: the original and rebuilt CVT2TB DATA pools have identical
+63-item contents. Do not transcode these strings or replace them with their
+decrypted display text; that would change the program's runtime behavior and
+break byte-exact reconstruction. The remaining CVT2TB round-trip mismatch is
+therefore unrelated to string-data character encoding.
+
+The exact public `CVT2TB.ZIP` archive was also retrieved from a Simtel mirror
+and its `CVT2TB.EXE` SHA-256 matches `wild/hits/CVT2TB.EXE` exactly
+(`7121b5fb2881804dbf4103b835da4b3041659b7b7311fdd352c0cd89dc241db0`). Its
+`CVT2TB.LST` identifies this as the 54,166-byte Version 1.1a program, but the
+archive contains no BASIC source. It confirms the wild image is the released
+binary, not corpus corruption; it does not provide the older compiler needed
+to reproduce the `[02A6]` floating-pool coordinate. The repository's English
+and German 1.1 compiler images were both checked; the German image was already
+known to emit the same `[0356]` coordinate. CVT2TB's runtime-region build
+match against the English oracle is only 23%, so the remaining `SUB11` and
+direct-boolean template differences are part of the same unrepresented
+compiler/runtime revision, not string-pool corruption.
 
 ### The workflow (each gap, see gap 9–14 commits for examples)
 

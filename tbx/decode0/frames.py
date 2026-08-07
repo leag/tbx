@@ -424,6 +424,11 @@ class UsingChain:
     fmt: object = None
     #: Values printed so far.
     values: list = field(default_factory=list)
+    #: The open PrintChain this USING is an ITEM of, when the statement holds
+    #: more than one USING clause -- one statement, and no split spelling
+    #: reproduces its bytes (t1_usingtwice). None for the ordinary standalone
+    #: form, where splitting IS byte-identical.
+    nested_in: object = None
     #: File number for the `#n` form; None for console output.
     file: object = None
     #: Whether this is `LPRINT USING` rather than `PRINT USING`. Read with a

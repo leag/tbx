@@ -192,7 +192,48 @@ function makeDriver(emulator) {
   const held = async (make, after = 500) => { emulator.keyboard_send_scancodes([make]); await sleep(130); emulator.keyboard_send_scancodes([make | 0x80]); await sleep(after); };
   // Extended (E0-prefixed) held key, e.g. arrow keys.
   const heldExt = async (make, after = 500) => { emulator.keyboard_send_scancodes([0xE0, make]); await sleep(130); emulator.keyboard_send_scancodes([0xE0, make | 0x80]); await sleep(after); };
-  return { altKey, tapKey, typeSlow, waitFor, held, heldExt };
+  // Extended key, quick press-release (no hold): unlike `heldExt`, this does NOT
+  // trigger a typematic repeat, so it moves a menu cursor exactly one item --
+  // needed to land precisely on one of the Options toggle rows (see
+  // `setOptionsToggles`), where `heldExt`'s double-step would overshoot.
+  const tapKeyExt = async (make, after = 350) => { emulator.keyboard_send_scancodes([0xE0, make, 0xE0, make | 0x80]); await sleep(after); };
+  return { altKey, tapKey, typeSlow, waitFor, held, heldExt, tapKeyExt };
+}
+
+// Options-menu row index for each IDE toggle letter (decode0.Program.toggles
+// alphabet), with row 0 ("Compile to") as the fixed navigation anchor.
+const TOGGLE_ROW = { "8": 1, K: 2, B: 3, O: 4, S: 5 };
+const DOWN = 0x50, UP = 0x48;
+
+// Set the given Options toggles (e.g. "KBOS") to ON via the real IDE menu, then
+// leave the Options menu closed. Assumes it starts closed and TB is idle at the
+// editor (as tb_v86.js's COMPILE_EXE branch expects before its own Alt-O).
+//
+// Every toggle here started OFF (Turbo Basic's default), so this only turns
+// toggles ON; it does not need to detect current state. `held`/`heldExt` (used
+// for the "Compile to" popup, see tb_v86.js) advance a cursor by TWO rows per
+// call due to typematic repeat -- confirmed by watching the toggle rows flip on
+// screen -- but the Options toggle LIST needs single-row precision, so this
+// uses `tapKeyExt` (a quick tap, no repeat) instead. Verified byte-exact via a
+// self-consistency round trip: a KBOS-toggled EXE, decoded, re-emitted, and
+// recompiled with the same toggles reproduces the original exactly.
+async function setOptionsToggles(driver, scrFn, togglesStr) {
+  if (!togglesStr) return;
+  const { altKey, held, tapKeyExt } = driver;
+  await altKey(0x18); // Alt-O, cursor starts at row 0 ("Compile to")
+  await sleep(400);
+  let cur = 0;
+  for (const letter of togglesStr) {
+    const target = TOGGLE_ROW[letter];
+    if (target === undefined) throw new Error(`setOptionsToggles: unknown toggle letter ${letter}`);
+    const delta = target - cur;
+    const key = delta > 0 ? DOWN : UP;
+    for (let i = 0; i < Math.abs(delta); i++) await tapKeyExt(key);
+    await held(ENTER, 300);
+    cur = target;
+  }
+  for (let i = 0; i < cur; i++) await tapKeyExt(UP); // back to row 0
+  await held(0x01, 400); // Esc closes the Options menu
 }
 
 // Dump the guest's B: floppy (fdb) to a host file so files the guest wrote (e.g. a
@@ -203,4 +244,25 @@ async function saveFdb(emulator, outPath) {
   return outPath;
 }
 
-module.exports = { buildWorkImg, extractExe, parseUdToken, bootEmulator, attachScreen, makeDriver, saveFdb, waitForStableScreen, waitForExe, sleep, ENTER };
+// TB's File->Load rejects a source past its editor's buffer size with a
+// modal "<name> too large.  Truncate? (Y/N)" prompt instead of loading it.
+// That prompt contains the loaded filename, so a plain `scr().includes(the
+// filename)` check (the harnesses' own load-success check) is a false
+// positive here -- it matches text inside the rejection dialog, not a
+// successful load, and the harness would then blindly press Alt-C into a
+// dialog still waiting on Y/N, timing out on "Compiling" with a message
+// that doesn't say why. Call this right after a load's waitFor succeeds,
+// before trusting it.
+function checkNotTooLarge(scrText) {
+  if (/too large/i.test(scrText)) {
+    throw new Error(
+      "Turbo Basic's editor rejected the source as too large to load " +
+        "(\"too large. Truncate?\" prompt) -- this program exceeds TB's " +
+        "single-file source size limit and can't be compiled this way; " +
+        "it would need splitting into $INCLUDE'd files, which this " +
+        "harness doesn't automate.\nScreen:\n" + scrText
+    );
+  }
+}
+
+module.exports = { buildWorkImg, extractExe, parseUdToken, bootEmulator, attachScreen, makeDriver, saveFdb, waitForStableScreen, waitForExe, setOptionsToggles, checkNotTooLarge, sleep, ENTER };

@@ -84,6 +84,53 @@ def _read_data_pool(exe: bytes) -> list[ir.DataItem]:
     return items
 
 
+def _static_slot_header(
+    exe: bytes, pos: int
+) -> tuple[int, int, int, int, int] | None:
+    if pos < 0 or pos + 8 > len(exe):
+        return None
+    para, rt, count, esz = struct.unpack_from("<4H", exe, pos)
+    # Type byte: 0x00 = integer (esz 2, witnessed t1_getput), 0x02 = long integer,
+    # 0x04 = single, 0x06 = double, 0x0A = string; element size 2 (int),
+    # 4 (single/long/string desc) or 8 (double).
+    valid_type = rt & 0xFF in (0x00, 0x02, 0x04, 0x06, 0x0A)
+    if (
+        rt >> 8 not in (1, 2, 3, 4)
+        or not valid_type
+        or esz not in (2, 4, 8)
+        or count <= 1
+        or para == 0
+    ):
+        return None
+    return para, rt, count, esz, rt >> 8
+
+
+def _static_slot_dimensions(
+    exe: bytes, pos: int, rank: int
+) -> tuple[list[int], list[int], list[int]] | None:
+    if pos + 6 * rank + 6 > len(exe):
+        return None
+    lo, hi, spans = [], [], []
+    p, span = pos + 8, 1
+    for dimension in range(rank):
+        lo_d, hi_d = struct.unpack_from("<2H", exe, p)
+        if hi_d < lo_d:
+            return None
+        lo.append(lo_d)
+        hi.append(hi_d)
+        p += 4
+        if dimension < rank - 1:
+            (span_d,) = struct.unpack_from("<H", exe, p)
+            if span_d != span * (hi_d - lo_d + 1):
+                return None
+            spans.append(span_d)
+            span = span_d
+            p += 2
+    if span * (hi[-1] - lo[-1] + 1) <= 1:
+        return None
+    return lo, hi, spans
+
+
 def _parse_static_slot(exe: bytes, pos: int) -> dict[str, Any] | None:
     """Parse a populated static slot record at file `pos`:
     +0 base-para, +2 04|rank, +4 count, +6 type (04 single / 0A string), then
@@ -95,40 +142,15 @@ def _parse_static_slot(exe: bytes, pos: int) -> dict[str, Any] | None:
     t1_dim4; the 0x36 slot itself is exactly a rank-8 record, but ranks
     above 4 stay unwitnessed and are rejected).
     None if the bytes don't validate."""
-    if pos < 0 or pos + 8 > len(exe):
+    header = _static_slot_header(exe, pos)
+    if header is None:
         return None
-    para, rt, count, esz = struct.unpack_from("<4H", exe, pos)
-    # Type byte: 0x00 = integer (esz 2, witnessed t1_getput), 0x02 = long integer,
-    # 0x04 = single, 0x06 = double, 0x0A = string; element size 2 (int),
-    # 4 (single/long/string desc) or 8 (double).
-    if (
-        rt >> 8 not in (1, 2, 3, 4)
-        or rt & 0xFF not in (0x00, 0x02, 0x04, 0x06, 0x0A)
-        or esz not in (2, 4, 8)
-        or count <= 1
-        or para == 0
-    ):
+    para, rt, count, esz, rank = header
+    dimensions = _static_slot_dimensions(exe, pos, rank)
+    if dimensions is None:
         return None
-    rank = rt >> 8
-    if pos + 6 * rank + 6 > len(exe):
-        return None
-    lo, hi, spans = [], [], []
-    p, span = pos + 8, 1
-    for d in range(rank):
-        lo_d, hi_d = struct.unpack_from("<2H", exe, p)
-        if hi_d < lo_d:
-            return None
-        lo.append(lo_d)
-        hi.append(hi_d)
-        p += 4
-        if d < rank - 1:
-            (span_d,) = struct.unpack_from("<H", exe, p)
-            if span_d != span * (hi_d - lo_d + 1):
-                return None
-            spans.append(span_d)
-            span = span_d
-            p += 2
-    if count != span * (hi[-1] - lo[-1] + 1):
+    lo, hi, spans = dimensions
+    if count != (spans[-1] if spans else 1) * (hi[-1] - lo[-1] + 1):
         return None
     return {
         "name": None,

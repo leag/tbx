@@ -5,3 +5,4 @@ work_*.img
 *.EXE
 *.exe
 *.tmp
+snapshots/

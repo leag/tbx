@@ -1,0 +1,22 @@
+# t1_forsubloc dialect=1.1 start=08700
+08703:jmp:34635
+08706:proc_enter
+08709:local_init:3:6
+0871D:mov_bp_imm:6:1
+08722:movm_imm:288:3
+08728:jmp:34624
+0872B:fild:288
+08730:rt:187
+08732:fild_bp:6
+08736:rt:187
+08738:rt:184
+0873C:inc_m:288
+08740:cmp_mi8:288:5
+08745:jcc:126:34603
+08747:proc_ret:6
+0874B:sub_sp:6
+0874E:far_call:34566
+08753:end
+08756:epilogue
+# commits
+0873A

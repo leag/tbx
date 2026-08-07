@@ -1,0 +1,19 @@
+# t1_forsubdg dialect=1.1 start=08700
+08703:jmp:34624
+08706:proc_enter
+08709:local_init:2:6
+0871D:movm_imm:288:3
+08723:jmp:34613
+08726:fild:288
+0872B:rt:187
+0872D:rt:184
+08731:inc_m:288
+08735:cmp_mi8:288:5
+0873A:jcc:126:34598
+0873C:proc_ret:4
+08740:sub_sp:4
+08743:far_call:34566
+08748:end
+0874B:epilogue
+# commits
+0872F

@@ -1,0 +1,34 @@
+# t1_gosubthendef dialect=1.1 start=08700
+08703:call:34618
+08706:push_bp
+08707:mov_mem_sp:104
+0870B:sub_sp:6
+0870E:mov_bp_sp
+08710:mov_bp_imm:2:3
+08715:movm_imm:104:0
+0871B:fn_call:34631
+08722:movax_bp:0
+08725:add_sp:6
+08728:pop_bp
+08729:movmem_ax:44
+0872C:fild:44
+08731:rt:187
+08733:rt:184
+08737:end
+0873A:movsi:292
+0873D:rt:156
+0873F:rt:190
+08741:rt:184
+08743:ret
+08744:jmp:34673
+08747:mov_bp_imm:0:0
+0874C:local_init:1:4
+08760:movax:1
+08763:addax_bp:2
+08766:movm_ax_bp:4
+08769:movax_bp:4
+0876C:movm_ax_bp:0
+0876F:fn_ret
+08771:epilogue
+# commits
+08735

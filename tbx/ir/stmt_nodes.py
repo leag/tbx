@@ -457,13 +457,21 @@ class DateTimeSet:
 
 @dataclass(frozen=True)
 class IfInline:
-    """IF cond THEN <stmt[: stmt...]> -- the inline-body form: dispatch pair
-    `75 +3; e9 SKIP` (jump past the body when false), body statements follow.
-    Required for compound conditions, whose negation does not
-    materialize to the same bytes; simple conditions canonicalize to IfGoto."""
+    """IF cond THEN <stmt[: stmt...]> [ELSE <stmt[: stmt...]>] -- the inline-body
+    form: dispatch pair `75 +3; e9 SKIP` (jump past the body when false), body
+    statements follow. Required for compound conditions, whose negation does not
+    materialize to the same bytes; simple conditions canonicalize to IfGoto.
+
+    `else_body` is None for the far commoner no-ELSE form, and is NOT
+    interchangeable with the IfBlock spelling: a block IF over a simple
+    condition compiles to different bytes (t1_selarmifelse's arm is 16 bytes
+    shorter inline). It exists because a CASE arm cannot hold the canonical
+    IfGoto spelling -- that one needs a numbered line to skip to, and an arm's
+    else-skip lands on the arm-close jmp, which owns no statement."""
 
     cond: object  # RelOp | LogOp
     body: tuple[Stmt, ...]
+    else_body: object = None  # tuple[Stmt, ...] | None
 
 
 @dataclass(frozen=True)
@@ -875,10 +883,10 @@ class PutString:
 
 @dataclass(frozen=True)
 class Put:
-    """PUT #n, rec -- write a random-access record."""
+    """PUT #n[, rec] -- write a random-access record."""
 
     num: int  # file number
-    pos: object  # Expr (record number)
+    pos: object | None  # Expr (record number), or None for current record
 
 
 @dataclass(frozen=True)
@@ -944,11 +952,19 @@ class Rset:
 
 @dataclass(frozen=True)
 class MidAssign:
-    """MID$(target$, start) = source$ -- overwrite substring in place."""
+    """MID$(target$, start[, len]) = source$ -- overwrite substring in place.
+
+    The two- and three-argument forms are separate runtime vectors (AE and AF)
+    with different register conventions, but one statement: `length` is None
+    for the two-argument spelling, which is not the same as a length that
+    happens to equal the source's -- the source text differs and so do the
+    compiled bytes.
+    """
 
     target: object  # Var ($)
     start: object  # Expr
     source: object  # Expr ($)
+    length: object | None = None  # Expr, or None for the 2-argument form
 
 
 # --- procedures (SUB / DEF FN / CALL) ---

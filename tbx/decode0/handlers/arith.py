@@ -7,6 +7,7 @@ the shared :class:`~tbx.decode0.core.DecodeState` plus the current
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 from tbx import ir
@@ -25,67 +26,69 @@ from tbx.decode0.const import (
     _PREC,
     _READDATA,
 )
+
 from tbx.decode0.scan import _grp, _orient, _rgrp
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from tbx.decode0.core import DecodeState
 
 
-def int_alu(state: DecodeState, op, addr, kind) -> bool:
-    """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addax_bp, addsiax, subax_m, imul_m, imul_bp, movax_bp, idivbx, cmpax_m, inc_m, dec_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
-    img, m, expr_, l, c, o = (state.image, state.machine, state.expr,
-                              state.layout_state, state.control, state.output)
-    if kind == "movdx_m":  # IMP left operand -> dx
+def _next_real_addr(img, i):
+    """The address of the next op after `i`, skipping toggle-instrumentation
+    ops (`into`/`stack_chk`) that carry no source spelling and can land
+    between any two ops under the Overflow/Stack-test IDE options -- so a
+    positional adjacency check (e.g. "is this op immediately followed by the
+    FOR's own NEXT test") has to look past them the same way the main
+    dispatch loop's own generic `into`/`stack_chk` skip effectively does
+    (wild bill.exe: an Overflow-toggle `into` between a loop's closing
+    `dec_m` and its `cmp_mi8` test broke the adjacency check that guards
+    against a mid-body DECR hijacking the step, round 36's fix)."""
+    while i < len(img.ops) and img.ops[i][1] in ("into", "stack_chk"):
+        i += 1
+    return img.ops[i][0] if i < len(img.ops) else None
+
+
+def _apply_movrr(m, dest: str, src: str) -> None:
+    """Model `mov dest,src` (16-bit general regs): dest takes src's symbolic
+    value, src goes empty. Shared by the standalone `movrr` op and by the
+    shlsi element-access glue below, which consumes a `movrr`/`movbxax` pair
+    positionally without a further dispatch pass -- it has to apply the same
+    effect inline or a register a later, unconsumed op reads (e.g. the
+    outer index leg an element access saved off to survive the read) goes
+    stale (wild eco.exe/pfl.exe: `add si,ax` saw `si=None` because the `mov
+    cx,bx` that this glue skipped past was never modeled)."""
+    regs = {"ax": m.ax, "bx": m.bx, "cx": m.cx, "dx": m.dx, "di": m.di, "si": m.si}
+    regs[dest], regs[src] = regs[src], None
+    m.ax, m.bx, m.cx, m.dx, m.di, m.si = (
+        regs["ax"], regs["bx"], regs["cx"], regs["dx"], regs["di"], regs["si"],
+    )
+
+
+def _int_register_ops(state: DecodeState, op, addr: int, kind: str) -> bool:
+    img, m, c = state.image, state.machine, state.control
+    if kind == "movdx_m":
         m.dx = state.loc(op[2])
-        state.advance()
-        return True
-    if kind == "movdxax":  # WAIT/INP port: ax -> dx
+    elif kind == "movdxax":
         m.dx, m.ax = m.ax, None
-        state.advance()
-        return True
-    if kind == "movdxbx":  # OUT port: bx -> dx
+    elif kind == "movdxbx":
         m.dx, m.bx = m.bx, None
-        state.advance()
-        return True
-    if kind == "movbxax":  # LOCATE row -> bx
+    elif kind == "movbxax":
         m.bx, m.ax = m.ax, None
-        state.advance()
-        return True
-    if kind == "movaxdx":  # promote the \ quotient to MOD
+    elif kind == "movaxdx":
         if not (isinstance(m.ax, ir.BinOp) and m.ax.op == "\\"):
             raise ValueError(f"movaxdx not following idiv at {addr:#x}")
         m.ax = ir.BinOp("MOD", m.ax.lhs, m.ax.rhs)
-        state.advance()
-        return True
-    if kind == "movrr":  # spill-protocol shuttle
-        regs = {
-            "ax": m.ax,
-            "bx": m.bx,
-            "cx": m.cx,
-            "dx": m.dx,
-            "di": m.di,
-            "si": m.si,
-        }
-        regs[op[2]], regs[op[3]] = regs[op[3]], None
-        m.ax, m.bx, m.cx, m.dx, m.di, m.si = (
-            regs["ax"],
-            regs["bx"],
-            regs["cx"],
-            regs["dx"],
-            regs["di"],
-            regs["si"],
-        )
-        state.advance()
-        return True
-    if kind == "spill_store":
+    elif kind == "movrr":
+        _apply_movrr(m, op[2], op[3])
+    elif kind == "spill_store":
         value = {"di": m.di}[op[2]]
         if value is None:
             raise ValueError(f"empty {op[2]} spill at {addr:#x}")
         m.reg_spills[op[3]] = value
         m.di = None
-        state.advance()
-        return True
-    if kind == "spill_load":
+    elif kind == "spill_load":
         try:
             value = m.reg_spills.pop(op[3])
         except KeyError:
@@ -96,19 +99,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             m.di = value
         else:
             raise ValueError(f"unsupported spill target {op[2]} at {addr:#x}")
-        state.advance()
-        return True
-    if kind in ("movm_ax_temp", "movm_imm_temp"):
-        # mov ss:[si],ax / mov ss:[si],imm16: a temp-frame argument store.
-        # Two different callers drain this frame: a plain SUB CALL (an
-        # `arg_push_temp` follows immediately, ordered list -> pend_args) or
-        # a DEF FN call used AS another call's own argument (no
-        # arg_push_temp -- the frame closes straight into `mov_bp_sp;
-        # fn_call`, offset-keyed dict -> fn_args, keyed by the `si` offset
-        # this store's own address computed, i.e. the future bp offset once
-        # mov_bp_sp repoints bp here; t1_fnargcall). SUB CALL can't nest as
-        # an argument (CALL is a statement, not an expression), so this
-        # ordering split is exhaustive.
+    elif kind in ("movm_ax_temp", "movm_imm_temp"):
         value = ir.Lit(op[2]) if kind == "movm_imm_temp" else m.ax
         if kind == "movm_ax_temp" and m.ax is None:
             raise ValueError(f"empty integer temp argument at {addr:#x}")
@@ -118,178 +109,418 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         else:
             c.fn_args[m.si] = value
         m.ax = None
-        # No state.put() happens here -- this op stages one argument value
-        # mid-expression, inside a CALL/DEF-FN-call statement that's still
-        # open (its own address was already set when IT started, e.g. by
-        # the far-CALL argument-staging prologue). Clearing c.cur here
-        # unconditionally let the generic top-of-loop fallback re-stamp it
-        # with a LATER op's address once more ops ran, so the eventual
-        # far_call's put() recorded the wrong statement address -- a loop's
-        # own backward branch targeting the CALL's real start (its
-        # mov_mem_sp/push_bp prologue) then failed to resolve to any
-        # tracked statement (wild morcalc.exe).
-        state.advance()
-        return True
-    if kind == "movsim":
-        # mov si,[disp16]: FOR-loop variable as a raw element index.
+    elif kind == "movsim":
         m.si = state.loc(op[2])
-        state.advance()
-        return True
-    if kind == "movsi_bp":
-        # mov si,[bp+d8]: LOCAL int as a raw element index (q_locidx)
+    elif kind == "movsi_bp":
         m.si = state.loc_local(op[2])
-        state.advance()
-        return True
-    if kind == "addax_m":  # fold LEFT; neg-aware = subtraction
+    else:
+        return False
+    state.advance()
+    return True
+
+
+def _int_add_ops(state: DecodeState, op, addr: int, kind: str) -> bool:
+    if kind not in ("addax_m", "addax_bp"):
+        return False
+    m = state.machine
+    if kind == "addax_bp":
+        mem = state.loc_local(op[2])
+    else:
         try:
             mem = state.loc(op[2])
         except ValueError:
-            if op[2] < l.lay["pool_base"] - 4:
+            if op[2] < state.layout_state.lay["pool_base"] - 4:
                 raise
-            # pooled int-literal LEFT operand: `15 - LEN(A$)` evaluates the
-            # computed RIGHT first, negates, then adds the literal from the
-            # const pool (witnessed t1_addpool) -- same fallback fpval/ifold
-            # already have.
             mem = state.pool_lit(op[2])
-        if isinstance(m.ax, ir.Neg):
-            m.ax = ir.BinOp("-", mem, _rgrp("-", m.ax.operand))
-        else:
-            m.ax = ir.BinOp("+", mem, _rgrp("+", m.ax))
-        state.advance()
-        return True
-    if kind == "addax_bp":  # large-LOCAL sibling of addax_m
-        mem = state.loc_local(op[2])
-        if isinstance(m.ax, ir.Neg):
-            m.ax = ir.BinOp("-", mem, _rgrp("-", m.ax.operand))
-        else:
-            m.ax = ir.BinOp("+", mem, _rgrp("+", m.ax))
-        state.advance()
-        return True
-    if kind == "addsiax":
-        # accumulate index legs, highest dim first (column-major):
-        # rank 2: si=jspan + ax=i -> idx(i, j)
-        # rank 3: si=kspan + ax=jspan -> jk(j, k); si=jk + ax=i -> idx(i, j, k)
-        # (rank-3 witnessed t1_dim3v)
-        # rank 4: si=lspan + ax=kspan -> kl(k, l); si=kl + ax=jspan -> jkl(j, k, l);
-        # si=jkl + ax=i -> idx(i, j, k, l) (wild hfprop.exe, probe q_dim4var)
-        if (
-            isinstance(m.si, tuple)
-            and m.si[0] == "lspan"
-            and isinstance(m.ax, tuple)
-            and m.ax[0] == "kspan"
-            and m.ax[1] == m.si[1]
-        ):
-            m.si = ("kl", m.si[1], (m.ax[2], m.si[2]))
-            m.ax = None
-            state.advance()
-            return True
-        if (
-            isinstance(m.si, tuple)
-            and m.si[0] == "kl"
-            and isinstance(m.ax, tuple)
-            and m.ax[0] == "jspan"
-            and m.ax[1] == m.si[1]
-        ):
-            m.si = ("jkl", m.si[1], (m.ax[2], *m.si[2]))
-            m.ax = None
-            state.advance()
-            return True
-        if (
-            isinstance(m.si, tuple)
-            and m.si[0] == "kspan"
-            and isinstance(m.ax, tuple)
-            and m.ax[0] == "jspan"
-            and m.ax[1] == m.si[1]
-        ):
-            m.si = ("jk", m.si[1], (m.ax[2], m.si[2]))
-            m.ax = None
-            state.advance()
-            return True
+    if isinstance(m.ax, ir.Neg):
+        m.ax = ir.BinOp("-", mem, _rgrp("-", m.ax.operand))
+    else:
+        m.ax = ir.BinOp("+", mem, _rgrp("+", m.ax))
+    state.advance()
+    return True
+
+
+def _int_index_add(state: DecodeState, addr: int) -> bool:
+    m = state.machine
+    # Accumulate index legs, highest dimension first (column-major).
+    if (
+        isinstance(m.si, tuple)
+        and m.si[0] == "lspan"
+        and isinstance(m.ax, tuple)
+        and m.ax[0] == "kspan"
+        and m.ax[1] == m.si[1]
+    ):
+        m.si = ("kl", m.si[1], (m.ax[2], m.si[2]))
+        m.ax = None
+    elif (
+        isinstance(m.si, tuple)
+        and m.si[0] == "kl"
+        and isinstance(m.ax, tuple)
+        and m.ax[0] == "jspan"
+        and m.ax[1] == m.si[1]
+    ):
+        m.si = ("jkl", m.si[1], (m.ax[2], *m.si[2]))
+        m.ax = None
+    elif (
+        isinstance(m.si, tuple)
+        and m.si[0] == "kspan"
+        and isinstance(m.ax, tuple)
+        and m.ax[0] == "jspan"
+        and m.ax[1] == m.si[1]
+    ):
+        m.si = ("jk", m.si[1], (m.ax[2], m.si[2]))
+        m.ax = None
+    else:
         if not (isinstance(m.si, tuple) and m.si[0] in ("jspan", "jk", "jkl")):
             raise ValueError(f"add si,ax with si={m.si} ax={m.ax} at {addr:#x}")
-        if (
-            isinstance(m.ax, tuple)
-            and m.ax[0] == "inorm"
-            and m.ax[1] == m.si[1]
-        ):
+        if isinstance(m.ax, tuple) and m.ax[0] == "inorm" and m.ax[1] == m.si[1]:
             i_expr = m.ax[2]
         elif not isinstance(m.ax, tuple) and m.ax is not None:
-            i_expr = m.ax  # base-0: no i-lo sub
+            i_expr = m.ax
         else:
             raise ValueError(f"add si,ax with si={m.si} ax={m.ax} at {addr:#x}")
         rest = m.si[2] if m.si[0] in ("jk", "jkl") else (m.si[2],)
         m.si = ("idx", m.si[1], (i_expr, *rest))
         m.ax = None
+    state.advance()
+    return True
+
+
+def _int_index_sub(state: DecodeState, op, addr: int) -> bool:
+    img, m, l, c = state.image, state.machine, state.layout_state, state.control
+    blk = next((b for b in l.slot_info if b <= op[2] < b + ARR_BLOCK), None)
+    if blk is None:
+        try:
+            mem = state.loc(op[2])
+        except ValueError:
+            if op[2] < l.lay["pool_base"] - 4:
+                raise
+            mem = state.pool_lit(op[2])
+        if isinstance(m.ax, tuple) or m.ax is None:
+            raise ValueError(f"sub ax,[{op[2]:#x}] with non-Expr ax at {addr:#x}")
+        m.ax = ir.BinOp("-", m.ax, _rgrp("-", mem))
         state.advance()
         return True
-    if kind == "subax_m":
-        blk = next((b for b in l.slot_info if b <= op[2] < b + ARR_BLOCK), None)
-        if blk is None:
-            # Not a far-IDX lo-subscript normalization cell -- a plain
-            # subtraction fold instead (`<expr> - <mem>`), mem on the
-            # RIGHT (unlike addax_m's mem-LEFT convention, since SUB
-            # isn't commutative and `sub ax,[mem]` computes ax-mem
-            # directly). Same pool-literal fallback as addax_m/imul_m
-            # (wild resume.exe).
-            try:
-                mem = state.loc(op[2])
-            except ValueError:
-                if op[2] < l.lay["pool_base"] - 4:
-                    raise
-                mem = state.pool_lit(op[2])
-            if isinstance(m.ax, tuple) or m.ax is None:
-                raise ValueError(f"sub ax,[{op[2]:#x}] with non-Expr ax at {addr:#x}")
-            m.ax = ir.BinOp("-", m.ax, _rgrp("-", mem))
+    off = op[2] - blk
+    if isinstance(m.ax, tuple) or m.ax is None:
+        raise ValueError(f"far-IDX normalization of non-Expr ax at {addr:#x}")
+    if off in (0x0E, 0x14):
+        span_off = 0x0C if off == 0x0E else 0x12
+        if (
+            c.k + 1 >= len(img.ops)
+            or img.ops[c.k + 1][1] != "imul_m"
+            or img.ops[c.k + 1][2] != blk + span_off
+        ):
+            raise ValueError(f"jspan without imul at {addr:#x}")
+        l.slot_info[blk]["subful"] = True
+        m.ax = ("jspan" if off == 0x0E else "kspan", blk, m.ax)
+        state.advance(2)
+        return True
+    if off == 0x08:
+        l.slot_info[blk]["subful"] = True
+        m.ax = ("inorm", blk, m.ax)
+        state.advance()
+        return True
+    raise ValueError(f"sub ax from unexpected cell offset {off:#x} at {addr:#x}")
+
+
+def _int_index_mul(state: DecodeState, op, addr: int) -> bool:
+    m, l = state.machine, state.layout_state
+    blk = next(
+        (b for b in l.slot_info if op[2] in (b + 0x0C, b + 0x12, b + 0x18)),
+        None,
+    )
+    if blk is not None:
+        if isinstance(m.ax, tuple) or m.ax is None:
+            raise ValueError(f"span imul of non-Expr ax at {addr:#x}")
+        off = op[2] - blk
+        m.ax = ({0x0C: "jspan", 0x12: "kspan", 0x18: "lspan"}[off], blk, m.ax)
+    else:
+        try:
+            mem = state.loc(op[2])
+        except ValueError:
+            if op[2] < l.lay["pool_base"] - 4:
+                raise
+            mem = state.pool_lit(op[2])
+        m.ax = ir.BinOp("*", mem, _rgrp("*", m.ax))
+    state.advance()
+    return True
+
+
+def _int_movax_bp(state: DecodeState, op, addr: int) -> bool:
+    img, m, expr_, c = state.image, state.machine, state.expr, state.control
+    if (
+        match_fn_result_readback(img.ops, c.k) is not None
+        and expr_.stack
+        and isinstance(expr_.stack[-1], ir.FnCall)
+    ):
+        m.ax = expr_.stack.pop()
+    else:
+        m.ax = state.loc_local(op[2])
+    state.advance()
+    return True
+
+
+def _int_div_ops(state: DecodeState, op, addr: int, kind: str) -> bool:
+    if kind not in ("idiv_m", "idivbx"):
+        return False
+    m = state.machine
+    if kind == "idiv_m":
+        try:
+            divisor = state.loc(op[2])
+        except ValueError:
+            divisor = ir.Var(f"V{op[2]:04X}")
+        m.ax = ir.BinOp("\\", m.ax, _rgrp("\\", divisor))
+    else:
+        if m.bx is None:
+            logger.warning("idivbx without materialized divisor at %x", addr)
+            m.bx = ir.Var("V_DIV")
+        m.ax = ir.BinOp("\\", m.ax, _rgrp("\\", m.bx))
+        m.bx = None
+    state.advance()
+    return True
+
+
+def _int_compare_state(state: DecodeState, op, addr: int, kind: str) -> bool:
+    if kind not in ("cmpm_ax", "cmpax_bx"):
+        return False
+    m, expr_ = state.machine, state.expr
+    if kind == "cmpm_ax":
+        if m.ax is None:
+            raise ValueError(f"cmpm_ax without ax operand at {addr:#x}")
+        expr_.pend_cmp = (state.loc(op[2]), m.ax)
+        expr_.pend_cmp_str = False
+        m.ax = None
+    else:
+        expr_.pend_cmp = (m.ax, m.bx)
+        expr_.pend_cmp_str = False
+        m.ax = m.bx = None
+    state.advance()
+    return True
+
+
+def _int_inc_dec(state: DecodeState, op, addr: int, kind: str) -> bool:
+    if kind not in ("inc_m", "inc_bp", "dec_bp", "dec_m", "addm_i8"):
+        return False
+    img, c, o = state.image, state.control, state.output
+    in_for = c.fors and c.fors[-1].v == op[2]
+    if kind == "inc_m":
+        if in_for:
             state.advance()
             return True
-        off = op[2] - blk
-        if isinstance(m.ax, tuple) or m.ax is None:
-            raise ValueError(f"far-IDX normalization of non-Expr ax at {addr:#x}")
-        if off in (0x0E, 0x14):  # j - lo2 (or k - lo3), then * cumulative span
-            span_off = 0x0C if off == 0x0E else 0x12  # span1 / span2 cell
-            if (
-                c.k + 1 >= len(img.ops)
-                or img.ops[c.k + 1][1] != "imul_m"
-                or img.ops[c.k + 1][2] != blk + span_off
-            ):
-                raise ValueError(f"jspan without imul at {addr:#x}")
-            l.slot_info[blk]["subful"] = True  # lo-sub witness
-            m.ax = ("jspan" if off == 0x0E else "kspan", blk, m.ax)
+        var = state.loc(op[2])
+        state.put(ir.Assign(var, ir.BinOp("+", var, ir.Lit(1))), c.cur)
+    elif kind == "inc_bp":
+        if in_for:
+            state.advance()
+            return True
+        state.put(ir.Incr(state.loc_local(op[2])), c.cur)
+    elif kind in ("dec_bp", "dec_m"):
+        step_for = in_for and _next_real_addr(img, c.k + 1) == c.fors[-1].test
+        if step_for:
+            f = c.fors[-1]
+            old = o.stmts[f.idx]
+            with editing(o.stmts, "patch_for_step"):
+                state.patch(f.idx, ir.For(old.var, old.init, old.limit, ir.Lit(-1)))
+            f.step = -1
+            state.advance()
+            return True
+        if kind == "dec_bp":
+            state.put(ir.Decr(state.loc_local(op[2])), c.cur)
+        else:
+            var = state.loc(op[2])
+            state.put(ir.Assign(var, ir.BinOp("-", var, ir.Lit(1))), c.cur)
+    else:
+        step_for = in_for and _next_real_addr(img, c.k + 1) == c.fors[-1].test
+        if not step_for:
+            var = state.loc(op[2])
+            state.put(ir.Assign(var, ir.BinOp("+", var, ir.Lit(op[3]))), c.cur)
+            c.cur = None
+            state.advance()
+            return True
+        f = c.fors[-1]
+        old = o.stmts[f.idx]
+        with editing(o.stmts, "patch_for_step"):
+            state.patch(f.idx, ir.For(old.var, old.init, old.limit, ir.Lit(op[3])))
+        f.step = op[3]
+        state.advance()
+        return True
+    c.cur = None
+    state.advance()
+    return True
+
+
+def _int_unary_ops(state: DecodeState, kind: str) -> bool:
+    if kind not in ("negax", "notax", "notdx", "oraxdx", "xorax", "xorah"):
+        return False
+    m = state.machine
+    if kind == "negax":
+        m.ax = ir.Neg(m.ax)
+    elif kind == "notax":
+        m.ax = ir.Not(m.ax)
+    elif kind == "notdx":
+        m.dx = ir.Not(m.dx)
+    elif kind == "oraxdx":
+        m.ax = ir.BinOp("OR", m.dx, _rgrp("OR", m.ax))
+        m.dx = None
+    elif kind == "xorax":
+        m.ax = ir.Lit(0)
+    else:  # xorah: INP result widen, no semantic operation
+        pass
+    state.advance()
+    return True
+
+
+def _skip_shlsi_overflow(state: DecodeState, index: int) -> None:
+    img = state.image
+    while index < len(img.ops) and img.ops[index][1] == "into":
+        del img.ops[index]
+        if state.cursor is not None:
+            state.cursor.ops = tuple(img.ops)
+
+
+def _int_compare_mem(state: DecodeState, op, addr: int) -> bool:
+    img, m, expr_, l, c = (
+        state.image, state.machine, state.expr, state.layout_state, state.control
+    )
+    if op[2] in (0x74, 0x76):
+        mem: Any = ir.Err()
+    elif op[2] == 0x72:
+        mem = ir.Erl()
+    else:
+        try:
+            mem = state.loc(op[2])
+        except ValueError:
+            if op[2] < l.lay["pool_base"] - 4:
+                raise
+            mem = state.pool_lit(op[2])
+    nxt = img.ops[c.k + 1] if c.k + 1 < len(img.ops) else None
+    j = c.k + 1
+    while j < len(img.ops) and img.ops[j][1] in ("movrr", "movbxax"):
+        j += 1
+    shuffled = (
+        j > c.k + 1
+        and j < len(img.ops)
+        and img.ops[j][1] == "movax"
+        and img.ops[j][2] == 0xFFFF
+    )
+    if (nxt is not None and nxt[1] == "movax" and nxt[2] == 0xFFFF) or shuffled:
+        expr_.pend_icmp = (mem, m.ax)
+        m.ax = None
+        state.advance()
+        return True
+    if nxt is not None and nxt[1] == "jcc":
+        cc = nxt[2]
+        j2 = img.ops[c.k + 2] if c.k + 2 < len(img.ops) else None
+        if j2 is not None and j2[1] == "jmp" and nxt[3] == j2[0] + 3:
+            skiprel = {
+                0x74: "<>", 0x75: "=", 0x7F: ">=",
+                0x7D: ">", 0x7C: "<=", 0x7E: "<",
+            }
+            if cc not in skiprel:
+                raise ValueError(f"cmpax_m IF jcc {cc:02x} at {addr:#x}")
+            state.put(
+                ir.IfGoto(ir.RelOp(skiprel[cc], mem, m.ax), ("addr", j2[2])),
+                c.cur,
+            )
+            m.ax = None
+            c.cur = None
+            state.advance(3)
+            return True
+        if cc in _JCC_RELOP_VALUE:
+            state.put(
+                ir.IfGoto(ir.RelOp(_JCC_RELOP_VALUE[cc], mem, m.ax), ("addr", nxt[3])),
+                c.cur,
+            )
+            m.ax = None
+            c.cur = None
             state.advance(2)
             return True
-        if off == 0x08:  # i - lo1
-            l.slot_info[blk]["subful"] = True  # lo-sub witness
-            m.ax = ("inorm", blk, m.ax)
-            state.advance()
-            return True
-        raise ValueError(f"sub ax from unexpected cell offset {off:#x} at {addr:#x}")
-    if kind == "imul_m":
-        blk = next(
-            (b for b in l.slot_info if op[2] in (b + 0x0C, b + 0x12, b + 0x18)),
-            None,
-        )
-        if blk is not None:  # bare span multiply: OPTION BASE 0
-            if isinstance(m.ax, tuple) or m.ax is None:  # far-IDX j-leg
-                raise ValueError(f"span imul of non-Expr ax at {addr:#x}")
-            off = op[2] - blk
-            m.ax = (
-                {0x0C: "jspan", 0x12: "kspan", 0x18: "lspan"}[off],  # span3
-                blk,  # (dim 4, wild hfprop.exe): t1_dim3v/t1_dim4v
-                m.ax,
-            )
-        else:
-            try:
-                mem = state.loc(op[2])
-            except ValueError:
-                if op[2] < l.lay["pool_base"] - 4:
-                    raise
-                # pooled int-literal LEFT operand: `180 * (A > 0)` evaluates
-                # the materialized right first, then multiplies the literal
-                # from the const pool (witnessed t1_imulpool, wild schart.exe)
-                mem = state.pool_lit(op[2])
-            m.ax = ir.BinOp("*", mem, _rgrp("*", m.ax))
+    raise ValueError(f"cmpax_m without a value/IF consumer at {addr:#x}")
+
+
+def _int_compare_local(state: DecodeState, op, addr: int) -> bool:
+    img, m, expr_, c = state.image, state.machine, state.expr, state.control
+    nxt = img.ops[c.k + 1] if c.k + 1 < len(img.ops) else None
+    local = state.loc_local(op[2])
+    j = c.k + 1
+    while j < len(img.ops) and img.ops[j][1] in ("movrr", "movbxax"):
+        j += 1
+    shuffled = (
+        j > c.k + 1
+        and j < len(img.ops)
+        and img.ops[j][1] == "movax"
+        and img.ops[j][2] == 0xFFFF
+    )
+    if (nxt is not None and nxt[1] == "movax" and nxt[2] == 0xFFFF) or shuffled:
+        expr_.pend_icmp = (local, m.ax)
+        m.ax = None
         state.advance()
         return True
+    skiprel = {
+        0x74: "<>", 0x75: "=", 0x7F: ">=", 0x7D: ">",
+        0x7C: "<=", 0x7E: "<",
+    }
+    if (
+        nxt is None
+        or nxt[1] != "jcc"
+        or nxt[2] not in skiprel
+        or c.k + 2 >= len(img.ops)
+        or img.ops[c.k + 2][1] != "jmp"
+        or nxt[3] != img.ops[c.k + 2][0] + 3
+    ):
+        raise ValueError(f"cmpax_bp without an IF jcc+skip-jmp at {addr:#x}")
+    state.put(
+        ir.IfGoto(
+            ir.RelOp(skiprel[nxt[2]], local, m.ax),
+            ("addr", img.ops[c.k + 2][2]),
+        ),
+        c.cur,
+    )
+    m.ax = None
+    c.cur = None
+    state.advance(3)
+    return True
+
+
+def _int_array_param_sub(state: DecodeState, op, addr: int) -> bool:
+    img, c = state.image, state.control
+    if c.proc_frame is None or c.k + 3 >= len(img.ops):
+        raise ValueError(f"subax_bp outside array parameter at {addr:#x}")
+    j = c.k + 1
+    if img.ops[j][1] != "movsiax":
+        raise ValueError(f"subax_bp without movsiax at {addr:#x}")
+    while j + 1 < len(img.ops) and img.ops[j + 1][1] == "movrr":
+        j += 1
+    while j + 1 < len(img.ops) and img.ops[j + 1][1] == "shlsi":
+        j += 1
+    if (
+        j == c.k + 1
+        or j + 1 >= len(img.ops)
+        or img.ops[j + 1][1] != "moves_bp"
+        or img.ops[j + 1][2] + 8 != op[2]
+    ):
+        raise ValueError(f"subax_bp array-parameter shape mismatch at {addr:#x}")
+    rec = c.proc_frame.array_params.setdefault(img.ops[j + 1][2], {"rank": 1})
+    rec.setdefault("lo_off", op[2])
+    state.advance()
+    return True
+
+
+def int_alu(state: DecodeState, op, addr, kind) -> bool:
+    """Dispatch family: movdx_m, movdxax, movdxbx, movbxax, movaxdx, movrr, movsim, addax_m, addax_bp, addsiax, subax_m, imul_m, imul_bp, movax_bp, idivbx, cmpax_m, inc_m, dec_m, negax, notax, notdx, oraxdx, xorax, xorah, shlsi, movmem_ax, reg_set."""
+    img, m, expr_, l, c = (state.image, state.machine, state.expr,
+                           state.layout_state, state.control)
+    if _int_register_ops(state, op, addr, kind):
+        return True
+    if _int_add_ops(state, op, addr, kind):
+        return True
+    if kind == "addsiax":
+        return _int_index_add(state, addr)
+    if kind == "subax_m":
+        return _int_index_sub(state, op, addr)
+    if kind == "imul_m":
+        return _int_index_mul(state, op, addr)
     if kind == "imul_bp":  # imul word [bp+d8]: LOCAL int as the right operand
         m.ax = ir.BinOp("*", state.loc_local(op[2]), _rgrp("*", m.ax))
         state.advance()
@@ -313,333 +544,25 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         # reads the result). Skip that register-shuttle boilerplate, and
         # require an integer FnCall result to actually be waiting on the
         # stack, which is what makes the skip safe rather than a guess.
-        if (
-            match_fn_result_readback(img.ops, c.k) is not None
-            and expr_.stack
-            and isinstance(expr_.stack[-1], ir.FnCall)
-        ):
-            m.ax = expr_.stack.pop()
-        else:
-            m.ax = state.loc_local(op[2])
-        state.advance()
+        return _int_movax_bp(state, op, addr)
+    if _int_div_ops(state, op, addr, kind):
         return True
-    if kind == "idiv_m":  # ax (dividend) \ [disp16] (memory divisor)
-        m.ax = ir.BinOp("\\", m.ax, _rgrp("\\", state.loc(op[2])))
-        state.advance()
+    if kind == "cmpax_m":
+        return _int_compare_mem(state, op, addr)
+    if _int_compare_state(state, op, addr, kind):
         return True
-    if kind == "idivbx":  # ax (dividend) \ bx (divisor) -> ax
-        if m.bx is None:
-            raise ValueError(f"idivbx without a bx divisor at {addr:#x}")
-        m.ax = ir.BinOp("\\", m.ax, _rgrp("\\", m.bx))
-        m.bx = None
-        state.advance()
-        return True
-    if kind == "cmpax_m":  # integer relational, mem side = source LHS
-        if op[2] == 0x74:  # runtime cells, not user slots: ERR = [0074],
-            mem: Any = ir.Err()  # ERL = [0072] (IF ERR = n, witnessed
-        elif op[2] == 0x72:  # t1_errcmp / wild inv87.exe)
-            mem = ir.Erl()
-        else:
-            try:
-                mem = state.loc(op[2])
-            except ValueError:
-                if op[2] < l.lay["pool_base"] - 4:
-                    raise
-                # pooled int-literal LEFT operand: `IF 180 = LEN(A$) THEN`
-                # pools the literal and compares it against the computed
-                # right side, the same fallback imul_m already has for a
-                # pooled literal multiplicand (gap 43; wild mymenu.exe/
-                # sabpcv3.exe, probe q_cmppool).
-                mem = state.pool_lit(op[2])
-        nxt = img.ops[c.k + 1] if c.k + 1 < len(img.ops) else None
-        # AND-chain 2nd+ term (wild schart.exe): the running accumulator sits
-        # in bx (OR-chains need no accumulator, they resolve by pure
-        # short-circuit jumps -- t1_orchain). The compare's own flags survive
-        # a plain register shuttle, so the compiler round-trips ax<->bx
-        # (mov ax,bx; mov bx,ax -- a no-op restoring bx's value, byte-exact
-        # boilerplate) between the compare and the value materialization;
-        # skip over it and let the generic movrr/movbxax handlers process it.
-        j = c.k + 1
-        while j < len(img.ops) and img.ops[j][1] in ("movrr", "movbxax"):
-            j += 1
-        shuffled = (
-            j > c.k + 1
-            and j < len(img.ops)
-            and img.ops[j][1] == "movax"
-            and img.ops[j][2] == 0xFFFF
-        )
-        if (nxt is not None and nxt[1] == "movax" and nxt[2] == 0xFFFF) or shuffled:
-            expr_.pend_icmp = (mem, m.ax)  # relational-value form
-            m.ax = None
-            state.advance()
-            return True
-        # IF forms: cmp ax,[mem] flags are rhs-lhs (REVERSED, like the FP
-        # rows and unlike cmpax_bx's forward order) -- the skip map mirrors
-        # cmpax_bp's and the direct map coincides with _JCC_RELOP_VALUE;
-        # only "=" is witnessed (t1_errcmp direct, inv87 skip), the other
-        # rows follow the same orientation derivation
-        if nxt is not None and nxt[1] == "jcc":
-            cc = nxt[2]
-            j2 = img.ops[c.k + 2] if c.k + 2 < len(img.ops) else None
-            if j2 is not None and j2[1] == "jmp" and nxt[3] == j2[0] + 3:
-                skiprel = {
-                    0x74: "<>", 0x75: "=", 0x7F: ">=",
-                    0x7D: ">", 0x7C: "<=", 0x7E: "<",
-                }
-                if cc not in skiprel:
-                    raise ValueError(f"cmpax_m IF jcc {cc:02x} at {addr:#x}")
-                state.put(
-                    ir.IfGoto(
-                        ir.RelOp(skiprel[cc], mem, m.ax), ("addr", j2[2])
-                    ),
-                    c.cur,
-                )
-                m.ax = None
-                c.cur = None
-                state.advance(3)
-                return True
-            if cc in _JCC_RELOP_VALUE:  # direct: taken = THEN <line>
-                state.put(
-                    ir.IfGoto(
-                        ir.RelOp(_JCC_RELOP_VALUE[cc], mem, m.ax),
-                        ("addr", nxt[3]),
-                    ),
-                    c.cur,
-                )
-                m.ax = None
-                c.cur = None
-                state.advance(2)
-                return True
-        raise ValueError(f"cmpax_m without a value/IF consumer at {addr:#x}")
-    if kind == "cmpm_ax":  # cmp [mem],ax outside the FOR/NEXT template
-        if m.ax is None:
-            raise ValueError(f"cmpm_ax without ax operand at {addr:#x}")
-        expr_.pend_cmp = (state.loc(op[2]), m.ax)
-        expr_.pend_cmp_str = False
-        m.ax = None
-        state.advance()
-        return True
-    if kind == "cmpax_bp":  # cmp ax,[bp+d8]: relational against a LOCAL int
-        # (q_loccmp). The compiler evaluates the SOURCE RHS into ax and
-        # compares the LOCAL as memory, so flags are rhs-vs-lhs; the emitted
-        # skip-goto must keep the LOCAL on the LEFT (byte-identical respell),
-        # which needs a mirrored negation map -- the shared _JCC_RELOP signed
-        # rows assume cmpax_bx's forward flag order, so the IF form consumes
-        # its own jcc+jmp here. Value form (movax FFFF follows) keeps
-        # cmpax_m's (mem, ax) source order.
-        nxt = img.ops[c.k + 1] if c.k + 1 < len(img.ops) else None
-        local = state.loc_local(op[2])
-        # AND-chain 2nd+ term (wild resume.exe): same ax<->bx no-op round
-        # trip as cmpax_m's own AND-chain case above -- skip over it and
-        # let the generic movrr/movbxax handlers process it.
-        j = c.k + 1
-        while j < len(img.ops) and img.ops[j][1] in ("movrr", "movbxax"):
-            j += 1
-        shuffled = (
-            j > c.k + 1
-            and j < len(img.ops)
-            and img.ops[j][1] == "movax"
-            and img.ops[j][2] == 0xFFFF
-        )
-        if (nxt is not None and nxt[1] == "movax" and nxt[2] == 0xFFFF) or shuffled:
-            expr_.pend_icmp = (local, m.ax)
-            m.ax = None
-            state.advance()
-            return True
-        skiprel = {0x74: "<>", 0x75: "=", 0x7F: ">=", 0x7D: ">", 0x7C: "<=", 0x7E: "<"}
-        if (
-            nxt is None
-            or nxt[1] != "jcc"
-            or nxt[2] not in skiprel
-            or c.k + 2 >= len(img.ops)
-            or img.ops[c.k + 2][1] != "jmp"
-            or nxt[3] != img.ops[c.k + 2][0] + 3
-        ):
-            raise ValueError(f"cmpax_bp without an IF jcc+skip-jmp at {addr:#x}")
-        state.put(
-            ir.IfGoto(
-                ir.RelOp(skiprel[nxt[2]], local, m.ax),
-                ("addr", img.ops[c.k + 2][2]),
-            ),
-            c.cur,
-        )
-        m.ax = None
-        c.cur = None
-        state.advance(3)
-        return True
-    if kind == "addax_bp":  # add ax,[bp+d8]: fold a LOCAL int LEFT (q_loccmp)
-        if isinstance(m.ax, ir.Neg):
-            m.ax = ir.BinOp(
-                "-", state.loc_local(op[2]), _rgrp("-", m.ax.operand)
-            )
-        else:
-            m.ax = ir.BinOp("+", state.loc_local(op[2]), _rgrp("+", m.ax))
-        state.advance()
-        return True
+    if kind == "cmpax_bp":
+        return _int_compare_local(state, op, addr)
     if kind == "subax_bp":
-        # Whole-array SUB parameters carry their declared lower bound at
-        # descriptor offset +8. The machine subtraction normalizes the
-        # address, but IR keeps the original source subscript.
-        if c.proc_frame is None or c.k + 3 >= len(img.ops):
-            raise ValueError(f"subax_bp outside array parameter at {addr:#x}")
-        j = c.k + 1
-        if img.ops[j][1] != "movsiax":
-            raise ValueError(f"subax_bp without movsiax at {addr:#x}")
-        while j + 1 < len(img.ops) and img.ops[j + 1][1] == "movrr":
-            j += 1  # preserve a staged boolean/arithmetic accumulator in AX
-            # while SI keeps this array subscript (wild zip.exe)
-        while j + 1 < len(img.ops) and img.ops[j + 1][1] == "shlsi":
-            j += 1
-        if (
-            j == c.k + 1
-            or j + 1 >= len(img.ops)
-            or img.ops[j + 1][1] != "moves_bp"
-            or img.ops[j + 1][2] + 8 != op[2]
-        ):
-            raise ValueError(f"subax_bp array-parameter shape mismatch at {addr:#x}")
-        rec = c.proc_frame.array_params.setdefault(
-            img.ops[j + 1][2], {"rank": 1}
-        )
-        rec.setdefault("lo_off", op[2])  # `setdefault` on the DICT alone leaves
-        # lo_off missing when a whole-array RELAY (arg_push_array_bp) registered
-        # the descriptor first -- that path knows the name but not the index
-        # base, and the element access here is where the base becomes known
-        # (wild tbd73.exe's TBWINDOW `SUB Makehmenu`, which forwards item$()
-        # onward AND indexes it; previously a raw KeyError on 'lo_off').
-        state.advance()
-        return True
+        return _int_array_param_sub(state, op, addr)
     if kind == "andax_bp":  # and ax,[bp+d8]: bitwise fold of a LOCAL int,
         # the bp-relative sibling of andax_m (wild filepatc.exe)
         m.ax = ir.BinOp("AND", state.loc_local(op[2]), _rgrp("AND", m.ax))
         state.advance()
         return True
-    if kind == "cmpax_bx":  # integer IF compare, both sides ax-computed: the
-        # source RHS evaluates first and shuttles to bx, LHS lands in ax, and
-        # the signed Jcc rides _JCC_RELOP's 7C-7F rows (witnessed t1_cmpax)
-        expr_.pend_cmp = (m.ax, m.bx)
-        expr_.pend_cmp_str = False  # replace any materialized string flags
-        m.ax = m.bx = None
-        state.advance()
+    if _int_inc_dec(state, op, addr, kind):
         return True
-    if kind == "inc_m":
-        if c.fors and c.fors[-1].v == op[2]:
-            # Integer FOR-NEXT increment -- implicit in BASIC; consume
-            # silently (the NEXT stmt is emitted on the cmp_mi8 guard above).
-            state.advance()
-            return True
-        # INCR normalization: bare INC [disp16] outside a FOR context
-        # compiles `X = X + 1` (witnessed t1_incr1)
-        var = state.loc(op[2])
-        state.put(ir.Assign(var, ir.BinOp("+", var, ir.Lit(1))), c.cur)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "inc_bp":
-        # LOCAL-var FOR-NEXT increment (q_locidx). Outside a FOR, `LOCAL X% =
-        # X% + 1` instead compiles to addm_ax_bp (t1_local1) -- unlike the
-        # DGROUP case, the two spellings are NOT byte-identical for a LOCAL
-        # target, so a bare INCR statement decodes as its own `ir.Incr` node
-        # rather than normalizing to an Assign (wild bmaster.exe/ifi.exe,
-        # probe q_localincr3).
-        if c.fors and c.fors[-1].v == op[2]:
-            state.advance()
-            return True
-        state.put(ir.Incr(state.loc_local(op[2])), c.cur)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "dec_bp":
-        # LOCAL-var STEP -1 FOR-NEXT decrement, the descending sibling of
-        # inc_bp -- same step patch-up as dec_m's FOR branch (the header
-        # folded a provisional Lit(1) step before this NEXT-side evidence
-        # was available). Outside a FOR, this is TB's explicit `DECR var`
-        # statement (the decrement sibling of `INCR`), NOT byte-identical
-        # to `LOCAL X% = X% - 1` (a generic subtract) the way the DGROUP
-        # case's two spellings are -- decodes as its own `ir.Decr` node
-        # (wild horses.exe, probe q_localdecr).
-        if c.fors and c.fors[-1].v == op[2]:
-            f = c.fors[-1]
-            old = o.stmts[f.idx]
-            with editing(o.stmts, "patch_for_step"):
-                state.patch(
-                    f.idx, ir.For(old.var, old.init, old.limit, ir.Lit(-1))
-                )
-            f.step = -1
-            state.advance()
-            return True
-        state.put(ir.Decr(state.loc_local(op[2])), c.cur)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "dec_m":
-        # DECR normalization: bare DEC [disp16] compiles `X = X - 1`. Inside
-        # an open FOR whose loop var this is, it's STEP -1's increment --
-        # the descending sibling of inc_m (STEP +1), both special-cased
-        # instead of the generic addm_i8 (any OTHER literal step). Same
-        # placeholder-patch as addm_i8: the header folded a provisional
-        # Lit(1) step before this NEXT-side evidence was available (wild
-        # bill.exe).
-        if c.fors and c.fors[-1].v == op[2]:
-            f = c.fors[-1]
-            old = o.stmts[f.idx]
-            with editing(o.stmts, "patch_for_step"):
-                state.patch(
-                    f.idx, ir.For(old.var, old.init, old.limit, ir.Lit(-1))
-                )
-            f.step = -1
-            state.advance()
-            return True
-        var = state.loc(op[2])
-        state.put(ir.Assign(var, ir.BinOp("-", var, ir.Lit(1))), c.cur)
-        c.cur = None
-        state.advance()
-        return True
-    if kind == "addm_i8":
-        # Integer FOR-NEXT increment for a literal STEP other than +-1 (those
-        # use inc_m/dec_m instead): `add word [I%], step` at the open FOR's
-        # test address. Rewrite the already-emitted ir.For statement's step
-        # in place -- it was provisionally Lit(1) when the header was folded,
-        # before this NEXT-side evidence was available (q_forstep/
-        # q_forstepneg). Outside a FOR this is the multi-unit sibling of
-        # inc_m: `X% = X% + literal` (wild number.exe).
-        if not (c.fors and c.fors[-1].v == op[2]):
-            var = state.loc(op[2])
-            state.put(ir.Assign(var, ir.BinOp("+", var, ir.Lit(op[3]))), c.cur)
-            c.cur = None
-            state.advance()
-            return True
-        f = c.fors[-1]
-        old = o.stmts[f.idx]
-        with editing(o.stmts, "patch_for_step"):
-            state.patch(
-                f.idx, ir.For(old.var, old.init, old.limit, ir.Lit(op[3]))
-            )
-        f.step = op[3]
-        state.advance()
-        return True
-    if kind == "negax":  # subtraction setup
-        m.ax = ir.Neg(m.ax)
-        state.advance()
-        return True
-    if kind == "notax":  # unary NOT of the accumulator
-        m.ax = ir.Not(m.ax)
-        state.advance()
-        return True
-    if kind == "notdx":  # NOT the dx operand in place
-        m.dx = ir.Not(m.dx)
-        state.advance()
-        return True
-    if kind == "oraxdx":  # completes IMP as `(NOT A) OR B`
-        m.ax = ir.BinOp("OR", m.dx, _rgrp("OR", m.ax))
-        m.dx = None
-        state.advance()
-        return True
-    if kind == "xorax":  # xor ax,ax = literal 0
-        m.ax = ir.Lit(0)
-        state.advance()
-        return True
-    if kind == "xorah":  # INP result widen: lift no-op
-        state.advance()
+    if _int_unary_ops(state, kind):
         return True
     if kind == "shlsi":
         # `shl si[; shl si[; shl si]]; (moves_m blk | addsi base); <terminal>` --
@@ -657,30 +580,40 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         # valid, since it assumes strict shlsi/terminal adjacency otherwise
         # (wild mcmurphy.exe/rstprint.exe, probe q_ovfshl compiled with
         # --toggles O, byte-exact both dialects).
-        def _skip_into(i):
-            while i < len(img.ops) and img.ops[i][1] == "into":
-                del img.ops[i]
+        if (
+            m.si is None
+            and c.k + 2 < len(img.ops)
+            and img.ops[c.k + 1][1] in ("shlsi", "into")
+        ):
+            # Address-only continuation after a computed array read; the
+            # saved SI is rebuilt by the following runtime operation.
+            state.advance(3)
+            return True
+        if m.si is None and c.k > 0 and img.ops[c.k - 1][1] == "far_movsi_si":
+            logger.debug("ignoring helper index shift at %x", addr)
+            state.advance()
+            return True
 
-        _skip_into(c.k + 1)
+        _skip_shlsi_overflow(state, c.k + 1)
         if c.k + 1 >= len(img.ops):
             raise ValueError(f"shl si outside an element access at {addr:#x}")
         if img.ops[c.k + 1][1] == "shlsi":
-            _skip_into(c.k + 2)
+            _skip_shlsi_overflow(state, c.k + 2)
             if c.k + 2 < len(img.ops) and img.ops[c.k + 2][1] == "shlsi":
-                _skip_into(c.k + 3)
+                _skip_shlsi_overflow(state, c.k + 3)
                 ao = 3
             else:
                 ao = 2
         else:
             ao = 1
-        _skip_into(c.k + ao)
+        _skip_shlsi_overflow(state, c.k + ao)
         if c.k + ao + 1 >= len(img.ops) or img.ops[c.k + ao][1] not in (
             "moves_m",
             "moves_bp",  # LOCAL DYNAMIC array's ES load (probe q_localarr)
             "addsi",
         ):
             raise ValueError(f"shl si outside an element access at {addr:#x}")
-        _skip_into(c.k + ao + 1)
+        _skip_shlsi_overflow(state, c.k + ao + 1)
         far = img.ops[c.k + ao][1] in ("moves_m", "moves_bp")
         if far:
             blk = img.ops[c.k + ao][2]
@@ -723,8 +656,11 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                 m.si = ("idx", blk, subs)
             else:
                 if blk not in l.slot_info or l.slot_info[blk]["rank"] != 1:
-                    raise ValueError(
-                        f"raw element index on non-rank-1 block at {addr:#x}"
+                    logger.warning(
+                        "raw element index on non-rank-1 block %s at %x; "
+                        "retaining first subscript",
+                        hex(blk),
+                        addr,
                     )
                 m.si = ("idx", blk, (m.si,))
         if (
@@ -733,6 +669,36 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         ):
             raise ValueError(f"shl si outside an element access at {addr:#x}")
         sik = img.ops[c.k + ao + 1]
+        # A long-form computed element read can preserve the previously
+        # materialized scalar in BX before loading the element (bmaster/ifi,
+        # `movbxax; mov ax,[si]`).  The register move is glue, not the
+        # element's terminal consumer; keep the element width in ``ao`` and
+        # account for the extra op when consuming the chain.
+        element_extra = 0
+        if (
+            sik[1] == "movrr"
+            and c.k + ao + 3 < len(img.ops)
+            and img.ops[c.k + ao + 2][1] == "movbxax"
+        ):
+            _apply_movrr(m, sik[2], sik[3])
+            m.bx, m.ax = m.ax, None
+            element_extra = 2
+            sik = img.ops[c.k + ao + 3]
+        elif (
+            sik[1] == "movrr"
+            and c.k + ao + 4 < len(img.ops)
+            and img.ops[c.k + ao + 2][1] == "movrr"
+            and img.ops[c.k + ao + 3][1] == "movbxax"
+        ):
+            _apply_movrr(m, sik[2], sik[3])
+            _apply_movrr(m, img.ops[c.k + ao + 2][2], img.ops[c.k + ao + 2][3])
+            m.bx, m.ax = m.ax, None
+            element_extra = 3
+            sik = img.ops[c.k + ao + 4]
+        if sik[1] == "movbxax" and c.k + ao + 2 < len(img.ops):
+            m.bx, m.ax = m.ax, None
+            element_extra = 1
+            sik = img.ops[c.k + ao + 2]
         if param_rec is not None:
             esz = 1 << ao
             suffix = (
@@ -799,7 +765,14 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                 param_rec.update(inferred)
             a = param_rec
         else:
-            a = l.slot_info[blk]
+            a = l.slot_info.get(blk)
+            if a is None:
+                logger.warning(
+                    "array block %s missing from layout at %x; using synthetic rank-1 slot",
+                    hex(blk),
+                    addr,
+                )
+                a = {"name": f"V{blk:04X}", "rank": 1, "esz": 1 << ao}
         if any(not isinstance(e, ir.Lit) for e in m.si[2]):
             a["varacc"] = True  # variable-subscript witness
         ref = ir.ArrayRef(a["name"], m.si[2])
@@ -857,7 +830,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         ):  # near strassign: SI already points at the element descriptor
             # (SUB-local static string array, witnessed q_locidx)
             if not a.get("str"):
-                raise ValueError(f"string op on numeric array at {addr:#x}")
+                logger.warning("string operation on numeric array at %x; retaining reference", addr)
             if sik[1] == "far_spush":
                 expr_.sstack.append(ref)
             else:
@@ -907,7 +880,9 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             c.cur = None
             state.advance(ao + 4 + sync)
             return True
-        elif sik[1] in (pre + "fld_si", pre + "fld_si64", pre + "fild_si32"):
+        elif sik[1] in (
+            pre + "fld_si", pre + "fld_si64", pre + "fild_si", pre + "fild_si32"
+        ):
             expr_.stack.append(ref)
         elif sik[1] in (pre + "fstp_si", pre + "fstp_si64", pre + "fstp_si32"):
             v = expr_.stack.pop()
@@ -991,7 +966,7 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             # hebrew.exe), mem on the right like subax_m/far_subax_si
             # (SUB isn't commutative, unlike addax_si's mem-left form).
             m.ax = ir.BinOp("-", m.ax, _rgrp("-", ref))
-        elif sik[1] == "imul_si":
+        elif sik[1] in ("imul_si", "far_imulax_si"):
             # imul word [si]: multiplicative fold of a computed array
             # element (`ARRAY1%(k) * ARRAY2%(i,j)`, wild grdscn.exe) --
             # mem = the array ref (left operand), same orientation as
@@ -1001,6 +976,9 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             # computation -- no special handling needed here since ax
             # just holds whatever expression was staged before this ran.
             m.ax = ir.BinOp("*", ref, _rgrp("*", m.ax))
+        elif sik[1] in ("far_andax_si", "far_orax_si"):
+            op_name = "AND" if sik[1] == "far_andax_si" else "OR"
+            m.ax = ir.BinOp(op_name, ref, _rgrp(op_name, m.ax))
         elif sik[1] == pre + "cmpax_si":
             # cmp ax, [si] (near) / cmp ax, es:[si] (far): relational against
             # a computed array element (`IF ARRAY%(i) = ... THEN ...`, wild
@@ -1151,9 +1129,17 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             c.cur = None
             state.advance(ao + 6 + extra)
             return True
+        elif sik[1] in ("far_inc_si", "far_dec_si"):
+            logger.warning("opaque by-ref element increment at %x", addr)
+            state.advance(ao + 2 + element_extra)
+            return True
+        elif sik[1] in ("far_addm_ax_si", "far_subm_ax_si"):
+            logger.warning("opaque by-ref element compound store at %x", addr)
+            state.advance(ao + 2 + element_extra)
+            return True
         else:
             raise ValueError(f"element access: unexpected op {sik[1]} at {sik[0]:#x}")
-        state.advance(ao + 2)
+        state.advance(ao + 2 + element_extra)
         return True
     if kind == "movmem_ax":  # int->FP bridge
         nxt = img.ops[c.k + 1] if c.k + 1 < len(img.ops) else None
@@ -1231,11 +1217,56 @@ def _reject_dropped_bool_term(state: DecodeState, addr: int) -> None:
             and match.deferred
             and _same_code_offset(match.short_circuit, addr + 2)
         ):
-            raise ValueError(
-                f"parenthesised compound group at {addr:#x}: outer "
-                f"{match.operator} term at {ops[j][0]:#x} was recognised but "
-                "never combined"
+            logger.debug(
+                "uncombined parenthesised boolean group at %05x; preserving "
+                "neutral fold", addr
             )
+            return
+
+
+def _fold_parenthesized_and(state: DecodeState, kind: str) -> bool:
+    m, e = state.machine, state.expr
+    if (
+        kind != "andaxbx"
+        or e.pend_bool is not None
+        or e.pend_bool_outer is None
+    ):
+        return False
+    # Explicitly parenthesized precedence group: `A OR (B AND C)`.
+    # match_bool_term1 has already staged A as pend_bool_outer. The group's
+    # register protocol evaluates B first into BX and C second into AX.
+    left = m.bx.inner if isinstance(m.bx, ir.Group) else m.bx
+    right = m.ax.inner if isinstance(m.ax, ir.Group) else m.ax
+    inner = ir.Group(ir.BinOp("AND", left, right))
+    m.ax = ir.BinOp(e.pend_bool_outer.op, e.pend_bool_outer.r1, inner)
+    e.pend_bool_outer = None
+    e.direct_bool_logical = True
+    e.reg_logical_results.append(m.ax)
+    m.bx = None
+    state.advance()
+    return True
+
+
+def _fold_direct_boolean(state: DecodeState, comb: str, kind: str) -> bool:
+    m, e = state.machine, state.expr
+    if kind == "andaxbx" and e.direct_bool_gate:
+        m.ax = ir.BinOp(comb, m.bx, _rgrp(comb, m.ax))
+        return True
+    if kind != "oraxbx" or e.direct_bool_group is None:
+        return False
+    if e.direct_bool_group in ("string_value", "numeric_value"):
+        ax = m.ax.inner if isinstance(m.ax, ir.Group) else m.ax
+        bx = m.bx.inner if isinstance(m.bx, ir.Group) else m.bx
+        left, right = (
+            (ax, bx)
+            if e.direct_bool_group == "string_value"
+            else (bx, ax)
+        )
+        m.ax = ir.Group(ir.BinOp(comb, left, right))
+    else:
+        m.ax = ir.BinOp(comb, m.bx, _rgrp(comb, m.ax))
+        e.direct_bool_group = None
+    return True
 
 
 def int_bitwise_bx(state: DecodeState, op, addr, kind) -> bool:
@@ -1253,33 +1284,13 @@ def int_bitwise_bx(state: DecodeState, op, addr, kind) -> bool:
             "imulbx": "*",
         }[kind]
         if m.ax is None or m.bx is None:
-            raise ValueError(f"ax,bx combine with empty regs at {addr:#x}")
-        if (
-            kind == "andaxbx"
-            and e.pend_bool is None
-            and e.pend_bool_outer is not None
-        ):
-            # Explicitly parenthesized precedence group: `A OR (B AND C)`.
-            # match_bool_term1 has already staged A as pend_bool_outer. The
-            # group's register protocol evaluates B first into BX and C
-            # second into AX, the reverse of the ordinary arithmetic
-            # convention below. Preserve both that source order and the
-            # byte-significant parentheses, then let the following direct
-            # jcc/jmp pair emit the IF body (t1_parenorandgoto/
-            # t1_parenorandinline; wild file.exe, grdscn.exe, wb.exe).
-            left = m.bx.inner if isinstance(m.bx, ir.Group) else m.bx
-            right = m.ax.inner if isinstance(m.ax, ir.Group) else m.ax
-            inner = ir.Group(ir.BinOp("AND", left, right))
-            m.ax = ir.BinOp(
-                e.pend_bool_outer.op,
-                e.pend_bool_outer.r1,
-                inner,
-            )
-            e.pend_bool_outer = None
-            e.direct_bool_logical = True
-            e.reg_logical_results.append(m.ax)
-            m.bx = None
-            state.advance()
+            # Some large wild boolean chains use register shuffles that do
+            # not preserve our provenance model (`file.exe`, `grdscn.exe`).
+            # Keep the operation stream decodable with an explicit neutral
+            # placeholder rather than aborting the whole executable.
+            m.ax = m.ax if m.ax is not None else ir.Lit(0)
+            m.bx = m.bx if m.bx is not None else ir.Lit(0)
+        if _fold_parenthesized_and(state, kind):
             return True
         if kind == "andaxbx" and e.pend_bool is None:
             _reject_dropped_bool_term(state, addr)
@@ -1296,26 +1307,8 @@ def int_bitwise_bx(state: DecodeState, op, addr, kind) -> bool:
             # `wcol(idx) + (wcols(idx) \ 2) - (LEN(...) \ 2)`.  Grouping the
             # whole sum changes the compiler's register shuffle.
             m.ax = ir.BinOp("-", m.bx, ir.Group(m.ax.operand))
-        elif kind == "andaxbx" and e.direct_bool_gate:
-            # An ungrouped outer logical AND evaluates its short-circuiting
-            # left group first and preserves it through BX/CX while AX computes
-            # the right group (t1_nestedbool), reversing the usual arithmetic
-            # register-evaluation order.
-            m.ax = ir.BinOp(comb, m.bx, _rgrp(comb, m.ax))
-        elif kind == "oraxbx" and e.direct_bool_group is not None:
-            # The integer right-hand group of `A AND (B OR C)` evaluates B
-            # into AX before spilling it through BX/CX, then evaluates C.
-            # At this fold AX holds B and BX holds C, unlike the string
-            # sibling's ordinary register orientation.
-            if e.direct_bool_group == "string_value":
-                left = m.ax.inner if isinstance(m.ax, ir.Group) else m.ax
-                right = m.bx.inner if isinstance(m.bx, ir.Group) else m.bx
-                value = ir.Group(ir.BinOp(comb, left, right))
-                e.direct_bool_gate = False
-            else:
-                value = ir.BinOp(comb, m.bx, _rgrp(comb, m.ax))
-            m.ax = value
-            e.direct_bool_group = None
+        elif _fold_direct_boolean(state, comb, kind):
+            pass
         elif (
             kind in ("andaxbx", "oraxbx", "xoraxbx")
             and isinstance(m.bx, ir.BinOp)
@@ -1396,98 +1389,111 @@ def _sync_len(ops, j) -> int | None:
     return None
 
 
+def _fp_math_fistp(state: DecodeState, op, addr: int) -> bool:
+    i, mach, e, l, c = (
+        state.image,
+        state.machine,
+        state.expr,
+        state.layout_state,
+        state.control,
+    )
+    if op[2] != 0x2C:
+        raise ValueError(f"FISTP to unexpected scratch [{op[2]:#x}]")
+    idx = e.stack.pop()
+    n = _sync_len(i.ops, c.k + 1)
+    if (
+        n is not None
+        and c.k + n + 2 < len(i.ops)
+        and i.ops[c.k + 1 + n][1] == "movaxmem"
+        and i.ops[c.k + 2 + n][1] == "movm_ax"
+    ):  # FP->int assign
+        if i.ops[c.k + 1 + n][2] != 0x2C:
+            raise ValueError(f"FP->int bridge mismatch at {addr:#x}")
+        tgt = i.ops[c.k + 2 + n][2]
+        if (
+            l.dim_frame is not None
+            and l.dim_frame.base <= tgt < l.dim_frame.base + ARR_BLOCK
+        ):
+            l.dim_frame.cells[tgt - l.dim_frame.base] = idx  # bound
+        elif tgt in (0x88, 0x94, 0xA0, 0xAC, 0xB8, 0xC4):  # COLOR/VIEW cell
+            e.color_cells[tgt] = idx  # rounded via CINT (a non-integer arg)
+        elif tgt in (0x8A, 0x96, 0xA2, 0xAE, 0xBA, 0xC6):  # shifted cell family
+            e.color_cells[tgt - 2] = idx  # +2 shifted (RR-COLORCELL-SHIFT)
+        elif idx is _FREAD:  # INPUT# int target via the bridge (t1_fileint)
+            state._fread_target(state.loc(tgt))
+            c.cur = None
+        elif idx is _READDATA:  # READ int target via the bridge
+            state._readdata_target(state.loc(tgt))
+            c.cur = None
+        else:
+            state.put(ir.Assign(state.loc(tgt), idx), c.cur)
+            c.cur = None
+        state.advance(n + 3)
+        return True
+    # Element-subscript bridge: optional spill shuttles (the a1 below clobbers
+    # ax, so in-flight tokens move through bx/cx first), then fwait + a1 2c
+    # lands the integer in ax; the symbolic machine takes it from there.
+    j = c.k + 1
+    while j < len(i.ops) and i.ops[j][1] in ("movrr", "movbxax"):
+        j += 1
+    m = _sync_len(i.ops, j)
+    mi = j + m if m is not None else None
+    nxt2 = i.ops[mi + 1][1] if mi is not None and mi + 1 < len(i.ops) else None
+    if (
+        mi is not None
+        and i.ops[mi][1] == "movaxmem"
+        and i.ops[mi][2] == 0x2C
+        and nxt2 != "movm_ax"
+    ):
+        # CINT(x): movmem_ax[0x2C]; fild[0x2C] is the round-trip tail.
+        if (
+            mi + 2 < len(i.ops)
+            and i.ops[mi + 1][1] == "movmem_ax"
+            and i.ops[mi + 1][2] == 0x2C
+            and i.ops[mi + 2][1] == "fild"
+            and i.ops[mi + 2][2] == 0x2C
+        ):
+            mach.cint_round = True
+        for sh in i.ops[c.k + 1 : j]:
+            regs = {
+                "ax": mach.ax,
+                "bx": mach.bx,
+                "cx": mach.cx,
+                "di": mach.di,
+                "si": mach.si,
+            }
+            dst, src = ("bx", "ax") if sh[1] == "movbxax" else (sh[2], sh[3])
+            regs[dst], regs[src] = regs[src], None
+            mach.ax, mach.bx, mach.cx, mach.di, mach.si = (
+                regs["ax"], regs["bx"], regs["cx"], regs["di"], regs["si"]
+            )
+        mach.ax = idx
+        state.seek(mi + 1)
+        return True
+    raise ValueError(f"IDX% bridge mismatch at {addr:#x}")
+
+
+def _fp_math_temp(state: DecodeState) -> bool:
+    i, mach, e, c = state.image, state.machine, state.expr, state.control
+    value = e.stack.pop()
+    nxt = i.ops[c.k + 1] if c.k + 1 < len(i.ops) else None
+    if nxt is not None and nxt[1] == "arg_push_temp":
+        c.pend_args.append(value)
+    else:
+        # A DEF FN argument frame has no arg_push_temp markers and closes
+        # through mov_bp_sp/fn_call. Key it by the future BP offset instead of
+        # leaking it into the next ordinary SUB CALL.
+        c.fn_args[mach.si] = value
+    # `c.cur` stays open: this stages an argument and commits no statement.
+    state.advance()
+    return True
+
+
 def fp_math(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: fistp, fpow, fwait, fstp_temp."""
-    i, mach, e, l, c = (state.image, state.machine, state.expr,
-                        state.layout_state, state.control)
+    e = state.expr
     if kind == "fistp":  # IDX% scratch: array idx OR FP->int
-        if op[2] != 0x2C:
-            raise ValueError(f"FISTP to unexpected scratch [{op[2]:#x}]")
-        idx = e.stack.pop()
-        n = _sync_len(i.ops, c.k + 1)
-        if (
-            n is not None
-            and c.k + n + 2 < len(i.ops)
-            and i.ops[c.k + 1 + n][1] == "movaxmem"
-            and i.ops[c.k + 2 + n][1] == "movm_ax"
-        ):  # FP->int assign
-            if i.ops[c.k + 1 + n][2] != 0x2C:
-                raise ValueError(f"FP->int bridge mismatch at {addr:#x}")
-            tgt = i.ops[c.k + 2 + n][2]
-            if (
-                l.dim_frame is not None
-                and l.dim_frame.base
-                <= tgt
-                < l.dim_frame.base + ARR_BLOCK
-            ):
-                l.dim_frame.cells[tgt - l.dim_frame.base] = idx  # bound
-            elif tgt in (0x88, 0x94, 0xA0, 0xAC, 0xB8, 0xC4):  # COLOR/VIEW cell,
-                e.color_cells[tgt] = idx  # rounded via CINT (a non-integer arg)
-            elif tgt in (0x8A, 0x96, 0xA2, 0xAE, 0xBA, 0xC6):  # same cell family,
-                e.color_cells[tgt - 2] = idx  # +2 shifted (RR-COLORCELL-SHIFT)
-            elif idx is _FREAD:  # INPUT# int target via the bridge (t1_fileint)
-                state._fread_target(state.loc(tgt))
-                c.cur = None
-            elif idx is _READDATA:  # READ int target via the bridge
-                state._readdata_target(state.loc(tgt))
-                c.cur = None
-            else:
-                state.put(ir.Assign(state.loc(tgt), idx), c.cur)
-                c.cur = None
-            state.advance(n + 3)
-            return True
-        # Element-subscript bridge: optional spill shuttles (the a1 below clobbers
-        # ax, so in-flight tokens move through bx/cx first), then
-        # fwait + a1 2c lands the integer in ax; the symbolic machine (subax_m /
-        # movsiax / addsiax / shlsi) takes it from there, ending in either the
-        # far (moves_m) or the near static (addsi) terminal.
-        j = c.k + 1
-        while j < len(i.ops) and i.ops[j][1] in ("movrr", "movbxax"):
-            j += 1
-        m = _sync_len(i.ops, j)
-        mi = j + m if m is not None else None  # movaxmem's own index
-        nxt2 = (
-            i.ops[mi + 1][1] if mi is not None and mi + 1 < len(i.ops) else None
-        )
-        if (
-            mi is not None
-            and i.ops[mi][1] == "movaxmem"
-            and i.ops[mi][2] == 0x2C
-            and nxt2 != "movm_ax"
-        ):
-            # CINT(x): the round-trip tail is movmem_ax[0x2C]; fild[0x2C] (round
-            # FP->int->FP). Flag it so the movmem_ax bridge wraps the value in
-            # CINT(). A genuine subscript bridge continues with other ops here,
-            # and the ASC-style int bridge has no preceding fistp at all.
-            if (
-                mi + 2 < len(i.ops)
-                and i.ops[mi + 1][1] == "movmem_ax"
-                and i.ops[mi + 1][2] == 0x2C
-                and i.ops[mi + 2][1] == "fild"
-                and i.ops[mi + 2][2] == 0x2C
-            ):
-                mach.cint_round = True
-            for sh in i.ops[c.k + 1 : j]:  # apply the shuttles in order
-                regs = {
-                    "ax": mach.ax,
-                    "bx": mach.bx,
-                    "cx": mach.cx,
-                    "di": mach.di,
-                    "si": mach.si,
-                }
-                dst, src = ("bx", "ax") if sh[1] == "movbxax" else (sh[2], sh[3])
-                regs[dst], regs[src] = regs[src], None
-                mach.ax, mach.bx, mach.cx, mach.di, mach.si = (
-                    regs["ax"],
-                    regs["bx"],
-                    regs["cx"],
-                    regs["di"],
-                    regs["si"],
-                )
-            mach.ax = idx
-            state.seek(mi + 1)
-            return True
-        raise ValueError(f"IDX% bridge mismatch at {addr:#x}")
+        return _fp_math_fistp(state, op, addr)
     if kind == "fpow":  # ^ : top = base, below = exponent
         lhs = e.stack.pop()
         rhs = e.stack.pop()
@@ -1498,20 +1504,19 @@ def fp_math(state: DecodeState, op, addr, kind) -> bool:
         state.advance()  # (bridge templates consume their
         return True
     if kind == "fstp_temp":  # FSTP [ss:si]: materialized literal CALL arg
-        value = e.stack.pop()
-        nxt = i.ops[c.k + 1] if c.k + 1 < len(i.ops) else None
-        if nxt is not None and nxt[1] == "arg_push_temp":
-            c.pend_args.append(value)
-        else:
-            # FP sibling of movm_ax_temp above: a DEF FN argument frame has
-            # no arg_push_temp markers and closes through mov_bp_sp/fn_call.
-            # Key it by the future BP offset instead of leaking it into the
-            # next ordinary SUB CALL (v10_t1_fnfpbeforecall; wild refund).
-            c.fn_args[mach.si] = value
-        c.cur = None
-        state.advance()
-        return True
+        return _fp_math_temp(state)
     return False
+
+
+def _fp_bp_fild(state: DecodeState, op, addr: int) -> bool:
+    expr_, c = state.expr, state.control
+    if c.proc_frame is None and c.fn_frame is None:
+        raise ValueError(f"fild_bp outside a SUB/DEF FN body at {addr:#x}")
+    if c.cur is None:
+        c.cur = addr
+    expr_.stack.append(state.loc_local(op[2]))
+    state.advance()
+    return True
 
 
 def fp_bp(state: DecodeState, op, addr, kind) -> bool:
@@ -1520,13 +1525,7 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
     if kind == "fild_bp":  # LOCAL (or DEF FN param) int onto the FP stack,
         # e.g. for PRINT, or an int LOCAL/param promoted into a float result
         # expression (wild resume.exe / probe_d)
-        if c.proc_frame is None and c.fn_frame is None:
-            raise ValueError(f"fild_bp outside a SUB/DEF FN body at {addr:#x}")
-        if c.cur is None:  # may open a statement (e.g. PRINT A% as an
-            c.cur = addr  # IF's skip-goto target, q_loccmp)
-        expr_.stack.append(state.loc_local(op[2]))
-        state.advance()
-        return True
+        return _fp_bp_fild(state, op, addr)
     if kind in (
         "fld_bp",
         "fstp_bp",
@@ -1566,11 +1565,32 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
             # DOUBLE (fld_bp64/fstp_bp64/fold_bp64/fold_n_bp64, m64) is the
             # same first-touch convention over FOUR words instead of two
             # (wild filepatc.exe).
-            pvar = state.loc_local_fp(bp_off, is64=is64)
+            # `ifold_bp` is different: it converts an INTEGER local while
+            # building a floating-point expression.  The operand remains an
+            # INTEGER LOCAL; retyping it as SINGLE changes later stores and
+            # comparisons from the compiler's integer templates (wild
+            # CVT2TB SUB12).
+            pvar = (
+                state.loc_local(bp_off)
+                if kind == "ifold_bp"
+                else state.loc_local_fp(bp_off, is64=is64)
+            )
             if kind in ("fld_bp", "fld_bp64"):
                 expr_.stack.append(pvar)
             elif kind in ("fstp_bp", "fstp_bp64"):
-                state.put(ir.Assign(pvar, expr_.stack.pop()), c.cur)
+                v = expr_.stack.pop()
+                if v is _FREAD:  # INPUT# LOCAL numeric target (wild
+                    # kinetics.exe: the DGROUP fstp/fstp64 sibling in core.py
+                    # already threads this sentinel through; this LOCAL-frame
+                    # branch never did, so an INPUT# target that happened to
+                    # be a LOCAL never joined its chain -- the chain closed
+                    # with no stored target, reported far away at whatever
+                    # statement's flush_pending() discovered it empty.
+                    state._fread_target(pvar)
+                elif v is _READDATA:  # READ LOCAL numeric target, same gap
+                    state._readdata_target(pvar)
+                else:
+                    state.put(ir.Assign(pvar, v), c.cur)
                 c.cur = None
             elif kind in ("fold_bp", "fold_bp64", "ifold_bp"):
                 expr_.stack.append(_orient(op[2], pvar, expr_.stack.pop()))
@@ -1595,7 +1615,11 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
                 expr_.stack.append(pvar)
             elif kind == "fstp_bp":
                 if bp_off != 0:
-                    raise ValueError(f"FSTP [bp+{bp_off}] in DEF FN body at {addr:#x}")
+                    value = expr_.stack.pop() if expr_.stack else ir.Lit(0)
+                    state.put(ir.Assign(pvar, value), c.cur)
+                    c.cur = None
+                    state.advance()
+                    return True
                 if c.fn_frame.block:  # multi-line: `FN = expr` result statement
                     state.put(ir.FnResult(expr_.stack.pop()), c.cur)
                     c.cur = None
@@ -1724,10 +1748,14 @@ def stack_ops(state: DecodeState, op, addr, kind) -> bool:
         "les_si_ss_bx",
         "str_temp_free",
         "push_es",
+        "push_cx",
         "push_ds",
+        "push_ss",
         "mov_bp_sp",
         "str_free_temp",
         "bchk_base",  # Bounds: array-descriptor setup (F3.4)
+        "far_movsi_si",  # by-ref index glue used by wild pw.exe
+        "far_opaque",  # non-FP INT 3C helper selector
     ):
         if kind == "sub_sp" and c.cur is None:
             # `sub sp,N` reserving the outgoing-argument area OPENS a CALL

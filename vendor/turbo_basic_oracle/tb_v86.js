@@ -3,6 +3,7 @@
 // SOLVER.BAS, then Run (compile-to-memory) or --compile-exe (compile-to-EXE on disk).
 // Usage: node tb_v86.js <file.bas> [--run-ms N] [--rows a-b] [--compile-exe]
 //                       [--floppy tb10_floppy.img]   (default tb_floppy.img = TB 1.1)
+//                       [--toggles KBOS]  (IDE Options: any of 8/K/B/O/S, ON only)
 const path = require("path");
 const lib = require("./tb_v86_lib.js");
 
@@ -13,7 +14,8 @@ const opt = (name, def) => { const i = args.indexOf(name); return i >= 0 ? args[
 const RUN_MS = parseInt(opt("--run-ms", "9000"), 10);
 const ROWS = opt("--rows", "0-24");
 const COMPILE_EXE = args.includes("--compile-exe");
-if (!basArg) { console.error("usage: node tb_v86.js <file.bas> [--run-ms N] [--rows a-b] [--compile-exe]"); process.exit(2); }
+const TOGGLES = opt("--toggles", "");
+if (!basArg) { console.error("usage: node tb_v86.js <file.bas> [--run-ms N] [--rows a-b] [--compile-exe] [--toggles KBOS]"); process.exit(2); }
 
 const WORKSPACE = path.resolve(opt("--workspace", HERE));
 const workImg = lib.buildWorkImg(basArg, HERE, opt("--floppy", undefined), WORKSPACE);
@@ -21,7 +23,8 @@ console.error(`[harness] work.img built with SOLVER.BAS`);
 
 const emulator = lib.bootEmulator({ here: HERE, workImg });
 const { scr } = lib.attachScreen(emulator);
-const { altKey, tapKey, typeSlow, waitFor, held, heldExt } = lib.makeDriver(emulator);
+const driver = lib.makeDriver(emulator);
+const { altKey, tapKey, typeSlow, waitFor, held, tapKeyExt } = driver;
 const sleep = lib.sleep, ENTER = lib.ENTER;
 const fs = require("fs");
 
@@ -40,29 +43,72 @@ const fs = require("fs");
   // SOLVER.BAS appears before a large source has completely tokenized. Wait
   // until the visible editor is stable, but avoid the old unconditional 4 s.
   if (loaded) await lib.waitForStableScreen(scr, 700, 20000);
+  // The "SOLVER.BAS" match above is a false positive when the source is too
+  // big for TB's editor: the rejection dialog names the file too. Check
+  // before trusting `loaded`.
+  if (loaded) lib.checkNotTooLarge(scr());
   console.error("[harness] auto-loaded:", loaded);
   if (!loaded) { await altKey(0x21); await tapKey(0x26, 700); await typeSlow("SOLVER.BAS"); await tapKey(ENTER, 2500); }
 
+  if (TOGGLES) {
+    await lib.setOptionsToggles(driver, scr, TOGGLES);
+    console.error("[harness] toggles set:", TOGGLES);
+  }
+
   if (COMPILE_EXE) {
-    // Set Options -> Compile to -> EXE file. In-menu keys must be held to register;
-    // the hold auto-repeats once, so 2 Downs wrap Memory->Chain file->EXE file.
-    for (let attempt = 1; attempt <= 4 && !scr().includes("Compile to"); attempt++) {
+    const french = scr().includes("Compil.") && scr().includes("Param.");
+    if (french) {
+      // The French IDE does not infer Fichier principal from the loaded editor
+      // buffer; select the existing filename before compiling.
+      await altKey(0x21); await sleep(700); // Fichiers
+      for (let i = 0; i < 4; i++) await tapKey(0x50, 120);
+      await held(ENTER, 500); await held(ENTER, 700);
+      await held(0x01, 500);
+      // French 1.1 labels the directory menu differently and uses a localized
+      // Compile-to popup. Keep output on the compiler disk; the supported image
+      // is provisioned with enough free space for generated EXEs.
+      await altKey(0x19); await sleep(700); // Param.
+      await held(0x50, 500); await held(ENTER, 700);
+      await held(0x50, 500); await held(ENTER, 700);
+      await typeSlow("B");
+      emulator.keyboard_send_scancodes([0x2A]); await sleep(120);
+      emulator.keyboard_send_scancodes([0x27]); await sleep(120);
+      emulator.keyboard_send_scancodes([0xA7]); await sleep(120);
+      emulator.keyboard_send_scancodes([0xAA]); await sleep(300);
+      await held(ENTER, 700); await held(0x01, 500);
+    }
+    // Set Options -> Compile to -> EXE file. The popup order is Memory -> EXE
+    // file -> Chain file, so use one precise (non-repeating) Down from the
+    // default Memory selection. A held key repeats and skips past EXE file.
+    for (let attempt = 1; attempt <= 4 && !(scr().includes("Compile to") || scr().includes("Compilation")); attempt++) {
       await altKey(0x18);              // Alt-O (Options); "Compile to" is the first item
-      if (!scr().includes("Compile to")) { await held(0x01, 400); await sleep(800); }  // retry
+      if (!(scr().includes("Compile to") || scr().includes("Compilation"))) { await held(0x01, 400); await sleep(800); }  // retry
     }
     await held(ENTER, 600);            // open the Compile-to popup (Memory/EXE file/Chain file)
-    await heldExt(0x50, 500);          // Down
-    await heldExt(0x50, 500);          // Down (wraps to EXE file)
-    await held(ENTER, 700);            // select
-    const compileTo = (scr().split("\n")[3] || "").trim();
-    if (!compileTo.includes("EXE file")) {
+    if (french) {
+      await tapKeyExt(0x50, 500);      // Down to fichier EXE
+    } else {
+      await tapKeyExt(0x50, 500);      // Down to EXE file
+    }
+    await held(ENTER, 700);          // select
+    await sleep(500);
+    const compileTo = scr();
+    if (!french && !compileTo.includes("EXE file") && !compileTo.includes("EXE")) {
       console.error("[harness] FAILED to set Compile to EXE file; row3:", compileTo);
+      console.error("[harness] Compile-to screen:\n" + scr());
       process.exit(1);
     }
     console.error("[harness] Compile to: EXE file");
     await held(0x01, 500);             // Esc to close the Options menu
-    await altKey(0x2E);                 // Alt-C = Compile (writes SOLVER.EXE to B:)
-    if (!await waitFor(scr, "Compiling", 4000))
+    if (french) await held(0x01, 500);  // localized popup layer remains open
+    await altKey(0x2E);                 // Alt-C = Compile
+    // waitFor polls every 150ms and returns as soon as the text appears, so
+    // this ceiling only matters on failure. Was 4000/1000ms, calibrated
+    // against fixture-sized sources; a very large one (k.exe, 24k
+    // statements) can take noticeably longer than that just to enter the
+    // compile screen under emulation, and hit this as a false "didn't
+    // enter" failure.
+    if (!await waitFor(scr, "Compiling", 60000) && !(french && await waitFor(scr, "Compile:", 15000)))
       throw new Error("Turbo Basic did not enter the compile screen");
     // Poll the guest floppy for a stable, closed SOLVER.EXE. This replaces the
     // fixed 9-second sleep and naturally accommodates both tiny and huge files.

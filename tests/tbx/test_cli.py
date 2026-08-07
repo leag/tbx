@@ -81,6 +81,21 @@ def test_ops_dump(capsys):
     assert "delay_init" in out and "# commits" in out
 
 
+def test_data_dump_escapes_non_latin_bytes(capsys):
+    assert cli.main([os.path.join(_CORPUS, "t1_dataorph.exe"), "--data"]) == 0
+    assert capsys.readouterr().out == (
+        "000 number: &H1\n001 number: &H2\n002 number: &H3\n003 number: &H4\n"
+    )
+
+
+def test_ops_and_data_are_mutually_exclusive(capsys):
+    assert (
+        cli.main([os.path.join(_CORPUS, "t1_delay.exe"), "--ops", "--data"])
+        == 1
+    )
+    assert "mutually exclusive" in capsys.readouterr().err
+
+
 def test_missing_file(capsys):
     assert cli.main(["/nonexistent/no.exe"]) == 1
     assert "tbx:" in capsys.readouterr().err

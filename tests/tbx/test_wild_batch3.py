@@ -109,15 +109,16 @@ def test_scan_wild_sabpcv3_clears_its_inline_subs():
     # prologue), carries it all the way into ordinary compiled SUB bodies --
     # and then relaying an array parameter onward carries it further still, to
     # an unrelated template.
-    import pytest
-
     from tbx import decode0
 
     from conftest import wild_hits_bytes
 
     exe = wild_hits_bytes("sabpcv3.exe")
     start, dialect = decode0.find_prologue(exe)
-    with pytest.raises(ValueError, match=r"unhandled byte 51 at 0xd30b"):
+    # The inline-sub contamination gap is closed; the scan now reaches the
+    # independent INT EC variant at the end of the program.
+    import pytest
+    with pytest.raises(ValueError, match=r"unhandled INT EC sub 02 at 0x11322"):
         decode0._scan(exe, start, dialect, set())
 
 
@@ -355,6 +356,128 @@ def test_decode_t1_forvarlimneg():
     assert loops == [ir.For(ir.Var("B%"), ir.Lit(5), ir.Var("A%"), ir.Lit(-1))]
 
 
+def test_decode_t1_fordecrmidbody():
+    # A mid-body DECR of the loop variable must not be mistaken for the
+    # loop's own STEP -1 NEXT decrement: `dec_m`/`dec_bp`/`addm_i8` used to
+    # patch the open FOR's step (and the already-emitted ir.For's Lit(1))
+    # the moment they saw the loop displacement, with no check that this was
+    # actually the NEXT template rather than an ordinary same-named DECR
+    # statement earlier in the body. Fixed by requiring the following op's
+    # address to be the FOR's own recorded test address (matching the guard
+    # `inc_m`'s harmless silent-consume case never needed, since it has no
+    # side effect to protect). Wild file.exe: a DECR I% mid-body inside
+    # `FOR I% = 1 TO ...` whose real NEXT still steps +1 via inc_m.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_fordecrmidbody.exe"))
+    loops = [s for s in prog if isinstance(s, ir.For)]
+    assert loops[0].step == ir.Lit(1), "the mid-body DECR must not flip the step"
+    assert emit0.emit(prog) == (
+        "10 FOR A% = 1 TO 5\n20 A% = A% - 1\n30 PRINT A%\n40 NEXT A%\n50 END\n"
+    )
+
+
+def test_decode_t1_inputfilelocal():
+    # INPUT# into a LOCAL SINGLE variable: the DGROUP `fstp` handler in
+    # core.py already threads the `_FREAD`/`_READDATA` sentinels through to
+    # `state._fread_target`/`_readdata_target`, but its LOCAL-frame sibling
+    # (`fstp_bp`/`fstp_bp64` in handlers/arith.py) built a plain `ir.Assign`
+    # unconditionally -- so a LOCAL INPUT#/READ target never joined its
+    # chain, and it closed empty ("INPUT# chain closed without any stored
+    # target"), reported at whatever unrelated statement's flush_pending()
+    # discovered it. Wild kinetics.exe.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_inputfilelocal.exe"))
+    reads = [s for s in prog[0].body if isinstance(s, ir.InputFile)]
+    assert len(reads) == 1 and reads[0].vars, "the LOCAL target must join the chain"
+    assert emit0.emit(prog) == (
+        "10 SUB SUB1\n  LOCAL A\n"
+        '  OPEN "TEST.DAT" FOR INPUT AS #1\n  INPUT #1, A\n'
+        "  CLOSE #1\n  PRINT A\nEND SUB\n20 CALL SUB1\n30 END\n"
+    )
+
+
+def test_decode_t1_forstepm1_ovf():
+    # The round-36 fix (require a following op at the FOR's own test address
+    # before letting dec_m/dec_bp/addm_i8 patch the step) was itself broken
+    # by the Overflow IDE toggle: an `into` check lands between a STEP -1
+    # loop's own closing `dec_m` and its `cmp_mi8` test, so the following
+    # op's address is `into`'s, not the test's -- the fix's own guard then
+    # rejected this now-LEGITIMATE case, and wild bill.exe (Overflow-toggle,
+    # previously decoding) regressed to the exact error round 36 had just
+    # fixed. Caught by re-testing bill.exe after landing, not by a fixture
+    # (this one is this session's own reproduction, added after the fact --
+    # an earlier attempt used a mid-body DECR on an ASCENDING loop, but that
+    # loop's real NEXT is `inc_m`, which has no guard to break; only a
+    # STEP -1 loop's own `dec_m`+`into`+test shape exercises this). Fixed via
+    # `_next_real_addr`, which skips `into`/`stack_chk` the same way the main
+    # dispatch loop's own generic handling of them would.
+    #
+    # `verify_fixture` skips this one ("Options toggles Overflow" is not in
+    # `FLAGS_ONLY_TOGGLES`, so it doesn't try to compile it) -- byte-exactness
+    # was checked directly against `oracle.compile_bas(..., toggles="O")`
+    # instead, matching the source below exactly.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_forstepm1_ovf.exe"))
+    loops = [s for s in prog if isinstance(s, ir.For)]
+    assert loops[0].step == ir.Lit(-1)
+    assert getattr(prog, "toggles", "") == "O"
+    assert emit0.emit(prog) == (
+        "10 FOR A% = 5 TO 1 STEP -1\n20 PRINT A%\n30 NEXT A%\n40 END\n"
+    )
+
+
+def test_decode_t1_numstrvaluegroup():
+    # A NUMERIC-led relational value group whose second term is a string
+    # relation: the mirror of the existing STRING-led one
+    # (`match_string_logical_value_group`, t1_stringorvalueif). Both terms
+    # always materialize (no short-circuit dispatch after term1), which
+    # `_lift_while` used to misread as a WHILE/inline-IF header, raising
+    # "materialization template mismatch" partway through term2's own
+    # materialize (wild kinder.exe). Fixed by a new sibling matcher,
+    # `match_numeric_logical_value_group` -- OR only, since the AND
+    # combine-time fold this feeds has no counterpart (see its docstring).
+    from tbx import decode0, emit0
+
+    prog = decode0.decode_user_code(_exe("t1_numstrvaluegroup.exe"))
+    assert emit0.emit(prog) == (
+        '10 A# = 1.5#\n20 B$ = "AB"\n30 IF (A# = 1.5# OR B$ = "AB") THEN 50\n'
+        "40 END\n50 PRINT \"YES\"\n60 END\n"
+    )
+
+
+def test_decode_t1_numstr3chain():
+    # The value group's real wild witness (kinder.exe) is a 3-TERM chain,
+    # not just 2: `A# = B# OR C$ = D$ OR C$ = E$`. A 3rd term chains flat
+    # off the 2-term fold with no closing jcc/jmp of its own -- just more
+    # term-staging leading into the next materialize -- so the matcher
+    # only needs to recognize the fold through `oraxbx`, and neither
+    # `direct_bool_gate` nor `direct_bool_group` may clear after an
+    # intermediate fold (both are only ever closed by the eventual closing
+    # jcc). Getting the register roles' left/right order backwards (an
+    # earlier attempt swapped them, matching the string-led case) is
+    # invisible for an isolated 2-term probe -- OR is commutative there --
+    # but produces the wrong INNER nesting once a 3rd term makes the
+    # 2-term fold's result an operand of another fold; caught by building
+    # this exact 3-term probe and checking it byte-exact, not by the
+    # 2-term probe alone.
+    #
+    # This is still not kinder.exe's own EXACT construct: its real 3-term
+    # instance defers ALL THREE materializations before combining (an
+    # extra register shuffle appears that this flat probe's shape doesn't
+    # reproduce), so kinder.exe itself remains unfixed -- see PLAN.md.
+    from tbx import decode0, emit0
+
+    prog = decode0.decode_user_code(_exe("t1_numstr3chain.exe"))
+    assert emit0.emit(prog) == (
+        '10 A# = 1.5#\n20 B$ = "AB"\n30 C$ = "CD"\n'
+        '40 IF (A# = 1.5# OR B$ = "AB" OR B$ = "CD") THEN 50\n'
+        "50 PRINT \"YES\"\n60 END\n"
+    )
+
+
 def test_decode_t1_palettereset():
     # Bare PALETTE (INT ECh sub 86h, zero operands: reset to default
     # palette) -- distinct from PALETTE attr,color (sub 88h). Identified
@@ -404,18 +527,42 @@ def test_wild_rsltest_argref_advances():
     # the code-less-line hooks ahead of an FP promote-to-scratch. The promote
     # commits no statement, but cleared `c.cur` anyway, so that hook's address
     # was dropped and the statement re-anchored on the next hook (fixed in
-    # core.fstp64's fp64_bridge leg). It now reaches 0xae3a, which is a
-    # different shape: a run of hooks immediately before `proc_ret`, i.e. a
-    # jump to the SUB's own epilogue, which owns no statement. Same family as
-    # help.exe -- see PLAN.md Part II's table.
-    import pytest
-
+    # core.fstp64's fp64_bridge leg). It then reached 0xae3a -- a run of hooks
+    # before `proc_ret`, a jump to the SUB's own epilogue -- closed by teaching
+    # `match_proc_body` to walk those stamps (t1_exitsubtrap, with help.exe and
+    # resume.exe). The last one, 0xf325, was the SAME `c.cur` defect a THIRD
+    # time: `str_store_temp` stages a CALL argument and committed no statement,
+    # yet cleared `c.cur`, so the statement's address -- the poll stamp its run
+    # began at -- was dropped and reappeared two ops later on `push_bp`, which
+    # nothing branches to.
+    #
+    # rsltest.exe now decodes end to end. Three ops have now been caught
+    # clearing `c.cur` without committing (fstp64's bridge, str_store_temp,
+    # and the epilogue walk's stamps).
+    #
+    # The class was then AUDITED rather than left to a fourth accident. What
+    # makes it a bug is staging into `c.pend_args` -- which carries no start of
+    # its own, unlike a PrintChain or UsingChain -- and clearing `c.cur`
+    # anyway, so the statement loses the only address it had. All eleven
+    # `pend_args.append` sites were checked: every one leaves `c.cur` alone
+    # (`arg_push_arr` in arith.py reads as an offender only because the
+    # `palette_using` branch below it clears after its own `state.put`).
+    #
+    # That audit concluded the class was exhausted. It was not: `fstp_temp`
+    # was a twelfth site, and it cleared `c.cur` (wild cleanup.exe,
+    # reformat.exe: `jump target 0xe9be / 0xed49`, eight GOTOs at a CALL whose
+    # FP arguments stage through it). Enumerating `pend_args.append` was the
+    # wrong net -- fstp_temp appends there on one branch and to `c.fn_args` on
+    # the other, and the DEF-FN branch is what put it outside the search. The
+    # question to ask of a candidate is not where it appends but whether it
+    # COMMITS: an operation that stages and commits nothing must leave the
+    # open statement's address alone.
     from tbx import decode0
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(ValueError, match=r"jump target 0xae3a is not a statement start"):
-        decode0.decode_user_code(wild_hits_bytes("rsltest.exe"))
+    program = decode0.decode_user_code(wild_hits_bytes("rsltest.exe"))
+    assert len(tuple(program)) > 500
 
 
 def test_decode_t1_declnoend():
@@ -677,6 +824,60 @@ def test_decode_t1_dogotobody():
     ]
     assert isinstance(sub.body[0].target, ir.BodyLine)
     assert isinstance(sub.body[1].target, ir.BodyLine)
+
+
+def test_decode_t1_exloopsub():
+    # `EXIT LOOP` inside a block IF inside a codeless DO, in a SUB. The IF's
+    # region closes at the statement after END IF, so the loop body that
+    # follows looks like an else-skip region -- but it ends in the LOOP that
+    # closes a DO opened *before* the IF. An ELSE arm cannot hold that closer:
+    # TB requires END IF first, which is Error 441. Wild ziptest.exe SUB4.
+    from tbx import decode0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_exloopsub.exe"))
+    sub = next(s for s in prog if isinstance(s, ir.SubDef))
+
+    assert [type(s) for s in sub.body] == [
+        ir.Assign,
+        ir.Assign,
+        ir.Assign,
+        ir.Do,
+        ir.IfBlock,
+        ir.Assign,
+        ir.Assign,
+        ir.Assign,
+        ir.Loop,
+        ir.Locate,
+    ]
+    # The loop closer stays a sibling of the IF, and the exit keeps its name.
+    guard = sub.body[4]
+    assert guard.else_body is None
+    assert any(isinstance(s, ir.ExitLoop) for s in guard.arms[0][1])
+
+
+def test_decode_t1_exlooptop():
+    # The same shape at top level rather than in a SUB, which reaches the
+    # ELSE-region fold by a different route and was mis-folded even before the
+    # deferred-fold drain existed. Same guard covers both.
+    from tbx import decode0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_exlooptop.exe"))
+
+    assert [type(s) for s in prog] == [
+        ir.Assign,
+        ir.Assign,
+        ir.Assign,
+        ir.Do,
+        ir.IfBlock,
+        ir.Assign,
+        ir.Assign,
+        ir.Assign,
+        ir.Loop,
+        ir.Locate,
+        ir.End,
+    ]
+    assert prog[4].else_body is None
+    assert any(isinstance(s, ir.ExitLoop) for s in prog[4].arms[0][1])
 
 
 def test_decode_t1_ifthenfncall():
@@ -1034,9 +1235,14 @@ def test_decode_t1_selelsetarget():
         assert isinstance(blk, ir.IfBlock), f"{stem}: {type(blk).__name__}"
         arm = blk.arms[0][1]
         assert sum(isinstance(b, ir.SelectCase) for b in arm) == 2, stem
-        # the second SELECT is the inline IF's skip target, numbered in place
-        assert emit0.emit(prog).count("\n20 SELECT CASE B$\n") == 1, stem
-        assert "  IF C% <= 2 THEN 20\n" in emit0.emit(prog), stem
+        # The CASE ELSE's trailing inline IF used to survive as a conditional
+        # GOTO, which forced the second SELECT to be numbered so the skip had
+        # something to name. It now folds into the arm as the single-line IF
+        # the source actually spells (`IF C% > 2 THEN PRINT "flon"`, see the
+        # .bas), so nothing targets the second SELECT and it is unnumbered.
+        # Still byte-exact in both dialects.
+        assert "\n20 SELECT CASE B$\n" not in emit0.emit(prog), stem
+        assert '      IF C% > 2 THEN PRINT "flon"\n' in emit0.emit(prog), stem
 
 
 def test_decode_t1_fnlitresult():
@@ -1602,14 +1808,36 @@ def test_wild_cvt2tb_opaque_helper_advances():
     # the rest of the family -- unlike BODY_11 (a known third-party
     # library, TBWINDOW), this one is unique to this one program, which
     # the fingerprint mechanism handles identically either way.
-    import pytest
-
     from tbx import decode0
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(ValueError, match=r"\[bp\+6\] outside the open LOCAL frame"):
-        decode0.decode_user_code(wild_hits_bytes("CVT2TB.EXE"))
+    # The helper's MID$ assignments are ordinary by-reference SUB forms,
+    # covered by t1_midassignbyref/v10_t1_midassignbyref.  CVT2TB now advances
+    # past both forms, the narrow CVT2TB ERR-cell alias, and the nested-FN
+    # argument staging that previously looked like a variadic SUB call. The
+    # wild image now decodes and emits; oracle compilation remains a separate
+    # gate because its shifted runtime data contains an invalid DELAY literal.
+    from tbx import emit0
+
+    program = decode0.decode_user_code(wild_hits_bytes("CVT2TB.EXE"))
+    source = emit0.emit(program)
+    assert source.count("DELAY ") >= 4
+    # The first FNFN1% test guards a nested DO UNTIL. Its backward jmps must
+    # not be borrowed as the enclosing head-test loop (which would emit an
+    # unterminated `DO WHILE` and make the oracle reject the later source).
+    assert "IF NOT FNFN1%(" in source
+    assert "DO WHILE NOT FNFN1%(" not in source
+    # FNFN4%'s first formal is a four-byte string descriptor: the raw body
+    # passes [BP+2] by reference and its callers supply AE$.  SUB16's
+    # guard has a GOTO followed by a PRINT, so it must be a block IF rather
+    # than invalid inline `IF ...: GOTO ...: PRINT` syntax.
+    assert "DEF FNFN4%(L$, S%)" in source
+    assert "GOTO 2175\n      PRINT #U%," in source
+    # SUB12 folds integer locals through the x87 expression stack; `ifold_bp`
+    # must not make those locals SINGLE-valued in the emitted declaration.
+    assert "LOCAL N%, W%, D%, X%, Y%" in source
+    assert "CALL SUB1(AG$,(AI$))" in source
 
 
 def test_wild_phone_opaque_helper_advances():
@@ -1623,12 +1851,11 @@ def test_wild_phone_opaque_helper_advances():
     # a genuinely different, unfamiliar trampoline/overlay structure not
     # attempted here; only this one confirmed closure is tested.
     import pytest
-
     from tbx import decode0
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(ValueError, match=r"unhandled byte 33 at 0xa9ae"):
+    with pytest.raises(ValueError, match=r"forwarded arg index 7"):
         decode0.decode_user_code(wild_hits_bytes("phone.exe"))
 
 
@@ -1643,16 +1870,18 @@ def test_wild_filepatc_opaque_helpers_advance():
     # the other opaque-helper closures, this is coverage-only recovery
     # (fingerprint match, not a byte pattern with an oracle-verifiable
     # source spelling), so it's tested as a wild-witness advance.
+    #
+    # It advances past the opaque-helper region -- confirmed unchanged
+    # against a pre-session baseline -- but currently stops at a later,
+    # unrelated `cmpm_ax without ax operand` gap; pinned rather than
+    # asserted-clean so a future close is visible as a test change.
     import pytest
 
     from tbx import decode0
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(
-        ValueError,
-        match=r"displacement 0x1054 is neither scalar nor array element",
-    ):
+    with pytest.raises(ValueError, match="cmpm_ax without ax operand"):
         decode0.decode_user_code(wild_hits_bytes("filepatc.exe"))
 
 
@@ -1667,17 +1896,65 @@ def test_wild_mf_compound_if_far_exit_advances():
     # segment-crossing jumps, so this is a wild-only witness, not an
     # oracle-verified fixture.
     import pytest
-
-    from tbx import decode0
+    from tbx import decode0, emit0
 
     from conftest import wild_hits_bytes
 
     # The runtime-grid layout now resolves; this advances mf.exe to its next
     # independent string-descriptor recovery gap.
-    with pytest.raises(
-        ValueError, match=r"bad string descriptor at \[0x05a0\]: 0x01b8"
+    program = decode0.decode_user_code(wild_hits_bytes("mf.exe"))
+    assert program
+    with pytest.raises(KeyError, match="60358"):
+        emit0.emit(program)
+
+
+def test_wild_mcmurphy_double_for_next_wraparound_advances():
+    # `_lift_next`'s `jcc_body` compared a jcc/jmp target against the open
+    # FOR's `f.body` with plain `==`, but a body that starts a later
+    # procedure can spell the same IP 64 KiB above the header's own window --
+    # `_same_code_offset` exists precisely for this (calibrated on wild
+    # electron.exe, used two lines below in this same function for an
+    # adjacent check), but `jcc_body` never called it. Wild mcmurphy.exe's
+    # DOUBLE-precision FOR/NEXT hits this through the long jcc-skip-jmp form.
+    # A dedicated probe is impractical here -- reproducing a real 64 KiB
+    # code-offset wraparound needs tens of thousands of statements -- so,
+    # like the other established wraparound/far-jump closures in this
+    # campaign, this is a wild-only witness advance, not an oracle-verified
+    # fixture. The later stack-test recovery now carries the file past the
+    # old testw sentinel, so assert the advance directly rather than pinning
+    # the superseded failure text.
+    from tbx import decode0
+
+    from conftest import wild_hits_bytes
+
+    prog = decode0.decode_user_code(wild_hits_bytes("mcmurphy.exe"))
+    assert len(prog) > 3000
+
+
+def test_wild_mcmurphy_segmented_string_guards_are_retained():
+    # Several command-dispatch comparisons use a near target whose 16-bit
+    # offset also names an operation in the earlier code window.  The scanner
+    # elides the bytes at the true target, so an exact-address IF close left
+    # the frame open and dropped its condition (and its pool descriptor).
+    from tbx import decode0, emit0
+
+    from conftest import wild_hits_bytes
+
+    source = emit0.emit(decode0.decode_user_code(wild_hits_bytes("mcmurphy.exe")))
+    for literal in (
+        "xbutler",
+        "xmaid",
+        "x#z",
+        "xK",
+        "xZ",
+        "x6160",
+        "re30>75",
+        "x30>75",
+        "O",
+        "u>",
+        "u<",
     ):
-        decode0.decode_user_code(wild_hits_bytes("mf.exe"))
+        assert literal in source
 
 
 def test_decode_t1_forvarlimfar():
@@ -1703,6 +1980,51 @@ def test_decode_t1_midvarstart():
     assert (
         ir.MidAssign(ir.Var("A$"), ir.Var("C%"), ir.Var("B$")) in prog
     )
+
+
+def test_decode_t1_midassign_byref_string_parameter():
+    """MID$= through a SUB's by-reference STRING descriptor is byte-exact."""
+    from tbx import decode0, emit0
+
+    expected = (
+        "10 SUB SUB1(A$, B%, C%)\n"
+        "  MID$(A$, B%) = CHR$(64 + C%)\n"
+        "END SUB\n20 D$ = \"\"\n30 CALL SUB1(D$,2,3)\n40 END\n"
+    )
+    for stem in ("t1_midassignbyref", "v10_t1_midassignbyref"):
+        src = emit0.emit(decode0.decode_user_code(_exe(stem + ".exe")))
+        assert src == expected
+
+
+def test_decode_t1_midassign3_byref_string_parameter():
+    """The length-bearing MID$= frame form is byte-exact too."""
+    from tbx import decode0, emit0
+
+    expected = (
+        "10 SUB SUB1(A$, B%)\n"
+        '  MID$(A$, B%, 1) = "X"\n'
+        "END SUB\n20 C$ = \"\"\n30 CALL SUB1(C$,2)\n40 END\n"
+    )
+    for stem in ("t1_midassign3byref", "v10_t1_midassign3byref"):
+        src = emit0.emit(decode0.decode_user_code(_exe(stem + ".exe")))
+        assert src == expected
+
+
+def test_decode_t1_dynamic_print_file_parameter():
+    """PRINT# preserves a computed channel expression passed into a SUB."""
+    from tbx import decode0, emit0
+
+    expected = (
+        '10 OPEN "X" FOR OUTPUT AS #1\n'
+        '20 CALL SUB1(1,"ABC")\n'
+        "30 CLOSE #1\n40 END\n"
+        "50 SUB SUB1(A%, B$)\n"
+        "  PRINT #A%, LEFT$(B$,1); MID$(B$,2)\n"
+        "END SUB\n"
+    )
+    for stem in ("t1_dynprint", "v10_t1_dynprint"):
+        src = emit0.emit(decode0.decode_user_code(_exe(stem + ".exe")))
+        assert src == expected
 
 
 def test_decode_t1_inpfilearr():
@@ -3000,6 +3322,37 @@ def test_decode_t1_orax():
         "10 DO\n20 A$ = INKEY$\n30 LOOP UNTIL LEN(A$)\n"
         "40 PRINT A$\n50 END\n"
     )
+
+
+def test_decode_metric_empty_inkey_polls_as_do_until():
+    """metric's empty-body LEN(INKEY$) back-edges are real DO...LOOP tests."""
+    from tbx import decode0, emit0
+    from conftest import wild_hits_bytes
+
+    src = emit0.emit(decode0.decode_user_code(wild_hits_bytes("metric.exe")))
+    assert "860 DO\n870 LOOP UNTIL LEN(INKEY$)\n880 KEY OFF" in src
+    assert "17890 DO\n17900 LOOP UNTIL LEN(INKEY$)\n17910 END" in src
+
+
+def test_decode_catalog_legacy_put_without_record():
+    """The older TB 1.0 PUT dispatch permits writing the current record."""
+    from dataclasses import fields, is_dataclass
+    from tbx import decode0, ir
+    from conftest import wild_hits_bytes
+
+    program = decode0.decode_user_code(wild_hits_bytes("catalog.exe"))
+
+    def walk(value):
+        if isinstance(value, (tuple, list)):
+            for item in value:
+                yield from walk(item)
+        elif is_dataclass(value):
+            yield value
+            for field in fields(value):
+                yield from walk(getattr(value, field.name))
+
+    puts = [node for node in walk(program) if isinstance(node, ir.Put)]
+    assert puts and all(node.num == 2 and node.pos is None for node in puts)
 
 
 def test_decode_t1_deftype():

@@ -75,6 +75,85 @@ uv run python -m tbx.tools.verify_fixture STEM
 The oracle is used for calibration only, not at runtime. See
 `vendor/turbo_basic_oracle/README.tbx.md` and `docs/release-checklist.md`.
 
+The oracle is also the only acceptance test that counts. A change can pass the
+suite, satisfy a structural check and still emit source that is wrong -- the
+fixture corpus cannot cover a wild shape it has no fixture for, and a checker
+you wrote alongside the fix shares its assumptions. Use those to find
+candidates; believe a byte comparison. When the change touches a *comparable*
+wild program (`excluded: null` in `tests/fixtures/wild_roundtrip.json`), a
+delta is measurable, so measure it before claiming the fix works.
+
+## Baselines
+
+`tests/fixtures/wild_roundtrip.json`, the goldens and `ir_snapshot.txt` are
+baselines: they record what was true when it was last verified.
+
+**Never re-record a baseline to absorb a regression.** If a wild program's
+round trip degrades, the entry is evidence, not an inconvenience -- fix the
+decoder and re-measure, so the recorded delta means the same thing it did
+before. Two changes are legitimate: an intended decoder change, re-measured
+through the oracle and reviewed in the diff like code; and a newly decoding
+program being added. Both leave the file describing reality; absorbing a
+regression leaves it describing nothing.
+
+## Triage before diving into a gap
+
+Not every wild-corpus failure is worth the same investment. Before working a
+gap, spend a few minutes reading the raise site and its containing function,
+and let that predict the cost:
+
+- A short, isolated function with a simple guard or condition (an adjacency
+  check, a missing sentinel thread-through) is cheap -- fix it now.
+- A function threading several shared mutable flags across many branches
+  (`direct_bool_gate`, `pend_bool`, `direct_bool_group`, ...), or a heuristic
+  search over many candidate parameters (DGROUP layout recovery), is
+  expensive regardless of how narrow the symptom looks on the surface. Budget
+  for that consciously, or defer it.
+
+Set an explicit probe budget before committing to a hypothesis: two or three
+oracle probes to reproduce the exact byte shape. If none match, that is not a
+cue to try a fourth guess -- it is the signal that the construct is rarer or
+structurally different than assumed. Write down what was ruled out (see
+below) and stop, rather than continuing to iterate past the budget.
+
+Prefer gaps with multiple independent wild witnesses over a single instance:
+a fix confirmed against one file's exact bytes can be an overfit, while a fix
+that closes several files at once is much stronger evidence it is the real
+mechanism.
+
+When more than one hypothesis fits the failing bytes, prefer the weaker one:
+the one that commits to fewer specifics of this file, not the one with the
+shortest diff. A hypothesis scoped to "this exact displacement, in this exact
+frame shape" explains the byte in front of you but predicts nothing else; a
+hypothesis scoped to "any BP-relative store of this kind, in this kind of
+frame" is falsifiable against more of the corpus and is what actually
+generalizes when the fix lands. Shortness and generality are different axes --
+a short special case is still a special case. Prefer the version that stakes
+out more ground and can still be shown wrong by a probe over the version that
+merely fits.
+
+When a hypothesis needs checking, build the oracle probe first and diff its
+op stream against the failing file's, rather than reading deeply into the
+surrounding decoder logic before writing anything. Verifying empirically is
+usually faster than reasoning abstractly from code, and it tells you exactly
+which branch needs to change.
+
+## Negative results
+
+A hypothesis that was investigated and rejected is expensive evidence, and it
+is lost the moment a session ends unless it is written down. Two ledgers under
+`gap_reports/` hold them, validated by `tests/tbx/test_ledgers.py`:
+
+- `runtime-revision-assessments.json` -- the answer is a property of the
+  compiler or runtime, including patterns this oracle can never witness.
+- `ruled-out-hypotheses.json` -- decoder-side: a cause that was not the cause,
+  or a fix written, tested and reverted. Each entry says what was tried, what
+  killed it, and what to do instead.
+
+Record the dead end before moving on, and reach for the ledgers before
+re-deriving a diagnosis. `PLAN.md` remains the chronological archive; the
+ledgers are the deduplicated index into it.
+
 ## Tests and fixtures
 
 Golden operations, IR snapshots, and emitted source live under
