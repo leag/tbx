@@ -33,6 +33,14 @@ FILE_LIMIT = 65535
 #: The compiler rejects a 64 KiB include with Error 495 even though the editor
 #: accepts a root BAS up to 64 KiB. Keep includes below the signed-word boundary.
 INCLUDE_LIMIT = 32767
+#: A GOTO/GOSUB target past this silently fails to compile (Error 417: Label
+#: / line number expected) even though the same number as a bare, unreferenced
+#: label is accepted -- probed empirically: 65530 compiles as a jump target,
+#: 65535 and 65536 do not. Keep well clear of that boundary rather than
+#: chase its exact value. Wild k.exe (24340 statements) is the witness: the
+#: free stride-10 renumbering below reaches into the 200,000s for a program
+#: this size, which no jump into that range can actually reach.
+MAX_LINE_NUMBER = 65529
 
 
 @dataclass(frozen=True)
@@ -75,7 +83,18 @@ def _compact_source_spacing(source: str) -> str:
 def _all_source_includes(
     source: str, clean: str, root_limit: int, include_limit: int
 ) -> SourceBundle:
-    """Pack complete physical BASIC lines; root contains only includes."""
+    """Pack complete physical BASIC lines; root contains only includes.
+
+    Never cuts inside an open block construct (IF/DO/WHILE/SELECT CASE): a
+    nested body line is rendered indented (`block_lines`' 2-space-per-level
+    convention), so a line with no leading whitespace is the only place a
+    cut can happen without splitting a block's scope across two files.
+    Deferring past the byte limit until the next top-level line is safe --
+    wild k.exe is the witness a cut that doesn't defer isn't: Turbo Basic's
+    own compiler desyncs many statements later in the file once a block's
+    body has been torn across an $INCLUDE boundary, surfacing as an
+    unrelated-looking syntax error far from the real cause.
+    """
     chunks: list[str] = []
     pending: list[str] = []
     size = 0
@@ -86,7 +105,8 @@ def _all_source_includes(
                 f"one physical source line is {line_size} bytes; "
                 f"no line-boundary split fits the {include_limit}-byte limit"
             )
-        if pending and size + line_size > include_limit:
+        at_top_level = line == line.lstrip()
+        if pending and size + line_size > include_limit and at_top_level:
             chunks.append("".join(pending))
             pending = []
             size = 0
@@ -401,11 +421,29 @@ def emit(stmts, *, compact: bool = False, line_starts: list[int] | None = None) 
         for stmt, phys in body_targets:
             if phys > max_phys.get(stmt, 0):
                 max_phys[stmt] = phys
-        line = {}
-        cur = 10
-        for i in range(len(stmts)):
-            line[i] = cur
-            cur += max(10, max_phys.get(i, 0) + 1)
+
+        def _number(stride: int) -> tuple[dict[int, int], int]:
+            numbering, cur = {}, 10
+            for i in range(len(stmts)):
+                numbering[i] = cur
+                cur += max(stride, max_phys.get(i, 0) + 1)
+            return numbering, cur
+
+        # The default stride is 10, purely for readability -- shrink it only
+        # when that would push a line number past MAX_LINE_NUMBER. A smaller
+        # uniform stride is still widened per-statement to fit any BodyLine
+        # target's own required gap, so nested-target correctness is
+        # unaffected; this only ever changes cosmetic spacing between lines.
+        line, final = _number(10)
+        if final > MAX_LINE_NUMBER:
+            stride = max(1, MAX_LINE_NUMBER // max(1, len(stmts)))
+            line, final = _number(stride)
+            if final > MAX_LINE_NUMBER:
+                raise ValueError(
+                    f"{len(stmts)} statements need line numbers up to {final} "
+                    f"even at a 1-per-line stride, past Turbo Basic's real "
+                    f"GOTO/GOSUB target ceiling ({MAX_LINE_NUMBER})"
+                )
 
     def jump_indices(node):
         if isinstance(node, (ir.Goto, ir.IfGoto, ir.Gosub)):

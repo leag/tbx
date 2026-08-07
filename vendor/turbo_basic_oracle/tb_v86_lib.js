@@ -244,4 +244,25 @@ async function saveFdb(emulator, outPath) {
   return outPath;
 }
 
-module.exports = { buildWorkImg, extractExe, parseUdToken, bootEmulator, attachScreen, makeDriver, saveFdb, waitForStableScreen, waitForExe, setOptionsToggles, sleep, ENTER };
+// TB's File->Load rejects a source past its editor's buffer size with a
+// modal "<name> too large.  Truncate? (Y/N)" prompt instead of loading it.
+// That prompt contains the loaded filename, so a plain `scr().includes(the
+// filename)` check (the harnesses' own load-success check) is a false
+// positive here -- it matches text inside the rejection dialog, not a
+// successful load, and the harness would then blindly press Alt-C into a
+// dialog still waiting on Y/N, timing out on "Compiling" with a message
+// that doesn't say why. Call this right after a load's waitFor succeeds,
+// before trusting it.
+function checkNotTooLarge(scrText) {
+  if (/too large/i.test(scrText)) {
+    throw new Error(
+      "Turbo Basic's editor rejected the source as too large to load " +
+        "(\"too large. Truncate?\" prompt) -- this program exceeds TB's " +
+        "single-file source size limit and can't be compiled this way; " +
+        "it would need splitting into $INCLUDE'd files, which this " +
+        "harness doesn't automate.\nScreen:\n" + scrText
+    );
+  }
+}
+
+module.exports = { buildWorkImg, extractExe, parseUdToken, bootEmulator, attachScreen, makeDriver, saveFdb, waitForStableScreen, waitForExe, setOptionsToggles, checkNotTooLarge, sleep, ENTER };

@@ -279,3 +279,49 @@ def test_recompile_invalid_source_returns_compiler_error():
 
     assert response.status_code == 422
     assert "error" in response.json()
+
+
+@pytest.mark.skipif(not _oracle_available(), reason="Turbo Basic oracle not provisioned locally")
+def test_recompile_splits_a_too_large_procedure_free_source_and_still_compiles():
+    # Turbo Basic's editor can't load a source file over ~64KB at all (a
+    # real compiler-era limit -- k.exe and cal.exe are wild witnesses).
+    # A procedure-free program can sidestep it the same way the compiler's
+    # own $INCLUDE does: split_source breaks it into <=32KB chunks a short
+    # root $INCLUDEs, which this endpoint now does automatically.
+    exe_bytes = FIXTURE.read_bytes()
+    decompile_response = client.post(
+        "/api/decompile", files={"exe": ("f87_t1_beep.exe", exe_bytes)}
+    )
+    session_id = decompile_response.json()["session_id"]
+
+    lines = [f'{n} PRINT "{"X" * 60}"' for n in range(10, 10 + 2000 * 10, 10)]
+    source = "\n".join(lines) + "\n"
+    assert len(source.encode("latin-1")) > 65535
+
+    response = client.post("/api/recompile", json={"session_id": session_id, "source": source})
+
+    assert response.status_code == 200
+    assert response.json()["recompiled_len"] > 0
+
+
+@pytest.mark.skipif(not _oracle_available(), reason="Turbo Basic oracle not provisioned locally")
+def test_recompile_rejects_a_too_large_source_with_subs_clearly():
+    # Turbo Basic rejects $INCLUDE alongside a scanned SUB/block DEF FN, so
+    # split_source can't help a too-large program that declares one --
+    # it should say so plainly rather than failing generically or handing
+    # the oracle a file it was never going to be able to load.
+    exe_bytes = FIXTURE.read_bytes()
+    decompile_response = client.post(
+        "/api/decompile", files={"exe": ("f87_t1_beep.exe", exe_bytes)}
+    )
+    session_id = decompile_response.json()["session_id"]
+
+    lines = ["10 SUB FOO", "20 END SUB"]
+    lines += [f'{n} PRINT "{"X" * 60}"' for n in range(30, 30 + 2000 * 10, 10)]
+    source = "\n".join(lines) + "\n"
+    assert len(source.encode("latin-1")) > 65535
+
+    response = client.post("/api/recompile", json={"session_id": session_id, "source": source})
+
+    assert response.status_code == 422
+    assert "SUB" in response.json()["error"]

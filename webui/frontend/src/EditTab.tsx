@@ -109,7 +109,17 @@ export default function EditTab({
     const safeAddresses = addresses ?? []
     const pos = update.state.selection.main.head
     const line = update.state.doc.lineAt(pos).number
-    const index = statementIndexForLine(lineStarts, line)
+    let index = statementIndexForLine(lineStarts, line)
+    // The resolved statement can itself be codeless (a SUB/DEF FN/IF whose
+    // own line carries no address -- only its nested body statements do,
+    // and those aren't tracked individually; see addresses' docstring).
+    // Rather than show nothing for every line inside such a block, fall
+    // back to the nearest enclosing/preceding statement that does have an
+    // address: still an approximation (real code for the *interior* line
+    // clicked may start later than this), but a materially better one
+    // than no highlight at all, and consistent with this mapping being
+    // best-effort by design wherever tbx has no finer-grained answer.
+    while (index >= 0 && safeAddresses[index] == null) index--
     const start = index >= 0 && index < safeAddresses.length ? safeAddresses[index] : null
     let range: [number, number] | null = null
     if (start != null) {

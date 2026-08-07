@@ -222,7 +222,18 @@ def _graphics_color(state: DecodeState, op, addr: int) -> bool:
 def _graphics_locate(state: DecodeState, addr: int, kind: str) -> bool:
     m, c, o = state.machine, state.control, state.output
     if kind == "locate":  # LOCATE row(bx),col(ax)
-        state.put(ir.Locate(m.bx, m.ax), c.cur)
+        row = m.bx
+        if isinstance(row, (ir.Lit, ir.HexLit)) and row.value == 0x8000:
+            # The compiler's own sentinel for an omitted row (`LOCATE ,col`):
+            # confirmed by oracle probe -- compiling `LOCATE ,7` loads
+            # exactly 0x8000 into bx before this same runtime call, and
+            # re-emitting that as a literal `LOCATE &H8000,7` does not
+            # recompile byte-identical to the omitted form (wild k.exe is
+            # the witness: the literal spelling also desyncs the compiler's
+            # parser many statements later in a large program). The row
+            # argument round-trips as omitted, not as this magic constant.
+            row = None
+        state.put(ir.Locate(row, m.ax), c.cur)
         m.bx = m.ax = None
     elif kind == "cursor":  # trailing cursor arg -> attach
         if o.stmts and isinstance(o.stmts[-1], ir.Locate):

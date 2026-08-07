@@ -35,3 +35,20 @@ def test_prime_then_fast_compile_matches_the_plain_path_byte_exact():
     fast = oracle.compile_bas(_BAS, dialect="1.1", toggles="", fast=True)
     plain = oracle.compile_bas(_BAS, dialect="1.1", toggles="", fast=False)
     assert fast == plain
+
+
+def test_compile_bas_names_the_too_large_editor_limit_clearly(tmp_path):
+    # TB's editor rejects a source past its own buffer size with a modal
+    # "<name> too large. Truncate? (Y/N)" prompt instead of loading it --
+    # witnessed on real wild files (cal.exe, 81KB source; k.exe, 551KB).
+    # The prompt names the loaded file, which used to read as a false
+    # "loaded successfully" to the harness's own `scr().includes(filename)`
+    # check, so it blindly pressed on into a still-open dialog and reported
+    # a misleading "did not enter the compile screen" instead of this.
+    oracle.prime_snapshot(dialect="1.1", toggles="")
+    big = tmp_path / "TOOBIG.BAS"
+    lines = "\n".join(f"{n} PRINT {n}" for n in range(10, 10 * 9000, 10))
+    big.write_text(lines + "\n", encoding="latin-1", newline="")
+
+    with pytest.raises(RuntimeError, match="too large"):
+        oracle.compile_bas(big, dialect="1.1", toggles="", fast=True)

@@ -164,14 +164,28 @@ async function fastCompile() {
     console.error("[fast] DEBUG screen at failure:\n" + scr());
     throw new Error("SOLVER.BAS did not load from the hot-swapped floppy");
   }
+  // The "SOLVER.BAS" match above is a false positive when the source is too
+  // big for TB's editor: the rejection dialog names the file too. Check
+  // before trusting `loaded`.
+  lib.checkNotTooLarge(scr());
   console.error("[fast] loaded:", loaded);
 
   await altKey(0x2E); // Alt-C = Compile
-  if (!await waitFor(scr, "Compiling", 4000)) throw new Error("Turbo Basic did not enter the compile screen");
+  // waitFor polls every 150ms and returns as soon as "Compiling" appears, so
+  // this ceiling only matters on failure -- a small/medium source still
+  // compiles in well under a second of wall time. Was 4000ms, calibrated
+  // against fixture-sized sources; a very large one (k.exe, 24k statements)
+  // can take noticeably longer than that just to enter the compile screen
+  // under emulation, and hit this as a false "didn't enter" failure.
+  if (!await waitFor(scr, "Compiling", 60000)) {
+    console.error("[fast] DEBUG screen at compile-timeout failure:\n" + scr());
+    throw new Error("Turbo Basic did not enter the compile screen");
+  }
   const outImg = path.join(WORKSPACE, "work_out.img");
   const out = path.join(WORKSPACE, "SOLVER_v86.EXE");
   const ok = await lib.waitForExe(emulator, outImg, "SOLVER.EXE", out, RUN_MS);
   console.error("[fast] extracted", out, ok ? `(${fs.statSync(out).size} B)` : "(empty/timeout)");
+  if (!ok) console.error("[fast] DEBUG screen at extract-timeout failure:\n" + scr());
   process.exit(ok ? 0 : 1);
 }
 

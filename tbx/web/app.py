@@ -197,7 +197,27 @@ def recompile(req: RecompileRequest) -> dict:
     with tempfile.TemporaryDirectory(prefix="tbx-web-recompile-") as workspace:
         bas_path = Path(workspace) / "EDITED.BAS"
         try:
-            bas_path.write_text(req.source, encoding="latin-1", newline="")
+            # Turbo Basic's editor can't load a source file over ~64KB at
+            # all (a real compiler-era limit, not a tbx one -- it's what
+            # produces the "too large. Truncate?" dialog the oracle harness
+            # detects). split_source sidesteps it the same way the
+            # compiler's own $INCLUDE does for a procedure-free program:
+            # break the text into <=32KB chunks the root just $INCLUDEs.
+            # A program with SUB/block DEF FN declarations can't be split
+            # this way -- Turbo Basic itself rejects $INCLUDE alongside
+            # those -- and split_source raises ValueError to say so; below
+            # ~64KB it returns the source unchanged, so this is always safe
+            # to run.
+            bundle = emit0.split_source(req.source)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=422,
+                detail=f"source cannot be compiled: {e}",
+            ) from e
+        try:
+            bas_path.write_text(bundle.root, encoding="latin-1", newline="")
+            for name, text in bundle.includes:
+                (Path(workspace) / name).write_text(text, encoding="latin-1", newline="")
         except UnicodeEncodeError as e:
             raise HTTPException(
                 status_code=422,

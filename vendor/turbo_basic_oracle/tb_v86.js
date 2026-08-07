@@ -43,6 +43,10 @@ const fs = require("fs");
   // SOLVER.BAS appears before a large source has completely tokenized. Wait
   // until the visible editor is stable, but avoid the old unconditional 4 s.
   if (loaded) await lib.waitForStableScreen(scr, 700, 20000);
+  // The "SOLVER.BAS" match above is a false positive when the source is too
+  // big for TB's editor: the rejection dialog names the file too. Check
+  // before trusting `loaded`.
+  if (loaded) lib.checkNotTooLarge(scr());
   console.error("[harness] auto-loaded:", loaded);
   if (!loaded) { await altKey(0x21); await tapKey(0x26, 700); await typeSlow("SOLVER.BAS"); await tapKey(ENTER, 2500); }
 
@@ -98,7 +102,13 @@ const fs = require("fs");
     await held(0x01, 500);             // Esc to close the Options menu
     if (french) await held(0x01, 500);  // localized popup layer remains open
     await altKey(0x2E);                 // Alt-C = Compile
-    if (!await waitFor(scr, "Compiling", 4000) && !(french && await waitFor(scr, "Compile:", 1000)))
+    // waitFor polls every 150ms and returns as soon as the text appears, so
+    // this ceiling only matters on failure. Was 4000/1000ms, calibrated
+    // against fixture-sized sources; a very large one (k.exe, 24k
+    // statements) can take noticeably longer than that just to enter the
+    // compile screen under emulation, and hit this as a false "didn't
+    // enter" failure.
+    if (!await waitFor(scr, "Compiling", 60000) && !(french && await waitFor(scr, "Compile:", 15000)))
       throw new Error("Turbo Basic did not enter the compile screen");
     // Poll the guest floppy for a stable, closed SOLVER.EXE. This replaces the
     // fixed 9-second sleep and naturally accommodates both tiny and huge files.
