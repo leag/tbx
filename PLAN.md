@@ -9724,6 +9724,30 @@ a user table at all -- so either `dsd`/`delta` is off for this program or the
 table lives outside the window the search assumes. Single witness; deferred
 rather than guessed at, per the probe budget.
 
+**`materialization template mismatch` is THREE gaps, not one (2026-08-09,
+triaged, none fixed)**: the last multi-witness bucket in the wild corpus is not
+a bucket. `_lift_while` wants `movax, jcc, incax, orax, jcc, jmp`; the three
+witnesses each diverge at op 4 in a DIFFERENT way, so a fix for any one of them
+predicts nothing about the others:
+
+- hebrew.exe 0xb602: `movax jcc incax oraxbx movrr andaxbx jcc jmp` -- the
+  materialized term feeds a multi-term boolean combine (OR then AND).
+- kinder.exe 0xbace: `movax jcc incax movsi rt movsi rt strcmp` -- a numeric
+  materialized term followed by a STRING comparison as the next term.
+- varamort.exe 0xc5f1: `movax jcc incax movsi rt movbxax movax_m movrr` --
+  followed by a string push and then integer ops.
+
+All three are "materialized first term of a compound boolean whose second term
+is something the template does not admit", which places them in the
+`pend_bool`/`direct_bool_gate` machinery CLAUDE.md's triage section names as
+expensive regardless of how narrow the symptom looks. Each needs its own probe
+and its own handling. Recorded so the shared error text does not invite one
+speculative fix for three causes -- the same mistake `RO-DISP-NOT-SCALAR-ONE-CAUSE`
+already documents for `displacement is neither scalar nor array element`.
+
+After this, the wild corpus has NO multi-witness buckets left: all 16 remaining
+failures are single programs.
+
 ### The workflow (each gap, see gap 9–14 commits for examples)
 
 1. `uv run python -m tbx.tools.scan_wild wild/hits` — pick the top
