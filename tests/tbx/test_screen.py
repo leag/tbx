@@ -57,6 +57,27 @@ def test_decode_t1_locateomit():
     assert decode0.decode_user_code(_exe("t1_locateomit.exe")) == want
 
 
+def test_cursor_only_locate_closes_a_pending_print_before_patching():
+    """A cursor-only LOCATE after `PRINT ...;` is a new statement.
+
+    PRINT remains pending because its trailing semicolon has no flush vector.
+    The cursor runtime leg must close that chain before looking backward for a
+    row/column LOCATE to patch, or all five cursor arguments move across the
+    PRINT and attach to the preceding LOCATE (wild smenu0.exe).
+    """
+    from tbx import decode0, emit0
+
+    prog = decode0.decode_user_code(_exe("v10_t1_printloccur.exe"))
+    assert prog[:3] == [
+        ir.Locate(ir.Lit(3), ir.Lit(5)),
+        ir.Print((ir.StrLit("X"),), newline=False),
+        ir.Locate(None, None, ir.Lit(0), ir.Lit(0), ir.Lit(0)),
+    ]
+    assert emit0.emit(prog) == (
+        '10 LOCATE 3,5\n20 PRINT "X";\n30 LOCATE ,,0,0,0\n40 END\n'
+    )
+
+
 def test_screen_optional_args():
     # SCREEN's trailing tag byte is a presence mask (08 mode / 04 burst /
     # 02 apage / 01 vpage) with args in cells [88]/[94]/[A0]/[AC] --

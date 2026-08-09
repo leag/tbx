@@ -7533,6 +7533,29 @@ writeup there with negative evidence already collected.
 
 ### Recently closed (this campaign, newest first)
 
+- **2026-08-09 — smenu0.exe now decodes and recompiles with an identical
+  user-code op stream**: the original failure, TB 1.0's raw INT EC 44
+  (canonical sub 46), is bare random-file `GET #n`; a compiled `GET #1`
+  probe established the no-position form. Three independent follow-ons then
+  surfaced: a constant-address integer-array read was incorrectly treated as
+  a literal-pool load (`PRINT A%(2)` silently became a number), `OPEN ... FOR
+  RANDOM AS #n LEN = size` had no emitter spelling, and a cursor-only LOCATE
+  following `PRINT ...;` patched an older LOCATE across the still-pending
+  print chain. The last code mismatch was a string ordering relation leading
+  a compound condition: generic materialization used the reversed x87 Jcc
+  table for strcmp, turning `<` into `>`.
+
+  Each shape has a successful authored TB 1.0 probe and a byte-exact corpus
+  fixture (`v10_t1_getbare`, `v10_t1_intarrconst`,
+  `v10_t1_openrandomlen`, `v10_t1_printloccur`, and
+  `v10_t1_strandord`). The rebuilt smenu0 image is the same 76,982 bytes with
+  the same 11,792 scanned operations at the same addresses, identical layout
+  and string pool, and no first scan mismatch. The standard aligned report is
+  144 bytes off / 99.81% identical, delta 0; 120 raw byte differences (45
+  after the already-approved residue normalization) remain in compiler/runtime
+  metadata and stale source-buffer space, so the manifest conservatively
+  records `code-or-metadata`, not byte-exact.
+
 - **2026-08-04 — `mov cx,bx`/`mov bx,ax` glue inside a computed element read
   was skipped, not modeled**: `int_alu`'s shlsi element-access chain matches
   and positionally consumes a `movrr`/`movbxax` pair that intervenes between

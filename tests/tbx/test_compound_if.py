@@ -243,6 +243,22 @@ def test_decode_t1_boolstrord():
         assert "((A$ <= CHR$(75)) OR (A$ >= CHR$(77)))" in src, stem
 
 
+def test_string_ordering_as_compound_first_term_uses_forward_flags():
+    """strcmp's ordering must not use the reversed x87 relation table.
+
+    This is the ordinary short-circuit compound shape, distinct from the
+    parenthesized value-group shape covered by t1_boolstrord.  With the x87
+    map, `<` silently decoded as `>` (wild smenu0.exe).
+    """
+    from tbx import decode0, emit0
+
+    src = emit0.emit(decode0.decode_user_code(_exe("v10_t1_strandord.exe")))
+    assert src == (
+        '10 A$ = "K"\n20 B% = 0\n'
+        '30 IF A$ < "M" AND B% = 0 THEN PRINT "YES"\n40 END\n'
+    )
+
+
 def test_decode_t1_and3():
     # 3+-term compound chain: each MID segment materializes its term, folds
     # with `and ax,bx` (`or ax,bx`), and its dispatch jmp short-circuits into

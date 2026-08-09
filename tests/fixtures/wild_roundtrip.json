@@ -494,6 +494,18 @@
    "excluded": "different Turbo Basic build (88% runtime match)"
   },
   {
+   "name": "smenu0.exe",
+   "sha256": "f4e9832dc537e866160c6a161ff451fc0c22dbd069c378683652e83a5cfcd814",
+   "bytes": 76982,
+   "statements": 2166,
+   "source_bytes": 52472,
+   "toggles": "KBOS",
+   "build_match": 98,
+   "roundtrip": "code-or-metadata",
+   "delta": 0,
+   "excluded": null
+  },
+  {
    "name": "startup.exe",
    "sha256": "57d9cdb5cc83de4950aea01d7925baaddf07269b0eba2b67707f448d6f777016",
    "bytes": 29968,

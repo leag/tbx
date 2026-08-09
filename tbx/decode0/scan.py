@@ -1559,6 +1559,7 @@ def _scan_runtime_record_ops(exe, p, sub, ops) -> int | None:
         0xFA: "write_file_num",
         0xFC: "write_file_str",
         0xFE: "write_file_sep",
+        0x46: "get",  # GET #n with omitted record number (v10_t1_getbare)
         0x48: "get",
         0x4C: "get_str",
         0xA8: "put",

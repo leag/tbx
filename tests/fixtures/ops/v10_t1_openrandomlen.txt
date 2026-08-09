@@ -1,0 +1,17 @@
+# v10_t1_openrandomlen dialect=1.0 start=075C0
+075C3:movsi:308
+075C6:rt:156
+075C8:movsi:288
+075CB:strassign
+075CD:movsi:288
+075D0:rt:156
+075D2:movm_imm:46:20993
+075D8:shortstr
+075DA:movm_imm:96:1
+075E0:movax:215
+075E3:open
+075E6:movax:1
+075E9:close
+075EC:end
+075EF:epilogue
+# commits

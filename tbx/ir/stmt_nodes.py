@@ -854,10 +854,10 @@ class Name:
 
 @dataclass(frozen=True)
 class Get:
-    """GET #n, rec -- read a random-access record."""
+    """GET #n[, rec] -- read a random-access record."""
 
     num: int  # file number
-    pos: object  # Expr (record number)
+    pos: object | None  # Expr (record number), or None for current record
 
 
 @dataclass(frozen=True)

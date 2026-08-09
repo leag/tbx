@@ -1,0 +1,9 @@
+# v10_t1_intarrconst dialect=1.0 start=070B0
+070B3:movm_imm:370:7
+070B9:fild:370
+070BE:rt:187
+070C0:rt:184
+070C4:end
+070C7:epilogue
+# commits
+070C2

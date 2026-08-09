@@ -236,6 +236,11 @@ def _graphics_locate(state: DecodeState, addr: int, kind: str) -> bool:
         state.put(ir.Locate(row, m.ax), c.cur)
         m.bx = m.ax = None
     elif kind == "cursor":  # trailing cursor arg -> attach
+        # Unlike the row/column leg, this path may patch instead of calling
+        # state.put().  Close any preceding lazy statement first so a
+        # cursor-only LOCATE after `PRINT ...;` cannot attach to an older
+        # LOCATE across that still-pending PRINT.
+        state.flush_pending()
         if o.stmts and isinstance(o.stmts[-1], ir.Locate):
             prev = o.stmts[-1]
             if prev.cursor is not None:
@@ -256,6 +261,7 @@ def _graphics_locate(state: DecodeState, addr: int, kind: str) -> bool:
             state.put(ir.Locate(None, None, m.ax), c.cur)
         m.ax = None
     else:  # cursor_shape: trailing cursor start/stop -> attach
+        state.flush_pending()
         if o.stmts and isinstance(o.stmts[-1], ir.Locate):
             prev = o.stmts[-1]
             if prev.start is not None or prev.stop is not None:

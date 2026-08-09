@@ -11415,6 +11415,12 @@ Assign(target=Var(name='B%'), value=Lit(value=3))
 CallStmt(name='SUB2', args=(Var(name='B%'),))
 End()
 
+## v10_t1_getbare
+Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'), reclen=None, for_as=False)
+Get(num=1, pos=None)
+Close(num=1)
+End()
+
 ## v10_t1_getfile
 Open(mode=StrLit(value='R'), num=1, file=StrLit(value='X.DAT'), reclen=None, for_as=False)
 Get(num=1, pos=Lit(value=1))
@@ -11710,6 +11716,12 @@ IfGoto(cond=LogOp(op='AND', lhs=RelOp(op='=', lhs=Var(name='A%'), rhs=Lit(value=
 Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None)
 End()
 Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None)
+End()
+
+## v10_t1_intarrconst
+Dim(name='V0%', bounds=((1, 3),), also=())
+Assign(target=ArrayRef(name='V0%', indices=(Lit(value=2),)), value=Lit(value=7))
+Print(items=(ArrayRef(name='V0%', indices=(Lit(value=2),)),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_ioctl
@@ -12280,6 +12292,12 @@ Print(items=(StrLit(value='HI'),), newline=True, file=1, commas=None)
 Close(num=1)
 End()
 
+## v10_t1_openrandomlen
+Assign(target=Var(name='A$'), value=StrLit(value='X.DAT'))
+Open(mode=StrLit(value='R'), num=1, file=Var(name='A$'), reclen=Lit(value=215), for_as=True)
+Close(num=1)
+End()
+
 ## v10_t1_or
 Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 IfGoto(cond=LogOp(op='OR', lhs=RelOp(op='<', lhs=Var(name='A'), rhs=Lit(value=0)), rhs=RelOp(op='>', lhs=Var(name='A'), rhs=Lit(value=9))), target=4)
@@ -12438,6 +12456,12 @@ Assign(target=Var(name='A'), value=Lit(value=5))
 Print(items=(StrLit(value='HELLO'),), newline=True, file=None, commas=None)
 Print(items=(StrLit(value='WORLD!'),), newline=True, file=None, commas=None)
 Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
+End()
+
+## v10_t1_printloccur
+Locate(row=Lit(value=3), col=Lit(value=5), cursor=None, start=None, stop=None)
+Print(items=(StrLit(value='X'),), newline=False, file=None, commas=None)
+Locate(row=None, col=None, cursor=Lit(value=0), start=Lit(value=0), stop=Lit(value=0))
 End()
 
 ## v10_t1_printphysical
@@ -12841,6 +12865,12 @@ End()
 Assign(target=Var(name='A$'), value=StrLit(value='HI'))
 Assign(target=Var(name='B$'), value=Var(name='A$'))
 Print(items=(Var(name='A$'),), newline=True, file=None, commas=None)
+End()
+
+## v10_t1_strandord
+Assign(target=Var(name='A$'), value=StrLit(value='K'))
+Assign(target=Var(name='B%'), value=Lit(value=0))
+IfInline(cond=LogOp(op='AND', lhs=RelOp(op='<', lhs=Var(name='A$'), rhs=StrLit(value='M')), rhs=RelOp(op='=', lhs=Var(name='B%'), rhs=Lit(value=0))), body=(Print(items=(StrLit(value='YES'),), newline=True, file=None, commas=None),), else_body=None)
 End()
 
 ## v10_t1_strch

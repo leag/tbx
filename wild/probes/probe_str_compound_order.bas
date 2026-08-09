@@ -1,0 +1,4 @@
+10 A$="K"
+20 B%=0
+30 IF A$ < "M" AND B%=0 THEN PRINT "YES"
+40 END

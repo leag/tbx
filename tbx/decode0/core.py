@@ -3391,7 +3391,7 @@ def _finalize(state: DecodeState, addr) -> Program:
 
 
 def _fp_load_ops(state: DecodeState, op, addr, kind) -> bool:
-    e, l = state.expr, state.layout_state
+    e = state.expr
     if kind == "fld1":
         e.stack.append(ir.Lit(1))
     elif kind == "fldz":
@@ -3403,10 +3403,12 @@ def _fp_load_ops(state: DecodeState, op, addr, kind) -> bool:
             e.stack.append(ir.Err())  # read, e.g. PRINT ERR --
         elif op[2] == 0x72:  # witnessed t1_suberr)
             e.stack.append(ir.Erl())
-        elif op[2] in l.lay["scalars"]:
-            e.stack.append(state.loc(op[2]))  # integer variable read
         else:
-            e.stack.append(state.pool_lit(op[2]))
+            try:
+                value = state.loc(op[2])  # integer scalar or array-element read
+            except ValueError:
+                value = state.pool_lit(op[2])
+            e.stack.append(value)
     elif kind == "fld":  # m32 load: single var or pooled f32
         e.stack.append(state.fpval(op[2]))
     elif kind == "fld64":  # m64 load: double var or pooled f64

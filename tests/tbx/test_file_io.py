@@ -49,6 +49,39 @@ def test_decode_t1_open2():
     assert prog[8] == ir.Open(ir.StrLit("R"), 4, ir.StrLit("B.DAT"), ir.Lit(64))
 
 
+def test_decode_get_with_omitted_record_number():
+    from tbx import decode0, emit0
+
+    program = decode0.decode_user_code(_exe("v10_t1_getbare.exe"))
+
+    assert program[1] == ir.Get(1, None)
+    assert emit0.emit(program).splitlines()[1] == "20 GET #1"
+
+
+def test_constant_integer_array_read_is_not_a_pool_literal():
+    from tbx import decode0, emit0
+
+    program = decode0.decode_user_code(_exe("v10_t1_intarrconst.exe"))
+
+    assert program[2] == ir.Print(
+        (ir.ArrayRef("V0%", (ir.Lit(2),)),), newline=True
+    )
+    assert emit0.emit(program).splitlines()[2] == "30 PRINT V0%(2)"
+
+
+def test_emit_random_open_with_explicit_record_length():
+    from tbx import decode0, emit0
+
+    program = decode0.decode_user_code(_exe("v10_t1_openrandomlen.exe"))
+
+    assert program[1] == ir.Open(
+        ir.StrLit("R"), 1, ir.Var("A$"), ir.Lit(215), for_as=True
+    )
+    assert emit0.emit(program).splitlines()[1] == (
+        "20 OPEN A$ FOR RANDOM AS #1 LEN = 215"
+    )
+
+
 def test_dialect_invariant():
     from tbx import decode0
 

@@ -775,7 +775,14 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
         comb = match_bool_term1(i.ops, c.k)  # compound-IF first term?
         if comb is not None:
             op, deferred = comb.operator, comb.deferred
-            r1 = ir.RelOp(_JCC_RELOP_TRUE[i.ops[c.k + 1][2]], *e.pend_cmp)
+            # strcmp leaves forward-order flags, unlike the reversed x87
+            # compare shape.  The generic compound path used the x87 table
+            # unconditionally, mirroring every ordering operator when a
+            # string relation led an AND/OR chain (wild smenu0.exe).
+            term_map = (
+                _JCC_RELOP_STR_TRUE if e.pend_cmp_str else _JCC_RELOP_TRUE
+            )
+            r1 = ir.RelOp(term_map[i.ops[c.k + 1][2]], *e.pend_cmp)
             if deferred:
                 # `A OR B AND C`-shaped (wild wb.exe/grdscn.exe/mcmurphy.exe):
                 # B and C form their OWN group first; hold this term as the

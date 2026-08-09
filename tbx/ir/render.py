@@ -593,9 +593,12 @@ def _us_fileio(s) -> str | None:
     if isinstance(s, Open):
         if s.for_as:
             kw = _OPEN_MODE_KW.get(s.mode.value)
-            if kw is None or s.reclen is not None:
+            if kw is None or (s.reclen is not None and kw != "RANDOM"):
                 raise ValueError(f"unsupported FOR-AS OPEN mode {s.mode!r}")
-            return f"OPEN {unparse(s.file)} FOR {kw} AS #{s.num}"
+            length = (
+                "" if s.reclen is None else f" LEN = {unparse(s.reclen)}"
+            )
+            return f"OPEN {unparse(s.file)} FOR {kw} AS #{s.num}{length}"
         rl = "" if s.reclen is None else f",{unparse(s.reclen)}"
         return f"OPEN {unparse(s.mode)},#{s.num},{unparse(s.file)}{rl}"
     if isinstance(s, InputFile):
@@ -612,7 +615,7 @@ def _us_fileio(s) -> str | None:
     if isinstance(s, Name):
         return f"NAME {unparse(s.old)} AS {unparse(s.new)}"
     if isinstance(s, Get):
-        return f"GET #{s.num}, {unparse(s.pos)}"
+        return f"GET #{s.num}" if s.pos is None else f"GET #{s.num}, {unparse(s.pos)}"
     if isinstance(s, GetString):
         return f"GET$ #{s.num}, {unparse(s.count)}, {unparse(s.target)}"
     if isinstance(s, Put):

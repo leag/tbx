@@ -1,0 +1,35 @@
+# v10_t1_strandord dialect=1.0 start=070B0
+070B3:movsi:316
+070B6:rt:156
+070B8:movsi:290
+070BB:strassign
+070BD:movm_imm:288:0
+070C3:movsi:290
+070C6:rt:156
+070C8:movsi:312
+070CB:rt:156
+070CD:strcmp
+070CF:movax:65535
+070D2:jcc:114:28885
+070D4:incax
+070D5:orax
+070D7:jcc:117:28892
+070D9:jmp:28912
+070DC:movbxax
+070DE:xorax
+070E0:cmpax_m:288
+070E4:movrr:ax:bx
+070E6:movbxax
+070E8:movax:65535
+070EB:jcc:116:28910
+070ED:incax
+070EE:andaxbx
+070F0:jcc:117:28917
+070F2:jmp:28926
+070F5:movsi:308
+070F8:rt:156
+070FA:rt:190
+070FC:rt:184
+070FE:end
+07101:epilogue
+# commits

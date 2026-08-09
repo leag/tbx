@@ -1,0 +1,17 @@
+# v10_t1_printloccur dialect=1.0 start=07160
+07163:movax:3
+07166:movbxax
+07168:movax:5
+0716B:locate
+0716D:movsi:292
+07170:rt:156
+07172:rt:190
+07174:xorax
+07176:cursor
+07178:xorax
+0717A:movbxax
+0717C:xorax
+0717E:cursor_shape
+07180:end
+07183:epilogue
+# commits
