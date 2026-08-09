@@ -613,6 +613,26 @@
    ],
    "instead": "Treat this as an incomplete string-descriptor walk (or a second descriptor chain the walk does not follow), not a table-position problem. Start by checking whether dsd/delta is correct for night.exe, since the apparent table start below 0x110 is unexplained. Single witness -- deferred under the probe budget rather than guessed at.",
    "source": "wild-corpus session 2026-08-09, after the DATA pointer table and grid-anchor fixes"
+  },
+  {
+   "id": "RO-PHONE-FORWARDED-ARG-GUARD",
+   "title": "phone.exe's forwarded-arg overflow is a missing opaque_procs guard",
+   "disposition": "refuted",
+   "confidence": "medium",
+   "files": [
+    "wild/hits/phone.exe"
+   ],
+   "signatures": [
+    "forwarded arg index 7 to callee 0xa2da with 7 params"
+   ],
+   "hypothesis": "`_forwarded_arg` raises when the argument index runs past the callee param list, while the sibling `local_ref` in the same function already returns a generic slot for `inline_procs` AND `opaque_procs`. Adding the same `opaque_procs` guard to `_forwarded_arg` looks like the missing half of a symmetric pair.",
+   "negative_evidence": [
+    "Callee 0xa2da IS an opaque helper (confirmed: opaque=True, inline=False), so the guard would indeed fire -- but the arity mismatch it hides is real: the fingerprinted BP frame yields 7 by-ref params (P1E P1A P16 P12 P0E P0A P06, 4-byte spaced) while the call site pushes 11 arguments.",
+    "core.py sets opaque_procs with the explicit note that this is deliberately unlike source INLINE -- \"its exact arity still matters, while its bare Pxx names are not type evidence\". Silencing the check contradicts a calibration decision that was written down on purpose.",
+    "An opaque helper is coverage-only recovery: it emits as SUBn with an OpaqueHelper body, so a lenient arity would produce source that is not real rather than a byte-exact decode."
+   ],
+   "instead": "Treat the 7-vs-11 mismatch as evidence the opaque-helper fingerprint under-counts this frame, or that 0xa2da is a genuine user SUB being mis-fingerprinted as a helper -- the caller forwards 11 arguments and references its own params out to offset 0x26. Investigate the fingerprint, not the guard. Single witness.",
+   "source": "wild-corpus session 2026-08-09"
   }
  ]
 }
