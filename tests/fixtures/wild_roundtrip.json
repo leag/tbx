@@ -78,11 +78,11 @@
    "sha256": "ee35d1d6947a05f55fac24d0017034a9b02f0635a42fb00ef3e537a02426937c",
    "bytes": 120774,
    "statements": 2345,
-   "source_bytes": 81332,
+   "source_bytes": 81475,
    "toggles": "",
    "build_match": 97,
    "roundtrip": "code-or-metadata",
-   "delta": -64,
+   "delta": -16,
    "excluded": null
   },
   {
@@ -90,11 +90,11 @@
    "sha256": "a27a88802e7a7dba84e96d9443991d713ebd0bd491cdc2d26bf7f3787f1de58a",
    "bytes": 120774,
    "statements": 2345,
-   "source_bytes": 81332,
+   "source_bytes": 81475,
    "toggles": "",
    "build_match": 99,
    "roundtrip": "code-or-metadata",
-   "delta": -64,
+   "delta": -16,
    "excluded": null
   },
   {
@@ -552,6 +552,30 @@
    "roundtrip": "filler-plus-metadata",
    "delta": 0,
    "excluded": "different Turbo Basic build (88% runtime match)"
+  },
+  {
+   "name": "styled.exe",
+   "sha256": "a905a21141bec88fd64a39164af67bb87e3a19fadb971219594d886ccd315310",
+   "bytes": 56483,
+   "statements": 902,
+   "source_bytes": 22168,
+   "toggles": "K",
+   "build_match": 87,
+   "roundtrip": "filler-plus-metadata",
+   "delta": 128,
+   "excluded": "different Turbo Basic build (87% runtime match)"
+  },
+  {
+   "name": "styllist.exe",
+   "sha256": "cff90bd551f45e9a9467b315aaddab7775196908576c400d46d5926dec5df455",
+   "bytes": 44838,
+   "statements": 384,
+   "source_bytes": 10493,
+   "toggles": "K",
+   "build_match": 87,
+   "roundtrip": "filler-plus-metadata",
+   "delta": 32,
+   "excluded": "different Turbo Basic build (87% runtime match)"
   },
   {
    "name": "tamstart.exe",

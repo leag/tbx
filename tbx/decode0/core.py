@@ -2780,20 +2780,30 @@ def _recover_inline_file_operands(state) -> tuple[tuple[str, bytes], ...]:
     return tuple(zip(names, payloads))
 
 
-def _recover_small_data_pointer_table(state) -> None:
+def _recover_data_pointer_table(state) -> None:
     """Replace exclusion-derived DATA with the compiler's pointer table.
 
     A DATA string that is also used by code shares its descriptor, so the
-    ordinary unreferenced-descriptor walk drops it.  Small programs keep the
-    authoritative source-order list as descriptor displacements in an aligned
-    table between DGROUP 0x100 and ``var_base`` (probes probe_datamid and
-    probe_datadup; fixture t1_datasharedlit; wild zip.exe).  Repeated pointers
-    preserve repeated DATA items, which descriptor walking cannot infer.
+    ordinary unreferenced-descriptor walk drops it.  The compiler keeps the
+    authoritative source-order list as descriptor displacements in a
+    paragraph-aligned table below the string pool, terminated by the first
+    word that is not a descriptor displacement.  Repeated pointers preserve
+    repeated DATA items, which descriptor walking cannot infer.
 
-    Claim only a unique aligned run whose trailing alignment padding is zero
-    and which contains every exclusion-derived item in order.  At least one
-    such item is required as an anchor; larger tables whose location is not
-    calibrated remain fail-loud through the existing recovery path.
+    The table is NOT confined to the gap below ``var_base``: that only held
+    for the small witnesses (probes probe_datamid and probe_datadup; fixture
+    t1_datasharedlit; wild zip.exe, all at 0x100/0x110 under a 0x120
+    ``var_base``).  Wild styled.exe and styllist.exe carry 94-entry tables at
+    0x180 and 0x140, past their variables, so the search runs to ``ss_base``.
+    Wild cal.exe is the clearest reading of the difference: its table is at
+    0x230, and without it exclusion recovered the twelve months and their
+    lengths as the single item `DATA 30`.
+
+    Runs starting inside a longer run repeat its tail, so only maximal runs
+    are candidates (cal.exe also matches at 0x240 and 0x250).
+
+    Claim only a unique aligned run containing every exclusion-derived item in
+    order.  At least one such item is required as an anchor.
     """
     img, lyt, out = state.image, state.layout_state, state.output
     if (
@@ -2825,25 +2835,28 @@ def _recover_small_data_pointer_table(state) -> None:
         return wanted is None
 
     candidates = []
-    var_base = lyt.lay["var_base"]
-    for start in range(0x100, var_base, 0x10):
+    for start in range(0x100, lyt.ss_base, 0x10):
         items = []
         disp = start
-        while disp + 2 <= var_base:
+        while disp + 2 <= lyt.ss_base:
             pointer = struct.unpack_from("<H", img.exe, lyt.dsd + disp)[0]
             item = by_disp.get(pointer)
             if item is None:
                 break
             items.append(item)
             disp += 2
-        pad_end = min((disp + 0xF) & ~0xF, var_base)
-        padding = img.exe[lyt.dsd + disp : lyt.dsd + pad_end]
-        if (
-            items
-            and not any(padding)
-            and contains_in_order(items, lyt.data_items)
-        ):
-            candidates.append(items)
+        if items and contains_in_order(items, lyt.data_items):
+            candidates.append((start, items))
+    # A later-starting run inside a longer one repeats its tail; the outermost
+    # start is the table.  Keep only maximal runs before demanding uniqueness.
+    candidates = [
+        items
+        for start, items in candidates
+        if not any(
+            other < start and other + 2 * len(rest) >= start + 2 * len(items)
+            for other, rest in candidates
+        )
+    ]
     if len(candidates) == 1:
         lyt.data_items = candidates[0]
 
@@ -2893,7 +2906,7 @@ def _finalize(state: DecodeState, addr) -> Program:
             state, dims, data_orphan_lines, expanded_table
         )
         inline_files = _recover_inline_file_operands(state)
-        _recover_small_data_pointer_table(state)
+        _recover_data_pointer_table(state)
         data_lines, deftype_lines = _finalize_data_recovery(
             state,
             data_orphan_lines,

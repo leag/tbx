@@ -9591,6 +9591,44 @@ match against the English oracle is only 23%, so the remaining `SUB11` and
 direct-boolean template differences are part of the same unrepresented
 compiler/runtime revision, not string-pool corruption.
 
+**DATA pointer table past `var_base` (2026-08-09)**: the
+`RESTORE item index 87 is past the 86 recovered DATA items` family (wild
+styled.exe, styllist.exe) is closed. The mechanism was already known -- see
+`tests/tbx/test_restore_shared_item.py`: `RESTORE` indexes a compiler-emitted
+table of descriptor displacements in source order, not the string pool, and
+exclusion-based recovery silently drops any DATA item whose text is shared
+with a code literal. What was wrong was only the table's calibrated LOCATION,
+recorded as "between DGROUP 0x100 and `var_base`" because all four small
+witnesses (probe_datadup, probe_datamid, t1_datasharedlit, zip.exe) sit at
+0x100/0x110 under a 0x120 `var_base`. That bound is an accident of their size.
+styled.exe and styllist.exe carry 94-entry tables at 0x180 and 0x140, past
+their variables. The bound that holds for every witness is the string pool:
+search 0x100 to `ss_base`, take paragraph-aligned runs of descriptor
+displacements ending at the first word that is not one, keep only maximal runs
+(a run starting inside a longer one just repeats its tail), and require the
+run to contain every exclusion-derived item in order. That leaves exactly one
+candidate in all six programs, so the uniqueness check that gated the old rule
+still gates this one. The zero-trailing-padding condition was dropped: it was
+an artifact of runs being truncated at `var_base` and is false for the wild
+tables, which are followed by live data.
+
+The widened search also fixed a silent wrong answer nobody was looking for:
+wild cal.exe and cal87.exe were emitting their twelve-month table as the
+single item `10 DATA 30`. Their real table is at 0x230, and they now emit
+`DATA "JANUARY",31,...,"DECEMBER",31`. Both are comparable programs, so this
+was measured rather than asserted -- the oracle delta improves from -64 to
+-16 (96.10%/96.57% identical), and the manifest entries are updated with that
+measurement. styled.exe/styllist.exe are added to the manifest as newly
+decoding but excluded: their runtime-region build match is 87%, the same
+unrepresented compiler revision that blocks the rest of that group.
+
+**Pre-existing, NOT touched**: wild number.exe emits 29575 bytes against a
+recorded `source_bytes` of 29538. This reproduces on main with this change
+stashed, and its oracle delta is unchanged at -160, so some earlier commit
+moved its emitted source without re-recording the manifest. The entry is left
+failing on purpose -- re-recording it would absorb an unexplained change into
+a baseline. Diagnosing that drift is its own gap.
+
 ### The workflow (each gap, see gap 9–14 commits for examples)
 
 1. `uv run python -m tbx.tools.scan_wild wild/hits` — pick the top

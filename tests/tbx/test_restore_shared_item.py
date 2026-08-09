@@ -26,15 +26,13 @@ literals and including shared ones. Both authored probes carry one at DGROUP
 disp 0x100, below `var_base` where nothing else is allocated: `probe_datamid`'s
 skips the PRINT-only literal, `probe_datadup`'s includes the shared item.
 
-The small-table location is now calibrated by `t1_datasharedlit` and wild
-zip.exe as well as the two probes. Larger wild tables still do not fit below
-`var_base`; their location remains unknown and they continue to fail loudly.
-
-So the decoder refuses. What this test fixes is that it refuses *loudly*: the
-failure used to be a bare `KeyError`, which is not a `ValueError` and so
-escaped `decode_user_code`'s wrapper without collecting any phase context --
-leaving the wild scan to report the raw index as the program's entire failure
-signature (styled.exe and styllist.exe both grouped under `87`).
+The location is calibrated by `t1_datasharedlit` and wild zip.exe as well as
+the two probes, which all sit at 0x100/0x110 below a 0x120 `var_base`, and by
+wild styled.exe/styllist.exe, whose 94-entry tables sit at 0x180/0x140 --
+PAST `var_base`. The bound that holds for all five is the string pool: the
+table is a paragraph-aligned run of descriptor displacements below `ss_base`,
+ending at the first word that is not one. Requiring it to contain every
+exclusion-derived item in order leaves exactly one candidate in each.
 """
 
 from pathlib import Path
@@ -68,43 +66,25 @@ def test_a_shared_data_item_is_recovered_from_the_pointer_table():
 
 
 @pytest.mark.parametrize("name", ("styled.exe", "styllist.exe"))
-def test_the_wild_witnesses_report_the_cause_not_a_bare_index(name):
-    """Both used to surface as the signature `87` and nothing else."""
+def test_the_wild_witnesses_recover_their_table_past_var_base(name):
+    """Both used to surface as the signature `87` and nothing else.
+
+    Their 94-entry tables sit at DGROUP 0x180 and 0x140, past a 0x120
+    `var_base` -- the reason a search bounded by `var_base` (which every small
+    witness happens to satisfy) could not find them. `RESTORE`'s item 87 is
+    real DATA in both, so the recovered table has to be at least that long.
+    """
     hits = _ROOT / "wild" / "hits" / name
     if not hits.is_file():  # wild/hits is gitignored
         pytest.skip(f"{name} not present")
 
-    with pytest.raises(ValueError) as caught:
-        decode0.decode_user_code(hits.read_bytes())
+    program = decode0.decode_user_code(hits.read_bytes())
 
-    message = str(caught.value)
-    assert "RESTORE item index 87 is past the 86 recovered DATA items" in message
-
-
-def test_the_two_witnesses_share_one_triage_signature():
-    """Both must group together in the scan tally, which keys on the message.
-
-    `failure_signature` collapses a message from ` at 0x...` to the end, so a
-    message without that marker keeps its whole `[phase=...]` trailer in the
-    key and each witness reads as its own singleton -- which would mis-rank the
-    family against every other open gap. Asserted through the real normalizer
-    rather than by trimming the string here.
-    """
-    from tbx.tools.scan_wild import failure_signature
-
-    names = ("styled.exe", "styllist.exe")
-    paths = [_ROOT / "wild" / "hits" / n for n in names]
-    if not all(p.is_file() for p in paths):  # wild/hits is gitignored
-        pytest.skip("wild witnesses not present")
-
-    signatures = set()
-    for p in paths:
-        with pytest.raises(ValueError) as caught:
-            decode0.decode_user_code(p.read_bytes())
-        signatures.add(failure_signature(str(caught.value)))
-
-    assert len(signatures) == 1, signatures
-    assert "0x" not in signatures.pop()
+    items = [item for stmt in program if type(stmt).__name__ == "Data"
+             for item in stmt.items]
+    assert len(items) >= 88, len(items)
+    # Exclusion alone recovered 86: the shared descriptors are back.
+    assert sum(1 for i in items if i.text == "xxx") > 1, items[:5]
 
 
 def test_a_code_only_literal_sits_between_two_data_items():
