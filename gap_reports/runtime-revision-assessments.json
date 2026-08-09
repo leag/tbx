@@ -1,7 +1,7 @@
 {
  "schema_version": 1,
  "document_type": "tbx.runtime_revision_assessments",
- "updated": "2026-08-02",
+ "updated": "2026-08-09",
  "corpus_fingerprint": "2043f80bf6bf929b0a8058ebb0b83e3ec6b63664855e4428b4781db63c4924a3",
  "evidence_classes": [
   "oracle-verified",
@@ -56,7 +56,7 @@
     "The vendored oracle rejects the common three-argument INSTR source spellings, so this is not oracle-verified."
    ],
    "implementation": "Scanner accepts only canonical ED/1e and the fold consumes the existing AX value plus exactly two string-stack operands.",
-   "source": "HANDOFF.md: CLOSED 2026-07-20 \u2014 missing runtime-revision three-argument INSTR"
+   "source": "HANDOFF.md: CLOSED 2026-07-20 — missing runtime-revision three-argument INSTR"
   },
   {
    "id": "RR-INT-8C",
@@ -80,7 +80,7 @@
     "TB 1.0 keyboard-break toggles, dense KEY ON/OFF control, and simple CLS-plus-assignment handler bodies did not reproduce it."
    ],
    "promotion_criteria": "Satisfied 2026-07-23 by the RETURN <line> oracle fixture and the invariant INT-vector-plus-JMP shape across all five wild hits.",
-   "source": "HANDOFF.md: Gap INT-8c \u2014 likely ON KEY GOSUB related"
+   "source": "HANDOFF.md: Gap INT-8c — likely ON KEY GOSUB related"
   },
   {
    "id": "RR-CGA-HELPERS",
@@ -108,7 +108,7 @@
    ],
    "implementation": "Exact helper bodies produce coverage-only OpaqueHelper IR; this does not claim semantic source recovery.",
    "promotion_criteria": "Identify the source trigger or compiler/runtime option and reproduce a helper byte-exact, or recover authoritative runtime-library provenance.",
-   "source": "HANDOFF.md: Gap 19 \u2014 byte 06 and REMAINING_GAPS_PLAN.md Wave 3"
+   "source": "HANDOFF.md: Gap 19 — byte 06 and REMAINING_GAPS_PLAN.md Wave 3"
   },
   {
    "id": "RR-SYSCELL-8A",
@@ -391,6 +391,27 @@
    "assessment": "The French TB.EXE is a distinct 214424-byte build (SHA-256 d45256929e5dbf14cd13442f93a45251b29fe26488b95b679f2f0cbae5df81c8), separate from the English and German binaries. A writable 1.44 MB compiler image plus the localized main-file, executable-directory, and compile-to-EXE menu path now reproducibly produces SOLVER.EXE; the minimal probe is 34768 bytes and decodes as the existing 1.1 operation dialect. The public 360 KB disk was insufficient because it had only about 7 KB free.",
    "promotion_criteria": "No further promotion is required for oracle support; compare CVT2TB against this build before attributing differences to the runtime revision.",
    "source": "French 1.1 image fingerprint and byte-identifiable v86 compile, session 2026-08-02"
+  },
+  {
+   "id": "RR-EC-02",
+   "title": "INT EC sub 02: the one EC statement slot below BLOAD with no probe",
+   "signatures": [
+    "unhandled INT EC sub 02"
+   ],
+   "disposition": "unresolved",
+   "evidence_class": "unresolved",
+   "confidence": "medium",
+   "files": [
+    "wild/hits/sabpcv3.exe"
+   ],
+   "assessment": "The EC statement table is alphabetical in steps of two, and a 46-statement probe sweep against the 1.1 oracle pinned its low half: 00 BEEP, 04 BLOAD, 06 BLOAD-with-offset, 08 BSAVE, 0e CHAIN, 10 CHDIR, 12 CIRCLE, 14 CLEAR, 1a CLS, 20 COM(n) ON, 22 COLOR, 24 DATE$=, 26 DEF SEG, 28 DELAY, 30 DRAW, 36/38 ERASE (38 also CHAIN's COMMON glue), 3c ERROR, 44 FILES, 54 KEY ON, 58 KEY n, 60 KILL, 62 LINE, 6a MKDIR, 6e NAME, 70 ON ERROR, 84 PAINT, 98 PLAY, a2 POKE, a4 PSET, b0 RANDOMIZE, b8 RESET, bc/be/c0 RESUME, ce SHELL, d0 SOUND, e0 TIME$=, e6 TIMER ON, ea VIEW, ec WIDTH, f2 WINDOW. Sub 02 is the single unclaimed slot between BEEP and BLOAD, so the statement it dispatches sorts there. sabpcv3.exe's only call site is `mov ax,2; INT EC 02` behind a set-once DGROUP flag at [4122] and followed by a backward jump -- a small integer argument in AX, which none of BEEP's or BLOAD's forms take.",
+   "negative_evidence": [
+    "BEEP is 00 and both BLOAD forms are 04/06, so 02 is not a spelling variant of either.",
+    "BLOAD/BSAVE/CHAIN/CHDIR and the other 40-plus statements swept in this session all landed on other slots.",
+    "CALL ABSOLUTE and LCOPY are rejected outright by the 1.1 oracle, so neither can be the entry."
+   ],
+   "promotion_criteria": "Find a statement the 1.1 oracle accepts that sorts between BEEP and BLOAD and takes one integer in AX, or read the TB 1.1 runtime's EC table directly. Do not map 02 from the call-site shape alone.",
+   "source": "scan_wild triage, session 2026-08-09, 46 oracle probes (1.1 dialect)"
   }
  ]
 }
