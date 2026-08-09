@@ -180,17 +180,29 @@ def split_source(
     return _all_source_includes(source, clean, limit, include_limit)
 
 
-def emit_split(stmts, prefix: str = "TBX", force: bool = False) -> SourceBundle:
-    """Render and split only when the 64 KiB editor limit requires it."""
+def emit_split(
+    stmts,
+    prefix: str = "TBX",
+    force: bool = False,
+    *,
+    dense: bool = False,
+) -> SourceBundle:
+    """Render and split only when the 64 KiB editor limit requires it.
+
+    ``dense`` applies the same source-layout-only compaction as :func:`emit`
+    before measuring and splitting the source.
+    """
     assets = tuple(getattr(stmts, "inline_files", ()))
-    source = _externalize_inline_files(emit(stmts), assets)
+    source = _externalize_inline_files(emit(stmts, dense=dense), assets)
     if _source_bytes(source) > FILE_LIMIT and any(
         isinstance(stmt, (ir.SubDef, ir.DefFn)) and (
             not isinstance(stmt, ir.DefFn) or stmt.is_block
         )
         for stmt in stmts
     ):
-        compact = _externalize_inline_files(emit(stmts, compact=True), assets)
+        compact = _externalize_inline_files(
+            emit(stmts, compact=True, dense=dense), assets
+        )
         if _source_bytes(compact) <= FILE_LIMIT:
             return SourceBundle(compact, assets=assets)
     bundle = split_source(source, prefix=prefix, force=force)
@@ -478,7 +490,20 @@ def _flatten_plus_chain(e) -> list[str]:
     return [ir.unparse(e)]
 
 
-def emit(stmts, *, compact: bool = False, line_starts: list[int] | None = None) -> str:
+def emit(
+    stmts,
+    *,
+    compact: bool = False,
+    dense: bool = False,
+    line_starts: list[int] | None = None,
+) -> str:
+    """Render canonical Turbo Basic source.
+
+    Dense output removes optional spacing and line labels which are not used
+    as transfer targets. Programs carrying recovered error/trace line data
+    retain their complete physical numbering.
+    """
+
     def validate_loop_exits(body, do_depth=0, path=()):
         """Reject EXIT LOOP nodes that are not lexically inside a DO."""
         for index, stmt in enumerate(body):
@@ -593,7 +618,7 @@ def emit(stmts, *, compact: bool = False, line_starts: list[int] | None = None) 
         if isinstance(node, (ir.Goto, ir.IfGoto, ir.Gosub)):
             if isinstance(node.target, int):
                 yield node.target
-        elif isinstance(node, (ir.Return, ir.OnError, ir.Resume)):
+        elif isinstance(node, (ir.Return, ir.OnError, ir.Resume, ir.Restore)):
             if isinstance(node.target, int):
                 yield node.target
         elif isinstance(node, (ir.OnGoto, ir.OnGosub)):
@@ -601,18 +626,18 @@ def emit(stmts, *, compact: bool = False, line_starts: list[int] | None = None) 
         elif isinstance(node, ir.OnTrap) and isinstance(node.target, int):
             yield node.target
         for field in getattr(node, "__dataclass_fields__", ()):
-            value = getattr(node, field)
-            if isinstance(value, tuple):
-                for item in value:
-                    if hasattr(item, "__dataclass_fields__"):
-                        yield from jump_indices(item)
-            elif hasattr(value, "__dataclass_fields__"):
-                yield from jump_indices(value)
+            for item in flat(getattr(node, field)):
+                if hasattr(item, "__dataclass_fields__"):
+                    yield from jump_indices(item)
+
+    jump_targets = {
+        target for stmt in stmts for target in jump_indices(stmt)
+    }
 
     # Apply the INLINE-SUB return-label adjustment before any statement is
     # rendered.  Doing this lazily from L() makes an earlier ON ERROR target
     # retain the pre-shift line number (CVT2TB's handler exposes that mismatch).
-    for target in set(target for stmt in stmts for target in jump_indices(stmt)):
+    for target in jump_targets:
         if (
             target > 0
             and target < len(stmts)
@@ -633,6 +658,27 @@ def emit(stmts, *, compact: bool = False, line_starts: list[int] | None = None) 
                 for index in range(target - 1, len(stmts)):
                     line[index] += 10
                 end_sub_lines[previous_sub] = target_line
+
+    # Turbo Basic line numbers are optional labels. Dense output omits them
+    # except where a statement is the target of a source-level transfer. A
+    # recovered line table or trace/split metadata makes physical numbering
+    # byte-significant, so retain the complete numbering in those cases.
+    sparse_labels = dense and orig is None and not any(
+        (
+            getattr(stmts, "hook_seq", ()),
+            getattr(stmts, "traced", ()),
+            getattr(stmts, "trace_partial", {}),
+            getattr(stmts, "print_splits", {}),
+        )
+    )
+    numbered_indices = (
+        jump_targets | {statement for statement, _physical in body_targets}
+        if sparse_labels
+        else set(range(len(stmts)))
+    )
+
+    def line_prefix(index: int) -> str:
+        return f"{line[index]} " if index in numbered_indices else ""
 
     def L(t):
         if isinstance(t, ir.BodyLine):
@@ -969,10 +1015,11 @@ def emit(stmts, *, compact: bool = False, line_starts: list[int] | None = None) 
                 out.append(f"{split_lines[part]} {txt(segment)}\n")
             i = j
             continue
+        prefix = line_prefix(i)
         text = _join_line(
             group,
             txt,
-            len(f"{line[i]} "),
+            len(prefix),
             allow_inline_block=expanded_line_table,
         )
         if i in end_sub_lines:
@@ -998,13 +1045,12 @@ def emit(stmts, *, compact: bool = False, line_starts: list[int] | None = None) 
             targeted = {k for (si, k) in body_targets if si == i}
             if not all(0 < k < len(body) for k in targeted):
                 raise ValueError(f"body-line target out of range at stmt {i}")
-            out.append(f"{line[i]} {body[0]}\n")
+            out.append(f"{prefix}{body[0]}\n")
             out.extend(
                 f"{line[i] + k} {ln.strip()}\n" if k in targeted else f"{ln}\n"
                 for k, ln in enumerate(body[1:], 1)
             )
         else:
-            prefix = f"{line[i]} "
             physical = text.splitlines() or [""]
             widths = [len(prefix) + len(physical[0])]
             widths.extend(len(part) for part in physical[1:])
@@ -1049,4 +1095,4 @@ def emit(stmts, *, compact: bool = False, line_starts: list[int] | None = None) 
     if hooks:
         raise ValueError(f"{len(hooks)} trace-hook lines left unconsumed")
     source = "".join(out)
-    return _compact_source_spacing(source) if compact else source
+    return _compact_source_spacing(source) if compact or dense else source

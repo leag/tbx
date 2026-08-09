@@ -3,6 +3,7 @@
     tbx PROGRAM.EXE                 # recovered source on stdout
     tbx PROGRAM.EXE -o PROGRAM.BAS  # write to a file
     tbx PROGRAM.EXE -o PROGRAM.BAS --split  # add .INC files when over 64 KiB
+    tbx PROGRAM.EXE --dense         # compact source with labels only where needed
     tbx PROGRAM.EXE --ops           # canonical op-stream dump (debugging aid)
     tbx PROGRAM.EXE --data          # readable DATA-pool dump (non-source)
 
@@ -110,6 +111,11 @@ def _parser() -> argparse.ArgumentParser:
         help="split source over 64 KiB into procedure-boundary .INC files "
         "(requires --output)",
     )
+    ap.add_argument(
+        "--dense",
+        action="store_true",
+        help="emit compact source with line labels only where required",
+    )
     return ap
 
 
@@ -119,6 +125,9 @@ def _validate_args(args: argparse.Namespace) -> bool:
         return False
     if args.split and (args.output is None or args.ops or args.data):
         print("tbx: --split requires --output and cannot be used with --ops/--data", file=sys.stderr)
+        return False
+    if args.dense and (args.ops or args.data):
+        print("tbx: --dense cannot be used with --ops/--data", file=sys.stderr)
         return False
     return True
 
@@ -132,11 +141,11 @@ def _decode_output(args: argparse.Namespace, exe: bytes):
         return _dump_data(prog), None, prog
 
     bundle = (
-        emit0.emit_split(prog, prefix=args.output.stem)
+        emit0.emit_split(prog, prefix=args.output.stem, dense=args.dense)
         if args.split or (args.output is not None and getattr(prog, "inline_files", ()))
         else None
     )
-    text = bundle.root if bundle is not None else emit0.emit(prog)
+    text = bundle.root if bundle is not None else emit0.emit(prog, dense=args.dense)
     return text, bundle, prog
 
 

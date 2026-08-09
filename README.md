@@ -17,6 +17,7 @@ byte-for-byte.
 pip install .
 tbx PROGRAM.EXE                 # recovered source on stdout
 tbx PROGRAM.EXE -o PROGRAM.BAS  # write recovered source
+tbx PROGRAM.EXE -o PROGRAM.BAS --dense --split  # minimize labels and add .INC files
 tbx PROGRAM.EXE --ops           # inspect the canonical op stream
 ```
 
@@ -44,6 +45,13 @@ from tbx import decode0, emit0
 exe = open("PROGRAM.EXE", "rb").read()
 source = emit0.emit(decode0.decode_user_code(exe))
 ```
+
+Pass `dense=True` to `emit0.emit` or use `--dense` on the command line to
+remove optional spacing and omit line labels that are not branch, error, or
+DATA targets. Recovered error/trace line tables remain fully numbered. For
+programs beyond Turbo Basic's editor limit, combine it with `--split` and an
+output path so the remaining source is written as procedure-safe `.INC`
+chunks.
 
 ## What it recovers
 

@@ -158,6 +158,7 @@ constructs from them alone.
 | command | use |
 | --- | --- |
 | `tbx PROGRAM.EXE` | decompile to stdout |
+| `tbx PROGRAM.EXE -o PROGRAM.BAS --dense --split` | compact source with only required labels, split at the editor limit |
 | `tbx PROGRAM.EXE --ops` | the operation stream |
 | `python -m tbx.tools.dump_ops` | operations with file offsets |
 | `python -m tbx.tools.dump_events` | events, edits and branch classification |

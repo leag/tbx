@@ -21,6 +21,16 @@ def test_decompile_to_file(tmp_path):
     assert out.read_text() == open(os.path.join(_GOLD, "v10_t1_delay.bas")).read()
 
 
+def test_dense_output_omits_unneeded_line_labels(capsys):
+    assert (
+        cli.main([os.path.join(_CORPUS, "v10_t1_delay.exe"), "--dense"])
+        == 0
+    )
+    output = capsys.readouterr().out
+    assert output
+    assert all(not line[:1].isdigit() for line in output.splitlines())
+
+
 def test_split_output_writes_the_root_and_latin1_include(tmp_path, monkeypatch):
     out = tmp_path / "out.bas"
     bundle = emit0.SourceBundle(
@@ -112,6 +122,16 @@ def test_ops_and_data_are_mutually_exclusive(capsys):
         == 1
     )
     assert "mutually exclusive" in capsys.readouterr().err
+
+
+def test_dense_is_source_only(capsys):
+    assert (
+        cli.main(
+            [os.path.join(_CORPUS, "t1_delay.exe"), "--dense", "--ops"]
+        )
+        == 1
+    )
+    assert "--dense cannot be used" in capsys.readouterr().err
 
 
 def test_missing_file(capsys):
