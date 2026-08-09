@@ -1,0 +1,34 @@
+# t1_fninput dialect=1.1 start=08830
+08833:jmp:34913
+08836:mov_bp_imm:0:0
+0883B:mov_bp_imm:2:0
+08840:input:288:0
+08847:read_str
+0884A:movsi:4
+0884D:strassign_bp
+0884F:movsi:4
+08852:spush_bp
+08854:movsi:0
+08857:strassign_bp
+08859:arg_ref:4
+0885D:str_temp_free
+0885F:fn_ret
+08861:push_bp
+08862:mov_mem_sp:104
+08866:sub_sp:8
+08869:mov_bp_sp
+0886B:movsi:292
+0886E:rt:156
+08870:mov_bp_imm:4:0
+08875:mov_bp_imm:6:0
+0887A:movsi:4
+0887D:strassign_bp
+0887F:movm_imm:104:0
+08885:fn_call:34870
+0888C:fnres_spush
+0888E:add_sp:8
+08891:pop_bp
+08892:rt:190
+08894:rt:184
+08896:epilogue
+# commits

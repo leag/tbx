@@ -1,0 +1,5 @@
+DEF FNA$(X$)
+  INPUT X$
+  FNA$ = X$
+END DEF
+PRINT FNA$("a")

@@ -6753,8 +6753,24 @@ def _decode_user_code(
                         # reads one, and t1_fnstrparamwrite does exactly that.
                         # Same reasoning as the far_ref_bp MID$= path above.
                         # A store with nothing staged is a different shape --
-                        # not an assignment at all -- so it still stops here
-                        # (wild crossref.exe at [bp+68]).
+                        # not an assignment at all.  INPUT is one: `INPUT X$`
+                        # inside a DEF FN body writes the parameter with the
+                        # value the runtime read, so the target is named here
+                        # rather than popped from the string stack.  The LOCAL
+                        # branch above already routes exactly this through
+                        # `_input_target`; this is the parameter sibling of it
+                        # (fixture t1_fninput; wild crossref.exe at [bp+68]).
+                        if e.pend_input is not None:
+                            c.fn_frame.param_offs.add(d)
+                            c.fn_frame.str_offs.add(d)
+                            state._input_target(ir.Var(f"P{d:02X}$"), is_str=True)
+                            c.cur = None
+                            state.advance(2)
+                            continue
+                        # The LOCAL branch also routes FIELD reads, GET$ and
+                        # READ this way.  Those have no DEF FN witness, so
+                        # they stay fail-loud rather than being assumed to
+                        # behave like INPUT does.
                         if not e.sstack:
                             raise ValueError(
                                 f"string store to [bp+{d}] in DEF FN body "

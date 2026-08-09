@@ -20,7 +20,11 @@ def test_scan_testw_bp_is_exact():
 @pytest.mark.parametrize(
     ("stem", "exc", "next_gap"),
     [
-        ("crossref.exe", ValueError, r"string store to \[bp\+68\] in DEF FN body with no staged value"),
+        # Advanced past the [bp+68] string store once INPUT into a DEF FN
+        # string parameter was recovered (t1_fninput); this records where it
+        # stops NOW, which is the LOCAL-array ERASE whose own DIM the decoder
+        # has not seen.
+        ("crossref.exe", ValueError, r"ERASE of undimensioned LOCAL block"),
     ],
 )
 def test_fp_local_for_advances_wild_program(stem, exc, next_gap):

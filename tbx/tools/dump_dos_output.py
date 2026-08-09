@@ -43,6 +43,8 @@ KEYS = {
     "t1_fn": '[{"wait":"?","send":"4\\r"}]',
     # lowercase answers: the oracle's scancode typing can't shift reliably
     "t1_inp": '[{"wait":"?","send":"5\\r"},{"wait":"?","count":2,"send":"ab\\r"}]',
+    # INPUT inside a DEF FN body writes the function's own string parameter.
+    "t1_fninput": '[{"wait":"?","send":"ab\\r"}]',
     "t1_inp2": '[{"wait":"X","send":"3\\r"}]',
     "t1_inp4": '[{"wait":"X","send":"ab\\r"}]',
     "t1_sarr2": '[{"wait":"?","send":"3\\r"}]',

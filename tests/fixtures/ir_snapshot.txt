@@ -4079,6 +4079,10 @@ Print(items=(FnCall(name='FNFN1', args=(Lit(value=3),)),), newline=True, file=No
 End()
 DefFn(name='FNFN1', params=('A',), body=(FnResult(value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1))),), is_block=True)
 
+## t1_fninput
+DefFn(name='FNFN1$', params=('A$',), body=(Input(prompt=None, var=Var(name='A$'), comma=False, semi=False), FnResult(value=Var(name='A$'))), is_block=True)
+Print(items=(FnCall(name='FNFN1$', args=(StrLit(value='a'),)),), newline=True, file=None, commas=None)
+
 ## t1_fnintarith
 DefFn(name='FNFN1%', params=(), body=(FnResult(value=BinOp(op='AND', lhs=Var(name='A%'), rhs=Lit(value=15))),), is_block=True)
 SubDef(name='SUB1', params=(), body=(Assign(target=Var(name='B%'), value=BinOp(op='-', lhs=FnCall(name='FNFN1%', args=()), rhs=Lit(value=7))), Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)))
@@ -11065,6 +11069,10 @@ DefFn(name='FNFN1', params=('A', 'B'), body=BinOp(op='+', lhs=Var(name='A'), rhs
 SubDef(name='SUB1', params=('C', 'D'), body=(Assign(target=Var(name='E'), value=FnCall(name='FNFN1', args=(Var(name='C'), Var(name='D')))), IfInline(cond=RelOp(op='>', lhs=Var(name='C'), rhs=Lit(value=0)), body=(CallStmt(name='SUB1', args=(BinOp(op='-', lhs=Var(name='C'), rhs=Lit(value=1)), Var(name='E'))),), else_body=None)))
 CallStmt(name='SUB1', args=(Lit(value=2), Lit(value=3)))
 End()
+
+## v10_t1_fninput
+DefFn(name='FNFN1$', params=('A$',), body=(Input(prompt=None, var=Var(name='A$'), comma=False, semi=False), FnResult(value=Var(name='A$'))), is_block=True)
+Print(items=(FnCall(name='FNFN1$', args=(StrLit(value='a'),)),), newline=True, file=None, commas=None)
 
 ## v10_t1_fnintarith
 DefFn(name='FNFN1%', params=(), body=(FnResult(value=BinOp(op='AND', lhs=Var(name='A%'), rhs=Lit(value=15))),), is_block=True)

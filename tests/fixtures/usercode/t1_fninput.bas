@@ -1,0 +1,5 @@
+10 DEF FNFN1$(A$)
+  INPUT A$
+  FNFN1$ = A$
+END DEF
+20 PRINT FNFN1$("a")

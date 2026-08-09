@@ -9826,6 +9826,34 @@ ops goldens. Do not splice fwait into the element chain until something
 reproduces it: that would make the chain accept an op whose source trigger is
 still unknown.
 
+**`INPUT X$` inside a DEF FN body (2026-08-09, CLOSED)**: the string
+store into a DEF FN frame slot had exactly one shape -- pop the staged value
+and assign it -- so a store with nothing staged raised `string store to
+[bp+N] in DEF FN body with no staged value`. The comment there already said
+the shape was "not an assignment at all", and this is what it is: INPUT NAMES
+its target instead of pushing a value, so the ops read `input; read_str;
+movsi; strassign_bp` with the string stack empty by design. The LOCAL branch
+immediately above already routes exactly this through `_input_target`; the
+DEF FN branch never did. Fixture t1_fninput (+v10_), both byte-exact, with a
+KEYS entry so its dosout captures.
+
+Kept deliberately narrow: the LOCAL branch also routes FIELD reads, GET$ and
+READ the same way, and none of those has a DEF FN witness, so they still
+raise rather than being assumed to behave like INPUT.
+
+crossref.exe advanced past [bp+68] to `ERASE of undimensioned LOCAL block` at
+0x12b44, and the two pins recording where it stops (test_local_bounds.py,
+test_fp_local_for.py) were updated to that measured signature.
+
+**The new crossref gap, diagnosed not fixed**: the ERASE is of a LOCAL block
+at [bp+8] whose DIM the decoder has not seen (it knows 0x4 and 0xe). The
+DGROUP sibling of this already tolerates ERASE-before-DIM by naming the array
+from its stable GRID position, but a LOCAL array's name comes from a running
+counter assigned at DIM time (`V{n_static + rt_blocks + n_local_arrs}`), so
+there is nothing to name it from at the ERASE. Closing it needs deferred
+naming -- emit a placeholder and patch it when the DIM appears, the way gap
+20 patches a FOR step in place -- not a lookup fix.
+
 ### The workflow (each gap, see gap 9–14 commits for examples)
 
 1. `uv run python -m tbx.tools.scan_wild wild/hits` — pick the top
