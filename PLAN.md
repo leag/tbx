@@ -9884,6 +9884,34 @@ Two traps this hit, both caught by existing guards rather than by inspection:
 [bp+8] is not a declared LOCAL span of the enclosing frame at all, so the
 naming helper declines it. That is a different cause, still undiagnosed.
 
+**NEXT GAP -- a LOCAL re-DIM invents a second name, SILENTLY
+(2026-08-09, found not fixed)**: this one does not raise, which makes it more
+dangerous than any of the 13 loud wild failures. Found while diagnosing
+crossref.exe.
+
+`probe_localredim` is `LOCAL A$()` / `DIM A$(N%)` / `ERASE A$` /
+`DIM A$(N%+1)` -- one array, DIMensioned twice. It decodes to:
+
+    LOCAL V1$()
+    DIM V0$(A%)
+    ERASE V0$
+    DIM V1$(A% + 1)
+
+One source array became TWO names, and the LOCAL declares only V1$ while V0$
+is never declared anywhere. The same shape is in the wild: instrumenting the
+registration site on crossref.exe shows disp 0x4 registered twice inside frame
+0xdfbb (V5$ then V6$) and disp 0xe twice inside frame 0xecc0 (V7$, V8$).
+
+Cause: every `DIM` allocates a fresh V-number, and `r_arrs` is keyed by BARE
+bp offset and is global across procedures, so it cannot tell "same slot, same
+frame, DIMmed again" from "different frame". A frame slot is ONE variable.
+
+Fix direction: per-frame identity has to come from the frame -- the same place
+`erase_named_arrays` lives after the t1_lerase work -- and a re-DIM of that
+slot must reuse the recorded name. Re-measure cleanup.exe and reformat.exe
+through the oracle afterwards: they are comparable, they carry LOCAL arrays,
+and a too-broad name-reuse rule already moved them 25 bytes once this session.
+
 ### The workflow (each gap, see gap 9–14 commits for examples)
 
 1. `uv run python -m tbx.tools.scan_wild wild/hits` — pick the top

@@ -673,6 +673,28 @@
    ],
    "instead": "The bytes at 0x12b44 are `8b f5 83 c6 08 ce 16 07 cd ec 36` -- mov si,bp; add si,8; push ss; pop es; INT EC sub 36 -- a GENUINE ERASE of the frame slot at bp+8, and it is immediately followed by a SECOND ERASE (`be c2 01 ... cd ec 36`) of DGROUP 0x1c2, which IS a known array. So this is one source statement, `ERASE <bp+8>, <0x1c2>`: a multi-array ERASE mixing a frame-relative operand with a DGROUP one. The open question is what bp+8 IS in a DEF FN whose r_arrs already holds bp+4 and bp+0xe -- those cannot all be 60-byte array blocks, so at least one is being classified wrong. Start from the multi-operand ERASE and the bp+4/bp+8/bp+0xe spacing, not from the naming helper. (An earlier note in this entry guessed a frame-CLOSING bug from the result store preceding the ERASE; the byte evidence above supersedes that -- the statements are genuinely inside the body.)",
    "source": "wild-corpus session 2026-08-09, after t1_lerase/t1_lerase2 landed"
+  },
+  {
+   "id": "RO-LOCAL-REDIM-SECOND-NAME",
+   "title": "Re-DIMensioning a LOCAL array invents a second name for it (SILENT)",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "wild/probes/probe_localredim.bas",
+    "wild/hits/crossref.exe"
+   ],
+   "signatures": [
+    "LOCAL V1$() with DIM V0$ never declared",
+    "r_arrs registered twice for one bp offset in one frame"
+   ],
+   "hypothesis": "Each `DIM` of a LOCAL dynamic array names a distinct array, so allocating a fresh V-number per DIM is correct.",
+   "negative_evidence": [
+    "probe_localredim (`LOCAL A$()` / `DIM A$(N%)` / `ERASE A$` / `DIM A$(N%+1)`) decodes to `LOCAL V1$()` / `DIM V0$(A%)` / `ERASE V0$` / `DIM V1$(A%+1)`: ONE source array becomes TWO names, and the LOCAL declares only V1$ while V0$ is never declared anywhere.",
+    "This does NOT raise. It is a silent wrong decode, which makes it more dangerous than any of the 13 loud failures in the wild corpus.",
+    "Instrumenting the registration site on wild crossref.exe shows the same shape in the wild: disp 0x4 registered twice inside frame 0xdfbb (V5$ then V6$), and disp 0xe twice inside frame 0xecc0 (V7$, V8$)."
+   ],
+   "instead": "A frame slot is ONE variable: a re-DIM of the same bp offset in the same open frame must reuse the name already recorded for it. `r_arrs` is keyed by bare bp offset and is global across procedures, so per-frame identity has to come from the frame -- the same place `erase_named_arrays` lives after the t1_lerase work. Fixing it changes emitted names, so re-measure the comparable wild programs (cleanup.exe, reformat.exe) through the oracle: a too-broad reuse rule already moved those two 25 bytes once.",
+   "source": "wild-corpus session 2026-08-09, found while diagnosing crossref.exe"
   }
  ]
 }
