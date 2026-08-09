@@ -61,6 +61,14 @@ def test_advance_and_seek_commit_the_same_window():
     assert relative.cursor.history == absolute.cursor.history == [OPS[0], OPS[1]]
 
 
+def test_begin_indexes_the_immutable_operation_addresses():
+    state = DecodeState()
+
+    state.begin(OPS)
+
+    assert state.image.op_addrs == frozenset({0x10, 0x20, 0x30})
+
+
 def test_seek_refuses_to_uncommit_consumed_operations():
     state = DecodeState()
     state.k = 0

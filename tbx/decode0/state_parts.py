@@ -72,7 +72,16 @@ class ImageState(StateView):
     be total without pretending the input image is mutable decoder state.
     """
 
-    fields = frozenset({"exe", "start", "dia", "main_start", "ops"})
+    fields = frozenset(
+        {
+            "exe",
+            "start",
+            "dia",
+            "main_start",
+            "ops",
+            "op_addrs",
+        }
+    )
 
 
 class MachineState(StateView):

@@ -201,6 +201,7 @@ class DecodeState:
     seg_metas: Any = None
     ops: Any = None
     option_base: Any = None
+    op_addrs: Any = None
     pend_arg: Any = None
     pend_args: Any = None
     pend_bool: Any = None
@@ -268,6 +269,11 @@ class DecodeState:
         caller could get out of order.
         """
         self.ops = ops
+        # Branch handling asks whether a target is represented in the scanned
+        # stream for every operation in the program.  Addresses do not change
+        # once dispatch begins, so build the membership index once rather than
+        # rebuilding the same set on every loop iteration.
+        self.op_addrs = frozenset(op[0] for op in ops)
         self.k = 0
         self.cursor = OpCursor(ops)
         self.diagnostics = self.diagnostics or DecodeDiagnostics()
@@ -472,12 +478,11 @@ class DecodeState:
         # the same rule while walking, or the IF frame remains open forever
         # and its condition disappears from the emitted IR (mcmurphy's
         # command-dispatch string tests).
-        op_addrs = {op[0] for op in self.image.ops}
         while self.ifs:
             target = self.frame_event(self.ifs[-1]).payload.target
             if addr != target and not (
                 target is not None
-                and target not in op_addrs
+                and target not in self.image.op_addrs
                 and addr % 0x10000 == target % 0x10000
             ):
                 break
@@ -956,8 +961,7 @@ class DecodeState:
         # nested inline-IFs close in stack order.  Waiting until final target
         # resolution leaves an unreachable outer frame and absorbs every
         # inner condition (mcmurphy's command-dispatch string tests).
-        op_addrs = {op[0] for op in self.image.ops}
-        if target is not None and (target not in op_addrs or (
+        if target is not None and (target not in self.image.op_addrs or (
             frame == "if" and address is not None and target < address
         )):
             candidates = [

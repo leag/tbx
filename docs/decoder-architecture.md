@@ -50,7 +50,7 @@ handful of sites; the module a failure comes from is the practical stand-in.
 
 ## State ownership
 
-`DecodeState` holds 100 persistent fields. They are partitioned across six
+`DecodeState` holds 101 persistent fields. They are partitioned across six
 views -- **total and disjoint**, enforced by `tests/tbx/test_state_parts.py`,
 which fails if a field gains a second owner or none. A view is an alias, not a
 copy, and writing an unowned name through one raises rather than shadowing it.
@@ -59,10 +59,10 @@ The partition is the answer to "who set this?": a field has exactly one owner,
 and `tests/tbx/test_state_audit.py` additionally proves every one of them is
 read somewhere, so nothing in the list is decoration.
 
-**`state.image`** (ImageState, 5 fields)
+**`state.image`** (ImageState, 6 fields)
 : The decoded input: EXE bytes, prologue anchors, and the op stream.
 
-    `dia`, `exe`, `main_start`, `ops`, `start`
+    `dia`, `exe`, `main_start`, `op_addrs`, `ops`, `start`
 
 **`state.machine`** (MachineState, 10 fields)
 : The emulated register file and latched x87/segment machine elements.
