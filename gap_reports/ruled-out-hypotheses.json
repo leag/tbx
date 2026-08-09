@@ -1,7 +1,7 @@
 {
  "schema_version": 1,
  "document_type": "tbx.ruled_out_hypotheses",
- "updated": "2026-08-08",
+ "updated": "2026-08-09",
  "note": "Decoder-side hypotheses that were investigated and REJECTED: a cause that turned out not to be the cause, or a fix that was written, tested and reverted. The sibling ledger runtime-revision-assessments.json covers the other class, where the answer is a property of the compiler rather than of our code; a pattern that is unwitnessable by our oracle belongs there, not here. The point of both is that a rejected hypothesis is expensive evidence and is otherwise lost the moment a session ends -- PLAN.md records them chronologically, and this is the deduplicated index into it. An entry earns its place by saying what was tried, what killed it, and what a re-attempt should do instead.",
  "dispositions": [
   "refuted",
@@ -592,6 +592,27 @@
    ],
    "instead": "Recover complete, uniquely paired .BIN descriptors as $INLINE file operands, and recover small DATA sequences from the aligned descriptor-pointer table below var_base. Do not infer either construct by rearranging the exclusion-derived data_items list.",
    "source": "three oracle source probes plus DATA-table and descriptor inspection, session 2026-08-08"
+  },
+  {
+   "id": "RO-NIGHT-DATA-TABLE-IS-LOCATION",
+   "title": "night.exe's RESTORE failure is the DATA pointer table's LOCATION",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/night.exe"
+   ],
+   "signatures": [
+    "RESTORE item index 343 is past the 226 recovered DATA items",
+    "night.exe 348 walked descriptors"
+   ],
+   "hypothesis": "night.exe fails the same way styled.exe/styllist.exe did, so widening where the DATA pointer table is searched for -- the fix that closed those two -- should close it as well.",
+   "negative_evidence": [
+    "The table is found and is genuinely present: dumping words from disp 0x0000 resolves a 285-entry run to the program's numeric star catalogue (8, 19, 8, 23, 8, 0, ...), and plausible descriptor disps continue on BOTH sides of it (a405 9c05 a405 8005 before, bc05 a805 bc05 after). The run does not end where the table ends.",
+    "It ends where the entries stop RESOLVING: a table word names a descriptor the string-descriptor walk never recovered. night.exe walks 348 descriptors while the RESTORE needs at least 344 DATA items and exclusion recovers only 226, so contains_in_order over the anchors can never be satisfied.",
+    "The run also begins at disp 0x0000, below the 0x110 runtime system cells, which cannot hold a user table -- so dsd/delta is suspect for this program independently of the search window."
+   ],
+   "instead": "Treat this as an incomplete string-descriptor walk (or a second descriptor chain the walk does not follow), not a table-position problem. Start by checking whether dsd/delta is correct for night.exe, since the apparent table start below 0x110 is unexplained. Single witness -- deferred under the probe budget rather than guessed at.",
+   "source": "wild-corpus session 2026-08-09, after the DATA pointer table and grid-anchor fixes"
   }
  ]
 }

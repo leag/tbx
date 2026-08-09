@@ -9699,6 +9699,31 @@ GET/PUT requires graphics mode, and the capture harness needs a DOS prompt.
 
 Corpus 88 -> 89 decode-ok of 108 (83 of 99 families), 17 -> 16 failing.
 
+**night.exe's DATA table is a DIFFERENT sub-gap (2026-08-09, diagnosed,
+NOT fixed)**: after the blit fix, night.exe returns to
+`RESTORE item index 343 is past the 226 recovered DATA items`. This is NOT the
+table-location rule closed earlier -- do not re-derive that.
+
+What was established: the table IS present and IS real DATA. Dumping the words
+from disp 0x0000 shows a 285-entry run resolving to the program's numeric star
+catalogue ('8', '19', '8', '23', '8', '0', ...), and plausible descriptor disps
+continue on both sides of it (`a405 9c05 a405 8005` before, `bc05 a805 bc05`
+after). So the run does not stop because the table stops.
+
+It stops because the entries stop resolving: the run is cut where a table word
+names a descriptor the STRING DESCRIPTOR WALK never recovered. night.exe walks
+348 descriptors and the RESTORE needs at least 344 DATA items, with only 226
+recovered by exclusion. The blocker is therefore an incomplete descriptor walk
+(or a second descriptor chain the walk does not follow), not the table's
+position, and `contains_in_order` over the exclusion anchors cannot be
+satisfied while entries are unresolvable.
+
+Also unexplained and worth checking first next time: the run begins at disp
+0x0000, below the 0x110 runtime system cells, which should not be able to hold
+a user table at all -- so either `dsd`/`delta` is off for this program or the
+table lives outside the window the search assumes. Single witness; deferred
+rather than guessed at, per the probe budget.
+
 ### The workflow (each gap, see gap 9–14 commits for examples)
 
 1. `uv run python -m tbx.tools.scan_wild wild/hits` — pick the top
