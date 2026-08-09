@@ -1,0 +1,7 @@
+10 DEF FNFN1%(A%)
+  LOCAL V1(), V0()
+  DIM V0(A%)
+  ERASE V1
+  FNFN1% = A%
+END DEF
+20 PRINT FNFN1%(3)

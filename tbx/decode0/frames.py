@@ -167,6 +167,13 @@ class BodyFrame:
     local_span: tuple | None = None
     #: bp offsets that are compiler temporaries rather than declared LOCALs.
     hidden_locals: set = field(default_factory=set)
+    #: LOCAL dynamic-array blocks an explicit `ERASE` already named, because
+    #: the array was declared but never DIMensioned. A later DIM of the same
+    #: block reuses that name instead of allocating a second one, and the
+    #: epilogue's `local_arr_free` skips it. Scoped to ERASE specifically: a
+    #: plain LOCAL declaration also leaves a `Vn()` spelling in `locals`, and
+    #: reusing THAT renumbers every later LOCAL array.
+    erase_named_arrays: set = field(default_factory=set)
     #: bp offsets read or written as ordinary variables, which is the evidence
     #: that a hidden offset is *not* a temp after all.
     touched: set = field(default_factory=set)

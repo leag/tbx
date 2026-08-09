@@ -1162,6 +1162,38 @@ def _drop_local_descriptor_initializers(state, frame, span, addr) -> None:
     o.addrs[:] = [stmt_addr for _, stmt_addr in kept]
 
 
+
+def _erase_named(control) -> set:
+    """The open body's ERASE-named LOCAL array blocks (empty outside a body)."""
+    frame = control.proc_frame if control.proc_frame is not None else control.fn_frame
+    return frame.erase_named_arrays if frame is not None else set()
+
+
+def _name_undimensioned_local_array(state, frame, d, addr, what):
+    """Register a declared-but-never-DIMensioned LOCAL dynamic array.
+
+    Such an array has no populated runtime record, so the only definitive
+    evidence that its zero-filled 30-word span IS an array descriptor is an
+    operation that treats it as one. Two do: the implicit `local_arr_free` in
+    the procedure epilogue, and an explicit source `ERASE`. Whichever comes
+    first in address order has to name it, and both must name it the SAME way
+    -- hence one helper rather than two copies of the numbering.
+
+    Returns the recovered name, or None when the span is not a LOCAL at all.
+    """
+    l = state.layout_state
+    locs = frame.locals if frame is not None else None
+    span = {d + 2 * i for i in range(_LOCAL_ARR_WORDS)}
+    if locs is None or not span <= set(locs):
+        return None
+    _drop_local_descriptor_initializers(state, frame, span, addr)
+    name = f"V{l.lay['n_static'] + len(l.lay['rt_blocks']) + l.n_local_arrs}"
+    l.n_local_arrs += 1
+    frame.hidden_locals.update(span - {d})
+    locs[d] = f"{name}()"
+    logger.debug("named undimensioned LOCAL array %s at %x via %s", name, addr, what)
+    return name
+
 def _scope_proc_regions(
     stmts: list[ir.Stmt],
 ) -> list[tuple[int, list[str], list[str]]]:
@@ -5065,7 +5097,26 @@ def _decode_user_code(
             # t1_fnlocalarrstr; wild cleanup.exe/reformat.exe).
             disp = op[2]
             if disp not in l.r_arrs:
-                raise ValueError(f"ERASE of undimensioned LOCAL block at {addr:#x}")
+                # `ERASE A` on a LOCAL array that was declared but never
+                # DIMensioned. The epilogue's `local_arr_free` names exactly
+                # this shape, but it sits LATER in address order, so the ERASE
+                # is the first operation to treat the span as a descriptor and
+                # therefore the one that has to name it (probes lerase and
+                # lerase2; wild crossref.exe at [bp+8]).
+                frame = c.proc_frame if c.proc_frame is not None else c.fn_frame
+                name = _name_undimensioned_local_array(
+                    state, frame, disp, addr, "ERASE"
+                )
+                if name is not None and frame is not None:
+                    frame.erase_named_arrays.add(disp)
+                if name is None:
+                    raise ValueError(
+                        f"ERASE of undimensioned LOCAL block at {addr:#x}"
+                    )
+                state.put(ir.Erase(name), c.cur)
+                c.cur = None
+                state.advance(2)
+                continue
             state.put(ir.Erase(l.r_arrs[disp]["name"]), c.cur)
             c.cur = None
             state.advance(2)
@@ -5214,11 +5265,31 @@ def _decode_user_code(
                     raise ValueError("inconsistent OPTION BASE across DIMs")
                 l.option_base = lo.value
             suffix = "%" if tb == 0x00 else ("$" if tb == 0x0A else "")
-            name = (
-                f"V{l.lay['n_static'] + len(l.lay['rt_blocks']) + l.n_local_arrs}"
-                f"{suffix}"
-            )
-            l.n_local_arrs += 1
+            # An explicit `ERASE` earlier in the body already named this block
+            # (see _name_undimensioned_local_array). Reuse that name instead of
+            # allocating a second one, which would leave the ERASE naming a
+            # variable the LOCAL list never declares (probe lerase2:
+            # `LOCAL A()` / `ERASE A` / `DIM A(N%)` came back as `ERASE V0`
+            # against `LOCAL V1()`).
+            frame = c.proc_frame if c.proc_frame is not None else c.fn_frame
+            prior = (frame.locals or {}).get(disp) if frame is not None else None
+            # ONLY when an ERASE named it: a plain LOCAL declaration can also
+            # leave a `Vn()` spelling here, and reusing that one renumbers
+            # every later LOCAL array (regressed wild cleanup.exe/reformat.exe
+            # by 25 bytes before this was narrowed).
+            if (
+                disp in _erase_named(c)
+                and isinstance(prior, str)
+                and prior.endswith("()")
+            ):
+                name = prior[:-2] + suffix
+                frame.locals[disp] = f"{name}()"
+            else:
+                name = (
+                    f"V{l.lay['n_static'] + len(l.lay['rt_blocks']) + l.n_local_arrs}"
+                    f"{suffix}"
+                )
+                l.n_local_arrs += 1
             rec = {
                 "name": name,
                 "rank": 1,
@@ -6653,31 +6724,27 @@ def _decode_user_code(
             if nxt == ("local_arr_free",):  # implicit runtime cleanup of a
                 # LOCAL DYNAMIC array's heap block at SUB exit -- no BASIC
                 # source spelling, so it's silently dropped (q_localarr)
-                if d not in l.r_arrs:
-                    frame = (
-                        c.proc_frame
-                        if c.proc_frame is not None
-                        else c.fn_frame
-                    )
-                    locs = frame.locals if frame is not None else None
-                    span = {d + 2 * i for i in range(_LOCAL_ARR_WORDS)}
-                    if locs is None or not span <= set(locs):
-                        raise ValueError(
-                            f"LOCAL array free of unknown handle {d:#x} at {addr:#x}"
-                        )
+                if d not in l.r_arrs and d not in _erase_named(c):
                     # A declared-but-never-DIMensioned LOCAL array has no
                     # populated runtime record; its exit cleanup is the first
                     # definitive evidence that this otherwise zero-filled
                     # 30-word span is an array descriptor (wild cleanup.exe /
                     # reformat.exe). Its element type is bytecode-lossy while
                     # unused, so the default SINGLE spelling is canonical.
-                    _drop_local_descriptor_initializers(state, frame, span, addr)
-                    name = (
-                        f"V{l.lay['n_static'] + len(l.lay['rt_blocks']) + l.n_local_arrs}"
+                    # An explicit ERASE earlier in the body names the block
+                    # first when present; `local_named_by_erase` records that
+                    # so this site does not allocate a SECOND name for it.
+                    frame = (
+                        c.proc_frame
+                        if c.proc_frame is not None
+                        else c.fn_frame
                     )
-                    l.n_local_arrs += 1
-                    frame.hidden_locals.update(span - {d})
-                    locs[d] = f"{name}()"
+                    if _name_undimensioned_local_array(
+                        state, frame, d, addr, "local_arr_free"
+                    ) is None:
+                        raise ValueError(
+                            f"LOCAL array free of unknown handle {d:#x} at {addr:#x}"
+                        )
                 state.advance(2)
                 continue
             if nxt == ("rt", 0x9C):  # push (var desc, static string-array

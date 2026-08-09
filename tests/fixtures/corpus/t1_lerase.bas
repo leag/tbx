@@ -1,0 +1,7 @@
+DEF FNA%(N%)
+  LOCAL A(), B()
+  DIM B(N%)
+  ERASE A
+  FNA% = N%
+END DEF
+PRINT FNA%(3)

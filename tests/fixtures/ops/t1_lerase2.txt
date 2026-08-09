@@ -1,0 +1,37 @@
+# t1_lerase2 dialect=1.1 start=08A40
+08A43:jmp:35488
+08A46:mov_bp_imm:0:0
+08A4B:local_init:30:4
+08A5F:far_ref_bp:4
+08A66:erase
+08A69:far_ref_bp:4
+08A70:dim_begin
+08A73:mov_bp_imm:6:260
+08A78:mov_bp_imm:10:4
+08A7D:movax_bp:2
+08A80:movm_ax_bp:14
+08A83:mov_bp_imm:12:0
+08A88:far_ref_bp:4
+08A8F:dim_end
+08A92:movax_bp:2
+08A95:movm_ax_bp:0
+08A98:movsi:4
+08A9B:local_arr_free
+08A9E:fn_ret
+08AA0:push_bp
+08AA1:mov_mem_sp:104
+08AA5:sub_sp:64
+08AA8:mov_bp_sp
+08AAA:mov_bp_imm:2:3
+08AAF:movm_imm:104:0
+08AB5:fn_call:35398
+08ABC:movax_bp:0
+08ABF:add_sp:64
+08AC2:pop_bp
+08AC3:movmem_ax:44
+08AC6:fild:44
+08ACB:rt:187
+08ACD:rt:184
+08AD1:epilogue
+# commits
+08ACF

@@ -9854,6 +9854,36 @@ there is nothing to name it from at the ERASE. Closing it needs deferred
 naming -- emit a placeholder and patch it when the DIM appears, the way gap
 20 patches a FOR step in place -- not a lookup fix.
 
+**`ERASE` of a declared-but-never-DIMensioned LOCAL array (2026-08-09,
+CLOSED)**: such an array has no populated runtime record, so the only
+definitive evidence that its zero-filled 30-word span IS an array descriptor
+is an operation that treats it as one. The epilogue's implicit
+`local_arr_free` was the only site the decoder knew; an explicit source
+`ERASE` is a second one and sits EARLIER in address order, so it has to do the
+naming when present. Both go through `_name_undimensioned_local_array` now --
+two copies of the numbering would drift. Fixtures t1_lerase and t1_lerase2
+(+v10_ each), all four byte-exact.
+
+Two traps this hit, both caught by existing guards rather than by inspection:
+
+1. A LATER `DIM` of the same block allocated a SECOND name, emitting
+   `ERASE V0` against a `LOCAL V1()` that never declared it (probe lerase2 is
+   exactly this shape). The DIM reuses the existing name now -- but ONLY for
+   blocks an ERASE named. Reusing any entry that merely ends in `()` renumbers
+   every later LOCAL array, because a plain LOCAL declaration leaves that
+   spelling too: it moved wild cleanup.exe and reformat.exe 25 bytes off their
+   recorded shapes, and those two comparable programs are what caught it.
+2. The marker for "an ERASE named this" was first put on the global decode
+   state, which grew the documented field surface 102 -> 103 and tripped
+   `test_state_audit` and the architecture doc -- tests written so that growing
+   it is "a decision, not a side effect". The fact is per-procedure, so it
+   belongs on `BodyFrame` (`erase_named_arrays`, documented per
+   tests/tbx/test_frames.py) and the state surface is unchanged.
+
+**crossref.exe is NOT closed by this** and still stops at the same site: its
+[bp+8] is not a declared LOCAL span of the enclosing frame at all, so the
+naming helper declines it. That is a different cause, still undiagnosed.
+
 ### The workflow (each gap, see gap 9–14 commits for examples)
 
 1. `uv run python -m tbx.tools.scan_wild wild/hits` — pick the top

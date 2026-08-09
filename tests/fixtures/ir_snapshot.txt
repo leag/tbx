@@ -4985,6 +4985,14 @@ Return(target=None)
 Kill(file=StrLit(value='X.DAT'))
 End()
 
+## t1_lerase
+DefFn(name='FNFN1%', params=('A%',), body=(Local(names=('V1()', 'V0()')), Dim(name='V0', bounds=(Var(name='A%'),), also=()), Erase(name='V1'), FnResult(value=Var(name='A%'))), is_block=True)
+Print(items=(FnCall(name='FNFN1%', args=(Lit(value=3),)),), newline=True, file=None, commas=None)
+
+## t1_lerase2
+DefFn(name='FNFN1%', params=('A%',), body=(Local(names=('V0()',)), Erase(name='V0'), Dim(name='V0', bounds=(Var(name='A%'),), also=()), FnResult(value=Var(name='A%'))), is_block=True)
+Print(items=(FnCall(name='FNFN1%', args=(Lit(value=3),)),), newline=True, file=None, commas=None)
+
 ## t1_licomp
 Dim(name='V0&', bounds=(5,), also=())
 For(var=Var(name='A%'), init=Lit(value=1), limit=Lit(value=5), step=Lit(value=1))
@@ -11832,6 +11840,14 @@ Return(target=None)
 ## v10_t1_kill
 Kill(file=StrLit(value='X.DAT'))
 End()
+
+## v10_t1_lerase
+DefFn(name='FNFN1%', params=('A%',), body=(Local(names=('V1()', 'V0()')), Dim(name='V0', bounds=(Var(name='A%'),), also=()), Erase(name='V1'), FnResult(value=Var(name='A%'))), is_block=True)
+Print(items=(FnCall(name='FNFN1%', args=(Lit(value=3),)),), newline=True, file=None, commas=None)
+
+## v10_t1_lerase2
+DefFn(name='FNFN1%', params=('A%',), body=(Local(names=('V0()',)), Erase(name='V0'), Dim(name='V0', bounds=(Var(name='A%'),), also=()), FnResult(value=Var(name='A%'))), is_block=True)
+Print(items=(FnCall(name='FNFN1%', args=(Lit(value=3),)),), newline=True, file=None, commas=None)
 
 ## v10_t1_licomp
 Dim(name='V0&', bounds=(5,), also=())
