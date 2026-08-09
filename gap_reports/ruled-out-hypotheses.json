@@ -653,6 +653,27 @@
    ],
    "instead": "stat.exe uses the EMULATED FWAIT (INT 3D, scan calls it the \"IDX% idiom\") inside a FAR element chain, which no authored probe has reproduced. Find what emits INT 3D at that position before splicing fwait into the element chain -- splicing it blind would make the chain accept an op whose source trigger is still unknown. Probe budget exhausted at four; single witness.",
    "source": "wild-corpus session 2026-08-09"
+  },
+  {
+   "id": "RO-CROSSREF-ERASE-IS-LOCAL-NAMING",
+   "title": "crossref.exe's LOCAL ERASE needs the undimensioned-array naming",
+   "disposition": "refuted",
+   "confidence": "medium",
+   "files": [
+    "wild/hits/crossref.exe"
+   ],
+   "signatures": [
+    "ERASE of undimensioned LOCAL block at 0x12b44"
+   ],
+   "hypothesis": "crossref.exe raises where an explicit ERASE reaches a LOCAL dynamic array before its DIM, so teaching that site to name a declared-but-never-DIMensioned LOCAL array (as the epilogue already does) should close it.",
+   "negative_evidence": [
+    "That naming WAS implemented and verified byte-exact in both dialects (fixtures t1_lerase, t1_lerase2), and crossref.exe still stops at the same address: its [bp+8] is not a declared LOCAL span, so the helper declines it.",
+    "The enclosing frame is an FnFrame with locals=None AND local_span=None -- the DEF FN has no LOCAL statement at all, so there is no span to match.",
+    "Two probes ruled out the obvious source shapes: `DIM B(N%)` + `ERASE B` inside a DEF FN with no LOCAL, and the same with an unrelated LOCAL scalar present. Both already decode correctly -- those arrays go through r_arrs.",
+    "The op stream is the real clue: `fstp_bp 0` at 0x12b2c stores the DEF FN RESULT cell, then `movm_imm 160,0`, `movm_imm 172,0`, `screen 3`, and only then `far_ref_bp 8; erase`. A result store normally ENDS a DEF FN body."
+   ],
+   "instead": "Treat this as a frame-CLOSING problem, not an ERASE-naming one: the ERASE is very likely main-program code being lifted while c.fn_frame is still open, which also explains locals=None (a body that never had a LOCAL statement). Check where the single-line/blockless DEF FN frame is closed relative to the result store at [bp+0] before touching the ERASE path again.",
+   "source": "wild-corpus session 2026-08-09, after t1_lerase/t1_lerase2 landed"
   }
  ]
 }
