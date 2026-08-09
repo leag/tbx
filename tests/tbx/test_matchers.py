@@ -24,6 +24,7 @@ from tbx.decode0.matchers import (
     match_fn_result_readback,
     match_for_header,
     match_loose_for_header,
+    match_var_step_branch,
     match_proc_body,
     match_return_to,
     match_using_chain_continues,
@@ -598,6 +599,53 @@ def test_for_header_rejects_trailing_string_assignments():
 
 def test_for_header_needs_three_assignments():
     assert match_for_header(_staged(0x3D0, 0x3CC, 0x3D4)[1:], _vdisp) is None
+
+
+def test_var_step_branch_matches_a_computed_limit_cell():
+    ops = [
+        (0x100, "movax_m", 0x706),
+        (0x104, "cmpm_ax", 0x708),
+        (0x108, "jcc", 0x7E, 0x080),
+    ]
+
+    match = match_var_step_branch(
+        ops, 0, var=0x708, body=0x080, wantcc=(0x7E,), invcc=(0x7F,)
+    )
+
+    assert match is not None
+    assert (match.limit_kind, match.limit) == ("cell", 0x706)
+    assert (match.start, match.stop, match.consumed) == (0, 3, 3)
+
+
+def test_var_step_branch_matches_inverse_jcc_over_near_body_jump():
+    ops = [
+        (0x100, "cmp_mi16", 0x708, 300),
+        (0x105, "jcc", 0x7F, 0x10A),
+        (0x107, "jmp", 0x080),
+    ]
+
+    match = match_var_step_branch(
+        ops, 0, var=0x708, body=0x080, wantcc=(0x7E,), invcc=(0x7F,)
+    )
+
+    assert match is not None
+    assert (match.limit_kind, match.limit) == ("literal", 300)
+    assert match.stop == 3
+
+
+def test_var_step_branch_rejects_a_compare_against_another_variable():
+    ops = [
+        (0x100, "movax_m", 0x706),
+        (0x104, "cmpm_ax", 0x70A),
+        (0x108, "jcc", 0x7E, 0x080),
+    ]
+
+    assert (
+        match_var_step_branch(
+            ops, 0, var=0x708, body=0x080, wantcc=(0x7E,), invcc=(0x7F,)
+        )
+        is None
+    )
 
 
 def test_loose_for_header_rejects_a_bare_testw():

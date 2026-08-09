@@ -96,11 +96,31 @@ def _byref_arg(state: DecodeState, op, addr, index, argument):
 
 def _far_call(state: DecodeState, op, addr) -> bool:
     c = state.control
+
+    def local_ref(index, argument):
+        offset = argument[1]
+        params = c.proc_params.get(op[2])
+        if params is None or op[2] in c.inline_procs or op[2] in c.opaque_procs:
+            return state.loc_local(offset)
+        if index >= len(params):
+            raise ValueError(f"LOCAL by-ref arg to unknown callee params at {addr:#x}")
+        suffix = params[index][-1:] if params[index][-1:] in "%$&#" else ""
+        if suffix == "$":
+            return state.loc_local_str(offset)
+        if suffix == "&":
+            return state.loc_local_long(offset)
+        # INTEGER is the provisional LOCAL spelling already. Default SINGLE
+        # and DOUBLE output-only slots have no compiled witness yet, so do not
+        # widen this refinement beyond the calibrated STRING/LONG shapes.
+        return state.loc_local(offset)
+
     args = tuple(
         _forwarded_arg(state, op, addr, index, argument)
         if isinstance(argument, tuple) and argument[0] == "fwd"
         else _byref_arg(state, op, addr, index, argument)
         if isinstance(argument, tuple) and argument[0] == "argref"
+        else local_ref(index, argument)
+        if isinstance(argument, tuple) and argument[0] == "argrefbp"
         else argument
         for index, argument in enumerate(c.pend_args)
     )
@@ -205,7 +225,12 @@ def _arg_push_ref_bp(state: DecodeState, op) -> bool:
         c.fn_frame.str_offs.add(op[2])
         c.pend_args.append(ir.Var(f"P{op[2]:02X}$"))
     else:
-        c.pend_args.append(state.loc_local(op[2]))
+        # A LOCAL passed only as an output argument has no read/write in the
+        # caller to refine its zero-filled word slot's type. Keep the offset
+        # until far_call supplies the callee signature; resolving it here
+        # prematurely turns a four-byte STRING LOCAL into two INTEGER locals
+        # (probe_local_string_arg_only; wild filepatc.exe).
+        c.pend_args.append(("argrefbp", op[2]))
     state.advance()
     return True
 

@@ -1,0 +1,31 @@
+# v10_t1_forvarstepinit dialect=1.0 start=070B0
+070B3:movm_imm:298:2
+070B9:movm_imm:296:10
+070BF:movm_imm:294:1
+070C5:movax_m:296
+070C9:movm_ax:290
+070CD:movax_m:294
+070D1:movm_ax:288
+070D5:movax_m:298
+070D9:movm_ax:292
+070DD:movax_m:288
+070E1:jmp:28919
+070E4:fild:292
+070E9:rt:187
+070EB:rt:184
+070EF:movax_m:288
+070F3:addm_ax:292
+070F7:orax_self
+070F9:jcc:121:28926
+070FB:jmp:28939
+070FE:movax_m:290
+07102:cmpm_ax:292
+07106:jcc:126:28900
+07108:jmp:28949
+0710B:movax_m:290
+0710F:cmpm_ax:292
+07113:jcc:125:28900
+07115:end
+07118:epilogue
+# commits
+070ED

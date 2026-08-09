@@ -1,0 +1,3 @@
+10 SUB SUB1
+  PRINT "X"
+END SUB

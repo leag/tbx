@@ -188,6 +188,7 @@ class ControlState(StateView):
             "fn_args_stack",
             "fwd_inline_offs",
             "inline_procs",
+            "opaque_procs",
             "nfn",
             "nsub",
             "pend_arg",

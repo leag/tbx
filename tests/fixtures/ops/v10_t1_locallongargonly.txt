@@ -1,0 +1,19 @@
+# v10_t1_locallongargonly dialect=1.0 start=070B0
+070B3:jmp:28875
+070B6:proc_enter
+070B9:fild32:292
+070BE:arg_ref:6
+070C1:far_fstp_si32
+070C7:proc_ret:4
+070CB:jmp:28917
+070CE:proc_enter
+070D1:local_init:2:6
+070E5:arg_push_ref_bp:6
+070EC:far_call:28854
+070F1:proc_ret:4
+070F5:sub_sp:4
+070F8:far_call:28878
+070FD:end
+07100:epilogue
+# commits
+070C5

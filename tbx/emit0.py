@@ -52,7 +52,9 @@ class SourceBundle:
     assets: tuple[tuple[str, bytes], ...] = ()
 
 
-_PROC_HEADER = re.compile(r"^\d+ (?:SUB\b|DEF FN)")
+_TOP_LEVEL_BLOCK_END = re.compile(
+    r"^(?:END (?:SUB|DEF|IF|SELECT)|WEND|LOOP(?:\b|$))"
+)
 
 
 def _source_bytes(text: str) -> int:
@@ -86,10 +88,12 @@ def _all_source_includes(
 ) -> SourceBundle:
     """Pack complete physical BASIC lines; root contains only includes.
 
-    Never cuts inside an open block construct (IF/DO/WHILE/SELECT CASE): a
-    nested body line is rendered indented (`block_lines`' 2-space-per-level
-    convention), so a line with no leading whitespace is the only place a
-    cut can happen without splitting a block's scope across two files.
+    Never cuts inside an open block construct (SUB/DEF FN/IF/DO/WHILE/SELECT
+    CASE): a nested body line is rendered indented (`block_lines`'
+    2-space-per-level convention), so a line with no leading whitespace is
+    normally the only place a cut can happen without splitting a block's
+    scope across two files. A top-level closing line is attached to the unit
+    that opened it instead of becoming a new unit of its own.
     Turbo Basic's own compiler desyncs many statements later in the file
     once a block's body has been torn across an $INCLUDE boundary (wild
     k.exe), surfacing as an unrelated-looking syntax error far from the real
@@ -104,7 +108,13 @@ def _all_source_includes(
     units: list[str] = []
     current: list[str] = []
     for line in source.splitlines(keepends=True):
-        if line == line.lstrip() and current:
+        top_level = line == line.lstrip()
+        if top_level and current:
+            if _TOP_LEVEL_BLOCK_END.match(line):
+                current.append(line)
+                units.append("".join(current))
+                current = []
+                continue
             units.append("".join(current))
             current = []
         current.append(line)
@@ -152,13 +162,14 @@ def split_source(
     include_limit: int | None = None,
     force: bool = False,
 ) -> SourceBundle:
-    """Split a procedure-free program into physical-line include chunks.
+    """Split a rendered program into block-safe include chunks.
 
     The input is already fully rendered. Splitting that text, instead of
     rendering statement subsets, preserves global line numbering, BodyLine
     targets, line-table grouping, and metastatement placement exactly. Turbo
-    Basic rejects `$INCLUDE` in a compilation unit containing scanned SUB or
-    block DEF FN declarations, so that case fails loudly.
+    Basic accepts scanned SUB declarations supplied by an include (verified
+    against the 1.0-early compiler); chunks therefore keep each complete
+    scanned block together and split only between top-level units.
     """
     if limit < 1:
         raise ValueError("source-file limit must be positive")
@@ -167,15 +178,6 @@ def split_source(
         raise ValueError("include-file limit must be positive")
     if not force and _source_bytes(source) <= limit:
         return SourceBundle(source)
-    if any(
-        _PROC_HEADER.match(line)
-        and not (" DEF FN" in line and " = " in line)
-        for line in source.splitlines()
-    ):
-        raise ValueError(
-            "cannot split source containing SUB or block DEF FN declarations: "
-            "Turbo Basic rejects $INCLUDE with scanned statements"
-        )
     clean = re.sub(r"[^A-Z0-9]", "", prefix.upper())[:5] or "TBX"
     return _all_source_includes(source, clean, limit, include_limit)
 

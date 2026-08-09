@@ -9,6 +9,7 @@ from tbx import ir
 from tbx.decode0.const import _JCC_RELOP_TRUE, _NEGATE_REL
 from tbx.decode0.control_graph import frame_for
 from tbx.decode0.frames import BoolTerm, IfFrame, LoopFrame
+from tbx.decode0.matchers import match_var_step_branch
 from tbx.decode0.statement_log import editing
 
 logger = logging.getLogger(__name__)
@@ -142,45 +143,16 @@ def _lift_var_step_next(ops, k, fors, stmts, addrs, patch=_nopatch) -> int:
     descending JGE), each direct (short jcc) or the indirect long form
     (inverse jcc skip + jmp) -- the runtime mirror of the compile-time
     sign choice a literal step makes in the caller of this function. Both
-    blocks must reference the SAME limit; that limit was unknown at header
-    time (the ir.For's limit was a Lit(0) placeholder) and gets patched
-    into the already-emitted statement here, the limit-side mirror of
-    addm_i8's step patch-up (q_forvarstep/q_forvarstep2; wild menu.exe/
-    stat.exe). A LOCAL loop var's sign test compares via cmp_bpi8 instead
-    of cmp_mi8/16 (wild ziptest.exe, probe q_localvarstep); either way the
-    loop var's own name is read back off the already-lifted ir.For (set
-    correctly by loc/loc_local at header time) rather than reconstructed
-    from the bp-offset/disp, since the two frames use different name
-    schemes (V#### vs L##%)."""
+    blocks must reference the SAME limit. A literal limit is recovered here
+    and patches the header's placeholder; a computed limit is reloaded from
+    the temp cell already folded into the ir.For at header time. A LOCAL loop
+    var uses bp-relative compare/reload forms. In either case the loop var's
+    own name is read back off the already-lifted ir.For rather than rebuilt
+    from its displacement, since static and local frames use different names.
+    """
     with editing(stmts, "lift_var_step_next"):
         f = fors[-1]
         v = f.v
-
-        def branch(i, wantcc, invcc):
-            o = ops[i] if i < len(ops) else None
-            if o is None or o[1] not in ("cmp_mi8", "cmp_mi16", "cmp_bpi8") or o[2] != v:
-                raise ValueError(f"FOR-STEP sign test: expected cmp [v] at index {i}")
-            lim = o[3]
-            nxt = ops[i + 1] if i + 1 < len(ops) else None
-            if (
-                nxt is not None
-                and nxt[1] == "jcc"
-                and nxt[2] in wantcc
-                and nxt[3] == f.body
-            ):
-                return lim, i + 2
-            nxt2 = ops[i + 2] if i + 2 < len(ops) else None
-            if (
-                nxt is not None
-                and nxt[1] == "jcc"
-                and nxt[2] in invcc
-                and nxt2 is not None
-                and nxt2[1] == "jmp"
-                and nxt2[2] == f.body
-                and nxt[3] == nxt2[0] + 3
-            ):
-                return lim, i + 3
-            raise ValueError(f"FOR-STEP sign test: branch mismatch at {o[0]:#x}")
 
         jns, jmp_desc = ops[k + 1], ops[k + 2]
         if (
@@ -190,7 +162,21 @@ def _lift_var_step_next(ops, k, fors, stmts, addrs, patch=_nopatch) -> int:
             or jns[3] != jmp_desc[0] + 3
         ):
             raise ValueError(f"FOR-STEP sign test: expected jns+jmp at {ops[k][0]:#x}")
-        asc_lim, i = branch(k + 3, (0x7E, 0x76), (0x7F, 0x77))
+        asc = match_var_step_branch(
+            ops,
+            k + 3,
+            var=v,
+            body=f.body,
+            wantcc=(0x7E, 0x76),
+            invcc=(0x7F, 0x77),
+        )
+        if asc is None:
+            raise ValueError(f"FOR-STEP sign test: ascending branch mismatch at {ops[k][0]:#x}")
+        if asc.limit_kind == "cell" and asc.limit != f.lim:
+            raise ValueError(
+                f"FOR-STEP sign test: limit cell {asc.limit:#x} != frame {f.lim:#x}"
+            )
+        i = asc.stop
         skip = ops[i] if i < len(ops) else None
         if (
             skip is None
@@ -204,8 +190,18 @@ def _lift_var_step_next(ops, k, fors, stmts, addrs, patch=_nopatch) -> int:
             raise ValueError(
                 f"FOR-STEP sign test: expected skip-descending jmp at {ops[k][0]:#x}"
             )
-        desc_lim, i = branch(i + 1, (0x7D,), (0x7C,))
-        if asc_lim != desc_lim:
+        desc = match_var_step_branch(
+            ops,
+            i + 1,
+            var=v,
+            body=f.body,
+            wantcc=(0x7D,),
+            invcc=(0x7C,),
+        )
+        if desc is None:
+            raise ValueError(f"FOR-STEP sign test: descending branch mismatch at {ops[k][0]:#x}")
+        i = desc.stop
+        if (asc.limit_kind, asc.limit) != (desc.limit_kind, desc.limit):
             raise ValueError(
                 f"FOR-STEP sign test: ascending/descending limit mismatch at {ops[k][0]:#x}"
             )
@@ -224,13 +220,14 @@ def _lift_var_step_next(ops, k, fors, stmts, addrs, patch=_nopatch) -> int:
         del stmts[-1], addrs[-1]
 
         old = stmts[f.idx]
-        revised = ir.For(old.var, old.init, ir.Lit(asc_lim), old.step)
-        # Before the list edit: `state.patch` reads the statement it is
-        # replacing out of the list, so assigning first would have it record
-        # the new node as superseding itself. The second assignment is
-        # idempotent there, and is what does the work under `_nopatch`.
-        patch(f.idx, revised)
-        stmts[f.idx] = revised
+        if asc.limit_kind == "literal":
+            revised = ir.For(old.var, old.init, ir.Lit(asc.limit), old.step)
+            # Before the list edit: `state.patch` reads the statement it is
+            # replacing out of the list, so assigning first would have it
+            # record the new node as superseding itself. The second assignment
+            # is idempotent there, and does the work under `_nopatch`.
+            patch(f.idx, revised)
+            stmts[f.idx] = revised
 
         stmts.append(ir.NextStmt(var))
         addrs.append(a)

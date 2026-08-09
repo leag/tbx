@@ -11339,6 +11339,15 @@ Print(items=(BinOp(op='+', lhs=Var(name='B%'), rhs=Lit(value=27)),), newline=Tru
 NextStmt(var=Var(name='B%'))
 End()
 
+## v10_t1_forvarstepinit
+Assign(target=Var(name='A%'), value=Lit(value=2))
+Assign(target=Var(name='B%'), value=Lit(value=10))
+Assign(target=Var(name='C%'), value=Lit(value=1))
+For(var=Var(name='D%'), init=Var(name='A%'), limit=Var(name='B%'), step=Var(name='C%'))
+Print(items=(Var(name='D%'),), newline=True, file=None, commas=None)
+NextStmt(var=Var(name='D%'))
+End()
+
 ## v10_t1_fp
 Assign(target=Var(name='A'), value=Lit(value=0.5))
 Assign(target=Var(name='B'), value=Lit(value=1.3552527156068805e-20))
@@ -11893,6 +11902,12 @@ SubDef(name='SUB1', params=(), body=(Local(names=('A%',)), Assign(target=Var(nam
 CallStmt(name='SUB1', args=())
 End()
 
+## v10_t1_locallongargonly
+SubDef(name='SUB1', params=('A&',), body=(Assign(target=Var(name='A&'), value=Lit(value=123456)),))
+SubDef(name='SUB2', params=(), body=(Local(names=('B&',)), CallStmt(name='SUB1', args=(Var(name='B&'),))))
+CallStmt(name='SUB2', args=())
+End()
+
 ## v10_t1_localsingle
 SubDef(name='SUB1', params=(), body=(Local(names=('A',)), Assign(target=Var(name='A'), value=DblLit(value=1.5)), Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1))), Print(items=(Var(name='A'),), newline=True, file=None, commas=None)))
 CallStmt(name='SUB1', args=())
@@ -11902,6 +11917,12 @@ End()
 CallStmt(name='SUB1', args=())
 End()
 SubDef(name='SUB1', params=(), body=(Local(names=('A$',)), Assign(target=Var(name='A$'), value=StrLit(value='X')), Print(items=(Var(name='A$'),), newline=True, file=None, commas=None)))
+
+## v10_t1_localstrargonly
+SubDef(name='SUB1', params=('A$',), body=(Assign(target=Var(name='A$'), value=StrLit(value='OK')),))
+SubDef(name='SUB2', params=(), body=(Local(names=('B$',)), CallStmt(name='SUB1', args=(Var(name='B$'),))))
+CallStmt(name='SUB2', args=())
+End()
 
 ## v10_t1_localsub1
 SubDef(name='SUB1', params=(), body=(Local(names=('A%',)), Assign(target=Var(name='A%'), value=BinOp(op='-', lhs=Var(name='A%'), rhs=Lit(value=1))), Print(items=(Var(name='A%'),), newline=True, file=None, commas=None)))

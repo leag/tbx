@@ -107,6 +107,7 @@ from tbx.decode0.matchers import (
     match_delay,
     match_for_header,
     match_loose_for_header,
+    match_var_step_branch,
 )
 from tbx.decode0.cursor import OpCursor
 from tbx.decode0.events import DecodedEvent, replay_events
@@ -134,6 +135,7 @@ __all__ = [
     "match_delay",
     "match_for_header",
     "match_loose_for_header",
+    "match_var_step_branch",
     "OpCursor",
     "replay_events",
     "toggle_names",

@@ -328,11 +328,11 @@ def test_recompile_splits_a_too_large_procedure_free_source_and_still_compiles()
 
 
 @pytest.mark.skipif(not _oracle_available(), reason="Turbo Basic oracle not provisioned locally")
-def test_recompile_rejects_a_too_large_source_with_subs_clearly():
-    # Turbo Basic rejects $INCLUDE alongside a scanned SUB/block DEF FN, so
-    # split_source can't help a too-large program that declares one --
-    # it should say so plainly rather than failing generically or handing
-    # the oracle a file it was never going to be able to load.
+@pytest.mark.oracle
+@pytest.mark.oracle_slow
+def test_recompile_splits_a_too_large_source_with_subs():
+    # Scanned SUBs may be supplied by $INCLUDE as long as the splitter keeps
+    # each complete block in one chunk (verified with probe_include_sub).
     exe_bytes = FIXTURE.read_bytes()
     decompile_response = client.post(
         "/api/decompile", files={"exe": ("f87_t1_beep.exe", exe_bytes)}
@@ -346,5 +346,5 @@ def test_recompile_rejects_a_too_large_source_with_subs_clearly():
 
     response = client.post("/api/recompile", json={"session_id": session_id, "source": source})
 
-    assert response.status_code == 422
-    assert "SUB" in response.json()["error"]
+    assert response.status_code == 200
+    assert response.json()["recompiled_len"] > 0

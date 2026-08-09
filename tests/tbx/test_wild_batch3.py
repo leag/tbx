@@ -1859,7 +1859,7 @@ def test_wild_phone_opaque_helper_advances():
         decode0.decode_user_code(wild_hits_bytes("phone.exe"))
 
 
-def test_wild_filepatc_opaque_helpers_advance():
+def test_wild_filepatc_computed_for_limit_and_step_decodes_cleanly():
     # Two more framed far-procedure helpers (BODY_9/BODY_10, wild
     # filepatc.exe), sitting back-to-back right after the already-
     # calibrated BODY..BODY_8 family (all from wild resume.exe): same
@@ -1871,18 +1871,29 @@ def test_wild_filepatc_opaque_helpers_advance():
     # (fingerprint match, not a byte pattern with an oracle-verifiable
     # source spelling), so it's tested as a wild-witness advance.
     #
-    # It advances past the opaque-helper region -- confirmed unchanged
-    # against a pre-session baseline -- but currently stops at a later,
-    # unrelated `cmpm_ax without ax operand` gap; pinned rather than
-    # asserted-clean so a future close is visible as a test change.
-    import pytest
-
-    from tbx import decode0
+    # The later gap is an integer FOR whose init, limit, and step are all
+    # computed. Its dual sign-test branches reload the same staged limit cell
+    # before comparing it with the loop variable. The v10 fixture immediately
+    # above calibrates that complete shape; filepatc now decodes to completion.
+    from tbx import decode0, emit0, ir
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(ValueError, match="cmpm_ax without ax operand"):
-        decode0.decode_user_code(wild_hits_bytes("filepatc.exe"))
+    prog = decode0.decode_user_code(wild_hits_bytes("filepatc.exe"))
+
+    assert len(prog) == 3973
+    assert any(
+        isinstance(stmt, ir.For)
+        and all(
+            isinstance(value, ir.Var)
+            for value in (stmt.var, stmt.init, stmt.limit, stmt.step)
+        )
+        for stmt in prog
+    )
+    source = emit0.emit(prog)
+    assert "6404 FOR " in source
+    assert " TO " in source[source.index("6404 FOR ") :][:80]
+    assert " STEP " in source[source.index("6404 FOR ") :][:80]
 
 
 def test_wild_mf_compound_if_far_exit_advances():
@@ -2294,6 +2305,69 @@ def test_decode_t1_forvarstep2():
     assert prog[0] == ir.Assign(ir.Var("A%"), ir.Lit(2))
     assert prog[1] == ir.For(ir.Var("B%"), ir.Lit(1), ir.Lit(10), ir.Var("A%"))
     assert prog[-2] == ir.NextStmt(ir.Var("B%"))
+
+
+def test_decode_v10_t1_forvarstepinit():
+    # Computed init, limit, AND step. Unlike t1_forvarstep's literal limit,
+    # the dual sign-test branches reload a staged limit cell before comparing
+    # it with the loop variable (`mov ax,[limit]; cmp [I%],ax`). This exact
+    # TB 1.0 shape is the one recovered from wild filepatc.exe.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("v10_t1_forvarstepinit.exe"))
+    assert prog[3] == ir.For(
+        ir.Var("D%"), ir.Var("A%"), ir.Var("B%"), ir.Var("C%")
+    )
+    assert emit0.emit(prog) == (
+        "10 A% = 2\n20 B% = 10\n30 C% = 1\n"
+        "40 FOR D% = A% TO B% STEP C%\n"
+        "50 PRINT D%\n60 NEXT D%\n70 END\n"
+    )
+
+
+def test_decode_v10_t1_localstrargonly():
+    # A LOCAL used only as an output argument has no caller-side access that
+    # reveals its type. The already-defined callee's STRING parameter is the
+    # evidence that collapses the zero-filled two-word pair to one STRING
+    # LOCAL instead of emitting two INTEGER locals and an invalid CALL.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("v10_t1_localstrargonly.exe"))
+    wrapper = next(
+        stmt
+        for stmt in prog
+        if isinstance(stmt, ir.SubDef) and stmt.name == "SUB2"
+    )
+
+    assert wrapper.body == (
+        ir.Local(("B$",)),
+        ir.CallStmt("SUB1", (ir.Var("B$"),)),
+    )
+    assert emit0.emit(prog) == (
+        "10 SUB SUB1(A$)\n  A$ = \"OK\"\nEND SUB\n"
+        "20 SUB SUB2\n  LOCAL B$\n  CALL SUB1(B$)\nEND SUB\n"
+        "30 CALL SUB2\n40 END\n"
+    )
+
+
+def test_decode_v10_t1_locallongargonly():
+    # Four-byte numeric sibling: a LONG output-only LOCAL also takes its type
+    # and width from the known callee signature, retiring the second word of
+    # the provisional zero-filled frame slot.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("v10_t1_locallongargonly.exe"))
+    wrapper = next(
+        stmt
+        for stmt in prog
+        if isinstance(stmt, ir.SubDef) and stmt.name == "SUB2"
+    )
+
+    assert wrapper.body == (
+        ir.Local(("B&",)),
+        ir.CallStmt("SUB1", (ir.Var("B&"),)),
+    )
+    assert "LOCAL B&\n  CALL SUB1(B&)" in emit0.emit(prog)
 
 
 def test_decode_t1_for10arr():
@@ -4216,7 +4290,7 @@ if __name__ == "__main__":
     test_decode_t1_arrbyrefidx()
     test_wild_cvt2tb_opaque_helper_advances()
     test_wild_phone_opaque_helper_advances()
-    test_wild_filepatc_opaque_helpers_advance()
+    test_wild_filepatc_computed_for_limit_and_step_decodes_cleanly()
     test_wild_mf_compound_if_far_exit_advances()
     test_decode_t1_forvarlimfar()
     test_decode_t1_midvarstart()

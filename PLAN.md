@@ -7531,6 +7531,37 @@ writeup there with negative evidence already collected.
     and byte ea (see `RR-BYTE-EA`) are both fully CLOSED — don't reopen
     them if they resurface in a tally, they're a scanner-level decode now.
 
+### Active — filepatc.exe (2026-08-09)
+
+`filepatc.exe` now decodes completely after calibrating the early-TB1.0
+computed INTEGER FOR shape whose init, limit, and step are all expressions.
+Fixture `v10_t1_forvarstepinit` is byte-exact through the standard 1.0 oracle.
+The matching operation template reloads one staged limit cell in both the
+ascending and descending runtime STEP branches.
+
+The first compile attempt exposed two independent source-delivery/emission
+issues. Turbo Basic 1.0-early accepts scanned SUB declarations through
+`$INCLUDE` (minimal real-compiler probe), disproving `split_source`'s blanket
+guard; block-safe splitting now writes filepatc as four includes below 32 KiB.
+Then Error 475 showed LOCAL output slots used only at a CALL defaulting to
+INTEGER because the caller never otherwise touched them. The known ordinary
+callee signature now types those slots, with compiled standard-1.0 fixtures
+for STRING and LONG (`v10_t1_localstrargonly`,
+`v10_t1_locallongargonly`). Opaque-helper parameter offsets remain explicitly
+non-type evidence and retain strict arity.
+
+With those fixes, the recovered source compiles under the matching
+1987-04-02 `1.0-early` compiler with Keyboard break enabled: 127,706 bytes
+versus the original 127,050 (delta +656). The first user-code mismatch is the
+DOS-date month expression: original bytes use `idiv_m 0x1054`, the DGROUP word
+at 0x1054 is 16, while current source emits a synthetic variable. The old
+ledger conclusion that this was not a literal used the later TB 1.0 compiler;
+filepatc is 98% runtime-identical to the early build. Exact probe
+`wild/probes/probe_mod16_early.bas` is authored, but its oracle compile was
+blocked by the local invocation quota (reset 2026-08-15). Do not add the
+pool-literal fallback or commit this wild until that matching-build probe is
+compiled and byte-verified.
+
 ### Recently closed (this campaign, newest first)
 
 - **2026-08-09 — smenu0.exe now decodes and recompiles with an identical

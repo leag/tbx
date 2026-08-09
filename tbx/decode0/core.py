@@ -51,6 +51,7 @@ from tbx.decode0.matchers import (
     match_bool_bare_term1,
     match_for_header,
     match_loose_for_header,
+    match_var_step_branch,
     epilogue_entry,
     match_definition_bracket,
     match_proc_body,
@@ -198,6 +199,7 @@ class DecodeState:
     n_local_arrs: int = 0
     fwd_inline_offs: Any = None
     inline_procs: Any = None
+    opaque_procs: Any = None
     nsub: Any = None
     seg_metas: Any = None
     ops: Any = None
@@ -446,6 +448,20 @@ class DecodeState:
             locs[bp_off] = locs[bp_off][:-1] + ("#" if is64 else "!")
             for extra in ((2, 4, 6) if is64 else (2,)):
                 locs.pop(bp_off + extra, None)
+        return ir.Var(locs[bp_off])
+
+    def loc_local_long(self, bp_off):
+        """Resolve and first-touch a four-byte LONG LOCAL stack slot."""
+        frame = self.proc_frame if self.proc_frame is not None else self.fn_frame
+        if frame is None or frame.locals is None or bp_off not in frame.locals:
+            raise ValueError(f"LONG [bp+{bp_off}] outside the open LOCAL frame")
+        self.touch_local(bp_off)
+        locs = frame.locals
+        if locs[bp_off].endswith("%"):
+            locs[bp_off] = locs[bp_off][:-1] + "&"
+            locs.pop(bp_off + 2, None)
+        elif not locs[bp_off].endswith("&"):
+            raise ValueError(f"[bp+{bp_off}] already has non-LONG LOCAL type")
         return ir.Var(locs[bp_off])
 
     def touch_local(self, bp_off):
@@ -4321,10 +4337,17 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             and len(out.stmts) >= 2
             and isinstance(out.stmts[-1], ir.Assign)
             and isinstance(out.stmts[-1].target, ir.Var)
-            and isinstance(out.stmts[-1].value, ir.Lit)
             and isinstance(out.stmts[-2], ir.Assign)
             and isinstance(out.stmts[-2].target, ir.Var)
             and state.vdisp(out.stmts[-2].target) == img.ops[c.k - 1][2]
+            and (var_step_branch := match_var_step_branch(
+                img.ops,
+                test_k + 3,
+                var=state.vdisp(out.stmts[-1].target),
+                body=img.ops[c.k + 1][0],
+                wantcc=(0x7E, 0x76),
+                invcc=(0x7F, 0x77),
+            )) is not None
         ):
             # Integer FOR header, VARIABLE (computed) STEP: the step's sign
             # is unknown at compile time, so the header copies the STEP
@@ -4332,12 +4355,10 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             # init (`mov ax,<step-expr>; mov [step-temp],ax; mov [I%],init;
             # mov ax,[step-temp]; jmp test`) -- fold that temp copy back
             # into the FOR's step field, mirroring the variable-limit case
-            # just above (t1_fori) but for STEP instead of TO. The limit
-            # isn't known yet here (it's inside the dual ascending/
-            # descending compare at the orax_self test itself, decoded
-            # below); a placeholder is patched in place once seen, the
-            # mirror image of addm_i8's step patch-up for a literal-step
-            # header (q_forvarstep/q_forvarstep2; wild menu.exe/stat.exe).
+            # just above (t1_fori) but for STEP instead of TO. A literal limit
+            # is patched in from the dual ascending/descending test below; a
+            # computed limit has its own staged temp assignment immediately
+            # before the step temp (probe_forvarstep_initvar; filepatc.exe).
             # A LOCAL loop var uses the bp-relative forms throughout
             # (movax_bp/movm_ax_bp/mov_bp_imm/cmp_bpi8/addm_ax_bp -- vdisp
             # and loc_local's L-names already disambiguate uniformly, same
@@ -4349,6 +4370,24 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             with editing(out.stmts, "fold_for_header"):
                 step_s = out.stmts.pop()
             out.addrs.pop()
+            limit = ir.Lit(0)
+            limit_disp = state.vdisp(init_s.target) - 4
+            if var_step_branch.limit_kind == "cell":
+                if (
+                    not out.stmts
+                    or not isinstance(out.stmts[-1], ir.Assign)
+                    or not isinstance(out.stmts[-1].target, ir.Var)
+                    or state.vdisp(out.stmts[-1].target) != var_step_branch.limit
+                ):
+                    raise ValueError(
+                        "computed FOR-STEP limit cell has no staged assignment "
+                        f"at {c.cur:#x}"
+                    )
+                with editing(out.stmts, "fold_for_header"):
+                    limit_s = out.stmts.pop()
+                a = out.addrs.pop()
+                limit = limit_s.value
+                limit_disp = var_step_branch.limit
             if img.ops[c.k - 1][1] == "movax_bp" and c.proc_frame is not None:
                 # A variable-STEP FOR over a LOCAL reserves a [limit-temp,
                 # step-temp] pair as the LAST two words of the LOCAL span
@@ -4368,7 +4407,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
                     (step_disp, step_disp + 2)
                 )
             state.put(
-                ir.For(init_s.target, init_s.value, ir.Lit(0), step_s.value),
+                ir.For(init_s.target, init_s.value, limit, step_s.value),
                 a,
             )
             state.branch(
@@ -4376,6 +4415,8 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             )
             c.fors.append(ForFrame(
                 v=state.vdisp(init_s.target),
+                lim=limit_disp,
+                stp=state.vdisp(step_s.target),
                 test=t,
                 idx=len(out.stmts) - 1,
                 var_step=True,
@@ -4612,6 +4653,7 @@ def _decode_user_code(
     img.main_start = None  # def-region end = entry-jmp target
     out.seg_metas = []  # stmt indices where a $SEGMENT transition landed
     c.inline_procs = set()  # entry addrs of SUB ... INLINE definitions
+    c.opaque_procs = set()  # fingerprinted helpers: offsets known, types unknown
     c.fwd_inline_offs = set()  # bp offsets forwarded to one of them
     c.nsub = 0  # SUB counter (entry-offset order)
     c.nfn = 0  # DEF FN counter (entry-offset order)
@@ -4855,6 +4897,10 @@ def _decode_user_code(
             params = tuple(f"P{off:02X}" for off in op[3])
             c.proc_names[addr] = name
             c.proc_params[addr] = params
+            # The offsets recover the calling convention, not source types.
+            # Keep that distinct from source INLINE: its exact arity still
+            # matters, while its bare Pxx names are not type evidence.
+            c.opaque_procs.add(addr)
             out.stmts.append(ir.SubDef(name, params, (ir.OpaqueHelper(op[2]),)))
             out.addrs.append(None)
             c.cur = None

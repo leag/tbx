@@ -31,18 +31,33 @@ def test_split_preserves_the_rendered_byte_stream_at_line_seams():
     assert all(len(text.encode("latin-1")) <= 50 for _, text in bundle.includes)
 
 
-def test_a_scanned_sub_program_fails_loud():
+def test_a_scanned_sub_program_splits_only_after_end_sub():
     source = (
         "10 A = 1\n"
         "20 SUB SUB1\n"
+        "  PRINT \"X\"\n"
         "END SUB\n"
         "30 SUB SUB2\n"
         "END SUB\n"
         "40 END\n"
     )
 
-    with pytest.raises(ValueError, match="scanned statements"):
-        emit0.split_source(source, limit=55)
+    bundle = emit0.split_source(
+        source, limit=100, include_limit=38, force=True
+    )
+
+    assert _expand(bundle) == source
+    assert any(
+        "20 SUB SUB1\n  PRINT \"X\"\nEND SUB\n" in text
+        for _name, text in bundle.includes
+    )
+    assert any(
+        "30 SUB SUB2\nEND SUB\n" in text for _name, text in bundle.includes
+    )
+    assert not any(
+        text.endswith(("20 SUB SUB1\n", "30 SUB SUB2\n"))
+        for _name, text in bundle.includes
+    )
 
 
 def test_source_under_the_limit_is_left_alone():
@@ -75,15 +90,15 @@ def test_an_over_limit_main_without_procedures_splits_at_physical_lines():
     assert _expand(bundle) == source
 
 
-def test_a_single_large_procedure_does_not_get_an_uncalibrated_fallback():
+def test_a_single_procedure_larger_than_an_include_fails_loud():
     source = (
         "10 SUB SUB1\n"
         + '  PRINT "TOO LONG"\n' * 5
         + "END SUB\n20 END\n"
     )
 
-    with pytest.raises(ValueError, match="scanned statements"):
-        emit0.split_source(source, limit=70)
+    with pytest.raises(ValueError, match="one top-level statement"):
+        emit0.split_source(source, limit=70, include_limit=50)
 
 
 def test_single_line_def_fn_is_not_mistaken_for_a_block():

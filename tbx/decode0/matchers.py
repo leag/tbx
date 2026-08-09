@@ -80,6 +80,16 @@ class ForHeaderMatch(TemplateMatch):
 
 
 @dataclass(frozen=True)
+class VarStepBranchMatch(TemplateMatch):
+    """One comparison branch of an INTEGER FOR with a computed STEP."""
+
+    #: ``literal`` for cmp [var],imm; ``cell`` for mov ax,[limit]; cmp [var],ax.
+    limit_kind: str = ""
+    #: Immediate limit value or displacement of the staged limit cell.
+    limit: int = 0
+
+
+@dataclass(frozen=True)
 class ProcBodyMatch(TemplateMatch):
     """A SUB/DEF FN body's extent and the two addresses its frame needs."""
 
@@ -530,6 +540,77 @@ def match_for_header(stmts, vdisp) -> ForHeaderMatch | None:
         limit=var - 4,
         step=var - 8,
         var=var,
+    )
+
+
+def match_var_step_branch(
+    ops,
+    index: int | None = None,
+    *,
+    var: int,
+    body: int,
+    wantcc: tuple[int, ...],
+    invcc: tuple[int, ...],
+) -> VarStepBranchMatch | None:
+    """Match one ascending/descending branch of a computed-STEP INTEGER FOR.
+
+    The limit is either embedded in ``cmp [var],imm`` or reloaded from the
+    compiler's staged limit cell immediately before ``cmp [var],ax``.  The
+    body edge may be a direct short conditional or its inverse over a near
+    jump.  No state is consulted or advanced here.
+    """
+    ops, index = _window(ops, index)
+    if index >= len(ops):
+        return None
+
+    first = ops[index]
+    if first[1] in ("cmp_mi8", "cmp_mi16", "cmp_bpi8"):
+        if first[2] != var:
+            return None
+        limit_kind = "literal"
+        limit = first[3]
+        branch_index = index + 1
+    elif first[1] in ("movax_m", "movax_bp"):
+        if index + 1 >= len(ops):
+            return None
+        compare = ops[index + 1]
+        expected = {"movax_m": "cmpm_ax", "movax_bp": "cmpm_ax_bp"}[first[1]]
+        if compare[1] != expected or compare[2] != var:
+            return None
+        limit_kind = "cell"
+        limit = first[2]
+        branch_index = index + 2
+    else:
+        return None
+
+    branch = ops[branch_index] if branch_index < len(ops) else None
+    if (
+        branch is not None
+        and branch[1] == "jcc"
+        and branch[2] in wantcc
+        and branch[3] == body
+    ):
+        stop = branch_index + 1
+    else:
+        jump = ops[branch_index + 1] if branch_index + 1 < len(ops) else None
+        if not (
+            branch is not None
+            and branch[1] == "jcc"
+            and branch[2] in invcc
+            and jump is not None
+            and jump[1] == "jmp"
+            and jump[2] == body
+            and branch[3] == jump[0] + 3
+        ):
+            return None
+        stop = branch_index + 2
+
+    return VarStepBranchMatch(
+        template="var_step_branch",
+        start=index,
+        stop=stop,
+        limit_kind=limit_kind,
+        limit=limit,
     )
 
 
