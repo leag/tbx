@@ -338,6 +338,18 @@
    "excluded": "different Turbo Basic build (87% runtime match)"
   },
   {
+   "name": "photo.exe",
+   "sha256": "a37be37ed4aba54171f1897ff0c16111ba532228ceee84f8bb5cf491b4a2fff5",
+   "bytes": 53711,
+   "statements": 435,
+   "source_bytes": 12280,
+   "toggles": "K",
+   "build_match": 98,
+   "roundtrip": "exact-nonreproducible-buffers-zeroed",
+   "delta": 0,
+   "excluded": null
+  },
+  {
    "name": "prtguide.exe",
    "sha256": "844dd8eaf6e53e2be3765423c699f3baee1722acaf7b725fd2caf345aae20434",
    "bytes": 75944,

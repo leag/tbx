@@ -17,7 +17,11 @@ from pathlib import Path
 
 from tbx import decode0, emit0
 from tbx.tools import oracle
-from tbx.tools.verify_wild import program_dialect
+from tbx.tools.verify_wild import (
+    NONREPRODUCIBLE_BUFFER_RANGES,
+    normalize_nonreproducible_buffers,
+    program_dialect,
+)
 
 
 def _layout_summary(exe: bytes) -> tuple[list[tuple], dict[str, object]]:
@@ -111,6 +115,8 @@ def report(exe_path: Path, outdir: Path | None = None, timeout: int = 1200) -> d
     original_pool = collections.Counter(_pool_strings(original))
     rebuilt_pool = collections.Counter(_pool_strings(rebuilt))
     same = sum(a == b for a, b in zip(original, rebuilt))
+    normalized_original = normalize_nonreproducible_buffers(original)
+    normalized_rebuilt = normalize_nonreproducible_buffers(rebuilt)
     return {
         "source": str(root),
         "rebuilt": str(rebuilt_path),
@@ -120,6 +126,17 @@ def report(exe_path: Path, outdir: Path | None = None, timeout: int = 1200) -> d
         "rebuilt_bytes": len(rebuilt),
         "delta_bytes": len(rebuilt) - len(original),
         "prefix_equal_bytes": same,
+        "raw_different_bytes": sum(
+            left != right for left, right in zip(original, rebuilt)
+        ) + abs(len(original) - len(rebuilt)),
+        "normalized_equal": normalized_original == normalized_rebuilt,
+        "normalized_different_bytes": sum(
+            left != right
+            for left, right in zip(normalized_original, normalized_rebuilt)
+        ) + abs(len(normalized_original) - len(normalized_rebuilt)),
+        "zeroed_nonreproducible_ranges": [
+            [start, stop] for start, stop in NONREPRODUCIBLE_BUFFER_RANGES
+        ],
         "original_ops": len(original_ops),
         "rebuilt_ops": len(rebuilt_ops),
         "first_scan_mismatch": first_mismatch,

@@ -52,3 +52,16 @@ def test_compile_bas_names_the_too_large_editor_limit_clearly(tmp_path):
 
     with pytest.raises(RuntimeError, match="too large"):
         oracle.compile_bas(big, dialect="1.1", toggles="", fast=True)
+
+
+def test_compile_ignores_inline_keyword_inside_a_string(tmp_path):
+    source = tmp_path / "INLINESTR.BAS"
+    source.write_text(
+        '10 A$ = "$INLINE "\n20 PRINT A$; "not a filename"\n30 END\n',
+        encoding="latin-1",
+        newline="",
+    )
+
+    compiled = oracle.compile_bas(source, dialect="1.1", toggles="")
+
+    assert compiled[:2] in (b"MZ", b"ZM")

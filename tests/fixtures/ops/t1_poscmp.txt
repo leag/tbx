@@ -1,0 +1,20 @@
+# t1_poscmp dialect=1.1 start=08700
+08703:fild:314
+08708:fstp:288
+0870F:fld:288
+08714:fn_ax0:POS
+08717:movmem_ax:44
+0871A:fild:44
+0871F:fcompp
+08722:fstsw
+08726:jcc:118:34603
+08728:jmp:34612
+0872B:movsi:308
+0872E:rt:156
+08730:rt:190
+08732:rt:184
+08734:end
+08737:epilogue
+# commits
+0870D
+08724

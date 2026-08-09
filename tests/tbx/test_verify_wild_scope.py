@@ -65,3 +65,23 @@ def test_an_expected_mismatch_does_not_count_against_the_tally():
     assert not counts(marked)
     assert counts(plain)
     assert not counts("exact")
+
+
+def test_nonreproducible_runtime_buffers_are_zeroed_with_fixed_scope():
+    size = verify_wild.NONREPRODUCIBLE_BUFFER_RANGES[-1][1] + 1
+    left = bytearray(b"A" * size)
+    right = bytearray(left)
+    for start, stop in verify_wild.NONREPRODUCIBLE_BUFFER_RANGES:
+        right[start] = 0x42
+        right[stop - 1] = 0x43
+
+    assert (
+        verify_wild.normalize_nonreproducible_buffers(bytes(left))
+        == verify_wild.normalize_nonreproducible_buffers(bytes(right))
+    )
+
+    right[-1] = 0x44
+    assert (
+        verify_wild.normalize_nonreproducible_buffers(bytes(left))
+        != verify_wild.normalize_nonreproducible_buffers(bytes(right))
+    )

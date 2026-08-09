@@ -38,3 +38,21 @@ def test_an_explicit_comparison_is_still_a_comparison():
         ir.unparse_cond(ir.RelOp("<>", ir.Call("EOF", (ir.Lit(1),)), ir.Lit(0)))
         == "EOF(1) <> 0"
     )
+
+
+def test_eof_block_shape_uses_the_line_table_faithful_inline_spelling():
+    program = decode0.Program(
+        [
+            ir.IfBlock(
+                ((ir.Call("EOF", (ir.Lit(1),)), (ir.Close(),)),),
+                (ir.Goto(1),),
+            ),
+            ir.End(),
+        ]
+    )
+    program.lines = [3180, 3185]
+    program.expanded_line_table = True
+
+    assert emit0.emit(program).startswith(
+        "3180 IF EOF(1) THEN CLOSE ELSE GOTO 3185\n"
+    )

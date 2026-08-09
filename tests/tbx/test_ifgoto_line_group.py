@@ -51,3 +51,49 @@ def test_statements_before_and_after_the_if():
     )
     text = emit0.emit(prog)
     assert '300 CLS: IF G$ <> "y" THEN 301 ELSE PRINT: PRINT\n' in text
+
+
+def test_nested_block_shape_becomes_inline_on_same_physical_line():
+    prog = _prog(
+        [
+            ir.IfGoto(_cond("A"), 3),
+            ir.Assign(ir.Var("Z$"), ir.StrLit("Y")),
+            ir.IfBlock(
+                ((ir.LogOp("OR", _cond("Z"), _cond("Q")), (ir.End(),)),),
+                (ir.Goto(0),),
+            ),
+            ir.End(),
+        ],
+        [133, 133, 133, 134],
+    )
+    prog.expanded_line_table = True
+
+    text = emit0.emit(prog)
+
+    assert (
+        '133 IF A$ <> "y" THEN 134 ELSE Z$ = "Y": '
+        'IF Z$ <> "y" OR Q$ <> "y" THEN END ELSE GOTO 133\n'
+    ) in text
+    assert "\n ELSE\n" not in text
+
+
+def test_else_skip_sequence_becomes_inline_on_same_physical_line():
+    prog = _prog(
+        [
+            ir.Locate(ir.Lit(24), ir.Lit(1)),
+            ir.IfGoto(ir.RelOp("<>", ir.Var("Z$"), ir.StrLit("6")), 4),
+            ir.Assign(ir.Var("A"), ir.Lit(64)),
+            ir.Goto(5),
+            ir.Assign(ir.Var("A"), ir.Lit(31)),
+            ir.End(),
+        ],
+        [700, 700, 700, 700, 700, 705],
+    )
+    prog.expanded_line_table = True
+
+    text = emit0.emit(prog)
+
+    assert (
+        '700 LOCATE 24,1: IF Z$ = "6" THEN A = 64 ELSE A = 31\n'
+    ) in text
+    assert "GOTO 700" not in text

@@ -27,8 +27,8 @@ _COMPARABLE = [e for e in _ENTRIES if not e["excluded"]]
 
 def test_the_manifest_records_a_comparable_subset():
     """The point of the file: not every wild program is evidence about bytes."""
-    assert len(_ENTRIES) == 51
-    assert len(_COMPARABLE) == 35
+    assert len(_ENTRIES) == 52
+    assert len(_COMPARABLE) == 36
     for entry in _ENTRIES:
         if entry["excluded"] is None:
             continue

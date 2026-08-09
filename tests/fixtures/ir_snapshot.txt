@@ -5728,6 +5728,12 @@ End()
 Assign(target=Var(name='A%'), value=Call(name='POS', args=(Lit(value=0),)))
 End()
 
+## t1_poscmp
+Assign(target=Var(name='A'), value=Lit(value=31))
+IfGoto(cond=RelOp(op='<', lhs=Var(name='A'), rhs=Template(kind='fcompp_call_first', inner=Call(name='POS', args=(Lit(value=0),)))), target=3)
+Print(items=(StrLit(value='MATCH'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_pow10
 Assign(target=Var(name='A'), value=SingleLit(value=2.5))
 Assign(target=Var(name='B'), value=SingleLit(value=1.5))

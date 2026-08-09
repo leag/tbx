@@ -156,6 +156,8 @@ def unparse(e) -> str:
             ):
                 raise ValueError("bad subtraction template")
             return f"{unparse(e.inner.lhs)} - {unparse(e.inner.rhs.inner.operand)}"
+        if e.kind == "fcompp_call_first":
+            return unparse(e.inner)
         raise ValueError(f"unknown expression template {e.kind!r}")
     if isinstance(e, Lit):
         if isinstance(e.value, float):
@@ -258,6 +260,12 @@ def unparse_cond(c) -> str:
     if isinstance(c, LogOp):
         return f"{unparse_cond(c.lhs)} {c.op} {unparse_cond(c.rhs)}"
     if isinstance(c, RelOp):
+        if (
+            isinstance(c.rhs, Template)
+            and c.rhs.kind == "fcompp_call_first"
+        ):
+            swapped = {"=": "=", "<>": "<>", "<": ">", ">": "<", "<=": ">=", ">=": "<="}
+            return f"{unparse(c.rhs.inner)} {swapped[c.op]} {unparse(c.lhs)}"
         return f"{unparse(c.lhs)} {c.op} {unparse(c.rhs)}"
     if isinstance(c, Group):
         return f"({unparse_cond(c.inner)})"

@@ -303,7 +303,14 @@ def _name_fn_results(body, name):
     return out
 
 
-def _join_line(group, txt, col: int) -> str:
+def _join_line(
+    group,
+    txt,
+    col: int,
+    *,
+    inside_if_else: bool = False,
+    allow_inline_block: bool = False,
+) -> str:
     """Render one original line's statements, `:`-joined -- except after an IfGoto.
 
     Turbo Basic ends a line at an `IF ... THEN <line>`: `IF c THEN 80: S` is
@@ -314,15 +321,39 @@ def _join_line(group, txt, col: int) -> str:
     the same way, nesting a further IfGoto inside the clause it falls into.
     Witnessed on wild vhfprop.exe (28 such lines).
     """
-    head = txt(group[0], col)
+    def line_text(statement):
+        if (
+            allow_inline_block
+            and inside_if_else
+            and isinstance(statement, ir.IfBlock)
+            and len(statement.arms) == 1
+        ):
+            # A block-shaped fold cannot remain multi-line when the recovered
+            # error table proves it was nested on another statement's physical
+            # line.  Compound-condition inline and block forms have the same
+            # operation shape; the line placement disambiguates the spelling
+            # (wild photo.exe: an inline IF inside an outer IF's ELSE arm).
+            cond, body = statement.arms[0]
+            statement = ir.IfInline(cond, body, statement.else_body)
+        return txt(statement, col)
+
+    head = line_text(group[0])
     if len(group) == 1:
         return head
-    tail = _join_line(group[1:], txt, col)
+    tail = _join_line(
+        group[1:],
+        txt,
+        col,
+        inside_if_else=inside_if_else or isinstance(group[0], ir.IfGoto),
+        allow_inline_block=allow_inline_block,
+    )
     sep = " ELSE " if isinstance(group[0], ir.IfGoto) else ": "
     return f"{head}{sep}{tail}"
 
 
-def _flatten_join_line(group, txt, col: int) -> tuple[list[str], list[str]]:
+def _flatten_join_line(
+    group, txt, col: int, *, allow_inline_block: bool = False
+) -> tuple[list[str], list[str]]:
     """(pieces, seps) for `_join_line`'s recursive `:`/` ELSE ` join, flattened.
 
     `pieces[i]` is one statement's own rendering; `seps[i]` is what
@@ -330,11 +361,24 @@ def _flatten_join_line(group, txt, col: int) -> tuple[list[str], list[str]]:
     `len(seps) == len(pieces) - 1`). Concatenating `pieces` and `seps`
     alternately reproduces `_join_line(group, txt, col)` exactly.
     """
-    pieces = [txt(group[0], col)]
+    def line_text(statement, inside_if_else):
+        if (
+            allow_inline_block
+            and inside_if_else
+            and isinstance(statement, ir.IfBlock)
+            and len(statement.arms) == 1
+        ):
+            cond, body = statement.arms[0]
+            statement = ir.IfInline(cond, body, statement.else_body)
+        return txt(statement, col)
+
+    pieces = [line_text(group[0], False)]
     seps = []
+    inside_if_else = isinstance(group[0], ir.IfGoto)
     for k in range(len(group) - 1):
         seps.append(" ELSE " if isinstance(group[k], ir.IfGoto) else ": ")
-        pieces.append(txt(group[k + 1], col))
+        pieces.append(line_text(group[k + 1], inside_if_else))
+        inside_if_else = inside_if_else or isinstance(group[k + 1], ir.IfGoto)
     return pieces, seps
 
 
@@ -450,6 +494,7 @@ def emit(stmts, *, compact: bool = False, line_starts: list[int] | None = None) 
     # Line numbers are normally free (renumber 10, 20, ...), EXCEPT when the image
     # embeds the error-trap line table (decode0.Program.lines): its entries store
     # the real line numbers, so the originals must be preserved to round-trip.
+    expanded_line_table = bool(getattr(stmts, "expanded_line_table", False))
     orig = getattr(stmts, "lines", None)
     if orig is not None and len(orig) > 1 and len(set(orig)) <= 1:
         # A table whose entries are all the same number distinguishes nothing,
@@ -578,6 +623,58 @@ def emit(stmts, *, compact: bool = False, line_starts: list[int] | None = None) 
             return line[t - 1]
         return line[t]
 
+    def negate_cond(cond):
+        if isinstance(cond, ir.RelOp):
+            opposite = {
+                "=": "<>",
+                "<>": "=",
+                "<": ">=",
+                ">=": "<",
+                ">": "<=",
+                "<=": ">",
+            }
+            return ir.RelOp(opposite[cond.op], cond.lhs, cond.rhs)
+        if isinstance(cond, ir.LogOp):
+            op = "OR" if cond.op == "AND" else "AND"
+            return ir.LogOp(op, negate_cond(cond.lhs), negate_cond(cond.rhs))
+        if isinstance(cond, ir.Group):
+            return ir.Group(negate_cond(cond.inner))
+        raise ValueError(f"cannot negate same-line IF condition {cond!r}")
+
+    def recover_same_line_inline_else(group, first_index, after_index):
+        """Fold an IF/else-skip sequence proved to occupy one source line.
+
+        Before general IF folding, a simple inline IF with ELSE can survive as
+        `IfGoto(false -> else), then-body, Goto(after), else-body`.  Numbering
+        every member with the same recovered line proves that it cannot use
+        either GOTO spelling in source: the first would jump into its own line
+        and the second may not be followed by another statement.  Reconstitute
+        the inline spelling while retaining the operation-order condition
+        (wild photo.exe line 700).
+        """
+        for rel, statement in enumerate(group):
+            if not isinstance(statement, ir.IfGoto):
+                continue
+            else_index = statement.target
+            if not (
+                isinstance(else_index, int)
+                and first_index + rel + 2 < else_index < after_index
+            ):
+                continue
+            split = else_index - first_index
+            skip = group[split - 1]
+            if not (isinstance(skip, ir.Goto) and skip.target == after_index):
+                continue
+            then_body = tuple(group[rel + 1 : split - 1])
+            else_body = tuple(group[split:])
+            if not then_body or not else_body:
+                continue
+            inline = ir.IfInline(
+                negate_cond(statement.cond), then_body, else_body
+            )
+            return group[:rel] + [inline]
+        return group
+
     def block_lines(body, render, col=0):
         """Indent each body statement two spaces; multi-line statements indent every line."""
         out = []
@@ -664,6 +761,21 @@ def emit(stmts, *, compact: bool = False, line_starts: list[int] | None = None) 
                 return _wrap_continued(head, body_pieces, col, sep=": ")
             return inline
         if isinstance(s, ir.IfBlock):
+            if (
+                expanded_line_table
+                and
+                len(s.arms) == 1
+                and isinstance(s.arms[0][0], ir.Call)
+                and s.arms[0][0].name == "EOF"
+                and s.else_body is not None
+            ):
+                # A bare EOF truth test has the same operation shape in inline
+                # and block form.  Its error-table sites disambiguate the wild
+                # spelling: photo.exe has two independent loops whose CLOSE /
+                # ELSE-skip operations retain the IF line and have no END-IF
+                # table sites, proving the single-line form.
+                cond, body = s.arms[0]
+                return txt(ir.IfInline(cond, body, s.else_body), col)
             out = []
             for j, (cond, body) in enumerate(s.arms):
                 out.append(
@@ -771,6 +883,7 @@ def emit(stmts, *, compact: bool = False, line_starts: list[int] | None = None) 
     # lines (t1_troffin): {stmt index -> count}. The traced prefix is numbered from the
     # hooks; the untraced tail (post-TROFF body + END IF) keeps the indented block style.
     partial = getattr(stmts, "trace_partial", {}) or {}
+    print_splits = getattr(stmts, "print_splits", {}) or {}
     out, i = [], 0
     while i < len(stmts):
         out.extend(f"{m}\n" for m in pre.get(i, []))
@@ -786,7 +899,34 @@ def emit(stmts, *, compact: bool = False, line_starts: list[int] | None = None) 
             start = sum(fragment.count("\n") for fragment in out)
             line_starts.extend([start] * (j - i))
         group = [stmts[k] for k in range(i, j)]
-        text = _join_line(group, txt, len(f"{line[i]} "))
+        if expanded_line_table:
+            group = recover_same_line_inline_else(group, i, j)
+        if i in print_splits:
+            if j != i + 1 or not isinstance(stmts[i], ir.Lprint):
+                raise ValueError("LPRINT split in a line-grouped statement")
+            statement = stmts[i]
+            bounds = (0,) + tuple(index for index, _ in print_splits[i]) + (
+                len(statement.items),
+            )
+            split_lines = (line[i],) + tuple(
+                split_line for _, split_line in print_splits[i]
+            )
+            if statement.commas is not None:
+                raise ValueError("split comma-separated LPRINT has no witness")
+            for part, (lo, hi) in enumerate(zip(bounds, bounds[1:])):
+                segment = ir.Lprint(
+                    statement.items[lo:hi],
+                    newline=statement.newline if part == len(bounds) - 2 else False,
+                )
+                out.append(f"{split_lines[part]} {txt(segment)}\n")
+            i = j
+            continue
+        text = _join_line(
+            group,
+            txt,
+            len(f"{line[i]} "),
+            allow_inline_block=expanded_line_table,
+        )
         if i in end_sub_lines:
             physical = text.splitlines()
             physical[-1] = f"{end_sub_lines[i]} {physical[-1].strip()}"
@@ -847,7 +987,12 @@ def emit(stmts, *, compact: bool = False, line_starts: list[int] | None = None) 
                 if max(map(len, narrowed.splitlines())) <= LINE_LIMIT:
                     text = narrowed[len(prefix) :]
                 else:
-                    pieces, seps = _flatten_join_line(group, txt, len(prefix))
+                    pieces, seps = _flatten_join_line(
+                        group,
+                        txt,
+                        len(prefix),
+                        allow_inline_block=expanded_line_table,
+                    )
                     text = _wrap_continued(prefix, pieces, len(prefix), sep=seps)[
                         len(prefix) :
                     ]

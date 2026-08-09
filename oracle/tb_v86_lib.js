@@ -28,7 +28,11 @@ function buildWorkImg(basPath, here, tbFloppy, workspace = here) {
     const sourceDir = path.dirname(current.host);
     const patterns = [
       { re: /^\s*\$INCLUDE\s*:?\s*(?:"([^"]+)"|'([^']+)')/gim, ext: ".BAS", label: "$INCLUDE" },
-      { re: /\$INLINE\s+"([^"]+)"/ig, ext: "", label: "$INLINE" },
+      // A directive may be numbered, but it must start the BASIC statement.
+      // Searching anywhere in the text mistakes source strings such as
+      // `A$ = "$INLINE "` for external-file directives and can consume text
+      // through the next quote on a later line (wild crossref.exe).
+      { re: /^\s*(?:\d+\s+)?\$INLINE\s+"([^"]+)"/gim, ext: "", label: "$INLINE" },
     ];
     for (const { re, ext, label } of patterns) {
       for (const m of current.text.matchAll(re)) {

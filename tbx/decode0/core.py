@@ -2112,29 +2112,110 @@ def _finalize_resolved_calls(state: DecodeState) -> None:
             out.stmts[index] = after
 
 
+def _omit_expanded_table_locate_columns(state: DecodeState) -> None:
+    """Apply LOCATE's AX sentinel only for the newly evidenced table shape."""
+
+    out = state.output
+
+    def omit(node):
+        if (
+            isinstance(node, ir.Locate)
+            and isinstance(node.col, (ir.Lit, ir.HexLit))
+            and node.col.value == 0x8000
+        ):
+            return replace(node, col=None)
+        return node
+
+    for index, statement in enumerate(tuple(out.stmts)):
+        rewritten = _rewrite_nodes(statement, omit, {}, out.stmt_addr)
+        if rewritten is not statement:
+            if out.event_log is not None and out.event_log.committed(statement):
+                state.patch(index, rewritten)
+            else:
+                out.stmts[index] = rewritten
+
+
+def _expanded_offsets_belong_to_lprint(stmts, addrs, start, offsets) -> bool:
+    """Whether every newly admitted table site is inside a merged LPRINT."""
+
+    if not offsets:
+        return False
+    owned = [
+        (address, index)
+        for index, address in enumerate(addrs)
+        if address is not None
+    ]
+    for offset in offsets:
+        candidates = [pair for pair in owned if pair[0] <= start + offset]
+        if not candidates or not isinstance(stmts[max(candidates)[1]], ir.Lprint):
+            return False
+    return True
+
+
 def _finalize_line_table(state: DecodeState, addr):
     img, out = state.image, state.output
     data_orphan_lines: list[tuple[int, int]] = []
     orphan_offs: set[int] = set()
     table_active = False
+    expanded_table = False
     if any(
         o[1] in ("resume_pre", "on_error", "error_stmt")
         or (o[1] == "movax_m" and o[2] in (0x72, 0x74))
         for o in img.ops
     ):
+        base_extra_offs = {a + 4 - img.start for a in out.trace_tbl} | {
+            a - img.start for a in out.stmt_addr.values() if a is not None
+        }
         early = _line_table(
             img.exe,
             img.start,
             out.addrs,
             addr,
-            extra_offs={a + 4 - img.start for a in out.trace_tbl}
-            | {a - img.start for a in out.stmt_addr.values() if a is not None},
+            extra_offs=base_extra_offs,
         )
+        if early is None:
+            load_offs = {
+                op[0] - img.start
+                for op in img.ops
+                if op[1] == "movax"
+            }
+            early = _line_table(
+                img.exe,
+                img.start,
+                out.addrs,
+                addr,
+                extra_offs=base_extra_offs | load_offs,
+                # A physical line inside a folded body can begin at its first
+                # literal-load operation rather than at the enclosing
+                # statement address. Require a scanned MOV AX, not an
+                # arbitrary code offset (wild photo.exe).
+            )
+            if early is not None:
+                entries, orphans = early
+                base_valid_offs = base_extra_offs | {
+                    statement_addr - img.start
+                    for statement_addr in out.addrs
+                    if statement_addr is not None
+                }
+                added_offs = {
+                    offset
+                    for offset, _ in (*entries.items(), *orphans)
+                    if offset not in base_valid_offs
+                }
+                if not _expanded_offsets_belong_to_lprint(
+                    out.stmts, out.addrs, img.start, added_offs
+                ):
+                    # This expansion exists to recover physical LPRINT
+                    # boundaries merged by the scanner. A MOV AX inside an
+                    # ordinary PRINT is not the same evidence (wild styled.exe)
+                    # and must retain the established fallback behavior.
+                    early = None
+            expanded_table = early is not None
         if early is not None:
             table_active = True
             data_orphan_lines = early[1]
             orphan_offs = {offset for offset, _ in early[1]}
-    return table_active, data_orphan_lines, orphan_offs
+    return table_active, expanded_table, data_orphan_lines, orphan_offs
 
 
 def _finalize_dimensions(state: DecodeState, sub_local_arrays):
@@ -2183,7 +2264,7 @@ def _finalize_sub_prefixes(state: DecodeState, shared_subs, local_dims) -> None:
             out.stmts[i] = ir.SubDef(stmt.name, stmt.params, tuple(prefix) + stmt.body)
 
 
-def _finalize_static_dims(state, dims, data_orphan_lines):
+def _finalize_static_dims(state, dims, data_orphan_lines, expanded_table=False):
     img, out = state.image, state.output
     ins = 0  # static DIMs follow any proc definitions
     while ins < len(out.stmts) and isinstance(
@@ -2191,18 +2272,51 @@ def _finalize_static_dims(state, dims, data_orphan_lines):
     ):
         ins += 1
     dim_lines: list[int] | None = None
-    if dims and data_orphan_lines and len(dims) == len(data_orphan_lines):
+    expanded_dim_attribution = False
+    if dims and len(dims) == len(data_orphan_lines):
         # Static DIMs with one shared orphan offset compiled inline at their
         # original position; otherwise they use the canonical procedure-top
         # insertion point.
-        offs = {o for o, _ in data_orphan_lines}
-        if len(offs) == 1:
-            ins = out.addrs.index(img.start + next(iter(offs)))
-            dim_lines = [ln for _, ln in data_orphan_lines]
+        offsets = {offset for offset, _ in data_orphan_lines}
+        if len(offsets) == 1:
+            ins = out.addrs.index(img.start + next(iter(offsets)))
+            dim_lines = [line for _, line in data_orphan_lines]
+            data_orphan_lines = []
+    elif dims and expanded_table:
+        # An explicit static DIM is codeless but still contributes a duplicate
+        # error-table row at the following executable statement.  Conversely,
+        # an implicit array contributes no row at all.  Use that distinction
+        # before emitting declarations recovered only from DGROUP shape (wild
+        # photo.exe has two implicit arrays followed by a DEFtype orphan).
+        def could_be_implicit(declaration):
+            return (
+                isinstance(declaration, ir.Dim)
+                and not declaration.dynamic
+                and declaration.bounds == (10,)
+                and not declaration.also
+            )
+
+        required = [
+            declaration
+            for declaration in dims
+            if not could_be_implicit(declaration)
+        ]
+        offsets = {offset for offset, _ in data_orphan_lines}
+        if (
+            len(dims) == 2
+            and len(required) == 1
+            and len(data_orphan_lines) == len(required)
+            and len(offsets) == 1
+        ):
+            dims = required
+            expanded_dim_attribution = True
+            expected = next(iter(offsets))
+            ins = out.addrs.index(img.start + expected)
+            dim_lines = [line for _, line in data_orphan_lines]
             data_orphan_lines = []
     for offset, declaration in enumerate(dims):
         state.reconstruct(ins + offset, declaration)
-    return ins, data_orphan_lines, dim_lines
+    return ins, data_orphan_lines, dim_lines, expanded_dim_attribution
 
 
 def _normalize_trace_hooks(img, out):
@@ -2532,7 +2646,7 @@ def _data_recovery_plan(state, items, data_orphan_lines):
     return [], [], splits, None
 
 
-def _finalize_data_recovery(state, data_orphan_lines):
+def _finalize_data_recovery(state, data_orphan_lines, suppress_pool_fallback=False):
     img, lyt, out = state.image, state.layout_state, state.output
     data_lines: list[int] | None = None
     deftype_lines: list[int] = []
@@ -2541,7 +2655,15 @@ def _finalize_data_recovery(state, data_orphan_lines):
         or data_orphan_lines
     ):
         return data_lines, deftype_lines
-    items = lyt.data_items or _read_data_pool(img.exe)
+    items = list(lyt.data_items)
+    if not items and (not suppress_pool_fallback or lyt.ss_base is None):
+        # `_read_data_pool` is the numeric-only fallback, for which no normal
+        # string descriptor walk exists.  A regular referenced string pool has
+        # a similar framed tail and can otherwise be mistaken wholesale for
+        # DATA when a codeless DEFtype contributes a line-table orphan (wild
+        # photo.exe).  `_prepare_string_pool` already recovered every genuinely
+        # unreferenced DATA descriptor into `data_items` when `ss_base` exists.
+        items = _read_data_pool(img.exe)
     if not items and data_orphan_lines:
         for off, line in data_orphan_lines:
             j = out.addrs.index(img.start + off)
@@ -2629,7 +2751,14 @@ def _finalize(state: DecodeState, addr) -> Program:
         # this linear EXE scan risks a spurious match in an unrelated program.
         # Every orphaned offset is independent of DATA/DIM; the probe must run
         # before later synthesis mutates the statement-address table.
-        table_active, data_orphan_lines, orphan_offs = _finalize_line_table(state, addr)
+        (
+            table_active,
+            expanded_table,
+            data_orphan_lines,
+            orphan_offs,
+        ) = _finalize_line_table(state, addr)
+        if expanded_table:
+            _omit_expanded_table_locate_columns(state)
         do_lines, data_orphan_lines = _finalize_do_recovery(
             state, table_active, data_orphan_lines, orphan_offs
         )
@@ -2637,11 +2766,18 @@ def _finalize(state: DecodeState, addr) -> Program:
         shared_subs, sub_local_arrays = _scope_procs(state)
         dims, local_dims = _finalize_dimensions(state, sub_local_arrays)
         _finalize_sub_prefixes(state, shared_subs, local_dims)
-        ins, data_orphan_lines, dim_lines = _finalize_static_dims(
-            state, dims, data_orphan_lines
+        (
+            ins,
+            data_orphan_lines,
+            dim_lines,
+            expanded_dim_attribution,
+        ) = _finalize_static_dims(
+            state, dims, data_orphan_lines, expanded_table
         )
         data_lines, deftype_lines = _finalize_data_recovery(
-            state, data_orphan_lines
+            state,
+            data_orphan_lines,
+            suppress_pool_fallback=expanded_dim_attribution,
         )
         _move_data_before_poll_loops(state)
 
@@ -2946,17 +3082,23 @@ def _finalize(state: DecodeState, addr) -> Program:
             or (o[1] == "movax_m" and o[2] in (0x72, 0x74))
             for o in img.ops
         ):
+            late_extra_offs = {a + 4 - img.start for a in out.trace_tbl} | {
+                a - img.start
+                for a in out.stmt_addr.values()
+                if a is not None
+            }
+            if expanded_table:
+                late_extra_offs |= {
+                    op[0] - img.start
+                    for op in img.ops
+                    if op[1] == "movax"
+                }
             _late = _line_table(
                 img.exe,
                 img.start,
                 out.addrs,
                 addr,
-                extra_offs={a + 4 - img.start for a in out.trace_tbl}
-                | {
-                    a - img.start
-                    for a in out.stmt_addr.values()
-                    if a is not None
-                },  # folded-body statements have table entries too (wild vhfprop)
+                extra_offs=late_extra_offs,
             )
             table = _late[0] if _late is not None else None
             if fixed_lines is not None and table is not None:
@@ -2985,6 +3127,30 @@ def _finalize(state: DecodeState, addr) -> Program:
             elif table is not None:
                 line_map_detail = "unknown statement"
                 try:
+                    table_entries = tuple(table.items())
+
+                    def line_for_addr(statement_addr):
+                        """Resolve an error-free statement between table sites.
+
+                        The compiler records operations which can raise, not
+                        every statement start.  An intervening jump or store
+                        is unambiguous when the nearest recorded sites on both
+                        sides carry the same physical line (wild photo.exe).
+                        """
+                        off = statement_addr - img.start
+                        direct = table.get(off)
+                        if direct is not None or not expanded_table:
+                            return direct
+                        before = next(
+                            (line for site, line in reversed(table_entries) if site < off),
+                            None,
+                        )
+                        after = next(
+                            (line for site, line in table_entries if site > off),
+                            None,
+                        )
+                        return before if before is not None and before == after else None
+
                     pending_data_lines = iter(data_lines or ())
                     pending_dim_lines = iter(dim_lines or ())
                     pending_do_lines = iter(do_lines or ())
@@ -3009,6 +3175,27 @@ def _finalize(state: DecodeState, addr) -> Program:
                         if a is None and queue is not None:
                             ln = next(queue, None)
                             if (
+                                expanded_table
+                                and
+                                ln is None
+                                and isinstance(s, (ir.Dim, ir.OptionBase))
+                            ):
+                                # A static declaration emits no user-code
+                                # operation, hence no error-table entry.  When
+                                # it precedes executable code on the same
+                                # physical line, inherit that following
+                                # statement's recorded number (wild
+                                # photo.exe has two leading DIMs before its
+                                # ON ERROR).  Keep the lookup constrained to
+                                # actual statement starts; the wider scanned-
+                                # op set is only for validating the table.
+                                for following_addr in out.addrs[stmt_index + 1 :]:
+                                    if following_addr is None:
+                                        continue
+                                    ln = line_for_addr(following_addr)
+                                    if ln is not None:
+                                        break
+                            if (
                                 ln is None
                                 and isinstance(s, ir.Do)
                                 and s.kind is None
@@ -3025,20 +3212,62 @@ def _finalize(state: DecodeState, addr) -> Program:
                                         continue
                                     loop_addr = out.addrs[j]
                                     if loop_addr is not None:
-                                        ln = table.get(loop_addr - img.start)
+                                        ln = line_for_addr(loop_addr)
                                     break
                             if ln is None:
                                 raise TypeError  # falls through to the same
                             lines.append(ln)  # unsupported-shape ValueError below
                         else:
-                            lines.append(table[a - img.start])
+                            ln = line_for_addr(a)
+                            if ln is None:
+                                raise KeyError(a)
+                            lines.append(ln)
                     prog.lines = lines
+                    print_splits = {}
+                    op_index = {op[0]: index for index, op in enumerate(img.ops)}
+                    for stmt_index, (statement, statement_addr) in enumerate(
+                        zip(prog, out.addrs)
+                    ) if expanded_table else ():
+                        if not (
+                            isinstance(statement, ir.Lprint)
+                            and statement.items
+                            and statement_addr in op_index
+                        ):
+                            continue
+                        starts = [statement_addr]
+                        emitted = 0
+                        for op_index_value in range(
+                            op_index[statement_addr], len(img.ops)
+                        ):
+                            candidate = img.ops[op_index_value]
+                            if (
+                                candidate[1] == "rt"
+                                and candidate[2] == 0xBF
+                            ):
+                                emitted += 1
+                                if emitted == len(statement.items):
+                                    break
+                                starts.append(img.ops[op_index_value + 1][0])
+                        if len(starts) != len(statement.items):
+                            continue
+                        base_line = lines[stmt_index]
+                        splits = tuple(
+                            (item_index, item_line)
+                            for item_index, item_addr in enumerate(starts[1:], 1)
+                            if (item_line := table.get(item_addr - img.start))
+                            is not None
+                            and item_line != base_line
+                        )
+                        if splits:
+                            print_splits[stmt_index] = splits
+                    prog.print_splits = print_splits
+                    prog.expanded_line_table = expanded_table
                 except (KeyError, TypeError):
                     logger.warning(
                         "ignoring incomplete error-trap line table during wild "
                         "recovery: %s", line_map_detail
                     )
-                    prog.lines = []
+                    prog.lines = None if expanded_table else []
         return prog
 
 
@@ -3351,7 +3580,16 @@ def _fp_compare_ops(state: DecodeState, op, kind) -> bool:
         e.pend_cmp = (state.fpval64(op[2]), e.stack.pop())
     elif kind == "fcompp":
         rhs = e.stack.pop()
-        e.pend_cmp = (e.stack.pop(), rhs)
+        lhs = e.stack.pop()
+        # A runtime call leaves its FP result at ST(0), so when the CALL is the
+        # textual left operand TB loads the right operand first, then calls.
+        # The ordinary FCOMPP orientation loses that source order: rendering
+        # the equivalent reversed relation selects a shorter memory-compare
+        # template instead. Retain the opcode witness for the renderer
+        # (t1_poscmp; wild photo.exe, plus crossref.exe's symmetric VAL case).
+        if isinstance(rhs, ir.Call):
+            rhs = ir.Template("fcompp_call_first", rhs)
+        e.pend_cmp = (lhs, rhs)
     elif kind == "strcmp":
         rhs = e.sstack.pop()
         e.pend_cmp = (e.sstack.pop(), rhs)

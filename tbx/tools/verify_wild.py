@@ -144,6 +144,28 @@ def load_manifest() -> list[dict]:
 #: excluding -- wild banker.exe comes back 155 bytes off in 94 KB.
 FLAGS_ONLY_TOGGLES = frozenset("K")
 
+# Turbo Basic copies two compile-session work areas into otherwise deterministic
+# EXEs.  They contain stale editor/compiler process state rather than program
+# code or initialized DGROUP data: rebuilding wild photo.exe reproduces all
+# 53,711 bytes except 88 bytes inside these areas, and the oracle's repeated
+# builds are identical to each other.  Zero the complete work areas, not just
+# the bytes observed to differ, so comparison never depends on their residue.
+# The boundaries are pinned by the surrounding fixed runtime image: startup
+# code begins at 0x01D0 and the second buffer is followed at 0x7C34 by the
+# stable runtime vector table.
+NONREPRODUCIBLE_BUFFER_RANGES = ((0x00C0, 0x01D0), (0x7B88, 0x7C34))
+
+
+def normalize_nonreproducible_buffers(data: bytes) -> bytes:
+    """Zero compiler-session residue copied into the linked runtime image."""
+    normalized = bytearray(data)
+    for start, stop in NONREPRODUCIBLE_BUFFER_RANGES:
+        if start >= len(normalized):
+            continue
+        end = min(stop, len(normalized))
+        normalized[start:end] = b"\0" * (end - start)
+    return bytes(normalized)
+
 
 def normalize_flags(data: bytes, dialect_start: int) -> bytes:
     """`data` with the IDE Options mask zeroed, so a flags-only toggle cancels."""
@@ -209,6 +231,8 @@ def verify(name: str) -> str:
         return f"COMPILE-FAIL: {str(exc).splitlines()[-1][:80]}"
     if out == data:
         return "exact"
+    if normalize_nonreproducible_buffers(out) == normalize_nonreproducible_buffers(data):
+        return "exact (non-reproducible buffers zeroed)"
     edit, pct = distance(data, out)
     text = (
         f"{edit} bytes off ({pct:.2f}% identical), "

@@ -34,6 +34,14 @@ class Program(list[Any]):
     traced: tuple[int, ...] = ()  # TRON: statement indices inside a traced region
     # TRON: {stmt index -> traced physical-line count} for a mid-block TROFF
     trace_partial: dict[int, int]
+    # Error-table-proved source boundaries inside a merged LPRINT item vector:
+    # {statement index: ((item index, original line), ...)}.  A trailing
+    # semicolon leaves no operation between adjacent LPRINT statements, so the
+    # scanner deliberately merges them and only the line table can split them.
+    print_splits: dict[int, tuple[tuple[int, int], ...]]
+    # True only when the ordinary statement/fold address set rejected the
+    # error table and scanned load boundaries supplied the missing evidence.
+    expanded_line_table: bool = False
     events: tuple[DecodedEvent, ...] = ()
     event_reconciliation: EventReconciliation | None = None
     statement_edits: tuple[StatementEdit, ...] = ()
