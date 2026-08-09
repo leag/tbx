@@ -63,8 +63,21 @@ source, or `SOLVER_v86.EXE`. Probe matrices can use this directly:
 uv run python tbx/tools/batch_probe.py /tmp/probes --jobs 4 --keep /tmp/exes
 ```
 
-`batch_probe.py` preflights Node, mtools, and the locked `v86` dependency before
-booting, prints each result as soon as it completes, and optionally retains each
-compiled executable outside the repository. On the project fixtures, a small
-compile fell from roughly 25 seconds to 8.8 seconds; two concurrent compiles
-also complete in about 8.9 seconds on the reference development machine.
+`batch_probe.py` primes one compiler snapshot and defaults to two concurrent
+restores. `verify_fixture` and `verify_wild` use the same strategy for
+multi-program sweeps; pass `--jobs N` to tune memory/CPU pressure. A lone
+`compile_bas` call automatically uses a matching snapshot when one already
+exists, but does not make a one-off compile slower by priming first.
+
+The pytest tiers keep v86 out of the ordinary edit loop while retaining the
+real compiler as the acceptance authority:
+
+```sh
+uv run pytest                         # deterministic, emulator-free suite
+uv run pytest --oracle                # snapshot-backed compiler smoke tests
+uv run pytest --oracle --oracle-slow  # multi-minute large-source coverage
+```
+
+On the reference development machine, a small cold compile fell from roughly
+25 seconds to 8.8 seconds; a snapshot restore takes about 4 seconds, and two
+concurrent restores finish in roughly the same wall time as one.

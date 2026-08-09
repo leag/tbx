@@ -75,7 +75,7 @@ async def decompile(exe: UploadFile = File(...)) -> dict:
 
 
 @app.get("/api/dialects")
-def dialects() -> dict:
+async def dialects() -> dict:
     return {"dialects": list(oracle.DIALECTS)}
 
 
@@ -85,7 +85,7 @@ _TOGGLE_LETTERS = tuple(letter for _bit, letter in _TOGGLE_BITS)
 
 
 @app.get("/api/toggles")
-def toggles() -> dict:
+async def toggles() -> dict:
     return {
         "toggles": [
             {"letter": letter, "name": _TOGGLE_NAMES[letter]} for letter in _TOGGLE_LETTERS
@@ -129,7 +129,7 @@ class DisassemblyRequest(BaseModel):
 
 
 @app.post("/api/disassembly")
-def disassembly(req: DisassemblyRequest) -> dict:
+async def disassembly(req: DisassemblyRequest) -> dict:
     try:
         session = _store.get(req.session_id)
     except KeyError as e:
@@ -143,7 +143,7 @@ class DisassembleBytesRequest(BaseModel):
 
 
 @app.post("/api/disassemble_bytes")
-def disassemble_bytes(req: DisassembleBytesRequest) -> dict:
+async def disassemble_bytes(req: DisassembleBytesRequest) -> dict:
     # Stateless counterpart to /api/disassembly: the recompiled binary only
     # ever exists as bytes already sent to the client (recompile() doesn't
     # persist it server-side), so disassembling it takes the bytes directly
@@ -167,7 +167,7 @@ class RecompileRequest(BaseModel):
 
 
 @app.post("/api/recompile")
-def recompile(req: RecompileRequest) -> dict:
+async def recompile(req: RecompileRequest) -> dict:
     try:
         session = _store.get(req.session_id)
     except KeyError as e:
@@ -226,11 +226,10 @@ def recompile(req: RecompileRequest) -> dict:
         # The fast (snapshot-restore) path is ~2x quicker than rebooting the
         # oracle from scratch every call; prime it once per (dialect,
         # toggles) pair on first use -- see oracle.compile_bas's docstring.
-        if not oracle.has_snapshot(dialect, toggles_):
-            try:
-                oracle.prime_snapshot(dialect, toggles_)
-            except RuntimeError as e:
-                raise HTTPException(status_code=503, detail=str(e)) from e
+        try:
+            oracle.ensure_snapshot(dialect, toggles_)
+        except RuntimeError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
         try:
             recompiled = oracle.compile_bas(bas_path, dialect=dialect, toggles=toggles_, fast=True)
         except RuntimeError as e:

@@ -1,12 +1,31 @@
+import asyncio
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 
 from tbx.tools import oracle
 from tbx.web.app import app
 
-client = TestClient(app)
+class _ASGIClient:
+    """Synchronous test facade without Starlette's deprecated portal wrapper."""
+
+    def request(self, method, path, **kwargs):
+        async def send():
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as active:
+                return await active.request(method, path, **kwargs)
+
+        return asyncio.run(send())
+
+    def get(self, path, **kwargs):
+        return self.request("GET", path, **kwargs)
+
+    def post(self, path, **kwargs):
+        return self.request("POST", path, **kwargs)
+
+
+client = _ASGIClient()
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "corpus" / "f87_t1_beep.exe"
 
@@ -226,6 +245,7 @@ def test_recompile_rejects_an_unknown_dialect_override():
 
 
 @pytest.mark.skipif(not _oracle_available(), reason="Turbo Basic oracle not provisioned locally")
+@pytest.mark.oracle
 def test_recompile_matching_source_reports_full_match():
     exe_bytes = FIXTURE.read_bytes()
     decompile_response = client.post(
@@ -265,6 +285,7 @@ def test_decompile_inline_fixture_with_raw_bytes_does_not_crash():
 
 
 @pytest.mark.skipif(not _oracle_available(), reason="Turbo Basic oracle not provisioned locally")
+@pytest.mark.oracle
 def test_recompile_invalid_source_returns_compiler_error():
     exe_bytes = FIXTURE.read_bytes()
     decompile_response = client.post(
@@ -282,6 +303,8 @@ def test_recompile_invalid_source_returns_compiler_error():
 
 
 @pytest.mark.skipif(not _oracle_available(), reason="Turbo Basic oracle not provisioned locally")
+@pytest.mark.oracle
+@pytest.mark.oracle_slow
 def test_recompile_splits_a_too_large_procedure_free_source_and_still_compiles():
     # Turbo Basic's editor can't load a source file over ~64KB at all (a
     # real compiler-era limit -- k.exe and cal.exe are wild witnesses).

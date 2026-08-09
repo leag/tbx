@@ -2,6 +2,7 @@
 
     python -m tbx.tools.verify_fixture STEM [STEM ...]
     python -m tbx.tools.verify_fixture --all
+    python -m tbx.tools.verify_fixture --jobs 2 STEM ...
 
 For each corpus stem: decompile the EXE, emit source, compile that source
 with the REAL Turbo Basic compiler (tbx.tools.oracle), and byte-compare the
@@ -20,8 +21,10 @@ K, and skipping on it is how two wild emitter bugs stayed hidden (see
 
 from __future__ import annotations
 
+import argparse
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from tbx import decode0, emit0
@@ -60,19 +63,47 @@ def verify(stem: str) -> str:
 
 
 def main(argv: list[str]) -> int:
-    if argv and argv[0] == "--all":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("stems", nargs="*")
+    parser.add_argument("--all", action="store_true")
+    parser.add_argument("--jobs", type=int, default=2)
+    args = parser.parse_args(argv)
+    if args.jobs < 1:
+        parser.error("--jobs must be at least 1")
+    if args.all:
         stems = sorted(p.stem for p in _CORPUS.glob("*.exe"))
     else:
-        stems = argv
+        stems = args.stems
     if not stems:
         print(__doc__)
         return 2
+
+    if len(stems) > 1:
+        try:
+            oracle.preflight()
+            for dialect in sorted(
+                {"1.0" if stem.startswith("v10_") else "1.1" for stem in stems}
+            ):
+                oracle.ensure_snapshot(dialect=dialect)
+        except RuntimeError as exc:
+            print(f"oracle infrastructure error: {exc}", file=sys.stderr)
+            return 2
+
+    if args.jobs == 1 or len(stems) < 2:
+        results = map(verify, stems)
+    else:
+        pool = ThreadPoolExecutor(max_workers=args.jobs)
+        results = pool.map(verify, stems)
+
     bad = 0
-    for stem in stems:
-        r = verify(stem)
-        print(f"{stem}: {r}")
-        if r.startswith("MISMATCH"):
-            bad += 1
+    try:
+        for stem, result in zip(stems, results):
+            print(f"{stem}: {result}")
+            if result.startswith("MISMATCH"):
+                bad += 1
+    finally:
+        if args.jobs > 1 and len(stems) >= 2:
+            pool.shutdown()
     return 1 if bad else 0
 
 

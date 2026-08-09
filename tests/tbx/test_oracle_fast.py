@@ -20,9 +20,17 @@ def _oracle_available() -> bool:
     return True
 
 
-pytestmark = pytest.mark.skipif(
-    not _oracle_available(), reason="Turbo Basic oracle not provisioned locally"
-)
+pytestmark = [
+    pytest.mark.oracle,
+    pytest.mark.skipif(
+        not _oracle_available(), reason="Turbo Basic oracle not provisioned locally"
+    ),
+]
+
+
+@pytest.fixture(scope="module")
+def primed_snapshot():
+    return oracle.ensure_snapshot(dialect="1.1", toggles="")
 
 
 def test_compile_bas_fast_without_a_primed_snapshot_raises_clearly():
@@ -30,14 +38,15 @@ def test_compile_bas_fast_without_a_primed_snapshot_raises_clearly():
         oracle.compile_bas(_BAS, dialect="1.1", toggles="ZZ-never-primed", fast=True)
 
 
-def test_prime_then_fast_compile_matches_the_plain_path_byte_exact():
-    oracle.prime_snapshot(dialect="1.1", toggles="")
+def test_prime_then_fast_compile_matches_the_plain_path_byte_exact(primed_snapshot):
     fast = oracle.compile_bas(_BAS, dialect="1.1", toggles="", fast=True)
     plain = oracle.compile_bas(_BAS, dialect="1.1", toggles="", fast=False)
     assert fast == plain
 
 
-def test_compile_bas_names_the_too_large_editor_limit_clearly(tmp_path):
+def test_compile_bas_names_the_too_large_editor_limit_clearly(
+    tmp_path, primed_snapshot
+):
     # TB's editor rejects a source past its own buffer size with a modal
     # "<name> too large. Truncate? (Y/N)" prompt instead of loading it --
     # witnessed on real wild files (cal.exe, 81KB source; k.exe, 551KB).
@@ -45,7 +54,6 @@ def test_compile_bas_names_the_too_large_editor_limit_clearly(tmp_path):
     # "loaded successfully" to the harness's own `scr().includes(filename)`
     # check, so it blindly pressed on into a still-open dialog and reported
     # a misleading "did not enter the compile screen" instead of this.
-    oracle.prime_snapshot(dialect="1.1", toggles="")
     big = tmp_path / "TOOBIG.BAS"
     lines = "\n".join(f"{n} PRINT {n}" for n in range(10, 10 * 9000, 10))
     big.write_text(lines + "\n", encoding="latin-1", newline="")
@@ -54,7 +62,7 @@ def test_compile_bas_names_the_too_large_editor_limit_clearly(tmp_path):
         oracle.compile_bas(big, dialect="1.1", toggles="", fast=True)
 
 
-def test_compile_ignores_inline_keyword_inside_a_string(tmp_path):
+def test_compile_ignores_inline_keyword_inside_a_string(tmp_path, primed_snapshot):
     source = tmp_path / "INLINESTR.BAS"
     source.write_text(
         '10 A$ = "$INLINE "\n20 PRINT A$; "not a filename"\n30 END\n',
@@ -62,6 +70,6 @@ def test_compile_ignores_inline_keyword_inside_a_string(tmp_path):
         newline="",
     )
 
-    compiled = oracle.compile_bas(source, dialect="1.1", toggles="")
+    compiled = oracle.compile_bas(source, dialect="1.1", toggles="", fast=True)
 
     assert compiled[:2] in (b"MZ", b"ZM")

@@ -114,7 +114,10 @@ const fs = require("fs");
     // fixed 9-second sleep and naturally accommodates both tiny and huge files.
     const outImg = path.join(WORKSPACE, "work_out.img");
     const out = path.join(WORKSPACE, "SOLVER_v86.EXE");
-    const ok = await lib.waitForExe(emulator, outImg, "SOLVER.EXE", out, RUN_MS);
+    const compileFailed = () => /^\s*Error \d+:/m.test(scr());
+    const ok = await lib.waitForExe(
+      emulator, outImg, "SOLVER.EXE", out, RUN_MS, compileFailed
+    );
     console.error("[harness] extracted", out, ok ? `(${fs.statSync(out).size} B)` : "(empty/timeout)");
     console.log("=== COMPILE-EXE screen ==="); console.log(scr());
     process.exit(ok ? 0 : 1);

@@ -7,10 +7,16 @@ Before tagging a release, re-verify a sample against the REAL toolchain on
 a machine with the repository's v86 oracle (see `oracle/`).
 Use `TBX_ORACLE` only to select another compatible v86 harness.
 
+Run both oracle pytest tiers once on that machine:
+
+```sh
+uv run pytest --oracle --oracle-slow
+```
+
 ## 1. Byte-exact round trip (the decompiler's contract)
 
 ```sh
-uv run python -m tbx.tools.verify_fixture t1_print t1_gosub t1_subsh \
+uv run python -m tbx.tools.verify_fixture --jobs 2 t1_print t1_gosub t1_subsh \
     t1_dim3v zz_sc3 v10_subdef tier1_expr
 ```
 

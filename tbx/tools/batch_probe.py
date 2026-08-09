@@ -39,7 +39,7 @@ from tbx.tools import oracle
 def probe_one(bas_path: Path, dialect: str) -> tuple[str, str, bytes | None]:
     """Compile + scan one probe. Returns status, detail, and compiled bytes."""
     try:
-        exe = oracle.compile_bas(bas_path, dialect=dialect)
+        exe = oracle.compile_bas(bas_path, dialect=dialect, fast=True)
     except Exception as e:
         return "ERR", str(e).splitlines()[0][:200], None
     try:
@@ -61,7 +61,7 @@ def main(argv: list[str]) -> int:
     want = argv[argv.index("--want") + 1] if "--want" in argv else None
     dialect = argv[argv.index("--dialect") + 1] if "--dialect" in argv else "1.1"
     keep = Path(argv[argv.index("--keep") + 1]) if "--keep" in argv else None
-    jobs = int(argv[argv.index("--jobs") + 1]) if "--jobs" in argv else 1
+    jobs = int(argv[argv.index("--jobs") + 1]) if "--jobs" in argv else 2
     if jobs < 1:
         print("--jobs must be at least 1", file=sys.stderr)
         return 2
@@ -73,6 +73,7 @@ def main(argv: list[str]) -> int:
 
     try:
         oracle.preflight()
+        oracle.ensure_snapshot(dialect=dialect)
     except RuntimeError as exc:
         print(f"oracle infrastructure error: {exc}", file=sys.stderr)
         return 2

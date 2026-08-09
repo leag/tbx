@@ -98,6 +98,7 @@ def test_batch_probe_parallel_keep(tmp_path, monkeypatch, capsys):
         (probes / f"{name}.bas").write_text("10 END\n")
 
     monkeypatch.setattr(batch_probe.oracle, "preflight", lambda: None)
+    monkeypatch.setattr(batch_probe.oracle, "ensure_snapshot", lambda **kwargs: None)
     monkeypatch.setattr(
         batch_probe,
         "probe_one",

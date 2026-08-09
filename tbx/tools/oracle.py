@@ -118,12 +118,27 @@ def prime_snapshot(dialect: str = "1.1", toggles: str = "", timeout: int = 300) 
     return snap_path
 
 
+def ensure_snapshot(
+    dialect: str = "1.1", toggles: str = "", timeout: int = 300
+) -> Path:
+    """Return the matching snapshot, priming it once when absent.
+
+    Batch callers use this before launching workers so concurrent compiles
+    only read a complete snapshot and never race to create the same file.
+    """
+
+    snap_path = _snapshot_path(dialect, toggles)
+    return snap_path if snap_path.is_file() else prime_snapshot(
+        dialect=dialect, toggles=toggles, timeout=timeout
+    )
+
+
 def compile_bas(
     bas: Path | str,
     dialect: str = "1.1",
     timeout: int = 300,
     toggles: str = "",
-    fast: bool = False,
+    fast: bool | None = None,
 ) -> bytes:
     """Compile a .BAS with the real Turbo Basic compiler; return EXE bytes.
 
@@ -139,11 +154,16 @@ def compile_bas(
     FreeDOS and re-navigating the IDE menus on every call -- see
     `prime_snapshot`, which must be called once for this exact
     (dialect, toggles) pair before `fast=True` can be used; raises
-    RuntimeError naming the missing snapshot otherwise. Verified
+    RuntimeError naming the missing snapshot otherwise. The default, `None`,
+    automatically uses the fast path when a matching snapshot already exists
+    and otherwise retains the plain one-shot path; it never adds priming cost
+    to a single compile. Verified
     byte-identical to the non-fast path across the fixture corpus and both
     dialects; use it freely once primed.
     """
     d = oracle_dir()
+    if fast is None:
+        fast = has_snapshot(dialect, toggles)
     # How long the harness polls for the compiled EXE to appear on the guest
     # floppy after "Compiling" shows (waitForExe, itself a poll that returns
     # as soon as the output stabilizes -- this is a ceiling, not a fixed

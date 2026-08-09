@@ -183,7 +183,10 @@ async function fastCompile() {
   }
   const outImg = path.join(WORKSPACE, "work_out.img");
   const out = path.join(WORKSPACE, "SOLVER_v86.EXE");
-  const ok = await lib.waitForExe(emulator, outImg, "SOLVER.EXE", out, RUN_MS);
+  const compileFailed = () => /^\s*Error \d+:/m.test(scr());
+  const ok = await lib.waitForExe(
+    emulator, outImg, "SOLVER.EXE", out, RUN_MS, compileFailed
+  );
   console.error("[fast] extracted", out, ok ? `(${fs.statSync(out).size} B)` : "(empty/timeout)");
   if (!ok) console.error("[fast] DEBUG screen at extract-timeout failure:\n" + scr());
   process.exit(ok ? 0 : 1);

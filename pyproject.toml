@@ -34,6 +34,10 @@ packages = ["tbx"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "oracle: invokes the provisioned Turbo Basic compiler under v86",
+    "oracle_slow: multi-minute oracle coverage, enabled with --oracle-slow",
+]
 
 [tool.ruff.lint]
 ignore = ["E701", "E702", "E741"]

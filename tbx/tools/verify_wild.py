@@ -2,7 +2,7 @@
 
     python -m tbx.tools.verify_wild            # the comparable subset, fast
     python -m tbx.tools.verify_wild --all      # compile every decoding program
-    python -m tbx.tools.verify_wild NAME ...
+    python -m tbx.tools.verify_wild --jobs 2 NAME ...
 
 The default gates a release and stays quick. `--all` is the thorough sweep: it
 COMPILES the programs the default skips rather than printing why they were
@@ -50,11 +50,13 @@ each recorded delta was measured against.
 
 from __future__ import annotations
 
+import argparse
 import difflib
 import hashlib
 import json
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from tbx import decode0, emit0
@@ -242,30 +244,71 @@ def verify(name: str) -> str:
 
 
 def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("names", nargs="*")
+    parser.add_argument("--all", action="store_true")
+    parser.add_argument("--jobs", type=int, default=2)
+    args = parser.parse_args(argv)
+    if args.jobs < 1:
+        parser.error("--jobs must be at least 1")
+
     entries = load_manifest()
-    if argv and argv[0] == "--all":
+    if args.all:
         names = [e["name"] for e in entries]
-    elif argv:
-        names = argv
+    elif args.names:
+        names = args.names
     else:
         names = [e["name"] for e in entries if not e["excluded"]]
 
     recorded = {e["name"]: e for e in entries}
-    bad = 0
-    for name in names:
+
+    # A verification sweep is the snapshot path's ideal workload: pay the
+    # one-time prime per compiler/options pair, then run independent v86
+    # restores in parallel. Single-name checks retain compile_bas's automatic
+    # behavior and never become slower just to create a snapshot.
+    if len(names) > 1:
+        configurations = set()
+        for name in names:
+            path = _HITS / name
+            if not path.is_file():
+                continue
+            data = path.read_bytes()
+            dialect = program_dialect(data)
+            prog = decode0.decode_user_code(data)
+            configurations.add((dialect, getattr(prog, "toggles", "")))
+        try:
+            oracle.preflight()
+            for dialect, toggles in sorted(configurations):
+                oracle.ensure_snapshot(dialect=dialect, toggles=toggles)
+        except RuntimeError as exc:
+            print(f"oracle infrastructure error: {exc}", file=sys.stderr)
+            return 2
+
+    def check(name):
         entry = recorded.get(name)
         path = _HITS / name
         if entry and path.is_file():
             digest = hashlib.sha256(path.read_bytes()).hexdigest()
             if digest != entry["sha256"]:
-                print(f"{name}: MANIFEST STALE (sha256 differs)")
-                bad += 1
-                continue
+                return name, "MANIFEST STALE (sha256 differs)", 1
         result = verify(name)
-        print(f"{name}: {result}")
-        # A mismatch only counts against us where byte-exactness was reachable.
-        if not result.startswith(("exact", "skip:")) and "[expected:" not in result:
-            bad += 1
+        failed = not result.startswith(("exact", "skip:")) and "[expected:" not in result
+        return name, result, int(failed)
+
+    if args.jobs == 1 or len(names) < 2:
+        results = map(check, names)
+    else:
+        pool = ThreadPoolExecutor(max_workers=args.jobs)
+        results = pool.map(check, names)
+
+    bad = 0
+    try:
+        for name, result, failed in results:
+            bad += failed
+            print(f"{name}: {result}")
+    finally:
+        if args.jobs > 1 and len(names) >= 2:
+            pool.shutdown()
     print(f"\n{len(names)} checked, {bad} not byte-exact")
     return 1 if bad else 0
 

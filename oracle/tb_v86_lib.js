@@ -162,11 +162,15 @@ async function waitForStableScreen(scrFn, stableMs, timeoutMs) {
   return false;
 }
 
-async function waitForExe(emulator, imagePath, guestName, outPath, timeoutMs) {
+async function waitForExe(emulator, imagePath, guestName, outPath, timeoutMs, abortFn = null) {
   const started = Date.now();
   let lastSize = -1, stable = 0;
   while (Date.now() - started < timeoutMs) {
     await sleep(200);
+    // A compiler error leaves no EXE to discover. The IDE paints the error
+    // immediately; let callers stop here instead of polling the floppy until
+    // the multi-minute success ceiling expires.
+    if (abortFn && abortFn()) return false;
     try {
       await saveFdb(emulator, imagePath);
       fs.rmSync(outPath, { force: true });

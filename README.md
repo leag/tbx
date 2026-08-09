@@ -73,11 +73,16 @@ Compiler losses are normalized only when the canonical spelling recompiles
 identically (for example, `STOP`/`SYSTEM` to `END`).
 
 The committed fixtures contain operation-stream, IR, and emitted-source
-goldens. Run the full regression suite with:
+goldens. The default regression suite is emulator-free and suitable for the
+per-PR loop:
 
 ```sh
 uv run pytest
 ```
+
+On a provisioned oracle machine, add the real-compiler smoke tests with
+`uv run pytest --oracle`. Multi-minute large-source compiler coverage is a
+separate release/nightly tier: `uv run pytest --oracle --oracle-slow`.
 
 ## Oracle verification
 
@@ -90,7 +95,7 @@ checks, never at runtime. Install its Node dependencies and follow
 
 ```sh
 uv run python -m tbx.tools.verify_fixture \
-  t1_print t1_gosub t1_subsh t1_dim3v zz_sc3 v10_subdef tier1_expr
+  --jobs 2 t1_print t1_gosub t1_subsh t1_dim3v zz_sc3 v10_subdef tier1_expr
 ```
 
 Set `TBX_ORACLE` only when using another compatible v86 harness. See the
