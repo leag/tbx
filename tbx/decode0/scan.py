@@ -33,9 +33,13 @@ from tbx.decode0.opaque_helpers import (
 )
 
 
-def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
+def _scan_direct(exe, p, b, dia, ops, start, cs=None) -> int | None:
     """Byte-dispatch family split out of _scan. Returns the new
-    cursor when it decodes the op at ``p``, else None."""
+    cursor when it decodes the op at ``p``, else None.
+
+    ``cs`` is the base of the code segment ``p`` sits in, which only a
+    program with more than one code segment needs; it defaults to ``start``.
+    """
     if b == 0x90:  # NOP padding around compiler templates
         ops.append((p, "nop"))
         return p + 1
@@ -43,10 +47,17 @@ def _scan_direct(exe, p, b, dia, ops, start) -> int | None:
         rel = struct.unpack_from("<h", exe, p + 1)[0]
         # A GOTO spanning more than 32KB of code wraps around the 64KB code
         # segment (rel16 is signed): normalize the file-linear target back
-        # into [start, start+64K) -- the mapping is linear, so the wrap is
-        # exactly 0x10000 in file terms too (witnessed t1_bigjmp / wild
-        # inv87.exe, an early GOTO +53KB encoded as a negative rel).
-        target = start + ((p + 3 + rel - start) % 0x10000)
+        # into [cs, cs+64K) -- the mapping is linear, so the wrap is exactly
+        # 0x10000 in file terms too (witnessed t1_bigjmp / wild inv87.exe, an
+        # early GOTO +53KB encoded as a negative rel).
+        #
+        # rel16 is relative to CS, not to the entry point, so the window is
+        # the segment `p` sits in. A program whose code outgrows 64KB has
+        # more than one (wild rs.exe, dirmain1.exe), and their later segments
+        # do not start a multiple of 64KB from `start`, so wrapping against
+        # `start` sent every jump in them into unrelated early code.
+        cs = start if cs is None else cs
+        target = cs + ((p + 3 + rel - cs) % 0x10000)
         # Some wild programs place a compiler/library data table between two
         # code regions and jump over it.  The ordinary operation stream is
         # linear, so without this guard it would try to decode the table as
@@ -1895,7 +1906,19 @@ def _scan_pass(
     *args); no DS knowledge needed. Raises on anything outside the
     calibrated vocabulary. `ops`/`p` are pre-seeded by `_scan` so a rescued
     SUB...INLINE body can resume a failed pass instead of restarting it."""
+    # Base of the code segment the scan is currently in. Only far/segment
+    # jumps name a segment, and a later segment is unreachable until one of
+    # them transfers into it, so the greatest base seen at or before `p` is
+    # the right window for a near jump's rel16. A single-segment program
+    # (every fixture, most wild files) never leaves `start`; rs.exe and
+    # dirmain1.exe outgrow 64KB of code and do.
+    cs_base = start
+    for op in ops:  # a resumed pass inherits what the failed one established
+        if op[1] in ("jmpf", "segjmp"):
+            cs_base = max(cs_base, start + op[3] * 16)
     while p + 1 < len(exe):
+        if cs_base > p:
+            cs_base = start
         if helper := opaque_helpers.get(p):
             target, body, param_offsets = helper
             ops.append((p, "opaque_helper", body, param_offsets))
@@ -1907,7 +1930,7 @@ def _scan_pass(
             ops.append((p, "swap", sw[0], sw[1]))
             p += 24
             continue
-        np = _scan_direct(exe, p, b, dia, ops, start)
+        np = _scan_direct(exe, p, b, dia, ops, start, cs_base)
         if np is not None:
             p = np
             continue
@@ -1928,6 +1951,8 @@ def _scan_pass(
         if jump is not None:
             if jump == -1:
                 return ops
+            if ops[-1][1] in ("jmpf", "segjmp"):
+                cs_base = max(cs_base, start + ops[-1][3] * 16)
             p = jump
             continue
 

@@ -7564,6 +7564,30 @@ compiled and byte-verified.
 
 ### Recently closed (this campaign, newest first)
 
+- **2026-08-09 — a near jump's rel16 is relative to CS, not to the entry
+  point** (wild dirmain1.exe and kinetics.exe now decode END TO END; rs.exe
+  and inv87.exe are the controls): the scanner normalized every `jmp rel16`
+  target back into `[start, start+64KB)`. That is right for a program whose
+  code fits one segment, and wrong for one that outgrows it. rs.exe has
+  three code segments (based at start, start+0x6250 and start+0xEFF0) and
+  dirmain1.exe two; their later segments do not begin a multiple of 64KB
+  from `start`, so every jump in them was pulled 64KB backwards into
+  unrelated early code. rs.exe emitted `IF BM$ = "N" OR BM$ = "n" THEN 490`
+  for what the byte stream says is `THEN 20670` -- the next prompt, twenty
+  thousand lines away from where the old edge pointed. dirmain1.exe's
+  remaining failure (`unhandled op cmp_mi8`) was one of these: a NEXT whose
+  loop head had been placed 64KB away, so no FOR frame was open.
+  `_scan_pass` now tracks the current segment base, which only far and
+  segment jumps name, and a jump wraps within that window instead.
+  Single-segment programs are bit-for-bit unaffected (inv87.exe/invoice.exe
+  hold at 2790 statements, and the whole fixture corpus is unchanged).
+  rs.exe's recorded statement count drops 2329 -> 2328: the removed
+  statement was the artifact of one mis-normalized edge. No compiled fixture
+  witnesses this -- a >64KB-code program is beyond what the oracle harness
+  authors -- so the guard is `tests/tbx/test_jump_segment_window.py`, which
+  drives `_scan_direct` on hand-built bytes plus the two wild witnesses and
+  the single-segment control.
+
 - **2026-08-09 — a DEF FN string parameter written before it is read**: the
   store branch required the offset to already be in `fn_frame.str_offs`,
   which only a prior `spush_bp` read put there, so a body assigning its
