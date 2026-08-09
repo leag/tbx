@@ -1,0 +1,12 @@
+# v10_t1_varptridx dialect=1.0 start=070B0
+070B3:movm_imm:344:2
+070B9:movsim:344
+070BD:shlsi
+070BF:movrr:ax:si
+070C1:movm_ax:342
+070C5:fild:342
+070CA:rt:187
+070CC:rt:184
+070D0:epilogue
+# commits
+070CE

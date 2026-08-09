@@ -1935,11 +1935,19 @@ def _scan_pass(
             p = np
             continue
 
-        if b == 0x89 and (exe[p + 1] & 0xC0) == 0xC0:  # mov reg,reg: the far-index
-            rm, rg = exe[p + 1] & 7, (exe[p + 1] >> 3) & 7  # spill protocol
-            names = {0: "ax", 1: "cx", 3: "bx", 6: "si", 7: "di"}
-            if rm in names and rg in names:
-                ops.append((p, "movrr", names[rm], names[rg]))
+        if b in (0x89, 0x8B) and (exe[p + 1] & 0xC0) == 0xC0:  # mov reg,reg
+            rm, rg = exe[p + 1] & 7, (exe[p + 1] >> 3) & 7  # the far-index
+            names = {0: "ax", 1: "cx", 3: "bx", 6: "si", 7: "di"}  # spill protocol
+            # 89 /r is `mov r/m, r` and 8B /r is `mov r, r/m`: same pair of
+            # registers, opposite direction, so the destination swaps between
+            # the two encodings.  Only 0x89 was ever witnessed until
+            # `VARPTR(A%(I%))` -- VARPTR of an array element at a VARIABLE
+            # index -- which computes the element offset into SI and then
+            # copies it out with `8b c6` (mov ax,si) to store the pointer
+            # (fixture t1_varptridx; wild dirmain2.exe, twice).
+            dst, src = (rm, rg) if b == 0x89 else (rg, rm)
+            if dst in names and src in names:
+                ops.append((p, "movrr", names[dst], names[src]))
                 p += 2
                 continue
         np = _scan_direct2(exe, p, b, ops)

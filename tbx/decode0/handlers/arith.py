@@ -622,6 +622,39 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         else:
             ao = 1
         _skip_shlsi_overflow(state, c.k + ao)
+        if (
+            c.k + ao < len(img.ops)
+            and img.ops[c.k + ao][1] == "movrr"
+            and img.ops[c.k + ao][2:4] == ("ax", "si")
+        ):
+            # `VARPTR(A%(I%))`: VARPTR of an array element at a VARIABLE
+            # index.  The compiler scales the index and copies it out of SI
+            # with `mov ax,si` -- and adds NO array base at all, so this chain
+            # has no `moves_m`/`addsi` terminal and no trace of WHICH array was
+            # named.  That is not a gap in the recovery: `VARPTR(A%(I%))` and
+            # `VARPTR(B%(I%))` compile to byte-identical EXEs (probes
+            # varptridx2/varptridx3), so the array is genuinely unrecoverable
+            # and any array of the same element width reproduces these bytes.
+            # Emit one canonical choice, the way COMMON's lossy declaration is
+            # canonicalized (fixture t1_varptridx; wild dirmain2.exe, twice).
+            width = 2 << (ao - 1)
+            name = next(
+                (
+                    a["name"]
+                    for a in l.arrs
+                    if a.get("esz") == width and a.get("rank") == 1
+                ),
+                None,
+            )
+            if name is None:
+                raise ValueError(
+                    f"VARPTR of a {width}-byte element with no rank-1 array "
+                    f"of that width at {addr:#x}"
+                )
+            m.ax = ir.Call("VARPTR", (ir.ArrayRef(name, (m.si,)),))
+            m.si = None
+            state.advance(ao + 1)
+            return True
         if c.k + ao + 1 >= len(img.ops) or img.ops[c.k + ao][1] not in (
             "moves_m",
             "moves_bp",  # LOCAL DYNAMIC array's ES load (probe q_localarr)

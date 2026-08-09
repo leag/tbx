@@ -7004,6 +7004,12 @@ Assign(target=Var(name='B%'), value=Call(name='VARPTR', args=(Var(name='A'),)))
 Assign(target=Var(name='C%'), value=VarSeg())
 End()
 
+## t1_varptridx
+Dim(name='V0%', bounds=(10,), also=())
+Assign(target=Var(name='A%'), value=Lit(value=2))
+Assign(target=Var(name='B%'), value=Call(name='VARPTR', args=(ArrayRef(name='V0%', indices=(Var(name='A%'),)),)))
+Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)
+
 ## t1_varptrs_arr
 Dim(name='V0%', bounds=(20,), also=())
 Assign(target=Var(name='A$'), value=Call(name='VARPTR$', args=(ArrayRef(name='V0%', indices=(Lit(value=0),)),)))
@@ -13482,6 +13488,12 @@ Assign(target=Var(name='A'), value=Lit(value=1))
 Assign(target=Var(name='B%'), value=Call(name='VARPTR', args=(Var(name='A'),)))
 Assign(target=Var(name='C%'), value=VarSeg())
 End()
+
+## v10_t1_varptridx
+Dim(name='V0%', bounds=(10,), also=())
+Assign(target=Var(name='A%'), value=Lit(value=2))
+Assign(target=Var(name='B%'), value=Call(name='VARPTR', args=(ArrayRef(name='V0%', indices=(Var(name='A%'),)),)))
+Print(items=(Var(name='B%'),), newline=True, file=None, commas=None)
 
 ## v10_t1_view
 View(x1=Lit(value=10), y1=Lit(value=10), x2=Lit(value=100), y2=Lit(value=100), screen=False, color=None, border=None)

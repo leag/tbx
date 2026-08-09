@@ -1,0 +1,12 @@
+# t1_varptridx dialect=1.1 start=08700
+08703:movm_imm:344:2
+08709:movsim:344
+0870D:shlsi
+0870F:movrr:ax:si
+08711:movm_ax:342
+08715:fild:342
+0871A:rt:187
+0871C:rt:184
+08720:epilogue
+# commits
+0871E

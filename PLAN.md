@@ -9748,6 +9748,35 @@ already documents for `displacement is neither scalar nor array element`.
 After this, the wild corpus has NO multi-witness buckets left: all 16 remaining
 failures are single programs.
 
+**`VARPTR(A%(I%))` names an array the bytes do not record (2026-08-09,
+CLOSED)**: wild dirmain2.exe's `unhandled byte 8b` was VARPTR of an array
+element at a VARIABLE index. Two findings:
+
+- Scan: only `89 /r` (mov r/m, r) had ever been witnessed as a register-
+  register move. `8b /r` is the same move the other way round, so the
+  DESTINATION swaps between the encodings -- `8b c6` is `mov ax,si`, not
+  `mov si,ax`. Handled alongside 0x89 with the operand roles swapped.
+- Lift: the chain is `movsim I%; shlsi; movrr ax,si; movm_ax P%` and adds NO
+  array base at all, so there is no `moves_m`/`addsi` terminal and no trace of
+  WHICH array was named. That is not a recovery gap -- `VARPTR(A%(I%))` and
+  `VARPTR(B%(I%))` compile to BYTE-IDENTICAL EXEs (probes varptridx2/
+  varptridx3), so the array is genuinely unrecoverable and any array of the
+  same element width reproduces the bytes. Canonicalized like COMMON's lossy
+  declaration: emit the first rank-1 array of that width. varptridx3 proves it
+  is byte-safe -- its source says `VARPTR(A%(I%))`, the decoder emits
+  `VARPTR(V1%(A%))` naming the OTHER array, and it still recompiles exactly.
+
+Fixture t1_varptridx (+v10_), both byte-exact. dirmain2.exe now clears scan and
+lift (5287 statements).
+
+**dirmain2 still does NOT emit**, and `scan_wild`'s "decode-ok" does not mean it
+does: that tally calls `decode_user_code` only. `emit0` raises
+`KeyError: ('addr', 36100)` on an `IF ... THEN <target>` whose target has no
+line, left behind by the `continuing wild recovery with unresolved control
+edges` path. So dirmain2 is NOT in wild_roundtrip.json -- that manifest only
+records programs whose source compiles -- and the next step for it is the
+unresolved-edge recovery, not the byte vocabulary.
+
 ### The workflow (each gap, see gap 9–14 commits for examples)
 
 1. `uv run python -m tbx.tools.scan_wild wild/hits` — pick the top

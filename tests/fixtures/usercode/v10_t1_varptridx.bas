@@ -1,0 +1,4 @@
+10 DIM V0%(10)
+20 A% = 2
+30 B% = VARPTR(V0%(A%))
+40 PRINT B%
