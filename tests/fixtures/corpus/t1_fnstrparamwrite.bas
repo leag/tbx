@@ -1,0 +1,5 @@
+10 DEF FNPAD$(S$)
+20   S$ = "X"
+30   FNPAD$ = S$ + "Y"
+40 END DEF
+50 PRINT FNPAD$("A")

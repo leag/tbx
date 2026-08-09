@@ -7564,6 +7564,17 @@ compiled and byte-verified.
 
 ### Recently closed (this campaign, newest first)
 
+- **2026-08-09 — a DEF FN string parameter written before it is read**: the
+  store branch required the offset to already be in `fn_frame.str_offs`,
+  which only a prior `spush_bp` read put there, so a body assigning its
+  string parameter first raised. A DEF FN frame slot that is neither a LOCAL
+  nor the result cell is a parameter, so the store registers it itself --
+  the same reasoning the neighbouring `far_ref_bp` MID$= path already used.
+  One probe reproduced it; fixture `t1_fnstrparamwrite` is byte-exact.
+  crossref.exe's own `[bp+68]` turned out NOT to be this shape: the store
+  has nothing staged on the string stack, so it is not an assignment at all
+  and still stops, now with a message that says so.
+
 - **2026-08-09 — MID$/LSET/RSET onto a computed string-array element** (wild
   dirmain1.exe, `element access: unexpected op movdx`): the fixed-field
   string statements reach their target through a `movdx blk; movesdx` far

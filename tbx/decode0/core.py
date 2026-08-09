@@ -6717,16 +6717,27 @@ def _decode_user_code(
                     c.cur = None
                 elif c.fn_frame is not None:  # FN result desc at [bp+0]
                     if d != 0:
-                        if d not in c.fn_frame.str_offs:
+                        # A DEF FN frame slot that is not a LOCAL (the branch
+                        # above) and not the result cell is a parameter, so
+                        # register it here rather than requiring a prior read:
+                        # a body may WRITE a string parameter before it ever
+                        # reads one, and t1_fnstrparamwrite does exactly that.
+                        # Same reasoning as the far_ref_bp MID$= path above.
+                        # A store with nothing staged is a different shape --
+                        # not an assignment at all -- so it still stops here
+                        # (wild crossref.exe at [bp+68]).
+                        if not e.sstack:
                             raise ValueError(
-                                f"string store to [bp+{d}] in DEF FN body at {addr:#x}"
+                                f"string store to [bp+{d}] in DEF FN body "
+                                f"with no staged value at {addr:#x}"
                             )
+                        c.fn_frame.param_offs.add(d)
+                        c.fn_frame.str_offs.add(d)
                         # Assignment to a string PARAMETER of the enclosing
                         # DEF FN -- the store sibling of the spush_bp read
-                        # above, and reached only once that read has named the
-                        # offset a parameter (wild cleanup.exe, reformat.exe,
-                        # crossref.exe: `P04$ = <expr over P04$>`, all three
-                        # stopping here). Fixture t1_fnstrparamassign.
+                        # above (wild cleanup.exe, reformat.exe:
+                        # `P04$ = <expr over P04$>`). Fixture
+                        # t1_fnstrparamassign.
                         state.put(
                             ir.Assign(ir.Var(f"P{d:02X}$"), e.sstack.pop()),
                             c.cur,

@@ -2370,6 +2370,21 @@ def test_decode_v10_t1_locallongargonly():
     assert "LOCAL B&\n  CALL SUB1(B&)" in emit0.emit(prog)
 
 
+def test_decode_t1_fnstrparamwrite():
+    # A DEF FN body may WRITE a string parameter before it ever reads one, so
+    # the store cannot require the read to have named the offset first (wild
+    # crossref.exe, "string store to [bp+68] in DEF FN body"). A frame slot
+    # that is neither a LOCAL nor the result cell is a parameter.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("t1_fnstrparamwrite.exe"))
+    fn = next(stmt for stmt in prog if isinstance(stmt, ir.DefFn))
+
+    assert len(fn.params) == 1
+    assert fn.body[0] == ir.Assign(ir.Var(fn.params[0]), ir.StrLit("X"))
+    assert "DEF FNFN1$(A$)" in emit0.emit(prog)
+
+
 def test_decode_v10_t1_midarrelem():
     # MID$= onto a COMPUTED string-array element: the index chain ends in the
     # same movdx/movesdx far-descriptor prefix the DGROUP-scalar form uses,
@@ -4407,6 +4422,7 @@ if __name__ == "__main__":
     test_decode_v10_t1_locallongfp()
     test_decode_v10_t1_bplocalfor()
     test_decode_v10_t1_midarrelem()
+    test_decode_t1_fnstrparamwrite()
     test_decode_t1_localsub1()
     test_decode_t1_localvarstep()
     test_decode_t1_forstepm1()
