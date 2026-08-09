@@ -1,0 +1,21 @@
+# f87_t1_elemsync dialect=1.1 start=069A0
+069A3:fld64:360
+069A8:fstp:344
+069AF:movm_imm:342:3
+069B5:fild:356
+069BA:fold:*:344
+069BF:fistp:44
+069C4:fwait
+069C5:movaxmem:44
+069C8:movsim:342
+069CC:shlsi
+069CE:addsi:368
+069D2:movm_ax_si
+069D6:fild:374
+069DB:rt:187
+069DD:rt:184
+069E1:epilogue
+# commits
+069AD
+069D4
+069DF

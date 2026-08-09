@@ -633,6 +633,26 @@
    ],
    "instead": "Treat the 7-vs-11 mismatch as evidence the opaque-helper fingerprint under-counts this frame, or that 0xa2da is a genuine user SUB being mis-fingerprinted as a helper -- the caller forwards 11 arguments and references its own params out to offset 0x26. Investigate the fingerprint, not the guard. Single witness.",
    "source": "wild-corpus session 2026-08-09"
+  },
+  {
+   "id": "RO-STAT-ELEM-FWAIT-SOURCE",
+   "title": "stat.exe's element-chain FWAIT is an ordinary FP-to-int element store",
+   "disposition": "refuted",
+   "confidence": "medium",
+   "files": [
+    "wild/hits/stat.exe"
+   ],
+   "signatures": [
+    "element access: unexpected op fwait at 0x15e7b"
+   ],
+   "hypothesis": "The chain `shlsi; moves_m; fwait; far_movm_ax_si` is an int-array element store whose VALUE came through the FP-to-int bridge, so an ordinary source construct storing a converted float into A%(I%) should reproduce it and justify splicing the fwait at that join, the way INTO already is.",
+   "negative_evidence": [
+    "Three oracle probes produced the element store WITHOUT any fwait in the chain: CINT via a temp (`I% = CINT(X)` then `A%(I%) = 7`), CINT inline (`A%(CINT(X)) = 7`), and an FP expression as the stored value (`A%(I%) = X * 2`). All three decode correctly today.",
+    "No fixture in the corpus has `moves_m` followed by `fwait` -- checked across all 1119 ops goldens, the adjacency does not occur once.",
+    "Recompiling the FP-expression probe with the 8087 toggle produced a DIFFERENT shape entirely (a bare 0x9B before `mov ax,[002c]`, and a NEAR `addsi` element store rather than the far `moves_m` form), so the 8087 build is not the trigger either. That bare-FWAIT gap was real and is now closed separately by fixture f87_t1_elemsync."
+   ],
+   "instead": "stat.exe uses the EMULATED FWAIT (INT 3D, scan calls it the \"IDX% idiom\") inside a FAR element chain, which no authored probe has reproduced. Find what emits INT 3D at that position before splicing fwait into the element chain -- splicing it blind would make the chain accept an op whose source trigger is still unknown. Probe budget exhausted at four; single witness.",
+   "source": "wild-corpus session 2026-08-09"
   }
  ]
 }

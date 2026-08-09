@@ -1935,6 +1935,18 @@ def _scan_pass(
             p = np
             continue
 
+        if b == 0x9B and not (0xD8 <= exe[p + 1] <= 0xDF):
+            # A BARE x87 FWAIT.  `9b` followed by an ESC byte is the emulated
+            # FP vector (_scan_vector), which is the only form a default build
+            # emits; a REAL 8087 build syncs before reading a converted value
+            # back, e.g. `fistp [002c]; fwait; mov ax,[002c]` (probe
+            # f87_elemfwait3, compiled with the 8087 IDE toggle).  The op is
+            # already known and already semantic-free everywhere else --
+            # `fwait` is dispatched as "stray x87 sync: no semantics" -- so
+            # this only gives the scanner the standalone spelling.
+            ops.append((p, "fwait"))
+            p += 1
+            continue
         if b in (0x89, 0x8B) and (exe[p + 1] & 0xC0) == 0xC0:  # mov reg,reg
             rm, rg = exe[p + 1] & 7, (exe[p + 1] >> 3) & 7  # the far-index
             names = {0: "ax", 1: "cx", 3: "bx", 6: "si", 7: "di"}  # spill protocol

@@ -36,6 +36,15 @@ CASES = [
         "8",
         "10 DIM V0(10)\n20 V0(1) = 5\n30 V0(2) = V0(1) + 1\n40 A = V0(2)\n50 END\n",
     ),
+    (  # A REAL 8087 build syncs before reading a converted value back:
+        # `fistp [002c]; fwait; mov ax,[002c]`. The bare 0x9B had no scan
+        # entry -- only `9b`+ESC, the emulated-FP vector every default build
+        # emits -- so this raised `unhandled byte 9b`.
+        "f87_t1_elemsync.exe",
+        "8",
+        "10 DIM V0%(10)\n20 A = 2.5\n30 B% = 3\n40 V0%(B%) = A * 2\n"
+        "50 PRINT V0%(3)\n",
+    ),
     ("fkb_t1_beep.exe", "K", "10 BEEP\n20 END\n"),
     ("fkb_t1_and.exe", "K", None),
     ("fov_t1_and.exe", "O", None),

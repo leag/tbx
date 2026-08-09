@@ -9800,6 +9800,32 @@ corpus and the wild set, 1220 begin with those bytes and nothing else does.
 `find_prologue` now checks it before trusting a content match and names the
 actual reason instead of a byte offset.
 
+**A real 8087 build emits a BARE FWAIT (2026-08-09, CLOSED)**: the
+scanner knew `9b` only as the first byte of the emulated-FP vector (`9b` + an
+ESC byte D8-DF), which is the only form a DEFAULT build emits. A build
+compiled with the 8087 IDE toggle syncs before reading a converted value back
+-- `fistp [002c]; fwait; mov ax,[002c]` -- and that standalone `9b` raised
+`unhandled byte 9b`. The op itself was already known and already
+semantic-free ("stray x87 sync: no semantics" in the arith dispatch); only
+the standalone spelling was missing. Fixture f87_t1_elemsync (flagged, .exe
+only, pinned in test_flags.py), byte-exact with toggles="8".
+
+This does NOT move the wild tally (90/13/5 before and after): it was found by
+an authored probe while investigating stat.exe, not by a wild program. It
+widens 8087-build coverage, which the corpus exercises through its f87_
+fixtures.
+
+**stat.exe's element-chain FWAIT is NOT this** -- see
+RO-STAT-ELEM-FWAIT-SOURCE. Its fwait is the EMULATED one (INT 3D, the "IDX%
+idiom") sitting inside a FAR element chain, and four probes failed to
+reproduce it: CINT via a temp, CINT inline, an FP expression as the stored
+value, and the 8087 recompile (which produced a different shape entirely --
+a bare 0x9B plus a NEAR `addsi` store rather than the far `moves_m` form).
+No fixture in the corpus has `moves_m` followed by `fwait`, across all 1119
+ops goldens. Do not splice fwait into the element chain until something
+reproduces it: that would make the chain accept an op whose source trigger is
+still unknown.
+
 ### The workflow (each gap, see gap 9–14 commits for examples)
 
 1. `uv run python -m tbx.tools.scan_wild wild/hits` — pick the top
