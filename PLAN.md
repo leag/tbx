@@ -9777,6 +9777,29 @@ edges` path. So dirmain2 is NOT in wild_roundtrip.json -- that manifest only
 records programs whose source compiles -- and the next step for it is the
 unresolved-edge recovery, not the byte vocabulary.
 
+**Two "wild failures" were never TB images (2026-08-09)**: brotheru.exe
+and pcdcfile.exe failed as `unhandled byte 9e` / `unhandled byte 21`, which
+reads like a missing opcode. Neither is a decoder gap. This is a
+RECLASSIFICATION, not a decode improvement -- the tally drops because two
+entries leave the TB set, not because anything new decodes.
+
+`find_prologue` locates `cd ec b8` / `cd ec ba` by CONTENT SEARCH, so it finds
+those bytes wherever they occur, including inside compressed payload; decoding
+then starts on whatever follows.
+
+- brotheru.exe is LZEXE-compressed: `LZ91` at 0x1C and the classic
+  `06 0e 1f 8b 0e 0c 00` decompressor stub at its entry. Its ONE `cd ec b8`
+  match is a coincidence in the packed bytes.
+- pcdcfile.exe declares cs:ip = fff0:0100 -- an entry point 0x100020 bytes
+  into a 119901-byte file.
+
+The discriminator is the entry stub, and it is measured rather than guessed:
+every Turbo Basic EXE begins at `mov cs:[00b2], ds` (`2e 8c 1e`), the linked
+runtime's startup ahead of any user code. Over every MZ file in the fixture
+corpus and the wild set, 1220 begin with those bytes and nothing else does.
+`find_prologue` now checks it before trusting a content match and names the
+actual reason instead of a byte offset.
+
 ### The workflow (each gap, see gap 9–14 commits for examples)
 
 1. `uv run python -m tbx.tools.scan_wild wild/hits` — pick the top
