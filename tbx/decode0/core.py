@@ -2523,7 +2523,23 @@ def _find_string_char_base(state, exe, descriptors, after_disp):
     )
     hdr = struct.pack("<H", 0x8000 | total)
     lo = (after_disp + 15) & ~15
-    for cand in range(lo, lo + 0x400, 16):
+    # Search to the end of the image rather than a fixed window past `lo`.
+    # The window used to be 0x400 bytes, which is not a property of anything:
+    # gap 30 already had to re-anchor `lo` itself when a long descriptor chain
+    # pushed the record out of it, and wild month086.exe/month386.exe put the
+    # record at 0x710 with `lo` at 0x2a0 -- 0x70 past the old cap.  The bracket
+    # shape is specific enough to carry the search on its own: across the 507
+    # corpus and wild programs that reach here, the whole-image scan finds
+    # exactly ONE match in every case.  This only ever looks further than
+    # before, and the first match ascending is still what is returned, so no
+    # program that already resolved can resolve differently.
+    # Bound only by the image itself.  Do NOT subtract `total` here: a short
+    # image can end before `lo + 0x400`, so subtracting would make the range
+    # SHORTER than the old fixed window and lose records the old code found
+    # near the end (t1_cmppool, t1_inpfilearr, t1_times).  Slices that run off
+    # the end simply compare unequal.
+    stop = max(lo + 0x400, len(exe) - l.dsd)
+    for cand in range(lo, stop, 16):
         pos = l.dsd + cand + 0x10
         if (
             exe[pos : pos + 2] == hdr
