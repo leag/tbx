@@ -68,10 +68,13 @@ def test_an_expected_mismatch_does_not_count_against_the_tally():
 
 
 def test_nonreproducible_runtime_buffers_are_zeroed_with_fixed_scope():
-    size = verify_wild.NONREPRODUCIBLE_BUFFER_RANGES[-1][1] + 1
-    left = bytearray(b"A" * size)
+    fixture = (
+        verify_wild._ROOT / "tests/fixtures/corpus/t1_ifgoto.exe"
+    ).read_bytes()
+    ranges = verify_wild.nonreproducible_buffer_ranges(fixture)
+    left = bytearray(fixture)
     right = bytearray(left)
-    for start, stop in verify_wild.NONREPRODUCIBLE_BUFFER_RANGES:
+    for start, stop in ranges:
         right[start] = 0x42
         right[stop - 1] = 0x43
 
@@ -80,7 +83,7 @@ def test_nonreproducible_runtime_buffers_are_zeroed_with_fixed_scope():
         == verify_wild.normalize_nonreproducible_buffers(bytes(right))
     )
 
-    right[-1] = 0x44
+    right[4] ^= 1  # MZ header field, outside every normalized region
     assert (
         verify_wild.normalize_nonreproducible_buffers(bytes(left))
         != verify_wild.normalize_nonreproducible_buffers(bytes(right))

@@ -569,6 +569,29 @@
    ],
    "instead": "Treat the bound-10 array as an implicit default array. Any decoder rule must use the missing codeless-statement hook as positive evidence; do not broadly drop explicit DIM(10) declarations, which are otherwise byte-indistinguishable in non-trapping programs.",
    "source": "third and final oracle probe in the crossref campaign, session 2026-08-08"
+  },
+  {
+   "id": "RO-ZIP-DATA-PLACEMENT-GUESSES",
+   "title": "zip.exe's +64-byte delta is only the placement of exclusion-recovered DATA items",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/zip.exe"
+   ],
+   "signatures": [
+    "zip.exe delta +64",
+    "ZIPA.BIN through ZIPZ.BIN in data_items",
+    "string-pool order mismatch"
+   ],
+   "hypothesis": "The remaining zip.exe delta could be fixed by moving the strings recovered through data_items without changing what those strings represented.",
+   "negative_evidence": [
+    "Oracle probe 1 moved the whole recovered DATA block after END. The mismatch shrank, but the compiler's string-descriptor order still disagreed.",
+    "Oracle probe 2 kept DATA 0 before the main program and moved the .BIN names after END. Pool order moved closer but P and D still occupied the wrong descriptor positions.",
+    "Oracle probe 3 added leading DATA P,D,0 and kept the filenames after END. It reproduced the string-pool order but still built 64 bytes too large, exhausting the three-probe budget.",
+    "Binary inspection then identified the independent causes: the .BIN descriptors pair one-for-one with file-backed $INLINE operands and are not DATA; the authoritative DATA pointer table contains P,D,0,0,0,0,0,0. Recompiling those two physical mappings gives identical operations, layout, descriptor order, and length."
+   ],
+   "instead": "Recover complete, uniquely paired .BIN descriptors as $INLINE file operands, and recover small DATA sequences from the aligned descriptor-pointer table below var_base. Do not infer either construct by rearranging the exclusion-derived data_items list.",
+   "source": "three oracle source probes plus DATA-table and descriptor inspection, session 2026-08-08"
   }
  ]
 }

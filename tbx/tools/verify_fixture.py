@@ -41,17 +41,19 @@ def verify(stem: str) -> str:
     toggles = getattr(prog, "toggles", "")
     if set(toggles) - FLAGS_ONLY_TOGGLES:
         return f"skip: Options toggles {decode0.toggle_names(toggles)}"
-    src = emit0.emit(prog)
+    bundle = emit0.emit_split(prog, prefix=stem)
     dialect = "1.0" if stem.startswith("v10_") else "1.1"
-    with tempfile.NamedTemporaryFile(
-        "w", suffix=".bas", encoding="latin-1", delete=False
-    ) as f:
-        f.write(src)
-        bas = f.name
-    try:
+    with tempfile.TemporaryDirectory(prefix=f"tbx-fixture-{stem}-") as temp:
+        directory = Path(temp)
+        bas = directory / f"{stem[:8]}.bas"
+        bas.write_text(bundle.root, encoding="latin-1", newline="")
+        for filename, source in bundle.includes:
+            (directory / filename).write_text(
+                source, encoding="latin-1", newline=""
+            )
+        for filename, payload in bundle.assets:
+            (directory / filename).write_bytes(payload)
         out = oracle.compile_bas(bas, dialect=dialect)
-    finally:
-        Path(bas).unlink(missing_ok=True)
     if out == exe:
         return "ok"
     if toggles:  # flags-only: the mask itself is the one byte we cannot ask for

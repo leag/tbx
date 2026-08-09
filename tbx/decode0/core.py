@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import logging
+import re
 import struct
 from dataclasses import dataclass, fields, is_dataclass, replace
 from typing import Any, cast
@@ -2734,6 +2735,117 @@ def _finalize_data_recovery(state, data_orphan_lines, suppress_pool_fallback=Fal
     return data_lines, deftype_lines
 
 
+_INLINE_FILE_NAME = re.compile(r"^[^\\/:*?\"<>|]{1,8}\.BIN$", re.IGNORECASE)
+
+
+def _recover_inline_file_operands(state) -> tuple[tuple[str, bytes], ...]:
+    """Recover `$INLINE "file"` provenance from unreferenced descriptors.
+
+    Linking erases the operand spelling from the procedure body: byte-list
+    and external-file forms produce the same inline bytes.  The file form does
+    leave its DOS filename in the compiler's string-descriptor walk, however.
+    Claim that evidence only when it is complete and unambiguous: every inline
+    SUB has one distinct 8.3 `.BIN` descriptor and there are no extras.  The
+    descriptor recovery and procedure walk are both in source order, which
+    supplies the pairing (fixture t1_inlinefile; wild zip.exe/ziptest.exe).
+
+    Claimed filenames are compiler operands, not DATA items.  Leaving them in
+    ``data_items`` invents DATA statements whenever the program also uses READ
+    (zip.exe), changing both the string pool and runtime DATA stream.
+    """
+    lyt, out = state.layout_state, state.output
+    payloads = [
+        stmt.body[0].data
+        for stmt in out.stmts
+        if isinstance(stmt, ir.SubDef)
+        and len(stmt.body) == 1
+        and isinstance(stmt.body[0], ir.Inline)
+    ]
+    candidates = [
+        (index, item)
+        for index, item in enumerate(lyt.data_items)
+        if item.is_str and _INLINE_FILE_NAME.fullmatch(item.text)
+    ]
+    if not payloads or len(candidates) != len(payloads):
+        return ()
+    names = [item.text for _, item in candidates]
+    if len({name.upper() for name in names}) != len(names):
+        return ()
+    claimed = {index for index, _ in candidates}
+    lyt.data_items = [
+        item for index, item in enumerate(lyt.data_items) if index not in claimed
+    ]
+    return tuple(zip(names, payloads))
+
+
+def _recover_small_data_pointer_table(state) -> None:
+    """Replace exclusion-derived DATA with the compiler's pointer table.
+
+    A DATA string that is also used by code shares its descriptor, so the
+    ordinary unreferenced-descriptor walk drops it.  Small programs keep the
+    authoritative source-order list as descriptor displacements in an aligned
+    table between DGROUP 0x100 and ``var_base`` (probes probe_datamid and
+    probe_datadup; fixture t1_datasharedlit; wild zip.exe).  Repeated pointers
+    preserve repeated DATA items, which descriptor walking cannot infer.
+
+    Claim only a unique aligned run whose trailing alignment padding is zero
+    and which contains every exclusion-derived item in order.  At least one
+    such item is required as an anchor; larger tables whose location is not
+    calibrated remain fail-loud through the existing recovery path.
+    """
+    img, lyt, out = state.image, state.layout_state, state.output
+    if (
+        lyt.ss_base is None
+        or not lyt.data_items
+        or not any(isinstance(stmt, ir.Read) for stmt in out.stmts)
+    ):
+        return
+    descriptors, _ = _walk_string_descriptors(state, img.exe)
+    by_disp: dict[int, ir.DataItem] = {}
+    for disp, length, pointer in descriptors:
+        text = img.exe[
+            lyt.dsd + lyt.ss_base + pointer :
+            lyt.dsd + lyt.ss_base + pointer + length
+        ].decode("latin-1")
+        try:
+            float(text)
+            is_str = False
+        except ValueError:
+            is_str = True
+        by_disp[disp] = ir.DataItem(text, is_str)
+
+    def contains_in_order(items, anchors):
+        pending = iter(anchors)
+        wanted = next(pending, None)
+        for item in items:
+            if item == wanted:
+                wanted = next(pending, None)
+        return wanted is None
+
+    candidates = []
+    var_base = lyt.lay["var_base"]
+    for start in range(0x100, var_base, 0x10):
+        items = []
+        disp = start
+        while disp + 2 <= var_base:
+            pointer = struct.unpack_from("<H", img.exe, lyt.dsd + disp)[0]
+            item = by_disp.get(pointer)
+            if item is None:
+                break
+            items.append(item)
+            disp += 2
+        pad_end = min((disp + 0xF) & ~0xF, var_base)
+        padding = img.exe[lyt.dsd + disp : lyt.dsd + pad_end]
+        if (
+            items
+            and not any(padding)
+            and contains_in_order(items, lyt.data_items)
+        ):
+            candidates.append(items)
+    if len(candidates) == 1:
+        lyt.data_items = candidates[0]
+
+
 def _finalize(state: DecodeState, addr) -> Program:
     """Program epilogue: static-DIM re-emit, control-flow folds, target
     resolution and canonical rename -> the finished Program."""
@@ -2778,6 +2890,8 @@ def _finalize(state: DecodeState, addr) -> Program:
         ) = _finalize_static_dims(
             state, dims, data_orphan_lines, expanded_table
         )
+        inline_files = _recover_inline_file_operands(state)
+        _recover_small_data_pointer_table(state)
         data_lines, deftype_lines = _finalize_data_recovery(
             state,
             data_orphan_lines,
@@ -3071,6 +3185,7 @@ def _finalize(state: DecodeState, addr) -> Program:
             + tuple(ev_metas)
         )
         prog.toggles = out.toggles
+        prog.inline_files = inline_files
         if fixed_lines is not None:
             prog.lines = _fill_lines(fixed_lines, len(prog))
             # emit0 numbers one physical line per hook inside traced

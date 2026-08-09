@@ -3499,6 +3499,12 @@ Data(items=(DataItem(text='2', is_str=False), DataItem(text='3', is_str=False), 
 Assign(target=Var(name='A%'), value=Lit(value=2))
 End()
 
+## t1_datasharedlit
+Data(items=(DataItem(text='P', is_str=True), DataItem(text='D', is_str=True), DataItem(text='0', is_str=False)))
+Read(targets=(Var(name='A$'), Var(name='B$'), Var(name='C')))
+IfInline(cond=LogOp(op='AND', lhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='P')), rhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='D'))), body=(Print(items=(Var(name='C'),), newline=True, file=None, commas=None),), else_body=None)
+End()
+
 ## t1_datef
 Assign(target=Var(name='A$'), value=Nullary(name='DATE$'))
 Assign(target=Var(name='B$'), value=Nullary(name='TIME$'))
@@ -4756,6 +4762,12 @@ Assign(target=Var(name='A%'), value=Lit(value=1))
 CallStmt(name='SUB1', args=())
 End()
 SubDef(name='SUB1', params=(), body=(Inline(data=b'U\x8b\xec\xc4~\n]\xcb\xda\xbf\xc0\xd9\xb3\xc4'),))
+
+## t1_inlinefile
+SubDef(name='SUB1', params=(), body=(Inline(data=b'HELLO\n'),))
+Print(items=(StrLit(value='X'),), newline=True, file=None, commas=None)
+CallStmt(name='SUB1', args=())
+End()
 
 ## t1_inlineport
 SubDef(name='SUB1', params=(), body=(Inline(data=b'U\x8b\xec\xb0t\xe6C\xb0\x12\xe6A\xb0\x00\xe6A]'),))

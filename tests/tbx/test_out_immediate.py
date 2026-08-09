@@ -55,6 +55,11 @@ def test_zip_port_procedures_decode_as_inline():
     assert not [b for s in subs for b in s.body if isinstance(b, ir.Out)]
     # The list carries its own bp frame; TB appends the terminating CB.
     assert inline[0].data == bytes.fromhex("558becb074e643b012e641b000e6415d")
+    assert [name for name, _ in prog.inline_files] == [
+        f"ZIP{letter}.BIN" for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    ]
+    data = [item.text for stmt in prog if isinstance(stmt, ir.Data) for item in stmt.items]
+    assert data == ["P", "D", "0", "0", "0", "0", "0", "0"]
 
 
 def test_ziptest_port_procedures_decode_as_inline():
@@ -64,6 +69,9 @@ def test_ziptest_port_procedures_decode_as_inline():
     subs = [s for s in prog if isinstance(s, ir.SubDef)]
     assert len([b for s in subs for b in s.body if isinstance(b, ir.Inline)]) == 23
     assert not [b for s in subs for b in s.body if isinstance(b, ir.Out)]
+    assert [name for name, _ in prog.inline_files] == [
+        f"zip{letter}.BIN" for letter in "ABCDEFGHIJKLMNOPQRSTUVW"
+    ]
 
 
 def test_a_real_out_statement_still_decodes():

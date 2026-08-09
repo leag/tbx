@@ -1,0 +1,4 @@
+10 DATA "P", "D", 0
+20 READ A$, B$, C
+30 IF A$ = "P" AND B$ = "D" THEN PRINT C
+40 END

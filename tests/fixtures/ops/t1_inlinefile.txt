@@ -1,0 +1,11 @@
+# t1_inlinefile dialect=1.1 start=08700
+08703:jmp:34573
+08706:inline_sub:b'HELLO\n'
+0870D:movsi:292
+08710:rt:156
+08712:rt:190
+08714:rt:184
+08716:far_call:34566
+0871B:end
+0871E:epilogue
+# commits

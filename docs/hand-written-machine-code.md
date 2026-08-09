@@ -19,9 +19,16 @@ These are the bytes the compiler did not choose, which is exactly what makes
 them hard to recognise on the way back: every other recovery in the decoder
 leans on the compiler having used a template.
 
-`ir.Inline` holds the byte list and `emit0` prints it back as `$INLINE`, so a
-recovered body round-trips byte-exactly. The difficulty is never the
-representation; it is deciding that a blob *is* one.
+`ir.Inline` holds the byte list and plain `emit0.emit` prints it back as a
+self-contained `$INLINE` byte list. The external-file spelling is normally
+lost, but Turbo Basic leaves its DOS filename as an unreferenced string
+descriptor. When every inline SUB pairs one-to-one with distinct `.BIN`
+descriptors, `Program.inline_files` retains those names and `emit_split`
+returns the payloads as binary `SourceBundle.assets`. This distinction is
+byte-significant: spelling the same body as numeric bytes adds the distinct
+byte values to DGROUP's numeric-constant band (wild zip.exe/ziptest.exe).
+
+The remaining difficulty is deciding that a blob *is* inline code at all.
 
 ## Why it is ambiguous
 
@@ -157,4 +164,5 @@ program decodes cleanly but rebuilds wrong:
 
 Recorded as `RO-OUT-IMM-FOLD` in `gap_reports/ruled-out-hypotheses.json`.
 Fixture `t1_inlineport` is the shape in miniature; `t1_inline`, `t1_inlinebp`
-and `t1_inlinedata` cover the unframed and data-tailed variants.
+and `t1_inlinedata` cover the unframed and data-tailed variants, and
+`t1_inlinefile` calibrates filename recovery plus the bundled binary asset.

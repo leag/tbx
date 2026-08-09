@@ -18,7 +18,7 @@ from pathlib import Path
 from tbx import decode0, emit0
 from tbx.tools import oracle
 from tbx.tools.verify_wild import (
-    NONREPRODUCIBLE_BUFFER_RANGES,
+    nonreproducible_buffer_ranges,
     normalize_nonreproducible_buffers,
     program_dialect,
 )
@@ -85,6 +85,8 @@ def _write_bundle(bundle: emit0.SourceBundle, outdir: Path, stem: str) -> Path:
     root.write_text(bundle.root, encoding="latin-1", newline="")
     for name, source in bundle.includes:
         (outdir / name).write_text(source, encoding="latin-1", newline="")
+    for name, payload in bundle.assets:
+        (outdir / name).write_bytes(payload)
     return root
 
 
@@ -135,7 +137,7 @@ def report(exe_path: Path, outdir: Path | None = None, timeout: int = 1200) -> d
             for left, right in zip(normalized_original, normalized_rebuilt)
         ) + abs(len(normalized_original) - len(normalized_rebuilt)),
         "zeroed_nonreproducible_ranges": [
-            [start, stop] for start, stop in NONREPRODUCIBLE_BUFFER_RANGES
+            [start, stop] for start, stop in nonreproducible_buffer_ranges(original)
         ],
         "original_ops": len(original_ops),
         "rebuilt_ops": len(rebuilt_ops),

@@ -46,6 +46,24 @@ def test_split_output_writes_the_root_and_latin1_include(tmp_path, monkeypatch):
     )
 
 
+def test_file_output_writes_recovered_inline_asset(tmp_path, monkeypatch):
+    out = tmp_path / "out.bas"
+    bundle = emit0.SourceBundle(
+        '10 SUB SUB1 INLINE\n  $INLINE "CODE.BIN"\nEND SUB\n',
+        assets=(("CODE.BIN", b"\x90\xcd"),),
+    )
+    monkeypatch.setattr(emit0, "emit_split", lambda *_args, **_kwargs: bundle)
+    monkeypatch.setattr(
+        cli.decode0,
+        "decode_user_code",
+        lambda _exe: type("Program", (list,), {"inline_files": bundle.assets})(),
+    )
+
+    assert cli.main([os.path.join(_CORPUS, "v10_t1_delay.exe"), "-o", str(out)]) == 0
+    assert out.read_text() == bundle.root
+    assert (tmp_path / "CODE.BIN").read_bytes() == b"\x90\xcd"
+
+
 def test_split_output_refuses_to_overwrite_an_existing_include(
     tmp_path, monkeypatch, capsys
 ):

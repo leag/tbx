@@ -54,6 +54,7 @@ import argparse
 import difflib
 import hashlib
 import json
+import struct
 import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
@@ -146,22 +147,127 @@ def load_manifest() -> list[dict]:
 #: excluding -- wild banker.exe comes back 155 bytes off in 94 KB.
 FLAGS_ONLY_TOGGLES = frozenset("K")
 
-# Turbo Basic copies two compile-session work areas into otherwise deterministic
-# EXEs.  They contain stale editor/compiler process state rather than program
-# code or initialized DGROUP data: rebuilding wild photo.exe reproduces all
-# 53,711 bytes except 88 bytes inside these areas, and the oracle's repeated
-# builds are identical to each other.  Zero the complete work areas, not just
-# the bytes observed to differ, so comparison never depends on their residue.
-# The boundaries are pinned by the surrounding fixed runtime image: startup
-# code begins at 0x01D0 and the second buffer is followed at 0x7C34 by the
-# stable runtime vector table.
-NONREPRODUCIBLE_BUFFER_RANGES = ((0x00C0, 0x01D0), (0x7B88, 0x7C34))
+# Turbo Basic copies compile-session work areas into otherwise deterministic
+# EXEs.  The first is fixed in the MZ image.  The second moves with the selected
+# runtime: its offsets from the user-code prologue are pinned by the surrounding
+# runtime vectors (photo.exe places it at the formerly hard-coded
+# 0x7B88..0x7C34; zip.exe places the same logical area at 0x6D48..0x6DF4).
+NONREPRODUCIBLE_BUFFER_RANGES = ((0x00C0, 0x01D0),)
+_RUNTIME_RESIDUE_FROM_PROLOGUE = (-0x1D78, -0x1CCC)
+
+
+def _dgroup_residue_ranges(data: bytes) -> list[tuple[int, int]]:
+    """Compiler-owned DGROUP padding that carries stale session bytes.
+
+    These spans are outside every decoded allocation: alignment between the
+    scalar band and descriptor pool, padding after the framed string data, and
+    two narrowly witnessed scratch tails.  The latter are claimed only with
+    their structural signatures: a full DATA-pointer block immediately before
+    ``var_base``, or a repeated word sequence in the final numeric-pool block.
+    """
+    try:
+        start, dialect = decode0.find_prologue(data)
+        ops = decode0._scan(data, start, dialect, set())
+        layout = decode0._layout(data, ops)
+    except (ValueError, struct.error):
+        return []
+    ds = layout["ds"]
+    ranges: list[tuple[int, int]] = []
+
+    scalar_end = max(
+        (disp + width for disp, width in layout["scalars"].items()),
+        default=layout["scalar_base"],
+    )
+    descriptor_sentinel = layout["pool_base"] - 4
+    if scalar_end < descriptor_sentinel:
+        ranges.append((ds + scalar_end, ds + descriptor_sentinel))
+
+    q = descriptor_sentinel
+    if ds + q + 4 > len(data):
+        return ranges
+    _, expected = struct.unpack_from("<HH", data, ds + q)
+    q += 4
+    descriptor_disps: set[int] = set()
+    total = 0
+    while ds + q + 4 <= len(data):
+        word, pointer = struct.unpack_from("<HH", data, ds + q)
+        if not word & 0x8000 or pointer != expected:
+            break
+        descriptor_disps.add(q)
+        length = word & 0x7FFF
+        total += length
+        expected += length
+        q += 4
+
+    var_base = layout["var_base"]
+    table_block = data[ds + var_base - 0x10 : ds + var_base]
+    if (
+        layout["n_static"]
+        and len(table_block) == 0x10
+        and all(
+            struct.unpack_from("<H", table_block, offset)[0] in descriptor_disps
+            for offset in range(0, 0x10, 2)
+        )
+    ):
+        # A full eight-entry DATA table consumes the preceding block.  The next
+        # block is compiler scratch before the floating static-array record;
+        # a clean compile zeroes it, while zip.exe retains editor text there.
+        ranges.append((ds + var_base, ds + var_base + 0x10))
+
+    string_base = None
+    aligned = (q + 15) & ~15
+    for candidate in range(aligned, aligned + 0x400, 16):
+        pos = ds + candidate + 0x10
+        header = 0x8000 | total
+        if (
+            pos + 8 + total <= len(data)
+            and struct.unpack_from("<H", data, pos)[0] == header
+            and data[pos + 2 : pos + 6] == b"\0" * 4
+            and struct.unpack_from("<H", data, pos + 6 + total)[0] == header
+        ):
+            string_base = candidate
+            break
+    if string_base is None:
+        return ranges
+
+    # The numeric word pool is deduplicated.  A repeated three-word sequence
+    # in its final alignment block is stale capacity, not another live pool
+    # entry (zip.exe repeats 49,26,3,0,8,1 and then editor text).
+    tail_floor = max(q + 6, string_base - 0x10)
+    for disp in range(tail_floor, string_base - 5, 2):
+        repeated = data[ds + disp : ds + disp + 6]
+        if any(
+            data[ds + prior : ds + prior + 6] == repeated
+            for prior in range(q, disp, 2)
+        ):
+            ranges.append((ds + disp, ds + string_base))
+            break
+
+    string_end = string_base + 0x10 + 6 + total + 2
+    aligned_end = (string_end + 15) & ~15
+    if string_end < aligned_end:
+        ranges.append((ds + string_end, ds + aligned_end))
+    return ranges
+
+
+def nonreproducible_buffer_ranges(data: bytes) -> tuple[tuple[int, int], ...]:
+    ranges = list(NONREPRODUCIBLE_BUFFER_RANGES)
+    try:
+        prologue, _ = decode0.find_prologue(data)
+    except ValueError:
+        pass
+    else:
+        ranges.append(
+            tuple(prologue + offset for offset in _RUNTIME_RESIDUE_FROM_PROLOGUE)
+        )
+    ranges.extend(_dgroup_residue_ranges(data))
+    return tuple(ranges)
 
 
 def normalize_nonreproducible_buffers(data: bytes) -> bytes:
     """Zero compiler-session residue copied into the linked runtime image."""
     normalized = bytearray(data)
-    for start, stop in NONREPRODUCIBLE_BUFFER_RANGES:
+    for start, stop in nonreproducible_buffer_ranges(data):
         if start >= len(normalized):
             continue
         end = min(stop, len(normalized))
@@ -223,6 +329,8 @@ def verify(name: str) -> str:
                 (directory / filename).write_text(
                     source, encoding="latin-1", newline=""
                 )
+            for filename, payload in bundle.assets:
+                (directory / filename).write_bytes(payload)
             # The program's own dialect, not a fixed one: compiling a 1.0
             # program with the 1.1 compiler cannot reproduce it whatever the
             # decode did. `toggles` drives the real Options menu to match --

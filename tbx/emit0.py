@@ -45,10 +45,11 @@ MAX_LINE_NUMBER = 65529
 
 @dataclass(frozen=True)
 class SourceBundle:
-    """One root BAS plus source-relative include files."""
+    """One root BAS plus source-relative text and binary dependencies."""
 
     root: str
     includes: tuple[tuple[str, str], ...] = ()
+    assets: tuple[tuple[str, bytes], ...] = ()
 
 
 _PROC_HEADER = re.compile(r"^\d+ (?:SUB\b|DEF FN)")
@@ -181,17 +182,64 @@ def split_source(
 
 def emit_split(stmts, prefix: str = "TBX", force: bool = False) -> SourceBundle:
     """Render and split only when the 64 KiB editor limit requires it."""
-    source = emit(stmts)
+    assets = tuple(getattr(stmts, "inline_files", ()))
+    source = _externalize_inline_files(emit(stmts), assets)
     if _source_bytes(source) > FILE_LIMIT and any(
         isinstance(stmt, (ir.SubDef, ir.DefFn)) and (
             not isinstance(stmt, ir.DefFn) or stmt.is_block
         )
         for stmt in stmts
     ):
-        compact = emit(stmts, compact=True)
+        compact = _externalize_inline_files(emit(stmts, compact=True), assets)
         if _source_bytes(compact) <= FILE_LIMIT:
-            return SourceBundle(compact)
-    return split_source(source, prefix=prefix, force=force)
+            return SourceBundle(compact, assets=assets)
+    bundle = split_source(source, prefix=prefix, force=force)
+    return SourceBundle(bundle.root, bundle.includes, assets)
+
+
+_INLINE_SOURCE_BLOCK = re.compile(
+    r"(?m)^(?P<indent>[ \t]*)\$INLINE[^\n]*"
+    r"(?:\n(?P=indent)\$INLINE[^\n]*)*"
+)
+
+
+def _externalize_inline_files(
+    source: str, assets: tuple[tuple[str, bytes], ...]
+) -> str:
+    """Replace recovered byte-list bodies with their evidenced file operands.
+
+    ``emit`` deliberately stays self-contained.  A ``SourceBundle`` can carry
+    binary siblings, so ``emit_split`` uses the source-significant external
+    spelling when the decoder recovered it.  Validate each rendered byte list
+    against the attached payload before replacing it; stale statement order
+    must fail loud instead of pairing a filename with the wrong machine code.
+    """
+    if not assets:
+        return source
+    index = 0
+
+    def replace_block(match: re.Match[str]) -> str:
+        nonlocal index
+        if index >= len(assets):
+            return match.group(0)
+        name, payload = assets[index]
+        rendered = bytes(
+            int(value, 16)
+            for value in re.findall(r"&H([0-9A-Fa-f]{2})", match.group(0))
+        )
+        if rendered != payload:
+            raise ValueError(
+                f"$INLINE asset {name} does not match rendered procedure body"
+            )
+        index += 1
+        return f'{match.group("indent")}$INLINE "{name}"'
+
+    external = _INLINE_SOURCE_BLOCK.sub(replace_block, source)
+    if index != len(assets):
+        raise ValueError(
+            f"{len(assets) - index} $INLINE asset(s) have no rendered procedure"
+        )
+    return external
 
 
 def _split_list_statement(stmt, width: int):

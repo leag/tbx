@@ -190,7 +190,7 @@ handling for the ones whose effects survive compilation:
 | `$SOUND n` | Recovered from the runtime allocation table and emitted as metadata. |
 | `$EVENT ON/OFF` | Recovered from the compiler’s statement poll hooks and emitted as metadata. |
 | `$INLINE byte, ...` | Recovered as an `Inline` body payload. |
-| `$INLINE "file"` | The oracle stages the external file; the compiled bytes are recovered as inline payload. |
+| `$INLINE "file"` | Recovered when distinct unreferenced `.BIN` descriptors pair one-to-one with the inline SUBs; `emit_split` restores the operands and returns their bytes as bundle assets (`t1_inlinefile`; wild zip/ziptest). |
 | `$INCLUDE "file"` | Oracle-only compile-time preprocessing. Included statements are flattened into the executable; the decoder cannot recover the include boundary or filename. |
 | `$SEGMENT` | Compile-time control-flow/layout directive. The oracle accepts it, and the scanner recognizes the resulting far-transfer family, but full multi-segment target mapping and source-boundary recovery are not yet supported. It is not present in the checked-in corpus source scan. |
 

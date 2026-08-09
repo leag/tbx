@@ -606,11 +606,11 @@
    "sha256": "6f90d6235f9b983ad944297f0378e14ad133de80422a36c8bb9732f7c33df24b",
    "bytes": 39482,
    "statements": 96,
-   "source_bytes": 7768,
+   "source_bytes": 7467,
    "toggles": "",
    "build_match": 99,
-   "roundtrip": "code-or-metadata",
-   "delta": 64,
+   "roundtrip": "exact-nonreproducible-buffers-zeroed",
+   "delta": 0,
    "excluded": null
   },
   {

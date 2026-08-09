@@ -51,6 +51,13 @@ class Program(list[Any]):
     #: deferred, so anything folded in between has moved that.
     fold_regions: tuple[tuple[int, int], ...] = ()
     control_graph: ControlGraph | None = None
+    # Source-level `$INLINE "file"` operands leave their DOS filenames as
+    # unreferenced string descriptors while the linked body retains only the
+    # file bytes.  When that evidence pairs every recovered inline SUB with a
+    # distinct .BIN descriptor, keep (filename, payload) in source order so a
+    # bundled emitter can recreate the external files.  Plain `emit()` stays
+    # self-contained by rendering the byte-list spelling.
+    inline_files: tuple[tuple[str, bytes], ...] = ()
 
 
 def toggle_names(toggles: str) -> str:

@@ -1,4 +1,4 @@
-"""A DATA item that reuses a code literal's text is dropped from the pool.
+"""DATA items that reuse code literals need the compiler's pointer table.
 
 `data_items` recovers DATA by EXCLUSION: pool descriptors that no code site
 references. The compiler emits ONE descriptor per distinct piece of text, so a
@@ -13,8 +13,8 @@ recovered instead of two, and `RESTORE 20`'s target -- item index 1, the
 calibrated encoding being imm/2 over source item order, as `t1_restoreline`
 pins -- is past the end.
 
-**Why this is a guard and not yet a mapping.** Exclusion is the wrong mechanism
-outright, and `probe_datamid` shows why: with `DATA AAA` / `PRINT "MIDDLE"` /
+Exclusion is the wrong mechanism outright, and `probe_datamid` shows why: with
+`DATA AAA` / `PRINT "MIDDLE"` /
 `DATA BBB`, the code-only literal 'MIDDLE' lands at descriptor index 1, BETWEEN
 'AAA' (2) and 'BBB' (0). The pool is in source first-appearance order and
 interleaves DATA items with code literals, so DATA descriptors are not
@@ -26,12 +26,9 @@ literals and including shared ones. Both authored probes carry one at DGROUP
 disp 0x100, below `var_base` where nothing else is allocated: `probe_datamid`'s
 skips the PRINT-only literal, `probe_datadup`'s includes the shared item.
 
-That is confirmed on the probes ONLY. Where the wild witnesses keep theirs is
-not known -- a >=88-entry table does not fit below styled.exe's `var_base`, and
-only 8 bytes separate the end of its variable storage from `pool_base`. PLAN.md
-records a run that looked like the table and is not (that region is referenced
-as variables by `fld`/`fstp`/`movsi`), plus two locator searches that came up
-empty. So nothing is landed.
+The small-table location is now calibrated by `t1_datasharedlit` and wild
+zip.exe as well as the two probes. Larger wild tables still do not fit below
+`var_base`; their location remains unknown and they continue to fail loudly.
 
 So the decoder refuses. What this test fixes is that it refuses *loudly*: the
 failure used to be a bare `KeyError`, which is not a `ValueError` and so
@@ -62,30 +59,12 @@ def test_the_calibrated_encoding_still_resolves():
     assert "Restore" in source
 
 
-def test_a_shared_data_item_is_refused_rather_than_dropped_silently():
-    """The probe: one shared item, so target 1 is past the end."""
+def test_a_shared_data_item_is_recovered_from_the_pointer_table():
     exe = (_ROOT / "wild" / "probes" / "probe_datadup.exe").read_bytes()
 
-    with pytest.raises(ValueError, match=r"RESTORE item index 1 is past the 1 "):
-        decode0.decode_user_code(exe)
+    data = [stmt for stmt in decode0.decode_user_code(exe) if type(stmt).__name__ == "Data"]
 
-
-def test_the_refusal_is_a_valueerror_carrying_phase_context():
-    """A KeyError here would bypass the fail-loud contract entirely.
-
-    `decode_user_code` annotates `ValueError` only, so the crash this replaces
-    reached the CLI with no phase, offset or op trail at all.
-    """
-    exe = (_ROOT / "wild" / "probes" / "probe_datadup.exe").read_bytes()
-
-    with pytest.raises(ValueError) as caught:
-        decode0.decode_user_code(exe)
-
-    message = str(caught.value)
-    assert "[phase=finalize" in message
-    # Names the mechanism, so the report points at the pool recovery rather
-    # than at whatever statement happened to be in flight.
-    assert "sharing a descriptor with a code string literal" in message
+    assert [item.text for stmt in data for item in stmt.items] == ["ONE", "TWO"]
 
 
 @pytest.mark.parametrize("name", ("styled.exe", "styllist.exe"))

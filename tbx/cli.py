@@ -131,7 +131,11 @@ def _decode_output(args: argparse.Namespace, exe: bytes):
     if args.data:
         return _dump_data(prog), None, prog
 
-    bundle = emit0.emit_split(prog, prefix=args.output.stem) if args.split else None
+    bundle = (
+        emit0.emit_split(prog, prefix=args.output.stem)
+        if args.split or (args.output is not None and getattr(prog, "inline_files", ()))
+        else None
+    )
     text = bundle.root if bundle is not None else emit0.emit(prog)
     return text, bundle, prog
 
@@ -142,9 +146,10 @@ def _write_output(args: argparse.Namespace, text: str, bundle) -> bool:
         return True
 
     if bundle is not None:
+        dependencies = tuple(bundle.includes) + tuple(bundle.assets)
         collisions = [
             args.output.parent / name
-            for name, _ in bundle.includes
+            for name, _ in dependencies
             if (args.output.parent / name).exists()
         ]
         if collisions:
@@ -158,6 +163,8 @@ def _write_output(args: argparse.Namespace, text: str, bundle) -> bool:
             (args.output.parent / name).write_text(
                 include, encoding="latin-1", newline=""
             )
+        for name, payload in bundle.assets:
+            (args.output.parent / name).write_bytes(payload)
     args.output.write_text(text, encoding="latin-1", newline="")
     return True
 
