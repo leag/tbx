@@ -2370,6 +2370,34 @@ def test_decode_v10_t1_locallongargonly():
     assert "LOCAL B&\n  CALL SUB1(B&)" in emit0.emit(prog)
 
 
+def test_decode_v10_t1_bplocalfor():
+    # A SUB frame whose LOCALs run past the signed-byte displacement range
+    # spells every BP-relative form wide (mod=10). Wild slimmer.exe raised on
+    # `ff 86` (inc), then `39 86` (cmp against ax), then `83 46`/`81 7e` (the
+    # LOCAL FOR's step and wide literal limit, which had DGROUP-only
+    # spellings). This fixture carries all eight integer encodings plus the
+    # mod=10 FP loads, and the same loops at both displacement widths.
+    from tbx import decode0, ir
+
+    prog = decode0.decode_user_code(_exe("v10_t1_bplocalfor.exe"))
+    body = next(
+        stmt.body
+        for stmt in prog
+        if isinstance(stmt, ir.SubDef) and stmt.name == "SUB1"
+    )
+    fors = [stmt for stmt in body if isinstance(stmt, ir.For)]
+
+    assert len(fors) == 5
+    # Narrow and wide slots recover the same loop headers.
+    assert [f.step for f in fors] == [
+        ir.Lit(8), ir.Lit(1), ir.Lit(1), ir.Lit(8), ir.Lit(1)
+    ]
+    assert [f.limit for f in fors[:2]] == [ir.Lit(152), ir.Var("B%")]
+    assert [f.limit for f in fors[2:]] == [
+        ir.Lit(60), ir.Lit(152), ir.Var("U%")
+    ]
+
+
 def test_decode_v10_t1_locallongfp():
     # A LONG LOCAL is read, written, folded and compared through the x87
     # m32-integer ops against the BP frame (esc db /0, db /3, da /0, da /3),
@@ -4362,6 +4390,7 @@ if __name__ == "__main__":
     test_decode_t1_localforstepm1()
     test_decode_t1_localsingle()
     test_decode_v10_t1_locallongfp()
+    test_decode_v10_t1_bplocalfor()
     test_decode_t1_localsub1()
     test_decode_t1_localvarstep()
     test_decode_t1_forstepm1()

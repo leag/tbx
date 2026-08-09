@@ -7564,6 +7564,20 @@ compiled and byte-verified.
 
 ### Recently closed (this campaign, newest first)
 
+- **2026-08-09 — wide (mod=10) BP-frame spellings and the LOCAL FOR's own
+  step/limit forms** (wild slimmer.exe): a SUB frame whose LOCALs run past
+  the signed-byte displacement range spells every BP-relative instruction
+  with a 16-bit displacement, and the scanner had the narrow spelling only
+  for `inc`/`dec`/`cmp [bp],ax`. Three DGROUP-only integer forms were also
+  missing their BP counterparts entirely: `83 /0` (the FOR step, `add_bpi8`)
+  and `81 /7` (a limit too wide for imm8, `cmp_bpi16`). The FP BP path now
+  shares one table across both displacement widths instead of a mod=10
+  branch that knew four opcodes. Fixture `v10_t1_bplocalfor` carries all
+  eight integer encodings plus the mod=10 FP loads, running the same loops
+  at both widths; byte-exact through the 1.0 oracle. slimmer.exe now clears
+  scan entirely and fails in layout ("runtime slot grid anchor"), the
+  expensive DGROUP-recovery bucket.
+
 - **2026-08-09 — LONG LOCAL x87 m32-integer BP-frame ops** (wild
   slimmer.exe, `unhandled FP op esc=db modrm=5e at 0xc815`): the scanner knew
   the m32-integer forms `fild32`/`fistp32`/`ifold32`/`icomp32` only against a

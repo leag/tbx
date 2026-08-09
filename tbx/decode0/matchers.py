@@ -564,7 +564,7 @@ def match_var_step_branch(
         return None
 
     first = ops[index]
-    if first[1] in ("cmp_mi8", "cmp_mi16", "cmp_bpi8"):
+    if first[1] in ("cmp_mi8", "cmp_mi16", "cmp_bpi8", "cmp_bpi16"):
         if first[2] != var:
             return None
         limit_kind = "literal"

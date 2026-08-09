@@ -511,6 +511,18 @@ def _scan_direct2_for_ops(exe, p, b, ops) -> int | None:
         bp_off, i8 = struct.unpack_from("<bb", exe, p + 2)
         ops.append((p, "cmp_bpi8", bp_off, i8))
         return p + 4
+    # mod=10 (disp16) spellings of the same three: a frame whose locals push
+    # the slot past the signed-byte displacement range (wild slimmer.exe).
+    if b == 0xFF and exe[p + 1] == 0x86:
+        ops.append((p, "inc_bp", struct.unpack_from("<h", exe, p + 2)[0]))
+        return p + 4
+    if b == 0xFF and exe[p + 1] == 0x8E:
+        ops.append((p, "dec_bp", struct.unpack_from("<h", exe, p + 2)[0]))
+        return p + 4
+    if b == 0x83 and exe[p + 1] == 0xBE:
+        bp_off, i8 = struct.unpack_from("<hb", exe, p + 2)
+        ops.append((p, "cmp_bpi8", bp_off, i8))
+        return p + 5
     if b == 0xFF and exe[p + 1] == 0x0E:
         ops.append((p, "dec_m", struct.unpack_from("<H", exe, p + 2)[0]))
         return p + 4
@@ -526,6 +538,25 @@ def _scan_direct2_for_ops(exe, p, b, ops) -> int | None:
         d16, i8 = struct.unpack_from("<Hb", exe, p + 2)
         ops.append((p, "addm_i8", d16, i8))
         return p + 5
+    # BP-frame counterparts of addm_i8/cmp_mi16: the same integer FOR step and
+    # wide-limit test against a LOCAL slot instead of a DGROUP scalar (wild
+    # slimmer.exe). Both mod=01 and mod=10 displacements occur.
+    if b == 0x83 and exe[p + 1] == 0x46:
+        bp_off, i8 = struct.unpack_from("<bb", exe, p + 2)
+        ops.append((p, "add_bpi8", bp_off, i8))
+        return p + 4
+    if b == 0x83 and exe[p + 1] == 0x86:
+        bp_off, i8 = struct.unpack_from("<hb", exe, p + 2)
+        ops.append((p, "add_bpi8", bp_off, i8))
+        return p + 5
+    if b == 0x81 and exe[p + 1] == 0x7E:
+        bp_off, i16 = struct.unpack_from("<bh", exe, p + 2)
+        ops.append((p, "cmp_bpi16", bp_off, i16))
+        return p + 5
+    if b == 0x81 and exe[p + 1] == 0xBE:
+        bp_off, i16 = struct.unpack_from("<hh", exe, p + 2)
+        ops.append((p, "cmp_bpi16", bp_off, i16))
+        return p + 6
     return None
 
 
@@ -701,6 +732,10 @@ def _scan_direct2_local_ops(exe, p, b, ops) -> int | None:
     if b == 0x39 and exe[p + 1] == 0x46:
         ops.append((p, "cmpm_ax_bp", struct.unpack_from("<b", exe, p + 2)[0]))
         return p + 3
+    if b == 0x39 and exe[p + 1] == 0x86:  # same, disp16: a frame whose locals
+        # push the compared slot past the signed-byte range (wild slimmer.exe)
+        ops.append((p, "cmpm_ax_bp", struct.unpack_from("<h", exe, p + 2)[0]))
+        return p + 4
     return None
 
 
@@ -1724,53 +1759,47 @@ def _scan_esc_disp_ops(p, mo, esc, pre, reg, disp, ops) -> int | None:
 
 
 def _scan_esc_bp_ops(exe, p, mo, esc, pre, reg, mod, ops) -> int | None:
+    """FP ops against a BP-frame slot.
+
+    mod=01 and mod=10 are the same instructions at two displacement widths;
+    a frame whose LOCALs run past the signed-byte range simply spells every
+    one of them wide (wild slimmer.exe), so both share one table.
+    """
     if mod == 1:
         bp_off = struct.unpack_from("<b", exe, mo + 1)[0]
+        size = mo + 2
     elif mod == 2:
-        bp_off = struct.unpack_from("<H", exe, mo + 1)[0]
+        bp_off = struct.unpack_from("<h", exe, mo + 1)[0]
+        size = mo + 3
     else:
         return None
-    if mod == 1:
-        kinds = {
-            (0xD9, 0): "fld_bp", (0xD9, 3): "fstp_bp",
-            (0xD8, 3): "fcomp_bp", (0xDF, 0): "fild_bp",
-            (0xDE, 3): "icomp_bp", (0xDD, 0): "fld_bp64",
-            (0xDD, 3): "fstp_bp64", (0xDC, 3): "fcomp_bp64",
-            # m32 integer load/store: a LONG LOCAL slot (the BP-frame
-            # counterpart of the fild32/fistp32 DGROUP pair).
-            (0xDB, 0): "fild32_bp", (0xDB, 3): "fistp32_bp",
-            (0xDA, 3): "icomp32_bp",
-        }
-        kind = kinds.get((esc, reg))
-        if kind:
-            ops.append((p, pre + kind, bp_off))
-            return mo + 2
-        folds = (
-            (0xDE, _FOLD_OPS, "ifold_bp"),
-            (0xD8, _FOLD_OPS, "fold_bp"),
-            (0xD8, _FOLD_OPS_N, "fold_n_bp"),
-            (0xDC, _FOLD_OPS, "fold_bp64"),
-            (0xDC, _FOLD_OPS_N, "fold_n_bp64"),
-            (0xDA, _FOLD_OPS, "ifold32_bp"),
-            (0xDA, _FOLD_OPS_N, "ifold32_n_bp"),
-        )
-        for opcode, table, name in folds:
-            if esc == opcode and reg in table:
-                ops.append((p, pre + name, table[reg], bp_off))
-                return mo + 2
-        return None
-    if (esc, reg) == (0xD9, 0):
-        ops.append((p, pre + "fld_bp", bp_off))
-        return mo + 3
-    if (esc, reg) == (0xD9, 3):
-        ops.append((p, pre + "fstp_bp", bp_off))
-        return mo + 3
-    if (esc, reg) == (0xD8, 0):
-        ops.append((p, pre + "fold_bp", "+", bp_off))
-        return mo + 3
-    if (esc, reg) == (0xD8, 3):
-        ops.append((p, pre + "fcomp_bp", bp_off))
-        return mo + 3
+    kinds = {
+        (0xD9, 0): "fld_bp", (0xD9, 3): "fstp_bp",
+        (0xD8, 3): "fcomp_bp", (0xDF, 0): "fild_bp",
+        (0xDE, 3): "icomp_bp", (0xDD, 0): "fld_bp64",
+        (0xDD, 3): "fstp_bp64", (0xDC, 3): "fcomp_bp64",
+        # m32 integer load/store: a LONG LOCAL slot (the BP-frame
+        # counterpart of the fild32/fistp32 DGROUP pair).
+        (0xDB, 0): "fild32_bp", (0xDB, 3): "fistp32_bp",
+        (0xDA, 3): "icomp32_bp",
+    }
+    kind = kinds.get((esc, reg))
+    if kind:
+        ops.append((p, pre + kind, bp_off))
+        return size
+    folds = (
+        (0xDE, _FOLD_OPS, "ifold_bp"),
+        (0xD8, _FOLD_OPS, "fold_bp"),
+        (0xD8, _FOLD_OPS_N, "fold_n_bp"),
+        (0xDC, _FOLD_OPS, "fold_bp64"),
+        (0xDC, _FOLD_OPS_N, "fold_n_bp64"),
+        (0xDA, _FOLD_OPS, "ifold32_bp"),
+        (0xDA, _FOLD_OPS_N, "ifold32_n_bp"),
+    )
+    for opcode, table, name in folds:
+        if esc == opcode and reg in table:
+            ops.append((p, pre + name, table[reg], bp_off))
+            return size
     return None
 
 

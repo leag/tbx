@@ -300,7 +300,7 @@ def _int_compare_state(state: DecodeState, op, addr: int, kind: str) -> bool:
 
 
 def _int_inc_dec(state: DecodeState, op, addr: int, kind: str) -> bool:
-    if kind not in ("inc_m", "inc_bp", "dec_bp", "dec_m", "addm_i8"):
+    if kind not in ("inc_m", "inc_bp", "dec_bp", "dec_m", "addm_i8", "add_bpi8"):
         return False
     img, c, o = state.image, state.control, state.output
     in_for = c.fors and c.fors[-1].v == op[2]
@@ -333,7 +333,7 @@ def _int_inc_dec(state: DecodeState, op, addr: int, kind: str) -> bool:
     else:
         step_for = in_for and _next_real_addr(img, c.k + 1) == c.fors[-1].test
         if not step_for:
-            var = state.loc(op[2])
+            var = state.loc_local(op[2]) if kind == "add_bpi8" else state.loc(op[2])
             state.put(ir.Assign(var, ir.BinOp("+", var, ir.Lit(op[3]))), c.cur)
             c.cur = None
             state.advance()

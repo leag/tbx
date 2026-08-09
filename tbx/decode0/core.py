@@ -4135,7 +4135,7 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             ))
         elif (
             cmp_at_t is not None
-            and cmp_at_t[1] in ("cmp_mi8", "cmp_mi16", "cmp_bpi8")
+            and cmp_at_t[1] in ("cmp_mi8", "cmp_mi16", "cmp_bpi8", "cmp_bpi16")
             and out.stmts
             and isinstance(out.stmts[-1], ir.Assign)
             and isinstance(out.stmts[-1].target, ir.Var)
@@ -5995,7 +5995,7 @@ def _decode_user_code(
             state.advance(4)
             continue
         if (
-            kind in ("cmp_mi8", "cmp_mi16", "cmp_bpi8")
+            kind in ("cmp_mi8", "cmp_mi16", "cmp_bpi8", "cmp_bpi16")
             and c.fors
             and addr == c.fors[-1].test
         ):
@@ -6032,7 +6032,9 @@ def _decode_user_code(
                 raise ValueError(f"int NEXT: expected JLE/JBE/JGE to body at {addr:#x}")
             state.put(
                 ir.NextStmt(
-                    state.loc_local(f.v) if kind == "cmp_bpi8" else state.loc(f.v)
+                    state.loc_local(f.v)
+                    if kind in ("cmp_bpi8", "cmp_bpi16")
+                    else state.loc(f.v)
                 ),
                 c.cur,
             )
