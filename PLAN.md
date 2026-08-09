@@ -7564,6 +7564,17 @@ compiled and byte-verified.
 
 ### Recently closed (this campaign, newest first)
 
+- **2026-08-09 — LONG LOCAL x87 m32-integer BP-frame ops** (wild
+  slimmer.exe, `unhandled FP op esc=db modrm=5e at 0xc815`): the scanner knew
+  the m32-integer forms `fild32`/`fistp32`/`ifold32`/`icomp32` only against a
+  DGROUP displacement, never against `[bp+disp8]`. A LONG has no 16-bit
+  register pair, so the compiler routes every LONG LOCAL read, write, fold
+  and compare through the FP stack: `L& = 0` is `fldz` + `fistp32_bp`,
+  `M& = L& + 5` is `fild32_bp` + `ifold32_bp`. One probe reproduced the exact
+  byte shape on the first try; fixture `v10_t1_locallongfp` is byte-exact
+  through the 1.0 oracle. slimmer.exe advances to `unhandled byte ff at
+  0x1ebdb`.
+
 - **2026-08-09 — smenu0.exe now decodes and recompiles with an identical
   user-code op stream**: the original failure, TB 1.0's raw INT EC 44
   (canonical sub 46), is bare random-file `GET #n`; a compiled `GET #1`

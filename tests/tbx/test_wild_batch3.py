@@ -2370,6 +2370,32 @@ def test_decode_v10_t1_locallongargonly():
     assert "LOCAL B&\n  CALL SUB1(B&)" in emit0.emit(prog)
 
 
+def test_decode_v10_t1_locallongfp():
+    # A LONG LOCAL is read, written, folded and compared through the x87
+    # m32-integer ops against the BP frame (esc db /0, db /3, da /0, da /3),
+    # the BP-frame counterparts of the fild32/fistp32/ifold32/icomp32 DGROUP
+    # forms. Wild slimmer.exe raised "unhandled FP op esc=db modrm=5e" on the
+    # first of them because only the DGROUP displacement forms were scanned.
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("v10_t1_locallongfp.exe"))
+    body = next(
+        stmt.body
+        for stmt in prog
+        if isinstance(stmt, ir.SubDef) and stmt.name == "SUB1"
+    )
+
+    assert body[:4] == (
+        ir.Local(("A&", "B&")),
+        ir.Assign(ir.Var("A&"), ir.Lit(100)),
+        ir.Assign(ir.Var("B&"), ir.BinOp("+", ir.Var("A&"), ir.Lit(5))),
+        ir.Assign(ir.Var("B&"), ir.BinOp("-", ir.Var("B&"), ir.Var("A&"))),
+    )
+    assert isinstance(body[4], ir.IfGoto)
+    assert body[4].cond == ir.RelOp("<=", ir.Var("B&"), ir.Var("A&"))
+    assert "LOCAL A&, B&" in emit0.emit(prog)
+
+
 def test_decode_t1_for10arr():
     # Gap 16: a literal-limit FOR loop's variable + the ordinary scalars
     # allocated after it can land inside the LAST static array's own 0x36
@@ -4335,6 +4361,7 @@ if __name__ == "__main__":
     test_decode_t1_imulsi()
     test_decode_t1_localforstepm1()
     test_decode_t1_localsingle()
+    test_decode_v10_t1_locallongfp()
     test_decode_t1_localsub1()
     test_decode_t1_localvarstep()
     test_decode_t1_forstepm1()

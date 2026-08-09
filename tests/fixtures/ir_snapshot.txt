@@ -11908,6 +11908,11 @@ SubDef(name='SUB2', params=(), body=(Local(names=('B&',)), CallStmt(name='SUB1',
 CallStmt(name='SUB2', args=())
 End()
 
+## v10_t1_locallongfp
+SubDef(name='SUB1', params=(), body=(Local(names=('A&', 'B&')), Assign(target=Var(name='A&'), value=Lit(value=100)), Assign(target=Var(name='B&'), value=BinOp(op='+', lhs=Var(name='A&'), rhs=Lit(value=5))), Assign(target=Var(name='B&'), value=BinOp(op='-', lhs=Var(name='B&'), rhs=Var(name='A&'))), IfGoto(cond=RelOp(op='<=', lhs=Var(name='B&'), rhs=Var(name='A&')), target=BodyLine(stmt=0, phys=7)), Print(items=(StrLit(value='A'),), newline=True, file=None, commas=None), Print(items=(Var(name='B&'),), newline=True, file=None, commas=None)))
+CallStmt(name='SUB1', args=())
+End()
+
 ## v10_t1_localsingle
 SubDef(name='SUB1', params=(), body=(Local(names=('A',)), Assign(target=Var(name='A'), value=DblLit(value=1.5)), Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1))), Print(items=(Var(name='A'),), newline=True, file=None, commas=None)))
 CallStmt(name='SUB1', args=())

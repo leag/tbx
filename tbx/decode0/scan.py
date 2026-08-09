@@ -1736,6 +1736,10 @@ def _scan_esc_bp_ops(exe, p, mo, esc, pre, reg, mod, ops) -> int | None:
             (0xD8, 3): "fcomp_bp", (0xDF, 0): "fild_bp",
             (0xDE, 3): "icomp_bp", (0xDD, 0): "fld_bp64",
             (0xDD, 3): "fstp_bp64", (0xDC, 3): "fcomp_bp64",
+            # m32 integer load/store: a LONG LOCAL slot (the BP-frame
+            # counterpart of the fild32/fistp32 DGROUP pair).
+            (0xDB, 0): "fild32_bp", (0xDB, 3): "fistp32_bp",
+            (0xDA, 3): "icomp32_bp",
         }
         kind = kinds.get((esc, reg))
         if kind:
@@ -1747,6 +1751,8 @@ def _scan_esc_bp_ops(exe, p, mo, esc, pre, reg, mod, ops) -> int | None:
             (0xD8, _FOLD_OPS_N, "fold_n_bp"),
             (0xDC, _FOLD_OPS, "fold_bp64"),
             (0xDC, _FOLD_OPS_N, "fold_n_bp64"),
+            (0xDA, _FOLD_OPS, "ifold32_bp"),
+            (0xDA, _FOLD_OPS_N, "ifold32_n_bp"),
         )
         for opcode, table, name in folds:
             if esc == opcode and reg in table:

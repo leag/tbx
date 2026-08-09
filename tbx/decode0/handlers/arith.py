@@ -1526,6 +1526,31 @@ def fp_bp(state: DecodeState, op, addr, kind) -> bool:
         # e.g. for PRINT, or an int LOCAL/param promoted into a float result
         # expression (wild resume.exe / probe_d)
         return _fp_bp_fild(state, op, addr)
+    if kind in ("fild32_bp", "fistp32_bp", "icomp32_bp", "ifold32_bp", "ifold32_n_bp"):
+        # m32 integer load/store against a LOCAL frame slot: a LONG LOCAL.
+        # The compiler routes LONG through the FP stack (there is no 32-bit
+        # integer register pair), so `L& = 0` is fldz + fistp32_bp and
+        # `M& = L&` is fild32_bp + fistp32_bp (wild slimmer.exe).
+        bp_off = op[2] if kind in ("fild32_bp", "fistp32_bp", "icomp32_bp") else op[3]
+        pvar = state.loc_local_long(bp_off)
+        if kind == "fild32_bp":
+            if c.cur is None:
+                c.cur = addr
+            expr_.stack.append(pvar)
+        elif kind == "fistp32_bp":
+            state.put(ir.Assign(pvar, expr_.stack.pop()), c.cur)
+            c.cur = None
+        elif kind == "icomp32_bp":
+            expr_.pend_cmp = (pvar, expr_.stack.pop())
+        elif kind == "ifold32_bp":  # the LOCAL is the LEFT operand
+            expr_.stack.append(_orient(op[2], pvar, expr_.stack.pop()))
+        else:  # ifold32_n_bp: non-reversed, the LOCAL is the RIGHT operand
+            top = expr_.stack.pop()
+            if isinstance(top, ir.BinOp) and _PREC[top.op] < _PREC[op[2]]:
+                top = ir.Group(top)
+            expr_.stack.append(ir.BinOp(op[2], top, pvar))
+        state.advance()
+        return True
     if kind in (
         "fld_bp",
         "fstp_bp",

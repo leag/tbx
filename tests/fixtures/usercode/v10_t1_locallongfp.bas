@@ -1,0 +1,11 @@
+10 SUB SUB1
+  LOCAL A&, B&
+  A& = 100
+  B& = A& + 5
+  B& = B& - A&
+  IF B& <= A& THEN 17
+  PRINT "A"
+17 PRINT B&
+END SUB
+20 CALL SUB1
+30 END

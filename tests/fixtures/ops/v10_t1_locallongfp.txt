@@ -1,0 +1,35 @@
+# v10_t1_locallongfp dialect=1.0 start=070B0
+070B3:jmp:28957
+070B6:proc_enter
+070B9:local_init:4:6
+070CD:fild:298
+070D2:fistp32_bp:6
+070D8:fild:296
+070DD:ifold32_bp:+:6
+070E1:fistp32_bp:10
+070E7:fild32_bp:6
+070EB:ifold32_bp:-:10
+070EF:fistp32_bp:10
+070F5:fild32_bp:6
+070F9:icomp32_bp:10
+070FD:fstsw
+07101:jcc:114:28934
+07103:jmp:28943
+07106:movsi:292
+07109:rt:156
+0710B:rt:190
+0710D:rt:184
+0710F:fild32_bp:10
+07113:rt:187
+07115:rt:184
+07119:proc_ret:8
+0711D:sub_sp:8
+07120:far_call:28854
+07125:end
+07128:epilogue
+# commits
+070D6
+070E5
+070F3
+070FF
+07117
