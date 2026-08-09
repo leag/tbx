@@ -669,7 +669,19 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
         for d in range(b1 + s1, b1 + s1 + s2, 4):
             run[d] = 4
             strs.add(d)
+        # The slot keys come off the GRID base the stamp reports, not `vb`.
+        # They differ under a LINE box-fill cell: `vb` is VAR_BASE+4 while the
+        # grid keeps its VAR_BASE anchor, so keying on `vb` puts every static
+        # slot 4 bytes high and any later lookup by a real slot disp misses
+        # (wild menu.exe/night.exe/sprogh.exe: `GET/PUT blit array slot 0x01f8
+        # unknown`, where 0x01f8 is exactly VAR_BASE + 4*0x36 and slot_info
+        # held 0x01fc).  Restored when this candidate is rejected so a failed
+        # stamp cannot leak its base into the walk paths below.
+        keep_base = static_base[0]
+        static_base[0] = gb
         lay = finish(ds, n, statics, b1, run, strs, guessed, pool_base, 0)
+        if lay is None:
+            static_base[0] = keep_base
         if lay is not None:
             return lay
 

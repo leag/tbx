@@ -9674,6 +9674,31 @@ out of the expensive "DGROUP layout not solvable" bucket; all three now share
 a new lift-phase signature, `GET/PUT blit array slot 0x... unknown`, which is
 a 3-witness target for the next round.
 
+**Static slot keys come off the grid base (2026-08-09)**: the missing
+half of the grid-anchor work above, surfaced by it. `_initialize_array_slots`
+builds `slot_info` as `{static_base + 0x36*i: array}` and GET/PUT resolves its
+array by looking the blit operand's disp up in that map -- but the stamp path
+still set `static_base = vb`. Under a LINE box-fill cell `vb` is VAR_BASE+4
+while the grid keeps its VAR_BASE anchor, so every key sat 4 bytes high:
+wild menu.exe/night.exe/sprogh.exe raised `GET/PUT blit array slot 0x01f8
+unknown` where 0x01f8 is exactly VAR_BASE + 4*0x36 and slot_info held 0x01fc.
+Keyed on the stamp's own `gb` now, restored when a candidate is rejected so a
+failed stamp cannot leak its base into the walk paths.
+
+menu.exe decodes completely (1838 statements, excluded at 85% build match,
+97.20% identical, delta +16). night.exe and sprogh.exe each advanced again,
+into DIFFERENT gaps -- night back to the RESTORE/DATA pointer table (item 343
+past 226 recovered, so its table is not where the small-table rule looks) and
+sprogh to `displacement 0x5c is neither scalar nor array element`.
+
+Fixture t1_blitline (+v10_), both byte-exact. It needed to be its own fixture:
+t1_linearr reads its array at a CONSTANT index, which resolves through the
+element base and never consults the slot record, so it cannot catch a bad slot
+key. The blit is what looks the record up. No dosout golden is possible --
+GET/PUT requires graphics mode, and the capture harness needs a DOS prompt.
+
+Corpus 88 -> 89 decode-ok of 108 (83 of 99 families), 17 -> 16 failing.
+
 ### The workflow (each gap, see gap 9–14 commits for examples)
 
 1. `uv run python -m tbx.tools.scan_wild wild/hits` — pick the top

@@ -242,6 +242,18 @@
    "excluded": null
   },
   {
+   "name": "menu.exe",
+   "sha256": "8c0509dd7092f2aa024f6e6ef312229f366db20584724c47542912f5c9b35854",
+   "bytes": 73722,
+   "statements": 1838,
+   "source_bytes": 41554,
+   "toggles": "",
+   "build_match": 85,
+   "roundtrip": "code-or-metadata",
+   "delta": 16,
+   "excluded": "different Turbo Basic build (85% runtime match)"
+  },
+  {
    "name": "metric.exe",
    "sha256": "dfffbe525d25c41059a200102ec171720b2938b6b66ee335e95e4309ec2b0784",
    "bytes": 81891,

@@ -3122,6 +3122,13 @@ End()
 Print(items=(StrLit(value='S'),), newline=True, file=None, commas=None)
 Return(target=None)
 
+## t1_blitline
+Dim(name='V0%', bounds=(100,), also=())
+Screen(mode=Lit(value=1), burst=None, apage=None, vpage=None)
+LineStmt(x1=Lit(value=0), y1=Lit(value=0), x2=Lit(value=10), y2=Lit(value=10), color=None, box='B', step1=False, step2=False, style=None)
+GetGfx(x1=Lit(value=0), y1=Lit(value=0), x2=Lit(value=9), y2=Lit(value=9), array='V0%')
+PutGfx(x=Lit(value=20), y=Lit(value=20), array='V0%', action=None)
+
 ## t1_blkgoto
 Assign(target=Var(name='A$'), value=StrLit(value='X'))
 IfBlock(arms=((RelOp(op='<>', lhs=Var(name='A$'), rhs=StrLit(value='Q')), (Print(items=(StrLit(value='A'),), newline=True, file=None, commas=None), Print(items=(StrLit(value='B'),), newline=True, file=None, commas=None))),), else_body=None)
@@ -10271,6 +10278,13 @@ Print(items=(StrLit(value='OK'),), newline=True, file=None, commas=None)
 End()
 Print(items=(StrLit(value='S'),), newline=True, file=None, commas=None)
 Return(target=None)
+
+## v10_t1_blitline
+Dim(name='V0%', bounds=(100,), also=())
+Screen(mode=Lit(value=1), burst=None, apage=None, vpage=None)
+LineStmt(x1=Lit(value=0), y1=Lit(value=0), x2=Lit(value=10), y2=Lit(value=10), color=None, box='B', step1=False, step2=False, style=None)
+GetGfx(x1=Lit(value=0), y1=Lit(value=0), x2=Lit(value=9), y2=Lit(value=9), array='V0%')
+PutGfx(x=Lit(value=20), y=Lit(value=20), array='V0%', action=None)
 
 ## v10_t1_blkgoto
 Assign(target=Var(name='A$'), value=StrLit(value='X'))
