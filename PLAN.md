@@ -9629,6 +9629,51 @@ moved its emitted source without re-recording the manifest. The entry is left
 failing on purpose -- re-recording it would absorb an unexplained change into
 a baseline. Diagnosing that drift is its own gap.
 
+**The array grid anchor is the COMMON band end (2026-08-09)**: two wild
+programs shared the message `runtime blocks are not 0x36-contiguous after
+statics` and had two DIFFERENT causes, which is why the bucket resisted a
+single fix.
+
+The general rule, replacing "the grid starts at `vb`":
+
+    grid_base = align16(0x110 + s_num + s_str) + 0x10
+
+read off the COMMON band stamp. For the DEGENERATE stamp a program without
+COMMON still carries (s_num == s_str == 0) this yields exactly VAR_BASE, so
+the old anchor was this formula's n=0 case all along rather than a separate
+rule. Runtime-DIM programs carry no ORDINARY stamp, so they take the
+grid-anchored path, which divided `rt_blocks[0] - vb` by 0x36 and raised
+whenever a COMMON band had pushed the grid.
+
+- wild tutordos.exe (4-byte band) and probe q_commonrt (16-byte band) both put
+  their first runtime block at 0x166: one 0x36 slot past a grid at 0x130, and
+  a ragged 70 bytes past 0x120. tutordos now decodes COMPLETELY (523
+  statements, comparable, 94.55% identical, delta -192).
+- wild stat.exe is the OTHER cause: a LINE box-fill cell moves `vb` to 0x124
+  but NOT the grid, whose blocks are 4 whole 0x36 records past VAR_BASE. The
+  stamp path already allowed `gb == VAR_BASE` for its n=0 case ("VAR_BASE
+  covers the LINE-cell form") while demanding `vb` for n>0 -- the existing
+  LINE witnesses (t1_lineb, t1_linevb) have no arrays at all, so "grid at vb"
+  and "grid at VAR_BASE" were indistinguishable in every one of them.
+
+**The COMMON half had a silent-wrong-answer trap.** Recovering the grid base
+alone made q_commonrt DECODE -- and drop its `COMMON` statement entirely,
+constant-folding `C1#` so the program printed `+ 3` where the source says
+`+ C1#`. COMMON compiles to NO ops, so the band is the only evidence the
+declaration existed, and the scalar walk starts past the band and never visits
+it. The fix also fills the band's slots (`_fill_band_slots` over the stamp
+spans) using 0x110-filtered evidence sets -- the ordinary sets drop everything
+below VAR_BASE as system cells, which typed q_commonrt's two doubles as eight
+`%` slots. Reinforces the standing lesson: a layout that passes `finish()` is
+not proof of correctness; only the byte compare is.
+
+Fixtures t1_linearr and t1_commonrt (+v10_ each), all four byte-exact.
+Corpus 85 -> 88 decode-ok of 108 (82 of 99 families), 20 -> 17 failing.
+Beyond the two witnesses, this also lifted menu.exe, night.exe and sprogh.exe
+out of the expensive "DGROUP layout not solvable" bucket; all three now share
+a new lift-phase signature, `GET/PUT blit array slot 0x... unknown`, which is
+a 3-witness target for the next round.
+
 ### The workflow (each gap, see gap 9–14 commits for examples)
 
 1. `uv run python -m tbx.tools.scan_wild wild/hits` — pick the top

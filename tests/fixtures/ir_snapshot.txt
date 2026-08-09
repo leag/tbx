@@ -3457,6 +3457,16 @@ CallStmt(name='SUB1', args=())
 End()
 SubDef(name='SUB1', params=(), body=(Dim(name='V0$', bounds=(50,), also=()), Assign(target=ArrayRef(name='V0$', indices=(Lit(value=1),)), value=StrLit(value='X')), Print(items=(ArrayRef(name='V0$', indices=(Lit(value=1),)),), newline=True, file=None, commas=None)))
 
+## t1_commonrt
+Common(names=('A#', 'B%', 'C%', 'D%', 'E%'))
+Dim(name='V0', bounds=(2,), also=())
+Assign(target=Var(name='F%'), value=Lit(value=3))
+Dim(name='V1', bounds=(Var(name='F%'),), also=())
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=1))
+Assign(target=ArrayRef(name='V1', indices=(Lit(value=1),)), value=Lit(value=2))
+Assign(target=Var(name='A#'), value=Lit(value=3))
+Print(items=(BinOp(op='+', lhs=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=1),)), rhs=ArrayRef(name='V1', indices=(Lit(value=1),))), rhs=Var(name='A#')),), newline=True, file=None, commas=None)
+
 ## t1_convf
 Assign(target=Var(name='A#'), value=DblLit(value=1.5))
 Assign(target=Var(name='B'), value=SingleLit(value=2.5))
@@ -4981,6 +4991,13 @@ End()
 ## t1_line2
 LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=Lit(value=2), box='', step1=False, step2=False, style=None)
 End()
+
+## t1_linearr
+Dim(name='V0', bounds=(3,), also=())
+LineStmt(x1=Lit(value=0), y1=Lit(value=0), x2=Lit(value=10), y2=Lit(value=10), color=None, box='B', step1=False, step2=False, style=None)
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=5))
+Assign(target=Var(name='A'), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=1),)), rhs=Lit(value=1)))
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 
 ## t1_lineb
 LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=Lit(value=2), box='B', step1=False, step2=False, style=None)
@@ -10539,6 +10556,16 @@ CallStmt(name='SUB1', args=())
 End()
 SubDef(name='SUB1', params=(), body=(Dim(name='V0$', bounds=(50,), also=()), Assign(target=ArrayRef(name='V0$', indices=(Lit(value=1),)), value=StrLit(value='X')), Print(items=(ArrayRef(name='V0$', indices=(Lit(value=1),)),), newline=True, file=None, commas=None)))
 
+## v10_t1_commonrt
+Common(names=('A#', 'B%', 'C%', 'D%', 'E%'))
+Dim(name='V0', bounds=(2,), also=())
+Assign(target=Var(name='F%'), value=Lit(value=3))
+Dim(name='V1', bounds=(Var(name='F%'),), also=())
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=1))
+Assign(target=ArrayRef(name='V1', indices=(Lit(value=1),)), value=Lit(value=2))
+Assign(target=Var(name='A#'), value=Lit(value=3))
+Print(items=(BinOp(op='+', lhs=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=1),)), rhs=ArrayRef(name='V1', indices=(Lit(value=1),))), rhs=Var(name='A#')),), newline=True, file=None, commas=None)
+
 ## v10_t1_convf
 Assign(target=Var(name='A#'), value=DblLit(value=1.5))
 Assign(target=Var(name='B'), value=SingleLit(value=2.5))
@@ -11795,6 +11822,13 @@ End()
 ## v10_t1_line2
 LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=Lit(value=2), box='', step1=False, step2=False, style=None)
 End()
+
+## v10_t1_linearr
+Dim(name='V0', bounds=(3,), also=())
+LineStmt(x1=Lit(value=0), y1=Lit(value=0), x2=Lit(value=10), y2=Lit(value=10), color=None, box='B', step1=False, step2=False, style=None)
+Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=5))
+Assign(target=Var(name='A'), value=BinOp(op='+', lhs=ArrayRef(name='V0', indices=(Lit(value=1),)), rhs=Lit(value=1)))
+Print(items=(Var(name='A'),), newline=True, file=None, commas=None)
 
 ## v10_t1_lineb
 LineStmt(x1=Lit(value=10), y1=Lit(value=20), x2=Lit(value=30), y2=Lit(value=40), color=Lit(value=2), box='B', step1=False, step2=False, style=None)

@@ -626,6 +626,18 @@
    "excluded": null
   },
   {
+   "name": "tutordos.exe",
+   "sha256": "b52b193cbfb17b63862dfbb65c5b0025d6faa85c99c5ebc4686c3a0e99518063",
+   "bytes": 82360,
+   "statements": 523,
+   "source_bytes": 22512,
+   "toggles": "K",
+   "build_match": 96,
+   "roundtrip": "code-or-metadata",
+   "delta": -192,
+   "excluded": null
+  },
+  {
    "name": "vhfprop.exe",
    "sha256": "28391f33a233b07d6cf1266312429e1b1a3600a60fe0508fc022616c9bc11bd2",
    "bytes": 67011,

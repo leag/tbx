@@ -1,0 +1,32 @@
+# t1_commonrt dialect=1.1 start=088A0
+088A3:movm_imm:412:3
+088A9:movsi:358
+088AC:movdx:155
+088AF:movesdx
+088B1:dim_begin
+088B4:movax_m:412
+088B8:movm_ax:368
+088BC:movm_imm:366:0
+088C2:movsi:358
+088C5:movdx:155
+088C8:movesdx
+088CA:dim_end
+088CD:fld1
+088D0:fstp:436
+088D7:fild:420
+088DC:moves_m:358
+088E0:far_fstp:4
+088E8:fild:424
+088ED:fstp64:272
+088F4:moves_m:358
+088F8:far_fld:4
+088FE:fold:+:436
+08903:fold64:+:272
+08908:rt:187
+0890A:rt:184
+0890E:epilogue
+# commits
+088D5
+088E6
+088F2
+0890C

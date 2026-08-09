@@ -1,0 +1,22 @@
+# t1_linearr dialect=1.1 start=08AD0
+08AD3:fldz
+08AD6:fldz
+08AD9:fstp:148
+08ADE:fstp:136
+08AE3:fild:360
+08AE8:fild:360
+08AED:line:68
+08AF3:fild:356
+08AF8:fstp:372
+08AFF:fld1
+08B02:fold:+:372
+08B07:fstp:342
+08B0E:fld:342
+08B13:rt:187
+08B15:rt:184
+08B19:epilogue
+# commits
+08AF1
+08AFD
+08B0C
+08B17

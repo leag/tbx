@@ -174,6 +174,65 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
     )
     prompt_disps = {o[2] for o in ops if o[1] in ("input", "line_input")}
     addsi_bases = {o[2] for o in ops if o[1] == "addsi"}
+    def band_evidence():
+        """The typed-disp sets, filtered at 0x110 instead of VAR_BASE.
+
+        The ordinary sets drop everything below VAR_BASE as runtime system
+        cells, which is right for the scalar band but wrong for the COMMON
+        band at 0x110: with them, every COMMON slot looks untyped and tiles as
+        2-byte integers (probe q_commonrt's two doubles came back as eight
+        `%` slots).  Same rebuild the COMMON stamp path below does.
+        """
+        f64 = {o[2] for o in ops if o[1] in ("fld64", "fstp64")} | {
+            o[3] for o in ops if o[1] in ("fold64", "fold_n64")
+        }
+        lng = {o[2] for o in ops if o[1] in ("fild32", "fistp32")} | {
+            o[3] for o in ops if o[1] == "ifold32"
+        }
+        ints = {
+            o[2]
+            for o in ops
+            if o[1]
+            in (
+                "movax_m", "addax_m", "imul_m", "movm_imm", "movm_ax", "addm_ax",
+                "subm_ax", "inc_m", "dec_m", "addm_i8", "cmp_mi8", "cmp_mi16",
+                "cmpm_ax", "movsim",
+            )
+        }
+        fil = {o[2] for o in ops if o[1] == "fild"}
+        keep = lambda s: {d for d in s if d >= COMMON_BASE}  # noqa: E731
+        return keep(f64), keep(lng), keep(ints), keep(fil)
+
+    def common_grid_base():
+        """Grid base derived from the COMMON band stamp, or None.
+
+        The stamp is 8 words `(s1, b1, s2, b1+s1, 0, b1, 0, b1)` with
+        b1 == COMMON_BASE: the CHAIN-persistent band's numeric and string
+        spans.  Past that band the layout aligns to 16 and carries a 16-byte
+        band stamp of its own, and the ordinary slot grid opens right after it
+        -- the same `align16(end) + 0x10` step the COMMON-array branch below
+        already applies to reach `ord_base`.
+
+        This is the general form of the grid anchor, not a special case: a
+        program with no COMMON carries the DEGENERATE stamp (s1 == s2 == 0),
+        for which the formula yields align16(0x110) + 0x10 == VAR_BASE, which
+        is exactly where the grid sits.  Witnesses: probe q_commonrt and wild
+        tutordos.exe (16- and 4-byte COMMON bands -> grid at 0x130, one static
+        slot ahead of a runtime block at 0x166); wild stat.exe (degenerate ->
+        0x120, confirming that a LINE box-fill cell does NOT move the grid).
+        """
+        best = None
+        for pos in range(16, len(exe) - 16, 2):
+            s1, b1, s2, b2, n, gb, z, b4 = struct.unpack_from("<8H", exe, pos)
+            if n or z or b1 != COMMON_BASE or gb != b1 or b4 != b1:
+                continue
+            if b2 != b1 + s1 or s1 % 2 or s2 % 4 or s1 >= 0x1000 or s2 >= 0x1000:
+                continue
+            if best is not None and best != (s1, s2):
+                return None  # ambiguous: fall back to the anchored candidates
+            best = (s1, s2)
+        return best
+
     P = exe.rfind(MARKER)
     if P < 0:
         raise ValueError("pool marker 00 80 16 00 not found")
@@ -233,7 +292,11 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
         starts a bit past `ds + vb` and the last record's populated bytes can
         extend a few bytes past the un-widened `ds + sb` boundary (witnessed
         wild/probes_gap16/q_gap16{q,u}.bas, offsets 48/32 bytes, both < 0x36)."""
-        out, pos, end = [], ds + vb, ds + sb + ARR_BLOCK
+        # Start at the resolved grid base, which is `vb` on every path except a
+        # LINE box-fill program with arrays, where the grid stays at VAR_BASE
+        # while `vb` is VAR_BASE+4 (wild stat.exe): scanning from `ds + vb`
+        # there begins 4 bytes INSIDE the first record and never matches it.
+        out, pos, end = [], ds + static_base[0], ds + sb + ARR_BLOCK
         while pos < end - 11 and len(out) < n_want:
             rec = _parse_static_slot(exe, pos) if pos + 24 <= len(exe) else None
             if rec is not None:
@@ -357,6 +420,10 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
         }
 
     if rt_blocks:
+        # Bound on both branches: the COMMON-array branch below never consults
+        # the stamp (its blocks ARE the band), but the shared code past the
+        # split tests these.
+        com_stamp = com_base = None
         if rt_blocks[0] == COMMON_BASE < vb:
             # A COMMON'd array's descriptor block lives in the CHAIN-persistent
             # COMMON band at DS:0110, ahead of the ordinary slot grid, so the
@@ -366,15 +433,61 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
             # eleven DIMmed arrays).
             n_static, base0 = 0, COMMON_BASE
         else:
-            n_static, rem = divmod(rt_blocks[0] - vb, ARR_BLOCK)
-            base0 = vb
-            if rem:
+            # The LINE box-fill cell does NOT push the array grid: it is a
+            # SCALAR-band allocation, so the grid can still start at VAR_BASE
+            # while `vb` is VAR_BASE+4.  The stamp path below already knew this
+            # for its n=0 case ("VAR_BASE covers the LINE-cell form"); with no
+            # witness carrying both a LINE box-fill and arrays, this path only
+            # ever tried `vb`.  Wild stat.exe is that witness: its runtime
+            # blocks are perfectly 0x36-contiguous and start at 0x1f8, which is
+            # 4 whole blocks past VAR_BASE (0x120) and a ragged 50 bytes past
+            # `vb` (0x124).  Only a base that divides evenly can be the grid.
+            # The stamp-derived base first: it is the compiler's own record of
+            # where the band ends, and `vb`/VAR_BASE are only the shapes it
+            # collapses to when there is no COMMON.
+            com_stamp = common_grid_base()
+            com_base = (
+                ((COMMON_BASE + sum(com_stamp) + 15) & ~15) + 0x10
+                if com_stamp is not None
+                else None
+            )
+            for base0 in (com_base, vb, VAR_BASE):
+                if base0 is None:
+                    continue
+                n_static, rem = divmod(rt_blocks[0] - base0, ARR_BLOCK)
+                if not rem:
+                    break
+            else:
                 raise ValueError("runtime blocks are not 0x36-contiguous after statics")
+            static_base[0] = base0
         if rt_blocks != [rt_blocks[0] + ARR_BLOCK * i for i in range(len(rt_blocks))]:
             raise ValueError("runtime blocks are not 0x36-contiguous after statics")
         n = n_static + len(rt_blocks)
         sb = base0 + ARR_BLOCK * n
         run, strs, guessed, dend = walk_run(sb)
+        if base0 == com_base and com_stamp is not None and sum(com_stamp):
+            # A non-degenerate COMMON band sits BELOW the grid on this path and
+            # the walk above starts past it, so its cells are never visited.
+            # They have to be recovered: COMMON compiles to no ops at all, so
+            # the band is the only evidence the declaration ever existed, and
+            # leaving it out does not fail loudly -- it silently drops the
+            # COMMON statement and constant-folds its variables (probe
+            # q_commonrt printed `+ 3` where the source has `+ C1#`).
+            spans = [
+                (COMMON_BASE, COMMON_BASE + com_stamp[0],
+                 COMMON_BASE + com_stamp[0] + com_stamp[1])
+            ]
+            f64_c, long_cc, int_cc, fild_cc = band_evidence()
+            filled = _fill_band_slots(
+                spans, fp_disps, f64_c, long_cc, int_cc, fild_cc
+            )
+            if filled is None:
+                raise ValueError("COMMON band does not tile into typed slots")
+            band_run, band_strs, band_guessed, _band_long = filled
+            band_slots[:] = sorted(band_run)
+            run = {**band_run, **run}
+            strs = band_strs | strs
+            guessed = band_guessed | guessed
         if base0 == COMMON_BASE:
             # Past the blocks the band runs on into the COMMON SCALARS, then
             # aligns to 16 and carries a 16-byte band stamp; the ORDINARY band
@@ -506,11 +619,16 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
             continue
         if s1 % 2 or s2 % 4 or s1 >= 0x1000 or s2 >= 0x1000:
             continue
-        if n:
-            if gb != vb:
-                continue
-        elif b1 not in (vb, VAR_BASE):
-            continue  # n=0: gb == b1; VAR_BASE covers the LINE-cell form
+        # The grid base is `vb`, or VAR_BASE when a LINE box-fill cell shifted
+        # `vb` without moving the grid -- that cell is a scalar-band
+        # allocation, so the arrays keep their VAR_BASE anchor.  This was
+        # already allowed for n=0; it holds for n>0 too (fixture t1_linearr:
+        # `DIM A(3)` plus `LINE ...,B`, whose stamp reports gb=VAR_BASE while
+        # `vb` is VAR_BASE+4, and which read a pooled value past EOF while the
+        # stamp was being rejected here).
+        # (n=0 has no grid, so the stamp reports gb == b1 and b1 is the base.)
+        if (gb if n else b1) not in (vb, VAR_BASE):
+            continue
         com = read_stamp(pos - 16)
         if com is None or com[2] != 0x110 or com[0] or com[1]:
             continue  # no adjacent degenerate COMMON stamp

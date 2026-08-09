@@ -1,0 +1,22 @@
+# v10_t1_linearr dialect=1.0 start=074A0
+074A3:fldz
+074A6:fldz
+074A9:fstp:148
+074AE:fstp:136
+074B3:fild:360
+074B8:fild:360
+074BD:line:68
+074C3:fild:356
+074C8:fstp:372
+074CF:fld1
+074D2:fold:+:372
+074D7:fstp:342
+074DE:fld:342
+074E3:rt:187
+074E5:rt:184
+074E9:epilogue
+# commits
+074C1
+074CD
+074DC
+074E7
