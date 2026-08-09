@@ -7564,6 +7564,17 @@ compiled and byte-verified.
 
 ### Recently closed (this campaign, newest first)
 
+- **2026-08-09 — MID$/LSET/RSET onto a computed string-array element** (wild
+  dirmain1.exe, `element access: unexpected op movdx`): the fixed-field
+  string statements reach their target through a `movdx blk; movesdx` far
+  descriptor, and core.py recognized that prefix only after a constant
+  `movsi` (a DGROUP scalar). When the descriptor address comes from an index
+  chain instead, the element-access dispatcher in arith.py saw the `movdx`
+  and had no case for it. One probe (`MID$(A$(I%), 2, 2) = B$`) reproduced
+  the exact shape; fixture `v10_t1_midarrelem` is byte-exact through the 1.0
+  oracle. `_mid3` moved to handlers/arith.py, which core.py now imports.
+  dirmain1.exe advances to `unhandled op cmp_mi8 at 0x1c776`.
+
 - **2026-08-09 — wide (mod=10) BP-frame spellings and the LOCAL FOR's own
   step/limit forms** (wild slimmer.exe): a SUB frame whose LOCALs run past
   the signed-byte displacement range spells every BP-relative instruction

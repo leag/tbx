@@ -299,6 +299,21 @@ def _int_compare_state(state: DecodeState, op, addr: int, kind: str) -> bool:
     return True
 
 
+def _mid3(state, target, source, addr):
+    """`MID$(target$, start, len) = source$` from the AF vector's registers.
+
+    start in bx and len in ax -- the same convention the MID$ FUNCTION uses
+    for the same three arguments, and the reverse of what the two-argument
+    assignment (AE) does with its single start in ax.
+    """
+    m = state.machine
+    if m.ax is None or m.bx is None:
+        raise ValueError(f"3-argument MID$= without start/len at {addr:#x}")
+    start, length = m.bx, m.ax
+    m.ax = m.bx = None
+    return ir.MidAssign(target, start, source, length)
+
+
 def _int_inc_dec(state: DecodeState, op, addr: int, kind: str) -> bool:
     if kind not in ("inc_m", "inc_bp", "dec_bp", "dec_m", "addm_i8", "add_bpi8"):
         return False
@@ -1128,6 +1143,33 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             expr_.pend_swap = None
             c.cur = None
             state.advance(ao + 6 + extra)
+            return True
+        elif (
+            sik[1] == "movdx"
+            and c.k + ao + 3 < len(img.ops)
+            and img.ops[c.k + ao + 2][1] == "movesdx"
+            and img.ops[c.k + ao + 3][1] in ("lset", "rset", "midassign", "midassign3")
+        ):
+            # `MID$(A$(i), ...) = src$` / LSET / RSET on a COMPUTED string
+            # array element. Same movdx/movesdx far-descriptor prefix as the
+            # DGROUP-scalar form in core.py, but the descriptor address came
+            # from this index chain rather than a constant movsi (wild
+            # dirmain1.exe).
+            op3 = img.ops[c.k + ao + 3][1]
+            source = expr_.sstack.pop()
+            if op3 == "lset":
+                state.put(ir.Lset(ref, source), c.cur)
+            elif op3 == "rset":
+                state.put(ir.Rset(ref, source), c.cur)
+            elif op3 == "midassign3":
+                state.put(_mid3(state, ref, source, addr), c.cur)
+            else:
+                if m.ax is None:
+                    raise ValueError(f"MID$= without start in ax at {addr:#x}")
+                state.put(ir.MidAssign(ref, m.ax, source), c.cur)
+                m.ax = None
+            c.cur = None
+            state.advance(ao + 4)
             return True
         elif sik[1] in ("far_inc_si", "far_dec_si"):
             logger.warning("opaque by-ref element increment at %x", addr)

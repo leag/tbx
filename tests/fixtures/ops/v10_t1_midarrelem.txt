@@ -1,0 +1,34 @@
+# v10_t1_midarrelem dialect=1.0 start=07150
+07153:movm_imm:342:3
+07159:movsi:360
+0715C:rt:156
+0715E:movsim:342
+07162:shlsi
+07164:shlsi
+07166:addsi:368
+0716A:strassign
+0716C:movsi:356
+0716F:rt:156
+07171:movsi:344
+07174:strassign
+07176:movax:2
+07179:movbxax
+0717B:movax:2
+0717E:movsi:344
+07181:rt:156
+07183:movsim:342
+07187:shlsi
+07189:shlsi
+0718B:addsi:368
+0718F:movdx:153
+07192:movesdx
+07194:midassign3
+07196:movsim:342
+0719A:shlsi
+0719C:shlsi
+0719E:addsi:368
+071A2:rt:156
+071A4:rt:190
+071A6:rt:184
+071A8:epilogue
+# commits

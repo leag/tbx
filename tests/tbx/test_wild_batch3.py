@@ -2370,6 +2370,21 @@ def test_decode_v10_t1_locallongargonly():
     assert "LOCAL B&\n  CALL SUB1(B&)" in emit0.emit(prog)
 
 
+def test_decode_v10_t1_midarrelem():
+    # MID$= onto a COMPUTED string-array element: the index chain ends in the
+    # same movdx/movesdx far-descriptor prefix the DGROUP-scalar form uses,
+    # which the element-access dispatcher had no case for (wild dirmain1.exe,
+    # "element access: unexpected op movdx").
+    from tbx import decode0, emit0, ir
+
+    prog = decode0.decode_user_code(_exe("v10_t1_midarrelem.exe"))
+    mid = next(stmt for stmt in prog if isinstance(stmt, ir.MidAssign))
+
+    assert mid.target == ir.ArrayRef("V0$", (ir.Var("A%"),))
+    assert (mid.start, mid.length) == (ir.Lit(2), ir.Lit(2))
+    assert "MID$(V0$(A%), 2, 2) = B$" in emit0.emit(prog)
+
+
 def test_decode_v10_t1_bplocalfor():
     # A SUB frame whose LOCALs run past the signed-byte displacement range
     # spells every BP-relative form wide (mod=10). Wild slimmer.exe raised on
@@ -4391,6 +4406,7 @@ if __name__ == "__main__":
     test_decode_t1_localsingle()
     test_decode_v10_t1_locallongfp()
     test_decode_v10_t1_bplocalfor()
+    test_decode_v10_t1_midarrelem()
     test_decode_t1_localsub1()
     test_decode_t1_localvarstep()
     test_decode_t1_forstepm1()

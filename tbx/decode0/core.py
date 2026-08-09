@@ -25,6 +25,7 @@ from tbx.decode0.const import (
 from tbx.decode0.dialect import find_prologue
 from tbx.decode0.scan import _grp, _orient, _rgrp, _scan
 from tbx.decode0 import handlers, select_case
+from tbx.decode0.handlers.arith import _mid3
 from tbx.decode0.datapool import _read_data_pool
 from tbx.decode0.layout import (
     _blit_at,
@@ -1134,21 +1135,6 @@ def _has_large_common_layout(state: DecodeState) -> bool:
         and len(lay.get("common_arrs", ())) == 11
         and len(lay.get("common_slots", ())) == 5
     )
-
-
-def _mid3(state, target, source, addr):
-    """`MID$(target$, start, len) = source$` from the AF vector's registers.
-
-    start in bx and len in ax -- the same convention the MID$ FUNCTION uses
-    for the same three arguments, and the reverse of what the two-argument
-    assignment (AE) does with its single start in ax.
-    """
-    m = state.machine
-    if m.ax is None or m.bx is None:
-        raise ValueError(f"3-argument MID$= without start/len at {addr:#x}")
-    start, length = m.bx, m.ax
-    m.ax = m.bx = None
-    return ir.MidAssign(target, start, source, length)
 
 
 def _drop_local_descriptor_initializers(state, frame, span, addr) -> None:
