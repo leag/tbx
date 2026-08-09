@@ -5277,7 +5277,21 @@ def _decode_user_code(
             # leave a `Vn()` spelling here, and reusing that one renumbers
             # every later LOCAL array (regressed wild cleanup.exe/reformat.exe
             # by 25 bytes before this was narrowed).
-            if (
+            already = (
+                frame.dimmed_arrays.get(disp) if frame is not None else None
+            )
+            if already is not None:
+                # A re-DIM of the same frame slot in the same body (`DIM A$(N%)`
+                # / `ERASE A$` / `DIM A$(N%+1)`, probe localredim): one array
+                # DIMensioned twice, not two arrays. Allocating a second name
+                # here left the LOCAL list declaring only the last one.
+                if (already[-1] if already[-1] in "%$" else "") != suffix:
+                    raise ValueError(
+                        f"LOCAL re-DIM element type mismatch at {addr:#x}: "
+                        f"{already} vs {suffix!r}"
+                    )
+                name = already
+            elif (
                 disp in _erase_named(c)
                 and isinstance(prior, str)
                 and prior.endswith("()")
@@ -5290,6 +5304,8 @@ def _decode_user_code(
                     f"{suffix}"
                 )
                 l.n_local_arrs += 1
+            if frame is not None:
+                frame.dimmed_arrays[disp] = name
             rec = {
                 "name": name,
                 "rank": 1,

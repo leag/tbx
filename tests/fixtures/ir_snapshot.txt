@@ -5250,6 +5250,10 @@ PrintUsing(fmt=StrLit(value='##.##'), values=(Var(name='B'),), file=None, newlin
 Lprint(items=(Var(name='A$'),), newline=True, commas=None)
 End()
 
+## t1_lredim
+DefFn(name='FNFN1%', params=('A%',), body=(Local(names=('V0$()',)), Dim(name='V0$', bounds=(Var(name='A%'),), also=()), Erase(name='V0$'), Dim(name='V0$', bounds=(BinOp(op='+', lhs=Var(name='A%'), rhs=Lit(value=1)),), also=()), Assign(target=ArrayRef(name='V0$', indices=(Lit(value=1),)), value=StrLit(value='x')), FnResult(value=Call(name='LEN', args=(ArrayRef(name='V0$', indices=(Lit(value=1),)),)))), is_block=True)
+Print(items=(FnCall(name='FNFN1%', args=(Lit(value=3),)),), newline=True, file=None, commas=None)
+
 ## t1_lset
 Assign(target=Var(name='A$'), value=StrLit(value='HELLO'))
 Lset(target=Var(name='A$'), source=StrLit(value='HI'))
@@ -12094,6 +12098,10 @@ Lprint(items=(Var(name='A$'),), newline=False, commas=None)
 PrintUsing(fmt=StrLit(value='##.##'), values=(Var(name='B'),), file=None, newline=False, lprint=True)
 Lprint(items=(Var(name='A$'),), newline=True, commas=None)
 End()
+
+## v10_t1_lredim
+DefFn(name='FNFN1%', params=('A%',), body=(Local(names=('V0$()',)), Dim(name='V0$', bounds=(Var(name='A%'),), also=()), Erase(name='V0$'), Dim(name='V0$', bounds=(BinOp(op='+', lhs=Var(name='A%'), rhs=Lit(value=1)),), also=()), Assign(target=ArrayRef(name='V0$', indices=(Lit(value=1),)), value=StrLit(value='x')), FnResult(value=Call(name='LEN', args=(ArrayRef(name='V0$', indices=(Lit(value=1),)),)))), is_block=True)
+Print(items=(FnCall(name='FNFN1%', args=(Lit(value=3),)),), newline=True, file=None, commas=None)
 
 ## v10_t1_lset
 Assign(target=Var(name='A$'), value=StrLit(value='HELLO'))

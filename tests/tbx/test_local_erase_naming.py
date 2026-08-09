@@ -67,6 +67,26 @@ def test_a_later_dim_reuses_the_name_the_erase_gave(stem):
     assert "V1" not in source, source
 
 
+@pytest.mark.parametrize("stem", ("t1_lredim", "v10_t1_lredim"))
+def test_a_re_dim_of_the_same_slot_keeps_one_name(stem):
+    """`LOCAL A$()` / `DIM A$(N%)` / `ERASE A$` / `DIM A$(N%+1)`.
+
+    One array DIMensioned twice, not two arrays. Every DIM used to allocate a
+    fresh V-number -- `r_arrs` is keyed by bare bp offset and is global across
+    procedures, so it cannot tell "same slot, same frame, DIMmed again" from
+    "the same offset in a different body". The result decoded silently to two
+    names, with the LOCAL list declaring only the second. A frame slot is one
+    variable, so the identity lives on the frame (`dimmed_arrays`).
+    """
+    source = _emit(stem)
+
+    assert "LOCAL V0$()" in source, source
+    assert "DIM V0$(A%)" in source, source
+    assert "ERASE V0$" in source, source
+    assert "DIM V0$(A% + 1)" in source, source
+    assert "V1" not in source, source
+
+
 @pytest.mark.parametrize("name", ("cleanup.exe", "reformat.exe"))
 def test_the_calibrated_programs_keep_their_numbering(name):
     """Reuse must not fire on a plain LOCAL declaration.

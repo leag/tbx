@@ -9912,6 +9912,23 @@ slot must reuse the recorded name. Re-measure cleanup.exe and reformat.exe
 through the oracle afterwards: they are comparable, they carry LOCAL arrays,
 and a too-broad name-reuse rule already moved them 25 bytes once this session.
 
+FIXED. `BodyFrame.dimmed_arrays` records disp -> the name that body's DIM
+allocated, and a second DIM of the same offset in the same body reuses it (a
+differing element-type suffix raises rather than reusing). Scoped to the frame,
+so it cannot fire across procedures the way `r_arrs` would. probe_localredim is
+promoted as `t1_lredim` (+`v10_`), both byte-exact.
+
+Re-measured through the oracle, and both comparable programs moved the right
+way -- the whole point of the fix, since each invented name costs a descriptor:
+
+    cleanup.exe   6430 -> 5429 bytes off (91.14% -> 92.60%), delta -215 -> -291
+    reformat.exe  7146 -> 5091 bytes off (90.29% -> 93.16%), delta -215 -> -275
+
+Their `source_bytes` are unchanged: a reused name is the same width as the
+one it replaced, so this is invisible to a source-size check and only the byte
+comparison shows it. The two recorded deltas in `wild_roundtrip.json` are
+updated to the re-measured values.
+
 ### The workflow (each gap, see gap 9–14 commits for examples)
 
 1. `uv run python -m tbx.tools.scan_wild wild/hits` — pick the top

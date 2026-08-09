@@ -1,0 +1,9 @@
+10 DEF FNFN1%(A%)
+  LOCAL V0$()
+  DIM V0$(A%)
+  ERASE V0$
+  DIM V0$(A% + 1)
+  V0$(1) = "x"
+  FNFN1% = LEN(V0$(1))
+END DEF
+20 PRINT FNFN1%(3)

@@ -174,6 +174,14 @@ class BodyFrame:
     #: plain LOCAL declaration also leaves a `Vn()` spelling in `locals`, and
     #: reusing THAT renumbers every later LOCAL array.
     erase_named_arrays: set = field(default_factory=set)
+    #: LOCAL dynamic-array blocks this body has already DIMensioned: bp offset
+    #: -> the name that DIM allocated. A frame slot is ONE variable, so a
+    #: second `DIM` of the same offset in the same body (`DIM A$(N%)` / `ERASE
+    #: A$` / `DIM A$(N%+1)`) re-dimensions that array rather than introducing a
+    #: new one, and must reuse the recorded name. Keyed per frame because the
+    #: layout's `r_arrs` is keyed by bare bp offset across all procedures and
+    #: so cannot tell a re-DIM from the same offset in a different body.
+    dimmed_arrays: dict = field(default_factory=dict)
     #: bp offsets read or written as ordinary variables, which is the evidence
     #: that a hidden offset is *not* a temp after all.
     touched: set = field(default_factory=set)

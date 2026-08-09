@@ -693,7 +693,7 @@
     "This does NOT raise. It is a silent wrong decode, which makes it more dangerous than any of the 13 loud failures in the wild corpus.",
     "Instrumenting the registration site on wild crossref.exe shows the same shape in the wild: disp 0x4 registered twice inside frame 0xdfbb (V5$ then V6$), and disp 0xe twice inside frame 0xecc0 (V7$, V8$)."
    ],
-   "instead": "A frame slot is ONE variable: a re-DIM of the same bp offset in the same open frame must reuse the name already recorded for it. `r_arrs` is keyed by bare bp offset and is global across procedures, so per-frame identity has to come from the frame -- the same place `erase_named_arrays` lives after the t1_lerase work. Fixing it changes emitted names, so re-measure the comparable wild programs (cleanup.exe, reformat.exe) through the oracle: a too-broad reuse rule already moved those two 25 bytes once.",
+   "instead": "A frame slot is ONE variable: a re-DIM of the same bp offset in the same open frame must reuse the name already recorded for it. `r_arrs` is keyed by bare bp offset and is global across procedures, so per-frame identity has to come from the frame -- the same place `erase_named_arrays` lives after the t1_lerase work. Fixing it changes emitted names, so re-measure the comparable wild programs (cleanup.exe, reformat.exe) through the oracle: a too-broad reuse rule already moved those two 25 bytes once. FIXED 2026-08-09: BodyFrame.dimmed_arrays records disp -> name per body and a re-DIM of that slot reuses it; fixture t1_lredim (+v10_), both byte-exact. Re-measured: cleanup.exe 6430 -> 5429 bytes off, reformat.exe 7146 -> 5091, deltas re-recorded in wild_roundtrip.json.",
    "source": "wild-corpus session 2026-08-09, found while diagnosing crossref.exe"
   }
  ]
