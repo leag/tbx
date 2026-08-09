@@ -621,8 +621,8 @@
    "source_bytes": 10683,
    "toggles": "",
    "build_match": 99,
-   "roundtrip": "code-or-metadata",
-   "delta": -224,
+   "roundtrip": "exact-nonreproducible-buffers-zeroed",
+   "delta": 0,
    "excluded": null
   }
  ]
