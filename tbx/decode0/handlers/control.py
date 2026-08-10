@@ -42,6 +42,35 @@ if TYPE_CHECKING:
     from tbx.decode0.core import DecodeState
 
 
+def _folds_into_value_group(ops, k) -> bool:
+    """Whether the materialization at ``ops[k]`` is a term of a VALUE group.
+
+    A value group's terms materialize one after another and are combined by
+    `or ax,bx` / `and ax,bx`; a short-circuit chain puts a dispatch between
+    them instead. So: look ahead for the combining op, and give up at the
+    first jcc/jmp that is not part of a term's own materialization.
+    """
+    if ops[k + 3][1] in ("oraxbx", "andaxbx"):
+        return True  # the CLOSING term: its fold is the very next op
+    j = k + 3
+    limit = min(k + 16, len(ops) - 4)
+    while j < limit:
+        if (
+            ops[j][1] == "movax"
+            and ops[j][2] == 0xFFFF
+            and ops[j + 1][1] == "jcc"
+            and ops[j + 2][1] == "incax"
+        ):
+            if ops[j + 3][1] in ("oraxbx", "andaxbx"):
+                return True
+            j += 3
+            continue
+        if ops[j][1] in ("jcc", "jmp", "jmpf", "jmps"):
+            return False
+        j += 1
+    return False
+
+
 def _forwarded_arg(state: DecodeState, op, addr, index, argument):
     c = state.control
     params = c.proc_params.get(op[2])
@@ -700,6 +729,60 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
     if kind == "movax" and e.pend_cmp and op[2] == 0xFFFF:
         frame = c.proc_frame if c.proc_frame is not None else c.fn_frame
         scope_start = state.frame_start(frame.seq) if frame is not None else 0
+        if (
+            (e.pend_bool is not None or e.pend_bool_outer is not None)
+            and c.k + 7 < len(i.ops)
+            and i.ops[c.k + 3][1] == "oraxbx"
+            and i.ops[c.k + 4][1] == "movrr"
+            and i.ops[c.k + 5][1] == "andaxbx"
+            and i.ops[c.k + 6][1] == "jcc"
+            and i.ops[c.k + 7][1] == "jmp"
+            and m.bx is not None
+        ):
+            # `A AND (B OR C)`: A short-circuits normally (its dispatch pair is
+            # the open `pend_bool`), and the PARENTHESIZED group does not --
+            # the compiler folds it as a value, `or ax,bx` over two finished
+            # terms, and closes with `mov bx,cx; and ax,bx` joining A back in.
+            # A's short circuit converges on that `and ax,bx`, which is what
+            # `match_bool_term1` matched to keep the term open this far (wild
+            # hebrew.exe, 57 ops of index arithmetic in between).
+            #
+            # The Group is byte-significant: it is what makes the compiler fold
+            # the OR as a value instead of cascading two more dispatch pairs.
+            # A deferred first term waits in `pend_bool_outer` -- that is what
+            # `deferred` means, and a group partner always sets it.
+            pb = e.pend_bool if e.pend_bool is not None else e.pend_bool_outer
+            term_map = (
+                _JCC_RELOP_STR_TRUE if e.pend_cmp_str else _JCC_RELOP_TRUE
+            )
+            third = ir.RelOp(term_map[i.ops[c.k + 1][2]], *e.pend_cmp)
+            group = ir.LogOp(
+                pb.op, pb.r1, ir.Group(ir.LogOp("OR", m.bx, third))
+            )
+            m.bx = None
+            e.pend_bool = e.pend_bool_outer = None
+            state.seek(_lift_while(
+                i.ops,
+                c.k,
+                e.pend_cmp,
+                c.whiles,
+                c.dos,
+                c.ifs,
+                o.stmts,
+                o.addrs,
+                state.put,
+                state.flush_pending,
+                pb.start,
+                block_ifs=c.block_if_addrs,
+                branch=state.branch,
+                shift=state.shift_pending,
+                group_cond=group,
+                group_len=3,
+            ))
+            e.pend_cmp = None
+            e.pend_cmp_str = False
+            c.cur = None
+            return True
         if e.pend_bool is not None:  # compound-IF tail
             nk = _lift_bool_do_tail(
                 i.ops,
@@ -1040,6 +1123,41 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
             e.pend_cmp = None
             e.pend_cmp_str = False
             c.cur = None
+            return True
+        if (
+            e.pend_cmp_str
+            and c.k + 3 < len(i.ops)
+            and i.ops[c.k + 1][1] == "jcc"
+            and i.ops[c.k + 2][1] == "incax"
+            and i.ops[c.k + 1][3] == i.ops[c.k + 3][0]
+            and i.ops[c.k + 1][2] in _JCC_RELOP_TRUE
+            and (
+                _folds_into_value_group(i.ops, c.k)
+                # ...or arithmetic consumes the -1/0 directly, the string
+                # sibling of the FP case above (`(A$ = B$) * N`, wild
+                # hebrew.exe at 0xcb70).
+                or i.ops[c.k + 3][1] in ("imulbx", "imul_m", "imulax")
+            )
+        ):
+            # A STRING relational-as-VALUE that is neither a condition nor a
+            # direct store: it is one term of a logical group whose RESULT is
+            # arithmetic (wild hebrew.exe, `... - (A$ = X$ OR A$ = Y$) * N`).
+            # The two branches above cover the FP-in-arithmetic and the
+            # store-it-straight-away cases; this is the third consumer, and it
+            # is identified by looking ahead to the value fold that combines
+            # the terms -- an `oraxbx`/`andaxbx` reached without crossing a
+            # dispatch, which is what separates a value group from an ordinary
+            # short-circuit chain.
+            #
+            # The Group is the same free normalization the FP case documents:
+            # `(A OR B)` and `((A) OR (B))` compile byte-identically.
+            lhs, rhs = e.pend_cmp
+            m.ax = ir.Group(
+                ir.BinOp(_JCC_RELOP_TRUE[i.ops[c.k + 1][2]], lhs, rhs)
+            )
+            e.pend_cmp = None
+            e.pend_cmp_str = False
+            state.advance(3)
             return True
         state.seek(_lift_while(
             i.ops,

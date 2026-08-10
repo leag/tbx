@@ -357,6 +357,14 @@ def graphics_box(state: DecodeState, op, addr, kind) -> bool:
     e, c = state.expr, state.control
     if kind in ("view", "window"):  # coord cells -> (x1,y1)-(x2,y2)
         fl = op[2]
+        if kind == "view" and fl == 0:
+            # Bare VIEW resets the viewport to the whole screen: zero operands,
+            # no coordinate cells staged, the same shape bare PALETTE has
+            # (wild hebrew.exe, `CLS` then `VIEW`).
+            state.put(ir.View(None, None, None, None), c.cur)
+            c.cur = None
+            state.advance()
+            return True
         base, scr_bit, extra = (
             (0x04, 0x08, 0x03) if kind == "view" else (0x01, 0x02, 0x00)
         )

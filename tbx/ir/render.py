@@ -509,6 +509,8 @@ def _us_graphics(s) -> str | None:
     if isinstance(s, PaletteUsing):
         return f"PALETTE USING {unparse(s.source)}"
     if isinstance(s, View):
+        if s.x1 is None:  # bare VIEW: reset the viewport to the whole screen
+            return "VIEW"
         scr = "SCREEN " if s.screen else ""
         txt = (
             f"VIEW {scr}({unparse(s.x1)},{unparse(s.y1)})"

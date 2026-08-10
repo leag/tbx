@@ -313,6 +313,26 @@ def test_an_array_used_before_its_dim_in_address_order():
 
 
 
+def test_bare_view_resets_the_viewport():
+    """`VIEW` with no arguments: flag 00, zero operands.
+
+    The flag guard demanded the 04 base bit every VIEW with coordinates
+    carries, so the bare form raised `VIEW flag 00 (unsupported variant)`
+    (wild hebrew.exe, a `CLS` followed by `VIEW`). It is represented the way
+    bare PALETTE already is -- all operands None -- and renders as the bare
+    keyword.
+    """
+    from tbx import decode0, emit0, ir
+
+    for stem in ("t1_viewbare", "v10_t1_viewbare"):
+        prog = decode0.decode_user_code(_exe(f"{stem}.exe"))
+        views = [s for s in tuple(prog) if isinstance(s, ir.View)]
+
+        assert views[-1] == ir.View(None, None, None, None), stem
+        assert emit0.emit(prog).rstrip().endswith("VIEW\n50 END"), stem
+
+
+
 if __name__ == "__main__":
     test_dim_node()
     test_decode_t1_arr1()

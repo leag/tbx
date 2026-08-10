@@ -231,10 +231,40 @@ def match_bool_term1(ops, index: int | None = None) -> BoolTermMatch | None:
         return None
     other = ("orax", "OR") if combination[0] == "andaxbx" else ("andaxbx", "AND")
     seen_materialize = False
-    for j in range(index + 6, min(index + 36, len(ops) - 3)):
+    # The plain-partner window stays at 36 ops, where it was calibrated. The
+    # value-folded group below may sit much further ahead -- wild hebrew.exe
+    # puts 57 ops of index arithmetic between the two -- and it is safe to
+    # look that far because its acceptance is an EXACT address match against
+    # this term's own short circuit, not a shape guess.
+    for j in range(index + 6, min(index + 96, len(ops) - 3)):
         if ops[j][1] != "movax" or ops[j][2] != 0xFFFF:
             continue
         next_kinds = [o[1] for o in ops[j + 1 : j + 4]]
+        if (
+            next_kinds == ["jcc", "incax", "oraxbx"]
+            and j + 5 < len(ops)
+            and ops[j + 4][1] == "movrr"
+            and ops[j + 5][1] == "andaxbx"
+            and _same_code_offset(short_circuit, ops[j + 5][0] + 2)
+        ):
+            # The partner is a VALUE-folded OR group, not another
+            # short-circuiting term: `or ax,bx` builds it out of two finished
+            # terms and the group's own `and ax,bx` -- two ops later, past the
+            # `mov bx,cx` that brings this term back -- is what the short
+            # circuit converges on. `A AND (B OR C)` in wild hebrew.exe, where
+            # A dispatches normally and the parenthesized group does not.
+            return BoolTermMatch(
+                template="bool_term1",
+                start=index,
+                stop=index + 6,
+                operator=combination[1],
+                polarity=polarity,
+                short_circuit=short_circuit,
+                deferred=True,
+            )
+        if j >= index + 36:
+            seen_materialize = True
+            continue
         for candidate in (combination, other):
             if next_kinds == ["jcc", "incax", candidate[0]]:
                 delta = 2 if candidate[1] == "AND" else 0

@@ -644,6 +644,7 @@ def _lift_bool_do_tail(
 def _lift_while(
     ops, k, pend_cmp, whiles, dos, ifs, stmts, addrs, put, flush, cur,
     block_ifs=None, branch=None, folded_away=frozenset(), shift=_noshift,
+    group_cond=None, group_len=1,
 ) -> int:
     """Consume the materialized loop test at ops[k] (mov ax,0FFFF):
     Jcc(R) +1; inc ax; or ax,ax; <cc> +3; e9 EXIT. With a loop-back before
@@ -684,15 +685,27 @@ def _lift_while(
             shift(idx, 1)
             put(ir.Loop(loop_kind, cond), cur)
             return k + 6
-        want = ["movax", "jcc", "incax"] + (["notax"] if negate else []) + [
-            "orax",
-            "jcc",
-            "jmp",
-        ]
-        if k + len(want) <= len(ops) and ops[k + 3 + off][1] == "andaxbx":
-            want[3 + off] = "andaxbx"
-        if k + len(want) > len(ops) or [o[1] for o in ops[k : k + len(want)]] != want:
-            raise ValueError(f"materialization template mismatch at {ops[k][0]:#x}")
+        if group_cond is not None:
+            # The caller recognized a value-folded compound whose combining ops
+            # sit where the plain self-test does, and built the condition from
+            # what it read there. Only the LENGTH of that middle matters here;
+            # from the exit pair on it is the same template.
+            off = group_len - 1
+        else:
+            want = ["movax", "jcc", "incax"] + (["notax"] if negate else []) + [
+                "orax",
+                "jcc",
+                "jmp",
+            ]
+            if k + len(want) <= len(ops) and ops[k + 3 + off][1] == "andaxbx":
+                want[3 + off] = "andaxbx"
+            if (
+                k + len(want) > len(ops)
+                or [o[1] for o in ops[k : k + len(want)]] != want
+            ):
+                raise ValueError(
+                    f"materialization template mismatch at {ops[k][0]:#x}"
+                )
         m_jcc, exit_jcc, exit_jmp = ops[k + 1], ops[k + 4 + off], ops[k + 5 + off]
         if m_jcc[3] != ops[k + 3][0]:  # Jcc +1 skips exactly the inc ax
             raise ValueError("materialization: bad Jcc skip")
@@ -700,9 +713,12 @@ def _lift_while(
             raise ValueError(f"unhandled materialization jcc {m_jcc[2]:02x}")
         if exit_jcc[2] not in (0x74, 0x75) or exit_jcc[3] != exit_jmp[0] + 3:
             raise ValueError("DO/WHILE: bad exit pair")
-        cond = ir.RelOp(_JCC_RELOP_TRUE[m_jcc[2]], *pend_cmp)
-        if negate:
-            cond = ir.Not(cond)
+        if group_cond is not None:
+            cond = group_cond
+        else:
+            cond = ir.RelOp(_JCC_RELOP_TRUE[m_jcc[2]], *pend_cmp)
+            if negate:
+                cond = ir.Not(cond)
         # The retry edge in its short form decides this outright. Its NEAR form
         # (a body past rel8 reach) only decides it at cc 74, because at cc 75
         # the inline/block-IF branch below is a live competing reading and the
@@ -785,7 +801,8 @@ def _lift_while(
             ifs.append(IfFrame(seq=event.seq))
         else:
             raise ValueError(f"unhandled materialized test at {ops[k][0]:#x}")
-        return k + len(want)
+        # 3 leading ops (movax/jcc/incax) + the middle + the exit jcc/jmp.
+        return k + 5 + (group_len if group_cond is not None else len(want) - 5)
 
 
 def _inline_safe(body) -> bool:

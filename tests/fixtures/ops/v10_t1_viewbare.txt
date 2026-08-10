@@ -1,0 +1,15 @@
+# v10_t1_viewbare dialect=1.0 start=073B0
+073B3:movm_imm:136:1
+073B9:screen:8
+073BD:xorax
+073BF:movm_imm:148:0
+073C5:movm_ax:136
+073C9:movax:100
+073CC:movm_imm:172:100
+073D2:movm_ax:160
+073D6:view:4
+073DA:cls
+073DD:view:0
+073E1:end
+073E4:epilogue
+# commits

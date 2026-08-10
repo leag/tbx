@@ -570,7 +570,11 @@ class View:
     """VIEW [SCREEN] (x1,y1)-(x2,y2)[, color][, border] -- integer coords staged
     through the system cells [0088]=x1 [0094]=y1 [00A0]=x2 [00AC]=y2, committed by
     INT ECh sub EAh + flag (04 base | 08 SCREEN | 02 color in [00B8] | 01 border
-    in [00C4])."""
+    in [00C4]).
+
+    Bare VIEW (reset the viewport to the whole screen, flag 00, zero operands)
+    is `View(None, None, None, None)` -- the same convention bare PALETTE uses.
+    """
 
     x1: object
     y1: object
