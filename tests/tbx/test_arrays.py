@@ -304,6 +304,10 @@ def test_an_array_used_before_its_dim_in_address_order():
         source = emit0.emit(decode0.decode_user_code(_exe(f"{stem}.exe")))
 
         assert "V0%(0) = V0%(0) + 7" in source, source
+        # The variable-index path resolves the same block through the same
+        # helper -- it used to invent its own `V0120`-style name there, so one
+        # array could come out under two.
+        assert "V0%(A%) = V0%(A%) + 1" in source, source
         assert "DIM DYNAMIC V0%(10)" in source, source
         assert "V0120" not in source, source
 

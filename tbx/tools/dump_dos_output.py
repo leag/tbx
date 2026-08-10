@@ -48,6 +48,7 @@ KEYS = {
     # The 324-character OR chain takes the ELSE arm on any lowercase answer,
     # which is all the oracle's scancode typing can send.
     "t1_wideif": '[{"wait":"?","send":"ab\\r"}]',
+    "t1_selmidguard": '[{"wait":"?","send":"q\\r"}]',
     "t1_notrel": '[{"wait":"?","send":"y\\r"}]',
     # A computed CASE guard: the arrow-key pair CHR$(0)+CHR$(72) cannot be
     # typed here, so the answer takes the second arm.

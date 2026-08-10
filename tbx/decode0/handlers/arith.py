@@ -855,6 +855,19 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
         else:
             a = l.slot_info.get(blk)
             if a is None:
+                # The DIM may simply not have been WALKED yet -- address order
+                # is not execution order (wild pw.exe: a SUB at 0x200f4 uses an
+                # array DIMmed at 0x2168c). Read the record off the descriptor
+                # the compiler already laid out, exactly as the `moves_m`
+                # dispatch does, so both sites agree on the name and the
+                # element type instead of one of them inventing `V0666`.
+                from tbx.decode0.core import _rt_slot_from_image
+
+                a = _rt_slot_from_image(state, blk)
+                if a is not None:
+                    l.r_arrs[blk] = a
+                    l.slot_info[blk] = a
+            if a is None:
                 logger.warning(
                     "array block %s missing from layout at %x; using synthetic rank-1 slot",
                     hex(blk),

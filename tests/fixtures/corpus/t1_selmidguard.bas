@@ -1,0 +1,8 @@
+INPUT A$
+SELECT CASE A$
+  CASE MID$("abcdefg", 2, 5)
+    PRINT 1
+  CASE "q"
+    PRINT 2
+END SELECT
+END

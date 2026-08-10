@@ -142,6 +142,30 @@ def test_a_string_select_nests_inside_another_one():
         ], stem
 
 
+def test_a_case_guard_that_is_an_expression():
+    """`CASE MID$("abcdefg", 2, 5)` -- a guard with no fixed op prefix.
+
+    The two calibrated string-arm headers are two ops wide (a pooled literal,
+    a bare `CHR$(n)`). A real expression is not: wild nvg.exe matches an arrow
+    key with `CHR$(0) + CHR$(72)` and wild pw.exe with a three-argument MID$
+    whose start and length shuttle through bx. What is invariant is the anchor
+    the compiler puts at the END of every guard -- `movsi [temp]; rt 9C;
+    strcmp` against the SELECT's own scratch cell -- so `_str_arm_anchor_at`
+    finds that and ordinary dispatch evaluates whatever built the value.
+    """
+    for stem, guard in (
+        ("t1_selchrcat", ir.BinOp("+", ir.Call("CHR$", (ir.Lit(0),)),
+                                  ir.Call("CHR$", (ir.Lit(72),)))),
+        ("t1_selmidguard", ir.Call(
+            "MID$", (ir.StrLit("abcdefg"), ir.Lit(2), ir.Lit(5))
+        )),
+    ):
+        for exe in (f"{stem}.exe", f"v10_{stem}.exe"):
+            prog = decode0.decode_user_code((CORPUS / exe).read_bytes())
+            select = next(s for s in tuple(prog) if isinstance(s, ir.SelectCase))
+            assert select.arms[0].guards == (ir.CaseValue(guard),), exe
+
+
 def test_a_numeric_select_nests_too():
     """Same nesting, numeric selector -- and one more thing had to give.
 

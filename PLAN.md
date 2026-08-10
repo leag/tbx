@@ -10222,3 +10222,23 @@ Fixture t1_subbeforedim (+v10_), byte-exact both dialects, raises the original
 error against the unfixed decoder.
 
 pw.exe advances again, to `reverse array SWAP source mismatch` at 0x2136a.
+
+### pw.exe decodes (the same helper, on the indexed path)
+
+The indexed element path resolves its block through `l.slot_info` directly,
+never through the `moves_m` dispatch, so it needed the same first-use
+registration -- otherwise one array still came out as `V0666` there while the
+constant-subscript path called it `V17`. t1_subbeforedim now exercises both
+paths in one fixture.
+
+A guard can also be a multi-argument intrinsic whose arguments shuttle through
+bx (`CASE MID$(s$, 2, 5)`, wild pw.exe), so `movbxax`/`movrr` join the ops a
+guard may be built from. Fixture t1_selmidguard (+v10_).
+
+pw.exe DECODES now, but does not yet emit: an `IfGoto` inside a SUB body holds
+an unresolved `('addr', 0xa4d5)` -- a target that is a real op (a `movm_imm`
+just past a `dim_end`) in MAIN-line code, which a SUB body cannot legally jump
+to. Something is attributed to the wrong body; that is the next gap on this
+file, and it is emit-side, not decode-side.
+
+Wild corpus 95 -> 96 decode-ok of 108, 7 failures.

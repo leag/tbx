@@ -91,7 +91,20 @@ def _is_str_arm_header_chr_at(state, i, temp):
 #: `movsi [temp]; rt 9C; strcmp` anchor. Deliberately small: the anchor is what
 #: identifies the arm, and this only bounds how far back the guard may start.
 _GUARD_OPS = frozenset(
-    ("movsi", "movax", "rt", "strfn", "strconcat", "xorax", "trap_hook")
+    (
+        "movsi",
+        "movax",
+        "rt",
+        "strfn",
+        "strconcat",
+        "xorax",
+        "trap_hook",
+        # Register staging for a multi-argument intrinsic in the guard, e.g.
+        # `CASE MID$(s$, 2, 5)` (wild pw.exe), whose start and length are
+        # shuttled through bx.
+        "movbxax",
+        "movrr",
+    )
 )
 
 
