@@ -87,9 +87,48 @@ def _is_str_arm_header_chr_at(state, i, temp):
     )
 
 
-def _str_guard_arm(state, k, guard):
-    """Shared tail for a matched string-arm guard header (movsi/movax..
-    strcmp at k..k+4, jcc at k+5, jmp at k+6). Mirrors the numeric arm's
+#: Ops a computed CASE guard is allowed to be built out of before the arm's
+#: `movsi [temp]; rt 9C; strcmp` anchor. Deliberately small: the anchor is what
+#: identifies the arm, and this only bounds how far back the guard may start.
+_GUARD_OPS = frozenset(
+    ("movsi", "movax", "rt", "strfn", "strconcat", "xorax", "trap_hook")
+)
+
+
+def _str_arm_anchor_at(state, i, temp):
+    """Index of the `strcmp` closing a string arm header starting at `i`.
+
+    The two calibrated headers -- a pooled literal and a bare `CHR$(n)` -- have
+    fixed two-op prefixes. A guard that is a real expression does not: wild
+    nvg.exe matches an arrow key with `CASE CHR$(0) + CHR$(72)`, five ops. What
+    is invariant is the anchor the compiler puts at the END of every guard,
+    `movsi [temp]; rt 9C; strcmp`, comparing against the SELECT's own scratch
+    cell. Find that, and let the ordinary dispatch evaluate whatever built the
+    value -- it lands on the string stack like any other expression.
+
+    Returns None when no anchor is within reach or an op between is not
+    something a guard is built from.
+    """
+    img = state.image
+    for j in range(i, min(i + 12, len(img.ops) - 2)):
+        if (
+            _kind_at(state, j) == "movsi"
+            and img.ops[j][2] == temp
+            and _kind_at(state, j + 1) == "rt"
+            and img.ops[j + 1][2] == 0x9C
+            and _kind_at(state, j + 2) == "strcmp"
+        ):
+            if j == i:
+                return None  # no guard at all between here and the compare
+            return j + 2
+        if _kind_at(state, j) not in _GUARD_OPS:
+            return None
+    return None
+
+
+def _str_guard_arm(state, cmp_k, guard):
+    """Shared tail for a matched string-arm guard header (`strcmp` at `cmp_k`,
+    jcc at cmp_k+1, jmp at cmp_k+2). Mirrors the numeric arm's
     own cc==0x75(JNE, value-list non-final)/cc==0x74(JE, final/only) split
     exactly -- structural position alone can't distinguish them (a
     non-final guard's mismatch branch and a final guard's match branch
@@ -100,18 +139,19 @@ def _str_guard_arm(state, k, guard):
     "4"` needs the non-final path; every single-guard CASE calibrated
     before this only ever exercised the final path)."""
     i, c = state.image, state.control
-    jcc = i.ops[k + 5]
+    jcc = i.ops[cmp_k + 1]
     c.cases[-1].cur_guards.append(ir.CaseValue(guard))
     if jcc[2] in (0x72, 0x73, 0x75, 0x76, 0x77):  # range/non-final guard
-        state.seek(k + 7)
+        state.seek(cmp_k + 3)
         c.cur = None
         return True
     if jcc[2] == 0x74:  # JE: literal final/only guard -> begin body
-        next_test = i.ops[k + 6][2]
-        _begin_body(state, k + 7, next_test)
+        next_test = i.ops[cmp_k + 2][2]
+        _begin_body(state, cmp_k + 3, next_test)
         return True
     raise ValueError(
-        f"SELECT CASE string arm: unexpected jcc {jcc[2]:02x} at {i.ops[k][0]:#x}"
+        f"SELECT CASE string arm: unexpected jcc {jcc[2]:02x} "
+        f"at {i.ops[cmp_k][0]:#x}"
     )
 
 
@@ -518,6 +558,7 @@ def _step(state):
             and (
                 _is_str_arm_header_at(state, _hdr, op[2])
                 or _is_str_arm_header_chr_at(state, _hdr, op[2])
+                or _str_arm_anchor_at(state, _hdr, op[2]) is not None
             )
         ):
             state.branch(
@@ -539,7 +580,7 @@ def _step(state):
             and c.cases[-1].body_jmp is None
             and _is_str_arm_header_at(state, c.k, c.cases[-1].temp)
         ):
-            return _str_guard_arm(state, c.k, state._pool_str(op[2]))
+            return _str_guard_arm(state, c.k + 4, state._pool_str(op[2]))
         # (3b-chr) String arm, computed CHR$(n) guard: movax n; strfn CHR$; movsi
         # temp; rt; strcmp; je body; jmp next; body -- same tail/positions as
         # (3b), just a computed value instead of a pooled literal/variable.
@@ -549,7 +590,27 @@ def _step(state):
             and c.cases[-1].body_jmp is None
             and _is_str_arm_header_chr_at(state, c.k, c.cases[-1].temp)
         ):
-            return _str_guard_arm(state, c.k, ir.Call("CHR$", (ir.Lit(op[2]),)))
+            return _str_guard_arm(state, c.k + 4, ir.Call("CHR$", (ir.Lit(op[2]),)))
+        # (3b-any) String arm with a COMPUTED guard: the value is whatever the
+        # ordinary dispatch just pushed, and this is its anchor -- `movsi
+        # [temp]; rt 9C; strcmp` against the SELECT's own scratch cell (wild
+        # nvg.exe: `CASE CHR$(0) + CHR$(72)`). The two branches above stay as
+        # they are: they recognise their guard from the ops alone and never
+        # let it reach the string stack, so this one must come last.
+        if (
+            c.cases
+            and c.cases[-1].is_string
+            and c.cases[-1].body_jmp is None
+            and kind == "movsi"
+            and op[2] == c.cases[-1].temp
+            and _kind_at(state, c.k + 1) == "rt"
+            and i.ops[c.k + 1][2] == 0x9C
+            and _kind_at(state, c.k + 2) == "strcmp"
+            and _kind_at(state, c.k + 3) == "jcc"
+            and _kind_at(state, c.k + 4) == "jmp"
+            and e.sstack
+        ):
+            return _str_guard_arm(state, c.k + 2, e.sstack.pop())
         # (3.5) IS-relational arm: materialized-boolean compare idiom.
         if (
             c.cases

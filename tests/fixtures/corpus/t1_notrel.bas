@@ -1,0 +1,3 @@
+INPUT A$
+IF NOT A$ = "x" THEN PRINT 1
+END

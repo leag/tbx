@@ -1,0 +1,24 @@
+# v10_t1_notrel dialect=1.0 start=071E0
+071E3:input:304:0
+071EA:read_str
+071ED:movsi:288
+071F0:strassign
+071F2:movsi:288
+071F5:rt:156
+071F7:movsi:308
+071FA:rt:156
+071FC:strcmp
+071FE:movax:65535
+07201:jcc:116:29188
+07203:incax
+07204:notax
+07206:orax
+07208:jcc:117:29197
+0720A:jmp:29206
+0720D:fld1
+07210:rt:187
+07212:rt:184
+07216:end
+07219:epilogue
+# commits
+07214

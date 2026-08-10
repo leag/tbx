@@ -1,0 +1,3 @@
+10 INPUT A$
+20 IF NOT A$ = "x" THEN PRINT 1
+30 END

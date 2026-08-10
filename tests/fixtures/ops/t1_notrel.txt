@@ -1,0 +1,24 @@
+# t1_notrel dialect=1.1 start=08830
+08833:input:304:0
+0883A:read_str
+0883D:movsi:288
+08840:strassign
+08842:movsi:288
+08845:rt:156
+08847:movsi:308
+0884A:rt:156
+0884C:strcmp
+0884E:movax:65535
+08851:jcc:116:34900
+08853:incax
+08854:notax
+08856:orax
+08858:jcc:117:34909
+0885A:jmp:34918
+0885D:fld1
+08860:rt:187
+08862:rt:184
+08866:end
+08869:epilogue
+# commits
+08864

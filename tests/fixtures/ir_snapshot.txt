@@ -5502,6 +5502,11 @@ End()
 Assign(target=Var(name='A$'), value=StrLit(value='Q'))
 Goto(target=BodyLine(stmt=2, phys=3))
 
+## t1_notrel
+Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
+IfInline(cond=Not(operand=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='x'))), body=(Print(items=(Lit(value=1),), newline=True, file=None, commas=None),), else_body=None)
+End()
+
 ## t1_notron
 Assign(target=Var(name='A%'), value=Lit(value=1))
 Assign(target=Var(name='B%'), value=Lit(value=2))
@@ -6328,6 +6333,11 @@ Assign(target=Var(name='A$'), value=StrLit(value='Y'))
 SelectCase(selector=Var(name='A$'), arms=(CaseArm(guards=(CaseValue(value=Call(name='CHR$', args=(Lit(value=88),))), CaseValue(value=Call(name='CHR$', args=(Lit(value=89),))), CaseValue(value=StrLit(value='Z'))), body=(Print(items=(StrLit(value='MATCH'),), newline=True, file=None, commas=None),)),), case_else=(Print(items=(StrLit(value='NOMATCH'),), newline=True, file=None, commas=None),))
 End()
 Return(target=None)
+
+## t1_selchrcat
+Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
+SelectCase(selector=Var(name='A$'), arms=(CaseArm(guards=(CaseValue(value=BinOp(op='+', lhs=Call(name='CHR$', args=(Lit(value=0),)), rhs=Call(name='CHR$', args=(Lit(value=72),)))),), body=(Print(items=(Lit(value=1),), newline=True, file=None, commas=None),)), CaseArm(guards=(CaseValue(value=StrLit(value='q')),), body=(Print(items=(Lit(value=2),), newline=True, file=None, commas=None),))), case_else=None)
+End()
 
 ## t1_selelsetarget
 SubDef(name='SUB1', params=('A%', 'B$', 'C%'), body=(IfBlock(arms=((LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='a')), rhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='b'))), (SelectCase(selector=Var(name='A%'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=3)),), body=(Print(items=(StrLit(value='three'),), newline=True, file=None, commas=None),)),), case_else=(Print(items=(StrLit(value='other'),), newline=True, file=None, commas=None), IfInline(cond=RelOp(op='>', lhs=Var(name='C%'), rhs=Lit(value=2)), body=(Print(items=(StrLit(value='flon'),), newline=True, file=None, commas=None),), else_body=None))), SelectCase(selector=Var(name='B$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='a')),), body=(Print(items=(StrLit(value='AA'),), newline=True, file=None, commas=None),)),), case_else=(Print(items=(StrLit(value='BB'),), newline=True, file=None, commas=None),)))),), else_body=None),))
@@ -12354,6 +12364,11 @@ End()
 Assign(target=Var(name='A$'), value=StrLit(value='Q'))
 Goto(target=BodyLine(stmt=2, phys=3))
 
+## v10_t1_notrel
+Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
+IfInline(cond=Not(operand=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='x'))), body=(Print(items=(Lit(value=1),), newline=True, file=None, commas=None),), else_body=None)
+End()
+
 ## v10_t1_notron
 Assign(target=Var(name='A%'), value=Lit(value=1))
 Assign(target=Var(name='B%'), value=Lit(value=2))
@@ -12977,6 +12992,11 @@ Assign(target=Var(name='A$'), value=StrLit(value='Y'))
 SelectCase(selector=Var(name='A$'), arms=(CaseArm(guards=(CaseValue(value=Call(name='CHR$', args=(Lit(value=88),))), CaseValue(value=Call(name='CHR$', args=(Lit(value=89),))), CaseValue(value=StrLit(value='Z'))), body=(Print(items=(StrLit(value='MATCH'),), newline=True, file=None, commas=None),)),), case_else=(Print(items=(StrLit(value='NOMATCH'),), newline=True, file=None, commas=None),))
 End()
 Return(target=None)
+
+## v10_t1_selchrcat
+Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
+SelectCase(selector=Var(name='A$'), arms=(CaseArm(guards=(CaseValue(value=BinOp(op='+', lhs=Call(name='CHR$', args=(Lit(value=0),)), rhs=Call(name='CHR$', args=(Lit(value=72),)))),), body=(Print(items=(Lit(value=1),), newline=True, file=None, commas=None),)), CaseArm(guards=(CaseValue(value=StrLit(value='q')),), body=(Print(items=(Lit(value=2),), newline=True, file=None, commas=None),))), case_else=None)
+End()
 
 ## v10_t1_selelsetarget
 SubDef(name='SUB1', params=('A%', 'B$', 'C%'), body=(IfBlock(arms=((LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='a')), rhs=RelOp(op='=', lhs=Var(name='B$'), rhs=StrLit(value='b'))), (SelectCase(selector=Var(name='A%'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=3)),), body=(Print(items=(StrLit(value='three'),), newline=True, file=None, commas=None),)),), case_else=(Print(items=(StrLit(value='other'),), newline=True, file=None, commas=None), IfInline(cond=RelOp(op='>', lhs=Var(name='C%'), rhs=Lit(value=2)), body=(Print(items=(StrLit(value='flon'),), newline=True, file=None, commas=None),), else_body=None))), SelectCase(selector=Var(name='B$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='a')),), body=(Print(items=(StrLit(value='AA'),), newline=True, file=None, commas=None),)),), case_else=(Print(items=(StrLit(value='BB'),), newline=True, file=None, commas=None),)))),), else_body=None),))

@@ -10127,3 +10127,39 @@ off, 78.94% identical, delta -13824. football.exe decodes but its emitted
 source did not get through the v86 harness this run (a harness error, not a
 compiler diagnostic), so it stays out of the manifest until someone measures
 it.
+
+## Gap: nvg.exe, three separate things behind one message
+
+`displacement 0xeee is neither scalar nor array element` was the first of
+three, and each one hid the next.
+
+1. **A pooled INT literal on the left of a bitwise fold.** `_int_index_mul`
+   already reads one for `imul_m`; `andax_m`/`orax_m`/`xorax_m` did not. The
+   same expression in nvg folds `imul_m` against the pool cell holding 1 and
+   `andax_m` against the one holding 15 -- only the multiply had the fallback.
+   This also advanced wild pw.exe.
+2. **A CASE guard that is an expression.** The two calibrated string-arm
+   headers have fixed two-op prefixes (a pooled literal, a bare `CHR$(n)`).
+   nvg matches an arrow key with `CASE CHR$(0) + CHR$(72)` -- five ops. What is
+   invariant is the anchor at the END of every guard, `movsi [temp]; rt 9C;
+   strcmp` against the SELECT's own scratch cell. `_str_arm_anchor_at` finds
+   that and lets ordinary dispatch evaluate whatever built the value, which
+   lands on the string stack like any other expression. Fixture t1_selchrcat.
+3. **`NOT <relational>` could not be rendered at all**, and did not get its
+   names re-lettered. `unparse_cond` had no `Not` case, so it fell through to
+   `unparse`, which does not know RelOp; and `walk_cond` had none either, so
+   `walk`'s Not branch recursed through `walk`, which hands a RelOp back
+   untouched -- the same variable came out `A$` in one statement and `V0120$`
+   in the condition of the next. Fixture t1_notrel.
+
+The parens on a NOT are decided by precedence in BOTH directions, and getting
+that wrong is silent. NOT binds LOOSER than the relationals, so `IF NOT A$ =
+"x"` already means `NOT (A$ = "x")` -- oracle-checked identical bytes, and the
+bare spelling is canonical. It binds TIGHTER than AND/OR, so a logical operand
+keeps its parens; dropping them turned wild tamstart.exe's `LOOP WHILE NOT
+((AC% >= 0) AND AC% < 7)` into `NOT (AC% >= 0) AND AC% < 7`, a different
+program. The rule now mirrors `unparse`'s own exactly, so no shape that already
+rendered can move.
+
+Wild corpus 94 -> 95 decode-ok of 108; pw.exe advanced to `unhandled op
+midassign3`.

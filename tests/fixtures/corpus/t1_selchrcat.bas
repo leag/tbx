@@ -1,0 +1,8 @@
+INPUT A$
+SELECT CASE A$
+  CASE CHR$(0) + CHR$(72)
+    PRINT 1
+  CASE "q"
+    PRINT 2
+END SELECT
+END

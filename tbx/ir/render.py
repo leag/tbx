@@ -267,6 +267,26 @@ def unparse_cond(c) -> str:
             swapped = {"=": "=", "<>": "<>", "<": ">", ">": "<", "<=": ">=", ">=": "<="}
             return f"{unparse(c.rhs.inner)} {swapped[c.op]} {unparse(c.lhs)}"
         return f"{unparse(c.lhs)} {c.op} {unparse(c.rhs)}"
+    if isinstance(c, Not):
+        # `NOT` is a condition-level operator here, and its operand can be a
+        # relational, which `unparse` cannot render on its own.
+        #
+        # Precedence decides the parens, in both directions. NOT binds LOOSER
+        # than the relationals, so `IF NOT A$ = "x"` already means
+        # `NOT (A$ = "x")` -- both spellings compile to identical bytes
+        # (checked against the oracle) and the bare one is canonical
+        # (t1_notrel). It binds TIGHTER than AND/OR, so a LogOp operand must
+        # keep its parens: dropping them turns `NOT (A AND B)` into
+        # `(NOT A) AND B` (caught on wild tamstart.exe, whose `LOOP WHILE NOT
+        # ((AC% >= 0) AND AC% < 7)` silently changed meaning).
+        if isinstance(c.operand, (LogOp, BinOp, Neg, Not)):
+            # Exactly `unparse`'s own rule for a NOT operand, so every shape
+            # that already rendered keeps its spelling; only the RelOp operand
+            # `unparse` could not render at all is new here. A logical AND/OR
+            # arrives as either LogOp or BinOp depending on which recognizer
+            # built it, and both need the parens.
+            return f"NOT ({unparse_cond(c.operand)})"
+        return f"NOT {unparse_cond(c.operand)}"
     if isinstance(c, Group):
         return f"({unparse_cond(c.inner)})"
     return unparse(c)

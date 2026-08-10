@@ -99,6 +99,13 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             return ir.LogOp(c.op, walk_cond(c.lhs), walk_cond(c.rhs))
         if isinstance(c, ir.RelOp):
             return ir.RelOp(c.op, walk(c.lhs), walk(c.rhs))
+        if isinstance(c, ir.Not):
+            # `walk`'s own Not branch recurses through `walk`, which does not
+            # know RelOp and hands it back untouched -- so `NOT A$ = "x"` kept
+            # the raw `V0120$` spelling in the condition while the same
+            # variable was re-lettered everywhere else (t1_notrel; wild
+            # nvg.exe). A NOT in condition position takes a condition.
+            return ir.Not(walk_cond(c.operand))
         return walk(c)  # bare numeric-truthiness condition (no explicit
         # compare in source, e.g. `LOOP UNTIL LEN(K$)` -- wild metric.exe)
 

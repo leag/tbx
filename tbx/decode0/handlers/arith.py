@@ -1260,7 +1260,18 @@ def int_bitwise_m(state: DecodeState, op, addr, kind) -> bool:
     m = state.machine
     if kind in ("andax_m", "orax_m", "xorax_m"):  # bitwise fold, mem on the left
         comb = {"andax_m": "AND", "orax_m": "OR", "xorax_m": "XOR"}[kind]
-        m.ax = ir.BinOp(comb, state.loc(op[2]), _rgrp(comb, m.ax))
+        try:
+            mem = state.loc(op[2])
+        except ValueError:
+            # A pooled INTEGER literal as the left operand, exactly as
+            # `_int_index_mul` already reads one for `imul_m` -- the same
+            # expression in wild nvg.exe folds `imul_m` against the pool cell
+            # holding 1 and `andax_m` against the one holding 15, and only the
+            # multiply had the fallback.
+            if op[2] < state.layout_state.lay["pool_base"] - 4:
+                raise
+            mem = state.pool_lit(op[2])
+        m.ax = ir.BinOp(comb, mem, _rgrp(comb, m.ax))
         state.advance()
         return True
     return False
