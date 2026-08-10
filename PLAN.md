@@ -10235,10 +10235,19 @@ A guard can also be a multi-argument intrinsic whose arguments shuttle through
 bx (`CASE MID$(s$, 2, 5)`, wild pw.exe), so `movbxax`/`movrr` join the ops a
 guard may be built from. Fixture t1_selmidguard (+v10_).
 
-pw.exe DECODES now, but does not yet emit: an `IfGoto` inside a SUB body holds
-an unresolved `('addr', 0xa4d5)` -- a target that is a real op (a `movm_imm`
-just past a `dim_end`) in MAIN-line code, which a SUB body cannot legally jump
-to. Something is attributed to the wrong body; that is the next gap on this
-file, and it is emit-side, not decode-side.
+pw.exe DECODES now, but does not yet emit, and the reason is not what the
+symptom says. An `IfGoto` inside SUB16 keeps a raw `('addr', 0xa4d5)`, but that
+address is an ordinary in-body op and SUB16 really does span 0xa12e..0xa517, so
+`map_body` would have handled it. `_resolve_targets` never got there: it raised
+`jump target 0xb67fa51 is not a statement start` and wild recovery kept the
+whole UNRESOLVED list. EVERY target in the program is raw, not just this one.
+
+0xb67fa51 comes from `on_error`, about twenty of them, all with that same
+impossible value -- far past the end of a 0x28000-byte image. pw is a
+MULTI-SEGMENT program (far procedures closing in `retf`, far_calls across
+segments) whose ON ERROR handlers live in another code segment, and the target
+is computed as if the segment part were an offset. That is the "multi-segment
+code, big lift" item, recorded as RO-PW-EMIT-BODYLINE-IS-THE-GAP so the next
+reader does not start at the body-line machinery the symptom points to.
 
 Wild corpus 95 -> 96 decode-ok of 108, 7 failures.

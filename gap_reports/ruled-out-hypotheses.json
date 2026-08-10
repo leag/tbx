@@ -782,6 +782,26 @@
    ],
    "instead": "CLOSED as a scan gap, and the scan note in this entry was the right lead: `26 03 06 disp16` was recorded as the DS-relative `addax_m`, dropping the segment prefix, so the element read became displacement 0. It is now `far_addax_disp`, the fold sibling of the `far_movm_ax_disp` store, and falls back to the DGROUP reading when no array segment is pending. pw.exe still stops at the same address for a DIFFERENT reason: its layout does not know array block 0x666 ('array block missing from layout'), so no segment is pending -- that is the DGROUP-layout cluster, not this. Method note: three probes chasing a KEYWORD failed, and the answer was that there was no keyword.",
    "source": "wild-corpus session 2026-08-09"
+  },
+  {
+   "id": "RO-PW-EMIT-BODYLINE-IS-THE-GAP",
+   "title": "pw.exe's unresolved ('addr', 0xa4d5) is a body-line addressing gap",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/pw.exe"
+   ],
+   "signatures": [
+    "KeyError: ('addr', 42197)"
+   ],
+   "hypothesis": "An IfGoto inside SUB16 keeps a raw ('addr', 0xa4d5) target, so `_resolve_targets` failed to map that address to a BodyLine and the body-line machinery is what needs work.",
+   "negative_evidence": [
+    "0xa4d5 is a perfectly ordinary in-body address (a `movm_imm` just past a `dim_end`), and SUB16 really does span 0xa12e..0xa517, so the target is legitimate and `map_body` would have handled it.",
+    "`_resolve_targets` never got that far: it raised `jump target 0xb67fa51 is not a statement start` and wild recovery kept the UNRESOLVED statement list, which is why a raw tuple reached emit. Every jump target in the program is unresolved, not just this one.",
+    "0xb67fa51 comes from `on_error`, and there are ~20 of them, all with the same impossible value -- far past the end of a 0x28000-byte image."
+   ],
+   "instead": "pw.exe is a MULTI-SEGMENT program (far procedures closing with `retf`, far_calls across segments), and its ON ERROR handlers live in another code segment: the target is being computed as if the segment part were an offset. Work the far/segmented address computation for `on_error` -- the whole file's target resolution is downstream of it. This is the 'multi-segment code, big lift' item from the corpus notes, and pw.exe DECODES today; only emission is blocked.",
+   "source": "wild-corpus session 2026-08-09"
   }
  ]
 }
