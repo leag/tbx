@@ -7087,6 +7087,11 @@ Assign(target=Var(name='D%'), value=Lit(value=1))
 CallStmt(name='SUB1', args=(Var(name='C$'), Var(name='D%')))
 End()
 
+## t1_wideif
+Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
+IfBlock(arms=((LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD00')), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD01'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD02'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD03'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD04'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD05'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD06'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD07'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD08'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD09'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD10'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD11'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD12'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD13'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD14'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD15'))), (Print(items=(StrLit(value='yes'),), newline=True, file=None, commas=None),)),), else_body=(Print(items=(StrLit(value='no'),), newline=True, file=None, commas=None),))
+End()
+
 ## t1_width
 Width(cols=Lit(value=80), device=None, file=None)
 End()
@@ -13576,6 +13581,11 @@ SubDef(name='SUB1', params=('A$', 'B%'), body=(Do(kind='WHILE', cond=RelOp(op='<
 Assign(target=Var(name='C$'), value=StrLit(value='001'))
 Assign(target=Var(name='D%'), value=Lit(value=1))
 CallStmt(name='SUB1', args=(Var(name='C$'), Var(name='D%')))
+End()
+
+## v10_t1_wideif
+Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
+IfBlock(arms=((LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=LogOp(op='OR', lhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD00')), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD01'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD02'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD03'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD04'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD05'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD06'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD07'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD08'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD09'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD10'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD11'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD12'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD13'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD14'))), rhs=RelOp(op='=', lhs=Var(name='A$'), rhs=StrLit(value='KEYWORD15'))), (Print(items=(StrLit(value='yes'),), newline=True, file=None, commas=None),)),), else_body=(Print(items=(StrLit(value='no'),), newline=True, file=None, commas=None),))
 End()
 
 ## v10_t1_width

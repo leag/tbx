@@ -1163,6 +1163,37 @@ def _drop_local_descriptor_initializers(state, frame, span, addr) -> None:
 
 
 
+def _fn_body_opens_here(ops, k) -> bool:
+    """Whether ops[k] is the first op of a block DEF FN body.
+
+    A DEF FN has no `proc_enter` to mark its entry, so the body is recognized
+    by the compiler's own bracket instead: every definition in the declaration
+    region is skipped by a jmp of its own (see the chained skip-jmp in the
+    dispatch loop), and a DEF FN's lands exactly on the op after its `fn_ret`.
+    That jmp is the compiler saying "a body begins on the far side of me", and
+    it is the only evidence available before the body is walked.
+
+    The declaration region holds more than definitions. A GOSUB subroutine
+    compiled ahead of the main entry sits there too and ends in `ret`, not
+    `fn_ret`. Taking "first op in the region with no open frame" as the entry
+    opened a DEF FN body on such a subroutine and then swallowed everything up
+    to the NEXT real fn_ret -- in wild crossref.exe, 0x11a72's ON ERROR/CHR$
+    run plus two whole SUBs, so the actual DEF FN at 0x11cba never got a frame
+    and its LOCAL zero-fill was discarded as an orphan (surfacing much later as
+    `ERASE of undimensioned LOCAL block at 0x12b44`).
+    """
+    if k == 0 or ops[k - 1][1] != "jmp":
+        return False
+    ret_k = next(
+        (j for j, o in enumerate(ops[k:], k) if o[1] == "fn_ret"), None
+    )
+    return (
+        ret_k is not None
+        and ret_k + 1 < len(ops)
+        and ops[k - 1][2] == ops[ret_k + 1][0]
+    )
+
+
 def _erase_named(control) -> set:
     """The open body's ERASE-named LOCAL array blocks (empty outside a body)."""
     frame = control.proc_frame if control.proc_frame is not None else control.fn_frame
@@ -4962,6 +4993,7 @@ def _decode_user_code(
             and img.main_start is not None
             and addr < img.main_start
             and kind != "proc_enter"
+            and _fn_body_opens_here(img.ops, c.k)
         ):
             ret_k = next(
                 j for j, o in enumerate(img.ops[c.k :], c.k) if o[1] == "fn_ret"

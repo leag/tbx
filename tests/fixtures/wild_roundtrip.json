@@ -330,7 +330,7 @@
    "sha256": "242b151c0db7701431ee63e24df73940804463a48ca65881c1f1a3532757ae07",
    "bytes": 55526,
    "statements": 1174,
-   "source_bytes": 29538,
+   "source_bytes": 29575,
    "toggles": "K",
    "build_match": 97,
    "roundtrip": "code-or-metadata",

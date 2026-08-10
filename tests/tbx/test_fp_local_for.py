@@ -17,22 +17,21 @@ def test_scan_testw_bp_is_exact():
     assert ops == [(0, "testw_bp", 0x18, 0x8000)]
 
 
-@pytest.mark.parametrize(
-    ("stem", "exc", "next_gap"),
-    [
-        # Advanced past the [bp+68] string store once INPUT into a DEF FN
-        # string parameter was recovered (t1_fninput); this records where it
-        # stops NOW, which is the LOCAL-array ERASE whose own DIM the decoder
-        # has not seen.
-        ("crossref.exe", ValueError, r"ERASE of undimensioned LOCAL block"),
-    ],
-)
-def test_fp_local_for_advances_wild_program(stem, exc, next_gap):
+@pytest.mark.parametrize("stem", ["crossref.exe"])
+def test_fp_local_for_advances_wild_program(stem):
+    """crossref.exe decodes end to end.
+
+    It stopped at a [bp+68] string store until INPUT into a DEF FN string
+    parameter was recovered (t1_fninput), then at `ERASE of undimensioned
+    LOCAL block` -- which turned out to be a body-recognition failure, not a
+    naming one: a GOSUB subroutine ahead of the main entry was mistaken for a
+    DEF FN body, so the real DEF FN never opened a frame of its own
+    (`_fn_body_opens_here`).
+    """
     from conftest import wild_hits_bytes
 
     data = wild_hits_bytes(stem)
-    with pytest.raises(exc, match=next_gap):
-        decode0.decode_user_code(data)
+    assert tuple(decode0.decode_user_code(data))
 
 
 @pytest.mark.parametrize("stem", ["t1_fnlocalarrstr", "v10_t1_fnlocalarrstr"])

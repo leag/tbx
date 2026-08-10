@@ -9949,3 +9949,53 @@ Session-persistent notes live in the auto-memory file `wild-tb-corpus.md`
 (gap history, unwitnessable cases, corpus caveats — e.g. wild EXEs may
 never verify byte-exact against the oracle due to runtime-revision skew,
 so they are never promoted; only authored probes are).
+
+## Gap: a GOSUB subroutine mistaken for a DEF FN body (crossref.exe)
+
+A DEF FN has no `proc_enter`, so the decoder opened a body at "the first op in
+the declaration region with no open frame". The declaration region is not only
+definitions: a GOSUB subroutine compiled ahead of the main entry sits there
+too, and it ends in `ret`, not `fn_ret`.
+
+crossref.exe has one at 0x11a72 (`ON ERROR`, a run of `CHR$` assignments,
+`ret`). A frame opened there and ran to the NEXT fn_ret at 0x12b68, swallowing
+the subroutine, two whole SUBs, and the real DEF FN at 0x11cba. That DEF FN
+never got a frame, so its LOCAL zero-fill was discarded ("ignoring orphan LOCAL
+zero-fill at 11cc4") and the failure surfaced 0x1000 bytes later as `ERASE of
+undimensioned LOCAL block at 0x12b44` -- which is why two ledger entries chased
+naming and frame-closing before this.
+
+`_fn_body_opens_here` asks the compiler instead: every definition in the region
+is skipped by a jmp of its own, and a DEF FN's lands exactly on the op after its
+`fn_ret`. 0x11cb7's `jmp 0x12b6a` brackets the real body; 0x11a6f's `jmp
+0x1409b` brackets nothing. Wild corpus 89 -> 90 decode-ok of 108.
+
+crossref.exe is NOT added to `wild_roundtrip.json`: its emitted source does not
+compile yet. Seven `IF` conditions run to 430 characters -- it tests its input
+against every Turbo Basic reserved word -- and they live in a DEF FN whose
+interior physical lines the line table addresses (`ir.BodyLine`). See below.
+
+### Folding an over-wide condition, and where it must be refused
+
+`_wrap_condition` folds a long top-level AND/OR chain over `_` continuations,
+the fifth over-wide shape after ON GOSUB, DIM, DATA and colon-joined lines.
+Fixture t1_wideif (+v10_) is the byte-exact proof: a 324-character condition,
+folded by us at a different point than the author folded it, recompiles
+identically in both dialects.
+
+It is refused where a physical line is itself an address. `ir.BodyLine` names a
+line by its offset inside the block, and a trace hook does the same, so a
+continuation renumbers every line below it -- the emitter then stamps a line
+number onto the continuation and TB rejects it (`Error 471`). crossref's widest
+conditions are exactly there and stay unfolded; `_OVER_WIDE_WILD` records that,
+and picking fold points that keep every addressed offset on a statement start
+is the open problem.
+
+### Baseline: number.exe
+
+Its recorded `source_bytes` had been stale since 781025a, which taught the
+decoder to read an integer array at a constant index: `PRINT 8248` (a garbage
+constant) became `PRINT V7%(1)`, 37 characters across the file. The oracle
+measurement is unchanged either way -- 1450 bytes off, 97.53% identical, delta
+-160, re-measured today -- so this re-records an intended improvement, not a
+regression. The suite had been red on it since.

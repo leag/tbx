@@ -36,6 +36,8 @@ import pytest
 
 from tbx import decode0, emit0, ir
 
+_CORPUS = Path(__file__).resolve().parents[1] / "fixtures" / "corpus"
+
 #: Turbo Basic Owner's Handbook (1987), editor limits.
 EDITOR_LINE_LIMIT = 248
 #: "The editor integrated within Turbo Basic allows source programs to be no
@@ -82,11 +84,22 @@ def test_no_fixture_emits_a_line_the_editor_would_reject():
     assert not over, f"{len(over)} fixtures emit an over-wide line: {over[:5]}"
 
 
-def test_no_wild_program_emits_an_over_wide_line():
-    """The wild corpus is where every one of these was found, and is now clean.
+#: The one wild program that still emits a line the editor cannot hold, and
+#: why it is not simply folded like every other over-wide shape here.
+#: crossref.exe's reserved-word tests are `IF` conditions of up to 430
+#: characters, and they sit inside a DEF FN body whose interior physical lines
+#: the compiler's line table addresses (`ir.BodyLine`). A `_` continuation
+#: there renumbers every line below the fold and puts a line number on the
+#: continuation itself, which does not compile -- so the fold is refused
+#: (`emit0.fold_conditions`) and the width is the honest remaining gap.
+_OVER_WIDE_WILD = {"crossref.exe"}
 
-    help.exe's 56-target `ON L% GOSUB` was the last one, at 364 characters; it
-    folds over `_` continuations now.
+
+def test_no_wild_program_emits_an_over_wide_line():
+    """The wild corpus is where every one of these was found.
+
+    help.exe's 56-target `ON L% GOSUB` was one, at 364 characters; it folds
+    over `_` continuations now. `_OVER_WIDE_WILD` is what is left.
     """
     from conftest import wild_hits_bytes
 
@@ -98,10 +111,18 @@ def test_no_wild_program_emits_an_over_wide_line():
             widest = _widest(exe.read_bytes())
         except Exception:
             continue
-        if widest > EDITOR_LINE_LIMIT:
+        if widest > EDITOR_LINE_LIMIT and exe.name not in _OVER_WIDE_WILD:
             over.append((exe.name, widest))
 
     assert not over, f"{len(over)} wild programs emit an over-wide line: {over}"
+
+
+def test_the_recorded_over_wide_program_really_is_still_over_wide():
+    """`_OVER_WIDE_WILD` is an exception list, so it has to stay earned."""
+    from conftest import wild_hits_bytes
+
+    for name in sorted(_OVER_WIDE_WILD):
+        assert _widest(wild_hits_bytes(name)) > EDITOR_LINE_LIMIT, name
 
 
 def test_a_wide_dim_comma_list_folds_with_continuation():
@@ -123,6 +144,54 @@ def test_a_wide_dim_comma_list_folds_with_continuation():
 
     assert all(len(ln) <= EDITOR_LINE_LIMIT for ln in source.split("\n"))
     assert " _\n" in source, "expected a `_` continuation fold, got one physical line"
+
+
+def test_a_wide_block_if_condition_folds_with_continuation():
+    """A fifth over-wide shape: a long OR chain testing one string.
+
+    Real source does this whenever it matches an input against a keyword set
+    -- wild crossref.exe tests against every Turbo Basic reserved word, up to
+    430 characters on one `IF`. `_` continuation at an operator boundary is
+    the only lever (there is nothing to divide into separate statements), and
+    fixture t1_wideif is the byte-exact proof it compiles the same folded:
+    its 324-character condition round-trips in both dialects.
+    """
+    program = decode0.decode_user_code(
+        (_CORPUS / "t1_wideif.exe").read_bytes()
+    )
+
+    source = emit0.emit(program).rstrip()
+
+    assert all(len(ln) <= EDITOR_LINE_LIMIT for ln in source.split("\n"))
+    assert " _\n" in source, "expected a `_` continuation fold, got one physical line"
+
+
+def test_a_condition_is_not_folded_inside_a_line_addressed_block():
+    """The fold is refused where a physical line is itself an address.
+
+    A `ir.BodyLine` target names a line by its offset inside the block, so
+    inserting a continuation renumbers everything below it -- and the emitter
+    then stamps a line number onto the continuation, which does not compile.
+    crossref.exe is the witness: its widest conditions live in exactly such a
+    DEF FN, and stay unfolded (see `_OVER_WIDE_WILD`).
+    """
+    from conftest import wild_hits_bytes
+
+    source = emit0.emit(
+        decode0.decode_user_code(wild_hits_bytes("crossref.exe"))
+    )
+
+    lines = source.split("\n")
+    continued = [
+        line
+        for prev, line in zip(lines, lines[1:])
+        if prev.rstrip().endswith(" _")
+    ]
+    assert continued, "crossref.exe should still fold something"
+    for line in continued:
+        assert not line.split(" ", 1)[0].isdigit(), (
+            f"a line number landed on a continuation line: {line[:60]!r}"
+        )
 
 
 def test_a_wide_data_list_keeps_one_statement_boundary():

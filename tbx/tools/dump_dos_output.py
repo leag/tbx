@@ -45,6 +45,9 @@ KEYS = {
     "t1_inp": '[{"wait":"?","send":"5\\r"},{"wait":"?","count":2,"send":"ab\\r"}]',
     # INPUT inside a DEF FN body writes the function's own string parameter.
     "t1_fninput": '[{"wait":"?","send":"ab\\r"}]',
+    # The 324-character OR chain takes the ELSE arm on any lowercase answer,
+    # which is all the oracle's scancode typing can send.
+    "t1_wideif": '[{"wait":"?","send":"ab\\r"}]',
     "t1_inp2": '[{"wait":"X","send":"3\\r"}]',
     "t1_inp4": '[{"wait":"X","send":"ab\\r"}]',
     "t1_sarr2": '[{"wait":"?","send":"3\\r"}]',

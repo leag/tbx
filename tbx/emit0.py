@@ -476,6 +476,47 @@ def _wrap_continued(head: str, items: list[str], col: int, sep=",") -> str:
     return "\n".join(lines)
 
 
+def _wrap_condition(head: str, cond, col: int, tail: str) -> str | None:
+    """`head` + a folded top-level AND/OR chain + `tail`, or None.
+
+    The `+`-chain sibling of `_flatten_plus_chain`, for the other construct
+    that grows without bound in real source: a keyword test written as one
+    long chain of comparisons (wild crossref.exe tests its input against every
+    Turbo Basic reserved word -- 430 characters on one `IF ... THEN`). Like
+    every other fold here the break is a pure lexer-level line splice, so the
+    folded and unfolded spellings compile identically.
+
+    Returns None when the condition is not such a chain, or when re-joining
+    the rendered terms does not reproduce `unparse_cond` character for
+    character -- the operators are uniform-precedence and left-associative, so
+    it normally does, but a fold that changed the text would change what
+    compiles and is not worth guessing at.
+    """
+    terms: list[str] = []
+    seps: list[str] = []
+
+    def walk(e):
+        if isinstance(e, ir.LogOp):
+            walk(e.lhs)
+            seps.append(f" {e.op}")
+            terms.append(ir.unparse_cond(e.rhs))
+        else:
+            terms.append(ir.unparse_cond(e))
+
+    walk(cond)
+    if len(terms) < 2:
+        return None
+    rejoined = terms[0]
+    for sep, term in zip(seps, terms[1:]):
+        rejoined += f"{sep} {term}"
+    if rejoined != ir.unparse_cond(cond):
+        return None
+    wrapped = _wrap_continued(head, terms, col, sep=seps)
+    lines = wrapped.split("\n")
+    lines[-1] += tail
+    return "\n".join(lines)
+
+
 def _flatten_plus_chain(e) -> list[str]:
     """Ordered operand texts of a left-associative `+` chain, one per leaf.
 
@@ -779,6 +820,14 @@ def emit(
                 out.append((" " if compact else "  ") + ln)
         return "\n".join(out)
 
+    #: Whether the statement currently being rendered may grow a physical
+    #: line. It may not when the compiler's line table addresses lines INSIDE
+    #: it -- a nested jump target (`ir.BodyLine`) or a trace hook names a
+    #: physical line by its offset within the block, so inserting a `_`
+    #: continuation renumbers every line below it and lands a line number on
+    #: the continuation itself. Set per top-level statement, below.
+    fold_conditions = True
+
     def txt(s, col=0):
         """One statement as source. `col` is the left margin it starts at.
 
@@ -874,9 +923,13 @@ def emit(
                 return txt(ir.IfInline(cond, body, s.else_body), col)
             out = []
             for j, (cond, body) in enumerate(s.arms):
-                out.append(
-                    f"{'IF' if j == 0 else 'ELSEIF'} {ir.unparse_cond(cond)} THEN"
-                )
+                kw = "IF" if j == 0 else "ELSEIF"
+                header = f"{kw} {ir.unparse_cond(cond)} THEN"
+                if fold_conditions and col + len(header) > LINE_LIMIT:
+                    folded = _wrap_condition(f"{kw} ", cond, col, " THEN")
+                    if folded is not None:
+                        header = folded
+                out.append(header)
                 out.append(block_lines(body, txt, col))
             if s.else_body is not None:
                 out.append("ELSE")
@@ -1018,6 +1071,12 @@ def emit(
             i = j
             continue
         prefix = line_prefix(i)
+        # See `fold_conditions`: a block whose interior physical lines are
+        # addressed by the line table has to keep exactly the physical shape
+        # the line table describes.
+        fold_conditions = i not in traced and not any(
+            t[0] in range(i, j) for t in body_targets
+        )
         text = _join_line(
             group,
             txt,

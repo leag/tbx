@@ -29,19 +29,15 @@ def test_undimensioned_local_array_cleanup(stem):
     assert "  LOCAL V0(), V1()\n  DIM V0(2)\n" in emit0.emit(program)
 
 
-@pytest.mark.parametrize(
-    ("stem", "exc", "next_gap"),
-    [
-        # Advanced past the [bp+68] string store once INPUT into a DEF FN
-        # string parameter was recovered (t1_fninput); this records where it
-        # stops NOW, which is the LOCAL-array ERASE whose own DIM the decoder
-        # has not seen.
-        ("crossref.exe", ValueError, r"ERASE of undimensioned LOCAL block"),
-    ],
-)
-def test_wild_local_bounds_remain_closed(stem, exc, next_gap):
+@pytest.mark.parametrize("stem", ["crossref.exe"])
+def test_wild_local_bounds_remain_closed(stem):
+    """The LOCAL bounds path stays closed on crossref.exe, which now decodes.
+
+    Its `ERASE of undimensioned LOCAL block` was a DEF FN body opened on a
+    GOSUB subroutine, not a bounds or naming problem -- see
+    `core._fn_body_opens_here`.
+    """
     from conftest import wild_hits_bytes
 
     data = wild_hits_bytes(stem)
-    with pytest.raises(exc, match=next_gap):
-        decode0.decode_user_code(data)
+    assert tuple(decode0.decode_user_code(data))
