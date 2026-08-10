@@ -10183,9 +10183,20 @@ store. Fixture t1_midfarelem (+v10_) -- `MID$(A$(I%), 1, 1) = "X"` in a SUB
 with `SHARED A$()` -- byte-exact in both dialects, and it raises pw.exe's exact
 error against the unfixed decoder.
 
-pw.exe advances to `displacement 0x0`, which is `add ax, ES:[0000]` after
-`mov es,[blk]` -- an array-bound intrinsic, recorded as
-RO-PW-ES0-MINUS-ONE-IS-UBOUND. Three spellings of UBOUND all failed to COMPILE,
-so the unknown there is the keyword, not the code shape. One thing is already
-certain and worth fixing separately: `26 03 06 00 00` is a segment-PREFIXED
-absolute read and the scanner records it as a DS-relative `addax_m 0`.
+pw.exe then advanced to `displacement 0x0`: `mov ax,1; mov es,[blk]; neg ax;
+add ax, ES:[0000]`. Three probes chased that as UBOUND and all three failed to
+COMPILE -- because there is no keyword. It is an ordinary CONSTANT subscript:
+`$DYNAMIC / DIM A%(10) / B% = A%(0) - 1` compiles to exactly those bytes, the
+`neg`/`add` pair being how the compiler spells a subtraction with the memory
+operand on the left. That is what made it read like `count - 1`.
+
+The real defect was in the scanner: `26 03 06 disp16` was recorded as the
+DS-relative `addax_m`, dropping the segment prefix, so the element read became
+displacement 0. It is `far_addax_disp` now -- the fold sibling of the
+`far_movm_ax_disp` store, which has had this addressing on the write side all
+along -- and it falls back to the DGROUP reading when no array segment is
+pending, so nothing it used to cover can move. Fixture t1_dynconstadd (+v10_).
+
+pw.exe still stops at that address, for a different reason: its layout does not
+know array block 0x666 ("array block missing from layout"), so no segment is
+pending to resolve against. That is the DGROUP-layout cluster.

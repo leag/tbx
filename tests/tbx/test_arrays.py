@@ -261,6 +261,27 @@ def test_mid_assign_into_a_far_element_indexed_by_a_byref_param():
 
 
 
+def test_constant_subscript_read_on_a_dynamic_array():
+    """`A%(0) - 1` on a `$DYNAMIC` array: `mov es,[blk]; add ax, ES:[0]`.
+
+    The 0x26 prefix is the whole point. The scanner recorded `26 03 06 disp16`
+    as the DS-relative `addax_m`, dropping it, so the element read became
+    displacement 0 and raised `displacement 0x0 is neither scalar nor array
+    element`. It is the fold sibling of `far_movm_ax_disp`, which had the
+    store side of the same addressing all along.
+
+    The op still falls back to the plain DGROUP reading when no array segment
+    is pending, so the shapes it used to cover cannot move.
+    """
+    from tbx import decode0, emit0
+
+    for stem in ("t1_dynconstadd", "v10_t1_dynconstadd"):
+        source = emit0.emit(decode0.decode_user_code(_exe(f"{stem}.exe")))
+
+        assert "A% = V0%(0) - 1" in source, source
+
+
+
 if __name__ == "__main__":
     test_dim_node()
     test_decode_t1_arr1()

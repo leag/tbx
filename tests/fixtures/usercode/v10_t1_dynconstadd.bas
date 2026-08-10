@@ -1,0 +1,5 @@
+10 DIM DYNAMIC V0%(10)
+20 V0%(0) = 7
+30 A% = V0%(0) - 1
+40 PRINT A%
+50 END

@@ -764,8 +764,8 @@
   },
   {
    "id": "RO-PW-ES0-MINUS-ONE-IS-UBOUND",
-   "title": "pw.exe's `mov es,[blk]; neg ax; add ax,es:[0]` is UBOUND of a dynamic array",
-   "disposition": "refuted",
+   "title": "pw.exe's `mov es,[blk]; neg ax; add ax,es:[0]` is a bound intrinsic",
+   "disposition": "reverted",
    "confidence": "low",
    "files": [
     "wild/hits/pw.exe"
@@ -777,9 +777,10 @@
    "negative_evidence": [
     "Three spellings all FAILED TO COMPILE against the 1.1 oracle, so none of them is what this build accepts: `B% = UBOUND(A)` after `$DYNAMIC / DIM A(10)`; `PRINT UBOUND(A())`; and `PRINT UBOUND(A%)` after `DIM DYNAMIC A%(10)`.",
     "The bare `$DYNAMIC` metacommand is not the problem -- fixture t1_farelemsync uses exactly that form and compiles.",
-    "Weak corroboration only, and it cuts both ways: crossref.exe's reserved-word table lists LBOUND but spells the other one UNBOUND, which is either the real keyword or its author's typo."
+    "Weak corroboration only, and it cuts both ways: crossref.exe's reserved-word table lists LBOUND but spells the other one UNBOUND, which is either the real keyword or its author's typo.",
+    "RESOLVED: it is not a bound intrinsic at all, it is an ordinary CONSTANT subscript. `$DYNAMIC / DIM A%(10) / B% = A%(0) - 1` compiles to `mov ax,1; mov es,[blk]; neg ax; add ax, ES:[0000]` -- pw.exe's shape byte for byte. The `neg`/`add` pair is just how the compiler spells a subtraction with the memory operand on the left, which is why it looked like `count - 1`. Fixture t1_dynconstadd."
    ],
-   "instead": "Probe budget spent at three without a compiling spelling, so the KEYWORD is what is unknown here, not the code shape -- find how this compiler spells the bound intrinsic (the IDE's own help, or a compiled program known to use it) before writing more probes. The scan side is worth checking first regardless: `26 03 06 00 00` is `add ax, ES:[0000]`, a segment-PREFIXED absolute read, and the scanner recorded it as an ordinary DS-relative `addax_m 0`. Whatever the source construct turns out to be, decoding an ES-prefixed absolute as a DGROUP displacement is wrong on its own.",
+   "instead": "CLOSED as a scan gap, and the scan note in this entry was the right lead: `26 03 06 disp16` was recorded as the DS-relative `addax_m`, dropping the segment prefix, so the element read became displacement 0. It is now `far_addax_disp`, the fold sibling of the `far_movm_ax_disp` store, and falls back to the DGROUP reading when no array segment is pending. pw.exe still stops at the same address for a DIFFERENT reason: its layout does not know array block 0x666 ('array block missing from layout'), so no segment is pending -- that is the DGROUP-layout cluster, not this. Method note: three probes chasing a KEYWORD failed, and the answer was that there was no keyword.",
    "source": "wild-corpus session 2026-08-09"
   }
  ]

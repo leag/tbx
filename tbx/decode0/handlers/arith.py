@@ -119,13 +119,37 @@ def _int_register_ops(state: DecodeState, op, addr: int, kind: str) -> bool:
     return True
 
 
+def _far_disp_element(state: DecodeState, op, addr: int):
+    """The `$DYNAMIC` array element an ES:[disp16] operand names.
+
+    The same resolution `far_movm_ax_disp` does for the store side: ES was
+    loaded from the array's descriptor, so the displacement is a byte offset
+    into that block's element stream.
+    """
+    m, l = state.machine, state.layout_state
+    if m.pend_es is None:
+        return None  # no array segment pending: an ordinary DGROUP read
+    rec = l.r_arrs.get(m.pend_es)
+    if rec is None or rec.get("str"):
+        raise ValueError(f"direct far array read type mismatch at {addr:#x}")
+    esz = rec["esz"]
+    if op[2] % esz:
+        raise ValueError(f"unaligned direct far array read at {addr:#x}")
+    m.pend_es = None
+    return ir.ArrayRef(rec["name"], (ir.Lit(op[2] // esz + rec["lo"][0]),))
+
+
 def _int_add_ops(state: DecodeState, op, addr: int, kind: str) -> bool:
-    if kind not in ("addax_m", "addax_bp"):
+    if kind not in ("addax_m", "addax_bp", "far_addax_disp"):
         return False
     m = state.machine
-    if kind == "addax_bp":
+    if kind == "far_addax_disp" and (
+        (elem := _far_disp_element(state, op, addr)) is not None
+    ):
+        mem = elem
+    elif kind == "addax_bp":
         mem = state.loc_local(op[2])
-    else:
+    else:  # addax_m, or far_addax_disp with no array segment pending
         try:
             mem = state.loc(op[2])
         except ValueError:

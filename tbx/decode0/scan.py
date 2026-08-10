@@ -488,7 +488,15 @@ def _scan_direct2_arithmetic(exe, p, b, ops) -> int | None:
         ops.append((p, "addax_m", struct.unpack_from("<H", exe, p + 2)[0]))
         return p + 4
     if b == 0x26 and exe[p + 1] == 0x03 and exe[p + 2] == 0x06:
-        ops.append((p, "addax_m", struct.unpack_from("<H", exe, p + 3)[0]))
+        # add ax, ES:[disp16]. The prefix is not decoration: after `mov
+        # es,[block]` this reads a CONSTANT subscript of a `$DYNAMIC` numeric
+        # array -- the fold sibling of `far_movm_ax_disp`'s store
+        # (t1_dynconstadd; wild pw.exe). Recording it as the DS-relative
+        # `addax_m` read `A%(0)` as displacement 0 and raised `displacement
+        # 0x0 is neither scalar nor array element`. The lifter falls back to
+        # the plain DGROUP reading when no array segment is pending, so the
+        # shapes this op used to cover are unaffected.
+        ops.append((p, "far_addax_disp", struct.unpack_from("<H", exe, p + 3)[0]))
         return p + 5
     if b == 0x26 and exe[p + 1] == 0x8B and exe[p + 2] == 0x06:
         ops.append((p, "movax_m", struct.unpack_from("<H", exe, p + 3)[0]))
