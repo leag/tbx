@@ -347,6 +347,14 @@ _OPAQUE_HELPER_BODY_21 = bytes.fromhex("5589e5061ec47e06268b0d81e1ff7f83f9007415
 # from TBWINDO.INC.  The remaining fingerprints have only a calibrated frame
 # upper bound, so retain all seven observed slots rather than invent arities.
 _SEVEN_SLOTS = (0x1E, 0x1A, 0x16, 0x12, 0x0E, 0x0A, 0x06)
+# BODY_11 (TBWINDOW 5.0) is the one fingerprint whose arity is not a bound but
+# a measurement, and seven was too few to decode its only caller: wild
+# phone.exe stages ELEVEN far-pointer arguments before it (`forwarded arg index
+# 7 to callee 0xa2da with 7 params`). Three independent counts agree on eleven:
+# the eleven `arg_push_*` ops in the staging run, the body's own eleven outer-
+# frame `les di,[bp+X]` slots at 0x06..0x2E, and the call site's `add sp,56` --
+# 11 far pointers plus the 12 bytes of `sub sp,12` scratch staged with them.
+_ELEVEN_SLOTS = (0x2E, 0x2A, 0x26, 0x22, 0x1E, 0x1A, 0x16, 0x12, 0x0E, 0x0A, 0x06)
 OPAQUE_HELPERS = (
     OpaqueHelperSpec(_OPAQUE_HELPER_BODY, _SEVEN_SLOTS),
     OpaqueHelperSpec(_OPAQUE_HELPER_BODY_2, _SEVEN_SLOTS),
@@ -364,7 +372,7 @@ OPAQUE_HELPERS = (
     OpaqueHelperSpec(_OPAQUE_HELPER_BODY_8_V10, (0x16, 0x12, 0x0E, 0x0A, 0x06)),
     OpaqueHelperSpec(_OPAQUE_HELPER_BODY_9, _SEVEN_SLOTS),
     OpaqueHelperSpec(_OPAQUE_HELPER_BODY_10, _SEVEN_SLOTS),
-    OpaqueHelperSpec(_OPAQUE_HELPER_BODY_11, _SEVEN_SLOTS),
+    OpaqueHelperSpec(_OPAQUE_HELPER_BODY_11, _ELEVEN_SLOTS),
     OpaqueHelperSpec(_OPAQUE_HELPER_BODY_12, _SEVEN_SLOTS),
     OpaqueHelperSpec(_OPAQUE_HELPER_BODY_13, (0x0A, 0x06)),
     OpaqueHelperSpec(_OPAQUE_HELPER_BODY_14, (0x0A, 0x06)),

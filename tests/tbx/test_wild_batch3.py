@@ -1846,17 +1846,28 @@ def test_wild_phone_opaque_helper_advances():
     # (1740 bytes) -- its own CALL leads into an embedded box-drawing
     # character DATA table before real code resumes near the end. Exact
     # byte-fingerprint match; size doesn't change the recognition
-    # mechanism. phone.exe's NEXT blocker (right after this helper) is a
-    # chain of jmp-to-jmp thunks landing on further helper-shaped code --
-    # a genuinely different, unfamiliar trampoline/overlay structure not
-    # attempted here; only this one confirmed closure is tested.
-    import pytest
+    # mechanism.
+    #
+    # Its recorded arity was the family's placeholder seven ("retain all seven
+    # observed slots rather than invent arities"), and seven was too few: the
+    # single call site stages ELEVEN arguments, which raised `forwarded arg
+    # index 7 to callee 0xa2da with 7 params`. Three independent counts agree
+    # on eleven -- the arg_push ops, the body's own outer-frame `les di,[bp+X]`
+    # slots at 0x06..0x2E, and `add sp,56` (11 far pointers plus the 12 bytes
+    # of `sub sp,12` scratch). phone.exe decodes end to end now.
     from tbx import decode0
 
     from conftest import wild_hits_bytes
 
-    with pytest.raises(ValueError, match=r"forwarded arg index 7"):
-        decode0.decode_user_code(wild_hits_bytes("phone.exe"))
+    program = decode0.decode_user_code(wild_hits_bytes("phone.exe"))
+
+    sub = next(
+        s
+        for s in program
+        if isinstance(s, ir.SubDef) and len(s.body) == 1
+        and isinstance(s.body[0], ir.OpaqueHelper)
+    )
+    assert len(sub.params) == 11, sub.params
 
 
 def test_wild_filepatc_computed_for_limit_and_step_decodes_cleanly():

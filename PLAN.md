@@ -10028,3 +10028,25 @@ terminal at `c.k + ao + 1`, an invariant the marker breaks, and no program
 pairs them.
 
 Wild corpus 90 -> 91 decode-ok of 108.
+
+## Gap: an opaque helper's placeholder arity (phone.exe)
+
+`forwarded arg index 7 to callee 0xa2da with 7 params`. BODY_11 -- TBWINDOW 5.0
+(c) 1988 Richard D. Fothergill, 1740 bytes, the only fingerprint phone.exe uses
+and the only program that carries it -- was recorded with the family's
+placeholder `_SEVEN_SLOTS`, whose comment says outright that it is a calibrated
+upper bound retained "rather than invent arities".
+
+Seven was too few, and the real number is measurable three independent ways,
+all agreeing on eleven:
+
+- eleven `arg_push_*` ops in the staging run before the call;
+- eleven outer-frame `les di,[bp+X]` slots in the body, 0x06..0x2E;
+- `add sp,56` at the call site = 11 far pointers (44) + the 12 bytes of
+  `sub sp,12` scratch staged with them.
+
+`_ELEVEN_SLOTS` replaces the placeholder for this one body. No other program
+contains it, so nothing else can move; the other placeholders stay untouched
+because nothing has measured them.
+
+Wild corpus 91 -> 92 decode-ok of 108.
