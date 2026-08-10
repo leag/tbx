@@ -20,6 +20,8 @@ from tbx.decode0.const import (
     _PREC,
     _PUT_ACTIONS,
     _READDATA,
+    _LINEINPUTREAD,
+    _INPUTREAD,
     _pp_commas,
 )
 from tbx.decode0.dialect import find_prologue
@@ -6980,6 +6982,15 @@ def _decode_user_code(
                 ):  # READ string target
                     e.sstack.pop()
                     state._readdata_target(state.loc(d))
+                elif (
+                    e.sstack and e.sstack[-1] is _LINEINPUTREAD
+                ):  # LINE INPUT string target -- the sibling the other three
+                    e.sstack.pop()  # sentinels already had here. Without it the
+                    # sentinel was assigned as if it were a value and reached
+                    # the emitter as `V4$(0) = ('lineinputread',)` (wild
+                    # hebrew.exe, a LINE INPUT into a static string array
+                    # element at a constant index).
+                    state._lineinput_target(state.loc(d))
                 else:
                     state.put(ir.Assign(state.loc(d), e.sstack.pop()), c.cur)
                 c.cur = None
@@ -7002,6 +7013,17 @@ def _decode_user_code(
                     v = e.sstack.pop()
                     if v is _FREAD:  # INPUT# far string target
                         state._fread_target(ref)
+                    elif v is _READDATA:  # READ far string target
+                        state._readdata_target(ref)
+                    elif v is _LINEINPUTREAD:  # LINE INPUT far string target
+                        # The three sentinels the DGROUP-scalar store already
+                        # handled; a constant-offset element of a runtime
+                        # string array can be any of the same targets, and the
+                        # sentinel was otherwise assigned as if it were a value
+                        # (wild hebrew.exe: `V4$(0) = ('lineinputread',)`).
+                        state._lineinput_target(ref)
+                    elif v is _INPUTREAD:  # console INPUT far string target
+                        state._input_target(ref, is_str=True)
                     else:
                         state.put(ir.Assign(ref, v), c.cur)
                     c.cur = None

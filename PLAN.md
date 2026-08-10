@@ -10251,3 +10251,46 @@ code, big lift" item, recorded as RO-PW-EMIT-BODYLINE-IS-THE-GAP so the next
 reader does not start at the body-line machinery the symptom points to.
 
 Wild corpus 95 -> 96 decode-ok of 108, 7 failures.
+
+## The materialization bucket, closed
+
+hebrew.exe, kinder.exe and varamort.exe were triaged as three distinct causes
+in the value-folded boolean machinery, and that was right -- but they turned
+out to share one missing idea, which is that a materialized relational can be
+a VALUE with consumers the decoder had no path for.
+
+Working hebrew.exe end to end took six:
+
+1. `A AND (B OR C)`, A short-circuiting and the parenthesized group not.
+   `match_bool_term1` looked 36 ops ahead for a partner combining with `orax`
+   or `andaxbx`; a value-folded group combines with `oraxbx`, and hebrew's sits
+   57 ops away behind index arithmetic. The group partner is admitted, and only
+   for it does the window widen -- its acceptance is an exact address match on
+   this term's own short circuit, not a shape guess. `_lift_while` takes a
+   `group_cond` so the caller hands it the condition it built from the
+   registers, and every downstream reading (loop, inline IF, block IF) is
+   reused.
+2. A STRING relational as one term of a value group whose result is arithmetic
+   (`... - (A$ = X$ OR A$ = Y$) * N`).
+3. The same, consumed directly: `(A$ = B$) * N`, and `-(A$ = B$) * N`.
+4. Bare `VIEW` (flag 00, resets the viewport) -- `View(None, None, None, None)`,
+   the convention bare PALETTE already uses. Fixture t1_viewbare.
+5. `SWAP B$, A$(i)` on a NEAR static string array: both operands in DGROUP, so
+   no segment work, and the descriptor is exchanged word by word through
+   `xchgsi`/`xchgsi2`. Fixture t1_swapstrelem.
+6. `_LINEINPUTREAD` (and `_READDATA`, `_INPUTREAD`) missing from the
+   constant-offset far string store, so the sentinel was assigned as if it
+   were a value and reached the emitter as `V4$(0) = ('lineinputread',)`.
+
+Ordering was the trap, and the suite caught it: the new string-value
+recognizer, placed before the short-circuit AND-group branch, swallowed
+t1_orofands' `(A AND B) OR (C AND D)`. It sits last, just ahead of the
+fallback.
+
+hebrew.exe DECODES and EMITS now. Its source does not yet COMPILE: two DGROUP
+slots the layout typed as 2-byte numerics are string descriptors, so it emits
+`Y% = ""`. That is band typing -- the DGROUP-layout cluster -- not the boolean
+machinery.
+
+Wild corpus 96 -> 99 decode-ok of 108, 4 failures: night.exe, sabpcv3.exe,
+slimmer.exe, swbb.exe.

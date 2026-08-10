@@ -6891,6 +6891,15 @@ Assign(target=Var(name='D'), value=Lit(value=2))
 Print(items=(ArrayRef(name='V1$', indices=(Var(name='C'),)), ArrayRef(name='V1$', indices=(Var(name='D'),))), newline=True, file=None, commas=None)
 End()
 
+## t1_swapstrelem
+Dim(name='V0$', bounds=(5,), also=())
+Input(prompt=None, var=Var(name='A%'), comma=False, semi=False)
+Assign(target=Var(name='B$'), value=StrLit(value='x'))
+Assign(target=ArrayRef(name='V0$', indices=(Lit(value=2),)), value=StrLit(value='y'))
+Swap(a=Var(name='B$'), b=ArrayRef(name='V0$', indices=(Var(name='A%'),)))
+Print(items=(Var(name='B$'),), newline=True, file=None, commas=None)
+End()
+
 ## t1_tab
 Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
 Print(items=(StrLit(value='A'), Call(name='TAB', args=(Lit(value=7),)), Var(name='A')), newline=True, file=None, commas=None)
@@ -13474,6 +13483,15 @@ End()
 Assign(target=Var(name='A'), value=Lit(value=1))
 Assign(target=Var(name='B'), value=Lit(value=2))
 Swap(a=Var(name='A'), b=Var(name='B'))
+End()
+
+## v10_t1_swapstrelem
+Dim(name='V0$', bounds=(5,), also=())
+Input(prompt=None, var=Var(name='A%'), comma=False, semi=False)
+Assign(target=Var(name='B$'), value=StrLit(value='x'))
+Assign(target=ArrayRef(name='V0$', indices=(Lit(value=2),)), value=StrLit(value='y'))
+Swap(a=Var(name='B$'), b=ArrayRef(name='V0$', indices=(Var(name='A%'),)))
+Print(items=(Var(name='B$'),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_tab

@@ -1257,6 +1257,27 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             c.cur = None
             state.advance(ao + 4)
             return True
+        elif (
+            sik[1] == "movax_m"
+            and not far
+            and c.k + ao + 6 < len(img.ops)
+            and [o[1] for o in img.ops[c.k + ao + 2 : c.k + ao + 7]]
+            == ["xchgsi", "movm_ax", "movax_m", "xchgsi2", "movm_ax"]
+            and img.ops[c.k + ao + 3][2] == sik[2]
+            and img.ops[c.k + ao + 4][2] == sik[2] + 2
+            and img.ops[c.k + ao + 6][2] == sik[2] + 2
+        ):
+            # `SWAP B$, A$(i)` with a NEAR static string array: the scalar's
+            # own two descriptor words are exchanged with the element's in two
+            # rounds (`mov ax,[d]; xchg ax,[si]; mov [d],ax`, then the same at
+            # d+2 through the si+2 form). No segment work, unlike the dynamic
+            # array SWAP above -- both operands are in DGROUP (wild hebrew.exe).
+            if not a.get("str"):
+                raise ValueError(f"string SWAP on numeric array at {addr:#x}")
+            state.put(ir.Swap(state.loc(sik[2]), ref), c.cur)
+            c.cur = None
+            state.advance(ao + 7)
+            return True
         elif sik[1] in ("lset", "rset", "midassign", "midassign3"):
             # The FAR sibling of the movdx/movesdx form just above: the index
             # chain already left the element's descriptor in ES:SI, so the

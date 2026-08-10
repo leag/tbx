@@ -1,0 +1,7 @@
+10 DIM V0$(5)
+20 INPUT A%
+30 B$ = "x"
+40 V0$(2) = "y"
+50 SWAP B$, V0$(A%)
+60 PRINT B$
+70 END

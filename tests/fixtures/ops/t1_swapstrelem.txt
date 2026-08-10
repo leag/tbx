@@ -1,0 +1,33 @@
+# t1_swapstrelem dialect=1.1 start=08830
+08833:input:352:16384
+0883A:read_num
+0883D:fistp:44
+08842:fwait
+08844:movaxmem:44
+08847:movm_ax:342
+0884D:movsi:360
+08850:rt:156
+08852:movsi:344
+08855:strassign
+08857:movsi:356
+0885A:rt:156
+0885C:movsi:376
+0885F:strassign
+08861:movsim:342
+08865:shlsi
+08867:shlsi
+08869:addsi:368
+0886D:movax_m:344
+08871:xchgsi
+08873:movm_ax:344
+08877:movax_m:346
+0887B:xchgsi2
+0887E:movm_ax:346
+08882:movsi:344
+08885:rt:156
+08887:rt:190
+08889:rt:184
+0888B:end
+0888E:epilogue
+# commits
+0884B

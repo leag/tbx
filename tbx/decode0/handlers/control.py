@@ -53,7 +53,11 @@ def _folds_into_value_group(ops, k) -> bool:
     if ops[k + 3][1] in ("oraxbx", "andaxbx"):
         return True  # the CLOSING term: its fold is the very next op
     j = k + 3
-    limit = min(k + 16, len(ops) - 4)
+    # The terms of a value group can be far apart -- wild hebrew.exe puts a
+    # two-dimensional index computation between them. Distance is safe to
+    # allow because the scan gives up at the first dispatch it meets, which is
+    # exactly what a short-circuit chain has and a value group does not.
+    limit = min(k + 40, len(ops) - 4)
     while j < limit:
         if (
             ops[j][1] == "movax"
@@ -1137,6 +1141,14 @@ def movax_family(state: DecodeState, op, addr, kind) -> bool:
                 # sibling of the FP case above (`(A$ = B$) * N`, wild
                 # hebrew.exe at 0xcb70).
                 or i.ops[c.k + 3][1] in ("imulbx", "imul_m", "imulax")
+                # `-(A$ = B$) * N` negates the -1/0 first, which is how source
+                # turns the flag into a COUNT (wild hebrew.exe:
+                # `LEFT$(X$, -(A$ = B$) * N)`).
+                or (
+                    i.ops[c.k + 3][1] == "negax"
+                    and c.k + 4 < len(i.ops)
+                    and i.ops[c.k + 4][1] in ("imulbx", "imul_m", "imulax")
+                )
             )
         ):
             # A STRING relational-as-VALUE that is neither a condition nor a

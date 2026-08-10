@@ -333,6 +333,25 @@ def test_bare_view_resets_the_viewport():
 
 
 
+def test_swap_a_string_scalar_with_a_near_array_element():
+    """`SWAP B$, A$(i)` on a NEAR static string array.
+
+    Both operands are in DGROUP, so there is no segment work at all -- the
+    scalar's own two descriptor words are exchanged with the element's in two
+    rounds (`mov ax,[d]; xchg ax,[si]; mov [d],ax`, then the same at d+2
+    through the si+2 form). The element dispatch knew only the dynamic-array
+    SWAP, which loads a segment, and stopped at `element access: unexpected op
+    movax_m` (wild hebrew.exe).
+    """
+    from tbx import decode0, emit0
+
+    for stem in ("t1_swapstrelem", "v10_t1_swapstrelem"):
+        source = emit0.emit(decode0.decode_user_code(_exe(f"{stem}.exe")))
+
+        assert "SWAP B$, V0$(A%)" in source, source
+
+
+
 if __name__ == "__main__":
     test_dim_node()
     test_decode_t1_arr1()

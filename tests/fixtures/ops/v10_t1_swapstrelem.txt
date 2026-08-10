@@ -1,0 +1,33 @@
+# v10_t1_swapstrelem dialect=1.0 start=071E0
+071E3:input:352:16384
+071EA:read_num
+071ED:fistp:44
+071F2:fwait
+071F4:movaxmem:44
+071F7:movm_ax:342
+071FD:movsi:360
+07200:rt:156
+07202:movsi:344
+07205:strassign
+07207:movsi:356
+0720A:rt:156
+0720C:movsi:376
+0720F:strassign
+07211:movsim:342
+07215:shlsi
+07217:shlsi
+07219:addsi:368
+0721D:movax_m:344
+07221:xchgsi
+07223:movm_ax:344
+07227:movax_m:346
+0722B:xchgsi2
+0722E:movm_ax:346
+07232:movsi:344
+07235:rt:156
+07237:rt:190
+07239:rt:184
+0723B:end
+0723E:epilogue
+# commits
+071FB
