@@ -282,6 +282,33 @@ def test_constant_subscript_read_on_a_dynamic_array():
 
 
 
+def test_an_array_used_before_its_dim_in_address_order():
+    """A SUB compiled ahead of the `DIM` that creates the array it shares.
+
+    The walk is in ADDRESS order and a program's execution is not. `r_arrs` is
+    filled at the DIM, so a SUB body compiled earlier found nothing there and
+    its element access fell through to a bare displacement (`displacement 0x0
+    is neither scalar nor array element`) -- or, on the indexed path, invented
+    the throwaway name `V0120`, so ONE array had two names depending on which
+    site the walk reached first.
+
+    Everything the access needs is already in the descriptor the compiler laid
+    out (element type at +2, rank at +3), and the name is positional rather
+    than walk-ordered, so registering it on first use cannot renumber
+    anything. Wild pw.exe is the witness -- a SUB at 0x200f4 reading an array
+    DIMmed at 0x2168c.
+    """
+    from tbx import decode0, emit0
+
+    for stem in ("t1_subbeforedim", "v10_t1_subbeforedim"):
+        source = emit0.emit(decode0.decode_user_code(_exe(f"{stem}.exe")))
+
+        assert "V0%(0) = V0%(0) + 7" in source, source
+        assert "DIM DYNAMIC V0%(10)" in source, source
+        assert "V0120" not in source, source
+
+
+
 if __name__ == "__main__":
     test_dim_node()
     test_decode_t1_arr1()

@@ -10200,3 +10200,25 @@ pending, so nothing it used to cover can move. Fixture t1_dynconstadd (+v10_).
 pw.exe still stops at that address, for a different reason: its layout does not
 know array block 0x666 ("array block missing from layout"), so no segment is
 pending to resolve against. That is the DGROUP-layout cluster.
+
+## Gap: an array used before its DIM in ADDRESS order
+
+The walk is in address order and a program's execution is not. `r_arrs` is
+filled when a `DIM` bracket is decoded, so a SUB compiled ahead of the DIM that
+creates the array it shares found nothing there: its element access fell
+through to a bare displacement (`displacement 0x0 is neither scalar nor array
+element`) or, on the indexed path, invented the throwaway name `V0666` -- one
+array with two names, decided by which site the walk reached first. Wild pw.exe
+does exactly this: a SUB at 0x200f4 reads an array whose DIM sits at 0x2168c.
+
+`_rt_slot_from_image` registers the record on first use instead. Nothing about
+it is guessed: the element type is at descriptor+2 and the rank at +3, both
+already laid out by the compiler, and the NAME is positional
+(`rt_blocks.index`) rather than walk-ordered, so registering it early cannot
+renumber anything. Only blocks the layout already recovered qualify. The DIM
+overwrites it with its own record, bounds included, when the walk reaches it.
+
+Fixture t1_subbeforedim (+v10_), byte-exact both dialects, raises the original
+error against the unfixed decoder.
+
+pw.exe advances again, to `reverse array SWAP source mismatch` at 0x2136a.

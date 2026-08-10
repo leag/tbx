@@ -1,0 +1,31 @@
+# t1_subbeforedim dialect=1.1 start=088A0
+088A3:jmp:35008
+088A6:proc_enter
+088A9:movax:7
+088AC:moves_m:288
+088B0:far_addax_disp:0
+088B5:moves_m:288
+088B9:far_movm_ax_disp:0
+088BE:proc_ret:0
+088C0:movsi:288
+088C3:movdx:154
+088C6:movesdx
+088C8:dim_begin
+088CB:movm_imm:298:10
+088D1:movm_imm:296:0
+088D7:movsi:288
+088DA:movdx:154
+088DD:movesdx
+088DF:dim_end
+088E2:movax:1
+088E5:moves_m:288
+088E9:far_movm_ax_disp:0
+088EE:far_call:34982
+088F3:moves_m:288
+088F7:far_fild:0
+088FD:rt:187
+088FF:rt:184
+08903:end
+08906:epilogue
+# commits
+08901

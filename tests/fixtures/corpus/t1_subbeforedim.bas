@@ -1,0 +1,10 @@
+$DYNAMIC
+SUB SUB1
+  SHARED A%()
+  A%(0) = A%(0) + 7
+END SUB
+DIM A%(10)
+A%(0) = 1
+CALL SUB1
+PRINT A%(0)
+END

@@ -1163,6 +1163,40 @@ def _drop_local_descriptor_initializers(state, frame, span, addr) -> None:
 
 
 
+def _rt_slot_from_image(state, block):
+    """A runtime array's record read off the image, or None if not one.
+
+    The walk is in ADDRESS order and a program's is not: wild pw.exe calls a
+    SUB compiled at 0x200f4 that reads an array whose `DIM` sits at 0x2168c,
+    so `r_arrs` was still empty there and the access decoded as a bare
+    displacement. Everything the access needs is in the descriptor the
+    compiler already laid out -- element type at +2, rank at +3 -- and the
+    NAME is positional (`rt_blocks.index`), not walk-ordered, so registering
+    it early cannot renumber anything. The `DIM` overwrites this with its own
+    record, bounds included, whenever the walk does reach it.
+
+    Only blocks the layout already recovered qualify; anything else stays
+    unknown rather than being invented.
+    """
+    l = state.layout_state
+    if block not in (l.lay.get("rt_blocks") or ()):
+        return None
+    exe = state.image.exe
+    tb = exe[l.ds + block + 2]
+    rank = exe[l.ds + block + 3]
+    if tb not in (0x00, 0x02, 0x04, 0x06, 0x0A) or not 1 <= rank <= 3:
+        return None
+    is_str = tb == 0x0A
+    suffix = "$" if is_str else "%" if tb == 0x00 else "#" if tb == 0x06 else "&" if tb == 0x02 else ""
+    return {
+        "name": f"V{l.lay['n_static'] + l.lay['rt_blocks'].index(block)}{suffix}",
+        "rank": rank,
+        "str": is_str,
+        "esz": 8 if tb == 0x06 else 4 if tb in (0x02, 0x04, 0x0A) else 2,
+        "lo": [l.option_base or 0] * rank,
+    }
+
+
 def _fn_body_opens_here(ops, k) -> bool:
     """Whether ops[k] is the first op of a block DEF FN body.
 
@@ -7076,8 +7110,12 @@ def _decode_user_code(
 
         if kind == "moves_m":  # mov es,[block]: far access
             if op[2] not in l.r_arrs:
-                state.advance()
-                continue
+                rec = _rt_slot_from_image(state, op[2])
+                if rec is None:
+                    state.advance()
+                    continue
+                l.r_arrs[op[2]] = rec
+                l.slot_info[op[2]] = rec
             m.pend_es = op[2]
             state.advance()
             continue

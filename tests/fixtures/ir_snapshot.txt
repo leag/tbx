@@ -6786,6 +6786,14 @@ Assign(target=ArrayRef(name='V0', indices=(Lit(value=1),)), value=Lit(value=7))
 CallStmt(name='SUB1', args=())
 Print(items=(ArrayRef(name='V0', indices=(Lit(value=2),)),), newline=True, file=None, commas=None)
 
+## t1_subbeforedim
+SubDef(name='SUB1', params=(), body=(Shared(names=('V0%()',)), Assign(target=ArrayRef(name='V0%', indices=(Lit(value=0),)), value=BinOp(op='+', lhs=ArrayRef(name='V0%', indices=(Lit(value=0),)), rhs=Lit(value=7)))))
+Dim(name='V0%', bounds=(Lit(value=10),), also=())
+Assign(target=ArrayRef(name='V0%', indices=(Lit(value=0),)), value=Lit(value=1))
+CallStmt(name='SUB1', args=())
+Print(items=(ArrayRef(name='V0%', indices=(Lit(value=0),)),), newline=True, file=None, commas=None)
+End()
+
 ## t1_subdef
 SubDef(name='SUB1', params=(), body=(Assign(target=Var(name='A'), value=BinOp(op='+', lhs=Var(name='A'), rhs=Lit(value=1))), Print(items=(StrLit(value='S'), Var(name='A')), newline=True, file=None, commas=None)))
 Assign(target=Var(name='B'), value=Lit(value=5))
@@ -13407,6 +13415,14 @@ Input(prompt=None, var=(Var(name='A$'), Var(name='B$')), comma=False, semi=False
 Assign(target=Var(name='C%'), value=BinOp(op='=', lhs=Var(name='A$'), rhs=Var(name='B$')))
 IfGoto(cond=RelOp(op='=', lhs=Var(name='C%'), rhs=Lit(value=0)), target=4)
 Print(items=(StrLit(value='SAME'),), newline=True, file=None, commas=None)
+End()
+
+## v10_t1_subbeforedim
+SubDef(name='SUB1', params=(), body=(Shared(names=('V0%()',)), Assign(target=ArrayRef(name='V0%', indices=(Lit(value=0),)), value=BinOp(op='+', lhs=ArrayRef(name='V0%', indices=(Lit(value=0),)), rhs=Lit(value=7)))))
+Dim(name='V0%', bounds=(Lit(value=10),), also=())
+Assign(target=ArrayRef(name='V0%', indices=(Lit(value=0),)), value=Lit(value=1))
+CallStmt(name='SUB1', args=())
+Print(items=(ArrayRef(name='V0%', indices=(Lit(value=0),)),), newline=True, file=None, commas=None)
 End()
 
 ## v10_t1_sublocafter

@@ -1,0 +1,31 @@
+# v10_t1_subbeforedim dialect=1.0 start=07250
+07253:jmp:29296
+07256:proc_enter
+07259:movax:7
+0725C:moves_m:288
+07260:far_addax_disp:0
+07265:moves_m:288
+07269:far_movm_ax_disp:0
+0726E:proc_ret:0
+07270:movsi:288
+07273:movdx:154
+07276:movesdx
+07278:dim_begin
+0727B:movm_imm:298:10
+07281:movm_imm:296:0
+07287:movsi:288
+0728A:movdx:154
+0728D:movesdx
+0728F:dim_end
+07292:movax:1
+07295:moves_m:288
+07299:far_movm_ax_disp:0
+0729E:far_call:29270
+072A3:moves_m:288
+072A7:far_fild:0
+072AD:rt:187
+072AF:rt:184
+072B3:end
+072B6:epilogue
+# commits
+072B1
