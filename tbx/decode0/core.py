@@ -5781,6 +5781,16 @@ def _decode_user_code(
                 e.stack.append(ir.BinOp(op[2], top, argvar))
             elif base == "fcomp_si":
                 e.pend_cmp = (argvar, e.stack.pop())
+            elif base == "movsi_si":  # mov si, es:[si]: the by-ref INT param
+                # IS the array subscript -- `MID$(A$(I%), n, m) = s$` inside a
+                # SUB whose I% is by-ref (wild pw.exe). Leaving SI as opaque
+                # glue made the following shl/moves_m chain unrecognizable and
+                # the terminal fell out as `unhandled op midassign3`. Naming
+                # the index here is all the element chain needs: the shl turns
+                # it into an ("idx", block, ...) exactly as a DGROUP-sourced
+                # subscript does.
+                m.si = ir.Var(f"P{c.pend_arg:02X}%")
+                c.proc_int_offs.add(c.pend_arg)
             elif base == "fild_si":  # by-ref int param onto the FP stack,
                 argvar = ir.Var(f"P{c.pend_arg:02X}%")  # e.g. for PRINT
                 c.proc_int_offs.add(c.pend_arg)  # (t1_byref1)

@@ -10163,3 +10163,29 @@ rendered can move.
 
 Wild corpus 94 -> 95 decode-ok of 108; pw.exe advanced to `unhandled op
 midassign3`.
+
+## Gap: MID$ into a far array element indexed by a by-ref parameter (pw.exe)
+
+`unhandled op midassign3`. Two things were missing and each hid the other.
+
+`far_movsi_si` -- `mov si, es:[si]`, the by-ref parameter read that puts the
+SUBSCRIPT straight into SI -- sat on the ignore list as opaque glue (its
+comment even said "by-ref index glue used by wild pw.exe"). With SI unnamed the
+shl/moves_m chain behind it was never an element access at all, and the
+terminal fell out of the main dispatch. Naming the index is all the chain needs:
+the shl turns it into an `("idx", block, ...)` exactly as a DGROUP-sourced
+subscript does.
+
+Then the terminal itself. The near form builds an explicit far pointer
+(`movdx; movesdx`) before `lset`/`rset`/`midassign`/`midassign3`; the far chain
+has already left the element's descriptor in ES:SI, so the terminal IS the
+store. Fixture t1_midfarelem (+v10_) -- `MID$(A$(I%), 1, 1) = "X"` in a SUB
+with `SHARED A$()` -- byte-exact in both dialects, and it raises pw.exe's exact
+error against the unfixed decoder.
+
+pw.exe advances to `displacement 0x0`, which is `add ax, ES:[0000]` after
+`mov es,[blk]` -- an array-bound intrinsic, recorded as
+RO-PW-ES0-MINUS-ONE-IS-UBOUND. Three spellings of UBOUND all failed to COMPILE,
+so the unknown there is the keyword, not the code shape. One thing is already
+certain and worth fixing separately: `26 03 06 00 00` is a segment-PREFIXED
+absolute read and the scanner records it as a DS-relative `addax_m 0`.

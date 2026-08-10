@@ -237,6 +237,30 @@ def test_far_element_store_across_an_x87_sync():
 
 
 
+def test_mid_assign_into_a_far_element_indexed_by_a_byref_param():
+    """`MID$(A$(I%), 1, 1) = "X"` in a SUB whose I% is by-ref.
+
+    Two things were missing and each hid the other. `far_movsi_si` -- mov si,
+    es:[si], the by-ref parameter read that puts the SUBSCRIPT straight into
+    SI -- was on the ignore list as opaque glue, so the shl/moves_m chain
+    behind it was never an element access at all. And once it is, the terminal
+    is the MID$ store itself: the index chain has already left the element's
+    descriptor in ES:SI, so unlike the near form there is no movdx/movesdx far
+    pointer to build first.
+
+    Wild pw.exe is the witness; the fixture raises `unhandled op midassign3`
+    against the unfixed decoder, exactly as pw.exe did.
+    """
+    from tbx import decode0, emit0
+
+    for stem in ("t1_midfarelem", "v10_t1_midfarelem"):
+        source = emit0.emit(decode0.decode_user_code(_exe(f"{stem}.exe")))
+
+        assert 'MID$(V0$(A%), 1, 1) = "X"' in source, source
+        assert "SHARED V0$()" in source, source
+
+
+
 if __name__ == "__main__":
     test_dim_node()
     test_decode_t1_arr1()

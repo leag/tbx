@@ -5322,6 +5322,14 @@ End()
 Print(items=(Err(),), newline=True, file=None, commas=None)
 Resume(next_=False, target=5)
 
+## t1_midfarelem
+Dim(name='V0$', bounds=(Lit(value=10),), also=())
+Assign(target=ArrayRef(name='V0$', indices=(Lit(value=2),)), value=StrLit(value='hello'))
+CallStmt(name='SUB1', args=(Lit(value=2),))
+Print(items=(ArrayRef(name='V0$', indices=(Lit(value=2),)),), newline=True, file=None, commas=None)
+End()
+SubDef(name='SUB1', params=('A%',), body=(Shared(names=('V0$()',)), MidAssign(target=ArrayRef(name='V0$', indices=(Var(name='A%'),)), start=Lit(value=1), source=StrLit(value='X'), length=Lit(value=1))))
+
 ## t1_midvarstart
 Assign(target=Var(name='A$'), value=StrLit(value='HELLO WORLD'))
 Assign(target=Var(name='B$'), value=StrLit(value='XY'))
@@ -12193,6 +12201,14 @@ Print(items=(StrLit(value='NO'),), newline=True, file=None, commas=None)
 End()
 Print(items=(Err(),), newline=True, file=None, commas=None)
 Resume(next_=False, target=5)
+
+## v10_t1_midfarelem
+Dim(name='V0$', bounds=(Lit(value=10),), also=())
+Assign(target=ArrayRef(name='V0$', indices=(Lit(value=2),)), value=StrLit(value='hello'))
+CallStmt(name='SUB1', args=(Lit(value=2),))
+Print(items=(ArrayRef(name='V0$', indices=(Lit(value=2),)),), newline=True, file=None, commas=None)
+End()
+SubDef(name='SUB1', params=('A%',), body=(Shared(names=('V0$()',)), MidAssign(target=ArrayRef(name='V0$', indices=(Var(name='A%'),)), start=Lit(value=1), source=StrLit(value='X'), length=Lit(value=1))))
 
 ## v10_t1_midvarstart
 Assign(target=Var(name='A$'), value=StrLit(value='HELLO WORLD'))

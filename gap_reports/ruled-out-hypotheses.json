@@ -761,6 +761,26 @@
    ],
    "instead": "CLOSED. Fixtures t1_selnestnum (+v10_), byte-exact both dialects; wild football.exe and sprogh.exe both decode. Method note: this entry's own value was in saying WHERE to look after the guess failed -- the entry guard looked like the mechanism because removing it changed the output, but it only changed WHICH wrong shape came out.",
    "source": "wild-corpus session 2026-08-09"
+  },
+  {
+   "id": "RO-PW-ES0-MINUS-ONE-IS-UBOUND",
+   "title": "pw.exe's `mov es,[blk]; neg ax; add ax,es:[0]` is UBOUND of a dynamic array",
+   "disposition": "refuted",
+   "confidence": "low",
+   "files": [
+    "wild/hits/pw.exe"
+   ],
+   "signatures": [
+    "displacement 0x0 is neither scalar nor array element"
+   ],
+   "hypothesis": "`mov ax,1; mov es,[0666]; neg ax; add ax,es:[0000]` computes ES:[0] - 1, and a dynamic array segment's word 0 is its element count, so that is UBOUND(A) -- write a probe for it and add the mapping.",
+   "negative_evidence": [
+    "Three spellings all FAILED TO COMPILE against the 1.1 oracle, so none of them is what this build accepts: `B% = UBOUND(A)` after `$DYNAMIC / DIM A(10)`; `PRINT UBOUND(A())`; and `PRINT UBOUND(A%)` after `DIM DYNAMIC A%(10)`.",
+    "The bare `$DYNAMIC` metacommand is not the problem -- fixture t1_farelemsync uses exactly that form and compiles.",
+    "Weak corroboration only, and it cuts both ways: crossref.exe's reserved-word table lists LBOUND but spells the other one UNBOUND, which is either the real keyword or its author's typo."
+   ],
+   "instead": "Probe budget spent at three without a compiling spelling, so the KEYWORD is what is unknown here, not the code shape -- find how this compiler spells the bound intrinsic (the IDE's own help, or a compiled program known to use it) before writing more probes. The scan side is worth checking first regardless: `26 03 06 00 00` is `add ax, ES:[0000]`, a segment-PREFIXED absolute read, and the scanner recorded it as an ordinary DS-relative `addax_m 0`. Whatever the source construct turns out to be, decoding an ES-prefixed absolute as a DGROUP displacement is wrong on its own.",
+   "source": "wild-corpus session 2026-08-09"
   }
  ]
 }

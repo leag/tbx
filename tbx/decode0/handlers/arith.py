@@ -1220,6 +1220,25 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             c.cur = None
             state.advance(ao + 4)
             return True
+        elif sik[1] in ("lset", "rset", "midassign", "midassign3"):
+            # The FAR sibling of the movdx/movesdx form just above: the index
+            # chain already left the element's descriptor in ES:SI, so the
+            # terminal IS this op and needs no explicit far pointer built for
+            # it (wild pw.exe: `MID$(A$(I%), n, m) = s$` where I% is a by-ref
+            # SUB parameter -- see `movsi_si` in the by-ref dispatch).
+            source = expr_.sstack.pop()
+            if sik[1] == "lset":
+                state.put(ir.Lset(ref, source), c.cur)
+            elif sik[1] == "rset":
+                state.put(ir.Rset(ref, source), c.cur)
+            elif sik[1] == "midassign3":
+                state.put(_mid3(state, ref, source, addr), c.cur)
+            else:
+                if m.ax is None:
+                    raise ValueError(f"MID$= without start in ax at {addr:#x}")
+                state.put(ir.MidAssign(ref, m.ax, source), c.cur)
+                m.ax = None
+            c.cur = None
         elif sik[1] in ("far_inc_si", "far_dec_si"):
             logger.warning("opaque by-ref element increment at %x", addr)
             state.advance(ao + 2 + element_extra)
@@ -1881,7 +1900,6 @@ def stack_ops(state: DecodeState, op, addr, kind) -> bool:
         "mov_bp_sp",
         "str_free_temp",
         "bchk_base",  # Bounds: array-descriptor setup (F3.4)
-        "far_movsi_si",  # by-ref index glue used by wild pw.exe
         "far_opaque",  # non-FP INT 3C helper selector
     ):
         if kind == "sub_sp" and c.cur is None:

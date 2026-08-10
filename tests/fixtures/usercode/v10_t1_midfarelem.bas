@@ -1,0 +1,9 @@
+10 DIM DYNAMIC V0$(10)
+20 V0$(2) = "hello"
+30 CALL SUB1(2)
+40 PRINT V0$(2)
+50 END
+60 SUB SUB1(A%)
+  SHARED V0$()
+  MID$(V0$(A%), 1, 1) = "X"
+END SUB
