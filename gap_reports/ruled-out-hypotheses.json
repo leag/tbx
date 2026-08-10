@@ -696,6 +696,27 @@
    ],
    "instead": "A frame slot is ONE variable: a re-DIM of the same bp offset in the same open frame must reuse the name already recorded for it. `r_arrs` is keyed by bare bp offset and is global across procedures, so per-frame identity has to come from the frame -- the same place `erase_named_arrays` lives after the t1_lerase work. Fixing it changes emitted names, so re-measure the comparable wild programs (cleanup.exe, reformat.exe) through the oracle: a too-broad reuse rule already moved those two 25 bytes once. FIXED 2026-08-09: BodyFrame.dimmed_arrays records disp -> name per body and a re-DIM of that slot reuses it; fixture t1_lredim (+v10_), both byte-exact. Re-measured: cleanup.exe 6430 -> 5429 bytes off, reformat.exe 7146 -> 5091, deltas re-recorded in wild_roundtrip.json.",
    "source": "wild-corpus session 2026-08-09, found while diagnosing crossref.exe"
+  },
+  {
+   "id": "RO-SABPCV3-INTEC-02-IS-ERROR",
+   "title": "sabpcv3.exe's INT EC sub 02 is the ERROR statement (or another terminating statement)",
+   "disposition": "refuted",
+   "confidence": "medium",
+   "files": [
+    "wild/hits/sabpcv3.exe"
+   ],
+   "signatures": [
+    "unhandled INT EC sub 02 at 0x11322"
+   ],
+   "hypothesis": "`mov ax,<small>; int ec 02` followed immediately by a retf or a jump is a runtime raise, so `ERROR n` -- or one of the other program-terminating statements -- should compile to dispatch slot 02 and name it.",
+   "negative_evidence": [
+    "`ERROR 5` compiles to subs 32/3C/6C/BA/E8 and never emits `cd ec 02`; 0x3C is where ERROR actually lands.",
+    "A twelve-statement probe (STOP, SYSTEM, TRON, TROFF, RESET, KEY OFF, SHELL, CHAIN, RUN, RESUME NEXT, SWAP) emits subs 0E/32/36/38/52/6C/B8/BA/BC/C0/C4/CE/E8 and no 02 either.",
+    "sabpcv3.exe is the ONLY file in the wild set, the fixture corpus and the probes that contains `cd ec 02` at all -- 26 sites, always `mov ax,N` with N in {2,3,5}, always followed by `retf` or a jump.",
+    "The dispatch table is not alphabetical (PAINT sits at 0xDC, after PALETTE at 0x86), so slot 02's position between BEEP (0x00) and BLOAD (0x04) does not narrow the candidate statement."
+   ],
+   "instead": "Probe budget spent at two without a hit. The 15 sites at 0x11322..0x116d9 repeat on an exact 0x44-byte stride and the 9 at 0x2d4d8..0x2da6f on a 0xB3 stride, each block being `compare / test a flag word / set it / else raise` -- a repeated template, which is what a $INLINE library or a code generator produces, not ordinary statement compilation. Identify what generates the repeated block before guessing the statement; a single-witness slot named by guess would be a fabricated mapping. Single witness, deferred.",
+   "source": "wild-corpus session 2026-08-09"
   }
  ]
 }
