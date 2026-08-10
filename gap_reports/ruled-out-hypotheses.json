@@ -720,7 +720,7 @@
   },
   {
    "id": "RO-SPROGH-DISP-5C-IS-A-NAMING-GAP",
-   "title": "sprogh.exe's `displacement 0x5c is neither scalar nor array element` is a missing slot name",
+   "title": "sprogh.exe's 0x5c raise is a layout-recovery failure",
    "disposition": "refuted",
    "confidence": "high",
    "files": [
@@ -733,9 +733,32 @@
    "negative_evidence": [
     "The raise at 0x5c is the LAST of many, not the first symptom. Instrumenting `loc` shows ~50 distinct displacements in 0x8F6..0x9A6 already going through the `unclassified displacement; treating as scalar` fallback on the way there.",
     "Recovered layout for this program: scalar_base 0x29A, pool_base 0x434, first string descriptor 0x3C0, delta 0. That places the whole variable area in 0x29A..0x434 while the program's actual variables are being read from around 0x900-0x9A6 -- past the recovered pool base.",
-    "So 0x5c is a consequence: the variable region was recovered in the wrong place, everything above it fell through the `>= pool_base - 4` fallback, and the first reference BELOW 0x400 is where the fallback's own guard finally raises."
+    "So 0x5c is a consequence: the variable region was recovered in the wrong place, everything above it fell through the `>= pool_base - 4` fallback, and the first reference BELOW 0x400 is where the fallback's own guard finally raises.",
+    "CORRECTION 2026-08-09, same session: the layout is NOT wrong for this program. Its ordinary-scalars stamp at file 0x1C0 reads s1=294 b1=0x29A s2=104 n=7 gb=0x120, which is exactly self-consistent (0x120 + 7*0x36 == 0x29A) and exactly what recovery produced. The 0x8F6..0x9A6 references sit between pool_base and the first static array at 0x9B0 -- pooled operands, whose `loc` raise is CAUGHT by the pool fallbacks by design. Only the uncaught 0x5C mattered."
    ],
-   "instead": "This is DGROUP layout recovery, not slot naming -- the same expensive bucket as slimmer.exe and swbb.exe ('DGROUP layout not solvable'), and pw.exe, which shows the same unclassified-displacement flood plus 'array block missing from layout'. Fix the anchor for these programs as one problem and re-check all four together; naming 0x5c would only move the raise. Consistent with RO-DISP-NOT-SCALAR-ONE-CAUSE: the message is a symptom, not a bucket.",
+   "instead": "SUPERSEDED: 0x5C was the SELECT CASE string scratch cell, and the real gap was that a SELECT CASE nested inside another one's arm was not recognized at all -- the compiler reuses the outer's scratch cell for the inner selector. Fixed for the string form (fixture t1_selnest, byte-exact both dialects); sprogh.exe now advances to the NUMERIC form of the same nesting, which is still open (probe_selnestnum). This entry stands as a warning about its own first reading: `unclassified displacement` warnings and caught pool raises are normal noise, so count only the raise that escapes.",
+   "source": "wild-corpus session 2026-08-09"
+  },
+  {
+   "id": "RO-NESTED-NUMERIC-SELECT-NESTS-LIKE-THE-STRING-ONE",
+   "title": "Allowing a numeric SELECT header inside an open arm nests it, as it does for strings",
+   "disposition": "reverted",
+   "confidence": "high",
+   "files": [
+    "wild/probes/probe_selnestnum.bas",
+    "wild/hits/football.exe",
+    "wild/hits/sprogh.exe"
+   ],
+   "signatures": [
+    "nested numeric SELECT CASE on cell 0x52"
+   ],
+   "hypothesis": "The string entry's `not in_body` guard was the only thing blocking nesting, so dropping it on the numeric (`fstp64 [temp]`) entry too should nest a numeric SELECT the same way.",
+   "negative_evidence": [
+    "Dropping it does push the inner frame, but the result is worse than before: probe_selnestnum decodes to a SINGLE `SELECT CASE B` carrying the inner arms 10 and 20 AND the outer arm 2 -- the outer frame is discarded entirely when the inner closes.",
+    "With the guard in place the old behaviour is a DIFFERENT silent wrong decode: the inner selector store is swallowed and the inner arms are appended to the outer frame, emitting `SELECT CASE A` with an arm `CASE 1, 10`.",
+    "So the guard is not the mechanism; the close/fold path is. The string form needs no such work because its arms are matched against the frame's own temp cell at each compare, while the numeric close is where the outer is lost."
+   ],
+   "instead": "The numeric entry now RAISES `nested numeric SELECT CASE` rather than emitting either wrong shape. Two wild witnesses (football.exe, which previously 'decoded' into the merged-arm form, and sprogh.exe, which reaches it after the string nesting landed) plus a byte-exact probe. Work the END SELECT close/fold path -- specifically what happens to the enclosing frame when an inner SelectCase is snapshotted -- not the entry guard.",
    "source": "wild-corpus session 2026-08-09"
   }
  ]

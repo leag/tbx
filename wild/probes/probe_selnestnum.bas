@@ -1,0 +1,14 @@
+INPUT A
+SELECT CASE A
+  CASE 1
+    INPUT B
+    SELECT CASE B
+      CASE 10
+        PRINT 1
+      CASE 20
+        PRINT 2
+    END SELECT
+  CASE 2
+    PRINT 3
+END SELECT
+END

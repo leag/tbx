@@ -48,6 +48,8 @@ KEYS = {
     # The 324-character OR chain takes the ELSE arm on any lowercase answer,
     # which is all the oracle's scancode typing can send.
     "t1_wideif": '[{"wait":"?","send":"ab\\r"}]',
+    # Nested string SELECT CASE: the outer arm "a", then the inner arm "x".
+    "t1_selnest": '[{"wait":"?","send":"a\\r"},{"wait":"?","count":2,"send":"x\\r"}]',
     "t1_inp2": '[{"wait":"X","send":"3\\r"}]',
     "t1_inp4": '[{"wait":"X","send":"ab\\r"}]',
     "t1_sarr2": '[{"wait":"?","send":"3\\r"}]',

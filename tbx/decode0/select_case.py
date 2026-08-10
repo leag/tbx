@@ -436,6 +436,17 @@ def step(state):
                 ).seq
             return True
         in_body = bool(c.cases) and c.cases[-1].body_jmp is not None
+        # An OPEN arm body is not a reason to decline a STRING header: a SELECT
+        # CASE nests inside another one's arm, and the compiler REUSES the
+        # outer's scratch cell for the inner selector (the outer's copy is
+        # dead once an arm was chosen) -- wild sprogh.exe writes 0x5c a second
+        # time inside an arm still holding `body_jmp`, and that store then fell
+        # through to `loc(0x5c)` as `displacement 0x5c is neither scalar nor
+        # array element`. What separates a header from an arm of the frame
+        # already open is the shape, not the nesting depth: a header is
+        # `movsi [temp]; strassign` (or `fstp64 [temp]`) with an arm header
+        # behind it, and an arm test never writes the cell. Both entries below
+        # already require exactly that, so `c.cases` carries the nesting.
         # (3) Numeric entry: fstp64 [temp] to a scratch slot, arm header following.
         # An event-trapping poll hook lands at this join too, exactly as it does
         # at the string entry below -- the selector evaluation and the first arm
@@ -446,12 +457,24 @@ def step(state):
         # sites, and the whole of what was left of its round trip).
         head = _skip_hooks(state, c.k + 1)
         if (
-            not in_body
-            and kind == "fstp64"
+            kind == "fstp64"
             and op[2] < VAR_BASE
             and _is_arm_header_at(state, head)
             and _arm_temp_at(state, head) == op[2]
         ):
+            if in_body:
+                # A NUMERIC SELECT CASE nested in another one's arm. The
+                # string form below is recovered (t1_selnest); this one is
+                # not, and the shape it used to take is a silent wrong
+                # decode, not a missing statement: the inner selector store
+                # was swallowed and the inner arms were appended to the OUTER
+                # frame, so `SELECT CASE A / CASE 1 / SELECT CASE B / CASE 10`
+                # came out as one `SELECT CASE A` with an arm `CASE 1, 10`.
+                # Say so instead of emitting that.
+                raise ValueError(
+                    f"nested numeric SELECT CASE on cell {op[2]:#x} "
+                    f"at {addr:#x}"
+                )
             state.branch(
                 "case", template="select_header", target=None, address=c.cur
             )
@@ -473,8 +496,7 @@ def step(state):
         # skip `movsi [temp]; strassign` itself.
         _hdr = c.k + 3 if _kind_at(state, c.k + 2) == "trap_hook" else c.k + 2
         if (
-            not in_body
-            and kind == "movsi"
+            kind == "movsi"
             and op[2] < VAR_BASE
             and _kind_at(state, c.k + 1) == "strassign"
             and (

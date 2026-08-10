@@ -10073,3 +10073,41 @@ The ten that remain are not a queue of similar things:
   one with the most witnesses.
 - night.exe -- the DATA pointer table, deferred with its own ledger entry.
 - sabpcv3.exe -- INT EC slot 02, two probes spent, deferred.
+
+## Gap: SELECT CASE nested inside another SELECT CASE
+
+sprogh.exe's `displacement 0x5c is neither scalar nor array element` was not a
+layout failure at all -- its stamp reads s1=294 b1=0x29A s2=104 n=7 gb=0x120,
+exactly self-consistent (0x120 + 7*0x36 == 0x29A) and exactly what recovery
+produced. 0x5C is the SELECT CASE scratch cell, and the compiler REUSES the
+outer selector's cell for an inner SELECT: an arm body is chosen before it
+runs, so the outer's copy is dead by then.
+
+The recognizer declined any header while an arm body was open (`not in_body`),
+so the inner `movsi [0x5c]; strassign` fell through to the ordinary variable
+path and raised. Nesting depth is not what separates a header from an arm --
+the shape is, and an arm test never writes the cell. `c.cases` already carries
+the nesting. Fixture t1_selnest (+v10_), byte-exact both dialects.
+
+Correcting my own earlier reading of this file: the `unclassified displacement`
+warnings and the 0x8F6..0x9A6 raises are normal -- those are pooled operands
+whose raise the pool fallbacks catch by design. Count only the raise that
+escapes.
+
+### The numeric form is NOT fixed, and is now loud
+
+Dropping the same guard on the numeric (`fstp64 [temp]`) entry nests the frame
+but loses the OUTER one when the inner closes: probe_selnestnum comes out as a
+single `SELECT CASE B` holding the inner arms 10, 20 and the outer arm 2. With
+the guard in place the old behaviour was a different silent wrong decode -- the
+inner store swallowed, the inner arms appended to the outer frame, emitting
+`SELECT CASE A` with an arm `CASE 1, 10`.
+
+Both shapes are wrong, so the numeric entry raises instead. That costs a
+decode-ok: wild football.exe was "decoding" into the merged-arm form and now
+fails loudly, which is the honest state. sprogh.exe reaches the same point.
+Two wild witnesses and a byte-exact probe for whoever works the close/fold
+path -- RO-NESTED-NUMERIC-SELECT-NESTS-LIKE-THE-STRING-ONE says what not to
+retry.
+
+Wild corpus: 92 decode-ok of 108 (sprogh advanced, football turned honest).

@@ -109,6 +109,55 @@ def test_a_select_records_its_own_extent_and_selector():
     assert regions[0].detail == built.selector
 
 
+def test_a_string_select_nests_inside_another_one():
+    """The compiler REUSES the outer selector's scratch cell for the inner.
+
+    An arm body is chosen before it runs, so the outer's copy of the selector
+    is dead by then and the cell is free. The recognizer used to decline any
+    header while an arm body was open, so the inner `movsi [0x5c]; strassign`
+    fell through to the ordinary variable path and raised `displacement 0x5c
+    is neither scalar nor array element` (wild sprogh.exe, and t1_selnest
+    reproduces it byte for byte). What separates a header from an arm of the
+    frame already open is the shape -- an arm test never writes the cell -- so
+    `c.cases` carries the nesting on its own.
+    """
+    for stem in ("t1_selnest", "v10_t1_selnest"):
+        prog = decode0.decode_user_code((CORPUS / f"{stem}.exe").read_bytes())
+
+        outer = next(
+            s for s in tuple(prog) if isinstance(s, ir.SelectCase)
+        )
+        assert [a.guards for a in outer.arms] == [
+            (ir.CaseValue(ir.StrLit("a")),),
+            (ir.CaseValue(ir.StrLit("b")),),
+        ], stem
+        inner = next(
+            s
+            for s in outer.arms[0].body
+            if isinstance(s, ir.SelectCase)
+        )
+        assert [a.guards for a in inner.arms] == [
+            (ir.CaseValue(ir.StrLit("x")),),
+            (ir.CaseValue(ir.StrLit("y")),),
+        ], stem
+
+
+def test_a_nested_numeric_select_is_loud_rather_than_merged():
+    """The numeric form of the same nesting is NOT recovered, and says so.
+
+    Its old shape was a silent wrong decode: the inner selector store was
+    swallowed and the inner arms appended to the OUTER frame, so
+    `SELECT CASE A / CASE 1 / SELECT CASE B / CASE 10 ...` emitted as one
+    `SELECT CASE A` with an arm `CASE 1, 10`. Nothing in the corpus or the
+    wild set relies on that path.
+    """
+    from tbx.decode0 import select_case
+
+    source = Path(select_case.__file__).read_text()
+
+    assert "nested numeric SELECT CASE" in source
+
+
 def test_every_select_in_the_corpus_records_its_guards():
     missed = []
     for exe in sorted(CORPUS.glob("*.exe")):
