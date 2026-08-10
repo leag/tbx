@@ -1,0 +1,34 @@
+# t1_farelemsync dialect=1.1 start=088A0
+088A3:movsi:288
+088A6:movdx:155
+088A9:movesdx
+088AB:dim_begin
+088AE:movm_imm:298:10
+088B4:movm_imm:296:0
+088BA:movsi:288
+088BD:movdx:155
+088C0:movesdx
+088C2:dim_end
+088C5:movm_imm:344:2
+088CB:movm_imm:342:5
+088D1:fild:342
+088D6:strfn:STR$
+088D9:str2num:LEN
+088DC:movsim:344
+088E0:shlsi
+088E2:moves_m:288
+088E6:fwait
+088E8:far_movm_ax_si
+088ED:movsim:344
+088F1:shlsi
+088F3:moves_m:288
+088F7:far_movax_si
+088FA:movmem_ax:44
+088FD:fild:44
+08902:rt:187
+08904:rt:184
+08908:end
+0890B:epilogue
+# commits
+088EB
+08906

@@ -9999,3 +9999,32 @@ constant) became `PRINT V7%(1)`, 37 characters across the file. The oracle
 measurement is unchanged either way -- 1450 bytes off, 97.53% identical, delta
 -160, re-measured today -- so this re-records an intended improvement, not a
 regression. The suite had been red on it since.
+
+## Gap: an x87 sync marker inside a FAR element chain (stat.exe)
+
+`shl si; mov es,[blk]; <sync>; mov es:[si],ax` -- the element dispatch read its
+terminal op at a fixed offset past the address chain and found the sync marker
+there instead (`element access: unexpected op fwait at 0x15e7b`).
+
+The interesting part is why this was filed as unreproducible
+(RO-STAT-ELEM-FWAIT-SOURCE, four probes). Every probe used a STATIC array,
+which takes the NEAR element path and emits no sync at all; the trigger is the
+array being DYNAMIC, so the element write goes far. `$DYNAMIC / DIM A%(10) /
+A%(I%) = LEN(STR$(N%))` reproduces it on the first try, and a DEFAULT build
+emits the emulated marker `cd 3d` at exactly stat.exe's byte position. Fixture
+t1_farelemsync (+v10_), both byte-exact, and it raises the original error
+without the fix.
+
+Method note worth keeping: when a probe series cannot reproduce a shape, vary
+NEAR vs FAR before varying the arithmetic. The earlier round varied the value
+(CINT via a temp, CINT inline, an FP expression, an 8087 recompile) and held
+the storage class fixed, which is the one thing that mattered.
+
+`_sync_len` -- which already knew both spellings, `fwait` and the
+revision-skewed `nop; nop` -- is now consulted between the address chain and
+its terminal, and the marker counts as chain glue. A sync followed by the
+register-shuffle glue forms is refused rather than guessed: those re-read the
+terminal at `c.k + ao + 1`, an invariant the marker breaks, and no program
+pairs them.
+
+Wild corpus 90 -> 91 decode-ok of 108.

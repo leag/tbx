@@ -637,7 +637,7 @@
   {
    "id": "RO-STAT-ELEM-FWAIT-SOURCE",
    "title": "stat.exe's element-chain FWAIT is an ordinary FP-to-int element store",
-   "disposition": "refuted",
+   "disposition": "reverted",
    "confidence": "medium",
    "files": [
     "wild/hits/stat.exe"
@@ -649,9 +649,10 @@
    "negative_evidence": [
     "Three oracle probes produced the element store WITHOUT any fwait in the chain: CINT via a temp (`I% = CINT(X)` then `A%(I%) = 7`), CINT inline (`A%(CINT(X)) = 7`), and an FP expression as the stored value (`A%(I%) = X * 2`). All three decode correctly today.",
     "No fixture in the corpus has `moves_m` followed by `fwait` -- checked across all 1119 ops goldens, the adjacency does not occur once.",
-    "Recompiling the FP-expression probe with the 8087 toggle produced a DIFFERENT shape entirely (a bare 0x9B before `mov ax,[002c]`, and a NEAR `addsi` element store rather than the far `moves_m` form), so the 8087 build is not the trigger either. That bare-FWAIT gap was real and is now closed separately by fixture f87_t1_elemsync."
+    "Recompiling the FP-expression probe with the 8087 toggle produced a DIFFERENT shape entirely (a bare 0x9B before `mov ax,[002c]`, and a NEAR `addsi` element store rather than the far `moves_m` form), so the 8087 build is not the trigger either. That bare-FWAIT gap was real and is now closed separately by fixture f87_t1_elemsync.",
+    "SUPERSEDED 2026-08-09: the trigger IS reproducible. Every earlier probe used a STATIC array, which takes the near element path and emits no sync at all. With `$DYNAMIC` the array element store goes far (`moves_m`) and a DEFAULT build emits the emulated marker `cd 3d` at exactly stat.exe's position: fixture t1_farelemsync (`$DYNAMIC / DIM A%(10) / A%(I%) = LEN(STR$(N%))`) is byte-exact in both dialects and reproduces `element access: unexpected op fwait` without the fix. The negative 'no fixture has moves_m followed by fwait' was true and was a statement about the corpus, not about the compiler."
    ],
-   "instead": "stat.exe uses the EMULATED FWAIT (INT 3D, scan calls it the \"IDX% idiom\") inside a FAR element chain, which no authored probe has reproduced. Find what emits INT 3D at that position before splicing fwait into the element chain -- splicing it blind would make the chain accept an op whose source trigger is still unknown. Probe budget exhausted at four; single witness.",
+   "instead": "CLOSED: `_sync_len` is consulted between the element address chain and its terminal op, and the marker counts as chain glue (both spellings). Method note: when a probe series fails to reproduce a FAR-path shape, check whether every probe used a static array -- near vs far is the first thing to vary, before the arithmetic.",
    "source": "wild-corpus session 2026-08-09"
   },
   {

@@ -202,6 +202,41 @@ def test_decode_local_dynamic_array():
     assert decode0.decode_user_code(_exe("v10_t1_localarrint.exe")) == want("V0%")
 
 
+def test_far_element_store_across_an_x87_sync():
+    """A DYNAMIC array's element store, with the x87 sync marker in the chain.
+
+    `A%(I%) = LEN(STR$(N%))` puts the value through the x87 (the FILD/STR$
+    bridge), and the compiler synchronizes before the far element write, so
+    the chain is `shl si; mov es,[blk]; <sync>; mov es:[si],ax` rather than
+    the four-op form the element dispatch expected -- `element access:
+    unexpected op fwait`.
+
+    The DYNAMIC array is the whole point: a static array takes the near path
+    and emits no sync, which is why four earlier probes (all static) missed
+    this and the gap was filed as unreproducible (RO-STAT-ELEM-FWAIT-SOURCE).
+    `_sync_len` admits both spellings of the marker, and a default build emits
+    the emulated one (`cd 3d`) here -- byte for byte what wild stat.exe has at
+    0x15e7b.
+    """
+    from tbx import decode0
+
+    want = [
+        ir.Dim("V0%", (ir.Lit(10),), dynamic=True),
+        ir.Assign(ir.Var("A%"), ir.Lit(2)),
+        ir.Assign(ir.Var("B%"), ir.Lit(5)),
+        ir.Assign(
+            ir.ArrayRef("V0%", (ir.Var("A%"),)),
+            ir.Call("LEN", (ir.Call("STR$", (ir.Var("B%"),)),)),
+        ),
+        ir.Print((ir.ArrayRef("V0%", (ir.Var("A%"),)),), newline=True),
+        ir.End(),
+    ]
+
+    for stem in ("t1_farelemsync", "v10_t1_farelemsync"):
+        assert list(decode0.decode_user_code(_exe(f"{stem}.exe"))) == want, stem
+
+
+
 if __name__ == "__main__":
     test_dim_node()
     test_decode_t1_arr1()

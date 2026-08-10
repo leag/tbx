@@ -716,37 +716,53 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
             or m.si[1] != blk
         ):
             raise ValueError(f"shl si outside an element access at {addr:#x}")
-        sik = img.ops[c.k + ao + 1]
+        # An 8087 build syncs the coprocessor between the address chain and
+        # the element's terminal op, so the terminal is one op further along
+        # (wild stat.exe: `shl si; mov es,[666]; FWAIT; mov es:[si],ax`, where
+        # the stored value came through the x87 -- STR$ of a FILD'd word).
+        # `_sync_len` also admits the runtime-revision nop;nop alias, and it
+        # counts against the chain like any other glue op.
+        pre_sync = _sync_len(img.ops, c.k + ao + 1) or 0
+        base = c.k + ao + 1 + pre_sync
+        sik = img.ops[base]
+        if pre_sync and sik[1] in ("negax", "movbxax", "movdx", "movrr"):
+            # Everything below this point re-reads the terminal as
+            # `img.ops[c.k + ao + 1]` after absorbing a neighbor op, an
+            # invariant a sync marker breaks. No wild program pairs the two,
+            # so say so rather than decode it against the wrong index.
+            raise ValueError(
+                f"x87 sync before element glue {sik[1]} at {sik[0]:#x}"
+            )
         # A long-form computed element read can preserve the previously
         # materialized scalar in BX before loading the element (bmaster/ifi,
         # `movbxax; mov ax,[si]`).  The register move is glue, not the
         # element's terminal consumer; keep the element width in ``ao`` and
         # account for the extra op when consuming the chain.
-        element_extra = 0
+        element_extra = pre_sync
         if (
             sik[1] == "movrr"
-            and c.k + ao + 3 < len(img.ops)
-            and img.ops[c.k + ao + 2][1] == "movbxax"
+            and base + 2 < len(img.ops)
+            and img.ops[base + 1][1] == "movbxax"
         ):
             _apply_movrr(m, sik[2], sik[3])
             m.bx, m.ax = m.ax, None
             element_extra = 2
-            sik = img.ops[c.k + ao + 3]
+            sik = img.ops[base + 2]
         elif (
             sik[1] == "movrr"
-            and c.k + ao + 4 < len(img.ops)
-            and img.ops[c.k + ao + 2][1] == "movrr"
-            and img.ops[c.k + ao + 3][1] == "movbxax"
+            and base + 3 < len(img.ops)
+            and img.ops[base + 1][1] == "movrr"
+            and img.ops[base + 2][1] == "movbxax"
         ):
             _apply_movrr(m, sik[2], sik[3])
-            _apply_movrr(m, img.ops[c.k + ao + 2][2], img.ops[c.k + ao + 2][3])
+            _apply_movrr(m, img.ops[base + 1][2], img.ops[base + 1][3])
             m.bx, m.ax = m.ax, None
             element_extra = 3
-            sik = img.ops[c.k + ao + 4]
-        if sik[1] == "movbxax" and c.k + ao + 2 < len(img.ops):
+            sik = img.ops[base + 3]
+        if sik[1] == "movbxax" and base + 1 < len(img.ops):
             m.bx, m.ax = m.ax, None
             element_extra = 1
-            sik = img.ops[c.k + ao + 2]
+            sik = img.ops[base + 1]
         if param_rec is not None:
             esz = 1 << ao
             suffix = (

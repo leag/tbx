@@ -1,0 +1,6 @@
+10 DIM DYNAMIC V0%(10)
+20 A% = 2
+30 B% = 5
+40 V0%(A%) = LEN(STR$(B%))
+50 PRINT V0%(A%)
+60 END
