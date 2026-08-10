@@ -142,20 +142,37 @@ def test_a_string_select_nests_inside_another_one():
         ], stem
 
 
-def test_a_nested_numeric_select_is_loud_rather_than_merged():
-    """The numeric form of the same nesting is NOT recovered, and says so.
+def test_a_numeric_select_nests_too():
+    """Same nesting, numeric selector -- and one more thing had to give.
 
-    Its old shape was a silent wrong decode: the inner selector store was
-    swallowed and the inner arms appended to the OUTER frame, so
-    `SELECT CASE A / CASE 1 / SELECT CASE B / CASE 10 ...` emitted as one
-    `SELECT CASE A` with an arm `CASE 1, 10`. Nothing in the corpus or the
-    wild set relies on that path.
+    A nested SELECT ends exactly where the ENCLOSING arm closes: nothing sits
+    between the inner END SELECT and the outer arm's exit jmp, so the two
+    addresses coincide. Consuming that jmp as the inner frame's own let the
+    inner keep scanning and swallow the outer's next arm (one `SELECT CASE B`
+    with arms 10, 20 AND 2); handing it back to the main loop instead decoded
+    it as a plain `GOTO` and left the outer arm unclosed, merging its guards
+    (`CASE 1, 2`). The frame closes at its own end_select and `_step` goes
+    round again, so the same address closes the inner construct and then the
+    enclosing arm.
     """
-    from tbx.decode0 import select_case
+    for stem in ("t1_selnestnum", "v10_t1_selnestnum"):
+        prog = decode0.decode_user_code((CORPUS / f"{stem}.exe").read_bytes())
 
-    source = Path(select_case.__file__).read_text()
-
-    assert "nested numeric SELECT CASE" in source
+        outer = next(s for s in tuple(prog) if isinstance(s, ir.SelectCase))
+        assert [a.guards for a in outer.arms] == [
+            (ir.CaseValue(ir.Lit(1)),),
+            (ir.CaseValue(ir.Lit(2)),),
+        ], stem
+        inner = next(
+            s for s in outer.arms[0].body if isinstance(s, ir.SelectCase)
+        )
+        assert [a.guards for a in inner.arms] == [
+            (ir.CaseValue(ir.Lit(10)),),
+            (ir.CaseValue(ir.Lit(20)),),
+        ], stem
+        assert not any(
+            isinstance(s, ir.Goto) for s in outer.arms[0].body
+        ), stem
 
 
 def test_every_select_in_the_corpus_records_its_guards():

@@ -542,6 +542,18 @@
    "excluded": null
   },
   {
+   "name": "sprogh.exe",
+   "sha256": "961d494eef90f75c66f97d5a1725cd562db4ab5982c324e546e26aba15e91b9b",
+   "bytes": 80787,
+   "statements": 449,
+   "source_bytes": 19011,
+   "toggles": "K",
+   "build_match": 96,
+   "roundtrip": "code-or-metadata",
+   "delta": -13824,
+   "excluded": null
+  },
+  {
    "name": "startup.exe",
    "sha256": "57d9cdb5cc83de4950aea01d7925baaddf07269b0eba2b67707f448d6f777016",
    "bytes": 29968,

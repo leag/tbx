@@ -362,6 +362,11 @@ def _keep_addrs(state, body, body_idx) -> None:
 
 def step(state):
     with editing(state.output.stmts, "select_case"):
+        return _step(state)
+
+
+def _step(state):
+    while True:
         i, e, c, o = state.image, state.expr, state.control, state.output
         op = i.ops[c.k]
         addr, kind = op[0], op[1]
@@ -402,6 +407,15 @@ def step(state):
             o.stmts.append(ir.SelectCase(fr.selector, tuple(fr.arms), case_else))
             o.addrs.append(fr.start)
             c.cur = None
+            if c.cases and c.cases[-1].body_jmp == addr:
+                # A NESTED SELECT ends exactly where the ENCLOSING arm closes:
+                # the same jmp is the inner construct's end and the outer
+                # arm's exit. Handing the op back to the main loop here
+                # decoded it as an ordinary `GOTO <line>` and left the outer
+                # arm unclosed, so its guards merged with the next one's
+                # (probe_selnestnum: `CASE 1, 2`). Go round again so (2)
+                # closes the enclosing arm at the same address.
+                continue
             return False  # process the op at END SELECT normally
         # (2) Arm body close: the current op is this arm's trailing `jmp END_SELECT`.
         if c.cases and c.cases[-1].body_jmp == addr:
@@ -412,7 +426,20 @@ def step(state):
             fr.arms.append(ir.CaseArm(tuple(fr.cur_guards), body))
             fr.cur_guards = []
             fr.body_jmp = None
-            if kind != "jmp":  # flow-through final arm closes AT END SELECT
+            if kind != "jmp" or addr == fr.end_select:
+                # The arm closed exactly AT this frame's own END SELECT, so
+                # the frame is finished and must not look for another arm.
+                # Two shapes reach here. A flow-through final arm has no
+                # trailing jmp at all. And a NESTED SELECT's last arm exits
+                # through the ENCLOSING arm's close jmp -- there is nothing
+                # between the inner END SELECT and it, so the two addresses
+                # coincide: consuming that jmp as the inner frame's own let
+                # the inner keep scanning and swallow the OUTER's next arm
+                # (probe_selnestnum decoded to one `SELECT CASE B` carrying
+                # arms 10, 20 and the outer's 2). Leave the op for the next
+                # turn: (1) pops this frame at the same address, and the jmp
+                # is then the enclosing frame's arm close, which is what it
+                # is.
                 return True
             state.advance()  # consume the trailing jmp
             c.cur = None
@@ -435,18 +462,20 @@ def step(state):
                     "case_else", start=i.ops[c.k][0], end=fr.end_select
                 ).seq
             return True
-        in_body = bool(c.cases) and c.cases[-1].body_jmp is not None
-        # An OPEN arm body is not a reason to decline a STRING header: a SELECT
-        # CASE nests inside another one's arm, and the compiler REUSES the
-        # outer's scratch cell for the inner selector (the outer's copy is
-        # dead once an arm was chosen) -- wild sprogh.exe writes 0x5c a second
-        # time inside an arm still holding `body_jmp`, and that store then fell
+        # An OPEN arm body is no reason to decline a header: a SELECT CASE
+        # nests inside another one's arm, and the compiler REUSES the outer's
+        # scratch cell for the inner selector -- the outer's copy is dead once
+        # an arm has been chosen. Wild sprogh.exe writes 0x5c a second time
+        # inside an arm still holding `body_jmp`, and that store used to fall
         # through to `loc(0x5c)` as `displacement 0x5c is neither scalar nor
-        # array element`. What separates a header from an arm of the frame
-        # already open is the shape, not the nesting depth: a header is
-        # `movsi [temp]; strassign` (or `fstp64 [temp]`) with an arm header
-        # behind it, and an arm test never writes the cell. Both entries below
-        # already require exactly that, so `c.cases` carries the nesting.
+        # array element`; wild football.exe does the same on the numeric cell
+        # 0x52 and silently merged the two constructs into one.
+        #
+        # What separates a header from an arm of the frame already open is the
+        # shape, not the nesting depth: a header is `movsi [temp]; strassign`
+        # (or `fstp64 [temp]`) with an arm header behind it, and an arm test
+        # never writes the cell. Both entries below already require exactly
+        # that, so `c.cases` carries the nesting on its own.
         # (3) Numeric entry: fstp64 [temp] to a scratch slot, arm header following.
         # An event-trapping poll hook lands at this join too, exactly as it does
         # at the string entry below -- the selector evaluation and the first arm
@@ -462,19 +491,6 @@ def step(state):
             and _is_arm_header_at(state, head)
             and _arm_temp_at(state, head) == op[2]
         ):
-            if in_body:
-                # A NUMERIC SELECT CASE nested in another one's arm. The
-                # string form below is recovered (t1_selnest); this one is
-                # not, and the shape it used to take is a silent wrong
-                # decode, not a missing statement: the inner selector store
-                # was swallowed and the inner arms were appended to the OUTER
-                # frame, so `SELECT CASE A / CASE 1 / SELECT CASE B / CASE 10`
-                # came out as one `SELECT CASE A` with an arm `CASE 1, 10`.
-                # Say so instead of emitting that.
-                raise ValueError(
-                    f"nested numeric SELECT CASE on cell {op[2]:#x} "
-                    f"at {addr:#x}"
-                )
             state.branch(
                 "case", template="select_header", target=None, address=c.cur
             )

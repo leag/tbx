@@ -271,12 +271,36 @@ def fold_inline_ifs(program) -> list:
 
 
 def _construct_operations(program) -> list[tuple[int, int, Any]]:
+    selects = select_regions(program)
+    # An arm holding a NESTED SELECT closes BEFORE it in commit order, and
+    # applying it first takes a body whose inner arms are still loose -- the
+    # inner SELECT then never builds at all (t1_selnest/t1_selnestnum).
+    #
+    # The two closes coincide in the image: a nested SELECT's END is the
+    # enclosing arm's own close jmp, so both are the same address. They differ
+    # only in seq, because the arrival that closes the arm is recorded before
+    # the END SELECT that closes the construct. Hold the arm open to the last
+    # SELECT nested inside its address span, and order a SELECT ahead of an arm
+    # at equal close so the tie that creates resolves inward-first. A SELECT
+    # never ties with its OWN arms: their arrival is always recorded before its
+    # region event, so they still fold first, as they must.
+    def held_open(arm):
+        inner = [
+            select.close
+            for select in selects
+            if arm.start_address is not None
+            and select.start_address is not None
+            and arm.start_address <= select.start_address
+            and (select.end_address or 0) <= (arm.end_address or 0)
+        ]
+        return max([arm.close, *inner])
+
     operations = [(region.close, 0, region) for region in fold_regions(program)]
+    operations += [(select.close, 1, select) for select in selects]
     operations += [
-        (arm.close, 1 if arm.kind == "case_arm" else 2, arm)
+        (held_open(arm), 2 if arm.kind == "case_arm" else 3, arm)
         for arm in arm_regions(program)
     ]
-    operations += [(select.close, 3, select) for select in select_regions(program)]
     return sorted(operations, key=lambda operation: (operation[0], operation[1]))
 
 

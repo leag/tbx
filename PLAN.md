@@ -10094,20 +10094,36 @@ warnings and the 0x8F6..0x9A6 raises are normal -- those are pooled operands
 whose raise the pool fallbacks catch by design. Count only the raise that
 escapes.
 
-### The numeric form is NOT fixed, and is now loud
+### The numeric form, fixed too (same session)
 
-Dropping the same guard on the numeric (`fstp64 [temp]`) entry nests the frame
-but loses the OUTER one when the inner closes: probe_selnestnum comes out as a
-single `SELECT CASE B` holding the inner arms 10, 20 and the outer arm 2. With
-the guard in place the old behaviour was a different silent wrong decode -- the
-inner store swallowed, the inner arms appended to the outer frame, emitting
-`SELECT CASE A` with an arm `CASE 1, 10`.
+Dropping the guard was necessary and nowhere near sufficient: it only changed
+WHICH wrong shape came out (a single `SELECT CASE B` holding arms 10, 20 and
+the outer's 2, instead of a `SELECT CASE A` with a merged `CASE 1, 10`). The
+mechanism was the close path, in two places, and both come from one fact --
+**a nested SELECT ends exactly where the enclosing arm closes.** Nothing sits
+between the inner END SELECT and the outer arm's exit jmp, so they are the same
+address.
 
-Both shapes are wrong, so the numeric entry raises instead. That costs a
-decode-ok: wild football.exe was "decoding" into the merged-arm form and now
-fails loudly, which is the honest state. sprogh.exe reaches the same point.
-Two wild witnesses and a byte-exact probe for whoever works the close/fold
-path -- RO-NESTED-NUMERIC-SELECT-NESTS-LIKE-THE-STRING-ONE says what not to
-retry.
+1. The arm-close leg consumed that jmp as the inner frame's own and kept
+   scanning, so the inner swallowed the outer's next arm. It now returns
+   without consuming when the arm closes at its own `end_select`, and `step`
+   loops (`_step`) so the same address closes the inner construct and then the
+   enclosing arm. Handing the op back to the main loop instead is what decoded
+   it as a stray `GOTO`.
+2. `fold_pass` -- the deferred rebuild that cross-checks the walk -- orders by
+   commit seq, and the arm's arrival is recorded BEFORE the inner END SELECT.
+   It folded the arm around inner arms that were still loose, and the inner
+   SELECT never built at all. An arm is now held open to the last SELECT
+   nested inside its address span.
 
-Wild corpus: 92 decode-ok of 108 (sprogh advanced, football turned honest).
+Fixture t1_selnestnum (+v10_), byte-exact both dialects. Wild football.exe --
+which had been "decoding" into the merged-arm shape all along -- and sprogh.exe
+both decode now.
+
+Wild corpus: 94 decode-ok of 108, 9 failures.
+
+sprogh.exe joins wild_roundtrip.json as comparable and measured: 22472 bytes
+off, 78.94% identical, delta -13824. football.exe decodes but its emitted
+source did not get through the v86 harness this run (a harness error, not a
+compiler diagnostic), so it stays out of the manifest until someone measures
+it.

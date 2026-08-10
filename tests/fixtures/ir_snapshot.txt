@@ -6342,6 +6342,11 @@ Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
 SelectCase(selector=Var(name='A$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='a')),), body=(Input(prompt=None, var=Var(name='B$'), comma=False, semi=False), SelectCase(selector=Var(name='B$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='x')),), body=(Print(items=(Lit(value=1),), newline=True, file=None, commas=None),)), CaseArm(guards=(CaseValue(value=StrLit(value='y')),), body=(Print(items=(Lit(value=2),), newline=True, file=None, commas=None),))), case_else=None))), CaseArm(guards=(CaseValue(value=StrLit(value='b')),), body=(Print(items=(Lit(value=3),), newline=True, file=None, commas=None),))), case_else=None)
 End()
 
+## t1_selnestnum
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
+SelectCase(selector=Var(name='A'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=1)),), body=(Input(prompt=None, var=Var(name='B'), comma=False, semi=False), SelectCase(selector=Var(name='B'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=10)),), body=(Print(items=(Lit(value=1),), newline=True, file=None, commas=None),)), CaseArm(guards=(CaseValue(value=Lit(value=20)),), body=(Print(items=(Lit(value=2),), newline=True, file=None, commas=None),))), case_else=None))), CaseArm(guards=(CaseValue(value=Lit(value=2)),), body=(Print(items=(Lit(value=3),), newline=True, file=None, commas=None),))), case_else=None)
+End()
+
 ## t1_selreftrap
 OnTrap(event='TIMER', n=Lit(value=1), target=5)
 TrapCtl(event='TIMER', n=None, mode='ON')
@@ -12984,6 +12989,11 @@ End()
 ## v10_t1_selnest
 Input(prompt=None, var=Var(name='A$'), comma=False, semi=False)
 SelectCase(selector=Var(name='A$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='a')),), body=(Input(prompt=None, var=Var(name='B$'), comma=False, semi=False), SelectCase(selector=Var(name='B$'), arms=(CaseArm(guards=(CaseValue(value=StrLit(value='x')),), body=(Print(items=(Lit(value=1),), newline=True, file=None, commas=None),)), CaseArm(guards=(CaseValue(value=StrLit(value='y')),), body=(Print(items=(Lit(value=2),), newline=True, file=None, commas=None),))), case_else=None))), CaseArm(guards=(CaseValue(value=StrLit(value='b')),), body=(Print(items=(Lit(value=3),), newline=True, file=None, commas=None),))), case_else=None)
+End()
+
+## v10_t1_selnestnum
+Input(prompt=None, var=Var(name='A'), comma=False, semi=False)
+SelectCase(selector=Var(name='A'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=1)),), body=(Input(prompt=None, var=Var(name='B'), comma=False, semi=False), SelectCase(selector=Var(name='B'), arms=(CaseArm(guards=(CaseValue(value=Lit(value=10)),), body=(Print(items=(Lit(value=1),), newline=True, file=None, commas=None),)), CaseArm(guards=(CaseValue(value=Lit(value=20)),), body=(Print(items=(Lit(value=2),), newline=True, file=None, commas=None),))), case_else=None))), CaseArm(guards=(CaseValue(value=Lit(value=2)),), body=(Print(items=(Lit(value=3),), newline=True, file=None, commas=None),))), case_else=None)
 End()
 
 ## v10_t1_shell

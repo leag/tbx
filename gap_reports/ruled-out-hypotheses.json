@@ -756,9 +756,10 @@
    "negative_evidence": [
     "Dropping it does push the inner frame, but the result is worse than before: probe_selnestnum decodes to a SINGLE `SELECT CASE B` carrying the inner arms 10 and 20 AND the outer arm 2 -- the outer frame is discarded entirely when the inner closes.",
     "With the guard in place the old behaviour is a DIFFERENT silent wrong decode: the inner selector store is swallowed and the inner arms are appended to the outer frame, emitting `SELECT CASE A` with an arm `CASE 1, 10`.",
-    "So the guard is not the mechanism; the close/fold path is. The string form needs no such work because its arms are matched against the frame's own temp cell at each compare, while the numeric close is where the outer is lost."
+    "So the guard is not the mechanism; the close/fold path is. The string form needs no such work because its arms are matched against the frame's own temp cell at each compare, while the numeric close is where the outer is lost.",
+    "RESOLVED same session: the entry guard was indeed not the mechanism, and the close path was, in TWO places. (1) A nested SELECT's END is the ENCLOSING arm's close jmp -- the same address -- and the arm-close leg consumed that jmp as the inner frame's own, so the inner kept scanning and took the outer's next arm. It returns without consuming when the arm closes at its own end_select, and `_step` loops so the same address then closes the enclosing arm. (2) The deferred fold pass ordered by commit seq, where the enclosing arm's arrival is recorded BEFORE the inner END SELECT, so it folded the arm around loose inner arms; an arm is now held open to the last SELECT nested in its address span."
    ],
-   "instead": "The numeric entry now RAISES `nested numeric SELECT CASE` rather than emitting either wrong shape. Two wild witnesses (football.exe, which previously 'decoded' into the merged-arm form, and sprogh.exe, which reaches it after the string nesting landed) plus a byte-exact probe. Work the END SELECT close/fold path -- specifically what happens to the enclosing frame when an inner SelectCase is snapshotted -- not the entry guard.",
+   "instead": "CLOSED. Fixtures t1_selnestnum (+v10_), byte-exact both dialects; wild football.exe and sprogh.exe both decode. Method note: this entry's own value was in saying WHERE to look after the guess failed -- the entry guard looked like the mechanism because removing it changed the output, but it only changed WHICH wrong shape came out.",
    "source": "wild-corpus session 2026-08-09"
   }
  ]
