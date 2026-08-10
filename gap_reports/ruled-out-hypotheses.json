@@ -717,6 +717,26 @@
    ],
    "instead": "Probe budget spent at two without a hit. The 15 sites at 0x11322..0x116d9 repeat on an exact 0x44-byte stride and the 9 at 0x2d4d8..0x2da6f on a 0xB3 stride, each block being `compare / test a flag word / set it / else raise` -- a repeated template, which is what a $INLINE library or a code generator produces, not ordinary statement compilation. Identify what generates the repeated block before guessing the statement; a single-witness slot named by guess would be a fabricated mapping. Single witness, deferred.",
    "source": "wild-corpus session 2026-08-09"
+  },
+  {
+   "id": "RO-SPROGH-DISP-5C-IS-A-NAMING-GAP",
+   "title": "sprogh.exe's `displacement 0x5c is neither scalar nor array element` is a missing slot name",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "wild/hits/sprogh.exe"
+   ],
+   "signatures": [
+    "displacement 0x5c is neither scalar nor array element"
+   ],
+   "hypothesis": "0x5c is one more low DGROUP runtime cell that layout recovery does not name, so naming it (as 0x76 was named for billadd.exe) should close the file.",
+   "negative_evidence": [
+    "The raise at 0x5c is the LAST of many, not the first symptom. Instrumenting `loc` shows ~50 distinct displacements in 0x8F6..0x9A6 already going through the `unclassified displacement; treating as scalar` fallback on the way there.",
+    "Recovered layout for this program: scalar_base 0x29A, pool_base 0x434, first string descriptor 0x3C0, delta 0. That places the whole variable area in 0x29A..0x434 while the program's actual variables are being read from around 0x900-0x9A6 -- past the recovered pool base.",
+    "So 0x5c is a consequence: the variable region was recovered in the wrong place, everything above it fell through the `>= pool_base - 4` fallback, and the first reference BELOW 0x400 is where the fallback's own guard finally raises."
+   ],
+   "instead": "This is DGROUP layout recovery, not slot naming -- the same expensive bucket as slimmer.exe and swbb.exe ('DGROUP layout not solvable'), and pw.exe, which shows the same unclassified-displacement flood plus 'array block missing from layout'. Fix the anchor for these programs as one problem and re-check all four together; naming 0x5c would only move the raise. Consistent with RO-DISP-NOT-SCALAR-ONE-CAUSE: the message is a symptom, not a bucket.",
+   "source": "wild-corpus session 2026-08-09"
   }
  ]
 }

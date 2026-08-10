@@ -10050,3 +10050,26 @@ contains it, so nothing else can move; the other placeholders stay untouched
 because nothing has measured them.
 
 Wild corpus 91 -> 92 decode-ok of 108.
+
+## Where the wild corpus stands after this session
+
+93 of 108 decode-ok (87 of 97 program families), up from 90. Closed here:
+crossref.exe (DEF FN body opened on a GOSUB subroutine), stat.exe (x87 sync in
+a far element chain), phone.exe (BODY_11's placeholder arity). Plus one silent
+wrong decode with no failing program at all: a LOCAL array re-DIMmed under two
+names.
+
+The ten that remain are not a queue of similar things:
+
+- hebrew.exe, kinder.exe, varamort.exe -- `materialization template mismatch`,
+  already triaged into THREE distinct causes (see the triage commit); all three
+  sit in the pend_bool/direct_bool_gate machinery.
+- nvg.exe, pw.exe, sprogh.exe, slimmer.exe, swbb.exe -- one problem wearing
+  three error messages. sprogh's instrumentation makes it explicit: its
+  variables are read from 0x8F6..0x9A6 while layout recovery put the variable
+  region at 0x29A..0x434, so everything above fell through the unclassified-
+  displacement fallback and the first reference below 0x400 raised. Naming that
+  cell would only move the raise. This is the biggest remaining cluster and the
+  one with the most witnesses.
+- night.exe -- the DATA pointer table, deferred with its own ledger entry.
+- sabpcv3.exe -- INT EC slot 02, two probes spent, deferred.
