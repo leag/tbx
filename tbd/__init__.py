@@ -9,6 +9,7 @@ from tbd.ir import (
     PassReport,
     Program,
     Slot,
+    Statement,
 )
 
 decode_user_code = decode
@@ -21,6 +22,7 @@ __all__ = [
     "PassReport",
     "Program",
     "Slot",
+    "Statement",
     "decode",
     "decode_user_code",
 ]

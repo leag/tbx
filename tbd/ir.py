@@ -60,6 +60,14 @@ class Slot:
 
 
 @dataclass(frozen=True)
+class Statement:
+    index: int
+    address: int
+    kind: str
+    operands: tuple[Any, ...] = ()
+
+
+@dataclass(frozen=True)
 class Program:
     """A standalone best-effort decode, including evidence and lifted IR."""
 
@@ -75,6 +83,7 @@ class Program:
     xrefs: tuple[CrossReference, ...] = ()
     passes: tuple[PassReport, ...] = ()
     slots: tuple[Slot, ...] = ()
+    statements: tuple[Statement, ...] = ()
     diagnostics: tuple[Diagnostic, ...] = ()
 
     def to_dict(self, *, include_instructions: bool = False) -> dict[str, Any]:
@@ -98,12 +107,8 @@ class Program:
         if show_instructions:
             lines.append("instructions")
             lines.extend(_render_operation(node) for node in self.instructions)
-        if self.passes:
-            lines.append("passes")
-            lines.extend(
-                f"  {item.round}:{item.name} changes={item.changes} nodes={item.nodes}"
-                for item in self.passes
-            )
+        lines.extend(_render_passes(self.passes))
+        lines.extend(_render_statements(self.statements))
         for diagnostic in self.diagnostics:
             where = "" if diagnostic.offset is None else f" at {diagnostic.offset:#x}"
             lines.append(f"{diagnostic.severity}{where}: {diagnostic.message}")
@@ -118,6 +123,24 @@ def _render_operation(operation: Operation) -> str:
         f"{operation.offset:05x}  {raw:<54} "
         f"{operation.kind}{suffix} [{operation.confidence}]"
     )
+
+
+def _render_passes(passes: tuple[PassReport, ...]) -> list[str]:
+    if not passes:
+        return []
+    return ["passes"] + [
+        f"  {item.round}:{item.name} changes={item.changes} nodes={item.nodes}"
+        for item in passes
+    ]
+
+
+def _render_statements(statements: tuple[Statement, ...]) -> list[str]:
+    if not statements:
+        return []
+    return ["statements"] + [
+        f"  {item.index}: {item.kind} {_render_arg(item.operands)}"
+        for item in statements
+    ]
 
 
 def _hex(value: int | None) -> str:

@@ -7,6 +7,7 @@ import struct
 from tbd.analysis import discover, lift
 from tbd.ir import Diagnostic, Program
 from tbd.slots import collect
+from tbd.statements import reconstruct
 
 _PROLOGUES = {b"\xcd\xec\xba": "1.1", b"\xcd\xec\xb8": "1.0"}
 
@@ -45,6 +46,7 @@ def decode(
         xrefs=xrefs,
         passes=passes,
         slots=collect(operations),
+        statements=reconstruct(operations),
         diagnostics=tuple(diagnostics) + found,
     )
 

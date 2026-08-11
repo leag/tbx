@@ -1,0 +1,94 @@
+"""Reconstruct source-level statement boundaries from lifted operations."""
+
+from __future__ import annotations
+
+from tbd.ir import Operation, Statement
+
+_SIMPLE_KINDS = {
+    "ir.assign": "Assign",
+    "ir.print": "Print",
+    "ir.if_goto": "IfGoto",
+    "flow.goto": "Goto",
+    "flow.call": "Call",
+    "flow.return": "Return",
+}
+
+
+def reconstruct(operations: tuple[Operation, ...]) -> tuple[Statement, ...]:
+    candidates = _statement_operations(list(operations))
+    addresses = [operation.offset for operation in candidates]
+    statements = []
+    for index, operation in enumerate(candidates):
+        kind, operands = _statement(operation)
+        operands = _resolve_operands(kind, operands, addresses)
+        statements.append(Statement(index, operation.offset, kind, operands))
+    return tuple(statements)
+
+
+def _statement_operations(nodes: list[Operation]) -> list[Operation]:
+    result = []
+    index = 0
+    while index < len(nodes):
+        window = nodes[index : index + 5]
+        if delay := _delay(window):
+            result.append(delay)
+            index += 5
+            continue
+        node = nodes[index]
+        if node.kind in _SIMPLE_KINDS or node.kind == "tb.statement":
+            result.append(node)
+        index += 1
+    return result
+
+
+def _delay(nodes: list[Operation]) -> Operation | None:
+    if len(nodes) != 5:
+        return None
+    value, begin, poll, commit, branch = nodes
+    if [value.kind, begin.kind, poll.kind, commit.kind, branch.kind] != [
+        "expr.value", "tb.statement", "tb.statement", "tb.commit", "flow.branch"
+    ]:
+        return None
+    if begin.operands[0] != "DELAY_INIT" or poll.operands[0] != "DELAY_POLL":
+        return None
+    if branch.operands[1] != poll.offset:
+        return None
+    raw = " ".join(node.raw for node in nodes)
+    return Operation(
+        value.offset,
+        branch.end - value.offset,
+        "ir.delay",
+        value.operands,
+        raw,
+        "semantic",
+    )
+
+
+def _statement(operation: Operation) -> tuple[str, tuple[object, ...]]:
+    if operation.kind == "ir.delay":
+        return "Delay", operation.operands
+    if operation.kind == "tb.statement":
+        name = operation.operands[0]
+        kind = "End" if name == "END" else str(name).title().replace("_", "")
+        return kind, operation.operands[2:]
+    return _SIMPLE_KINDS[operation.kind], operation.operands
+
+
+def _resolve_operands(
+    kind: str, operands: tuple[object, ...], addresses: list[int]
+) -> tuple[object, ...]:
+    if kind == "IfGoto":
+        condition, left, right, target, _false_target = operands
+        return condition, left, right, _resolve(target, addresses)
+    if kind == "Goto":
+        return (_resolve(operands[0], addresses),)
+    return operands
+
+
+def _resolve(target: object, addresses: list[int]) -> object:
+    if not isinstance(target, int):
+        return target
+    for index, address in enumerate(addresses):
+        if address >= target:
+            return index
+    return "address", target

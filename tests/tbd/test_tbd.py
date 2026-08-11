@@ -116,6 +116,25 @@ def test_branch_pair_pass_lifts_source_conditions_and_true_targets():
     ]
 
 
+def test_statement_pass_recovers_boundaries_and_resolves_targets():
+    arithmetic = decode((_CORPUS / "t1_addimm.exe").read_bytes())
+    conditional = decode((_CORPUS / "t1_if.exe").read_bytes())
+    delay = decode((_CORPUS / "t1_delay.exe").read_bytes())
+
+    assert [node.kind for node in arithmetic.statements] == [
+        "Assign", "Assign", "Print", "End"
+    ]
+    assert [node.kind for node in conditional.statements] == [
+        "Assign", "Assign", "IfGoto", "Assign", "IfGoto", "Assign", "End"
+    ]
+    assert conditional.statements[2].operands[-1] == 4
+    assert conditional.statements[4].operands[-1] == 6
+    assert [(node.kind, node.operands) for node in delay.statements] == [
+        ("Delay", (("const", 1),)),
+        ("End", ()),
+    ]
+
+
 def test_empty_truncated_and_limited_images_still_return_programs():
     empty = decode(b"")
     truncated = decode(b"MZ\x01")
