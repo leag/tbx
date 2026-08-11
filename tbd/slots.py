@@ -40,14 +40,19 @@ def _rewrite_operands(node: Operation) -> tuple[Any, ...]:
     operands = tuple(_rewrite(value) for value in node.operands)
     if node.kind.startswith("machine.") and operands and isinstance(operands[0], int):
         target = operands[0]
-        if target >= VAR_BASE:
+        if _is_slot(target):
             operands = ((_slot(target),) + operands[1:])
     return operands
 
 
 def _rewrite(value: Any) -> Any:
     if isinstance(value, tuple):
-        if len(value) >= 2 and value[0] == "memory" and isinstance(value[1], int):
+        if (
+            len(value) >= 2
+            and value[0] == "memory"
+            and isinstance(value[1], int)
+            and _is_slot(value[1])
+        ):
             return _slot(value[1]) + tuple(_rewrite(item) for item in value[2:])
         return tuple(_rewrite(item) for item in value)
     if isinstance(value, list):
@@ -62,6 +67,10 @@ def _slot(offset: int) -> tuple[str, str, int]:
 def _name(offset: int) -> str:
     index = (offset - VAR_BASE) // SLOT_WIDTH + 1
     return f"V{index:04d}"
+
+
+def _is_slot(offset: int) -> bool:
+    return offset >= VAR_BASE and (offset - VAR_BASE) % SLOT_WIDTH == 0
 
 
 def _collect_from(value: Any, found: dict[int, set[str]]) -> None:
