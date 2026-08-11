@@ -1,0 +1,60 @@
+# `tbd`: compact iterative decoding
+
+`tbd` is a standalone, forgiving companion to `tbx`. It borrows two ideas
+from IDA without trying to reproduce IDA itself:
+
+- recursive traversal follows branches and calls from known entry points, so
+  unreachable data is not decoded merely because it follows code;
+- FLIRT-style signatures recognize stable compiler/runtime byte patterns and
+  give later passes stronger facts. The implementation uses ordinary Python
+  predicate functions rather than a signature-file format.
+
+See the [official FLIRT overview](https://docs.hex-rays.com/user-guide/signatures/flirt)
+for the original library-recognition concept.
+
+## Use
+
+```sh
+tbd PROGRAM.EXE                 # compact lifted IR as JSON
+tbd PROGRAM.EXE --text          # compact lifted IR as text
+tbd PROGRAM.EXE --instructions  # also expose discovered instructions
+tbd PROGRAM.EXE --rounds 12     # change the fixed-point limit
+python -m tbd PROGRAM.EXE
+```
+
+Python callers use one function:
+
+```python
+from tbd import decode
+
+program = decode(open("PROGRAM.EXE", "rb").read())
+for block in program.blocks:
+    print(block.start, block.successors)
+for operation in program.operations:
+    print(operation.offset, operation.kind, operation.operands)
+```
+
+## Analysis model
+
+The pipeline is deliberately small:
+
+1. Read the MZ bounds, entry point, and Turbo Basic prologue signature.
+2. Discover instructions recursively and record basic blocks and cross-references.
+3. Record signature matches for Turbo Basic dispatches and runtime calls.
+4. Repeatedly fold assignments, register/stack arguments, conditions, and
+   control flow until a complete round makes no changes.
+5. Group everything not yet lifted into `unknown.region` nodes.
+
+`Program.instructions` retains the low-level evidence. `Program.operations`
+is the compact IR and is what the CLI emits by default. `Program.passes`
+records every pass, round, change count, and resulting node count, making it
+clear whether another round helped.
+
+Unknown bytes never stop discovery. Conflicting code targets, scan limits,
+and opaque bytes become diagnostics. More signatures and rewrite functions
+can progressively decode an unknown region in later versions without changing
+the traversal engine.
+
+`tbd` imports no `tbx` decoder or emitter modules and makes no byte-exactness
+promise. Use `tbx` and the oracle when correctness means a byte-identical
+recompile.

@@ -21,6 +21,20 @@ tbx PROGRAM.EXE -o PROGRAM.BAS --dense --split  # minimize labels and add .INC f
 tbx PROGRAM.EXE --ops           # inspect the canonical op stream
 ```
 
+For best-effort inspection of unknown or damaged binaries, the same install
+also provides the standalone `tbd` analyzer. It recursively discovers code,
+applies compiler/runtime signatures, and repeats small lifting passes until
+the IR stops changing. Unresolved instructions are grouped into opaque regions:
+
+```sh
+tbd PROGRAM.EXE                 # JSON IR
+tbd PROGRAM.EXE --text          # compact text IR
+tbd PROGRAM.EXE --instructions  # include low-level disassembly evidence
+```
+
+Unlike `tbx`, `tbd` does not claim that recovered semantics will recompile
+byte-for-byte. See [`docs/tbd.md`](docs/tbd.md) for its API and guarantees.
+
 The core package has no runtime dependencies and requires Python 3.11 or
 newer. For development:
 
