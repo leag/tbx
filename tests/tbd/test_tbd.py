@@ -71,9 +71,17 @@ def test_symbolic_pass_evaluates_fp_stack_and_direct_memory_effects():
         if operation.kind.startswith("machine.")
     ]
     assert effects[:2] == [
-        ("machine.store", (0x120, ("const", 5))),
-        ("machine.update", (0x120, "+", ("const", 3))),
+        ("machine.store", (("slot", "V0001", 0x120), ("const", 5))),
+        ("machine.update", (("slot", "V0001", 0x120), "+", ("const", 3))),
     ]
+
+
+def test_dgroup_pass_names_slots_without_touching_runtime_cells():
+    program = decode((_CORPUS / "t1_if.exe").read_bytes())
+
+    assert [slot.name for slot in program.slots[:3]] == ["V0001", "V0002", "V0003"]
+    assert [slot.offset for slot in program.slots[:3]] == [0x120, 0x124, 0x128]
+    assert any(report.name == "dgroup-slots" and report.changes for report in program.passes)
 
 
 def test_empty_truncated_and_limited_images_still_return_programs():

@@ -53,6 +53,13 @@ class PassReport:
 
 
 @dataclass(frozen=True)
+class Slot:
+    offset: int
+    name: str
+    types: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class Program:
     """A standalone best-effort decode, including evidence and lifted IR."""
 
@@ -67,6 +74,7 @@ class Program:
     blocks: tuple[BasicBlock, ...] = ()
     xrefs: tuple[CrossReference, ...] = ()
     passes: tuple[PassReport, ...] = ()
+    slots: tuple[Slot, ...] = ()
     diagnostics: tuple[Diagnostic, ...] = ()
 
     def to_dict(self, *, include_instructions: bool = False) -> dict[str, Any]:

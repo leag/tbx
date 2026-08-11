@@ -6,6 +6,7 @@ import heapq
 from collections.abc import Callable
 
 from tbd.ir import BasicBlock, CrossReference, Diagnostic, Operation, PassReport
+from tbd.slots import identify
 from tbd.symbolic import evaluate
 from tbd.x86 import decode_instruction
 
@@ -89,6 +90,7 @@ def lift(
     reports = [PassReport(0, "signatures", signature_count, len(nodes))]
     rewrites: tuple[tuple[str, Rewrite], ...] = (
         ("symbols", evaluate),
+        ("dgroup-slots", identify),
         ("assignments", _fold_assignments),
         ("register-arguments", _fold_register_arguments),
         ("stack-arguments", _fold_stack_arguments),
