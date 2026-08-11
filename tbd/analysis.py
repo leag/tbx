@@ -8,6 +8,7 @@ from collections.abc import Callable
 from tbd.assignments import lift_assignments
 from tbd.branches import lift_if_gotos
 from tbd.ir import BasicBlock, CrossReference, Diagnostic, Operation, PassReport
+from tbd.pool import resolve as resolve_pool
 from tbd.runtime import lift_runtime
 from tbd.slots import identify
 from tbd.symbolic import evaluate
@@ -83,6 +84,7 @@ def lift(
     blocks: tuple[BasicBlock, ...],
     xrefs: tuple[CrossReference, ...],
     *,
+    image: bytes,
     rounds: int = 8,
 ) -> tuple[tuple[Operation, ...], tuple[PassReport, ...]]:
     """Apply simple rewrites until a round makes no further progress."""
@@ -93,6 +95,7 @@ def lift(
     reports = [PassReport(0, "signatures", signature_count, len(nodes))]
     rewrites: tuple[tuple[str, Rewrite], ...] = (
         ("symbols", evaluate),
+        ("constant-pool", lambda nodes, protected: resolve_pool(nodes, protected, image)),
         ("dgroup-slots", identify),
         ("assignments", lift_assignments),
         ("runtime", lift_runtime),

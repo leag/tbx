@@ -43,9 +43,10 @@ The pipeline is deliberately small:
 1. Read the MZ bounds, entry point, and Turbo Basic prologue signature.
 2. Discover instructions recursively and record basic blocks and cross-references.
 3. Record signature matches for Turbo Basic dispatches and runtime calls.
-4. Repeatedly propagate register and FP-stack values, name DGROUP slots, lift
-   assignments and PRINT chains, recover call arguments and conditions, and
-   normalize control flow until a complete round makes no changes.
+4. Repeatedly propagate register and FP-stack values, solve anchored constant-
+   pool candidates, name DGROUP slots, lift assignments and PRINT chains,
+   recover call arguments and conditions, and normalize control flow until a
+   complete round makes no changes.
 5. Group everything not yet lifted into `unknown.region` nodes.
 6. Reconstruct a source-shaped statement sequence from the stable operation
    stream, resolving branch addresses to statement indexes when possible.
@@ -61,6 +62,13 @@ runtime statements. This view is intentionally lossy and incomplete: a value
 stays a memory or string-pool address until a pass has enough evidence to name
 or decode it. The operation stream remains available to explain every lifted
 statement.
+
+The pool lift is generic across the simple Turbo Basic scalar layout, rather
+than across arbitrary executable formats. It derives candidates from evidenced
+assignment targets and memory references, then requires the compiler's pool
+marker and EOF anchor before decoding integer, single-precision, or string
+literals. Mixed-width scalar bands, arrays, overlays, or an ambiguous layout
+remain unresolved for later passes.
 
 Unknown bytes never stop discovery. Conflicting code targets, scan limits,
 and opaque bytes become diagnostics. More signatures and rewrite functions

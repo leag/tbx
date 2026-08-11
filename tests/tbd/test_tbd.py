@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 
 from tbd import cli, decode
+from tbd.ir import Operation
+from tbd.pool import resolve as resolve_pool
 
 _CORPUS = Path(__file__).parents[1] / "fixtures" / "corpus"
 
@@ -76,7 +78,41 @@ def test_dgroup_pass_names_slots_without_touching_runtime_cells():
 
     assert [slot.name for slot in program.slots[:3]] == ["V0001", "V0002", "V0003"]
     assert [slot.offset for slot in program.slots[:3]] == [0x120, 0x124, 0x128]
+    assert all(slot.offset < 0x134 for slot in program.slots)
     assert any(report.name == "dgroup-slots" and report.changes for report in program.passes)
+
+
+def test_constant_pool_pass_resolves_numeric_and_string_literals():
+    printed = decode((_CORPUS / "t1_print.exe").read_bytes())
+    conditional = decode((_CORPUS / "t1_if.exe").read_bytes())
+
+    assert printed.statements[0].operands[1] == ("const", 5)
+    assert printed.statements[1].operands[1] == (("string", "HELLO"),)
+    assert conditional.statements[1].operands[1] == ("const", 2)
+    assert conditional.statements[3].operands[1] == ("const", 5)
+    assert any(
+        report.name == "constant-pool" and report.changes
+        for report in printed.passes
+    )
+
+
+def test_constant_pool_candidates_follow_evidenced_slot_extent():
+    image = bytearray(0x200)
+    marker = len(image) - 0x30
+    image[marker : marker + 4] = b"\x00\x80\x16\x00"
+    ds = marker - 0x140
+    image[ds + 0x146 : ds + 0x148] = b"\x2a\x00"
+    node = Operation(
+        0,
+        1,
+        "machine.store",
+        (0x130, ("memory", 0x146, "integer")),
+    )
+
+    resolved, changes = resolve_pool([node], set(), bytes(image))
+
+    assert changes == 1
+    assert resolved[0].operands == (0x130, ("const", 42))
 
 
 def test_assignment_pass_lifts_store_and_update_expressions():
@@ -95,7 +131,7 @@ def test_runtime_pass_lifts_numeric_and_string_print_chains():
     prints = [node.operands for node in program.operations if node.kind == "ir.print"]
 
     assert prints == [
-        ("console", (("string-address", 0x134),), True),
+        ("console", (("string", "HELLO"),), True),
         ("console", (("slot", "V0001", 0x120, "float"),), True),
         (
             "console",

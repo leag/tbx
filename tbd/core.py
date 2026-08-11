@@ -28,7 +28,7 @@ def decode(
     stop = image_end if max_bytes is None else min(image_end, start + max_bytes)
     diagnostics = _loader_diagnostics(exe, prologue)
     instructions, blocks, xrefs, found = discover(exe, start, stop, dialect)
-    operations, passes = lift(instructions, blocks, xrefs, rounds=rounds)
+    operations, passes = lift(instructions, blocks, xrefs, image=exe, rounds=rounds)
     if stop < image_end:
         diagnostics.append(
             Diagnostic(f"analysis window is limited to {stop - start} bytes", stop)
