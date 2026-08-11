@@ -78,3 +78,5 @@ the traversal engine.
 `tbd` imports no `tbx` decoder or emitter modules and makes no byte-exactness
 promise. Use `tbx` and the oracle when correctness means a byte-identical
 recompile.
+
+New analysis work follows the normative [fact-engine design](tbd-design.md).

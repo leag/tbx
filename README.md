@@ -33,7 +33,8 @@ tbd PROGRAM.EXE --instructions  # include low-level disassembly evidence
 ```
 
 Unlike `tbx`, `tbd` does not claim that recovered semantics will recompile
-byte-for-byte. See [`docs/tbd.md`](docs/tbd.md) for its API and guarantees.
+byte-for-byte. See [`docs/tbd.md`](docs/tbd.md) for its API and guarantees, and
+[`docs/tbd-design.md`](docs/tbd-design.md) for the analysis design.
 
 The core package has no runtime dependencies and requires Python 3.11 or
 newer. For development:
