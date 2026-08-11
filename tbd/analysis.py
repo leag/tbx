@@ -6,6 +6,7 @@ import heapq
 from collections.abc import Callable
 
 from tbd.assignments import lift_assignments
+from tbd.branches import lift_if_gotos
 from tbd.ir import BasicBlock, CrossReference, Diagnostic, Operation, PassReport
 from tbd.runtime import lift_runtime
 from tbd.slots import identify
@@ -99,6 +100,7 @@ def lift(
         ("stack-arguments", _fold_stack_arguments),
         ("conditions", _fold_conditions),
         ("control-flow", _lift_control_flow),
+        ("if-gotos", lift_if_gotos),
     )
     for round_number in range(1, rounds + 1):
         changed = 0

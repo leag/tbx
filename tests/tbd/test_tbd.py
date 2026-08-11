@@ -106,6 +106,16 @@ def test_runtime_pass_lifts_numeric_and_string_print_chains():
     assert any(node.kind == "tb.commit" for node in program.operations)
 
 
+def test_branch_pair_pass_lifts_source_conditions_and_true_targets():
+    program = decode((_CORPUS / "t1_if.exe").read_bytes())
+    conditions = [node.operands for node in program.operations if node.kind == "ir.if_goto"]
+
+    assert conditions == [
+        (">=", ("slot", "V0003", 0x128), ("slot", "V0002", 0x124, "float"), 0x8738, 0x872C),
+        ("=", ("slot", "V0003", 0x128), ("slot", "V0002", 0x124, "float"), 0x875A, 0x874B),
+    ]
+
+
 def test_empty_truncated_and_limited_images_still_return_programs():
     empty = decode(b"")
     truncated = decode(b"MZ\x01")
