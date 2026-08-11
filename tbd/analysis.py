@@ -6,6 +6,7 @@ import heapq
 from collections.abc import Callable
 
 from tbd.ir import BasicBlock, CrossReference, Diagnostic, Operation, PassReport
+from tbd.symbolic import evaluate
 from tbd.x86 import decode_instruction
 
 _CONDITIONAL = {
@@ -87,6 +88,7 @@ def lift(
     signature_count = sum(node.confidence == "signature" for node in nodes)
     reports = [PassReport(0, "signatures", signature_count, len(nodes))]
     rewrites: tuple[tuple[str, Rewrite], ...] = (
+        ("symbols", evaluate),
         ("assignments", _fold_assignments),
         ("register-arguments", _fold_register_arguments),
         ("stack-arguments", _fold_stack_arguments),
@@ -323,7 +325,8 @@ def _group_unknown(
 
 def _is_unknown(node: Operation) -> bool:
     high_level = ("tb.prologue", "tb.statement", "tb.epilogue")
-    return not (node.kind in high_level or node.kind.startswith(("flow.", "ir.")))
+    semantic = ("flow.", "ir.", "expr.", "machine.")
+    return not (node.kind in high_level or node.kind.startswith(semantic))
 
 
 def _can_join(group: list[Operation], node: Operation, boundaries: set[int]) -> bool:

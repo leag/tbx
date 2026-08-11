@@ -57,6 +57,25 @@ def test_repeated_passes_reveal_arguments_until_stable():
     assert changed_rounds == {1, 2}
 
 
+def test_symbolic_pass_evaluates_fp_stack_and_direct_memory_effects():
+    delay = decode((_CORPUS / "t1_delay.exe").read_bytes())
+    arithmetic = decode((_CORPUS / "t1_addimm.exe").read_bytes())
+
+    assert any(
+        operation.kind == "expr.value" and operation.operands == (("const", 1),)
+        for operation in delay.operations
+    )
+    effects = [
+        (operation.kind, operation.operands)
+        for operation in arithmetic.operations
+        if operation.kind.startswith("machine.")
+    ]
+    assert effects[:2] == [
+        ("machine.store", (0x120, ("const", 5))),
+        ("machine.update", (0x120, "+", ("const", 3))),
+    ]
+
+
 def test_empty_truncated_and_limited_images_still_return_programs():
     empty = decode(b"")
     truncated = decode(b"MZ\x01")
