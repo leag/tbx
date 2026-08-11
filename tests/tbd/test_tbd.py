@@ -65,15 +65,10 @@ def test_symbolic_pass_evaluates_fp_stack_and_direct_memory_effects():
         operation.kind == "expr.value" and operation.operands == (("const", 1),)
         for operation in delay.operations
     )
-    effects = [
-        (operation.kind, operation.operands)
-        for operation in arithmetic.operations
-        if operation.kind.startswith("machine.")
-    ]
-    assert effects[:2] == [
-        ("machine.store", (("slot", "V0001", 0x120), ("const", 5))),
-        ("machine.update", (("slot", "V0001", 0x120), "+", ("const", 3))),
-    ]
+    assert any(
+        report.name == "symbols" and report.changes >= 2
+        for report in arithmetic.passes
+    )
 
 
 def test_dgroup_pass_names_slots_without_touching_runtime_cells():
@@ -82,6 +77,17 @@ def test_dgroup_pass_names_slots_without_touching_runtime_cells():
     assert [slot.name for slot in program.slots[:3]] == ["V0001", "V0002", "V0003"]
     assert [slot.offset for slot in program.slots[:3]] == [0x120, 0x124, 0x128]
     assert any(report.name == "dgroup-slots" and report.changes for report in program.passes)
+
+
+def test_assignment_pass_lifts_store_and_update_expressions():
+    program = decode((_CORPUS / "t1_addimm.exe").read_bytes())
+    assignments = [node.operands for node in program.operations if node.kind == "ir.assign"]
+    target = ("slot", "V0001", 0x120)
+
+    assert assignments[:2] == [
+        (target, ("const", 5)),
+        (target, ("binary", "+", target, ("const", 3))),
+    ]
 
 
 def test_empty_truncated_and_limited_images_still_return_programs():

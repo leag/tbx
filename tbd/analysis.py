@@ -5,6 +5,7 @@ from __future__ import annotations
 import heapq
 from collections.abc import Callable
 
+from tbd.assignments import lift_assignments
 from tbd.ir import BasicBlock, CrossReference, Diagnostic, Operation, PassReport
 from tbd.slots import identify
 from tbd.symbolic import evaluate
@@ -91,7 +92,7 @@ def lift(
     rewrites: tuple[tuple[str, Rewrite], ...] = (
         ("symbols", evaluate),
         ("dgroup-slots", identify),
-        ("assignments", _fold_assignments),
+        ("assignments", lift_assignments),
         ("register-arguments", _fold_register_arguments),
         ("stack-arguments", _fold_stack_arguments),
         ("conditions", _fold_conditions),
@@ -208,19 +209,6 @@ def _successors(
     if operation.kind in _TERMINALS:
         return ()
     return (operation.end,) if operation.end in instructions else ()
-
-
-def _fold_assignments(
-    nodes: list[Operation], protected: set[int]
-) -> tuple[list[Operation], int]:
-    def replacement(left: Operation, right: Operation) -> Operation | None:
-        if left.kind != "x86.mov_imm" or left.operands[0] != "ax":
-            return None
-        if right.kind != "x86.mov_acc_mem" or right.operands[1] != "store":
-            return None
-        return _merge((left, right), "ir.assign", (right.operands[0], left.operands[1]))
-
-    return _rewrite_pairs(nodes, protected, replacement)
 
 
 def _fold_register_arguments(
