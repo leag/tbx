@@ -90,6 +90,22 @@ def test_assignment_pass_lifts_store_and_update_expressions():
     ]
 
 
+def test_runtime_pass_lifts_numeric_and_string_print_chains():
+    program = decode((_CORPUS / "t1_print.exe").read_bytes())
+    prints = [node.operands for node in program.operations if node.kind == "ir.print"]
+
+    assert prints == [
+        ("console", (("string-address", 0x134),), True),
+        ("console", (("slot", "V0001", 0x120, "float"),), True),
+        (
+            "console",
+            (("binary", "+", ("const", 1), ("slot", "V0001", 0x120)),),
+            True,
+        ),
+    ]
+    assert any(node.kind == "tb.commit" for node in program.operations)
+
+
 def test_empty_truncated_and_limited_images_still_return_programs():
     empty = decode(b"")
     truncated = decode(b"MZ\x01")

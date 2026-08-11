@@ -7,6 +7,7 @@ from collections.abc import Callable
 
 from tbd.assignments import lift_assignments
 from tbd.ir import BasicBlock, CrossReference, Diagnostic, Operation, PassReport
+from tbd.runtime import lift_runtime
 from tbd.slots import identify
 from tbd.symbolic import evaluate
 from tbd.x86 import decode_instruction
@@ -93,6 +94,7 @@ def lift(
         ("symbols", evaluate),
         ("dgroup-slots", identify),
         ("assignments", lift_assignments),
+        ("runtime", lift_runtime),
         ("register-arguments", _fold_register_arguments),
         ("stack-arguments", _fold_stack_arguments),
         ("conditions", _fold_conditions),
@@ -314,7 +316,7 @@ def _group_unknown(
 
 
 def _is_unknown(node: Operation) -> bool:
-    high_level = ("tb.prologue", "tb.statement", "tb.epilogue")
+    high_level = ("tb.prologue", "tb.statement", "tb.epilogue", "tb.commit")
     semantic = ("flow.", "ir.", "expr.", "machine.")
     return not (node.kind in high_level or node.kind.startswith(semantic))
 
