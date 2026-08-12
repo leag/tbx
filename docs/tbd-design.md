@@ -204,6 +204,8 @@ the legacy operation rewriters. Instruction, signature, basic-block, and xref
 facts retain discovery provenance. Direct memory accesses now feed an anchored
 pool-layout fact and integer, single-precision, and string constant facts.
 The anchored boundary also produces address-stable scalar-slot and type facts.
+Block-local register and emulated FP-stack interpretation produces value,
+store, update, and comparison facts with complete instruction provenance.
 Semantic output still comes from the legacy view while its consumers migrate.
 
 1. Add `Fact` and a fact store alongside `Program.instructions`.

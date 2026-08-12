@@ -130,6 +130,46 @@ def test_symbolic_pass_evaluates_fp_stack_and_direct_memory_effects():
     )
 
 
+def test_symbolic_facts_recover_values_stores_updates_and_provenance():
+    delay = decode((_CORPUS / "t1_delay.exe").read_bytes())
+    arithmetic = decode((_CORPUS / "t1_addimm.exe").read_bytes())
+    conditional = decode((_CORPUS / "t1_if.exe").read_bytes())
+
+    assert _fact_values(delay, "expression.value") == [("const", 1)]
+    assert _fact_effects(arithmetic, "machine.store") == {
+        0x120: (("const", 5),)
+    }
+    assert _fact_effects(arithmetic, "machine.update") == {
+        0x120: ("+", ("const", 3))
+    }
+    update = next(fact for fact in arithmetic.facts if fact.kind == "machine.update")
+    assert update.evidence == (0x8709, 0x870C)
+    stores = [fact for fact in conditional.facts if fact.kind == "machine.store"]
+    assert any(
+        fact.subject == (0x128,)
+        and fact.value == (("const", 1),)
+        and fact.evidence == (0x8703, 0x8706)
+        for fact in stores
+    )
+    assert any(
+        fact.subject == (0x124,)
+        and fact.value == (("memory", 0x136, "integer"),)
+        and fact.evidence == (0x870D, 0x8712)
+        for fact in stores
+    )
+    assert len([fact for fact in conditional.facts if fact.kind == "expression.compare"]) == 2
+
+
+def _fact_values(program, kind):
+    return [fact.value[0] for fact in program.facts if fact.kind == kind]
+
+
+def _fact_effects(program, kind):
+    return {
+        fact.subject[0]: fact.value for fact in program.facts if fact.kind == kind
+    }
+
+
 def test_dgroup_pass_names_slots_without_touching_runtime_cells():
     program = decode((_CORPUS / "t1_if.exe").read_bytes())
 
