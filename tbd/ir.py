@@ -103,6 +103,7 @@ class Program:
     passes: tuple[PassReport, ...] = ()
     facts: tuple[Fact, ...] = ()
     fact_passes: tuple[FactReport, ...] = ()
+    fact_operations: tuple[Operation, ...] = ()
     slots: tuple[Slot, ...] = ()
     statements: tuple[Statement, ...] = ()
     diagnostics: tuple[Diagnostic, ...] = ()
@@ -116,6 +117,7 @@ class Program:
         if not include_facts:
             result.pop("facts")
             result.pop("fact_passes")
+            result.pop("fact_operations")
         return result
 
     def render(
@@ -138,6 +140,8 @@ class Program:
             lines.extend(_render_operation(node) for node in self.instructions)
         if show_facts:
             lines.extend(_render_facts(self.facts, self.fact_passes))
+            lines.append("fact-operations")
+            lines.extend(_render_operation(node) for node in self.fact_operations)
         lines.extend(_render_passes(self.passes))
         lines.extend(_render_statements(self.statements))
         for diagnostic in self.diagnostics:

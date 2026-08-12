@@ -10,19 +10,21 @@ from tbd.semantic import Resolved, combine_evidence, resolve_expression, resolve
 
 
 def assignment_facts(
-    _evidence: Evidence, facts: frozenset[Fact]
+    evidence: Evidence, facts: frozenset[Fact]
 ) -> Iterable[Fact]:
     """Resolve complete stores and updates into source-shaped assignments."""
 
     for effect in facts:
         if effect.kind not in {"machine.store", "machine.update"}:
             continue
-        assignment = _assignment(effect, facts)
+        assignment = _assignment(effect, evidence, facts)
         if assignment is not None:
             yield assignment
 
 
-def _assignment(effect: Fact, facts: frozenset[Fact]) -> Fact | None:
+def _assignment(
+    effect: Fact, evidence: Evidence, facts: frozenset[Fact]
+) -> Fact | None:
     address = effect.subject[0] if effect.subject else None
     target = resolve_slot(address, facts)
     if target is None:
@@ -30,14 +32,23 @@ def _assignment(effect: Fact, facts: frozenset[Fact]) -> Fact | None:
     value = _effect_value(effect, target.value, facts)
     if value is None:
         return None
-    evidence = combine_evidence(effect.evidence, target.evidence, value.evidence)
+    support = combine_evidence(effect.evidence, target.evidence, value.evidence)
+    end = _effect_end(effect, evidence)
+    if end is None:
+        return None
     return Fact(
         "semantic.assign",
-        (effect.evidence[0],),
+        (effect.evidence[0], end),
         (target.value, value.value),
-        evidence,
+        support,
         "anchored",
     )
+
+
+def _effect_end(effect: Fact, evidence: Evidence) -> int | None:
+    instructions = {instruction.offset: instruction for instruction in evidence.instructions}
+    last = instructions.get(effect.evidence[-1]) if effect.evidence else None
+    return last.end if last is not None else None
 
 
 def _effect_value(

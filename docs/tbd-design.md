@@ -210,7 +210,9 @@ Fully resolved stores and updates produce anchored source-shaped assignment
 facts; unresolved memory identities deliberately produce no semantic guess.
 Complete runtime PRINT chains likewise produce anchored semantic facts, while
 an item without its matching flush remains only runtime and expression evidence.
-Semantic output still comes from the legacy view while its consumers migrate.
+`Program.fact_operations` now materializes migrated assignment and PRINT facts
+directly into operation IR. `Program.operations` remains the legacy compatibility
+view until the remaining runtime and control-flow consumers migrate.
 
 1. Add `Fact` and a fact store alongside `Program.instructions`.
 2. Port constant-pool, slot, and symbolic results to additive facts.

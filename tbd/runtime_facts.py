@@ -44,7 +44,7 @@ def runtime_facts(
         )
         yield Fact(
             "semantic.print",
-            (chain[0].start,),
+            (chain[0].start, instruction.end),
             (mode, values, True),
             support,
             "anchored",

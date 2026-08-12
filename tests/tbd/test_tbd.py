@@ -324,7 +324,7 @@ def test_runtime_facts_match_legacy_prints_with_complete_provenance():
 
     printed = decode((_CORPUS / "t1_print.exe").read_bytes())
     first = next(fact for fact in printed.facts if fact.kind == "semantic.print")
-    assert first.subject == (0x870F,)
+    assert first.subject == (0x870F, 0x8718)
     assert {0x870F, 0x8712, 0x8714, 0x8716} <= set(first.evidence)
 
 
@@ -337,6 +337,23 @@ def test_runtime_facts_combine_adjacent_items_and_ignore_incomplete_chains():
         ("console", (("const", 1), ("const", 1)), True)
     ]
     assert not any(fact.kind == "semantic.print" for fact in incomplete.facts)
+
+
+def test_fact_operation_view_matches_migrated_legacy_operations():
+    for stem in ("t1_addimm", "t1_print", "t1_if"):
+        program = decode((_CORPUS / f"{stem}.exe").read_bytes())
+        migrated_kinds = {"ir.assign", "ir.print"}
+        legacy = [
+            (node.offset, node.end, node.kind, node.operands)
+            for node in program.operations
+            if node.kind in migrated_kinds
+        ]
+        facts = [
+            (node.offset, node.end, node.kind, node.operands)
+            for node in program.fact_operations
+        ]
+        assert facts == legacy
+        assert all(node.raw for node in program.fact_operations)
 
 
 def test_branch_pair_pass_lifts_source_conditions_and_true_targets():

@@ -6,6 +6,7 @@ import struct
 
 from tbd.analysis import discover, lift
 from tbd.assignment_facts import ASSIGNMENT_FACT_PASSES
+from tbd.fact_ir import build_operations
 from tbd.facts import EVIDENCE_PASSES, Evidence, analyze as analyze_facts
 from tbd.ir import Diagnostic, Program
 from tbd.pool_facts import POOL_FACT_PASSES
@@ -34,8 +35,9 @@ def decode(
     stop = image_end if max_bytes is None else min(image_end, start + max_bytes)
     diagnostics = _loader_diagnostics(exe, prologue)
     instructions, blocks, xrefs, found = discover(exe, start, stop, dialect)
+    evidence = Evidence(exe, instructions, blocks, xrefs)
     facts, fact_passes, facts_converged = analyze_facts(
-        Evidence(exe, instructions, blocks, xrefs),
+        evidence,
         rounds=rounds,
         passes=(
             EVIDENCE_PASSES
@@ -67,6 +69,7 @@ def decode(
         passes=passes,
         facts=facts,
         fact_passes=fact_passes,
+        fact_operations=build_operations(evidence, facts),
         slots=collect(operations),
         statements=reconstruct(operations),
         diagnostics=tuple(diagnostics) + found,
