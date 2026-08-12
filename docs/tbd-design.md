@@ -206,6 +206,8 @@ pool-layout fact and integer, single-precision, and string constant facts.
 The anchored boundary also produces address-stable scalar-slot and type facts.
 Block-local register and emulated FP-stack interpretation produces value,
 store, update, and comparison facts with complete instruction provenance.
+Fully resolved stores and updates produce anchored source-shaped assignment
+facts; unresolved memory identities deliberately produce no semantic guess.
 Semantic output still comes from the legacy view while its consumers migrate.
 
 1. Add `Fact` and a fact store alongside `Program.instructions`.

@@ -271,6 +271,28 @@ def test_assignment_pass_lifts_store_and_update_expressions():
     ]
 
 
+def test_assignment_facts_match_legacy_assignments_when_fully_resolved():
+    for stem in ("t1_addimm", "t1_print", "t1_if"):
+        program = decode((_CORPUS / f"{stem}.exe").read_bytes())
+        legacy = [
+            operation.operands
+            for operation in program.operations
+            if operation.kind == "ir.assign"
+        ]
+        migrated = [
+            fact.value for fact in program.facts if fact.kind == "semantic.assign"
+        ]
+        assert migrated == legacy
+        assert all(fact.confidence == "anchored" for fact in program.facts if fact.kind == "semantic.assign")
+
+
+def test_assignment_facts_wait_for_unique_memory_identity():
+    program = decode(bytes.fromhex("c7 06 20 01 05 00"))
+
+    assert any(fact.kind == "machine.store" for fact in program.facts)
+    assert not any(fact.kind == "semantic.assign" for fact in program.facts)
+
+
 def test_runtime_pass_lifts_numeric_and_string_print_chains():
     program = decode((_CORPUS / "t1_print.exe").read_bytes())
     prints = [node.operands for node in program.operations if node.kind == "ir.print"]

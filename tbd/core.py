@@ -5,6 +5,7 @@ from __future__ import annotations
 import struct
 
 from tbd.analysis import discover, lift
+from tbd.assignment_facts import ASSIGNMENT_FACT_PASSES
 from tbd.facts import EVIDENCE_PASSES, Evidence, analyze as analyze_facts
 from tbd.ir import Diagnostic, Program
 from tbd.pool_facts import POOL_FACT_PASSES
@@ -40,6 +41,7 @@ def decode(
             + POOL_FACT_PASSES
             + SLOT_FACT_PASSES
             + SYMBOLIC_FACT_PASSES
+            + ASSIGNMENT_FACT_PASSES
         ),
     )
     operations, passes = lift(instructions, blocks, xrefs, image=exe, rounds=rounds)
