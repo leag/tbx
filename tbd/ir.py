@@ -107,6 +107,7 @@ class Program:
     slots: tuple[Slot, ...] = ()
     statements: tuple[Statement, ...] = ()
     fact_statements: tuple[Statement, ...] = ()
+    canonical_statements: tuple[Statement, ...] = ()
     diagnostics: tuple[Diagnostic, ...] = ()
 
     def to_dict(
@@ -120,6 +121,7 @@ class Program:
             result.pop("fact_passes")
             result.pop("fact_operations")
             result.pop("fact_statements")
+            result.pop("canonical_statements")
         return result
 
     def render(
@@ -145,6 +147,9 @@ class Program:
             lines.append("fact-operations")
             lines.extend(_render_operation(node) for node in self.fact_operations)
             lines.extend(_render_statements(self.fact_statements, "fact-statements"))
+            lines.extend(
+                _render_statements(self.canonical_statements, "canonical-statements")
+            )
         lines.extend(_render_passes(self.passes))
         lines.extend(_render_statements(self.statements))
         for diagnostic in self.diagnostics:

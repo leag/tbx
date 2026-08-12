@@ -6,6 +6,7 @@ import struct
 
 from tbd.analysis import discover, lift
 from tbd.assignment_facts import ASSIGNMENT_FACT_PASSES
+from tbd.canonical import canonicalize
 from tbd.control_facts import CONTROL_FACT_PASSES
 from tbd.fact_ir import build_operations
 from tbd.facts import EVIDENCE_PASSES, Evidence, analyze as analyze_facts
@@ -54,6 +55,7 @@ def decode(
     )
     operations, passes = lift(instructions, blocks, xrefs, image=exe, rounds=rounds)
     fact_operations = build_operations(evidence, facts)
+    fact_statements = reconstruct(fact_operations)
     if not facts_converged:
         diagnostics.append(Diagnostic("fact analysis reached the round limit"))
     if stop < image_end:
@@ -77,7 +79,8 @@ def decode(
         fact_operations=fact_operations,
         slots=collect(operations),
         statements=reconstruct(operations),
-        fact_statements=reconstruct(fact_operations),
+        fact_statements=fact_statements,
+        canonical_statements=canonicalize(fact_statements, collect(fact_operations)),
         diagnostics=tuple(diagnostics) + found,
     )
 

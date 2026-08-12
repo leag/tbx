@@ -1,10 +1,11 @@
 import json
 from pathlib import Path
 
-from tbx import decode0
+from tbx import decode0, ir as tbx_ir
 from tbd import cli, decode
+from tbd.canonical import canonicalize
 from tbd.facts import Evidence, analyze as analyze_facts
-from tbd.ir import Fact, Operation
+from tbd.ir import Fact, Operation, Slot, Statement
 from tbd.pool import resolve as resolve_pool
 
 _CORPUS = Path(__file__).parents[1] / "fixtures" / "corpus"
@@ -412,6 +413,31 @@ def test_fact_operation_shapes_are_compared_with_tbx_ir():
         assert migrated == exact
 
 
+def test_canonical_fact_ir_matches_tbx_trees():
+    for stem in ("t1_addimm", "t1_print", "t1_if", "t1_delay"):
+        image = (_CORPUS / f"{stem}.exe").read_bytes()
+        exact = [_tbx_statement(node) for node in decode0.decode_user_code(image)]
+        migrated = [
+            (node.kind, node.operands) for node in decode(image).canonical_statements
+        ]
+        assert migrated == exact
+
+
+def test_canonicalization_is_a_non_destructive_final_view():
+    slot = ("slot", "V0001", 0x120)
+    source = (
+        Statement(0, 0x10, "Assign", (slot, ("binary", "+", ("const", 1), slot))),
+    )
+
+    result = canonicalize(source, (Slot(0x120, "V0001", ("integer",)),))
+
+    assert source[0].operands[1][2] == ("const", 1)
+    assert result[0].operands == (
+        ("var", "A%"),
+        ("binary", "+", ("var", "A%"), ("const", 1)),
+    )
+
+
 def test_statement_facts_match_the_legacy_statement_view():
     for stem in ("t1_addimm", "t1_print", "t1_if", "t1_delay"):
         program = decode((_CORPUS / f"{stem}.exe").read_bytes())
@@ -465,6 +491,7 @@ def test_cli_hides_instructions_unless_requested(tmp_path, capsys):
     assert "instructions" not in compact
     assert "facts" not in compact
     assert "fact_statements" not in compact
+    assert "canonical_statements" not in compact
 
     assert cli.main([str(binary), "--instructions"]) == 0
     detailed = json.loads(capsys.readouterr().out)
@@ -482,3 +509,43 @@ def test_cli_text_can_be_written_to_a_file(tmp_path):
 
     assert cli.main([str(binary), "--text", "-o", str(output)]) == 0
     assert output.read_text().startswith("program format=raw")
+
+
+def _tbx_statement(node):
+    if isinstance(node, tbx_ir.Assign):
+        operands = _tbx_expression(node.target), _tbx_expression(node.value)
+    elif isinstance(node, tbx_ir.Print):
+        operands = (
+            "console" if node.file is None else node.file,
+            tuple(_tbx_expression(item) for item in node.items),
+            node.newline,
+        )
+    elif isinstance(node, tbx_ir.IfGoto):
+        operands = (
+            node.cond.op,
+            _tbx_expression(node.cond.lhs),
+            _tbx_expression(node.cond.rhs),
+            node.target,
+        )
+    elif isinstance(node, tbx_ir.Delay):
+        operands = (_tbx_expression(node.secs),)
+    else:
+        operands = ()
+    return type(node).__name__, operands
+
+
+def _tbx_expression(node):
+    if isinstance(node, tbx_ir.Var):
+        return "var", node.name
+    if isinstance(node, tbx_ir.Lit):
+        return "const", node.value
+    if isinstance(node, tbx_ir.StrLit):
+        return "string", node.value
+    if isinstance(node, tbx_ir.BinOp):
+        return (
+            "binary",
+            node.op,
+            _tbx_expression(node.lhs),
+            _tbx_expression(node.rhs),
+        )
+    return "unknown", type(node).__name__
