@@ -30,6 +30,7 @@ the IR stops changing. Unresolved instructions are grouped into opaque regions:
 tbd PROGRAM.EXE                 # JSON IR
 tbd PROGRAM.EXE --text          # compact text IR
 tbd PROGRAM.EXE --instructions  # include low-level disassembly evidence
+tbd PROGRAM.EXE --facts         # include immutable facts and provenance
 ```
 
 Unlike `tbx`, `tbd` does not claim that recovered semantics will recompile

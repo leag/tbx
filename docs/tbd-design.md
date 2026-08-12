@@ -65,10 +65,10 @@ targets, and statements until final naming.
 
 ### 3. Passes are small and pure
 
-The conceptual pass interface is:
+The pass interface uses one immutable evidence bundle:
 
 ```python
-def analyze(image, instructions, facts) -> Iterable[Fact]: ...
+def analyze(evidence, facts) -> Iterable[Fact]: ...
 ```
 
 A pass:
@@ -198,6 +198,11 @@ mechanism.
 
 The existing iterative rewriters are a working prototype. Migration should be
 incremental:
+
+Current status: `Program.facts` and the monotonic fact runner are active beside
+the legacy operation rewriters. Instruction, signature, basic-block, and xref
+facts already retain discovery provenance; semantic output still comes from the
+legacy view.
 
 1. Add `Fact` and a fact store alongside `Program.instructions`.
 2. Port constant-pool, slot, and symbolic results to additive facts.

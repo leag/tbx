@@ -2,7 +2,8 @@ import json
 from pathlib import Path
 
 from tbd import cli, decode
-from tbd.ir import Operation
+from tbd.facts import Evidence, analyze as analyze_facts
+from tbd.ir import Fact, Operation
 from tbd.pool import resolve as resolve_pool
 
 _CORPUS = Path(__file__).parents[1] / "fixtures" / "corpus"
@@ -40,6 +41,62 @@ def test_recursive_discovery_skips_unreachable_bytes():
     assert [item.offset for item in program.instructions] == [0, 4]
     assert len(program.blocks) == 2
     assert program.xrefs[0].target == 4
+
+
+def test_fact_engine_preserves_instruction_signature_and_xref_evidence():
+    program = decode((_CORPUS / "t1_delay.exe").read_bytes())
+
+    assert len([fact for fact in program.facts if fact.kind == "instruction"]) == len(
+        program.instructions
+    )
+    assert any(
+        fact.kind == "signature"
+        and fact.subject == (program.code_start,)
+        and fact.evidence == (program.code_start,)
+        for fact in program.facts
+    )
+    assert any(
+        fact.kind == "xref"
+        and fact.value[0] == "branch"
+        and fact.evidence == fact.subject
+        for fact in program.facts
+    )
+    assert program.fact_passes[-1].additions == 0
+    first_round = [
+        report.facts for report in program.fact_passes if report.round == 1
+    ]
+    assert first_round == sorted(first_round)
+    assert all(
+        report.facts == len(program.facts)
+        for report in program.fact_passes
+        if report.round == 2
+    )
+
+
+def test_fact_engine_is_monotonic_and_pass_order_independent():
+    seed = Fact("seed", (0,), (), (0,), "structural")
+    derived = Fact("derived", (0,), (), (0,), "anchored")
+    evidence = Evidence(b"", (), (), ())
+
+    def add_seed(_evidence, _facts):
+        return (seed,)
+
+    def add_derived(_evidence, facts):
+        return (derived,) if seed in facts else ()
+
+    forward = analyze_facts(
+        evidence,
+        rounds=4,
+        passes=(("derived", add_derived), ("seed", add_seed)),
+    )
+    reverse = analyze_facts(
+        evidence,
+        rounds=4,
+        passes=(("seed", add_seed), ("derived", add_derived)),
+    )
+
+    assert forward[0] == reverse[0] == (derived, seed)
+    assert forward[2] and reverse[2]
 
 
 def test_repeated_passes_reveal_arguments_until_stable():
@@ -189,10 +246,15 @@ def test_cli_hides_instructions_unless_requested(tmp_path, capsys):
     assert cli.main([str(binary)]) == 0
     compact = json.loads(capsys.readouterr().out)
     assert "instructions" not in compact
+    assert "facts" not in compact
 
     assert cli.main([str(binary), "--instructions"]) == 0
     detailed = json.loads(capsys.readouterr().out)
     assert detailed["instructions"][0]["kind"] == "x86.int3"
+
+    assert cli.main([str(binary), "--facts"]) == 0
+    evidence = json.loads(capsys.readouterr().out)
+    assert evidence["facts"][0]["evidence"] == [0]
 
 
 def test_cli_text_can_be_written_to_a_file(tmp_path):

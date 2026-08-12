@@ -18,6 +18,7 @@ for the original library-recognition concept.
 tbd PROGRAM.EXE                 # compact lifted IR as JSON
 tbd PROGRAM.EXE --text          # compact lifted IR as text
 tbd PROGRAM.EXE --instructions  # also expose discovered instructions
+tbd PROGRAM.EXE --facts         # expose facts, provenance, and fact-pass reports
 tbd PROGRAM.EXE --rounds 12     # change the fixed-point limit
 python -m tbd PROGRAM.EXE
 ```
@@ -32,6 +33,8 @@ for block in program.blocks:
     print(block.start, block.successors)
 for operation in program.operations:
     print(operation.offset, operation.kind, operation.operands)
+for fact in program.facts:
+    print(fact.kind, fact.subject, fact.value, fact.evidence)
 for statement in program.statements:
     print(statement.index, statement.kind, statement.operands)
 ```

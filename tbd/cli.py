@@ -24,6 +24,11 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="include discovered machine instructions as well as lifted IR",
     )
+    parser.add_argument(
+        "--facts",
+        action="store_true",
+        help="include immutable analysis facts and their pass reports",
+    )
     parser.add_argument("--max-bytes", type=lambda value: int(value, 0))
     parser.add_argument("--rounds", type=int, default=8, help="maximum lifting rounds")
     return parser
@@ -42,10 +47,13 @@ def main(argv=None) -> int:
         print(f"tbd: {error}", file=sys.stderr)
         return 1
     text = (
-        program.render(show_instructions=args.instructions)
+        program.render(show_instructions=args.instructions, show_facts=args.facts)
         if args.text
         else json.dumps(
-            program.to_dict(include_instructions=args.instructions),
+            program.to_dict(
+                include_instructions=args.instructions,
+                include_facts=args.facts,
+            ),
             indent=None if args.compact else 2,
         ) + "\n"
     )

@@ -5,6 +5,7 @@ from __future__ import annotations
 import struct
 
 from tbd.analysis import discover, lift
+from tbd.facts import Evidence, analyze as analyze_facts
 from tbd.ir import Diagnostic, Program
 from tbd.slots import collect
 from tbd.statements import reconstruct
@@ -28,7 +29,12 @@ def decode(
     stop = image_end if max_bytes is None else min(image_end, start + max_bytes)
     diagnostics = _loader_diagnostics(exe, prologue)
     instructions, blocks, xrefs, found = discover(exe, start, stop, dialect)
+    facts, fact_passes, facts_converged = analyze_facts(
+        Evidence(exe, instructions, blocks, xrefs), rounds=rounds
+    )
     operations, passes = lift(instructions, blocks, xrefs, image=exe, rounds=rounds)
+    if not facts_converged:
+        diagnostics.append(Diagnostic("fact analysis reached the round limit"))
     if stop < image_end:
         diagnostics.append(
             Diagnostic(f"analysis window is limited to {stop - start} bytes", stop)
@@ -45,6 +51,8 @@ def decode(
         blocks=blocks,
         xrefs=xrefs,
         passes=passes,
+        facts=facts,
+        fact_passes=fact_passes,
         slots=collect(operations),
         statements=reconstruct(operations),
         diagnostics=tuple(diagnostics) + found,
