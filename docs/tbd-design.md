@@ -208,6 +208,8 @@ Block-local register and emulated FP-stack interpretation produces value,
 store, update, and comparison facts with complete instruction provenance.
 Fully resolved stores and updates produce anchored source-shaped assignment
 facts; unresolved memory identities deliberately produce no semantic guess.
+Complete runtime PRINT chains likewise produce anchored semantic facts, while
+an item without its matching flush remains only runtime and expression evidence.
 Semantic output still comes from the legacy view while its consumers migrate.
 
 1. Add `Fact` and a fact store alongside `Program.instructions`.

@@ -309,6 +309,36 @@ def test_runtime_pass_lifts_numeric_and_string_print_chains():
     assert any(node.kind == "tb.commit" for node in program.operations)
 
 
+def test_runtime_facts_match_legacy_prints_with_complete_provenance():
+    for stem in ("t1_addimm", "t1_print"):
+        program = decode((_CORPUS / f"{stem}.exe").read_bytes())
+        legacy = [
+            operation.operands
+            for operation in program.operations
+            if operation.kind == "ir.print"
+        ]
+        migrated = [
+            fact.value for fact in program.facts if fact.kind == "semantic.print"
+        ]
+        assert migrated == legacy
+
+    printed = decode((_CORPUS / "t1_print.exe").read_bytes())
+    first = next(fact for fact in printed.facts if fact.kind == "semantic.print")
+    assert first.subject == (0x870F,)
+    assert {0x870F, 0x8712, 0x8714, 0x8716} <= set(first.evidence)
+
+
+def test_runtime_facts_combine_adjacent_items_and_ignore_incomplete_chains():
+    complete = decode(bytes.fromhex("cd35e8 cdbb cd35e8 cdbb cdb8"))
+    incomplete = decode(bytes.fromhex("cd35e8 cdbb"))
+
+    prints = [fact for fact in complete.facts if fact.kind == "semantic.print"]
+    assert [fact.value for fact in prints] == [
+        ("console", (("const", 1), ("const", 1)), True)
+    ]
+    assert not any(fact.kind == "semantic.print" for fact in incomplete.facts)
+
+
 def test_branch_pair_pass_lifts_source_conditions_and_true_targets():
     program = decode((_CORPUS / "t1_if.exe").read_bytes())
     conditions = [node.operands for node in program.operations if node.kind == "ir.if_goto"]

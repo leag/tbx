@@ -9,6 +9,7 @@ from tbd.assignment_facts import ASSIGNMENT_FACT_PASSES
 from tbd.facts import EVIDENCE_PASSES, Evidence, analyze as analyze_facts
 from tbd.ir import Diagnostic, Program
 from tbd.pool_facts import POOL_FACT_PASSES
+from tbd.runtime_facts import RUNTIME_FACT_PASSES
 from tbd.slot_facts import SLOT_FACT_PASSES
 from tbd.slots import collect
 from tbd.statements import reconstruct
@@ -42,6 +43,7 @@ def decode(
             + SLOT_FACT_PASSES
             + SYMBOLIC_FACT_PASSES
             + ASSIGNMENT_FACT_PASSES
+            + RUNTIME_FACT_PASSES
         ),
     )
     operations, passes = lift(instructions, blocks, xrefs, image=exe, rounds=rounds)
