@@ -139,6 +139,27 @@ def test_dgroup_pass_names_slots_without_touching_runtime_cells():
     assert any(report.name == "dgroup-slots" and report.changes for report in program.passes)
 
 
+def test_slot_facts_match_legacy_identities_and_retain_types():
+    arithmetic = decode((_CORPUS / "t1_addimm.exe").read_bytes())
+    conditional = decode((_CORPUS / "t1_if.exe").read_bytes())
+
+    arithmetic_slots = [fact for fact in arithmetic.facts if fact.kind == "slot"]
+    conditional_slots = [fact for fact in conditional.facts if fact.kind == "slot"]
+    assert [(fact.subject[0], fact.value[0]) for fact in arithmetic_slots] == [
+        (slot.offset, slot.name) for slot in arithmetic.slots
+    ]
+    assert [(fact.subject[0], fact.value[0]) for fact in conditional_slots] == [
+        (slot.offset, slot.name) for slot in conditional.slots
+    ]
+    assert arithmetic_slots[0].value[1] == ("integer",)
+    assert {fact.subject[0]: fact.value[1] for fact in conditional_slots} == {
+        0x120: ("float",),
+        0x124: ("float",),
+        0x128: ("float",),
+    }
+    assert all(fact.subject[0] < 0x134 for fact in conditional_slots)
+
+
 def test_constant_pool_pass_resolves_numeric_and_string_literals():
     printed = decode((_CORPUS / "t1_print.exe").read_bytes())
     conditional = decode((_CORPUS / "t1_if.exe").read_bytes())

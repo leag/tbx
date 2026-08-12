@@ -31,7 +31,7 @@ def collect(nodes: tuple[Operation, ...]) -> tuple[Slot, ...]:
     for node in nodes:
         _collect_from(node.operands, found)
     return tuple(
-        Slot(offset, _name(offset), tuple(sorted(types)))
+        Slot(offset, slot_name(offset), tuple(sorted(types)))
         for offset, types in sorted(found.items())
     )
 
@@ -40,7 +40,7 @@ def _rewrite_operands(node: Operation) -> tuple[Any, ...]:
     operands = tuple(_rewrite(value) for value in node.operands)
     if node.kind.startswith("machine.") and operands and isinstance(operands[0], int):
         target = operands[0]
-        if _is_slot(target):
+        if is_slot(target):
             operands = ((_slot(target),) + operands[1:])
     return operands
 
@@ -51,7 +51,7 @@ def _rewrite(value: Any) -> Any:
             len(value) >= 2
             and value[0] == "memory"
             and isinstance(value[1], int)
-            and _is_slot(value[1])
+            and is_slot(value[1])
         ):
             return _slot(value[1]) + tuple(_rewrite(item) for item in value[2:])
         return tuple(_rewrite(item) for item in value)
@@ -61,15 +61,15 @@ def _rewrite(value: Any) -> Any:
 
 
 def _slot(offset: int) -> tuple[str, str, int]:
-    return "slot", _name(offset), offset
+    return "slot", slot_name(offset), offset
 
 
-def _name(offset: int) -> str:
+def slot_name(offset: int) -> str:
     index = (offset - VAR_BASE) // SLOT_WIDTH + 1
     return f"V{index:04d}"
 
 
-def _is_slot(offset: int) -> bool:
+def is_slot(offset: int) -> bool:
     return offset >= VAR_BASE and (offset - VAR_BASE) % SLOT_WIDTH == 0
 
 

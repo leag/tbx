@@ -8,6 +8,7 @@ from tbd.analysis import discover, lift
 from tbd.facts import EVIDENCE_PASSES, Evidence, analyze as analyze_facts
 from tbd.ir import Diagnostic, Program
 from tbd.pool_facts import POOL_FACT_PASSES
+from tbd.slot_facts import SLOT_FACT_PASSES
 from tbd.slots import collect
 from tbd.statements import reconstruct
 
@@ -33,7 +34,7 @@ def decode(
     facts, fact_passes, facts_converged = analyze_facts(
         Evidence(exe, instructions, blocks, xrefs),
         rounds=rounds,
-        passes=EVIDENCE_PASSES + POOL_FACT_PASSES,
+        passes=EVIDENCE_PASSES + POOL_FACT_PASSES + SLOT_FACT_PASSES,
     )
     operations, passes = lift(instructions, blocks, xrefs, image=exe, rounds=rounds)
     if not facts_converged:
