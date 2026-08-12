@@ -31,7 +31,7 @@ def analyze(
 ) -> tuple[tuple[Fact, ...], tuple[FactReport, ...], bool]:
     """Run additive passes to a fixed point without pass-order mutation."""
 
-    selected = passes if passes is not None else _DEFAULT_PASSES
+    selected = passes if passes is not None else EVIDENCE_PASSES
     facts: set[Fact] = set()
     reports = []
     converged = False
@@ -121,7 +121,7 @@ def _fact_key(fact: Fact) -> tuple[str, str, str, tuple[int, ...], str]:
     )
 
 
-_DEFAULT_PASSES: tuple[NamedPass, ...] = (
+EVIDENCE_PASSES: tuple[NamedPass, ...] = (
     ("instructions", instruction_facts),
     ("signatures", signature_facts),
     ("blocks", block_facts),

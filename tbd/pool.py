@@ -15,7 +15,8 @@ _POOL_EOF_GAP = 0x2C
 
 
 @dataclass(frozen=True)
-class _Layout:
+class PoolLayout:
+    marker: int
     ds: int
     pool_base: int
     descriptors: dict[int, tuple[int, int]]
@@ -43,14 +44,24 @@ def resolve(
     return result, changes
 
 
-def _layout(nodes: list[Operation], image: bytes) -> _Layout | None:
+def _layout(nodes: list[Operation], image: bytes) -> PoolLayout | None:
+    targets = _assigned_targets(nodes)
+    references = _reference_addresses(nodes)
+    return infer_layout(image, targets, references)
+
+
+def infer_layout(
+    image: bytes,
+    targets: set[int],
+    references: tuple[tuple[int, str], ...],
+) -> PoolLayout | None:
+    """Choose the best anchored pool candidate for observed memory evidence."""
+
     marker = _pool_marker(image)
     if marker is None:
         return None
-    targets = _assigned_targets(nodes)
     scalar_end = max((address + 4 for address in targets), default=VAR_BASE)
     first_base = _align16(scalar_end) + 4
-    references = _reference_addresses(nodes)
     highest_reference = max((address for address, _kind in references), default=first_base)
     last_base = max(first_base, _align16(highest_reference + 4) + 4)
     candidates = [
@@ -79,13 +90,15 @@ def _assigned_targets(nodes: list[Operation]) -> set[int]:
     return targets
 
 
-def _candidate_layout(image: bytes, marker: int, pool_base: int) -> _Layout | None:
+def _candidate_layout(
+    image: bytes, marker: int, pool_base: int
+) -> PoolLayout | None:
     ds = marker - (pool_base - 4)
     if ds < 0 or image[ds + pool_base - 4 : ds + pool_base] != _MARKER:
         return None
     descriptors, after = _descriptors(image, ds, pool_base)
     string_base = _string_base(image, ds, descriptors, after)
-    return _Layout(ds, pool_base, descriptors, string_base)
+    return PoolLayout(marker, ds, pool_base, descriptors, string_base)
 
 
 def _reference_addresses(nodes: list[Operation]) -> tuple[tuple[int, str], ...]:
@@ -111,7 +124,9 @@ def _collect_references(value: object, found: list[tuple[int, str]]) -> None:
         _collect_references(item, found)
 
 
-def _evidence_score(layout: _Layout, references: tuple[tuple[int, str], ...]) -> int:
+def _evidence_score(
+    layout: PoolLayout, references: tuple[tuple[int, str], ...]
+) -> int:
     score = 0
     for address, kind in references:
         if kind == "string" and address in layout.descriptors:
@@ -134,7 +149,7 @@ def _target_address(value: object) -> int | None:
     return None
 
 
-def _rewrite(value: Any, layout: _Layout, image: bytes) -> Any:
+def _rewrite(value: Any, layout: PoolLayout, image: bytes) -> Any:
     if not isinstance(value, tuple):
         if isinstance(value, list):
             return [_rewrite(item, layout, image) for item in value]
@@ -145,13 +160,26 @@ def _rewrite(value: Any, layout: _Layout, image: bytes) -> Any:
     return tuple(_rewrite(item, layout, image) for item in value)
 
 
-def _literal(value: tuple[Any, ...], layout: _Layout, image: bytes) -> object | None:
+def _literal(
+    value: tuple[Any, ...], layout: PoolLayout, image: bytes
+) -> object | None:
     if len(value) >= 2 and value[0] == "string-address":
-        return _string_literal(value[1], layout, image)
+        return decode_literal(image, layout, value[1], "string")
     memory = _memory_reference(value)
     if memory is None:
         return None
-    address, kind = memory
+    return decode_literal(image, layout, *memory)
+
+
+def decode_literal(
+    image: bytes, layout: PoolLayout, address: object, kind: str
+) -> object | None:
+    """Decode one supported reference under an already anchored layout."""
+
+    if kind == "string":
+        return _string_literal(address, layout, image)
+    if not isinstance(address, int):
+        return None
     if address < layout.pool_base:
         return None
     offset = layout.ds + address
@@ -223,7 +251,9 @@ def _is_string_record(image: bytes, position: int, header: bytes, total: int) ->
     )
 
 
-def _string_literal(address: object, layout: _Layout, image: bytes) -> object | None:
+def _string_literal(
+    address: object, layout: PoolLayout, image: bytes
+) -> object | None:
     if not isinstance(address, int) or layout.string_base is None:
         return None
     descriptor = layout.descriptors.get(address)

@@ -153,6 +153,33 @@ def test_constant_pool_pass_resolves_numeric_and_string_literals():
     )
 
 
+def test_constant_pool_facts_match_legacy_literal_view():
+    printed = decode((_CORPUS / "t1_print.exe").read_bytes())
+    conditional = decode((_CORPUS / "t1_if.exe").read_bytes())
+
+    layouts = [fact for fact in printed.facts if fact.kind == "layout.pool"]
+    assert len(layouts) == 1
+    assert layouts[0].value[1] == 0x134
+    printed_constants = {
+        fact.subject: fact.value
+        for fact in printed.facts
+        if fact.kind == "constant"
+    }
+    conditional_constants = {
+        fact.subject: fact.value
+        for fact in conditional.facts
+        if fact.kind == "constant"
+    }
+    assert printed_constants == {
+        ("memory", 0x13A): ("const", 5),
+        ("string", 0x134): ("string", "HELLO"),
+    }
+    assert conditional_constants == {
+        ("memory", 0x134): ("const", 5),
+        ("memory", 0x136): ("const", 2),
+    }
+
+
 def test_constant_pool_candidates_follow_evidenced_slot_extent():
     image = bytearray(0x200)
     marker = len(image) - 0x30

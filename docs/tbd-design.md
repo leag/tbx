@@ -201,8 +201,9 @@ incremental:
 
 Current status: `Program.facts` and the monotonic fact runner are active beside
 the legacy operation rewriters. Instruction, signature, basic-block, and xref
-facts already retain discovery provenance; semantic output still comes from the
-legacy view.
+facts retain discovery provenance. Direct memory accesses now feed an anchored
+pool-layout fact and integer, single-precision, and string constant facts.
+Semantic output still comes from the legacy view while its consumers migrate.
 
 1. Add `Fact` and a fact store alongside `Program.instructions`.
 2. Port constant-pool, slot, and symbolic results to additive facts.
