@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from tbx import decode0
 from tbd import cli, decode
 from tbd.facts import Evidence, analyze as analyze_facts
 from tbd.ir import Fact, Operation
@@ -342,7 +343,7 @@ def test_runtime_facts_combine_adjacent_items_and_ignore_incomplete_chains():
 def test_fact_operation_view_matches_migrated_legacy_operations():
     for stem in ("t1_addimm", "t1_print", "t1_if"):
         program = decode((_CORPUS / f"{stem}.exe").read_bytes())
-        migrated_kinds = {"ir.assign", "ir.print"}
+        migrated_kinds = {"ir.assign", "ir.print", "ir.if_goto"}
         legacy = [
             (node.offset, node.end, node.kind, node.operands)
             for node in program.operations
@@ -364,6 +365,53 @@ def test_branch_pair_pass_lifts_source_conditions_and_true_targets():
         (">=", ("slot", "V0003", 0x128), ("slot", "V0002", 0x124, "float"), 0x8738, 0x872C),
         ("=", ("slot", "V0003", 0x128), ("slot", "V0002", 0x124, "float"), 0x875A, 0x874B),
     ]
+
+
+def test_control_facts_match_legacy_branches_and_if_gotos():
+    delay = decode((_CORPUS / "t1_delay.exe").read_bytes())
+    conditional = decode((_CORPUS / "t1_if.exe").read_bytes())
+
+    legacy_branch = next(node for node in delay.operations if node.kind == "flow.branch")
+    fact_branch = next(fact for fact in delay.facts if fact.kind == "flow.branch")
+    assert fact_branch.subject == (legacy_branch.offset, legacy_branch.end)
+    assert fact_branch.value == legacy_branch.operands
+
+    legacy_ifs = [
+        node for node in conditional.operations if node.kind == "ir.if_goto"
+    ]
+    fact_ifs = [
+        fact for fact in conditional.facts if fact.kind == "semantic.if_goto"
+    ]
+    assert [fact.value for fact in fact_ifs] == [node.operands for node in legacy_ifs]
+    assert [fact.subject for fact in fact_ifs] == [
+        (node.offset, node.end) for node in legacy_ifs
+    ]
+    migrated = [node for node in conditional.fact_operations if node.kind == "ir.if_goto"]
+    assert [
+        (node.offset, node.end, node.operands) for node in migrated
+    ] == [
+        (node.offset, node.end, node.operands) for node in legacy_ifs
+    ]
+
+
+def test_if_goto_facts_require_the_complete_runtime_branch_pair():
+    incomplete = decode(bytes.fromhex("cd35062001 cd341e2401 cd99 cd87 7503"))
+
+    assert any(fact.kind == "expression.compare" for fact in incomplete.facts)
+    assert not any(fact.kind == "semantic.if_goto" for fact in incomplete.facts)
+
+
+def test_fact_operation_shapes_are_compared_with_tbx_ir():
+    names = {"ir.assign": "Assign", "ir.print": "Print", "ir.if_goto": "IfGoto"}
+    for stem in ("t1_addimm", "t1_print", "t1_if"):
+        image = (_CORPUS / f"{stem}.exe").read_bytes()
+        exact = [
+            type(node).__name__
+            for node in decode0.decode_user_code(image)
+            if type(node).__name__ in names.values()
+        ]
+        migrated = [names[node.kind] for node in decode(image).fact_operations]
+        assert migrated == exact
 
 
 def test_statement_pass_recovers_boundaries_and_resolves_targets():

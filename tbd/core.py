@@ -6,6 +6,7 @@ import struct
 
 from tbd.analysis import discover, lift
 from tbd.assignment_facts import ASSIGNMENT_FACT_PASSES
+from tbd.control_facts import CONTROL_FACT_PASSES
 from tbd.fact_ir import build_operations
 from tbd.facts import EVIDENCE_PASSES, Evidence, analyze as analyze_facts
 from tbd.ir import Diagnostic, Program
@@ -46,6 +47,7 @@ def decode(
             + SYMBOLIC_FACT_PASSES
             + ASSIGNMENT_FACT_PASSES
             + RUNTIME_FACT_PASSES
+            + CONTROL_FACT_PASSES
         ),
     )
     operations, passes = lift(instructions, blocks, xrefs, image=exe, rounds=rounds)

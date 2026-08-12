@@ -8,6 +8,7 @@ from tbd.ir import Fact, Operation
 _OPERATION_KINDS = {
     "semantic.assign": "ir.assign",
     "semantic.print": "ir.print",
+    "semantic.if_goto": "ir.if_goto",
 }
 
 
