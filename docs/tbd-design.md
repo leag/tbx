@@ -194,6 +194,18 @@ A mismatch is evidence for a missing or ambiguous fact. It is not permission to
 special-case a fixture name, address, or byte sequence without a reusable
 mechanism.
 
+Run the corpus-wide comparison with:
+
+```sh
+uv run python -m tbx.tools.compare_tbd_ir tests/fixtures/corpus
+```
+
+The report distinguishes recovered statement coverage, aligned statement kinds,
+whole-file kind agreement, and exact canonical trees. Exact-tree counts include
+only files made entirely of migrated fact-IR statement kinds whose statement
+sequences already align; unsupported constructs therefore remain coverage gaps
+instead of being mislabeled semantic mismatches.
+
 ## Migration from the current implementation
 
 The existing iterative rewriters are a working prototype. Migration should be
