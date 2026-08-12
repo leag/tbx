@@ -214,6 +214,9 @@ an item without its matching flush remains only runtime and expression evidence.
 directly into operation IR. Conditional branch pairs and their resolved operands
 now produce `IfGoto` facts and operations as well. `Program.operations` remains
 the legacy compatibility view until the remaining runtime consumers migrate.
+Recognized source statements and complete DELAY loops are also additive facts;
+`Program.fact_statements` reconstructs statement indexes and branch targets only
+from the fact-built operation view.
 
 1. Add `Fact` and a fact store alongside `Program.instructions`.
 2. Port constant-pool, slot, and symbolic results to additive facts.

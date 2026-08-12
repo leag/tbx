@@ -67,10 +67,11 @@ def test_fact_engine_preserves_instruction_signature_and_xref_evidence():
         report.facts for report in program.fact_passes if report.round == 1
     ]
     assert first_round == sorted(first_round)
+    final_round = max(report.round for report in program.fact_passes)
     assert all(
-        report.facts == len(program.facts)
+        report.facts == len(program.facts) and report.additions == 0
         for report in program.fact_passes
-        if report.round == 2
+        if report.round == final_round
     )
 
 
@@ -343,7 +344,9 @@ def test_runtime_facts_combine_adjacent_items_and_ignore_incomplete_chains():
 def test_fact_operation_view_matches_migrated_legacy_operations():
     for stem in ("t1_addimm", "t1_print", "t1_if"):
         program = decode((_CORPUS / f"{stem}.exe").read_bytes())
-        migrated_kinds = {"ir.assign", "ir.print", "ir.if_goto"}
+        migrated_kinds = {
+            "ir.assign", "ir.print", "ir.if_goto", "ir.delay", "tb.statement"
+        }
         legacy = [
             (node.offset, node.end, node.kind, node.operands)
             for node in program.operations
@@ -402,16 +405,25 @@ def test_if_goto_facts_require_the_complete_runtime_branch_pair():
 
 
 def test_fact_operation_shapes_are_compared_with_tbx_ir():
-    names = {"ir.assign": "Assign", "ir.print": "Print", "ir.if_goto": "IfGoto"}
-    for stem in ("t1_addimm", "t1_print", "t1_if"):
+    for stem in ("t1_addimm", "t1_print", "t1_if", "t1_delay"):
         image = (_CORPUS / f"{stem}.exe").read_bytes()
-        exact = [
-            type(node).__name__
-            for node in decode0.decode_user_code(image)
-            if type(node).__name__ in names.values()
-        ]
-        migrated = [names[node.kind] for node in decode(image).fact_operations]
+        exact = [type(node).__name__ for node in decode0.decode_user_code(image)]
+        migrated = [node.kind for node in decode(image).fact_statements]
         assert migrated == exact
+
+
+def test_statement_facts_match_the_legacy_statement_view():
+    for stem in ("t1_addimm", "t1_print", "t1_if", "t1_delay"):
+        program = decode((_CORPUS / f"{stem}.exe").read_bytes())
+        assert program.fact_statements == program.statements
+
+
+def test_delay_fact_requires_the_complete_loop_shape():
+    incomplete = decode(bytes.fromhex("cd35e8 cdec28 cdec2a cd87"))
+
+    assert any(fact.kind == "expression.value" for fact in incomplete.facts)
+    assert not any(fact.kind == "semantic.delay" for fact in incomplete.facts)
+    assert incomplete.fact_statements == ()
 
 
 def test_statement_pass_recovers_boundaries_and_resolves_targets():
@@ -452,6 +464,7 @@ def test_cli_hides_instructions_unless_requested(tmp_path, capsys):
     compact = json.loads(capsys.readouterr().out)
     assert "instructions" not in compact
     assert "facts" not in compact
+    assert "fact_statements" not in compact
 
     assert cli.main([str(binary), "--instructions"]) == 0
     detailed = json.loads(capsys.readouterr().out)

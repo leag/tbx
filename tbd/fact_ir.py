@@ -9,6 +9,8 @@ _OPERATION_KINDS = {
     "semantic.assign": "ir.assign",
     "semantic.print": "ir.print",
     "semantic.if_goto": "ir.if_goto",
+    "semantic.delay": "ir.delay",
+    "semantic.statement": "tb.statement",
 }
 
 

@@ -106,6 +106,7 @@ class Program:
     fact_operations: tuple[Operation, ...] = ()
     slots: tuple[Slot, ...] = ()
     statements: tuple[Statement, ...] = ()
+    fact_statements: tuple[Statement, ...] = ()
     diagnostics: tuple[Diagnostic, ...] = ()
 
     def to_dict(
@@ -118,6 +119,7 @@ class Program:
             result.pop("facts")
             result.pop("fact_passes")
             result.pop("fact_operations")
+            result.pop("fact_statements")
         return result
 
     def render(
@@ -142,6 +144,7 @@ class Program:
             lines.extend(_render_facts(self.facts, self.fact_passes))
             lines.append("fact-operations")
             lines.extend(_render_operation(node) for node in self.fact_operations)
+            lines.extend(_render_statements(self.fact_statements, "fact-statements"))
         lines.extend(_render_passes(self.passes))
         lines.extend(_render_statements(self.statements))
         for diagnostic in self.diagnostics:
@@ -187,10 +190,12 @@ def _render_facts(
     return lines
 
 
-def _render_statements(statements: tuple[Statement, ...]) -> list[str]:
+def _render_statements(
+    statements: tuple[Statement, ...], title: str = "statements"
+) -> list[str]:
     if not statements:
         return []
-    return ["statements"] + [
+    return [title] + [
         f"  {item.index}: {item.kind} {_render_arg(item.operands)}"
         for item in statements
     ]
