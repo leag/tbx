@@ -230,7 +230,9 @@ Recognized source statements and complete DELAY loops are also additive facts;
 `Program.fact_statements` reconstructs statement indexes and branch targets only
 from the fact-built operation view. `Program.canonical_statements` is a final,
 non-destructive view that assigns stable source names and orders commutative
-expressions; the address-bearing fact statements remain unchanged.
+expressions; it reads type suffixes from anchored slot facts rather than relying
+on a later typed use in operation IR. The address-bearing fact statements remain
+unchanged.
 
 1. Add `Fact` and a fact store alongside `Program.instructions`.
 2. Port constant-pool, slot, and symbolic results to additive facts.

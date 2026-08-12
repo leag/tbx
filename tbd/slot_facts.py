@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from tbd.facts import Evidence, NamedPass
-from tbd.ir import Fact
+from tbd.ir import Fact, Slot
 from tbd.slots import VAR_BASE, is_slot, slot_name
 
 
@@ -58,6 +58,39 @@ def _is_slot_access(fact: Fact, pool_base: int) -> bool:
         and is_slot(address)
         and bool(fact.value)
         and isinstance(fact.value[0], str)
+    )
+
+
+def materialize_slots(facts: tuple[Fact, ...]) -> tuple[Slot, ...]:
+    """Build the canonical slot view from additive slot conclusions."""
+
+    found: dict[int, tuple[set[str], set[str]]] = {}
+    for fact in facts:
+        if not _valid_slot_fact(fact):
+            continue
+        address = fact.subject[0]
+        names, types = found.setdefault(address, (set(), set()))
+        names.add(fact.value[0])
+        types.update(fact.value[1])
+    return tuple(
+        Slot(
+            address,
+            next(iter(names)) if len(names) == 1 else slot_name(address),
+            tuple(sorted(types)),
+        )
+        for address, (names, types) in sorted(found.items())
+    )
+
+
+def _valid_slot_fact(fact: Fact) -> bool:
+    return (
+        fact.kind == "slot"
+        and len(fact.subject) == 1
+        and isinstance(fact.subject[0], int)
+        and len(fact.value) == 2
+        and isinstance(fact.value[0], str)
+        and isinstance(fact.value[1], tuple)
+        and all(isinstance(item, str) for item in fact.value[1])
     )
 
 

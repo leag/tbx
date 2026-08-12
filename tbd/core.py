@@ -13,7 +13,7 @@ from tbd.facts import EVIDENCE_PASSES, Evidence, analyze as analyze_facts
 from tbd.ir import Diagnostic, Program
 from tbd.pool_facts import POOL_FACT_PASSES
 from tbd.runtime_facts import RUNTIME_FACT_PASSES
-from tbd.slot_facts import SLOT_FACT_PASSES
+from tbd.slot_facts import SLOT_FACT_PASSES, materialize_slots
 from tbd.slots import collect
 from tbd.statement_facts import STATEMENT_FACT_PASSES
 from tbd.statements import reconstruct
@@ -56,6 +56,7 @@ def decode(
     operations, passes = lift(instructions, blocks, xrefs, image=exe, rounds=rounds)
     fact_operations = build_operations(evidence, facts)
     fact_statements = reconstruct(fact_operations)
+    fact_slots = materialize_slots(facts)
     if not facts_converged:
         diagnostics.append(Diagnostic("fact analysis reached the round limit"))
     if stop < image_end:
@@ -80,7 +81,7 @@ def decode(
         slots=collect(operations),
         statements=reconstruct(operations),
         fact_statements=fact_statements,
-        canonical_statements=canonicalize(fact_statements, collect(fact_operations)),
+        canonical_statements=canonicalize(fact_statements, fact_slots),
         diagnostics=tuple(diagnostics) + found,
     )
 

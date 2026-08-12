@@ -438,6 +438,15 @@ def test_canonicalization_is_a_non_destructive_final_view():
     )
 
 
+def test_canonicalization_uses_anchored_slot_types_without_a_typed_read():
+    program = decode((_CORPUS / "t1_meta0.exe").read_bytes())
+
+    slot = next(fact for fact in program.facts if fact.kind == "slot")
+    assert slot.value == ("V0001", ("integer",))
+    assert program.fact_statements[0].operands[0] == ("slot", "V0001", 0x120)
+    assert program.canonical_statements[0].operands[0] == ("var", "A%")
+
+
 def test_statement_facts_match_the_legacy_statement_view():
     for stem in ("t1_addimm", "t1_print", "t1_if", "t1_delay"):
         program = decode((_CORPUS / f"{stem}.exe").read_bytes())

@@ -26,9 +26,22 @@ def test_comparison_separates_kind_and_tree_mismatches():
 
     assert report.kind_match_files == 1
     assert report.comparable_files == 1
-    assert report.exact_files == 0
-    assert report.mismatches[0].category == "tree"
-    assert "A%" in report.mismatches[0].detail
+    assert report.exact_files == 1
+    assert report.mismatches == ()
+
+
+def test_anchored_slot_types_close_both_dialect_tree_mismatches():
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in ("t1_meta0", "t1_soundm", "t1_stack", "t1_stack4")
+    ]
+
+    report = compare_paths(paths)
+
+    assert report.comparable_files == 8
+    assert report.exact_files == 8
+    assert report.mismatches == ()
 
 
 def test_comparison_cli_prints_coverage(capsys):
