@@ -388,6 +388,12 @@ statement itself; shorter forms require a following instruction that cannot
 begin an extension, or another complete row/column leg, as positive boundary
 evidence. An unresolved or truncated extension therefore cannot leave a stale
 partial LOCATE fact.
+Numeric READ groups consecutive DATA_NUMBER phases with their typed direct FP
+stores and requires the final statement-commit call. Every target must resolve
+before the anchored chain becomes one READ fact. A preceding DATA_STRING item
+keeps a mixed chain wholly unresolved rather than exposing a numeric suffix;
+string READ remains uncalibrated after its fixture failed whole-image oracle
+verification.
 Device I/O likewise requires its whole compiler scaffold. Constant OUT is
 recovered only when two immediate AX loads are separated by the exact
 `mov bx,ax` staging move and followed contiguously by `mov dx,bx; out dx,al` in

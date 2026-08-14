@@ -11,6 +11,26 @@
  ],
  "hypotheses": [
   {
+   "id": "RO-TBD-READ-STRING-ORACLE-FIXTURE",
+   "title": "t1_readstr is byte-exact acceptance evidence for string READ recovery",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "tests/fixtures/corpus/t1_readstr.exe"
+   ],
+   "signatures": [
+    "DATA_STRING; mov si,target; string store"
+   ],
+   "hypothesis": "The existing t1_readstr fixture can calibrate scalar string READ chains alongside the byte-exact numeric READ fixture.",
+   "negative_evidence": [
+    "Byte-exact oracle verification rejected t1_readstr: both images are 34816 bytes, with about three bytes differing.",
+    "The paired numeric fixture t1_readnum passed byte-for-byte, so acceptance supports only numeric DATA_NUMBER/store chains in this pass.",
+    "A mixed string/numeric READ cannot be recovered as a numeric suffix without inventing a second source statement."
+   ],
+   "instead": "Keep string-only and mixed READ unresolved until a string fixture passes whole-image verification. Numeric recovery must explicitly reject a chain immediately preceded by a DATA_STRING item.",
+   "source": "tbd parity session 2026-08-14"
+  },
+  {
    "id": "RO-TBD-BARE-JMP-IS-GOTO",
    "title": "Every direct flow.goto fact is a source GOTO",
    "disposition": "refuted",

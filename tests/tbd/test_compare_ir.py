@@ -178,6 +178,18 @@ def test_grouped_constant_locate_forms_align_with_tbx():
     assert report.failures == 0
 
 
+def test_numeric_read_chains_align_in_both_dialects():
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in ("t1_readnum", "t1_readfp", "t1_readalt")
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["Read"] == report.tbx_kinds["Read"] == 6
+    assert report.failures == 0
+
+
 def test_complete_field_descriptors_are_exact_in_both_dialects():
     paths = [
         _CORPUS / f"{prefix}t1_field.exe"

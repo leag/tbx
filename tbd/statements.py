@@ -22,6 +22,7 @@ _SIMPLE_KINDS = {
     "ir.mid_assign": "MidAssign",
     "ir.swap": "Swap",
     "ir.locate": "Locate",
+    "ir.read": "Read",
     "ir.gosub": "Gosub",
     "ir.return": "Return",
     "ir.resume": "Resume",

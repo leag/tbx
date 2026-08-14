@@ -839,6 +839,36 @@ def test_locate_does_not_emit_a_partial_cursor_extension():
     assert not any(fact.kind == "semantic.locate" for fact in truncated.facts)
 
 
+def test_numeric_read_facts_recover_complete_committed_chains():
+    for prefix in ("", "v10_"):
+        for stem in ("t1_readnum", "t1_readfp", "t1_readalt"):
+            image = (_CORPUS / f"{prefix}{stem}.exe").read_bytes()
+            program = decode(image)
+            actual = [
+                (node.kind, node.operands)
+                for node in program.canonical_statements
+                if node.kind == "Read"
+            ]
+            exact = [
+                _tbx_statement(node)
+                for node in decode0.decode_user_code(image)
+                if isinstance(node, tbx_ir.Read)
+            ]
+            assert actual == exact
+
+
+def test_numeric_read_does_not_lift_incomplete_or_mixed_suffixes():
+    incomplete = decode(bytes.fromhex("cd ec b2 cd 35 1e 20 01"))
+    mixed = decode(
+        bytes.fromhex(
+            "cd ec b4 be 24 01 cd a0 cd ec b2 cd 35 1e 20 01 cd 87"
+        )
+    )
+
+    assert not any(fact.kind == "semantic.read" for fact in incomplete.facts)
+    assert not any(fact.kind == "semantic.read" for fact in mixed.facts)
+
+
 def test_runtime_facts_recover_complete_field_descriptors():
     for prefix in ("", "v10_"):
         image = (_CORPUS / f"{prefix}t1_field.exe").read_bytes()
@@ -1782,6 +1812,8 @@ def _tbx_statement(node):
             None if value is None else _tbx_expression(value)
             for value in (node.row, node.col, node.cursor, node.start, node.stop)
         )
+    elif isinstance(node, tbx_ir.Read):
+        operands = (tuple(_tbx_expression(target) for target in node.targets),)
     elif isinstance(node, tbx_ir.Field):
         operands = node.num, tuple(
             (_tbx_expression(width), _tbx_expression(target))

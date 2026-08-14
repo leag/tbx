@@ -16,6 +16,7 @@ from tbd.locate_facts import LOCATE_FACT_PASSES
 from tbd.pool_facts import POOL_FACT_PASSES
 from tbd.procedure_facts import PROCEDURE_FACT_PASSES
 from tbd.profile import PROLOGUES
+from tbd.read_facts import READ_FACT_PASSES
 from tbd.runtime_facts import RUNTIME_FACT_PASSES
 from tbd.slot_facts import SLOT_FACT_PASSES, materialize_slots
 from tbd.slots import collect
@@ -53,6 +54,7 @@ def decode(
             + ASSIGNMENT_FACT_PASSES
             + IO_FACT_PASSES
             + LOCATE_FACT_PASSES
+            + READ_FACT_PASSES
             + RUNTIME_FACT_PASSES
             + SWAP_FACT_PASSES
             + CONTROL_FACT_PASSES
