@@ -1,7 +1,7 @@
 {
  "schema_version": 1,
  "document_type": "tbx.ruled_out_hypotheses",
- "updated": "2026-08-09",
+ "updated": "2026-08-14",
  "note": "Decoder-side hypotheses that were investigated and REJECTED: a cause that turned out not to be the cause, or a fix that was written, tested and reverted. The sibling ledger runtime-revision-assessments.json covers the other class, where the answer is a property of the compiler rather than of our code; a pattern that is unwitnessable by our oracle belongs there, not here. The point of both is that a rejected hypothesis is expensive evidence and is otherwise lost the moment a session ends -- PLAN.md records them chronologically, and this is the deduplicated index into it. An entry earns its place by saying what was tried, what killed it, and what a re-attempt should do instead.",
  "dispositions": [
   "refuted",
@@ -10,6 +10,26 @@
   "not-a-defect"
  ],
  "hypotheses": [
+  {
+   "id": "RO-TBD-OUT2-ORACLE-FIXTURE",
+   "title": "t1_out2 is byte-exact acceptance evidence for direct-memory OUT recovery",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "tests/fixtures/corpus/t1_out2.exe"
+   ],
+   "signatures": [
+    "mov ax,888; mov bx,ax; mov ax,[slot]; mov dx,bx; out dx,al"
+   ],
+   "hypothesis": "The existing t1_out2 fixture can calibrate tbd's direct-memory OUT operand recovery because tbx emits source text identical to its authored BAS file.",
+   "negative_evidence": [
+    "The byte-exact oracle rejected that identical emitted source: both images are 34720 bytes, but nine bytes differ.",
+    "A diagnostic recompilation found differences only at 0x8742, 0x8743, 0x8746, 0x8747, 0x874a, 0x874b, 0x874e, 0x874f, and 0x879e. The OUT code region at 0x8709..0x8715 is identical, so the mismatch is trailing data rather than the proposed instruction scaffold, but it still fails the repository's whole-image acceptance rule.",
+    "The constant fixture t1_out passes byte-exact oracle verification and therefore supports only the immediate-load subset landed in tbd."
+   ],
+   "instead": "Keep direct-memory OUT unresolved in tbd until a newly authored fixture verifies byte-for-byte, or until the trailing-data mismatch in t1_out2 is diagnosed and the existing fixture itself becomes valid acceptance evidence. Do not weaken verification to a code-region comparison.",
+   "source": "tbd parity session 2026-08-14"
+  },
   {
    "id": "RO-METRIC-DATA-ORDER",
    "title": "metric.exe's round-trip delta is DATA descriptor ordering",

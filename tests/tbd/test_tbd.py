@@ -561,6 +561,43 @@ def test_runtime_facts_preserve_items_across_print_separators():
         assert all(len(fact.evidence) >= 8 for fact in separated)
 
 
+def test_device_io_facts_recover_complete_out_scaffolds():
+    expected = [
+        ("Out", (("const", 888), ("const", 1))),
+        ("End", ()),
+    ]
+    for prefix in ("", "v10_"):
+        program = decode((_CORPUS / f"{prefix}t1_out.exe").read_bytes())
+        actual = [
+            (statement.kind, statement.operands)
+            for statement in program.canonical_statements
+        ]
+        exact = [
+            _tbx_statement(statement)
+            for statement in decode0.decode_user_code(
+                (_CORPUS / f"{prefix}t1_out.exe").read_bytes()
+            )
+        ]
+
+        assert actual == exact == expected
+        out = next(fact for fact in program.facts if fact.kind == "semantic.out")
+        assert out.confidence == "signature"
+        assert len(out.evidence) == 5
+
+
+def test_device_io_facts_leave_incomplete_or_altered_out_structural():
+    complete = bytes.fromhex("b8 78 03 89 c3 b8 01 00 8b d3 ee")
+    truncated = decode(complete[:-1])
+    altered = decode(complete[:3] + b"\x89\xc1" + complete[5:])
+    variable = decode((_CORPUS / "t1_out2.exe").read_bytes())
+
+    assert not any(fact.kind == "semantic.out" for fact in truncated.facts)
+    assert not any(fact.kind == "semantic.out" for fact in altered.facts)
+    assert not any(fact.kind == "semantic.out" for fact in variable.facts)
+    assert truncated.canonical_statements == altered.canonical_statements == ()
+    assert [node.kind for node in variable.canonical_statements] == ["Assign", "End"]
+
+
 def test_fact_operation_view_matches_migrated_legacy_operations():
     for stem in ("t1_addimm", "t1_print", "t1_if"):
         program = decode((_CORPUS / f"{stem}.exe").read_bytes())
@@ -1380,6 +1417,8 @@ def _tbx_statement(node):
         operands = (_tbx_expression(node.secs),)
     elif isinstance(node, tbx_ir.DefSeg):
         operands = () if node.seg is None else (_tbx_expression(node.seg),)
+    elif isinstance(node, tbx_ir.Out):
+        operands = _tbx_expression(node.port), _tbx_expression(node.value)
     else:
         operands = ()
     return type(node).__name__, operands

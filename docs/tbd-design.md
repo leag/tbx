@@ -333,10 +333,17 @@ statement in an early fixed-point round; later facts can therefore complete the
 whole PRINT without leaving a stale partial statement behind.
 PRINT item chains retain intervening mode-specific separator calls and their
 provenance rather than dropping the items before a comma-zone advance.
-`Program.fact_operations` now materializes migrated assignment and PRINT facts
-directly into operation IR. Conditional branch pairs and their resolved operands
-now produce `IfGoto` facts and operations as well. `Program.operations` remains
-the legacy compatibility view until the remaining runtime consumers migrate.
+Device I/O likewise requires its whole compiler scaffold. Constant OUT is
+recovered only when two immediate AX loads are separated by the exact
+`mov bx,ax` staging move and followed contiguously by `mov dx,bx; out dx,al` in
+one basic block. A non-immediate load, altered move, or truncated tail remains
+structural; the individual instructions and their byte evidence are never
+replaced.
+`Program.fact_operations` now materializes migrated assignment, PRINT, and
+constant OUT facts directly into operation IR. Conditional branch pairs and
+their resolved operands now produce `IfGoto` facts and operations as well.
+`Program.operations` remains the legacy compatibility view until the remaining
+runtime consumers migrate.
 Recognized source statements and complete DELAY loops are also additive facts;
 `Program.fact_statements` reconstructs statement indexes and branch targets only
 from the fact-built operation view. `Program.canonical_statements` is a final,

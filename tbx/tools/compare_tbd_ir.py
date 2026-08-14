@@ -33,6 +33,7 @@ MIGRATED_KINDS = frozenset(
         "End",
         "Gosub",
         "IfGoto",
+        "Out",
         "Print",
         "Return",
         "Resume",
@@ -176,6 +177,8 @@ def _statement(node: Any) -> tuple[str, tuple[object, ...]]:
         operands = (_expression(node.secs),)
     elif isinstance(node, ir.DefSeg):
         operands = () if node.seg is None else (_expression(node.seg),)
+    elif isinstance(node, ir.Out):
+        operands = _expression(node.port), _expression(node.value)
     else:
         operands = ()
     return type(node).__name__, operands
