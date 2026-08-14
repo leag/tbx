@@ -337,11 +337,14 @@ Device I/O likewise requires its whole compiler scaffold. Constant OUT is
 recovered only when two immediate AX loads are separated by the exact
 `mov bx,ax` staging move and followed contiguously by `mov dx,bx; out dx,al` in
 one basic block. A non-immediate load, altered move, or truncated tail remains
-structural; the individual instructions and their byte evidence are never
-replaced.
+structural. Three-argument constant WAIT additionally requires the complete
+mask/xor register shuffle, `in; xor; and` polling body, and a decoded backward
+`JE` whose branch and fallthrough CFG edges close the loop. The two-argument
+form remains structural pending a byte-exact acceptance fixture. In every case,
+the individual instructions and their byte evidence are never replaced.
 `Program.fact_operations` now materializes migrated assignment, PRINT, and
-constant OUT facts directly into operation IR. Conditional branch pairs and
-their resolved operands now produce `IfGoto` facts and operations as well.
+constant device-I/O facts directly into operation IR. Conditional branch pairs
+and their resolved operands now produce `IfGoto` facts and operations as well.
 `Program.operations` remains the legacy compatibility view until the remaining
 runtime consumers migrate.
 Recognized source statements and complete DELAY loops are also additive facts;

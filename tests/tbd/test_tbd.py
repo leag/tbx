@@ -598,6 +598,45 @@ def test_device_io_facts_leave_incomplete_or_altered_out_structural():
     assert [node.kind for node in variable.canonical_statements] == ["Assign", "End"]
 
 
+def test_device_io_facts_recover_complete_three_argument_wait():
+    expected = [
+        ("Wait", (("const", 986), ("const", 8), ("const", 4))),
+        ("End", ()),
+    ]
+    for prefix in ("", "v10_"):
+        image = (_CORPUS / f"{prefix}t1_wait3.exe").read_bytes()
+        program = decode(image)
+        actual = [
+            (statement.kind, statement.operands)
+            for statement in program.canonical_statements
+        ]
+        exact = [
+            _tbx_statement(statement)
+            for statement in decode0.decode_user_code(image)
+        ]
+
+        assert actual == exact == expected
+        wait = next(fact for fact in program.facts if fact.kind == "semantic.wait")
+        assert wait.confidence == "signature"
+        assert len(wait.evidence) == 11
+
+
+def test_device_io_facts_leave_unverified_or_incomplete_wait_structural():
+    complete = bytes.fromhex(
+        "b8 08 00 89 c3 b8 04 00 89 d9 89 c3 b8 da 03 8b d0 "
+        "ec 30 d8 20 c8 74 f9"
+    )
+    truncated = decode(complete[:-1])
+    altered = decode(complete[:18] + b"\x30\xc8" + complete[20:])
+    two_argument = decode((_CORPUS / "t1_wait.exe").read_bytes())
+
+    assert not any(fact.kind == "semantic.wait" for fact in truncated.facts)
+    assert not any(fact.kind == "semantic.wait" for fact in altered.facts)
+    assert not any(fact.kind == "semantic.wait" for fact in two_argument.facts)
+    assert truncated.canonical_statements == altered.canonical_statements == ()
+    assert [node.kind for node in two_argument.canonical_statements] == ["End"]
+
+
 def test_fact_operation_view_matches_migrated_legacy_operations():
     for stem in ("t1_addimm", "t1_print", "t1_if"):
         program = decode((_CORPUS / f"{stem}.exe").read_bytes())
@@ -1419,6 +1458,10 @@ def _tbx_statement(node):
         operands = () if node.seg is None else (_tbx_expression(node.seg),)
     elif isinstance(node, tbx_ir.Out):
         operands = _tbx_expression(node.port), _tbx_expression(node.value)
+    elif isinstance(node, tbx_ir.Wait):
+        operands = (_tbx_expression(node.port), _tbx_expression(node.mask))
+        if node.xor is not None:
+            operands += (_tbx_expression(node.xor),)
     else:
         operands = ()
     return type(node).__name__, operands

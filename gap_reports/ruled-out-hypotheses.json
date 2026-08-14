@@ -11,6 +11,26 @@
  ],
  "hypotheses": [
   {
+   "id": "RO-TBD-WAIT-ORACLE-FIXTURE",
+   "title": "t1_wait is byte-exact acceptance evidence for two-argument WAIT recovery",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "tests/fixtures/corpus/t1_wait.exe"
+   ],
+   "signatures": [
+    "mov ax,mask; mov bx,ax; mov ax,port; mov dx,ax; in; and; je poll"
+   ],
+   "hypothesis": "The existing t1_wait fixture can calibrate tbd's two-argument constant WAIT recovery because tbx emits source text identical to its authored BAS file.",
+   "negative_evidence": [
+    "The byte-exact oracle rejected that identical emitted source: both images are 34720 bytes, but four bytes differ.",
+    "A diagnostic recompilation found differences only at 0x877a, 0x877b, 0x877e, and 0x877f. The WAIT code region at 0x8703..0x8712 is identical, so the mismatch is trailing data rather than the proposed polling scaffold, but it still fails the repository's whole-image acceptance rule.",
+    "The three-argument fixture t1_wait3 passes byte-exact oracle verification and therefore supports only the mask/xor polling template landed in tbd."
+   ],
+   "instead": "Keep two-argument WAIT unresolved in tbd until a newly authored fixture verifies byte-for-byte, or until the trailing-data mismatch in t1_wait is diagnosed and the existing fixture itself becomes valid acceptance evidence. Do not weaken verification to a code-region comparison.",
+   "source": "tbd parity session 2026-08-14"
+  },
+  {
    "id": "RO-TBD-OUT2-ORACLE-FIXTURE",
    "title": "t1_out2 is byte-exact acceptance evidence for direct-memory OUT recovery",
    "disposition": "refuted",
