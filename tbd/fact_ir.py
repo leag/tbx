@@ -13,6 +13,8 @@ _OPERATION_KINDS = {
     "semantic.dim": "ir.dim",
     "semantic.gosub": "ir.gosub",
     "semantic.return": "ir.return",
+    "semantic.call": "ir.call",
+    "semantic.sub_def": "ir.sub_def",
     "semantic.statement": "tb.statement",
 }
 

@@ -149,6 +149,25 @@ def test_targeted_return_templates_align_all_authored_return_lines():
     assert report.aligned_by_kind["Return"] == 4
 
 
+def test_framed_procedures_align_definition_and_call_structure():
+    paths = [
+        _CORPUS / f"{stem}.exe"
+        for stem in (
+            "t1_subdef",
+            "v10_subdef",
+            "t1_argrefonly",
+            "v10_t1_argrefonly",
+        )
+    ]
+
+    report = compare_paths(paths)
+
+    assert report.failures == 0
+    assert report.kind_match_files == 4
+    assert report.aligned_by_kind["SubDef"] == report.tbx_kinds["SubDef"]
+    assert report.aligned_by_kind["CallStmt"] == report.tbx_kinds["CallStmt"]
+
+
 def test_comparison_cli_prints_coverage(capsys):
     result = main([str(_CORPUS / "t1_delay.exe"), "--examples", "0"])
 

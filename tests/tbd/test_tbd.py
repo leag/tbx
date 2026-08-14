@@ -649,6 +649,53 @@ def test_procedure_returns_do_not_become_source_returns():
     assert [fact.subject for fact in returns] == [(0x8718, 0x8719)]
 
 
+def test_framed_procedure_facts_nest_bodies_and_name_calls():
+    for stem in ("t1_subdef", "v10_subdef"):
+        image = (_CORPUS / f"{stem}.exe").read_bytes()
+        exact_kinds = [type(node).__name__ for node in decode0.decode_user_code(image)]
+        program = decode(image)
+
+        assert [node.kind for node in program.canonical_statements] == exact_kinds
+        definition = program.canonical_statements[0]
+        assert definition.kind == "SubDef"
+        assert definition.operands[0:2] == ("SUB1", ())
+        assert [node.kind for node in definition.operands[2]] == ["Assign", "Print"]
+        assert [node.operands[0] for node in program.canonical_statements[2:4]] == [
+            "SUB1",
+            "SUB1",
+        ]
+
+
+def test_procedure_frame_uncertainty_stays_explicit_across_nested_calls():
+    program = decode((_CORPUS / "t1_argrefonly.exe").read_bytes())
+
+    assert [node.kind for node in program.canonical_statements] == [
+        "CallStmt", "End", "SubDef", "SubDef"
+    ]
+    first, second = program.canonical_statements[2:]
+    nested_call = first.operands[2][0]
+    assert nested_call.operands == (
+        "SUB2",
+        ("unresolved-call-arguments", 4),
+    )
+    assert second.operands[:2] == ("SUB2", ("unresolved-frame", 4))
+    assert any(
+        fact.kind == "semantic.sub_def"
+        and fact.evidence == (0x870B, 0x870E, 0x871B)
+        for fact in program.facts
+    )
+
+
+def test_incomplete_procedure_frame_does_not_invent_definition_or_call():
+    program = decode(bytes.fromhex("55 8b ec 9a 00 00 00 00"))
+
+    assert any(node.kind == "tb.proc_enter" for node in program.instructions)
+    assert not any(
+        fact.kind in {"semantic.sub_def", "semantic.call"}
+        for fact in program.facts
+    )
+
+
 def test_far_call_to_nonprocedure_target_is_an_event_safe_gosub():
     program = decode((_CORPUS / "t1_fargosub.exe").read_bytes())
     gosub = next(fact for fact in program.facts if fact.kind == "semantic.gosub")

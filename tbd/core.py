@@ -12,6 +12,7 @@ from tbd.fact_ir import build_operations
 from tbd.facts import EVIDENCE_PASSES, Evidence, analyze as analyze_facts
 from tbd.ir import Diagnostic, Program
 from tbd.pool_facts import POOL_FACT_PASSES
+from tbd.procedure_facts import PROCEDURE_FACT_PASSES
 from tbd.profile import PROLOGUES
 from tbd.runtime_facts import RUNTIME_FACT_PASSES
 from tbd.slot_facts import SLOT_FACT_PASSES, materialize_slots
@@ -48,6 +49,7 @@ def decode(
             + ASSIGNMENT_FACT_PASSES
             + RUNTIME_FACT_PASSES
             + CONTROL_FACT_PASSES
+            + PROCEDURE_FACT_PASSES
             + STATEMENT_FACT_PASSES
         ),
     )

@@ -47,6 +47,13 @@ contains its jump inside one instruction, while an ordinary GOSUB frame uses an
 adjacent `ADD SP,2` and jump pair. Both add a RETURN fact only when the complete
 template is present, and retain the jump target for final statement-index
 resolution.
+Framed SUB definitions similarly require a procedure-entry signature and one
+procedure-return signature before the next entry. Their compiler skip jump,
+when present, supplies the declaration address. Calls targeting a recovered
+entry and semantic body facts inside the complete region then form a nested
+source view without consuming any of that evidence. A nonzero return-frame pop
+is retained as unresolved parameter and argument metadata until independent
+frame facts can distinguish caller arguments from procedure-local storage.
 
 ## Required design choices
 
@@ -278,6 +285,11 @@ non-destructive view that assigns stable source names and orders commutative
 expressions; it reads type suffixes from anchored slot facts rather than relying
 on a later typed use in operation IR. The address-bearing fact statements remain
 unchanged.
+Complete framed SUBs and calls to their entry addresses are additive facts as
+well. Statement reconstruction nests already-recovered body facts inside their
+region, while final canonicalization gives definition and call addresses the
+same stable procedure name. Frame cleanup that cannot yet distinguish parameters
+from LOCAL storage remains explicit unresolved metadata.
 
 1. Add `Fact` and a fact store alongside `Program.instructions`.
 2. Port constant-pool, slot, and symbolic results to additive facts.

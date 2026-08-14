@@ -12,6 +12,7 @@ _SIMPLE_KINDS = {
     "ir.if_goto": "IfGoto",
     "ir.gosub": "Gosub",
     "ir.return": "Return",
+    "ir.call": "CallStmt",
     "flow.goto": "Goto",
     "flow.call": "Call",
     "flow.return": "Return",
@@ -20,13 +21,32 @@ _SIMPLE_KINDS = {
 
 def reconstruct(operations: tuple[Operation, ...]) -> tuple[Statement, ...]:
     candidates = _statement_operations(list(operations))
-    addresses = [operation.offset for operation in candidates]
+    return _reconstruct_scope(candidates)
+
+
+def _reconstruct_scope(candidates: list[Operation]) -> tuple[Statement, ...]:
+    visible = _visible_operations(candidates)
+    addresses = [operation.offset for operation in visible]
     statements = []
-    for index, operation in enumerate(candidates):
-        kind, operands = _statement(operation)
+    for index, operation in enumerate(visible):
+        kind, operands = _statement(operation, candidates)
         operands = _resolve_operands(kind, operands, addresses)
         statements.append(Statement(index, operation.offset, kind, operands))
     return tuple(statements)
+
+
+def _visible_operations(candidates: list[Operation]) -> list[Operation]:
+    procedures = [node for node in candidates if node.kind == "ir.sub_def"]
+    return [
+        node
+        for node in candidates
+        if node.kind == "ir.sub_def"
+        or not any(_inside(node, procedure) for procedure in procedures)
+    ]
+
+
+def _inside(node: Operation, procedure: Operation) -> bool:
+    return procedure.offset < node.offset and node.end <= procedure.end
 
 
 def _statement_operations(nodes: list[Operation]) -> list[Operation]:
@@ -39,7 +59,7 @@ def _statement_operations(nodes: list[Operation]) -> list[Operation]:
             index += 5
             continue
         node = nodes[index]
-        if node.kind in _SIMPLE_KINDS or node.kind == "tb.statement":
+        if node.kind in _SIMPLE_KINDS or node.kind in {"ir.sub_def", "tb.statement"}:
             result.append(node)
         index += 1
     return result
@@ -68,7 +88,15 @@ def _delay(nodes: list[Operation]) -> Operation | None:
     )
 
 
-def _statement(operation: Operation) -> tuple[str, tuple[object, ...]]:
+def _statement(
+    operation: Operation, candidates: list[Operation]
+) -> tuple[str, tuple[object, ...]]:
+    if operation.kind == "ir.sub_def":
+        entry, parameters = operation.operands
+        body = _reconstruct_scope(
+            [node for node in candidates if _inside(node, operation)]
+        )
+        return "SubDef", (entry, parameters, body)
     if operation.kind == "ir.delay":
         return "Delay", operation.operands
     if operation.kind == "ir.dim":

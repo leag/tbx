@@ -14,7 +14,14 @@ def canonicalize(
 ) -> tuple[Statement, ...]:
     """Name address-based slots and normalize equivalent expression order."""
 
-    names = _Names(slots)
+    procedures = tuple(
+        statement.operands[0]
+        for statement in statements
+        if statement.kind == "SubDef"
+        and statement.operands
+        and isinstance(statement.operands[0], int)
+    )
+    names = _Names(slots, procedures)
     named = tuple(names.statement(statement) for statement in statements)
     return tuple(_normalize_statement(statement) for statement in named)
 
@@ -36,6 +43,18 @@ def _normalize_statement(statement: Statement) -> Statement:
         )
     elif statement.kind == "Delay":
         operands = tuple(normalize_expression(item) for item in operands)
+    elif statement.kind == "SubDef":
+        name, parameters, body = operands
+        operands = (
+            name,
+            parameters,
+            tuple(_normalize_statement(item) for item in body),
+        )
+    elif statement.kind == "CallStmt":
+        name, arguments = operands
+        if not _unresolved(arguments):
+            arguments = tuple(normalize_expression(item) for item in arguments)
+        operands = name, arguments
     return Statement(statement.index, statement.address, statement.kind, operands)
 
 
@@ -98,14 +117,33 @@ def _expression_key(value: object) -> tuple[int, str]:
 
 
 class _Names:
-    def __init__(self, slots: tuple[Slot, ...]) -> None:
+    def __init__(self, slots: tuple[Slot, ...], procedures: tuple[int, ...]) -> None:
         self._types = {slot.offset: slot.types for slot in slots}
         self._names: dict[int, str] = {}
         self._next = 0
+        self._procedures = {
+            address: f"SUB{index}"
+            for index, address in enumerate(procedures, start=1)
+        }
 
     def statement(self, statement: Statement) -> Statement:
+        if statement.kind == "SubDef":
+            entry, parameters, body = statement.operands
+            operands = (
+                self._procedure(entry),
+                self._value(parameters),
+                tuple(self.statement(item) for item in body),
+            )
+            return Statement(statement.index, statement.address, statement.kind, operands)
+        if statement.kind == "CallStmt":
+            target, arguments = statement.operands
+            operands = self._procedure(target), self._value(arguments)
+            return Statement(statement.index, statement.address, statement.kind, operands)
         operands = tuple(self._value(value) for value in statement.operands)
         return Statement(statement.index, statement.address, statement.kind, operands)
+
+    def _procedure(self, address: object) -> object:
+        return self._procedures.get(address, ("procedure", address))
 
     def _value(self, value: object) -> object:
         if not isinstance(value, tuple) or not value:
@@ -144,3 +182,11 @@ def _letters(index: int) -> str:
         index, remainder = divmod(index - 1, 26)
         result = chr(ord("A") + remainder) + result
     return result
+
+
+def _unresolved(value: object) -> bool:
+    return (
+        isinstance(value, tuple)
+        and bool(value)
+        and value[0] == "unresolved-call-arguments"
+    )
