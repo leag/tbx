@@ -344,6 +344,11 @@ whole PRINT without leaving a stale partial statement behind.
 An additional consecutive printer flush is a complete empty LPRINT statement:
 the first B9 has already closed the preceding chain, so every directly adjacent
 B9 after it adds one empty statement fact with both flushes as evidence.
+File PRINT chains require the uniquely resolved adjacent store to the compiler's
+0x60 channel cell and retain that channel instead of a generic file-mode label.
+For an empty file PRINT, that store followed immediately by the file flush is
+the complete statement signature; a flush without the store remains runtime
+evidence only.
 PRINT item chains retain intervening mode-specific separator calls and their
 provenance rather than dropping the items before a comma-zone advance.
 Immediate TAB/SPC controls are ordered items in the same chain for console,

@@ -78,6 +78,8 @@ def _normalize_statement(statement: Statement) -> Statement:
         )
     elif statement.kind in {"Print", "Lprint"}:
         mode, items, newline = operands
+        if not isinstance(mode, (int, str)):
+            mode = normalize_expression(mode)
         operands = mode, tuple(normalize_expression(item) for item in items), newline
     elif statement.kind == "Write":
         file_number, items = operands

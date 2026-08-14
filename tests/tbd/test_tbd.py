@@ -579,6 +579,43 @@ def test_runtime_facts_preserve_items_across_print_separators():
         assert all(len(fact.evidence) >= 8 for fact in separated)
 
 
+def test_file_print_facts_preserve_channel_items_and_blank_statements():
+    stems = (
+        "t1_close",
+        "t1_fpcomma",
+        "t1_fprintblank",
+        "t1_open2",
+        "t1_openfor",
+        "t1_tab",
+    )
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in stems
+        if (_CORPUS / f"{prefix}{stem}.exe").exists()
+    ]
+    for path in paths:
+        image = path.read_bytes()
+        program = decode(image)
+        actual = [
+            (node.kind, node.operands)
+            for node in program.canonical_statements
+            if node.kind == "Print" and node.operands[0] != "console"
+        ]
+        exact = [
+            _tbx_statement(node)
+            for node in decode0.decode_user_code(image)
+            if isinstance(node, tbx_ir.Print) and node.file is not None
+        ]
+        assert actual == exact
+
+
+def test_file_print_requires_its_adjacent_channel_store():
+    program = decode(bytes.fromhex("cd ba"))
+
+    assert not any(fact.kind == "semantic.print" for fact in program.facts)
+
+
 def test_runtime_facts_classify_resolved_printer_chains_as_lprint():
     for stem, expected_count in {
         "t1_lprint": 1,
@@ -655,8 +692,7 @@ def test_runtime_facts_keep_tab_spc_items_in_their_chains():
             if isinstance(statement, tbx_ir.Print)
         ]
         assert actual_prints[:3] == exact_prints[:3]
-        assert actual_prints[3][0] == "file"
-        assert actual_prints[3][1:] == exact_prints[3][1:]
+        assert actual_prints[3] == exact_prints[3]
         assert actual_prints[2][1][0] == (
             "call", "TAB", (("var", "A"),)
         )

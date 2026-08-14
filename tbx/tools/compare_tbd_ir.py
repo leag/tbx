@@ -175,7 +175,10 @@ def _statement(node: Any) -> tuple[str, tuple[object, ...]]:
             node.dynamic,
         )
     elif isinstance(node, ir.Print):
-        mode = "console" if node.file is None else node.file
+        if node.file is None or isinstance(node.file, int):
+            mode = "console" if node.file is None else node.file
+        else:
+            mode = _expression(node.file)
         operands = mode, tuple(_expression(item) for item in node.items), node.newline
     elif isinstance(node, ir.Lprint):
         operands = "printer", tuple(_expression(item) for item in node.items), node.newline

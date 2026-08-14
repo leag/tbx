@@ -217,6 +217,24 @@ def test_open_kinds_align_for_both_source_scaffolds():
     assert report.failures == 0
 
 
+def test_file_print_channels_restore_exact_open_file_trees():
+    paths = [
+        _CORPUS / f"{stem}.exe"
+        for stem in (
+            "t1_close",
+            "t1_fpcomma",
+            "t1_open2",
+            "t1_openfor",
+            "v10_t1_fpcomma",
+            "v10_t1_openfor",
+        )
+    ]
+    report = compare_paths(paths)
+
+    assert report.comparable_files == report.exact_files == len(paths)
+    assert report.failures == 0
+
+
 def test_close_channels_are_exact_for_all_calibrated_forms():
     paths = [
         _CORPUS / f"{stem}.exe"

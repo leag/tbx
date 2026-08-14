@@ -64,20 +64,32 @@ def runtime_facts(
         chain = _item_chain(by_end, separators, instruction.offset, mode)
         if not chain or _has_preceding_item(instructions_by_end, chain.start, mode):
             continue
+        statement_mode: object = mode
+        start = chain.start
+        file_evidence: tuple[int, ...] = ()
+        if mode == "file":
+            file_result = _write_file_number(
+                facts, instructions_by_end, chain.start
+            )
+            if file_result is None:
+                continue
+            statement_mode, start, file_evidence = file_result
         values = tuple(item.value for item in chain.items)
         support = combine_evidence(
             *(item.evidence for item in chain.items),
             chain.evidence,
+            file_evidence,
             (instruction.offset,),
         )
         yield Fact(
             "semantic.lprint" if mode == "printer" else "semantic.print",
-            (chain.start, instruction.end),
-            (mode, values, True),
+            (start, instruction.end),
+            (statement_mode, values, True),
             support,
             "anchored",
         )
     yield from _blank_lprint_facts(evidence.instructions)
+    yield from _blank_file_print_facts(evidence.instructions, facts)
     yield from _write_facts(evidence.instructions, facts)
     yield from _fixed_string_facts(evidence.instructions, facts)
     yield from _field_facts(evidence.instructions, facts)
@@ -98,6 +110,26 @@ def _blank_lprint_facts(instructions: tuple[Operation, ...]) -> Iterable[Fact]:
                 (previous.offset, current.offset),
                 "signature",
             )
+
+
+def _blank_file_print_facts(
+    instructions: tuple[Operation, ...], facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    by_end = {instruction.end: instruction for instruction in instructions}
+    for flush in instructions:
+        if _runtime_vector(flush) != 0xBA:
+            continue
+        file_result = _write_file_number(facts, by_end, flush.offset)
+        if file_result is None:
+            continue
+        file_number, start, file_evidence = file_result
+        yield Fact(
+            "semantic.print",
+            (start, flush.end),
+            (file_number, (), True),
+            combine_evidence(file_evidence, (flush.offset,)),
+            "anchored",
+        )
 
 
 def _field_facts(
