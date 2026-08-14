@@ -77,6 +77,134 @@ def runtime_facts(
             support,
             "anchored",
         )
+    yield from _write_facts(evidence.instructions, facts)
+
+
+def _write_facts(
+    instructions: tuple[Operation, ...], facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    expressions = _expression_index(facts, instructions)
+    items = _write_items(instructions, expressions, facts)
+    by_end = {item.end: item for item in items}
+    by_end_instruction = {item.end: item for item in instructions}
+    separators = {
+        item.end: item
+        for item in instructions
+        if _phase_name(item) in {"WRITE_SEPARATOR", "WRITE_FILE_SEPARATOR"}
+    }
+    for flush in instructions:
+        mode = {0xB8: "console", 0xBA: "file"}.get(_runtime_vector(flush))
+        if mode is None:
+            continue
+        chain = _item_chain(by_end, separators, flush.offset, mode)
+        if not chain or _has_preceding_item(by_end_instruction, chain.start, mode):
+            continue
+        file_number = None
+        start = chain.start
+        file_evidence: tuple[int, ...] = ()
+        if mode == "file":
+            resolved = _write_file_number(facts, by_end_instruction, start)
+            if resolved is None:
+                continue
+            file_number, start, file_evidence = resolved
+        support = combine_evidence(
+            *(item.evidence for item in chain.items),
+            chain.evidence,
+            file_evidence,
+            (flush.offset,),
+        )
+        yield Fact(
+            "semantic.write",
+            (start, flush.end),
+            (file_number, tuple(item.value for item in chain.items)),
+            support,
+            "anchored",
+        )
+
+
+def _write_items(
+    instructions: tuple[Operation, ...],
+    expressions: dict[int, Fact],
+    facts: frozenset[Fact],
+) -> tuple[_Item, ...]:
+    result = []
+    modes = {"WRITE_ITEM": "console", "WRITE_FILE_NUMBER": "file"}
+    for index, instruction in enumerate(instructions):
+        mode = modes.get(_phase_name(instruction))
+        expression = expressions.get(instruction.offset)
+        if mode is not None and expression is not None:
+            resolved = resolve_expression(expression.value[0], facts)
+            if resolved is not None:
+                support = combine_evidence(
+                    expression.evidence, resolved.evidence, (instruction.offset,)
+                )
+                result.append(
+                    _Item(
+                        expression.evidence[0],
+                        instruction.end,
+                        mode,
+                        resolved.value,
+                        support,
+                    )
+                )
+        window = instructions[index : index + 3]
+        if item := _write_string_item(window, facts):
+            result.append(item)
+    return tuple(result)
+
+
+def _write_string_item(
+    window: tuple[Operation, ...], facts: frozenset[Fact]
+) -> _Item | None:
+    if len(window) != 3:
+        return None
+    setup, read, phase = window
+    if not _is_string_setup(setup, read) or _phase_name(phase) != "WRITE_FILE_STRING":
+        return None
+    resolved = resolve_expression(("memory", setup.operands[1], "string"), facts)
+    if resolved is None:
+        return None
+    support = combine_evidence(
+        (setup.offset, read.offset, phase.offset), resolved.evidence
+    )
+    return _Item(setup.offset, phase.end, "file", resolved.value, support)
+
+
+def _write_file_number(
+    facts: frozenset[Fact],
+    instructions_by_end: dict[int, Operation],
+    start: int,
+) -> tuple[object, int, tuple[int, ...]] | None:
+    store = instructions_by_end.get(start)
+    if store is None:
+        return None
+    effects = [
+        fact
+        for fact in facts
+        if fact.kind == "machine.store"
+        and fact.subject == (0x60,)
+        and fact.evidence
+        and fact.evidence[-1] == store.offset
+        and len(fact.value) == 1
+    ]
+    if len(effects) != 1:
+        return None
+    resolved = resolve_expression(effects[0].value[0], facts)
+    if resolved is None:
+        return None
+    file_number = resolved.value
+    if isinstance(file_number, tuple) and file_number[:1] == ("const",):
+        file_number = file_number[1]
+    return file_number, effects[0].evidence[0], combine_evidence(
+        effects[0].evidence, resolved.evidence
+    )
+
+
+def _phase_name(instruction: Operation) -> str | None:
+    if instruction.kind != "tb.statement" or not instruction.operands:
+        return None
+    name = instruction.operands[0]
+    return name if isinstance(name, str) else None
 
 
 def _expression_index(
@@ -241,7 +369,7 @@ def _item_chain(
         separator = separators.get(cursor)
         if (
             separator is not None
-            and _SEPARATORS[_runtime_vector(separator)] == mode
+            and _separator_mode(separator) == mode
         ):
             support.append(separator.offset)
             cursor = start = separator.offset
@@ -252,6 +380,16 @@ def _item_chain(
     return _Chain(start, tuple(reversed(reverse)), tuple(support))
 
 
+def _separator_mode(instruction: Operation) -> str | None:
+    runtime_mode = _SEPARATORS.get(_runtime_vector(instruction))
+    if runtime_mode is not None:
+        return runtime_mode
+    return {
+        "WRITE_SEPARATOR": "console",
+        "WRITE_FILE_SEPARATOR": "file",
+    }.get(_phase_name(instruction))
+
+
 def _has_preceding_item(
     instructions_by_end: dict[int, Operation], start: int, mode: str
 ) -> bool:
@@ -260,6 +398,12 @@ def _has_preceding_item(
     preceding_mode = _NUMERIC_ITEMS.get(
         vector, _STRING_ITEMS.get(vector, _UNRESOLVED_CONTROLS.get(vector))
     )
+    if preceding_mode is None and previous is not None:
+        preceding_mode = {
+            "WRITE_ITEM": "console",
+            "WRITE_FILE_NUMBER": "file",
+            "WRITE_FILE_STRING": "file",
+        }.get(_phase_name(previous))
     return preceding_mode == mode
 
 

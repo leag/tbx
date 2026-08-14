@@ -341,6 +341,10 @@ compiler's complete FP-expression-to-AX bridge is also accepted when its store
 fact, reload address, and resolved source all agree. Any other unresolved
 control remains a chain boundary, preventing a trailing suffix from becoming a
 partial statement.
+WRITE uses the same immutable expression and string evidence but keeps its own
+item and separator phases. A console or file WRITE fact requires every item,
+the mode-specific flush, and, for file mode, the immediately preceding resolved
+`[0060]` file-number store; incomplete chains remain phase evidence.
 Device I/O likewise requires its whole compiler scaffold. Constant OUT is
 recovered only when two immediate AX loads are separated by the exact
 `mov bx,ax` staging move and followed contiguously by `mov dx,bx; out dx,al` in

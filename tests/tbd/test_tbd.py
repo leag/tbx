@@ -640,6 +640,31 @@ def test_runtime_facts_keep_tab_spc_items_in_their_chains():
     )
 
 
+def test_runtime_facts_recover_complete_console_and_file_write_chains():
+    for prefix in ("", "v10_"):
+        for stem in ("t1_write", "t1_writefile"):
+            image = (_CORPUS / f"{prefix}{stem}.exe").read_bytes()
+            program = decode(image)
+            actual = [node for node in program.canonical_statements if node.kind == "Write"]
+            exact = [
+                _tbx_statement(node)
+                for node in decode0.decode_user_code(image)
+                if isinstance(node, tbx_ir.Write)
+            ]
+            assert [(node.kind, node.operands) for node in actual] == exact
+            fact = next(item for item in program.facts if item.kind == "semantic.write")
+            assert fact.confidence == "anchored"
+
+    incomplete = decode(bytes.fromhex("cd 35 e8 cd ec f4"))
+    unresolved_prefix = decode(
+        bytes.fromhex("cd ec f4 cd ec f8 cd 35 e8 cd ec f4 cd b8")
+    )
+    assert not any(fact.kind == "semantic.write" for fact in incomplete.facts)
+    assert not any(
+        fact.kind == "semantic.write" for fact in unresolved_prefix.facts
+    )
+
+
 def test_device_io_facts_recover_complete_out_scaffolds():
     expected = [
         ("Out", (("const", 888), ("const", 1))),
@@ -1521,6 +1546,12 @@ def _tbx_statement(node):
             tuple(_tbx_expression(item) for item in node.items),
             node.newline,
         )
+    elif isinstance(node, tbx_ir.Write):
+        if node.file is None or isinstance(node.file, int):
+            file_number = node.file
+        else:
+            file_number = _tbx_expression(node.file)
+        operands = file_number, tuple(_tbx_expression(item) for item in node.items)
     elif isinstance(node, tbx_ir.IfGoto):
         operands = (
             node.cond.op,

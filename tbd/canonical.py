@@ -33,6 +33,9 @@ def _normalize_statement(statement: Statement) -> Statement:
     elif statement.kind in {"Print", "Lprint"}:
         mode, items, newline = operands
         operands = mode, tuple(normalize_expression(item) for item in items), newline
+    elif statement.kind == "Write":
+        file_number, items = operands
+        operands = file_number, tuple(normalize_expression(item) for item in items)
     elif statement.kind == "IfGoto":
         condition, left, right, target = operands
         operands = (
