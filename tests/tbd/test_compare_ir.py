@@ -93,6 +93,21 @@ def test_resume_signatures_close_handler_kind_sequences():
     assert report.kind_match_files == len(stems)
 
 
+def test_profiled_source_control_closes_checked_and_computed_calls():
+    stems = (
+        "fst_t1_gosub",
+        "t1_ongosub", "v10_t1_ongosub",
+        "t1_run", "v10_t1_run",
+    )
+
+    report = compare_paths([_CORPUS / f"{stem}.exe" for stem in stems])
+
+    assert report.failures == 0
+    assert report.tbx_statements == report.tbd_statements == 20
+    assert report.aligned_kinds == 20
+    assert report.kind_match_files == len(stems)
+
+
 def test_static_array_facts_close_both_dialect_tree_comparisons():
     paths = [
         _CORPUS / f"{prefix}{stem}.exe"

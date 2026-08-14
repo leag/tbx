@@ -23,6 +23,13 @@ class CompilerProfile:
         upper = 0xEC - self.vector_shift
         return vector + self.vector_shift if 0x40 <= vector < upper else vector
 
+    def is_run_jump(self, opcode: int, target: int, code_start: int) -> bool:
+        """Whether one direct jump is this compiler's bare RUN spelling."""
+
+        if self.name == "1.0":
+            return opcode == 0xE9 and target == code_start + 3
+        return target == code_start
+
 
 TB11 = CompilerProfile("1.1", b"\xcd\xec\xba", 0, 0)
 TB10 = CompilerProfile("1.0", b"\xcd\xec\xb8", 2, 6)
@@ -33,6 +40,8 @@ PROCEDURE_RETURN = b"\x5d\xcb"
 PROCEDURE_RETURN_POP = b"\x5d\xca"
 RETURN_TO_VECTOR = 0x8C
 TRACE_VECTOR = 0x97
+CHECKED_GOSUB_VECTOR = 0x8A
+CHECKED_RETURN_VECTOR = 0x8B
 
 # Direct-memory types carried by Turbo Basic's emulated x87 escape vectors.
 # The analyzer consumes these as profile signatures; it does not infer widths

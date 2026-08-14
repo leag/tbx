@@ -116,7 +116,7 @@ def _resume_value(tail: Operation) -> tuple[object, ...] | None:
         "RESUME_NEXT", 0xC0
     ):
         return ("NEXT",)
-    if tail.kind in {"x86.jmp", "x86.jmp_far"} and tail.operands:
+    if tail.kind in {"x86.jmp", "x86.jmp_far", "tb.run"} and tail.operands:
         target = tail.operands[0]
         return (target,) if isinstance(target, int) else None
     return None

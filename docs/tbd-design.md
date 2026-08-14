@@ -54,6 +54,17 @@ RESUME jump also makes its physical fallthrough a discovery root: the compiler
 may retain unreachable source after the transfer, and the adjacent prefix is
 the positive evidence that distinguishes this from a generic unconditional
 jump. A truncated prefix or unrelated tail adds no RESUME fact or orphan root.
+Profiled stack-check GOSUB and RETURN vectors are complete source-control
+instructions: the checked call owns its four-byte target payload, while the
+checked return is a two-byte terminal. Dynamic ON GOTO/GOSUB dispatch tables
+likewise register every embedded target plus the out-of-range fallthrough as
+CFG edges, so adjacent one-byte targets remain independently discoverable.
+Bare RUN is classified only from the profile's entry-jump spelling; its jump
+target is control evidence and its physical fallthrough is an orphan discovery
+root because the compiler retains following source such as END. Truncated or
+out-of-image checked-call payloads remain source-less evidence. When a 1.0
+entry jump is immediately preceded by `RESUME_BEGIN`, that stronger enclosing
+signature owns the jump and suppresses a separate RUN fact.
 Framed SUB definitions similarly require a procedure-entry signature and one
 procedure-return signature before the next entry. Their compiler skip jump,
 when present, supplies the declaration address. Calls targeting a recovered

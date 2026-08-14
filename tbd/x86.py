@@ -12,6 +12,8 @@ from typing import Any, Callable
 
 from tbd.ir import Operation
 from tbd.profile import (
+    CHECKED_GOSUB_VECTOR,
+    CHECKED_RETURN_VECTOR,
     EC_DISPATCH_NAMES,
     EC_INLINE_PAYLOAD_FORMATS,
     EC_RELATIVE_TARGET_SUBS,
@@ -83,6 +85,26 @@ def _decode_interrupt(
         size = min(stop - offset, 2 + _modrm_size(exe, offset + 2, stop))
         return _op(exe, offset, size, "tb.fp", (vector, exe[offset + 2]), "signature")
     canonical = _canonical_vector(vector, dialect)
+    if dialect is not None and canonical == CHECKED_GOSUB_VECTOR:
+        if offset + 6 > stop:
+            return _op(
+                exe,
+                offset,
+                2,
+                "tb.checked_call_truncated",
+                (6,),
+                "structural",
+            )
+        relative = struct.unpack_from("<i", exe, offset + 2)[0]
+        target = code_start + relative
+        kind = (
+            "tb.checked_gosub"
+            if code_start <= target < stop
+            else "tb.checked_call_runtime"
+        )
+        return _op(exe, offset, 6, kind, (target,), "signature")
+    if dialect is not None and canonical == CHECKED_RETURN_VECTOR:
+        return _op(exe, offset, 2, "tb.checked_return", (), "signature")
     if dialect is not None and canonical == TRACE_VECTOR and offset + 4 <= stop:
         return _op(
             exe,
@@ -184,7 +206,7 @@ def _truncated_dispatch(
 
 
 def _decode_near_branch(
-    exe: bytes, offset: int, stop: int, code_start: int, _dialect: str | None
+    exe: bytes, offset: int, stop: int, code_start: int, dialect: str | None
 ) -> Operation | None:
     byte = exe[offset]
     if 0x70 <= byte <= 0x7F and offset + 1 < stop:
@@ -192,17 +214,32 @@ def _decode_near_branch(
         return _op(exe, offset, 2, f"x86.{_JCC[byte - 0x70]}", (target,))
     if byte == 0xEB and offset + 1 < stop:
         target = offset + 2 + _signed8(exe[offset + 1])
+        if _is_run_jump(byte, target, code_start, dialect):
+            return _op(exe, offset, 2, "tb.run", (target,), "signature")
         return _op(exe, offset, 2, "x86.jmp", (target,))
     if byte in (0xE8, 0xE9) and offset + 2 < stop:
         relative = struct.unpack_from("<h", exe, offset + 1)[0]
         target = code_start + ((offset + 3 + relative - code_start) & 0xFFFF)
         kind = "x86.call" if byte == 0xE8 else "x86.jmp"
+        if byte == 0xE9 and _is_run_jump(byte, target, code_start, dialect):
+            return _op(exe, offset, 3, "tb.run", (target,), "signature")
         return _op(exe, offset, 3, kind, (target,))
     if 0xE0 <= byte <= 0xE3 and offset + 1 < stop:
         names = ("loopne", "loope", "loop", "jcxz")
         target = offset + 2 + _signed8(exe[offset + 1])
         return _op(exe, offset, 2, f"x86.{names[byte - 0xE0]}", (target,))
     return None
+
+
+def _is_run_jump(
+    opcode: int, target: int, code_start: int, dialect: str | None
+) -> bool:
+    profile = profile_for(dialect)
+    return (
+        profile.is_run_jump(opcode, target, code_start)
+        if profile is not None
+        else False
+    )
 
 
 def _decode_far_branch(

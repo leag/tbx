@@ -17,6 +17,7 @@ _SOURCE_FACTS = {
     "semantic.print",
     "semantic.return",
     "semantic.resume",
+    "semantic.run",
     "semantic.statement",
 }
 _CONTROL = {

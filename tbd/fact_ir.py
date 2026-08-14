@@ -14,6 +14,7 @@ _OPERATION_KINDS = {
     "semantic.gosub": "ir.gosub",
     "semantic.return": "ir.return",
     "semantic.resume": "ir.resume",
+    "semantic.run": "ir.run",
     "semantic.call": "ir.call",
     "semantic.sub_def": "ir.sub_def",
     "semantic.tron": "ir.tron",

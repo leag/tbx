@@ -33,8 +33,8 @@ _SOURCE_CONDITIONS = {
     ">": "<=",
 }
 _JUMPS = {"x86.jmp", "x86.jmp_far"}
-_CALLS = {"x86.call", "x86.call_far"}
-_RETURNS = {"x86.ret", "x86.retf", "x86.iret"}
+_CALLS = {"x86.call", "x86.call_far", "tb.checked_gosub"}
+_RETURNS = {"x86.ret", "x86.retf", "x86.iret", "tb.checked_return"}
 
 
 def control_flow_facts(
@@ -84,7 +84,7 @@ def source_subroutine_facts(
             continue
         if (
             flow.kind == "flow.call"
-            and instruction.kind in {"x86.call", "x86.call_far"}
+            and instruction.kind in _CALLS
             and flow.value
             and flow.value[0] in targets
             and instructions[flow.value[0]].kind != "tb.proc_enter"
@@ -128,6 +128,32 @@ def source_subroutine_facts(
             )
 
 
+def source_run_facts(
+    evidence: Evidence, _facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    """Lift only profile-classified entry jumps to bare RUN statements."""
+
+    instructions = {
+        instruction.offset: instruction for instruction in evidence.instructions
+    }
+    for instruction in evidence.instructions:
+        previous = instructions.get(instruction.offset - 3)
+        resume_tail = (
+            previous is not None
+            and previous.end == instruction.offset
+            and previous.kind == "tb.statement"
+            and previous.operands[:2] == ("RESUME_BEGIN", 0xBC)
+        )
+        if instruction.kind == "tb.run" and not resume_tail:
+            yield Fact(
+                "semantic.run",
+                (instruction.offset, instruction.end),
+                (),
+                (instruction.offset,),
+                "signature",
+            )
+
+
 def _flow_fact(instruction: Operation) -> Fact | None:
     if instruction.kind in _BRANCH_TESTS:
         return _flow(
@@ -139,6 +165,8 @@ def _flow_fact(instruction: Operation) -> Fact | None:
         return _flow("flow.goto", instruction, (instruction.operands[0],))
     if instruction.kind in _CALLS:
         return _flow("flow.call", instruction, (instruction.operands[0],))
+    if instruction.kind == "tb.run":
+        return _flow("flow.run", instruction, (instruction.operands[0],))
     if instruction.kind == "tb.return_to":
         return _flow("flow.return_to", instruction, (instruction.operands[0],))
     if instruction.kind in _RETURNS:
@@ -230,5 +258,6 @@ def _runtime(instruction: Operation | None, vector: int) -> bool:
 CONTROL_FACT_PASSES: tuple[NamedPass, ...] = (
     ("control-flow", control_flow_facts),
     ("source-subroutines", source_subroutine_facts),
+    ("source-run", source_run_facts),
     ("if-gotos", if_goto_facts),
 )

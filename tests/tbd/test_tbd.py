@@ -634,6 +634,88 @@ def test_source_subroutine_facts_match_near_gosub_and_return_trees():
         ] == ["semantic.gosub", "semantic.return"]
 
 
+def test_checked_gosub_and_return_are_complete_profile_instructions():
+    image = (_CORPUS / "fst_t1_gosub.exe").read_bytes()
+    exact = [_tbx_statement(node) for node in decode0.decode_user_code(image)]
+    program = decode(image)
+
+    assert [
+        (node.kind, node.operands) for node in program.canonical_statements
+    ] == exact
+    checked = [
+        (node.offset, node.end, node.kind, node.operands)
+        for node in program.instructions
+        if node.kind.startswith("tb.checked")
+    ]
+    assert checked == [
+        (0x870D, 0x8713, "tb.checked_gosub", (0x8722,)),
+        (0x872E, 0x8730, "tb.checked_return", ()),
+    ]
+
+
+def test_checked_call_payload_must_be_complete_and_in_user_code():
+    complete = {
+        "1.1": bytes.fromhex("cd 8a 00 00 00 00"),
+        "1.0": bytes.fromhex("cd 84 00 00 00 00"),
+    }
+    for dialect, image in complete.items():
+        instruction = decode_instruction(image, 0, len(image), 0, dialect)
+        truncated = decode_instruction(image, 0, len(image) - 1, 0, dialect)
+
+        assert (instruction.kind, instruction.size, instruction.operands) == (
+            "tb.checked_gosub", 6, (0,)
+        )
+        assert (truncated.kind, truncated.size, truncated.confidence) == (
+            "tb.checked_call_truncated", 2, "structural"
+        )
+
+    helper = decode_instruction(
+        bytes.fromhex("cd 8a ff ff ff 7f"), 0, 6, 0, "1.1"
+    )
+    assert (helper.kind, helper.size, helper.confidence) == (
+        "tb.checked_call_runtime", 6, "signature"
+    )
+    raw = decode_instruction(complete["1.1"], 0, 6, 0, None)
+    assert (raw.kind, raw.size, raw.operands) == ("tb.runtime", 2, (0x8A,))
+
+
+def test_computed_call_tables_discover_every_return_target():
+    for prefix, targets in (
+        ("", (0x872E, 0x872F)),
+        ("v10_", (0x70DE, 0x70DF)),
+    ):
+        program = decode((_CORPUS / f"{prefix}t1_ongosub.exe").read_bytes())
+        calls = {xref.target for xref in program.xrefs if xref.kind == "call"}
+
+        assert calls == set(targets)
+        assert [node.kind for node in program.canonical_statements] == [
+            "Assign", "OnGosub", "End", "Return", "Return"
+        ]
+        assert program.canonical_statements[1].operands == (3, 4)
+
+
+def test_profile_run_jumps_retain_the_compiled_fallthrough():
+    expected = {
+        "t1_run": (0x8703, 0x8705, 0x8700),
+        "v10_t1_run": (0x70B3, 0x70B6, 0x70B3),
+    }
+    for stem, (start, end, target) in expected.items():
+        image = (_CORPUS / f"{stem}.exe").read_bytes()
+        exact = [type(node).__name__ for node in decode0.decode_user_code(image)]
+        program = decode(image)
+        run = next(node for node in program.instructions if node.kind == "tb.run")
+
+        assert [node.kind for node in program.canonical_statements] == exact
+        assert (run.offset, run.end, run.operands) == (start, end, (target,))
+        assert any(
+            xref.kind == "orphan" and xref.source == start and xref.target == end
+            for xref in program.xrefs
+        )
+
+    far = decode((_CORPUS / "t1_runfar.exe").read_bytes())
+    assert [node.kind for node in far.canonical_statements[-2:]] == ["Run", "End"]
+
+
 def test_procedure_returns_do_not_become_source_returns():
     program = decode((_CORPUS / "t1_subgsb.exe").read_bytes())
 
@@ -767,6 +849,15 @@ def test_resume_facts_recover_all_complete_tail_forms_in_both_dialects():
             assert actual == expected
             assert len(fact.evidence) == 2
             assert fact.subject[0] == fact.evidence[0]
+
+    for prefix in ("", "v10_"):
+        program = decode((_CORPUS / f"{prefix}t1_resumestart.exe").read_bytes())
+        resumes = [
+            node for node in program.canonical_statements if node.kind == "Resume"
+        ]
+
+        assert [node.operands for node in resumes] == [(0,)]
+        assert not any(node.kind == "Run" for node in program.canonical_statements)
 
 
 def test_targeted_resume_retains_compiled_fallthrough_source():
