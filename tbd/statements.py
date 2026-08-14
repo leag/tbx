@@ -24,6 +24,7 @@ _SIMPLE_KINDS = {
     "ir.locate": "Locate",
     "ir.read": "Read",
     "ir.input_file": "InputFile",
+    "ir.input": "Input",
     "ir.open": "Open",
     "ir.close": "Close",
     "ir.trap_ctl": "TrapCtl",

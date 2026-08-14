@@ -204,6 +204,30 @@ def test_scalar_input_file_chains_align_with_tbx():
     assert report.failures == 0
 
 
+def test_console_input_scalar_and_multi_target_chains_align_with_tbx():
+    stems = (
+        "t1_inp",
+        "t1_inp2",
+        "t1_inp4",
+        "t1_inpdbl",
+        "t1_inpmixed",
+        "t1_inpmulti",
+        "t1_inpmulti3",
+        "t1_inpsemi",
+        "t1_inpsemis",
+    )
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in stems
+        if (_CORPUS / f"{prefix}{stem}.exe").exists()
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["Input"] == report.tbx_kinds["Input"]
+    assert report.failures == 0
+
+
 def test_open_kinds_align_for_both_source_scaffolds():
     paths = [
         _CORPUS / "t1_open2.exe",

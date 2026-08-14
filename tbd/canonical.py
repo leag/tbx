@@ -52,6 +52,14 @@ def _normalize_statement(statement: Statement) -> Statement:
             operands[0],
             tuple(normalize_expression(item) for item in operands[1]),
         )
+    elif statement.kind == "Input":
+        prompt, targets, comma, semi = operands
+        operands = (
+            None if prompt is None else normalize_expression(prompt),
+            normalize_expression(targets),
+            comma,
+            semi,
+        )
     elif statement.kind == "Open":
         operands = (
             normalize_expression(operands[0]),

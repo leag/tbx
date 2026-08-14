@@ -327,6 +327,9 @@ turning array storage into constants. Those facts recover codeless static
 `DIM` statements in source order, including explicit lower bounds, and resolve
 constant element addresses to array references while leaving unsupported
 indexing unresolved.
+The string descriptor immediately below the anchored pool (`pool_base - 4`) is
+the compiler's canonical empty string. It becomes an empty-string constant, not
+a scalar slot; INPUT also uses that same descriptor as its no-prompt sentinel.
 Complete string concatenation stacks produce ordered binary-expression facts;
 canonicalization preserves that order instead of treating string `+` as numeric
 commutative addition.
@@ -399,6 +402,15 @@ before the anchored chain becomes one READ fact. A preceding DATA_STRING item
 keeps a mixed chain wholly unresolved rather than exposing a numeric suffix;
 string READ remains uncalibrated after its fixture failed whole-image oracle
 verification.
+Console INPUT uses its inline prompt descriptor and flags as the chain header.
+The low six flag bits give the exact number of additional targets, per-position
+high bits distinguish numeric from string targets, and 0x40/0x80 retain the
+prompt separator and leading semicolon. A fact requires exactly that many
+consecutive direct numeric or string target items, a final commit for any chain
+containing numeric input, a resolved literal prompt (or the profiled no-prompt
+descriptor), and resolved scalar destinations. Integer scratch conversion,
+frame-relative targets, and computed arrays remain separate mechanisms rather
+than becoming partial INPUT statements.
 Scalar INPUT # uses the analogous numeric and string target items, preceded by
 one uniquely resolved file-number store in the compiler cell at 0x60. Numeric
 items require the final commit; string-only chains require a following boundary,

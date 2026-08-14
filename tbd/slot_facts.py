@@ -50,11 +50,21 @@ def _slot_accesses(
 ) -> dict[int, list[Fact]]:
     if not isinstance(pool_base, int):
         return {}
+    constants = {
+        fact.subject[1]
+        for fact in facts
+        if fact.kind == "constant"
+        and len(fact.subject) == 2
+        and fact.subject[0] in {"memory", "string"}
+        and isinstance(fact.subject[1], int)
+    }
     found: dict[int, list[Fact]] = {}
     for fact in facts:
         if not _is_slot_access(fact, pool_base, scalar_base):
             continue
         address = fact.subject[0]
+        if address in constants:
+            continue
         if resolve_array_element(address, facts) is not None:
             continue
         found.setdefault(address, []).append(fact)

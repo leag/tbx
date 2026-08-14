@@ -102,7 +102,11 @@ def constant_pool_facts(
     for address, kind in references:
         if array_at(layout, address) is not None:
             continue
-        literal = decode_literal(evidence.image, layout, address, kind)
+        literal = (
+            ("string", "")
+            if kind == "string" and address == layout.pool_base - 4
+            else decode_literal(evidence.image, layout, address, kind)
+        )
         if literal is None:
             continue
         subject = ("string", address) if kind == "string" else ("memory", address)
@@ -184,7 +188,7 @@ def _references(facts: frozenset[Fact]) -> tuple[tuple[int, str], ...]:
             {
                 (fact.subject[0], fact.value[0])
                 for fact in facts
-                if fact.kind == "memory.read"
+                if fact.kind in {"memory.read", "reference.input_prompt"}
                 and fact.subject
                 and fact.value
                 and isinstance(fact.subject[0], int)
@@ -215,7 +219,7 @@ def _reference_support(
             {
                 source
                 for fact in facts
-                if fact.kind == "memory.read"
+                if fact.kind in {"memory.read", "reference.input_prompt"}
                 and fact.subject == (address,)
                 and fact.value == (kind,)
                 for source in fact.evidence

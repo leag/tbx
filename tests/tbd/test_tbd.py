@@ -299,6 +299,29 @@ def test_constant_pool_facts_match_legacy_literal_view():
     }
 
 
+def test_pool_base_minus_four_is_the_canonical_empty_string_descriptor():
+    image = (_CORPUS / "t1_poolrun.exe").read_bytes()
+    program = decode(image)
+    layout = next(fact for fact in program.facts if fact.kind == "layout.pool")
+    empty_address = layout.value[1] - 4
+
+    assert any(
+        fact.kind == "constant"
+        and fact.subject == ("string", empty_address)
+        and fact.value == ("string", "")
+        for fact in program.facts
+    )
+    assert not any(
+        fact.kind == "slot" and fact.subject == (empty_address,)
+        for fact in program.facts
+    )
+    assert [
+        (node.kind, node.operands) for node in program.canonical_statements
+    ] == [
+        _tbx_statement(node) for node in decode0.decode_user_code(image)
+    ]
+
+
 def test_wide_fp_facts_recover_double_literals_and_direct_stores():
     for prefix in ("", "v10_"):
         image = (_CORPUS / f"{prefix}t1_convf.exe").read_bytes()
@@ -937,6 +960,65 @@ def test_input_file_facts_recover_complete_scalar_chains():
             assert len(actual) == len(exact) == 1
         else:
             assert actual == exact
+
+
+def test_console_input_facts_preserve_prompts_flags_and_scalar_targets():
+    stems = (
+        "t1_inp",
+        "t1_inp2",
+        "t1_inp4",
+        "t1_inpdbl",
+        "t1_inpmixed",
+        "t1_inpmulti",
+        "t1_inpmulti3",
+        "t1_inpsemi",
+        "t1_inpsemis",
+    )
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in stems
+        if (_CORPUS / f"{prefix}{stem}.exe").exists()
+    ]
+    for path in paths:
+        image = path.read_bytes()
+        program = decode(image)
+        actual = [
+            (node.kind, node.operands)
+            for node in program.canonical_statements
+            if node.kind == "Input"
+        ]
+        exact = [
+            _tbx_statement(node)
+            for node in decode0.decode_user_code(image)
+            if isinstance(node, tbx_ir.Input)
+        ]
+        assert actual == exact
+
+
+def test_console_input_rejects_incomplete_and_integer_conversion_chains():
+    image = bytearray((_CORPUS / "t1_inp.exe").read_bytes())
+    complete = decode(bytes(image))
+    header = next(
+        instruction
+        for instruction in complete.instructions
+        if instruction.kind == "tb.statement"
+        and instruction.operands[:1] == ("INPUT",)
+    )
+    image[header.offset + 5] |= 1
+    incomplete = decode(bytes(image))
+    assert not any(
+        fact.kind == "semantic.input" and fact.subject[0] == header.offset
+        for fact in incomplete.facts
+    )
+
+    for prefix in ("", "v10_"):
+        converted = decode(
+            (_CORPUS / f"{prefix}t1_dimv2.exe").read_bytes()
+        )
+        assert not any(
+            fact.kind == "semantic.input" for fact in converted.facts
+        )
 
 
 def test_input_file_rejects_an_incomplete_following_item():
@@ -2035,6 +2117,18 @@ def _tbx_statement(node):
         operands = (tuple(_tbx_expression(target) for target in node.targets),)
     elif isinstance(node, tbx_ir.InputFile):
         operands = node.num, tuple(_tbx_expression(target) for target in node.vars)
+    elif isinstance(node, tbx_ir.Input):
+        targets = (
+            tuple(_tbx_expression(target) for target in node.var)
+            if isinstance(node.var, tuple)
+            else _tbx_expression(node.var)
+        )
+        operands = (
+            None if node.prompt is None else _tbx_expression(node.prompt),
+            targets,
+            node.comma,
+            node.semi,
+        )
     elif isinstance(node, tbx_ir.Open):
         operands = (
             _tbx_expression(node.mode),

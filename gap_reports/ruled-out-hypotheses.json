@@ -11,6 +11,32 @@
  ],
  "hypotheses": [
   {
+   "id": "RO-TBD-DIRECT-INPUT-COVERS-ALL-SCALARS",
+   "title": "Complete direct INPUT target chains recover every scalar corpus INPUT",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "tests/fixtures/corpus/t1_mix.exe",
+    "tests/fixtures/corpus/t1_mix2.exe",
+    "tests/fixtures/corpus/t1_mix3.exe",
+    "tests/fixtures/corpus/v10_t1_mix.exe",
+    "tests/fixtures/corpus/v10_t1_mix2.exe",
+    "tests/fixtures/corpus/v10_t1_mix3.exe"
+   ],
+   "signatures": [
+    "INPUT prompt address 0x1d0",
+    "layout.pool pool_base 0x214 instead of the implied no-prompt boundary 0x1d4"
+   ],
+   "hypothesis": "Once direct numeric and string target items are grouped by the INPUT header count and type mask, every scalar INPUT can be recovered without changing layout.",
+   "negative_evidence": [
+    "The complete direct-target pass recovers 101 of 114 top-level INPUT statements before sequence alignment, including prompted, semicolon, comma, mixed, multi-target, single-, double-, and string forms.",
+    "All six t1_mix/t1_mix2/t1_mix3 dialect variants have a complete direct single-precision target but remain unresolved because their header prompt address is 0x1d0 while the anchored pool_base is 0x214. The current layout therefore cannot justify the compiler's pool_base-minus-4 no-prompt sentinel.",
+    "Treating every unresolved prompt descriptor as no prompt would also erase a real prompt whenever layout failed, so it is not a safe local fallback. Integer scratch conversion, BP-frame targets, and computed arrays are separate target mechanisms and were not evidence against the direct matcher."
+   ],
+   "instead": "Repair or disambiguate DGROUP layout for the static-array mix fixtures, using the INPUT header's descriptor as evidence rather than assuming it is a sentinel. Keep unresolved prompts fail-closed; implement integer conversion, frame targets, and computed arrays in their own calibrated passes.",
+   "source": "tbd parity session 2026-08-14"
+  },
+  {
    "id": "RO-TBD-OPEN-SCAFFOLD-COVERS-ALL-CORPUS",
    "title": "The two local OPEN scaffolds are sufficient for all 63 corpus operands",
    "disposition": "refuted",
