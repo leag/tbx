@@ -943,6 +943,39 @@ def test_numbered_close_requires_a_complete_ax_source():
     assert not any(fact.kind == "semantic.close" for fact in program.facts)
 
 
+def test_trap_control_facts_preserve_event_number_and_mode():
+    stems = (
+        "t1_oncom",
+        "t1_onkey",
+        "t1_onpen",
+        "t1_onplay",
+        "t1_ontimer",
+        "t1_strigoff",
+        "t1_strigon",
+    )
+    for prefix in ("", "v10_"):
+        for stem in stems:
+            image = (_CORPUS / f"{prefix}{stem}.exe").read_bytes()
+            program = decode(image)
+            actual = [
+                (node.kind, node.operands)
+                for node in program.canonical_statements
+                if node.kind == "TrapCtl"
+            ]
+            exact = [
+                _tbx_statement(node)
+                for node in decode0.decode_user_code(image)
+                if isinstance(node, tbx_ir.TrapCtl)
+            ]
+            assert actual == exact
+
+
+def test_numbered_trap_control_requires_its_ax_literal():
+    program = decode(bytes.fromhex("cd ec 20"))
+
+    assert not any(fact.kind == "semantic.trap_ctl" for fact in program.facts)
+
+
 def test_runtime_facts_recover_complete_field_descriptors():
     for prefix in ("", "v10_"):
         image = (_CORPUS / f"{prefix}t1_field.exe").read_bytes()
@@ -1896,6 +1929,9 @@ def _tbx_statement(node):
         else:
             value = _tbx_expression(node.num)
         operands = (value,)
+    elif isinstance(node, tbx_ir.TrapCtl):
+        number = None if node.n is None else _tbx_expression(node.n)
+        operands = node.event, number, node.mode
     elif isinstance(node, tbx_ir.Field):
         operands = node.num, tuple(
             (_tbx_expression(width), _tbx_expression(target))

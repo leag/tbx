@@ -221,6 +221,27 @@ def test_close_channels_are_exact_for_all_calibrated_forms():
     assert report.failures == 0
 
 
+def test_trap_control_operands_are_exact_in_both_dialects():
+    stems = (
+        "t1_oncom",
+        "t1_onkey",
+        "t1_onpen",
+        "t1_onplay",
+        "t1_ontimer",
+        "t1_strigoff",
+        "t1_strigon",
+    )
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in stems
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["TrapCtl"] == report.tbx_kinds["TrapCtl"]
+    assert report.failures == 0
+
+
 def test_complete_field_descriptors_are_exact_in_both_dialects():
     paths = [
         _CORPUS / f"{prefix}t1_field.exe"

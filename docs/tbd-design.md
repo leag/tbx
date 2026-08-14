@@ -404,6 +404,9 @@ sub 18. A numbered channel requires either an adjacent immediate AX load or the
 complete typed FP-source/integer-scratch/AX-reload bridge used for an expression;
 the generic profile statement no longer invents an operandless CLOSE when that
 source is unresolved.
+Dedicated trap-control facts retain the profiled event and ON/OFF/STOP mode.
+COM and KEY additionally require their adjacent immediate AX event number;
+unnumbered PEN, PLAY, STRIG, and TIMER forms use the dispatch signature alone.
 Device I/O likewise requires its whole compiler scaffold. Constant OUT is
 recovered only when two immediate AX loads are separated by the exact
 `mov bx,ax` staging move and followed contiguously by `mov dx,bx; out dx,al` in

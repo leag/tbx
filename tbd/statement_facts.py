@@ -25,6 +25,7 @@ def statement_facts(
             yield statement
     yield from _defseg_facts(instructions, facts)
     yield from _close_facts(instructions, facts)
+    yield from _trap_ctl_facts(instructions)
     yield from _resume_facts(instructions, facts)
     yield from _static_dim_facts(evidence, facts)
     yield from _delay_facts(instructions, facts)
@@ -71,6 +72,8 @@ def _simple_statement(
     if source is None:
         return None
     name, fixed_operands = source
+    if name == "TRAP_CTL":
+        return None
     return Fact(
         "semantic.statement",
         (instruction.offset, instruction.end),
@@ -122,6 +125,35 @@ def _close_facts(
             (value,),
             combine_evidence(support, (close.offset,)),
             confidence,
+        )
+
+
+def _trap_ctl_facts(instructions: dict[int, Operation]) -> Iterable[Fact]:
+    by_end = {instruction.end: instruction for instruction in instructions.values()}
+    for instruction in instructions.values():
+        if instruction.kind != "tb.statement" or len(instruction.operands) < 2:
+            continue
+        source = EC_SOURCE_STATEMENTS.get(instruction.operands[1])
+        if source is None or source[0] != "TRAP_CTL" or len(source[1]) != 2:
+            continue
+        event, mode = source[1]
+        number = None
+        start = instruction.offset
+        support = (instruction.offset,)
+        if event in {"COM", "KEY"}:
+            load = by_end.get(instruction.offset)
+            immediate = _immediate_ax(load)
+            if load is None or not isinstance(immediate, int):
+                continue
+            number = ("const", immediate)
+            start = load.offset
+            support = (load.offset, instruction.offset)
+        yield Fact(
+            "semantic.trap_ctl",
+            (start, instruction.end),
+            (event, number, mode),
+            support,
+            "signature",
         )
 
 

@@ -56,6 +56,12 @@ def _normalize_statement(statement: Statement) -> Statement:
         operands = (
             None if operands[0] is None else normalize_expression(operands[0]),
         )
+    elif statement.kind == "TrapCtl":
+        operands = (
+            operands[0],
+            None if operands[1] is None else normalize_expression(operands[1]),
+            operands[2],
+        )
     elif statement.kind in {"Print", "Lprint"}:
         mode, items, newline = operands
         operands = mode, tuple(normalize_expression(item) for item in items), newline
