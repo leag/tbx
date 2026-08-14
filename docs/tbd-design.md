@@ -283,6 +283,11 @@ the legacy operation rewriters. Instruction, signature, basic-block, and xref
 facts retain discovery provenance. Direct memory accesses now feed an anchored
 pool-layout fact and integer, single-precision, and string constant facts.
 The anchored boundary also produces address-stable scalar-slot and type facts.
+Scalar slot validation follows the compiler's two-byte packing unit and each
+evidenced value kind's actual width, so mixed integer and four-byte string or
+numeric slots need not begin on the same four-byte grid. An address already
+anchored inside a static array remains an array element and is not also
+invented as a scalar slot.
 The pool sentinel is accepted at its unique evidenced file position rather than
 at a fixed distance from EOF: numeric payload width changes the trailing file
 distance, while multiple sentinels leave layout unresolved.
@@ -356,6 +361,15 @@ FIELD item scaffolds add string memory-role facts for their descriptor targets,
 allowing the ordinary slot pass to anchor names. A complete consecutive item
 run plus its immediately preceding resolved file-number store then adds one
 FIELD fact; missing descriptors or unresolved targets remain structural.
+Scalar MID$ assignment similarly requires one of its two complete runtime
+scaffolds. The AE form carries a start expression and an omitted length; the AF
+form stages the start in BX and carries a separately resolved length expression.
+Both require resolved source and target string descriptors plus the adjacent
+relocated-DGROUP `mov DX,imm; mov ES,DX` pair. The immediate segment value is
+deliberately not fixed because link layout changes it. A recognized scaffold
+adds a string write role for its scalar target, while only fully resolved
+operands add the anchored MID$ statement fact. Computed array targets remain a
+separate unsupported mechanism.
 Device I/O likewise requires its whole compiler scaffold. Constant OUT is
 recovered only when two immediate AX loads are separated by the exact
 `mov bx,ax` staging move and followed contiguously by `mov dx,bx; out dx,al` in

@@ -36,6 +36,7 @@ MIGRATED_KINDS = frozenset(
         "IfGoto",
         "Lprint",
         "Lset",
+        "MidAssign",
         "Out",
         "Print",
         "Return",
@@ -183,6 +184,13 @@ def _statement(node: Any) -> tuple[str, tuple[object, ...]]:
         )
     elif isinstance(node, (ir.Lset, ir.Rset)):
         operands = _expression(node.target), _expression(node.source)
+    elif isinstance(node, ir.MidAssign):
+        operands = (
+            _expression(node.target),
+            _expression(node.start),
+            _expression(node.source),
+            None if node.length is None else _expression(node.length),
+        )
     elif isinstance(node, ir.IfGoto):
         operands = (*_condition(node.cond), node.target)
     elif isinstance(node, ir.Gosub):

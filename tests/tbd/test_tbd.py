@@ -352,6 +352,24 @@ def test_wide_fp_direct_array_reads_keep_array_identity():
     )
 
 
+def test_scalar_slot_facts_do_not_alias_static_array_storage():
+    program = decode((_CORPUS / "t1_cmpsival.exe").read_bytes())
+    array = next(fact for fact in program.facts if fact.kind == "layout.array")
+    array_base = array.value[4]
+
+    assert not any(
+        fact.kind == "slot" and fact.subject == (array_base,)
+        for fact in program.facts
+    )
+    first_assignments = [
+        fact
+        for fact in program.facts
+        if fact.kind == "semantic.assign" and fact.subject[0] == 0x8703
+    ]
+    assert len(first_assignments) == 1
+    assert first_assignments[0].value[0][0] == "array"
+
+
 def test_long_fp_facts_recover_literals_arithmetic_and_arrays():
     for stem in ("zz_vm_ladd", "zz_vm_lsub", "zz_vm_lmul", "zz_vm_lmix"):
         image = (_CORPUS / f"{stem}.exe").read_bytes()
@@ -700,6 +718,50 @@ def test_runtime_facts_recover_complete_lset_and_rset_scaffolds():
                 item for item in program.facts if item.kind == f"semantic.{kind.lower()}"
             )
             assert fact.confidence == "anchored"
+
+
+def test_runtime_facts_recover_scalar_mid_assignments():
+    for prefix in ("", "v10_"):
+        for stem in ("t1_midas", "t1_midvarstart", "t1_mid3"):
+            image = (_CORPUS / f"{prefix}{stem}.exe").read_bytes()
+            program = decode(image)
+            actual = [
+                (node.kind, node.operands)
+                for node in program.canonical_statements
+            ]
+            exact = [
+                _tbx_statement(node) for node in decode0.decode_user_code(image)
+            ]
+            assert actual == exact
+            fact = next(
+                item
+                for item in program.facts
+                if item.kind == "semantic.mid_assign"
+            )
+            assert fact.confidence == "anchored"
+
+
+def test_runtime_facts_leave_incomplete_mid_assign_scaffolds_structural():
+    complete = bytes.fromhex(
+        "b8 02 00 be 40 01 cd 9c be 20 01 ba 96 00 8e c2 cd ae"
+    )
+    truncated = decode(complete[:-2])
+    altered = decode(complete[:14] + b"\x8e\xc0" + complete[16:])
+
+    assert not any(
+        fact.kind == "memory.write"
+        and fact.subject == (0x120,)
+        and fact.value == ("string",)
+        for fact in truncated.facts
+    )
+    assert not any(
+        fact.kind == "memory.write"
+        and fact.subject == (0x120,)
+        for fact in altered.facts
+    )
+    assert not any(
+        fact.kind == "semantic.mid_assign" for fact in altered.facts
+    )
 
 
 def test_runtime_facts_recover_complete_field_descriptors():
@@ -1609,6 +1671,13 @@ def _tbx_statement(node):
         operands = file_number, tuple(_tbx_expression(item) for item in node.items)
     elif isinstance(node, (tbx_ir.Lset, tbx_ir.Rset)):
         operands = _tbx_expression(node.target), _tbx_expression(node.source)
+    elif isinstance(node, tbx_ir.MidAssign):
+        operands = (
+            _tbx_expression(node.target),
+            _tbx_expression(node.start),
+            _tbx_expression(node.source),
+            None if node.length is None else _tbx_expression(node.length),
+        )
     elif isinstance(node, tbx_ir.Field):
         operands = node.num, tuple(
             (_tbx_expression(width), _tbx_expression(target))

@@ -6,7 +6,16 @@ from collections.abc import Iterable
 
 from tbd.facts import Evidence, NamedPass
 from tbd.ir import Fact, Slot
+from tbd.semantic import resolve_array_element
 from tbd.slots import VAR_BASE, slot_name
+
+_TYPE_WIDTHS = {
+    "integer": 2,
+    "long": 4,
+    "float": 4,
+    "double": 8,
+    "string": 4,
+}
 
 
 def slot_facts(
@@ -46,6 +55,8 @@ def _slot_accesses(
         if not _is_slot_access(fact, pool_base, scalar_base):
             continue
         address = fact.subject[0]
+        if resolve_array_element(address, facts) is not None:
+            continue
         found.setdefault(address, []).append(fact)
     return found
 
@@ -54,18 +65,21 @@ def _is_slot_access(fact: Fact, pool_base: int, scalar_base: int) -> bool:
     if fact.kind not in {"memory.read", "memory.write"} or not fact.subject:
         return False
     address = fact.subject[0]
+    kind = fact.value[0] if fact.value else None
+    width = _TYPE_WIDTHS.get(kind) if isinstance(kind, str) else None
     return (
         isinstance(address, int)
-        and scalar_base <= address < pool_base - 4
-        and (address - scalar_base) % 4 == 0
-        and bool(fact.value)
-        and isinstance(fact.value[0], str)
+        and isinstance(width, int)
+        and scalar_base <= address
+        and address + width <= pool_base
+        and (address - scalar_base) % 2 == 0
     )
 
 
 def _scalar_name(address: int, scalar_base: int) -> str:
     index = (address - scalar_base) // 4 + 1
-    return f"V{index:04d}"
+    half = "H" if (address - scalar_base) % 4 else ""
+    return f"V{index:04d}{half}"
 
 
 def materialize_slots(facts: tuple[Fact, ...]) -> tuple[Slot, ...]:

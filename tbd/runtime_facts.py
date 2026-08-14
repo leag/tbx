@@ -44,7 +44,7 @@ class _Chain:
 def runtime_facts(
     evidence: Evidence, facts: frozenset[Fact]
 ) -> Iterable[Fact]:
-    """Resolve complete PRINT chains without consuming their instructions."""
+    """Resolve complete runtime statements without consuming instructions."""
 
     expressions = _expression_index(facts, evidence.instructions)
     items = _print_items(evidence.instructions, expressions, facts)
@@ -81,6 +81,7 @@ def runtime_facts(
     yield from _write_facts(evidence.instructions, facts)
     yield from _fixed_string_facts(evidence.instructions, facts)
     yield from _field_facts(evidence.instructions, facts)
+    yield from _mid_assign_facts(evidence.instructions, facts)
 
 
 def _blank_lprint_facts(instructions: tuple[Operation, ...]) -> Iterable[Fact]:
@@ -212,6 +213,128 @@ def _fixed_string_facts(
             support,
             "anchored",
         )
+
+
+def _mid_assign_facts(
+    instructions: tuple[Operation, ...], facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    """Recover scalar MID$ assignment from either complete runtime ABI."""
+
+    shapes = ((7, False), (9, True))
+    for index in range(len(instructions)):
+        for size, has_length in shapes:
+            window = instructions[index : index + size]
+            matched = _mid_assign_template(window, has_length)
+            if matched is None:
+                continue
+            target_address, start_value, source_address, length_value = matched
+            instruction_support = tuple(item.offset for item in window)
+            yield Fact(
+                "memory.write",
+                (target_address,),
+                ("string",),
+                instruction_support,
+                "signature",
+            )
+            target = resolve_slot(target_address, facts)
+            start = resolve_expression(start_value, facts)
+            source = resolve_expression(
+                ("memory", source_address, "string"), facts
+            )
+            length = (
+                resolve_expression(length_value, facts)
+                if length_value is not None
+                else None
+            )
+            if (
+                target is None
+                or start is None
+                or source is None
+                or (has_length and length is None)
+            ):
+                continue
+            support = combine_evidence(
+                instruction_support,
+                target.evidence,
+                start.evidence,
+                source.evidence,
+                () if length is None else length.evidence,
+            )
+            yield Fact(
+                "semantic.mid_assign",
+                (window[0].offset, window[-1].end),
+                (
+                    target.value + ("string",),
+                    start.value,
+                    source.value,
+                    None if length is None else length.value,
+                ),
+                support,
+                "anchored",
+            )
+
+
+def _mid_assign_template(
+    window: tuple[Operation, ...], has_length: bool
+) -> tuple[int, object, int, object | None] | None:
+    expected_size = 9 if has_length else 7
+    if len(window) != expected_size or not _contiguous(window):
+        return None
+    if has_length:
+        start_load, stage, length_load, *tail = window
+        if bytes.fromhex(stage.raw) != b"\x89\xc3":
+            return None
+        length_value = _ax_expression(length_load)
+        terminal_vector = 0xAF
+    else:
+        start_load, *tail = window
+        length_value = None
+        terminal_vector = 0xAE
+    start_value = _ax_expression(start_load)
+    source_setup, source_read, target_setup, segment_load, segment_set, terminal = tail
+    if (
+        start_value is None
+        or (has_length and length_value is None)
+        or not _is_string_setup(source_setup, source_read)
+        or target_setup.kind != "x86.mov_imm"
+        or len(target_setup.operands) != 2
+        or target_setup.operands[0] != "si"
+        or not isinstance(target_setup.operands[1], int)
+        or not _is_es_setup(segment_load, segment_set)
+        or _runtime_vector(terminal) != terminal_vector
+    ):
+        return None
+    return (
+        target_setup.operands[1],
+        start_value,
+        source_setup.operands[1],
+        length_value,
+    )
+
+
+def _ax_expression(instruction: Operation) -> object | None:
+    if (
+        instruction.kind == "x86.mov_imm"
+        and len(instruction.operands) == 2
+        and instruction.operands[0] == "ax"
+    ):
+        return "const", instruction.operands[1]
+    raw = bytes.fromhex(instruction.raw)
+    if len(raw) == 4 and raw[:2] == b"\x8b\x06":
+        return "memory", struct.unpack_from("<H", raw, 2)[0], "integer"
+    return None
+
+
+def _is_es_setup(load: Operation, write: Operation) -> bool:
+    # The relocated DGROUP segment value varies with link layout; the register
+    # convention and adjacent ES write are the stable compiler signature.
+    return (
+        load.kind == "x86.mov_imm"
+        and len(load.operands) == 2
+        and load.operands[0] == "dx"
+        and isinstance(load.operands[1], int)
+        and bytes.fromhex(write.raw) == b"\x8e\xc2"
+    )
 
 
 def _write_facts(
@@ -544,7 +667,9 @@ def _has_preceding_item(
 def _is_string_setup(setup: Operation, read: Operation) -> bool:
     return (
         setup.kind == "x86.mov_imm"
+        and len(setup.operands) == 2
         and setup.operands[0] == "si"
+        and isinstance(setup.operands[1], int)
         and _runtime_vector(read) == 0x9C
         and setup.end == read.offset
     )

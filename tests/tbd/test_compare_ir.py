@@ -138,6 +138,19 @@ def test_complete_lset_rset_scaffolds_are_exact_in_both_dialects():
     assert report.mismatches == ()
 
 
+def test_scalar_mid_assignments_are_exact_in_both_dialects():
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in ("t1_midas", "t1_midvarstart", "t1_mid3")
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["MidAssign"] == 6
+    assert report.comparable_files == report.exact_files == 6
+    assert report.mismatches == ()
+
+
 def test_complete_field_descriptors_are_exact_in_both_dialects():
     paths = [
         _CORPUS / f"{prefix}t1_field.exe"

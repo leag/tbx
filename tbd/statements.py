@@ -19,6 +19,7 @@ _SIMPLE_KINDS = {
     "ir.lset": "Lset",
     "ir.rset": "Rset",
     "ir.field": "Field",
+    "ir.mid_assign": "MidAssign",
     "ir.gosub": "Gosub",
     "ir.return": "Return",
     "ir.resume": "Resume",
