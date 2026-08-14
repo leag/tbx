@@ -6,6 +6,7 @@ from collections.abc import Iterable
 
 from tbd.facts import Evidence, NamedPass
 from tbd.ir import Fact, Operation
+from tbd.procedure_facts import inline_procedure_regions
 from tbd.semantic import combine_evidence, resolve_expression
 
 _BRANCH_TESTS = {
@@ -76,6 +77,8 @@ def source_subroutine_facts(
         instruction.offset: instruction for instruction in evidence.instructions
     }
     targets = set(instructions)
+    inline = inline_procedure_regions(evidence)
+    inline_entries = {procedure.entry for procedure in inline}
     for flow in facts:
         if len(flow.subject) != 2:
             continue
@@ -87,6 +90,7 @@ def source_subroutine_facts(
             and instruction.kind in _CALLS
             and flow.value
             and flow.value[0] in targets
+            and flow.value[0] not in inline_entries
             and instructions[flow.value[0]].kind != "tb.proc_enter"
         ):
             yield Fact(
@@ -96,7 +100,15 @@ def source_subroutine_facts(
                 flow.evidence,
                 "signature",
             )
-        elif flow.kind == "flow.return" and instruction.kind in _RETURNS:
+        elif (
+            flow.kind == "flow.return"
+            and instruction.kind in _RETURNS
+            and not instruction.operands
+            and not any(
+                procedure.declaration <= instruction.offset < procedure.end
+                for procedure in inline
+            )
+        ):
             yield Fact(
                 "semantic.return",
                 flow.subject,

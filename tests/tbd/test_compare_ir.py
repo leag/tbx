@@ -122,6 +122,17 @@ def test_defseg_profile_signatures_close_both_dialect_kind_sequences():
     assert report.kind_match_files == len(stems)
 
 
+def test_inline_procedure_signatures_replace_false_gosub_returns():
+    stems = ("t1_inline", "v10_t1_inline", "t1_inlinefile")
+
+    report = compare_paths([_CORPUS / f"{stem}.exe" for stem in stems])
+
+    assert report.failures == 0
+    assert report.tbx_statements == report.tbd_statements == 10
+    assert report.aligned_kinds == 10
+    assert report.kind_match_files == len(stems)
+
+
 def test_static_array_facts_close_both_dialect_tree_comparisons():
     paths = [
         _CORPUS / f"{prefix}{stem}.exe"

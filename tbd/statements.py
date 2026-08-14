@@ -11,6 +11,7 @@ _SIMPLE_KINDS = {
     "ir.dim": "Dim",
     "ir.print": "Print",
     "ir.if_goto": "IfGoto",
+    "ir.inline": "Inline",
     "ir.gosub": "Gosub",
     "ir.return": "Return",
     "ir.resume": "Resume",
@@ -42,16 +43,27 @@ def _reconstruct_scope(candidates: list[Operation]) -> tuple[Statement, ...]:
 
 def _visible_operations(candidates: list[Operation]) -> list[Operation]:
     procedures = [node for node in candidates if node.kind == "ir.sub_def"]
+    inline = [node for node in candidates if node.kind == "ir.inline"]
     return [
         node
         for node in candidates
-        if node.kind == "ir.sub_def"
-        or not any(_inside(node, procedure) for procedure in procedures)
+        if (
+            node.kind == "ir.sub_def"
+            or not any(_inside(node, procedure) for procedure in procedures)
+        )
+        and (
+            node.kind == "ir.inline"
+            or not any(_covered_by_inline(node, region) for region in inline)
+        )
     ]
 
 
 def _inside(node: Operation, procedure: Operation) -> bool:
     return procedure.offset < node.offset and node.end <= procedure.end
+
+
+def _covered_by_inline(node: Operation, region: Operation) -> bool:
+    return region.offset <= node.offset and node.end <= region.end
 
 
 def _statement_operations(nodes: list[Operation]) -> list[Operation]:

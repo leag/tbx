@@ -837,6 +837,81 @@ def test_incomplete_procedure_frame_does_not_invent_definition_or_call():
     )
 
 
+def test_bracketed_inline_procedures_preserve_opaque_body_bytes():
+    expected = {
+        "t1_inline": (
+            ["SubDef", "CallStmt", "End"],
+            "ba0007e46124fc3402e661b94001e2fe4a7402ebf2",
+        ),
+        "v10_t1_inline": (
+            ["SubDef", "CallStmt", "End"],
+            "ba0007e46124fc3402e661b94001e2fe4a7402ebf2",
+        ),
+        "t1_inlinefile": (
+            ["SubDef", "Print", "CallStmt", "End"],
+            "48454c4c4f0a",
+        ),
+    }
+    for stem, (kinds, body_hex) in expected.items():
+        image = (_CORPUS / f"{stem}.exe").read_bytes()
+        program = decode(image)
+        definition = program.canonical_statements[0]
+        call = program.canonical_statements[-2]
+
+        assert [node.kind for node in program.canonical_statements] == kinds
+        assert definition.kind == "SubDef"
+        assert definition.operands[:2] == ("SUB1", ())
+        assert [node.kind for node in definition.operands[2]] == ["Inline"]
+        assert definition.operands[2][0].operands == (body_hex,)
+        assert call.kind == "CallStmt"
+        assert call.operands == ("SUB1", ())
+        assert not any(
+            fact.kind in {"semantic.gosub", "semantic.return"}
+            for fact in program.facts
+        )
+
+
+def test_all_authored_inline_bodies_override_frame_shaped_bytes():
+    stems = (
+        "t1_fwdinline", "v10_t1_fwdinline",
+        "t1_inline", "v10_t1_inline",
+        "t1_inlinebp", "v10_t1_inlinebp",
+        "t1_inlinedata", "v10_t1_inlinedata",
+        "t1_inlinefile",
+        "t1_inlineport",
+        "t1_inlinethendef", "v10_t1_inlinethendef",
+    )
+    for stem in stems:
+        image = (_CORPUS / f"{stem}.exe").read_bytes()
+        exact = decode0.decode_user_code(image)
+        expected = [
+            statement.data.hex()
+            for definition in exact
+            if isinstance(definition, tbx_ir.SubDef)
+            for statement in definition.body
+            if isinstance(statement, tbx_ir.Inline)
+        ]
+        program = decode(image)
+        actual = [
+            statement.operands[0]
+            for definition in program.canonical_statements
+            if definition.kind == "SubDef"
+            for statement in definition.operands[2]
+            if statement.kind == "Inline"
+        ]
+
+        assert actual == expected
+
+
+def test_returns_with_stack_pops_do_not_become_source_return():
+    raw = decode(bytes.fromhex("c2 01 b8"))
+    assert not any(fact.kind == "semantic.return" for fact in raw.facts)
+
+    for stem in ("fbd_t1_dimm", "v10_t1_mix", "v10_t1_mix2", "v10_t1_mix3"):
+        program = decode((_CORPUS / f"{stem}.exe").read_bytes())
+        assert not any(node.kind == "Return" for node in program.canonical_statements)
+
+
 def test_far_call_to_nonprocedure_target_is_an_event_safe_gosub():
     program = decode((_CORPUS / "t1_fargosub.exe").read_bytes())
     gosub = next(fact for fact in program.facts if fact.kind == "semantic.gosub")

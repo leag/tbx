@@ -72,6 +72,20 @@ entry and semantic body facts inside the complete region then form a nested
 source view without consuming any of that evidence. A nonzero return-frame pop
 is retained as unresolved parameter and argument metadata until independent
 frame facts can distinguish caller arguments from procedure-local storage.
+An unframed `$INLINE` SUB requires three independent pieces of compiler
+evidence: a declaration skip jump whose fallthrough is the entry, a later far
+call to that entry, and the compiler-appended bare RETF immediately before the
+skip target. If the bytes also imitate a framed procedure, the appended RETF
+must extend past the decoded frame return; the byte-identical tail stays framed
+unless a complete instruction sequence known to be unspellable in BASIC is
+present. The calibrated sequence is `mov al,imm8; out imm8,al`, never a bare
+opcode search. The enclosed bytes become one opaque Inline statement and
+remain byte-preserved; other apparent statements covered by that region stay
+out of the source view. The call and definition become ordinary procedure
+facts, suppressing false GOSUB/RETURN readings of the far call and appended
+RETF. A `RET imm16` is likewise structural control, not a source RETURN: source
+RETURN signatures are bare RET/RETF, checked RETURN, or one of the complete
+targeted-return templates.
 TRON trace hooks are also profile instructions, not a two-byte runtime call
 followed by ordinary x86: their embedded line word is part of the immutable
 four-byte signature. A hook run positively establishes a codeless TRON before
