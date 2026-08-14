@@ -11,6 +11,8 @@ _OPERATION_KINDS = {
     "semantic.wait": "ir.wait",
     "semantic.lprint": "ir.lprint",
     "semantic.write": "ir.write",
+    "semantic.lset": "ir.lset",
+    "semantic.rset": "ir.rset",
     "semantic.print": "ir.print",
     "semantic.if_goto": "ir.if_goto",
     "semantic.inline": "ir.inline",

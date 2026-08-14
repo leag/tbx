@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 from tbd.facts import Evidence, NamedPass
 from tbd.ir import Fact, Operation
-from tbd.semantic import combine_evidence, resolve_expression
+from tbd.semantic import combine_evidence, resolve_expression, resolve_slot
 
 _NUMERIC_ITEMS = {0xBB: "console", 0xBD: "file", 0xBC: "printer"}
 _STRING_ITEMS = {0xBE: "console", 0xC0: "file", 0xBF: "printer"}
@@ -78,6 +78,45 @@ def runtime_facts(
             "anchored",
         )
     yield from _write_facts(evidence.instructions, facts)
+    yield from _fixed_string_facts(evidence.instructions, facts)
+
+
+def _fixed_string_facts(
+    instructions: tuple[Operation, ...], facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    modes = {0xA4: "semantic.lset", 0xA5: "semantic.rset"}
+    for index in range(len(instructions) - 5):
+        window = instructions[index : index + 6]
+        source_setup, source_read, target_setup, segment_load, segment_set, terminal = window
+        kind = modes.get(_runtime_vector(terminal))
+        if (
+            kind is None
+            or not _contiguous(window)
+            or not _is_string_setup(source_setup, source_read)
+            or target_setup.kind != "x86.mov_imm"
+            or target_setup.operands[:1] != ("si",)
+            or len(target_setup.operands) != 2
+            or segment_load.kind != "x86.mov_imm"
+            or segment_load.operands != ("dx", 0x96)
+            or bytes.fromhex(segment_set.raw) != b"\x8e\xc2"
+        ):
+            continue
+        source = resolve_expression(
+            ("memory", source_setup.operands[1], "string"), facts
+        )
+        target = resolve_slot(target_setup.operands[1], facts)
+        if source is None or target is None:
+            continue
+        support = combine_evidence(
+            tuple(item.offset for item in window), source.evidence, target.evidence
+        )
+        yield Fact(
+            kind,
+            (source_setup.offset, terminal.end),
+            (target.value + ("string",), source.value),
+            support,
+            "anchored",
+        )
 
 
 def _write_facts(

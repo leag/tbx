@@ -119,6 +119,18 @@ def test_complete_write_chains_align_in_both_modes_and_dialects():
     assert report.kind_match_files == 4
 
 
+def test_complete_lset_rset_scaffolds_are_exact_in_both_dialects():
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in ("t1_lset", "t1_rset")
+    ]
+    report = compare_paths(paths)
+
+    assert report.comparable_files == report.exact_files == 4
+    assert report.mismatches == ()
+
+
 def test_profile_dispatches_normalize_source_kinds_and_inline_payloads():
     stems = (
         "t1_close",

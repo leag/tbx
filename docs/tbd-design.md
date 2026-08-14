@@ -345,6 +345,10 @@ WRITE uses the same immutable expression and string evidence but keeps its own
 item and separator phases. A console or file WRITE fact requires every item,
 the mode-specific flush, and, for file mode, the immediately preceding resolved
 `[0060]` file-number store; incomplete chains remain phase evidence.
+LSET and RSET share another complete string scaffold: resolved source and
+target descriptors, the compiler's `ES=0x96` field-segment setup, and the final
+A4/A5 mode vector. Only the whole contiguous template adds a justified-assignment
+fact; the source store and slot evidence remain independent.
 Device I/O likewise requires its whole compiler scaffold. Constant OUT is
 recovered only when two immediate AX loads are separated by the exact
 `mov bx,ax` staging move and followed contiguously by `mov dx,bx; out dx,al` in

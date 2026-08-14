@@ -665,6 +665,25 @@ def test_runtime_facts_recover_complete_console_and_file_write_chains():
     )
 
 
+def test_runtime_facts_recover_complete_lset_and_rset_scaffolds():
+    for prefix in ("", "v10_"):
+        for stem, kind in (("t1_lset", "Lset"), ("t1_rset", "Rset")):
+            image = (_CORPUS / f"{prefix}{stem}.exe").read_bytes()
+            program = decode(image)
+            actual = [
+                (node.kind, node.operands)
+                for node in program.canonical_statements
+            ]
+            exact = [
+                _tbx_statement(node) for node in decode0.decode_user_code(image)
+            ]
+            assert actual == exact
+            fact = next(
+                item for item in program.facts if item.kind == f"semantic.{kind.lower()}"
+            )
+            assert fact.confidence == "anchored"
+
+
 def test_device_io_facts_recover_complete_out_scaffolds():
     expected = [
         ("Out", (("const", 888), ("const", 1))),
@@ -1552,6 +1571,8 @@ def _tbx_statement(node):
         else:
             file_number = _tbx_expression(node.file)
         operands = file_number, tuple(_tbx_expression(item) for item in node.items)
+    elif isinstance(node, (tbx_ir.Lset, tbx_ir.Rset)):
+        operands = _tbx_expression(node.target), _tbx_expression(node.source)
     elif isinstance(node, tbx_ir.IfGoto):
         operands = (
             node.cond.op,

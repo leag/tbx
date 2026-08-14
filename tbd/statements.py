@@ -16,6 +16,8 @@ _SIMPLE_KINDS = {
     "ir.wait": "Wait",
     "ir.lprint": "Lprint",
     "ir.write": "Write",
+    "ir.lset": "Lset",
+    "ir.rset": "Rset",
     "ir.gosub": "Gosub",
     "ir.return": "Return",
     "ir.resume": "Resume",

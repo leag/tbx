@@ -34,10 +34,12 @@ MIGRATED_KINDS = frozenset(
         "Gosub",
         "IfGoto",
         "Lprint",
+        "Lset",
         "Out",
         "Print",
         "Return",
         "Resume",
+        "Rset",
         "Wait",
         "Write",
     }
@@ -173,6 +175,8 @@ def _statement(node: Any) -> tuple[str, tuple[object, ...]]:
         else:
             file_number = _expression(node.file)
         operands = file_number, tuple(_expression(item) for item in node.items)
+    elif isinstance(node, (ir.Lset, ir.Rset)):
+        operands = _expression(node.target), _expression(node.source)
     elif isinstance(node, ir.IfGoto):
         operands = (*_condition(node.cond), node.target)
     elif isinstance(node, ir.Gosub):
