@@ -98,6 +98,15 @@ def test_resolved_lprint_chain_is_exact_in_both_dialects():
     assert report.mismatches == ()
 
 
+def test_immediate_printer_controls_produce_an_exact_lprint_tree():
+    report = compare_paths([_CORPUS / "t1_ltab.exe"])
+
+    assert report.tbx_statements == report.tbd_statements == 3
+    assert report.aligned_kinds == 3
+    assert report.comparable_files == report.exact_files == 1
+    assert report.mismatches == ()
+
+
 def test_profile_dispatches_normalize_source_kinds_and_inline_payloads():
     stems = (
         "t1_close",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import struct
 from collections.abc import Iterable
 from dataclasses import dataclass
 
@@ -13,10 +14,15 @@ _NUMERIC_ITEMS = {0xBB: "console", 0xBD: "file", 0xBC: "printer"}
 _STRING_ITEMS = {0xBE: "console", 0xC0: "file", 0xBF: "printer"}
 _FLUSHES = {0xB8: "console", 0xBA: "file", 0xB9: "printer"}
 _SEPARATORS = {0xC1: "console", 0xC3: "file", 0xC2: "printer"}
-_UNRESOLVED_CONTROLS = {
-    0xC8: "printer",
-    0xC5: "printer",
+_CONTROL_ITEMS = {
+    0xC7: ("TAB", "console"),
+    0xC9: ("TAB", "file"),
+    0xC8: ("TAB", "printer"),
+    0xC4: ("SPC", "console"),
+    0xC6: ("SPC", "file"),
+    0xC5: ("SPC", "printer"),
 }
+_UNRESOLVED_CONTROLS = {vector: mode for vector, (_name, mode) in _CONTROL_ITEMS.items()}
 
 
 @dataclass(frozen=True)
@@ -102,6 +108,10 @@ def _print_items(
             result.append(item)
         if item := _string_item(instructions[index : index + 3], facts):
             result.append(item)
+        if item := _control_item(instructions[index : index + 2]):
+            result.append(item)
+        if item := _bridged_control(instructions[index : index + 4], facts):
+            result.append(item)
     return tuple(result)
 
 
@@ -139,6 +149,77 @@ def _string_item(
         (setup.offset, read.offset, runtime.offset), resolved.evidence
     )
     return _Item(setup.offset, runtime.end, mode, resolved.value, support)
+
+
+def _control_item(pair: tuple[Operation, ...]) -> _Item | None:
+    if len(pair) != 2:
+        return None
+    load, runtime = pair
+    control = _CONTROL_ITEMS.get(_runtime_vector(runtime))
+    if (
+        control is None
+        or load.kind != "x86.mov_imm"
+        or load.operands[:1] != ("ax",)
+        or len(load.operands) != 2
+        or load.end != runtime.offset
+    ):
+        return None
+    name, mode = control
+    value = "call", name, (("const", load.operands[1]),)
+    return _Item(
+        load.offset,
+        runtime.end,
+        mode,
+        value,
+        (load.offset, runtime.offset),
+    )
+
+
+def _bridged_control(
+    window: tuple[Operation, ...], facts: frozenset[Fact]
+) -> _Item | None:
+    if len(window) != 4:
+        return None
+    source, store, reload, runtime = window
+    control = _CONTROL_ITEMS.get(_runtime_vector(runtime))
+    address = _fp_ax_reload(reload)
+    if control is None or address is None or not _contiguous(window):
+        return None
+    effects = [
+        fact
+        for fact in facts
+        if fact.kind == "machine.store"
+        and fact.subject == (address,)
+        and fact.evidence == (source.offset, store.offset)
+        and len(fact.value) == 1
+    ]
+    if len(effects) != 1:
+        return None
+    resolved = resolve_expression(effects[0].value[0], facts)
+    if resolved is None:
+        return None
+    name, mode = control
+    value = "call", name, (resolved.value,)
+    support = combine_evidence(
+        tuple(instruction.offset for instruction in window),
+        effects[0].evidence,
+        resolved.evidence,
+    )
+    return _Item(source.offset, runtime.end, mode, value, support)
+
+
+def _fp_ax_reload(instruction: Operation) -> int | None:
+    raw = bytes.fromhex(instruction.raw)
+    if instruction.kind != "tb.fp" or len(raw) != 5 or raw[:3] != b"\xcd\x3d\xa1":
+        return None
+    return struct.unpack_from("<H", raw, 3)[0]
+
+
+def _contiguous(instructions: tuple[Operation, ...]) -> bool:
+    return all(
+        left.end == right.offset
+        for left, right in zip(instructions, instructions[1:])
+    )
 
 
 def _item_chain(

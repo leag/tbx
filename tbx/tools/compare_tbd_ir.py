@@ -220,6 +220,8 @@ def _expression(node: Any) -> object:
         return "const", node.value
     if isinstance(node, ir.StrLit):
         return "string", node.value
+    if isinstance(node, ir.Call):
+        return "call", node.name, tuple(_expression(item) for item in node.args)
     if isinstance(node, ir.BinOp):
         return normalize_expression(
             ("binary", node.op, _expression(node.lhs), _expression(node.rhs))

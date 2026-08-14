@@ -593,12 +593,51 @@ def test_runtime_facts_classify_resolved_printer_chains_as_lprint():
         ]
         assert actual == exact
 
-    controlled = decode((_CORPUS / "t1_ltab.exe").read_bytes())
-    assert not any(
-        fact.kind in {"semantic.print", "semantic.lprint"}
-        for fact in controlled.facts
+
+def test_runtime_facts_keep_tab_spc_items_in_their_chains():
+    printer_image = (_CORPUS / "t1_ltab.exe").read_bytes()
+    printer = decode(printer_image)
+    assert [
+        (statement.kind, statement.operands)
+        for statement in printer.canonical_statements
+    ] == [
+        _tbx_statement(statement)
+        for statement in decode0.decode_user_code(printer_image)
+    ]
+
+    for prefix in ("", "v10_"):
+        console_image = (_CORPUS / f"{prefix}t1_tab.exe").read_bytes()
+        console = decode(console_image)
+        actual_prints = [
+            statement.operands
+            for statement in console.canonical_statements
+            if statement.kind == "Print"
+        ]
+        exact_prints = [
+            _tbx_statement(statement)[1]
+            for statement in decode0.decode_user_code(console_image)
+            if isinstance(statement, tbx_ir.Print)
+        ]
+        assert actual_prints[:3] == exact_prints[:3]
+        assert actual_prints[3][0] == "file"
+        assert actual_prints[3][1:] == exact_prints[3][1:]
+        assert actual_prints[2][1][0] == (
+            "call", "TAB", (("var", "A"),)
+        )
+
+    complete = decode(bytes.fromhex("b8 05 00 cd c8 cd 35 e8 cd bc cd b9"))
+    unresolved = decode(bytes.fromhex("b9 05 00 cd c8 cd 35 e8 cd bc cd b9"))
+    complete_lprint = next(
+        fact for fact in complete.facts if fact.kind == "semantic.lprint"
     )
-    assert [node.kind for node in controlled.canonical_statements] == ["End"]
+    assert complete_lprint.value == (
+        "printer",
+        (("call", "TAB", (("const", 5),)), ("const", 1)),
+        True,
+    )
+    assert not any(
+        fact.kind == "semantic.lprint" for fact in unresolved.facts
+    )
 
 
 def test_device_io_facts_recover_complete_out_scaffolds():
@@ -1539,6 +1578,8 @@ def _tbx_expression(node):
         return "const", node.value
     if isinstance(node, tbx_ir.StrLit):
         return "string", node.value
+    if isinstance(node, tbx_ir.Call):
+        return "call", node.name, tuple(_tbx_expression(item) for item in node.args)
     if isinstance(node, tbx_ir.BinOp):
         return normalize_expression(
             (

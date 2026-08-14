@@ -334,6 +334,13 @@ statement in an early fixed-point round; later facts can therefore complete the
 whole PRINT without leaving a stale partial statement behind.
 PRINT item chains retain intervening mode-specific separator calls and their
 provenance rather than dropping the items before a comma-zone advance.
+Immediate TAB/SPC controls are ordered items in the same chain for console,
+file, and printer modes. Their complete `mov ax,imm; runtime` pair becomes a
+call-shaped expression with both instruction addresses as provenance. The
+compiler's complete FP-expression-to-AX bridge is also accepted when its store
+fact, reload address, and resolved source all agree. Any other unresolved
+control remains a chain boundary, preventing a trailing suffix from becoming a
+partial statement.
 Device I/O likewise requires its whole compiler scaffold. Constant OUT is
 recovered only when two immediate AX loads are separated by the exact
 `mov bx,ax` staging move and followed contiguously by `mov dx,bx; out dx,al` in
