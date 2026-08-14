@@ -54,6 +54,13 @@ entry and semantic body facts inside the complete region then form a nested
 source view without consuming any of that evidence. A nonzero return-frame pop
 is retained as unresolved parameter and argument metadata until independent
 frame facts can distinguish caller arguments from procedure-local storage.
+TRON trace hooks are also profile instructions, not a two-byte runtime call
+followed by ordinary x86: their embedded line word is part of the immutable
+four-byte signature. A hook run positively establishes a codeless TRON before
+its first traced statement. An unhooked semantic statement between two hooks,
+with no control-transfer instruction in that byte interval, establishes TROFF
+and the next TRON; the same evidence after the final hook establishes TROFF.
+Complex or single-hook shapes that do not prove a boundary remain unresolved.
 
 ## Required design choices
 
@@ -290,6 +297,10 @@ well. Statement reconstruction nests already-recovered body facts inside their
 region, while final canonicalization gives definition and call addresses the
 same stable procedure name. Frame cleanup that cannot yet distinguish parameters
 from LOCAL storage remains explicit unresolved metadata.
+Profiled trace-hook facts now recover supported codeless TRON/TROFF regions.
+Several independent facts may support the same toggle conclusion; the fact
+store retains each provenance chain while semantic operation materialization
+emits the source statement once.
 
 1. Add `Fact` and a fact store alongside `Program.instructions`.
 2. Port constant-pool, slot, and symbolic results to additive facts.

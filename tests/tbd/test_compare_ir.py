@@ -168,6 +168,20 @@ def test_framed_procedures_align_definition_and_call_structure():
     assert report.aligned_by_kind["CallStmt"] == report.tbx_kinds["CallStmt"]
 
 
+def test_trace_hook_facts_align_simple_repeated_and_loop_regions():
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in ("t1_tron", "t1_tron2r2", "t1_tronml", "t1_tronfor")
+    ]
+
+    report = compare_paths(paths)
+
+    assert report.failures == 0
+    assert report.aligned_by_kind["Tron"] == report.tbx_kinds["Tron"] == 12
+    assert report.aligned_by_kind["Troff"] == report.tbx_kinds["Troff"] == 4
+
+
 def test_comparison_cli_prints_coverage(capsys):
     result = main([str(_CORPUS / "t1_delay.exe"), "--examples", "0"])
 

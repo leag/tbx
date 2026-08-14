@@ -20,6 +20,7 @@ from tbd.slots import collect
 from tbd.statement_facts import STATEMENT_FACT_PASSES
 from tbd.statements import reconstruct
 from tbd.symbolic_facts import SYMBOLIC_FACT_PASSES
+from tbd.trace_facts import TRACE_FACT_PASSES
 
 def decode(
     exe: bytes, *, max_bytes: int | None = None, rounds: int = 8
@@ -51,6 +52,7 @@ def decode(
             + CONTROL_FACT_PASSES
             + PROCEDURE_FACT_PASSES
             + STATEMENT_FACT_PASSES
+            + TRACE_FACT_PASSES
         ),
     )
     operations, passes = lift(instructions, blocks, xrefs, image=exe, rounds=rounds)

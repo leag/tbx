@@ -18,6 +18,7 @@ from tbd.profile import (
     PROCEDURE_RETURN_POP,
     PROLOGUES,
     RETURN_TO_VECTOR,
+    TRACE_VECTOR,
     profile_for,
 )
 
@@ -79,6 +80,15 @@ def _decode_interrupt(
         size = min(stop - offset, 2 + _modrm_size(exe, offset + 2, stop))
         return _op(exe, offset, size, "tb.fp", (vector, exe[offset + 2]), "signature")
     canonical = _canonical_vector(vector, dialect)
+    if dialect is not None and canonical == TRACE_VECTOR and offset + 4 <= stop:
+        return _op(
+            exe,
+            offset,
+            4,
+            "tb.trace",
+            (_word(exe, offset + 2),),
+            "signature",
+        )
     if canonical == RETURN_TO_VECTOR:
         targeted = _decode_targeted_return(exe, offset, stop, code_start)
         if targeted is not None:

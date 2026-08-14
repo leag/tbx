@@ -13,6 +13,8 @@ _SIMPLE_KINDS = {
     "ir.gosub": "Gosub",
     "ir.return": "Return",
     "ir.call": "CallStmt",
+    "ir.tron": "Tron",
+    "ir.troff": "Troff",
     "flow.goto": "Goto",
     "flow.call": "Call",
     "flow.return": "Return",

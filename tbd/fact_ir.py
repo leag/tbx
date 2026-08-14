@@ -15,6 +15,8 @@ _OPERATION_KINDS = {
     "semantic.return": "ir.return",
     "semantic.call": "ir.call",
     "semantic.sub_def": "ir.sub_def",
+    "semantic.tron": "ir.tron",
+    "semantic.troff": "ir.troff",
     "semantic.statement": "tb.statement",
 }
 
@@ -25,15 +27,20 @@ def build_operations(
     """Materialize supported semantic facts without consulting legacy rewrites."""
 
     operations = []
+    materialized: set[tuple[object, ...]] = set()
     for fact in facts:
         kind = _OPERATION_KINDS.get(fact.kind)
+        identity = fact.kind, fact.subject, fact.value
+        if kind is None or identity in materialized:
+            continue
+        materialized.add(identity)
         if kind == "ir.dim":
             operation = _static_dim_operation(evidence, fact)
             if operation is not None:
                 operations.append(operation)
             continue
         span = _span(fact, len(evidence.image))
-        if kind is None or span is None:
+        if span is None:
             continue
         start, end = span
         raw = evidence.image[start:end].hex(" ")
@@ -78,4 +85,5 @@ def _span(fact: Fact, image_size: int) -> tuple[int, int] | None:
 def _operation_key(operation: Operation) -> tuple[int, int, int, str]:
     if operation.kind == "ir.dim":
         return operation.offset, operation.end, operation.operands[0], ""
-    return operation.offset, operation.end, 1000, operation.kind
+    toggles = {"ir.tron": 0, "ir.troff": 1}
+    return operation.offset, operation.end, toggles.get(operation.kind, 1000), operation.kind

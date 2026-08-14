@@ -7,6 +7,7 @@ from tbd.canonical import canonicalize, normalize_expression
 from tbd.facts import Evidence, analyze as analyze_facts
 from tbd.ir import Fact, Operation, Slot, Statement
 from tbd.pool import infer_layout, resolve as resolve_pool
+from tbd.x86 import decode_instruction
 
 _CORPUS = Path(__file__).parents[1] / "fixtures" / "corpus"
 
@@ -748,6 +749,72 @@ def test_incomplete_stack_unwind_does_not_invent_a_return():
     program = decode(bytes.fromhex("83 c4 02"))
 
     assert not any(fact.kind == "semantic.return" for fact in program.facts)
+
+
+def test_profile_trace_hooks_consume_the_embedded_line_word():
+    complete = {
+        "1.1": bytes.fromhex("cd 97 14 00"),
+        "1.0": bytes.fromhex("cd 91 14 00"),
+    }
+    for dialect, image in complete.items():
+        instruction = decode_instruction(image, 0, len(image), 0, dialect)
+        truncated = decode_instruction(image, 0, len(image) - 1, 0, dialect)
+
+        assert (instruction.kind, instruction.size, instruction.operands) == (
+            "tb.trace", 4, (20,)
+        )
+        assert truncated.kind == "tb.runtime"
+        assert truncated.size == 2
+
+
+def test_trace_region_facts_recover_repeated_runs_in_both_dialects():
+    expected = {
+        "": (0x8793, 0x87A1, 0x87BD),
+        "v10_": (0x7143, 0x7151, 0x716D),
+    }
+    for prefix, addresses in expected.items():
+        program = decode((_CORPUS / f"{prefix}t1_tron2r2.exe").read_bytes())
+        toggles = [
+            fact for fact in program.facts
+            if fact.kind in {"semantic.tron", "semantic.troff"}
+        ]
+
+        assert [(fact.kind, fact.subject[0]) for fact in toggles] == [
+            ("semantic.troff", addresses[1]),
+            ("semantic.tron", addresses[0]),
+            ("semantic.tron", addresses[2]),
+        ]
+        assert [
+            statement.kind
+            for statement in program.canonical_statements
+            if statement.kind in {"Tron", "Troff"}
+        ] == ["Tron", "Troff", "Tron"]
+
+
+def test_trace_regions_remain_conservative_around_complex_or_ambiguous_flow():
+    for prefix in ("", "v10_"):
+        loop = decode((_CORPUS / f"{prefix}t1_tronfor.exe").read_bytes())
+        ambiguous = decode((_CORPUS / f"{prefix}t1_tronerr.exe").read_bytes())
+
+        assert [
+            statement.kind
+            for statement in loop.canonical_statements
+            if statement.kind in {"Tron", "Troff"}
+        ] == ["Tron"]
+        assert not any(
+            fact.kind in {"semantic.tron", "semantic.troff"}
+            for fact in ambiguous.facts
+        )
+
+
+def test_independent_trace_support_materializes_one_toggle_statement():
+    program = decode((_CORPUS / "t1_tronsplit.exe").read_bytes())
+
+    troff_facts = [fact for fact in program.facts if fact.kind == "semantic.troff"]
+    assert len(troff_facts) == 2
+    assert len({fact.subject for fact in troff_facts}) == 1
+    assert sum(node.kind == "ir.troff" for node in program.fact_operations) == 1
+    assert sum(node.kind == "Troff" for node in program.canonical_statements) == 1
 
 
 def test_if_goto_facts_require_the_complete_runtime_branch_pair():
