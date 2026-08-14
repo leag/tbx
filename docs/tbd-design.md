@@ -37,6 +37,11 @@ segment. When a wrapped forward jump skips physically present compiled source,
 discovery records the fallthrough as an `orphan` cross-reference and analyzes
 it as an additional root. Raw inputs without a compiler profile retain ordinary
 recursive reachability and do not acquire speculative orphan roots.
+Compiler-profile procedure entry and return templates are decoded before their
+component x86 instructions. This keeps `END SUB` distinct from source RETURN;
+near calls, and far calls whose target is not a procedure entry, can then add
+GOSUB facts with stable CFG targets while raw RET/RETF instructions add RETURN
+facts.
 
 ## Required design choices
 

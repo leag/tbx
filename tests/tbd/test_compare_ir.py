@@ -115,9 +115,25 @@ def test_wrapped_code_segment_branches_recover_large_source_regions():
 
     assert report.failures == 0
     assert report.tbx_statements == 5616
-    assert report.tbd_statements == report.aligned_kinds == 5610
+    assert report.tbd_statements == report.aligned_kinds == 5614
     assert report.aligned_by_kind["Assign"] == 5600
     assert report.aligned_by_kind["Print"] == 6
+    assert report.aligned_by_kind["Gosub"] == 2
+    assert report.aligned_by_kind["Return"] == 2
+
+
+def test_source_subroutine_facts_close_both_dialect_tree_comparisons():
+    paths = [
+        _CORPUS / f"{prefix}t1_gosub.exe"
+        for prefix in ("", "v10_")
+    ]
+
+    report = compare_paths(paths)
+
+    assert report.tbx_statements == report.tbd_statements == 12
+    assert report.aligned_kinds == 12
+    assert report.comparable_files == report.exact_files == 2
+    assert report.mismatches == ()
 
 
 def test_comparison_cli_prints_coverage(capsys):

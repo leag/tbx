@@ -28,6 +28,9 @@ TB11 = CompilerProfile("1.1", b"\xcd\xec\xba", 0, 0)
 TB10 = CompilerProfile("1.0", b"\xcd\xec\xb8", 2, 6)
 PROFILES = (TB11, TB10)
 PROLOGUES = {profile.prologue: profile.name for profile in PROFILES}
+PROCEDURE_ENTER = b"\x55\x8b\xec"
+PROCEDURE_RETURN = b"\x5d\xcb"
+PROCEDURE_RETURN_POP = b"\x5d\xca"
 
 # Direct-memory types carried by Turbo Basic's emulated x87 escape vectors.
 # The analyzer consumes these as profile signatures; it does not infer widths

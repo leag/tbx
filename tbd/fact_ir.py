@@ -11,6 +11,8 @@ _OPERATION_KINDS = {
     "semantic.if_goto": "ir.if_goto",
     "semantic.delay": "ir.delay",
     "semantic.dim": "ir.dim",
+    "semantic.gosub": "ir.gosub",
+    "semantic.return": "ir.return",
     "semantic.statement": "tb.statement",
 }
 

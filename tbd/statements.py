@@ -10,6 +10,8 @@ _SIMPLE_KINDS = {
     "ir.dim": "Dim",
     "ir.print": "Print",
     "ir.if_goto": "IfGoto",
+    "ir.gosub": "Gosub",
+    "ir.return": "Return",
     "flow.goto": "Goto",
     "flow.call": "Call",
     "flow.return": "Return",
@@ -85,6 +87,8 @@ def _resolve_operands(
         condition, left, right, target, _false_target = operands
         return condition, left, right, _resolve(target, addresses)
     if kind == "Goto":
+        return (_resolve(operands[0], addresses),)
+    if kind == "Gosub":
         return (_resolve(operands[0], addresses),)
     return operands
 

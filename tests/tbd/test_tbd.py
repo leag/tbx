@@ -59,7 +59,7 @@ def test_wrapped_near_branches_discover_compiled_orphan_source_regions():
             xref.kind == "orphan" and xref.target == orphan
             for xref in program.xrefs
         )
-        assert len(program.canonical_statements) == 2805
+        assert len(program.canonical_statements) == 2807
         assert sum(
             statement.kind == "Assign"
             for statement in program.canonical_statements
@@ -616,6 +616,47 @@ def test_control_facts_match_legacy_branches_and_if_gotos():
     ]
 
 
+def test_source_subroutine_facts_match_near_gosub_and_return_trees():
+    for prefix in ("", "v10_"):
+        image = (_CORPUS / f"{prefix}t1_gosub.exe").read_bytes()
+        exact = [_tbx_statement(node) for node in decode0.decode_user_code(image)]
+        program = decode(image)
+        migrated = [
+            (node.kind, node.operands) for node in program.canonical_statements
+        ]
+
+        assert migrated == exact
+        assert [
+            fact.kind
+            for fact in program.facts
+            if fact.kind in {"semantic.gosub", "semantic.return"}
+        ] == ["semantic.gosub", "semantic.return"]
+
+
+def test_procedure_returns_do_not_become_source_returns():
+    program = decode((_CORPUS / "t1_subgsb.exe").read_bytes())
+
+    controls = [
+        (instruction.offset, instruction.kind, instruction.operands)
+        for instruction in program.instructions
+        if instruction.kind.startswith("tb.proc")
+    ]
+    returns = [fact for fact in program.facts if fact.kind == "semantic.return"]
+    assert controls == [
+        (0x8706, "tb.proc_enter", ()),
+        (0x8719, "tb.proc_return", (0,)),
+    ]
+    assert [fact.subject for fact in returns] == [(0x8718, 0x8719)]
+
+
+def test_far_call_to_nonprocedure_target_is_an_event_safe_gosub():
+    program = decode((_CORPUS / "t1_fargosub.exe").read_bytes())
+    gosub = next(fact for fact in program.facts if fact.kind == "semantic.gosub")
+
+    assert gosub.subject == (0x8856, 0x885B)
+    assert gosub.value == (0x8875,)
+
+
 def test_if_goto_facts_require_the_complete_runtime_branch_pair():
     incomplete = decode(bytes.fromhex("cd35062001 cd341e2401 cd99 cd87 7503"))
 
@@ -780,6 +821,10 @@ def _tbx_statement(node):
             _tbx_expression(node.cond.rhs),
             node.target,
         )
+    elif isinstance(node, tbx_ir.Gosub):
+        operands = (node.target,)
+    elif isinstance(node, tbx_ir.Return):
+        operands = () if node.target is None else (node.target,)
     elif isinstance(node, tbx_ir.Delay):
         operands = (_tbx_expression(node.secs),)
     else:

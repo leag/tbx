@@ -11,7 +11,14 @@ from collections.abc import Iterable
 from typing import Any, Callable
 
 from tbd.ir import Operation
-from tbd.profile import EC_DISPATCH_NAMES, PROLOGUES, profile_for
+from tbd.profile import (
+    EC_DISPATCH_NAMES,
+    PROCEDURE_ENTER,
+    PROCEDURE_RETURN,
+    PROCEDURE_RETURN_POP,
+    PROLOGUES,
+    profile_for,
+)
 
 _JCC = (
     "jo", "jno", "jb", "jae", "je", "jne", "jbe", "ja",
@@ -122,6 +129,33 @@ def _decode_far_branch(
     target = code_start + segment * 16 + far_offset
     kind = "x86.call_far" if byte == 0x9A else "x86.jmp_far"
     return _op(exe, offset, 5, kind, (target, segment, far_offset))
+
+
+def _decode_procedure_control(
+    exe: bytes, offset: int, stop: int, _start: int, _dialect: str | None
+) -> Operation | None:
+    if exe.startswith(PROCEDURE_ENTER, offset, stop):
+        return _op(exe, offset, len(PROCEDURE_ENTER), "tb.proc_enter", confidence="signature")
+    if exe.startswith(PROCEDURE_RETURN, offset, stop):
+        return _op(
+            exe,
+            offset,
+            len(PROCEDURE_RETURN),
+            "tb.proc_return",
+            (0,),
+            "signature",
+        )
+    size = len(PROCEDURE_RETURN_POP) + 2
+    if exe.startswith(PROCEDURE_RETURN_POP, offset, stop) and offset + size <= stop:
+        return _op(
+            exe,
+            offset,
+            size,
+            "tb.proc_return",
+            (_word(exe, offset + len(PROCEDURE_RETURN_POP)),),
+            "signature",
+        )
+    return None
 
 
 def _decode_register(
@@ -264,6 +298,7 @@ _DECODERS: tuple[Decoder, ...] = (
     _decode_interrupt,
     _decode_near_branch,
     _decode_far_branch,
+    _decode_procedure_control,
     _decode_register,
     _decode_stack_immediate,
     _decode_alu_immediate,

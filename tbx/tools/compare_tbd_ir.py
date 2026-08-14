@@ -24,7 +24,17 @@ from tbd import decode
 from tbd.canonical import normalize_expression
 
 MIGRATED_KINDS = frozenset(
-    {"Assign", "Beep", "Delay", "Dim", "End", "IfGoto", "Print"}
+    {
+        "Assign",
+        "Beep",
+        "Delay",
+        "Dim",
+        "End",
+        "Gosub",
+        "IfGoto",
+        "Print",
+        "Return",
+    }
 )
 
 
@@ -151,6 +161,10 @@ def _statement(node: Any) -> tuple[str, tuple[object, ...]]:
         operands = mode, tuple(_expression(item) for item in node.items), node.newline
     elif isinstance(node, ir.IfGoto):
         operands = (*_condition(node.cond), node.target)
+    elif isinstance(node, ir.Gosub):
+        operands = (node.target,)
+    elif isinstance(node, ir.Return):
+        operands = () if node.target is None else (node.target,)
     elif isinstance(node, ir.Delay):
         operands = (_expression(node.secs),)
     else:

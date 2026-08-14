@@ -67,6 +67,45 @@ def if_goto_facts(
             yield result
 
 
+def source_subroutine_facts(
+    evidence: Evidence, facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    """Lift compiler-distinct near GOSUB calls and source RETURN opcodes."""
+
+    instructions = {
+        instruction.offset: instruction for instruction in evidence.instructions
+    }
+    targets = set(instructions)
+    for flow in facts:
+        if len(flow.subject) != 2:
+            continue
+        instruction = instructions.get(flow.subject[0])
+        if instruction is None:
+            continue
+        if (
+            flow.kind == "flow.call"
+            and instruction.kind in {"x86.call", "x86.call_far"}
+            and flow.value
+            and flow.value[0] in targets
+            and instructions[flow.value[0]].kind != "tb.proc_enter"
+        ):
+            yield Fact(
+                "semantic.gosub",
+                flow.subject,
+                (flow.value[0],),
+                flow.evidence,
+                "signature",
+            )
+        elif flow.kind == "flow.return" and instruction.kind in _RETURNS:
+            yield Fact(
+                "semantic.return",
+                flow.subject,
+                (),
+                flow.evidence,
+                "signature",
+            )
+
+
 def _flow_fact(instruction: Operation) -> Fact | None:
     if instruction.kind in _BRANCH_TESTS:
         return _flow(
@@ -166,5 +205,6 @@ def _runtime(instruction: Operation | None, vector: int) -> bool:
 
 CONTROL_FACT_PASSES: tuple[NamedPass, ...] = (
     ("control-flow", control_flow_facts),
+    ("source-subroutines", source_subroutine_facts),
     ("if-gotos", if_goto_facts),
 )

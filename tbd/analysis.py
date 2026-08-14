@@ -25,7 +25,7 @@ _CONDITIONAL = {
 _JUMPS = {"x86.jmp", "x86.jmp_far"}
 _CALLS = {"x86.call", "x86.call_far"}
 _RETURNS = {"x86.ret", "x86.retf", "x86.iret"}
-_TERMINALS = _RETURNS | {"tb.epilogue", "x86.hlt"}
+_TERMINALS = _RETURNS | {"tb.epilogue", "tb.proc_return", "x86.hlt"}
 _CONDITIONS = {
     "x86.je": "=", "x86.jne": "<>", "x86.jb": "<u",
     "x86.jae": ">=u", "x86.jbe": "<=u", "x86.ja": ">u",
