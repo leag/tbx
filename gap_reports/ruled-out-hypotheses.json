@@ -11,6 +11,29 @@
  ],
  "hypotheses": [
   {
+   "id": "RO-TBD-BARE-JMP-IS-GOTO",
+   "title": "Every direct flow.goto fact is a source GOTO",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "tests/fixtures/corpus/t1_goto.exe",
+    "tests/fixtures/corpus/v10_t1_goto.exe",
+    "tests/fixtures/corpus/t1_if.exe"
+   ],
+   "signatures": [
+    "x86.jmp / flow.goto",
+    "e9 0c 00"
+   ],
+   "hypothesis": "tbd can recover the corpus's 30 GOTO statements by materializing every existing direct flow.goto fact as a source statement.",
+   "negative_evidence": [
+    "t1_goto's source GOTO compiles to the ordinary near jump `e9 0c 00`, exactly the same bytes as t1_if's structural jump from the first conditional branch to its false continuation.",
+    "The same flow.goto family also contains IF tails, loop edges, declaration skips, procedure-region control, and other compiler structure; the local instruction and xref do not identify source ownership.",
+    "Recursive discovery follows t1_goto's target but not its physical fallthrough, so the unreachable authored assignment after GOTO is absent from immutable evidence. Adding a GOTO fact alone would still produce the wrong statement sequence and target index."
+   ],
+   "instead": "First add positive region ownership/claim facts for structural jumps and a positively evidenced orphan-fallthrough rule for source GOTO. Promote only an unclaimed jump whose source ownership is established after control-region folding; do not classify bare flow.goto facts by default.",
+   "source": "tbd parity session 2026-08-14"
+  },
+  {
    "id": "RO-TBD-RESTORE-ORACLE-FIXTURES",
    "title": "Existing RESTORE fixtures are byte-exact acceptance evidence for tbd recovery",
    "disposition": "refuted",
