@@ -326,8 +326,9 @@ facts; unresolved memory identities deliberately produce no semantic guess.
 Assignment resolution caches repeated address and expression identities inside
 one pure pass, so large compiler-generated runs remain linear without changing
 the immutable fact inputs or emitted provenance.
-Complete runtime PRINT chains likewise produce anchored semantic facts, while
-an item without its matching flush remains only runtime and expression evidence.
+Complete runtime PRINT and LPRINT chains likewise produce anchored semantic
+facts, with the runtime mode deciding their distinct source kinds. An item
+without its matching flush remains only runtime and expression evidence.
 An unresolved earlier item prevents a suffix of the same chain from becoming a
 statement in an early fixed-point round; later facts can therefore complete the
 whole PRINT without leaving a stale partial statement behind.
@@ -342,11 +343,11 @@ mask/xor register shuffle, `in; xor; and` polling body, and a decoded backward
 `JE` whose branch and fallthrough CFG edges close the loop. The two-argument
 form remains structural pending a byte-exact acceptance fixture. In every case,
 the individual instructions and their byte evidence are never replaced.
-`Program.fact_operations` now materializes migrated assignment, PRINT, and
-constant device-I/O facts directly into operation IR. Conditional branch pairs
-and their resolved operands now produce `IfGoto` facts and operations as well.
-`Program.operations` remains the legacy compatibility view until the remaining
-runtime consumers migrate.
+`Program.fact_operations` now materializes migrated assignment, PRINT, LPRINT,
+and constant device-I/O facts directly into operation IR. Conditional branch
+pairs and their resolved operands now produce `IfGoto` facts and operations as
+well. `Program.operations` remains the legacy compatibility view until the
+remaining runtime consumers migrate.
 Recognized source statements and complete DELAY loops are also additive facts;
 `Program.fact_statements` reconstructs statement indexes and branch targets only
 from the fact-built operation view. `Program.canonical_statements` is a final,

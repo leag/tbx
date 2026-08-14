@@ -84,6 +84,20 @@ def test_complete_three_argument_wait_is_exact_in_both_dialects():
     assert report.mismatches == ()
 
 
+def test_resolved_lprint_chain_is_exact_in_both_dialects():
+    paths = [
+        _CORPUS / f"{prefix}t1_lprint.exe"
+        for prefix in ("", "v10_")
+    ]
+
+    report = compare_paths(paths)
+
+    assert report.tbx_statements == report.tbd_statements == 4
+    assert report.aligned_kinds == 4
+    assert report.comparable_files == report.exact_files == 2
+    assert report.mismatches == ()
+
+
 def test_profile_dispatches_normalize_source_kinds_and_inline_payloads():
     stems = (
         "t1_close",

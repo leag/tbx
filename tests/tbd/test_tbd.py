@@ -561,6 +561,46 @@ def test_runtime_facts_preserve_items_across_print_separators():
         assert all(len(fact.evidence) >= 8 for fact in separated)
 
 
+def test_runtime_facts_classify_resolved_printer_chains_as_lprint():
+    for stem, expected_count in {
+        "t1_lprint": 1,
+        "v10_t1_lprint": 1,
+        "t1_lpstr": 2,
+    }.items():
+        image = (_CORPUS / f"{stem}.exe").read_bytes()
+        program = decode(image)
+        recovered = [
+            fact for fact in program.facts if fact.kind == "semantic.lprint"
+        ]
+
+        assert len(recovered) == expected_count
+        assert all(fact.value[0] == "printer" for fact in recovered)
+        assert not any(
+            fact.kind == "semantic.print" and fact.value[0] == "printer"
+            for fact in program.facts
+        )
+
+    for prefix in ("", "v10_"):
+        image = (_CORPUS / f"{prefix}t1_lprint.exe").read_bytes()
+        program = decode(image)
+        actual = [
+            (statement.kind, statement.operands)
+            for statement in program.canonical_statements
+        ]
+        exact = [
+            _tbx_statement(statement)
+            for statement in decode0.decode_user_code(image)
+        ]
+        assert actual == exact
+
+    controlled = decode((_CORPUS / "t1_ltab.exe").read_bytes())
+    assert not any(
+        fact.kind in {"semantic.print", "semantic.lprint"}
+        for fact in controlled.facts
+    )
+    assert [node.kind for node in controlled.canonical_statements] == ["End"]
+
+
 def test_device_io_facts_recover_complete_out_scaffolds():
     expected = [
         ("Out", (("const", 888), ("const", 1))),
@@ -1433,6 +1473,12 @@ def _tbx_statement(node):
     elif isinstance(node, tbx_ir.Print):
         operands = (
             "console" if node.file is None else node.file,
+            tuple(_tbx_expression(item) for item in node.items),
+            node.newline,
+        )
+    elif isinstance(node, tbx_ir.Lprint):
+        operands = (
+            "printer",
             tuple(_tbx_expression(item) for item in node.items),
             node.newline,
         )

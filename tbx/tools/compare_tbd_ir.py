@@ -33,6 +33,7 @@ MIGRATED_KINDS = frozenset(
         "End",
         "Gosub",
         "IfGoto",
+        "Lprint",
         "Out",
         "Print",
         "Return",
@@ -163,6 +164,8 @@ def _statement(node: Any) -> tuple[str, tuple[object, ...]]:
     elif isinstance(node, ir.Print):
         mode = "console" if node.file is None else node.file
         operands = mode, tuple(_expression(item) for item in node.items), node.newline
+    elif isinstance(node, ir.Lprint):
+        operands = "printer", tuple(_expression(item) for item in node.items), node.newline
     elif isinstance(node, ir.IfGoto):
         operands = (*_condition(node.cond), node.target)
     elif isinstance(node, ir.Gosub):

@@ -13,6 +13,10 @@ _NUMERIC_ITEMS = {0xBB: "console", 0xBD: "file", 0xBC: "printer"}
 _STRING_ITEMS = {0xBE: "console", 0xC0: "file", 0xBF: "printer"}
 _FLUSHES = {0xB8: "console", 0xBA: "file", 0xB9: "printer"}
 _SEPARATORS = {0xC1: "console", 0xC3: "file", 0xC2: "printer"}
+_UNRESOLVED_CONTROLS = {
+    0xC8: "printer",
+    0xC5: "printer",
+}
 
 
 @dataclass(frozen=True)
@@ -61,7 +65,7 @@ def runtime_facts(
             (instruction.offset,),
         )
         yield Fact(
-            "semantic.print",
+            "semantic.lprint" if mode == "printer" else "semantic.print",
             (chain.start, instruction.end),
             (mode, values, True),
             support,
@@ -172,7 +176,10 @@ def _has_preceding_item(
 ) -> bool:
     previous = instructions_by_end.get(start)
     vector = _runtime_vector(previous) if previous is not None else None
-    return _NUMERIC_ITEMS.get(vector, _STRING_ITEMS.get(vector)) == mode
+    preceding_mode = _NUMERIC_ITEMS.get(
+        vector, _STRING_ITEMS.get(vector, _UNRESOLVED_CONTROLS.get(vector))
+    )
+    return preceding_mode == mode
 
 
 def _is_string_setup(setup: Operation, read: Operation) -> bool:

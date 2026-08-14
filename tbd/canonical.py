@@ -30,7 +30,7 @@ def _normalize_statement(statement: Statement) -> Statement:
     operands = statement.operands
     if statement.kind == "Assign":
         operands = (normalize_expression(operands[0]), normalize_expression(operands[1]))
-    elif statement.kind == "Print":
+    elif statement.kind in {"Print", "Lprint"}:
         mode, items, newline = operands
         operands = mode, tuple(normalize_expression(item) for item in items), newline
     elif statement.kind == "IfGoto":

@@ -14,6 +14,7 @@ _SIMPLE_KINDS = {
     "ir.inline": "Inline",
     "ir.out": "Out",
     "ir.wait": "Wait",
+    "ir.lprint": "Lprint",
     "ir.gosub": "Gosub",
     "ir.return": "Return",
     "ir.resume": "Resume",
