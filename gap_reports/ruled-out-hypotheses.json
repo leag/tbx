@@ -11,6 +11,29 @@
  ],
  "hypotheses": [
   {
+   "id": "RO-TBD-RANDOMIZE-IS-AN-ISOLATED-FP-CONSUMER",
+   "title": "RANDOMIZE operands can be recovered independently of DGROUP layout",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "tests/fixtures/corpus/t1_randomize.exe",
+    "tests/fixtures/corpus/t1_rndseq.exe",
+    "tests/fixtures/corpus/v10_t1_randomize.exe"
+   ],
+   "signatures": [
+    "FP expression immediately followed by INT EC B0",
+    "t1_rndseq layout.pool ds is 16 bytes after the numeric literal pool"
+   ],
+   "hypothesis": "A dedicated semantic.randomize fact can resolve the adjacent FP expression and preserve every seed without changing the shared layout machinery.",
+   "negative_evidence": [
+    "The isolated t1_randomize and v10_t1_randomize fixtures do have an anchored integer constant 5, but the multi-seed t1_rndseq fixture anchors layout.pool at ds=35024, 16 bytes after the data that contains its integer literals.",
+    "Under that accepted layout, addresses 0x146 and 0x148 resolve as zero even though tbx recovers RANDOMIZE 12345 and RANDOMIZE 2; consuming the existing expression and constant facts would therefore create plausible but wrong typed IR.",
+    "The negative seed additionally crosses mov ax,7; neg ax; scratch store; fild, while the current symbolic CPU facts clear AX at neg and cannot justify the stored -7 expression."
+   ],
+   "instead": "Repair or disambiguate the t1_rndseq DGROUP pool anchor first and add a justified unary-negation/scratch bridge. Only then add a dedicated RANDOMIZE consumer over the complete adjacent FP expression; do not preserve an empty generic statement or trust the current zero constants.",
+   "source": "tbd parity session 2026-08-14"
+  },
+  {
    "id": "RO-TBD-READ-STRING-ORACLE-FIXTURE",
    "title": "t1_readstr is byte-exact acceptance evidence for string READ recovery",
    "disposition": "refuted",
