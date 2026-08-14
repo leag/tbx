@@ -684,6 +684,24 @@ def test_runtime_facts_recover_complete_lset_and_rset_scaffolds():
             assert fact.confidence == "anchored"
 
 
+def test_runtime_facts_recover_complete_field_descriptors():
+    for prefix in ("", "v10_"):
+        image = (_CORPUS / f"{prefix}t1_field.exe").read_bytes()
+        program = decode(image)
+        actual = [
+            (node.kind, node.operands) for node in program.canonical_statements
+        ]
+        exact = [
+            _tbx_statement(node) for node in decode0.decode_user_code(image)
+        ]
+        assert actual == exact
+        field = next(item for item in program.facts if item.kind == "semantic.field")
+        assert field.confidence == "anchored"
+
+    incomplete = decode(bytes.fromhex("c7 06 60 00 01 00 cd ec 3e b8 0a 00"))
+    assert not any(fact.kind == "semantic.field" for fact in incomplete.facts)
+
+
 def test_device_io_facts_recover_complete_out_scaffolds():
     expected = [
         ("Out", (("const", 888), ("const", 1))),
@@ -1573,6 +1591,11 @@ def _tbx_statement(node):
         operands = file_number, tuple(_tbx_expression(item) for item in node.items)
     elif isinstance(node, (tbx_ir.Lset, tbx_ir.Rset)):
         operands = _tbx_expression(node.target), _tbx_expression(node.source)
+    elif isinstance(node, tbx_ir.Field):
+        operands = node.num, tuple(
+            (_tbx_expression(width), _tbx_expression(target))
+            for width, target in node.fields
+        )
     elif isinstance(node, tbx_ir.IfGoto):
         operands = (
             node.cond.op,

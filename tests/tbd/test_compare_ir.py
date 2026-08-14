@@ -131,6 +131,18 @@ def test_complete_lset_rset_scaffolds_are_exact_in_both_dialects():
     assert report.mismatches == ()
 
 
+def test_complete_field_descriptors_are_exact_in_both_dialects():
+    paths = [
+        _CORPUS / f"{prefix}t1_field.exe"
+        for prefix in ("", "v10_")
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["Field"] == 2
+    assert report.kind_match_files == 2
+    assert report.mismatches == ()
+
+
 def test_profile_dispatches_normalize_source_kinds_and_inline_payloads():
     stems = (
         "t1_close",

@@ -349,6 +349,10 @@ LSET and RSET share another complete string scaffold: resolved source and
 target descriptors, the compiler's `ES=0x96` field-segment setup, and the final
 A4/A5 mode vector. Only the whole contiguous template adds a justified-assignment
 fact; the source store and slot evidence remain independent.
+FIELD item scaffolds add string memory-role facts for their descriptor targets,
+allowing the ordinary slot pass to anchor names. A complete consecutive item
+run plus its immediately preceding resolved file-number store then adds one
+FIELD fact; missing descriptors or unresolved targets remain structural.
 Device I/O likewise requires its whole compiler scaffold. Constant OUT is
 recovered only when two immediate AX loads are separated by the exact
 `mov bx,ax` staging move and followed contiguously by `mov dx,bx; out dx,al` in

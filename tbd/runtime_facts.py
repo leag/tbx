@@ -79,6 +79,84 @@ def runtime_facts(
         )
     yield from _write_facts(evidence.instructions, facts)
     yield from _fixed_string_facts(evidence.instructions, facts)
+    yield from _field_facts(evidence.instructions, facts)
+
+
+def _field_facts(
+    instructions: tuple[Operation, ...], facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    by_end = {item.end: item for item in instructions}
+    for index, begin in enumerate(instructions):
+        if _phase_name(begin) != "FIELD_BEGIN":
+            continue
+        items = []
+        cursor = index + 1
+        while cursor + 5 <= len(instructions):
+            item = _field_item(instructions[cursor : cursor + 5])
+            if item is None:
+                break
+            width, address, support = item
+            items.append((width, address, support))
+            yield Fact(
+                "memory.write",
+                (address,),
+                ("string",),
+                support,
+                "signature",
+            )
+            cursor += 5
+        if not items:
+            continue
+        file_result = _write_file_number(facts, by_end, begin.offset)
+        if file_result is None:
+            continue
+        file_number, start, file_evidence = file_result
+        fields = []
+        field_evidence = []
+        for width, address, support in items:
+            target = resolve_slot(address, facts)
+            if target is None:
+                break
+            fields.append((("const", width), target.value + ("string",)))
+            field_evidence.extend((support, target.evidence))
+        else:
+            end = instructions[cursor - 1].end
+            support = combine_evidence(
+                (begin.offset,), file_evidence, *field_evidence
+            )
+            yield Fact(
+                "semantic.field",
+                (start, end),
+                (file_number, tuple(fields)),
+                support,
+                "anchored",
+            )
+
+
+def _field_item(
+    window: tuple[Operation, ...],
+) -> tuple[object, object, tuple[int, ...]] | None:
+    if len(window) != 5 or not _contiguous(window):
+        return None
+    width, target, segment_load, segment_set, phase = window
+    if (
+        width.kind != "x86.mov_imm"
+        or width.operands[:1] != ("ax",)
+        or len(width.operands) != 2
+        or target.kind != "x86.mov_imm"
+        or target.operands[:1] != ("si",)
+        or len(target.operands) != 2
+        or segment_load.kind != "x86.mov_imm"
+        or segment_load.operands != ("dx", 0x98)
+        or bytes.fromhex(segment_set.raw) != b"\x8e\xc2"
+        or _phase_name(phase) != "FIELD_ITEM"
+    ):
+        return None
+    return (
+        width.operands[1],
+        target.operands[1],
+        tuple(item.offset for item in window),
+    )
 
 
 def _fixed_string_facts(

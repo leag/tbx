@@ -31,6 +31,7 @@ MIGRATED_KINDS = frozenset(
         "DefSeg",
         "Dim",
         "End",
+        "Field",
         "Gosub",
         "IfGoto",
         "Lprint",
@@ -175,6 +176,11 @@ def _statement(node: Any) -> tuple[str, tuple[object, ...]]:
         else:
             file_number = _expression(node.file)
         operands = file_number, tuple(_expression(item) for item in node.items)
+    elif isinstance(node, ir.Field):
+        operands = node.num, tuple(
+            (_expression(width), _expression(target))
+            for width, target in node.fields
+        )
     elif isinstance(node, (ir.Lset, ir.Rset)):
         operands = _expression(node.target), _expression(node.source)
     elif isinstance(node, ir.IfGoto):

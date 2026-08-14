@@ -13,6 +13,7 @@ _OPERATION_KINDS = {
     "semantic.write": "ir.write",
     "semantic.lset": "ir.lset",
     "semantic.rset": "ir.rset",
+    "semantic.field": "ir.field",
     "semantic.print": "ir.print",
     "semantic.if_goto": "ir.if_goto",
     "semantic.inline": "ir.inline",

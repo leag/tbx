@@ -38,6 +38,12 @@ def _normalize_statement(statement: Statement) -> Statement:
     elif statement.kind == "Write":
         file_number, items = operands
         operands = file_number, tuple(normalize_expression(item) for item in items)
+    elif statement.kind == "Field":
+        file_number, fields = operands
+        operands = file_number, tuple(
+            (normalize_expression(width), normalize_expression(target))
+            for width, target in fields
+        )
     elif statement.kind == "IfGoto":
         condition, left, right, target = operands
         operands = (
