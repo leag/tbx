@@ -11,6 +11,28 @@
  ],
  "hypotheses": [
   {
+   "id": "RO-TBD-RESTORE-ORACLE-FIXTURES",
+   "title": "Existing RESTORE fixtures are byte-exact acceptance evidence for tbd recovery",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "tests/fixtures/corpus/t1_restore.exe",
+    "tests/fixtures/corpus/t1_restoreline.exe"
+   ],
+   "signatures": [
+    "c7 06 78 00 00 00",
+    "c7 06 78 00 02 00"
+   ],
+   "hypothesis": "The existing bare and targeted RESTORE fixtures can calibrate tbd's direct data-pointer-cell store recovery within the explicit two-probe budget.",
+   "negative_evidence": [
+    "Byte-exact oracle verification rejected t1_restore: both images are 34832 bytes, with about seven bytes differing.",
+    "Byte-exact oracle verification rejected t1_restoreline: both images are 34816 bytes, with about five bytes differing.",
+    "Neither authored shape passed, so the probe budget ended without acceptance evidence and no semantic.restore mapping was added."
+   ],
+   "instead": "Do not calibrate RESTORE from these fixtures. Diagnose and repair their whole-image round trips or author a new bare and targeted fixture pair that verifies byte-for-byte; only then map zero to bare RESTORE and preserve positive even values as data-item indices until DATA placement facts can resolve source targets.",
+   "source": "tbd parity session 2026-08-14"
+  },
+  {
    "id": "RO-TBD-WAIT-ORACLE-FIXTURE",
    "title": "t1_wait is byte-exact acceptance evidence for two-argument WAIT recovery",
    "disposition": "refuted",
