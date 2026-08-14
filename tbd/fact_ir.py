@@ -21,6 +21,7 @@ _OPERATION_KINDS = {
     "semantic.input_file": "ir.input_file",
     "semantic.close": "ir.close",
     "semantic.trap_ctl": "ir.trap_ctl",
+    "semantic.on_trap": "ir.on_trap",
     "semantic.print": "ir.print",
     "semantic.if_goto": "ir.if_goto",
     "semantic.inline": "ir.inline",

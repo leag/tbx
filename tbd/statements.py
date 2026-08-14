@@ -26,6 +26,7 @@ _SIMPLE_KINDS = {
     "ir.input_file": "InputFile",
     "ir.close": "Close",
     "ir.trap_ctl": "TrapCtl",
+    "ir.on_trap": "OnTrap",
     "ir.gosub": "Gosub",
     "ir.return": "Return",
     "ir.resume": "Resume",
@@ -155,8 +156,8 @@ def _resolve_operands(
         return (_resolve(operands[0], addresses),)
     if kind == "OnError" and operands and operands[0] is not None:
         return (_resolve(operands[0], addresses),)
-    if kind == "OnTrap" and len(operands) == 2:
-        return operands[0], _resolve(operands[1], addresses)
+    if kind == "OnTrap" and len(operands) == 3:
+        return operands[0], operands[1], _resolve(operands[2], addresses)
     if kind in {"OnGoto", "OnGosub"}:
         return tuple(_resolve(target, addresses) for target in operands)
     return operands

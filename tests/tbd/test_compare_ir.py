@@ -242,6 +242,20 @@ def test_trap_control_operands_are_exact_in_both_dialects():
     assert report.failures == 0
 
 
+def test_on_trap_operands_are_exact_in_both_dialects():
+    stems = ("t1_oncom", "t1_onkey", "t1_onpen", "t1_onplay", "t1_ontimer")
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in stems
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["OnTrap"] == report.tbx_kinds["OnTrap"]
+    assert report.comparable_files == report.exact_files == len(paths)
+    assert report.failures == 0
+
+
 def test_complete_field_descriptors_are_exact_in_both_dialects():
     paths = [
         _CORPUS / f"{prefix}t1_field.exe"

@@ -976,6 +976,33 @@ def test_numbered_trap_control_requires_its_ax_literal():
     assert not any(fact.kind == "semantic.trap_ctl" for fact in program.facts)
 
 
+def test_on_trap_facts_preserve_event_number_and_target():
+    stems = ("t1_oncom", "t1_onkey", "t1_onpen", "t1_onplay", "t1_ontimer")
+    for prefix in ("", "v10_"):
+        for stem in stems:
+            image = (_CORPUS / f"{prefix}{stem}.exe").read_bytes()
+            program = decode(image)
+            actual = [
+                (node.kind, node.operands)
+                for node in program.canonical_statements
+                if node.kind == "OnTrap"
+            ]
+            exact = [
+                _tbx_statement(node)
+                for node in decode0.decode_user_code(image)
+                if isinstance(node, tbx_ir.OnTrap)
+            ]
+            assert actual == exact
+
+
+def test_numbered_on_trap_requires_its_complete_operand_source():
+    com = decode(bytes.fromhex("cd ec 76 00 00 00 00"))
+    timer = decode(bytes.fromhex("cd ec 80 00 00 00 00"))
+
+    assert not any(fact.kind == "semantic.on_trap" for fact in com.facts)
+    assert not any(fact.kind == "semantic.on_trap" for fact in timer.facts)
+
+
 def test_runtime_facts_recover_complete_field_descriptors():
     for prefix in ("", "v10_"):
         image = (_CORPUS / f"{prefix}t1_field.exe").read_bytes()
@@ -1932,6 +1959,9 @@ def _tbx_statement(node):
     elif isinstance(node, tbx_ir.TrapCtl):
         number = None if node.n is None else _tbx_expression(node.n)
         operands = node.event, number, node.mode
+    elif isinstance(node, tbx_ir.OnTrap):
+        number = None if node.n is None else _tbx_expression(node.n)
+        operands = node.event, number, node.target
     elif isinstance(node, tbx_ir.Field):
         operands = node.num, tuple(
             (_tbx_expression(width), _tbx_expression(target))

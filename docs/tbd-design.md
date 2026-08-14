@@ -407,6 +407,11 @@ source is unresolved.
 Dedicated trap-control facts retain the profiled event and ON/OFF/STOP mode.
 COM and KEY additionally require their adjacent immediate AX event number;
 unnumbered PEN, PLAY, STRIG, and TIMER forms use the dispatch signature alone.
+Trap-handler installation likewise keeps the profiled event and relative handler
+target. COM, KEY, and PLAY require their adjacent immediate AX event number,
+TIMER requires one uniquely resolved adjacent FP expression, and PEN has no
+number. An incomplete numbered scaffold remains structural instead of producing
+an operand-truncated ON event GOSUB statement.
 Device I/O likewise requires its whole compiler scaffold. Constant OUT is
 recovered only when two immediate AX loads are separated by the exact
 `mov bx,ax` staging move and followed contiguously by `mov dx,bx; out dx,al` in

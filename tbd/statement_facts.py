@@ -26,6 +26,7 @@ def statement_facts(
     yield from _defseg_facts(instructions, facts)
     yield from _close_facts(instructions, facts)
     yield from _trap_ctl_facts(instructions)
+    yield from _on_trap_facts(instructions, facts)
     yield from _resume_facts(instructions, facts)
     yield from _static_dim_facts(evidence, facts)
     yield from _delay_facts(instructions, facts)
@@ -72,7 +73,7 @@ def _simple_statement(
     if source is None:
         return None
     name, fixed_operands = source
-    if name == "TRAP_CTL":
+    if name in {"ON_TRAP", "TRAP_CTL"}:
         return None
     return Fact(
         "semantic.statement",
@@ -152,6 +153,63 @@ def _trap_ctl_facts(instructions: dict[int, Operation]) -> Iterable[Fact]:
             "semantic.trap_ctl",
             (start, instruction.end),
             (event, number, mode),
+            support,
+            "signature",
+        )
+
+
+def _on_trap_facts(
+    instructions: dict[int, Operation], facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    by_end = {instruction.end: instruction for instruction in instructions.values()}
+    values = tuple(fact for fact in facts if fact.kind == "expression.value")
+    for instruction in instructions.values():
+        if instruction.kind != "tb.statement" or len(instruction.operands) != 3:
+            continue
+        source = EC_SOURCE_STATEMENTS.get(instruction.operands[1])
+        if source is None or source[0] != "ON_TRAP" or len(source[1]) != 1:
+            continue
+        event = source[1][0]
+        target = instruction.operands[2]
+        if not isinstance(target, int):
+            continue
+        number = None
+        start = instruction.offset
+        support = (instruction.offset,)
+        if event in {"COM", "KEY", "PLAY"}:
+            load = by_end.get(instruction.offset)
+            immediate = _immediate_ax(load)
+            if load is None or not isinstance(immediate, int):
+                continue
+            number = ("const", immediate)
+            start = load.offset
+            support = (load.offset, instruction.offset)
+        elif event == "TIMER":
+            candidates = [
+                value
+                for value in values
+                if value.evidence
+                and (last := instructions.get(value.evidence[-1])) is not None
+                and last.end == instruction.offset
+            ]
+            if len(candidates) != 1:
+                continue
+            resolved = resolve_expression(candidates[0].value[0], facts)
+            if resolved is None:
+                continue
+            number = resolved.value
+            start = candidates[0].evidence[0]
+            support = combine_evidence(
+                candidates[0].evidence,
+                resolved.evidence,
+                (instruction.offset,),
+            )
+        elif event != "PEN":
+            continue
+        yield Fact(
+            "semantic.on_trap",
+            (start, instruction.end),
+            (event, number, target),
             support,
             "signature",
         )
