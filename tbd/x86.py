@@ -290,6 +290,20 @@ def _decode_profile_direct(
     if profile is None:
         return None
     if (
+        offset + 12 <= stop
+        and exe[offset : offset + 2] == b"\x81\xfc"
+        and exe[offset + 4 : offset + 11] == b"\x73\x06\xb8\x07\x00\xcd\xec"
+        and profile.canonical_sub(0xEC, exe[offset + 11]) == 0x3C
+    ):
+        return _op(
+            exe,
+            offset,
+            12,
+            "tb.stack_check",
+            (_word(exe, offset + 2),),
+            "signature",
+        )
+    if (
         offset + 4 <= stop
         and exe[offset : offset + 2] == b"\x8c\x1e"
         and _word(exe, offset + 2) == profile.defseg_cell

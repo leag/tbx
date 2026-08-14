@@ -679,6 +679,45 @@ def test_checked_call_payload_must_be_complete_and_in_user_code():
     assert (raw.kind, raw.size, raw.operands) == ("tb.runtime", 2, (0x8A,))
 
 
+def test_profile_stack_checks_do_not_become_error_statements():
+    expected = {
+        "fst_t1_stsub": (0x8734, 0x8740, 0x020E),
+        "v10_fst_t1_stsub": (0x70E4, 0x70F0, 0x020E),
+    }
+    for stem, (start, end, threshold) in expected.items():
+        program = decode((_CORPUS / f"{stem}.exe").read_bytes())
+        check = next(
+            instruction
+            for instruction in program.instructions
+            if instruction.kind == "tb.stack_check"
+        )
+
+        assert (check.offset, check.end, check.operands) == (
+            start, end, (threshold,)
+        )
+        assert not any(
+            node.kind == "ErrorStmt" for node in program.canonical_statements
+        )
+
+    for stem in ("t1_errorn", "v10_t1_errorn"):
+        program = decode((_CORPUS / f"{stem}.exe").read_bytes())
+        assert [node.kind for node in program.canonical_statements] == [
+            "ErrorStmt", "End"
+        ]
+
+
+def test_incomplete_or_unprofiled_stack_check_stays_structural():
+    complete = bytes.fromhex("81 fc 0e 02 73 06 b8 07 00 cd ec 3c")
+    profiled = decode_instruction(complete, 0, len(complete), 0, "1.1")
+    truncated = decode_instruction(complete, 0, len(complete) - 1, 0, "1.1")
+    raw = decode_instruction(complete, 0, len(complete), 0, None)
+
+    assert (profiled.kind, profiled.size, profiled.operands) == (
+        "tb.stack_check", 12, (0x020E,)
+    )
+    assert truncated.kind == raw.kind == "x86.op_81"
+
+
 def test_computed_call_tables_discover_every_return_target():
     for prefix, targets in (
         ("", (0x872E, 0x872F)),

@@ -65,6 +65,11 @@ root because the compiler retains following source such as END. Truncated or
 out-of-image checked-call payloads remain source-less evidence. When a 1.0
 entry jump is immediately preceded by `RESUME_BEGIN`, that stronger enclosing
 signature owns the jump and suppresses a separate RUN fact.
+The stack-room guard emitted by the compiler's stack-check toggle is one
+source-less profiled instruction: `cmp sp,limit; jae skip; mov ax,7; ERROR`.
+Only the complete 12-byte template is claimed. Its embedded ERROR dispatch is
+not a source ErrorStmt; an authored ERROR outside that exact guard remains a
+normal statement, while truncated or unprofiled bytes remain structural.
 Framed SUB definitions similarly require a procedure-entry signature and one
 procedure-return signature before the next entry. Their compiler skip jump,
 when present, supplies the declaration address. Calls targeting a recovered
