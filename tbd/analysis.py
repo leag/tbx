@@ -25,6 +25,7 @@ _CONDITIONAL = {
 _JUMPS = {"x86.jmp", "x86.jmp_far"}
 _CALLS = {"x86.call", "x86.call_far"}
 _RETURNS = {"x86.ret", "x86.retf", "x86.iret"}
+_TARGETED_RETURNS = {"tb.return_to"}
 _TERMINALS = _RETURNS | {"tb.epilogue", "tb.proc_return", "x86.hlt"}
 _CONDITIONS = {
     "x86.je": "=", "x86.jne": "<>", "x86.jb": "<u",
@@ -138,6 +139,9 @@ def _follow(
         _queue(next_offset, pending, queued, leaders, start, stop)
         xrefs.add(CrossReference(operation.offset, next_offset, "fallthrough"))
         return next_offset, True
+    if operation.kind in _TARGETED_RETURNS:
+        _add_target(operation, "return", pending, queued, leaders, xrefs, start, stop)
+        return next_offset, True
     if operation.kind in _JUMPS:
         _add_target(operation, "jump", pending, queued, leaders, xrefs, start, stop)
         if dialect is not None and _wrapped_forward_gap(operation, start, stop):
@@ -215,7 +219,7 @@ def _block_offsets(
     while cursor in instructions:
         operation = instructions[cursor]
         offsets.append(cursor)
-        if operation.kind in _CONDITIONAL | _JUMPS | _TERMINALS:
+        if operation.kind in _CONDITIONAL | _JUMPS | _TARGETED_RETURNS | _TERMINALS:
             break
         cursor = operation.end
         if cursor in leaders:
@@ -230,6 +234,8 @@ def _successors(
     if operation.kind in _CONDITIONAL:
         return tuple(value for value in (target, operation.end) if value in instructions)
     if operation.kind in _JUMPS:
+        return (target,) if target in instructions else ()
+    if operation.kind in _TARGETED_RETURNS:
         return (target,) if target in instructions else ()
     if operation.kind in _TERMINALS:
         return ()

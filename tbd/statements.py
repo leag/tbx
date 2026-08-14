@@ -90,6 +90,8 @@ def _resolve_operands(
         return (_resolve(operands[0], addresses),)
     if kind == "Gosub":
         return (_resolve(operands[0], addresses),)
+    if kind == "Return" and operands:
+        return (_resolve(operands[0], addresses),)
     return operands
 
 

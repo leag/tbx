@@ -104,6 +104,28 @@ def source_subroutine_facts(
                 flow.evidence,
                 "signature",
             )
+        elif flow.kind == "flow.return_to" and instruction.kind == "tb.return_to":
+            yield Fact(
+                "semantic.return",
+                flow.subject,
+                (flow.value[0],),
+                flow.evidence,
+                "signature",
+            )
+    for cleanup, jump in zip(evidence.instructions, evidence.instructions[1:]):
+        if (
+            cleanup.raw == "83 c4 02"
+            and cleanup.end == jump.offset
+            and jump.kind == "x86.jmp"
+            and jump.operands
+        ):
+            yield Fact(
+                "semantic.return",
+                (cleanup.offset, jump.end),
+                (jump.operands[0],),
+                (cleanup.offset, jump.offset),
+                "signature",
+            )
 
 
 def _flow_fact(instruction: Operation) -> Fact | None:
@@ -117,6 +139,8 @@ def _flow_fact(instruction: Operation) -> Fact | None:
         return _flow("flow.goto", instruction, (instruction.operands[0],))
     if instruction.kind in _CALLS:
         return _flow("flow.call", instruction, (instruction.operands[0],))
+    if instruction.kind == "tb.return_to":
+        return _flow("flow.return_to", instruction, (instruction.operands[0],))
     if instruction.kind in _RETURNS:
         return _flow("flow.return", instruction, instruction.operands)
     return None

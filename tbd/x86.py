@@ -17,6 +17,7 @@ from tbd.profile import (
     PROCEDURE_RETURN,
     PROCEDURE_RETURN_POP,
     PROLOGUES,
+    RETURN_TO_VECTOR,
     profile_for,
 )
 
@@ -67,7 +68,7 @@ def decode_instruction(
 
 
 def _decode_interrupt(
-    exe: bytes, offset: int, stop: int, _start: int, dialect: str | None
+    exe: bytes, offset: int, stop: int, code_start: int, dialect: str | None
 ) -> Operation | None:
     if exe[offset] != 0xCD or offset + 1 >= stop:
         return None
@@ -78,9 +79,33 @@ def _decode_interrupt(
         size = min(stop - offset, 2 + _modrm_size(exe, offset + 2, stop))
         return _op(exe, offset, size, "tb.fp", (vector, exe[offset + 2]), "signature")
     canonical = _canonical_vector(vector, dialect)
+    if canonical == RETURN_TO_VECTOR:
+        targeted = _decode_targeted_return(exe, offset, stop, code_start)
+        if targeted is not None:
+            return targeted
     kind = "tb.runtime" if canonical >= 0x80 else "x86.int"
     confidence = "signature" if canonical >= 0x80 else "structural"
     return _op(exe, offset, 2, kind, (canonical,), confidence)
+
+
+def _decode_targeted_return(
+    exe: bytes, offset: int, stop: int, code_start: int
+) -> Operation | None:
+    branch = exe[offset + 2] if offset + 2 < stop else None
+    if branch == 0xE9 and offset + 5 <= stop:
+        relative = struct.unpack_from("<h", exe, offset + 3)[0]
+        target = code_start + ((offset + 5 + relative - code_start) & 0xFFFF)
+        size = 5
+    elif branch == 0xEB and offset + 4 <= stop:
+        target = offset + 4 + _signed8(exe[offset + 3])
+        size = 4
+    elif branch == 0xEA and offset + 7 <= stop:
+        far_offset, segment = struct.unpack_from("<HH", exe, offset + 3)
+        target = code_start + segment * 16 + far_offset
+        size = 7
+    else:
+        return None
+    return _op(exe, offset, size, "tb.return_to", (target,), "signature")
 
 
 def _decode_tb_dispatch(

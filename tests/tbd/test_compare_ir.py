@@ -136,6 +136,19 @@ def test_source_subroutine_facts_close_both_dialect_tree_comparisons():
     assert report.mismatches == ()
 
 
+def test_targeted_return_templates_align_all_authored_return_lines():
+    paths = [
+        _CORPUS / "t1_returngosub.exe",
+        _CORPUS / "t1_returnline.exe",
+        _CORPUS / "v10_t1_returnline.exe",
+    ]
+
+    report = compare_paths(paths)
+
+    assert report.failures == 0
+    assert report.aligned_by_kind["Return"] == 4
+
+
 def test_comparison_cli_prints_coverage(capsys):
     result = main([str(_CORPUS / "t1_delay.exe"), "--examples", "0"])
 

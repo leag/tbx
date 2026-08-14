@@ -657,6 +657,52 @@ def test_far_call_to_nonprocedure_target_is_an_event_safe_gosub():
     assert gosub.value == (0x8875,)
 
 
+def test_targeted_event_returns_are_single_profiled_instructions():
+    expected = {
+        "": (0x885E, 0x8862, 0x8855),
+        "v10_": (0x720E, 0x7212, 0x7205),
+    }
+    for prefix, (start, end, target) in expected.items():
+        image = (_CORPUS / f"{prefix}t1_returnline.exe").read_bytes()
+        exact = [_tbx_statement(node) for node in decode0.decode_user_code(image)]
+        program = decode(image)
+        instruction = next(
+            node for node in program.instructions if node.kind == "tb.return_to"
+        )
+        returned = next(
+            fact for fact in program.facts
+            if fact.kind == "semantic.return" and fact.value
+        )
+
+        assert (instruction.offset, instruction.end, instruction.operands) == (
+            start,
+            end,
+            (target,),
+        )
+        assert returned.subject == (start, end)
+        assert program.canonical_statements[-1].operands == exact[-1][1]
+
+
+def test_gosub_stack_unwind_pairs_recover_targeted_returns():
+    program = decode((_CORPUS / "t1_returngosub.exe").read_bytes())
+    returns = [
+        fact for fact in program.facts
+        if fact.kind == "semantic.return" and fact.value
+    ]
+
+    assert [(fact.subject, fact.value) for fact in returns] == [
+        ((0x8864, 0x8869), (0x8847,)),
+        ((0x8869, 0x886E), (0x8850,)),
+    ]
+    assert all(len(fact.evidence) == 2 for fact in returns)
+
+
+def test_incomplete_stack_unwind_does_not_invent_a_return():
+    program = decode(bytes.fromhex("83 c4 02"))
+
+    assert not any(fact.kind == "semantic.return" for fact in program.facts)
+
+
 def test_if_goto_facts_require_the_complete_runtime_branch_pair():
     incomplete = decode(bytes.fromhex("cd35062001 cd341e2401 cd99 cd87 7503"))
 

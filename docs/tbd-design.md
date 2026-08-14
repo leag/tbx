@@ -42,6 +42,11 @@ component x86 instructions. This keeps `END SUB` distinct from source RETURN;
 near calls, and far calls whose target is not a procedure entry, can then add
 GOSUB facts with stable CFG targets while raw RET/RETF instructions add RETURN
 facts.
+Targeted RETURN has two separate signatures: the event-safe runtime-vector form
+contains its jump inside one instruction, while an ordinary GOSUB frame uses an
+adjacent `ADD SP,2` and jump pair. Both add a RETURN fact only when the complete
+template is present, and retain the jump target for final statement-index
+resolution.
 
 ## Required design choices
 
