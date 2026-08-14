@@ -151,6 +151,18 @@ def test_scalar_mid_assignments_are_exact_in_both_dialects():
     assert report.mismatches == ()
 
 
+def test_scalar_swap_template_is_exact_in_both_dialects():
+    paths = [
+        _CORPUS / f"{prefix}t1_swap.exe"
+        for prefix in ("", "v10_")
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["Swap"] == 2
+    assert report.comparable_files == report.exact_files == 2
+    assert report.mismatches == ()
+
+
 def test_complete_field_descriptors_are_exact_in_both_dialects():
     paths = [
         _CORPUS / f"{prefix}t1_field.exe"

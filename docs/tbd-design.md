@@ -370,6 +370,13 @@ deliberately not fixed because link layout changes it. A recognized scaffold
 adds a string write role for its scalar target, while only fully resolved
 operands add the anchored MID$ statement fact. Computed array targets remain a
 separate unsupported mechanism.
+Scalar SWAP is a complete 24-byte inline signature: two low-word
+load/exchange/store triples followed by the corresponding high-word triples.
+Those component operations remain instruction evidence but do not create six
+false integer memory roles. When independent facts anchor both four-byte base
+slots, the signature adds one SWAP statement with all six instruction addresses
+as provenance. Array and mixed scalar/array SWAP use separate mechanisms and
+remain unsupported by this lift.
 Device I/O likewise requires its whole compiler scaffold. Constant OUT is
 recovered only when two immediate AX loads are separated by the exact
 `mov bx,ax` staging move and followed contiguously by `mov dx,bx; out dx,al` in

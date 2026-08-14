@@ -764,6 +764,42 @@ def test_runtime_facts_leave_incomplete_mid_assign_scaffolds_structural():
     )
 
 
+def test_scalar_swap_signature_recovers_slots_without_component_aliases():
+    for prefix in ("", "v10_"):
+        image = (_CORPUS / f"{prefix}t1_swap.exe").read_bytes()
+        program = decode(image)
+        actual = [
+            (node.kind, node.operands) for node in program.canonical_statements
+        ]
+        exact = [
+            _tbx_statement(node) for node in decode0.decode_user_code(image)
+        ]
+
+        assert actual == exact
+        swap = next(
+            fact for fact in program.facts if fact.kind == "semantic.swap"
+        )
+        assert swap.confidence == "anchored"
+        assert not any(
+            fact.kind in {"memory.read", "memory.write"}
+            and fact.subject in {(0x124,), (0x126,)}
+            and fact.value == ("integer",)
+            for fact in program.facts
+        )
+
+
+def test_scalar_swap_requires_the_complete_inline_template():
+    complete = bytes.fromhex(
+        "8b 06 24 01 87 06 20 01 89 06 24 01 "
+        "8b 06 26 01 87 06 22 01 89 06 26 01"
+    )
+    truncated = decode(complete[:-4])
+    altered = decode(complete[:18] + b"\x24\x01" + complete[20:])
+
+    assert not any(fact.kind == "semantic.swap" for fact in truncated.facts)
+    assert not any(fact.kind == "semantic.swap" for fact in altered.facts)
+
+
 def test_runtime_facts_recover_complete_field_descriptors():
     for prefix in ("", "v10_"):
         image = (_CORPUS / f"{prefix}t1_field.exe").read_bytes()
@@ -1678,6 +1714,8 @@ def _tbx_statement(node):
             _tbx_expression(node.source),
             None if node.length is None else _tbx_expression(node.length),
         )
+    elif isinstance(node, tbx_ir.Swap):
+        operands = _tbx_expression(node.a), _tbx_expression(node.b)
     elif isinstance(node, tbx_ir.Field):
         operands = node.num, tuple(
             (_tbx_expression(width), _tbx_expression(target))

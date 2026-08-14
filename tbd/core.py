@@ -20,6 +20,7 @@ from tbd.slot_facts import SLOT_FACT_PASSES, materialize_slots
 from tbd.slots import collect
 from tbd.statement_facts import STATEMENT_FACT_PASSES
 from tbd.statements import reconstruct
+from tbd.swap_facts import SWAP_FACT_PASSES
 from tbd.symbolic_facts import SYMBOLIC_FACT_PASSES
 from tbd.trace_facts import TRACE_FACT_PASSES
 
@@ -51,6 +52,7 @@ def decode(
             + ASSIGNMENT_FACT_PASSES
             + IO_FACT_PASSES
             + RUNTIME_FACT_PASSES
+            + SWAP_FACT_PASSES
             + CONTROL_FACT_PASSES
             + PROCEDURE_FACT_PASSES
             + STATEMENT_FACT_PASSES

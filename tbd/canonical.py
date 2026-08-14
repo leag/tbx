@@ -30,7 +30,7 @@ def _normalize_statement(statement: Statement) -> Statement:
     operands = statement.operands
     if statement.kind == "Assign":
         operands = (normalize_expression(operands[0]), normalize_expression(operands[1]))
-    elif statement.kind in {"Lset", "Rset"}:
+    elif statement.kind in {"Lset", "Rset", "Swap"}:
         operands = (normalize_expression(operands[0]), normalize_expression(operands[1]))
     elif statement.kind == "MidAssign":
         target, start, source, length = operands

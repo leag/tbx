@@ -10,6 +10,7 @@ from tbd.ir import Fact, Operation
 from tbd.pool import array_at, decode_literal, infer_layout
 from tbd.profile import FP_ARITHMETIC_TYPES, FP_TRANSFER_TYPES
 from tbd.slots import VAR_BASE
+from tbd.swap_facts import scalar_swap_matches
 
 
 def memory_access_facts(
@@ -17,7 +18,14 @@ def memory_access_facts(
 ) -> Iterable[Fact]:
     """Describe supported direct memory reads and writes."""
 
+    claimed = {
+        offset
+        for match in scalar_swap_matches(evidence.instructions)
+        for offset in match.evidence
+    }
     for instruction in evidence.instructions:
+        if instruction.offset in claimed:
+            continue
         for action, address, kind in _memory_accesses(instruction):
             yield Fact(
                 f"memory.{action}",
