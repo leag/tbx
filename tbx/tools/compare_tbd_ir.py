@@ -34,6 +34,7 @@ MIGRATED_KINDS = frozenset(
         "IfGoto",
         "Print",
         "Return",
+        "Resume",
     }
 )
 
@@ -165,6 +166,11 @@ def _statement(node: Any) -> tuple[str, tuple[object, ...]]:
         operands = (node.target,)
     elif isinstance(node, ir.Return):
         operands = () if node.target is None else (node.target,)
+    elif isinstance(node, ir.Resume):
+        if node.next_:
+            operands = ("NEXT",)
+        else:
+            operands = () if node.target is None else (node.target,)
     elif isinstance(node, ir.Delay):
         operands = (_expression(node.secs),)
     else:

@@ -76,6 +76,23 @@ def test_profile_dispatches_normalize_source_kinds_and_inline_payloads():
     assert report.kind_match_files == len(stems)
 
 
+def test_resume_signatures_close_handler_kind_sequences():
+    stems = (
+        "t1_onerr", "v10_t1_onerr",
+        "t1_resumen", "v10_t1_resumen",
+        "t1_resumel", "v10_t1_resumel",
+        "t1_tronerr", "v10_t1_tronerr",
+        "t1_resumefar",
+    )
+
+    report = compare_paths([_CORPUS / f"{stem}.exe" for stem in stems])
+
+    assert report.failures == 0
+    assert report.tbx_statements == report.tbd_statements == 45
+    assert report.aligned_kinds == 45
+    assert report.kind_match_files == len(stems)
+
+
 def test_static_array_facts_close_both_dialect_tree_comparisons():
     paths = [
         _CORPUS / f"{prefix}{stem}.exe"

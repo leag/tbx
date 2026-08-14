@@ -22,6 +22,7 @@ def statement_facts(
         statement = _simple_statement(signature, instructions)
         if statement is not None:
             yield statement
+    yield from _resume_facts(instructions, facts)
     yield from _static_dim_facts(evidence, facts)
     yield from _delay_facts(instructions, facts)
 
@@ -72,6 +73,53 @@ def _simple_statement(
         signature.evidence,
         "signature",
     )
+
+
+def _resume_facts(
+    instructions: dict[int, Operation], facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    signatures = {
+        fact.subject[0]: fact
+        for fact in facts
+        if fact.kind == "signature" and fact.subject
+    }
+    for begin in signatures.values():
+        if begin.value != ("tb.statement", ("RESUME_BEGIN", 0xBC)):
+            continue
+        begin_instruction = instructions.get(begin.subject[0])
+        if begin_instruction is None:
+            continue
+        tail = instructions.get(begin_instruction.end)
+        if tail is None:
+            continue
+        value = _resume_value(tail)
+        if value is None:
+            continue
+        tail_signature = signatures.get(tail.offset)
+        if tail.kind == "tb.statement" and tail_signature is None:
+            continue
+        yield Fact(
+            "semantic.resume",
+            (begin_instruction.offset, tail.end),
+            value,
+            combine_evidence(begin.evidence, (tail.offset,)),
+            "signature",
+        )
+
+
+def _resume_value(tail: Operation) -> tuple[object, ...] | None:
+    if tail.kind == "tb.statement" and tail.operands[:2] == (
+        "RESUME_BARE", 0xBE
+    ):
+        return ()
+    if tail.kind == "tb.statement" and tail.operands[:2] == (
+        "RESUME_NEXT", 0xC0
+    ):
+        return ("NEXT",)
+    if tail.kind in {"x86.jmp", "x86.jmp_far"} and tail.operands:
+        target = tail.operands[0]
+        return (target,) if isinstance(target, int) else None
+    return None
 
 
 def _delay_facts(

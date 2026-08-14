@@ -16,6 +16,7 @@ _SOURCE_FACTS = {
     "semantic.if_goto",
     "semantic.print",
     "semantic.return",
+    "semantic.resume",
     "semantic.statement",
 }
 _CONTROL = {

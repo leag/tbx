@@ -70,7 +70,15 @@ def discover(
             for byte in range(cursor, operation.end):
                 occupied[byte] = cursor
             cursor, end_path = _follow(
-                operation, pending, queued, leaders, xrefs, start, stop, dialect
+                operation,
+                instructions,
+                pending,
+                queued,
+                leaders,
+                xrefs,
+                start,
+                stop,
+                dialect,
             )
             if end_path:
                 break
@@ -122,6 +130,7 @@ def lift(
 
 def _follow(
     operation: Operation,
+    instructions: dict[int, Operation],
     pending: list[int],
     queued: set[int],
     leaders: set[int],
@@ -144,7 +153,10 @@ def _follow(
         return next_offset, True
     if operation.kind in _JUMPS:
         _add_target(operation, "jump", pending, queued, leaders, xrefs, start, stop)
-        if dialect is not None and _wrapped_forward_gap(operation, start, stop):
+        if dialect is not None and (
+            _wrapped_forward_gap(operation, start, stop)
+            or _resume_jump_fallthrough(operation, instructions)
+        ):
             _queue(next_offset, pending, queued, leaders, start, stop)
             xrefs.add(CrossReference(operation.offset, next_offset, "orphan"))
         return next_offset, True
@@ -161,6 +173,18 @@ def _wrapped_forward_gap(operation: Operation, start: int, stop: int) -> bool:
         flat_target < start
         and isinstance(target, int)
         and operation.end < target < stop
+    )
+
+
+def _resume_jump_fallthrough(
+    operation: Operation, instructions: dict[int, Operation]
+) -> bool:
+    begin = instructions.get(operation.offset - 3)
+    return (
+        begin is not None
+        and begin.end == operation.offset
+        and begin.kind == "tb.statement"
+        and begin.operands[:2] == ("RESUME_BEGIN", 0xBC)
     )
 
 

@@ -745,6 +745,64 @@ def test_gosub_stack_unwind_pairs_recover_targeted_returns():
     assert all(len(fact.evidence) == 2 for fact in returns)
 
 
+def test_resume_facts_recover_all_complete_tail_forms_in_both_dialects():
+    for prefix in ("", "v10_"):
+        for stem in ("t1_onerr", "t1_resumen", "t1_resumel"):
+            image = (_CORPUS / f"{prefix}{stem}.exe").read_bytes()
+            expected = next(
+                _tbx_statement(node)
+                for node in decode0.decode_user_code(image)
+                if isinstance(node, tbx_ir.Resume)
+            )
+            program = decode(image)
+            actual = next(
+                (node.kind, node.operands)
+                for node in program.canonical_statements
+                if node.kind == "Resume"
+            )
+            fact = next(
+                fact for fact in program.facts if fact.kind == "semantic.resume"
+            )
+
+            assert actual == expected
+            assert len(fact.evidence) == 2
+            assert fact.subject[0] == fact.evidence[0]
+
+
+def test_targeted_resume_retains_compiled_fallthrough_source():
+    image = (_CORPUS / "t1_resumefar.exe").read_bytes()
+    exact = decode0.decode_user_code(image)
+    program = decode(image)
+
+    assert [node.kind for node in program.canonical_statements] == [
+        type(node).__name__ for node in exact
+    ]
+    expected_resume = next(
+        _tbx_statement(node) for node in exact if isinstance(node, tbx_ir.Resume)
+    )
+    actual_resume = next(
+        (node.kind, node.operands)
+        for node in program.canonical_statements
+        if node.kind == "Resume"
+    )
+    assert actual_resume == expected_resume
+    assert any(
+        xref.kind == "orphan" and xref.source == 0x8716 and xref.target == 0x871B
+        for xref in program.xrefs
+    )
+
+
+def test_incomplete_resume_prefix_does_not_invent_a_statement():
+    for image in (
+        bytes.fromhex("cd ec bc"),
+        bytes.fromhex("cd ec bc cd ec 32"),
+    ):
+        program = decode(image)
+
+        assert not any(fact.kind == "semantic.resume" for fact in program.facts)
+        assert not any(node.kind == "Resume" for node in program.canonical_statements)
+
+
 def test_incomplete_stack_unwind_does_not_invent_a_return():
     program = decode(bytes.fromhex("83 c4 02"))
 
@@ -855,7 +913,7 @@ def test_trace_region_facts_recover_repeated_runs_in_both_dialects():
         ] == ["Tron", "Troff", "Tron"]
 
 
-def test_trace_regions_remain_conservative_around_complex_or_ambiguous_flow():
+def test_trace_regions_use_complete_handler_statements_without_guessing_loops():
     for prefix in ("", "v10_"):
         loop = decode((_CORPUS / f"{prefix}t1_tronfor.exe").read_bytes())
         ambiguous = decode((_CORPUS / f"{prefix}t1_tronerr.exe").read_bytes())
@@ -869,7 +927,7 @@ def test_trace_regions_remain_conservative_around_complex_or_ambiguous_flow():
             statement.kind
             for statement in ambiguous.canonical_statements
             if statement.kind in {"Tron", "Troff"}
-        ] == ["Tron"]
+        ] == ["Tron", "Troff"]
 
 
 def test_independent_trace_support_materializes_one_toggle_statement():
@@ -1050,6 +1108,11 @@ def _tbx_statement(node):
         operands = (node.target,)
     elif isinstance(node, tbx_ir.Return):
         operands = () if node.target is None else (node.target,)
+    elif isinstance(node, tbx_ir.Resume):
+        if node.next_:
+            operands = ("NEXT",)
+        else:
+            operands = () if node.target is None else (node.target,)
     elif isinstance(node, tbx_ir.Delay):
         operands = (_tbx_expression(node.secs),)
     else:

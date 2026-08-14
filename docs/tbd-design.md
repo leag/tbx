@@ -47,6 +47,13 @@ contains its jump inside one instruction, while an ordinary GOSUB frame uses an
 adjacent `ADD SP,2` and jump pair. Both add a RETURN fact only when the complete
 template is present, and retain the jump target for final statement-index
 resolution.
+RESUME likewise remains phase evidence until its `RESUME_BEGIN` dispatch is
+immediately followed by a complete bare, NEXT, or jump tail. The pair adds one
+source fact and retains a jump target for final index resolution. A profiled
+RESUME jump also makes its physical fallthrough a discovery root: the compiler
+may retain unreachable source after the transfer, and the adjacent prefix is
+the positive evidence that distinguishes this from a generic unconditional
+jump. A truncated prefix or unrelated tail adds no RESUME fact or orphan root.
 Framed SUB definitions similarly require a procedure-entry signature and one
 procedure-return signature before the next entry. Their compiler skip jump,
 when present, supplies the declaration address. Calls targeting a recovered

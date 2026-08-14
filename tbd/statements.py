@@ -12,6 +12,7 @@ _SIMPLE_KINDS = {
     "ir.if_goto": "IfGoto",
     "ir.gosub": "Gosub",
     "ir.return": "Return",
+    "ir.resume": "Resume",
     "ir.call": "CallStmt",
     "ir.tron": "Tron",
     "ir.troff": "Troff",
@@ -121,6 +122,8 @@ def _resolve_operands(
     if kind == "Gosub":
         return (_resolve(operands[0], addresses),)
     if kind == "Return" and operands:
+        return (_resolve(operands[0], addresses),)
+    if kind == "Resume" and operands and isinstance(operands[0], int):
         return (_resolve(operands[0], addresses),)
     if kind == "OnError" and operands and operands[0] is not None:
         return (_resolve(operands[0], addresses),)
