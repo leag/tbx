@@ -190,6 +190,20 @@ def test_numeric_read_chains_align_in_both_dialects():
     assert report.failures == 0
 
 
+def test_scalar_input_file_chains_align_with_tbx():
+    stems = (
+        "t1_file",
+        "v10_t1_file",
+        "t1_file2",
+        "v10_t1_file2",
+        "t1_open2",
+    )
+    report = compare_paths([_CORPUS / f"{stem}.exe" for stem in stems])
+
+    assert report.aligned_by_kind["InputFile"] == report.tbx_kinds["InputFile"] == 7
+    assert report.failures == 0
+
+
 def test_complete_field_descriptors_are_exact_in_both_dialects():
     paths = [
         _CORPUS / f"{prefix}t1_field.exe"

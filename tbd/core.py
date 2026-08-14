@@ -11,6 +11,7 @@ from tbd.control_facts import CONTROL_FACT_PASSES
 from tbd.fact_ir import build_operations
 from tbd.facts import EVIDENCE_PASSES, Evidence, analyze as analyze_facts
 from tbd.io_facts import IO_FACT_PASSES
+from tbd.input_file_facts import INPUT_FILE_FACT_PASSES
 from tbd.ir import Diagnostic, Program
 from tbd.locate_facts import LOCATE_FACT_PASSES
 from tbd.pool_facts import POOL_FACT_PASSES
@@ -53,6 +54,7 @@ def decode(
             + SYMBOLIC_FACT_PASSES
             + ASSIGNMENT_FACT_PASSES
             + IO_FACT_PASSES
+            + INPUT_FILE_FACT_PASSES
             + LOCATE_FACT_PASSES
             + READ_FACT_PASSES
             + RUNTIME_FACT_PASSES

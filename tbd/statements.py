@@ -23,6 +23,7 @@ _SIMPLE_KINDS = {
     "ir.swap": "Swap",
     "ir.locate": "Locate",
     "ir.read": "Read",
+    "ir.input_file": "InputFile",
     "ir.gosub": "Gosub",
     "ir.return": "Return",
     "ir.resume": "Resume",

@@ -394,6 +394,11 @@ before the anchored chain becomes one READ fact. A preceding DATA_STRING item
 keeps a mixed chain wholly unresolved rather than exposing a numeric suffix;
 string READ remains uncalibrated after its fixture failed whole-image oracle
 verification.
+Scalar INPUT # uses the analogous numeric and string target items, preceded by
+one uniquely resolved file-number store in the compiler cell at 0x60. Numeric
+items require the final commit; string-only chains require a following boundary,
+and any incomplete next phase suppresses the whole statement. Integer scratch
+conversion and computed-array targets remain separate mechanisms.
 Device I/O likewise requires its whole compiler scaffold. Constant OUT is
 recovered only when two immediate AX loads are separated by the exact
 `mov bx,ax` staging move and followed contiguously by `mov dx,bx; out dx,al` in
