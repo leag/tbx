@@ -89,7 +89,7 @@ def _decode_tb_dispatch(
 
 
 def _decode_near_branch(
-    exe: bytes, offset: int, stop: int, _start: int, _dialect: str | None
+    exe: bytes, offset: int, stop: int, code_start: int, _dialect: str | None
 ) -> Operation | None:
     byte = exe[offset]
     if 0x70 <= byte <= 0x7F and offset + 1 < stop:
@@ -99,7 +99,8 @@ def _decode_near_branch(
         target = offset + 2 + _signed8(exe[offset + 1])
         return _op(exe, offset, 2, "x86.jmp", (target,))
     if byte in (0xE8, 0xE9) and offset + 2 < stop:
-        target = offset + 3 + struct.unpack_from("<h", exe, offset + 1)[0]
+        relative = struct.unpack_from("<h", exe, offset + 1)[0]
+        target = code_start + ((offset + 3 + relative - code_start) & 0xFFFF)
         kind = "x86.call" if byte == 0xE8 else "x86.jmp"
         return _op(exe, offset, 3, kind, (target,))
     if 0xE0 <= byte <= 0xE3 and offset + 1 < stop:

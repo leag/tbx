@@ -32,6 +32,12 @@ Instruction discovery runs once. Semantic passes may run repeatedly, but they
 read the same evidence and only add facts. Operations and statements are views
 built from the resulting fact set; they are not the storage for analysis state.
 
+Near CALL/JMP displacements are normalized in the compiler's 16-bit code
+segment. When a wrapped forward jump skips physically present compiled source,
+discovery records the fallthrough as an `orphan` cross-reference and analyzes
+it as an additional root. Raw inputs without a compiler profile retain ordinary
+recursive reachability and do not acquire speculative orphan roots.
+
 ## Required design choices
 
 ### 1. Evidence is immutable
@@ -241,6 +247,9 @@ canonicalization preserves that order instead of treating string `+` as numeric
 commutative addition.
 Fully resolved stores and updates produce anchored source-shaped assignment
 facts; unresolved memory identities deliberately produce no semantic guess.
+Assignment resolution caches repeated address and expression identities inside
+one pure pass, so large compiler-generated runs remain linear without changing
+the immutable fact inputs or emitted provenance.
 Complete runtime PRINT chains likewise produce anchored semantic facts, while
 an item without its matching flush remains only runtime and expression evidence.
 An unresolved earlier item prevents a suffix of the same chain from becoming a

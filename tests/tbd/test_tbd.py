@@ -45,6 +45,27 @@ def test_recursive_discovery_skips_unreachable_bytes():
     assert program.xrefs[0].target == 4
 
 
+def test_wrapped_near_branches_discover_compiled_orphan_source_regions():
+    expected = {
+        "": (0x12B31, 0x12B25, 0x8709),
+        "v10_": (0x114E1, 0x114D5, 0x70B9),
+    }
+    for prefix, (call_target, jump_target, orphan) in expected.items():
+        program = decode((_CORPUS / f"{prefix}t1_bigjmp.exe").read_bytes())
+
+        assert program.instructions[1].operands == (call_target,)
+        assert program.instructions[2].operands == (jump_target,)
+        assert any(
+            xref.kind == "orphan" and xref.target == orphan
+            for xref in program.xrefs
+        )
+        assert len(program.canonical_statements) == 2805
+        assert sum(
+            statement.kind == "Assign"
+            for statement in program.canonical_statements
+        ) == 2800
+
+
 def test_fact_engine_preserves_instruction_signature_and_xref_evidence():
     program = decode((_CORPUS / "t1_delay.exe").read_bytes())
 

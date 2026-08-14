@@ -105,6 +105,21 @@ def test_long_fp_facts_close_direct_long_tree_comparisons():
     assert report.mismatches == ()
 
 
+def test_wrapped_code_segment_branches_recover_large_source_regions():
+    paths = [
+        _CORPUS / f"{prefix}t1_bigjmp.exe"
+        for prefix in ("", "v10_")
+    ]
+
+    report = compare_paths(paths)
+
+    assert report.failures == 0
+    assert report.tbx_statements == 5616
+    assert report.tbd_statements == report.aligned_kinds == 5610
+    assert report.aligned_by_kind["Assign"] == 5600
+    assert report.aligned_by_kind["Print"] == 6
+
+
 def test_comparison_cli_prints_coverage(capsys):
     result = main([str(_CORPUS / "t1_delay.exe"), "--examples", "0"])
 

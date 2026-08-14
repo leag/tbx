@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import heapq
+import struct
 from collections.abc import Callable
 
 from tbd.assignments import lift_assignments
@@ -68,7 +69,7 @@ def discover(
             for byte in range(cursor, operation.end):
                 occupied[byte] = cursor
             cursor, end_path = _follow(
-                operation, pending, queued, leaders, xrefs, start, stop
+                operation, pending, queued, leaders, xrefs, start, stop, dialect
             )
             if end_path:
                 break
@@ -126,6 +127,7 @@ def _follow(
     xrefs: set[CrossReference],
     start: int,
     stop: int,
+    dialect: str | None,
 ) -> tuple[int, bool]:
     next_offset = operation.end
     if operation.kind in _CALLS:
@@ -138,8 +140,24 @@ def _follow(
         return next_offset, True
     if operation.kind in _JUMPS:
         _add_target(operation, "jump", pending, queued, leaders, xrefs, start, stop)
+        if dialect is not None and _wrapped_forward_gap(operation, start, stop):
+            _queue(next_offset, pending, queued, leaders, start, stop)
+            xrefs.add(CrossReference(operation.offset, next_offset, "orphan"))
         return next_offset, True
     return next_offset, operation.kind in _TERMINALS
+
+
+def _wrapped_forward_gap(operation: Operation, start: int, stop: int) -> bool:
+    raw = bytes.fromhex(operation.raw)
+    if operation.kind != "x86.jmp" or len(raw) != 3 or raw[0] != 0xE9:
+        return False
+    flat_target = operation.end + struct.unpack_from("<h", raw, 1)[0]
+    target = operation.operands[0] if operation.operands else None
+    return (
+        flat_target < start
+        and isinstance(target, int)
+        and operation.end < target < stop
+    )
 
 
 def _add_target(

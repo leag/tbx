@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from tbd.facts import Evidence, NamedPass
-from tbd.ir import Fact
+from tbd.ir import Fact, Operation
 from tbd.semantic import (
     Resolved,
     combine_evidence,
@@ -20,26 +20,44 @@ def assignment_facts(
 ) -> Iterable[Fact]:
     """Resolve complete stores and updates into source-shaped assignments."""
 
+    instructions = {
+        instruction.offset: instruction for instruction in evidence.instructions
+    }
+    targets: dict[object, Resolved | None] = {}
+    values: dict[tuple[object, ...], Resolved | None] = {}
     for effect in facts:
         if effect.kind not in {"machine.store", "machine.update"}:
             continue
-        assignment = _assignment(effect, evidence, facts)
+        assignment = _assignment(
+            effect, facts, instructions, targets, values
+        )
         if assignment is not None:
             yield assignment
 
 
 def _assignment(
-    effect: Fact, evidence: Evidence, facts: frozenset[Fact]
+    effect: Fact,
+    facts: frozenset[Fact],
+    instructions: dict[int, Operation],
+    targets: dict[object, Resolved | None],
+    values: dict[tuple[object, ...], Resolved | None],
 ) -> Fact | None:
     address = effect.subject[0] if effect.subject else None
-    target = resolve_slot(address, facts) or resolve_array_element(address, facts)
+    if address not in targets:
+        targets[address] = resolve_slot(address, facts) or resolve_array_element(
+            address, facts
+        )
+    target = targets[address]
     if target is None:
         return None
-    value = _effect_value(effect, target.value, facts)
+    value_key = effect.kind, effect.value, target.value
+    if value_key not in values:
+        values[value_key] = _effect_value(effect, target.value, facts)
+    value = values[value_key]
     if value is None:
         return None
     support = combine_evidence(effect.evidence, target.evidence, value.evidence)
-    end = _effect_end(effect, evidence)
+    end = _effect_end(effect, instructions)
     if end is None:
         return None
     return Fact(
@@ -51,8 +69,7 @@ def _assignment(
     )
 
 
-def _effect_end(effect: Fact, evidence: Evidence) -> int | None:
-    instructions = {instruction.offset: instruction for instruction in evidence.instructions}
+def _effect_end(effect: Fact, instructions: dict[int, Operation]) -> int | None:
     last = instructions.get(effect.evidence[-1]) if effect.evidence else None
     return last.end if last is not None else None
 
