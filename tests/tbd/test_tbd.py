@@ -3,7 +3,7 @@ from pathlib import Path
 
 from tbx import decode0, ir as tbx_ir
 from tbd import cli, decode
-from tbd.canonical import canonicalize
+from tbd.canonical import canonicalize, normalize_expression
 from tbd.facts import Evidence, analyze as analyze_facts
 from tbd.ir import Fact, Operation, Slot, Statement
 from tbd.pool import infer_layout, resolve as resolve_pool
@@ -328,6 +328,29 @@ def test_wide_fp_direct_array_reads_keep_array_identity():
         fact.kind == "constant" and fact.subject == ("memory", 0x190)
         for fact in program.facts
     )
+
+
+def test_long_fp_facts_recover_literals_arithmetic_and_arrays():
+    for stem in ("zz_vm_ladd", "zz_vm_lsub", "zz_vm_lmul", "zz_vm_lmix"):
+        image = (_CORPUS / f"{stem}.exe").read_bytes()
+        exact = [_tbx_statement(node) for node in decode0.decode_user_code(image)]
+        program = decode(image)
+        migrated = [
+            (node.kind, node.operands) for node in program.canonical_statements
+        ]
+
+        assert migrated == exact
+        assert any(
+            fact.kind == "memory.read" and fact.value == ("long",)
+            for fact in program.facts
+        )
+
+    mixed = decode((_CORPUS / "zz_vm_lmix.exe").read_bytes())
+    array = next(fact for fact in mixed.facts if fact.kind == "layout.array")
+    prints = [fact for fact in mixed.facts if fact.kind == "semantic.print"]
+    assert array.value[3] == "long"
+    assert len(prints) == 1
+    assert len(prints[0].value[1]) == 3
 
 
 def test_constant_pool_candidates_follow_evidenced_slot_extent():
@@ -770,10 +793,12 @@ def _tbx_expression(node):
     if isinstance(node, tbx_ir.StrLit):
         return "string", node.value
     if isinstance(node, tbx_ir.BinOp):
-        return (
-            "binary",
-            node.op,
-            _tbx_expression(node.lhs),
-            _tbx_expression(node.rhs),
+        return normalize_expression(
+            (
+                "binary",
+                node.op,
+                _tbx_expression(node.lhs),
+                _tbx_expression(node.rhs),
+            )
         )
     return "unknown", type(node).__name__

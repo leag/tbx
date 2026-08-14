@@ -39,6 +39,9 @@ def runtime_facts(
     expressions = _expression_index(facts, evidence.instructions)
     items = _print_items(evidence.instructions, expressions, facts)
     by_end = {item.end: item for item in items}
+    instructions_by_end = {
+        instruction.end: instruction for instruction in evidence.instructions
+    }
     separators = {
         instruction.end: instruction
         for instruction in evidence.instructions
@@ -49,7 +52,7 @@ def runtime_facts(
         if mode is None:
             continue
         chain = _item_chain(by_end, separators, instruction.offset, mode)
-        if not chain:
+        if not chain or _has_preceding_item(instructions_by_end, chain.start, mode):
             continue
         values = tuple(item.value for item in chain.items)
         support = combine_evidence(
@@ -162,6 +165,14 @@ def _item_chain(
     if not reverse:
         return None
     return _Chain(start, tuple(reversed(reverse)), tuple(support))
+
+
+def _has_preceding_item(
+    instructions_by_end: dict[int, Operation], start: int, mode: str
+) -> bool:
+    previous = instructions_by_end.get(start)
+    vector = _runtime_vector(previous) if previous is not None else None
+    return _NUMERIC_ITEMS.get(vector, _STRING_ITEMS.get(vector)) == mode
 
 
 def _is_string_setup(setup: Operation, read: Operation) -> bool:

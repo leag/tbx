@@ -6,6 +6,7 @@ import struct
 from dataclasses import dataclass
 
 from tbd.ir import Operation
+from tbd.semantic import orient_memory_fold
 
 
 @dataclass
@@ -107,7 +108,8 @@ def _apply_fp(
     value = stack.pop()
     if kind == "binary":
         operator, left = operand
-        stack.append(_Value(("binary", operator, left, value.expression), value.origins + [node]))
+        expression = orient_memory_fold(operator, left, value.expression)
+        stack.append(_Value(expression, value.origins + [node]))
         return 1
     if kind == "store":
         result.append(_merge(value.origins + [node], "machine.store", (operand, value.expression)))

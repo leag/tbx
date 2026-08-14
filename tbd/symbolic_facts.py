@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from tbd.facts import Evidence, NamedPass
 from tbd.ir import Fact, Operation
 from tbd.profile import FP_ARITHMETIC_TYPES, FP_TRANSFER_TYPES
+from tbd.semantic import orient_memory_fold
 
 
 @dataclass(frozen=True)
@@ -191,7 +192,7 @@ def _apply_fp(
     evidence = _evidence(value.evidence, (instruction.offset,))
     if kind == "binary":
         operator, left = operand
-        expression = "binary", operator, left, value.expression
+        expression = orient_memory_fold(operator, left, value.expression)
         stack.append(_Value(expression, evidence))
         return
     if kind == "store":

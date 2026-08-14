@@ -6,7 +6,7 @@ from tbd.ir import Slot, Statement
 
 _COMMUTATIVE = {"+", "*"}
 _RESERVED = {"AS", "AT", "DO", "FN", "GO", "IF", "LN", "ON", "OR", "PI", "TO"}
-_SUFFIXES = {"integer": "%", "string": "$", "double": "#"}
+_SUFFIXES = {"integer": "%", "long": "&", "string": "$", "double": "#"}
 
 
 def canonicalize(
@@ -22,31 +22,33 @@ def canonicalize(
 def _normalize_statement(statement: Statement) -> Statement:
     operands = statement.operands
     if statement.kind == "Assign":
-        operands = (_normalize_expression(operands[0]), _normalize_expression(operands[1]))
+        operands = (normalize_expression(operands[0]), normalize_expression(operands[1]))
     elif statement.kind == "Print":
         mode, items, newline = operands
-        operands = mode, tuple(_normalize_expression(item) for item in items), newline
+        operands = mode, tuple(normalize_expression(item) for item in items), newline
     elif statement.kind == "IfGoto":
         condition, left, right, target = operands
         operands = (
             condition,
-            _normalize_expression(left),
-            _normalize_expression(right),
+            normalize_expression(left),
+            normalize_expression(right),
             target,
         )
     elif statement.kind == "Delay":
-        operands = tuple(_normalize_expression(item) for item in operands)
+        operands = tuple(normalize_expression(item) for item in operands)
     return Statement(statement.index, statement.address, statement.kind, operands)
 
 
-def _normalize_expression(value: object) -> object:
+def normalize_expression(value: object) -> object:
+    """Return the comparison-stable form of one source expression."""
+
     if not isinstance(value, tuple) or not value:
         return value
     if value[0] == "slot":
         return value
     if value[0] == "binary" and len(value) == 4:
-        left = _normalize_expression(value[2])
-        right = _normalize_expression(value[3])
+        left = normalize_expression(value[2])
+        right = normalize_expression(value[3])
         commutative = value[1] in _COMMUTATIVE and not (
             value[1] == "+"
             and (_is_string_expression(left) or _is_string_expression(right))
@@ -54,7 +56,7 @@ def _normalize_expression(value: object) -> object:
         if commutative and _expression_key(right) < _expression_key(left):
             left, right = right, left
         return "binary", value[1], left, right
-    return tuple(_normalize_expression(item) for item in value)
+    return tuple(normalize_expression(item) for item in value)
 
 
 def _is_string_expression(value: object) -> bool:

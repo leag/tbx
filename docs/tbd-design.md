@@ -225,10 +225,12 @@ Direct string-stack push/store pairs now produce string memory-role and store
 facts as well; incomplete or interrupted pairs remain unresolved. Turbo Basic
 1.0 dispatcher subs and service vectors are normalized by a compiler profile
 before any fact pass matches them.
-The same profile names direct emulated-FP memory widths. Wide loads, stores,
-folds, and comparisons therefore retain their 64-bit memory role, and finite
-pooled doubles can support assignments and expressions without replacing the
-underlying instruction evidence.
+The same profile names direct emulated-FP memory widths. Long-integer and wide
+loads, stores, folds, and comparisons therefore retain their 32- or 64-bit
+memory role, and finite pooled values can support assignments and expressions
+without replacing the underlying instruction evidence. Direct folds preserve
+the compiler's memory/stack source ordering before final equivalence
+normalization.
 Validated static-array descriptors now produce anchored layout facts without
 turning array storage into constants. Those facts recover codeless static
 `DIM` statements in source order, including explicit lower bounds, and resolve
@@ -241,6 +243,9 @@ Fully resolved stores and updates produce anchored source-shaped assignment
 facts; unresolved memory identities deliberately produce no semantic guess.
 Complete runtime PRINT chains likewise produce anchored semantic facts, while
 an item without its matching flush remains only runtime and expression evidence.
+An unresolved earlier item prevents a suffix of the same chain from becoming a
+statement in an early fixed-point round; later facts can therefore complete the
+whole PRINT without leaving a stale partial statement behind.
 PRINT item chains retain intervening mode-specific separator calls and their
 provenance rather than dropping the items before a comma-zone advance.
 `Program.fact_operations` now materializes migrated assignment and PRINT facts

@@ -7,6 +7,8 @@ from typing import Any
 
 from tbd.ir import Fact
 
+_PRECEDENCE = {"+": 5, "-": 5, "*": 8, "/": 8}
+
 
 @dataclass(frozen=True)
 class Resolved:
@@ -82,6 +84,23 @@ def unique_fact(
 
 def combine_evidence(*groups: tuple[int, ...]) -> tuple[int, ...]:
     return tuple(sorted({address for group in groups for address in group}))
+
+
+def orient_memory_fold(operator: str, memory: object, top: object) -> object:
+    """Recover Turbo Basic's source ordering for a direct FP memory fold."""
+
+    if not (
+        isinstance(top, tuple)
+        and len(top) == 4
+        and top[0] == "binary"
+        and top[1] in _PRECEDENCE
+    ):
+        return "binary", operator, memory, top
+    if _PRECEDENCE[top[1]] < _PRECEDENCE[operator]:
+        return "binary", operator, memory, top
+    if operator in {"+", "*"}:
+        return "binary", operator, top, memory
+    return "binary", operator, memory, top
 
 
 def _resolve_binary(value: tuple[Any, ...], facts: frozenset[Fact]) -> Resolved | None:

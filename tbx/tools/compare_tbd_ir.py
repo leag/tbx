@@ -21,6 +21,7 @@ from typing import Any
 
 from tbx import decode0, ir
 from tbd import decode
+from tbd.canonical import normalize_expression
 
 MIGRATED_KINDS = frozenset(
     {"Assign", "Beep", "Delay", "Dim", "End", "IfGoto", "Print"}
@@ -186,7 +187,9 @@ def _expression(node: Any) -> object:
     if isinstance(node, ir.StrLit):
         return "string", node.value
     if isinstance(node, ir.BinOp):
-        return "binary", node.op, _expression(node.lhs), _expression(node.rhs)
+        return normalize_expression(
+            ("binary", node.op, _expression(node.lhs), _expression(node.rhs))
+        )
     return "unsupported-expression", type(node).__name__, repr(node)
 
 

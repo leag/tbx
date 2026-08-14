@@ -91,6 +91,20 @@ def test_wide_fp_facts_improve_both_dialect_assignment_alignment():
     assert report.aligned_by_kind["End"] == 2
 
 
+def test_long_fp_facts_close_direct_long_tree_comparisons():
+    paths = [
+        _CORPUS / f"{stem}.exe"
+        for stem in ("zz_vm_ladd", "zz_vm_lsub", "zz_vm_lmul", "zz_vm_lmix")
+    ]
+
+    report = compare_paths(paths)
+
+    assert report.tbx_statements == report.tbd_statements == 22
+    assert report.aligned_kinds == 22
+    assert report.comparable_files == report.exact_files == 4
+    assert report.mismatches == ()
+
+
 def test_comparison_cli_prints_coverage(capsys):
     result = main([str(_CORPUS / "t1_delay.exe"), "--examples", "0"])
 

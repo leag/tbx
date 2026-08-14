@@ -184,7 +184,7 @@ def _literal_score(
     for address, kind in references:
         if kind == "string" and address in layout.descriptors:
             score += 4 if layout.string_base is not None else 2
-        elif kind in {"integer", "float", "double"} and address >= layout.pool_base:
+        elif kind in {"integer", "long", "float", "double"} and address >= layout.pool_base:
             score += 1
     return score
 
@@ -209,7 +209,7 @@ def _supports_observations(
             address == layout.pool_base - 4 or address in layout.descriptors
         ):
             continue
-        if kind in {"integer", "float", "double"} and address >= layout.pool_base:
+        if kind in {"integer", "long", "float", "double"} and address >= layout.pool_base:
             continue
         return False
     return True
@@ -351,6 +351,8 @@ def decode_literal(
     offset = layout.ds + address
     if kind == "integer" and offset + 2 <= len(image):
         return "const", struct.unpack_from("<H", image, offset)[0]
+    if kind == "long" and offset + 4 <= len(image):
+        return "const", struct.unpack_from("<l", image, offset)[0]
     if kind == "float" and offset + 4 <= len(image):
         number = struct.unpack_from("<f", image, offset)[0]
         return ("const", number) if math.isfinite(number) else None
