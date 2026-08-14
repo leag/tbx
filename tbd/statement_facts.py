@@ -6,9 +6,8 @@ from collections.abc import Iterable
 
 from tbd.facts import Evidence, NamedPass
 from tbd.ir import Fact, Operation
+from tbd.profile import EC_SOURCE_STATEMENTS
 from tbd.semantic import combine_evidence, resolve_expression
-
-_DELAY_PARTS = {"DELAY_INIT", "DELAY_POLL"}
 
 
 def statement_facts(
@@ -60,12 +59,16 @@ def _simple_statement(
     instruction = instructions.get(signature.subject[0])
     if kind != "tb.statement" or instruction is None:
         return None
-    if not operands or operands[0] in _DELAY_PARTS:
+    if len(operands) < 2 or not isinstance(operands[1], int):
         return None
+    source = EC_SOURCE_STATEMENTS.get(operands[1])
+    if source is None:
+        return None
+    name, fixed_operands = source
     return Fact(
         "semantic.statement",
         (instruction.offset, instruction.end),
-        operands,
+        (name, operands[1], *fixed_operands, *operands[2:]),
         signature.evidence,
         "signature",
     )

@@ -31,7 +31,7 @@ def test_unknown_input_becomes_ir_instead_of_an_exception():
     assert program.format == "raw"
     assert program.instructions[0].kind == "x86.int3"
     assert program.instructions[1].kind == "tb.statement"
-    assert program.instructions[1].operands == ("SUB_FE", 0xFE)
+    assert program.instructions[1].operands == ("WRITE_FILE_SEPARATOR", 0xFE)
     assert program.instructions[2].kind == "opaque.byte"
     assert [operation.kind for operation in program.operations] == [
         "unknown.region", "tb.statement", "unknown.region"
@@ -125,13 +125,13 @@ def test_fact_engine_is_monotonic_and_pass_order_independent():
 
 
 def test_repeated_passes_reveal_arguments_until_stable():
-    binary = bytes.fromhex("b8 01 00 bb 02 00 cd ec 22 ea 00 00 00 00")
+    binary = bytes.fromhex("b8 01 00 bb 02 00 cd ec 22 00 ea 00 00 00 00")
     program = decode(binary)
 
     statement = program.operations[0]
     assert statement.kind == "tb.statement"
     assert statement.operands == (
-        "COLOR", 0x22, ("register", "bx", 2), ("register", "ax", 1)
+        "COLOR", 0x22, 0, ("register", "bx", 2), ("register", "ax", 1)
     )
     changed_rounds = {
         report.round
@@ -767,6 +767,70 @@ def test_profile_trace_hooks_consume_the_embedded_line_word():
         assert truncated.size == 2
 
 
+def test_profile_dispatches_consume_complete_inline_payloads():
+    cases = {
+        "1.1": (bytes.fromhex("cd ec 12 08"), 0x12),
+        "1.0": (bytes.fromhex("cd ec 12 08"), 0x12),
+    }
+    for dialect, (image, canonical_sub) in cases.items():
+        instruction = decode_instruction(image, 0, len(image), 0, dialect)
+        truncated = decode_instruction(image, 0, len(image) - 1, 0, dialect)
+
+        assert (instruction.kind, instruction.size, instruction.operands) == (
+            "tb.statement", 4, ("CIRCLE", canonical_sub, 8)
+        )
+        assert (truncated.kind, truncated.size, truncated.confidence) == (
+            "tb.dispatch_truncated", 3, "structural"
+        )
+
+
+def test_profile_target_dispatches_require_the_complete_signature():
+    cases = {
+        "1.1": bytes.fromhex("cd ec 70 34 12 00 00"),
+        "1.0": bytes.fromhex("cd ec 6e 34 12 00 00"),
+    }
+    for dialect, image in cases.items():
+        instruction = decode_instruction(image, 0, len(image), 0x8000, dialect)
+        truncated = decode_instruction(image, 0, len(image) - 1, 0x8000, dialect)
+
+        assert (instruction.kind, instruction.size, instruction.operands) == (
+            "tb.statement", 7, ("ON_ERROR", 0x70, 0x9234)
+        )
+        assert (truncated.kind, truncated.size, truncated.confidence) == (
+            "tb.dispatch_truncated", 3, "structural"
+        )
+
+
+def test_profile_target_tables_are_one_complete_dispatch_instruction():
+    cases = {
+        "1.1": bytes.fromhex("cd ec 74 02 00 10 00 00 00 20 00 00 00"),
+        "1.0": bytes.fromhex("cd ec 72 02 00 10 00 00 00 20 00 00 00"),
+    }
+    for dialect, image in cases.items():
+        instruction = decode_instruction(image, 0, len(image), 0x8000, dialect)
+        truncated = decode_instruction(image, 0, len(image) - 1, 0x8000, dialect)
+
+        assert (instruction.kind, instruction.size, instruction.operands) == (
+            "tb.statement", 13, ("ON_GOTO", 0x74, 0x8010, 0x8020)
+        )
+        assert (truncated.kind, truncated.size, truncated.confidence) == (
+            "tb.dispatch_truncated", 3, "structural"
+        )
+
+
+def test_runtime_statement_phases_remain_signature_evidence_only():
+    program = decode(bytes.fromhex("cd ec 2c cd ec 2e cd ec 9a"))
+
+    signatures = {
+        fact.value[1][0]
+        for fact in program.facts
+        if fact.kind == "signature" and fact.value[0] == "tb.statement"
+    }
+    assert {"DIM_BEGIN", "DIM_END", "READ_NUMBER"} <= signatures
+    assert not any(fact.kind == "semantic.statement" for fact in program.facts)
+    assert program.canonical_statements == ()
+
+
 def test_trace_region_facts_recover_repeated_runs_in_both_dialects():
     expected = {
         "": (0x8793, 0x87A1, 0x87BD),
@@ -801,10 +865,11 @@ def test_trace_regions_remain_conservative_around_complex_or_ambiguous_flow():
             for statement in loop.canonical_statements
             if statement.kind in {"Tron", "Troff"}
         ] == ["Tron"]
-        assert not any(
-            fact.kind in {"semantic.tron", "semantic.troff"}
-            for fact in ambiguous.facts
-        )
+        assert [
+            statement.kind
+            for statement in ambiguous.canonical_statements
+            if statement.kind in {"Tron", "Troff"}
+        ] == ["Tron"]
 
 
 def test_independent_trace_support_materializes_one_toggle_statement():

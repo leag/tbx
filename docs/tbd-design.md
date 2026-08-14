@@ -255,6 +255,15 @@ Direct string-stack push/store pairs now produce string memory-role and store
 facts as well; incomplete or interrupted pairs remain unresolved. Turbo Basic
 1.0 dispatcher subs and service vectors are normalized by a compiler profile
 before any fact pass matches them.
+The profile separately names complete single-dispatch source statements and
+runtime phases. A complete dispatch may add a source-statement fact; phases
+such as DIM, READ, DATA, and WRITE components remain signature evidence until
+a pass proves their whole source construct. Equivalent compiler spellings,
+including bare and static variants, normalize to the same source kind rather
+than becoming synthetic `SubXX` statements. Inline option bytes, relative
+targets, and dynamic target tables belong to the dispatch instruction itself;
+discovery consumes the entire evidenced signature, while a truncated payload
+stays structural and cannot add a semantic statement.
 The same profile names direct emulated-FP memory widths. Long-integer and wide
 loads, stores, folds, and comparisons therefore retain their 32- or 64-bit
 memory role, and finite pooled values can support assignments and expressions

@@ -122,6 +122,12 @@ def _resolve_operands(
         return (_resolve(operands[0], addresses),)
     if kind == "Return" and operands:
         return (_resolve(operands[0], addresses),)
+    if kind == "OnError" and operands and operands[0] is not None:
+        return (_resolve(operands[0], addresses),)
+    if kind == "OnTrap" and len(operands) == 2:
+        return operands[0], _resolve(operands[1], addresses)
+    if kind in {"OnGoto", "OnGosub"}:
+        return tuple(_resolve(target, addresses) for target in operands)
     return operands
 
 

@@ -56,6 +56,26 @@ def test_signature_complete_beep_is_an_exact_migrated_statement():
     assert report.mismatches == ()
 
 
+def test_profile_dispatches_normalize_source_kinds_and_inline_payloads():
+    stems = (
+        "t1_close",
+        "t1_erasestatic", "v10_t1_erasestatic",
+        "t1_palettereset", "v10_t1_palettereset",
+        "t1_lineinf", "v10_t1_lineinf",
+        "t1_line", "v10_t1_line",
+        "t1_circle", "v10_t1_circle",
+        "t1_errorn", "v10_t1_errorn",
+        "t1_ongoto", "v10_t1_ongoto",
+    )
+
+    report = compare_paths([_CORPUS / f"{stem}.exe" for stem in stems])
+
+    assert report.failures == 0
+    assert report.tbx_statements == report.tbd_statements == 56
+    assert report.aligned_kinds == 56
+    assert report.kind_match_files == len(stems)
+
+
 def test_static_array_facts_close_both_dialect_tree_comparisons():
     paths = [
         _CORPUS / f"{prefix}{stem}.exe"

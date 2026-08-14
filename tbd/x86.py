@@ -13,6 +13,9 @@ from typing import Any, Callable
 from tbd.ir import Operation
 from tbd.profile import (
     EC_DISPATCH_NAMES,
+    EC_INLINE_PAYLOAD_FORMATS,
+    EC_RELATIVE_TARGET_SUBS,
+    EC_TARGET_TABLE_SUBS,
     PROCEDURE_ENTER,
     PROCEDURE_RETURN,
     PROCEDURE_RETURN_POP,
@@ -75,7 +78,7 @@ def _decode_interrupt(
         return None
     vector = exe[offset + 1]
     if vector in (0xEC, 0xED, 0xEE) and offset + 2 < stop:
-        return _decode_tb_dispatch(exe, offset, vector, dialect)
+        return _decode_tb_dispatch(exe, offset, stop, code_start, vector, dialect)
     if 0x34 <= vector <= 0x3D and offset + 2 < stop:
         size = min(stop - offset, 2 + _modrm_size(exe, offset + 2, stop))
         return _op(exe, offset, size, "tb.fp", (vector, exe[offset + 2]), "signature")
@@ -119,15 +122,65 @@ def _decode_targeted_return(
 
 
 def _decode_tb_dispatch(
-    exe: bytes, offset: int, vector: int, dialect: str | None
+    exe: bytes,
+    offset: int,
+    stop: int,
+    code_start: int,
+    vector: int,
+    dialect: str | None,
 ) -> Operation:
     sub = _canonical_sub(vector, exe[offset + 2], dialect)
     if vector == 0xEC:
         name = EC_DISPATCH_NAMES.get(sub, f"SUB_{sub:02X}")
         kind = "tb.epilogue" if sub == 0xE8 else "tb.statement"
+        if sub in EC_RELATIVE_TARGET_SUBS:
+            if offset + 7 > stop:
+                return _op(
+                    exe,
+                    offset,
+                    3,
+                    "tb.dispatch_truncated",
+                    (name, sub, 7),
+                    "structural",
+                )
+            relative = struct.unpack_from("<i", exe, offset + 3)[0]
+            target = None if sub == 0x70 and relative == -1 else code_start + relative
+            return _op(exe, offset, 7, kind, (name, sub, target), "signature")
+        if sub in EC_TARGET_TABLE_SUBS:
+            if offset + 5 > stop:
+                return _truncated_dispatch(exe, offset, name, sub, 5)
+            count = _word(exe, offset + 3)
+            size = 5 + count * 4
+            if offset + size > stop:
+                return _truncated_dispatch(exe, offset, name, sub, size)
+            targets = tuple(
+                code_start + struct.unpack_from("<I", exe, offset + 5 + index * 4)[0]
+                for index in range(count)
+            )
+            return _op(exe, offset, size, kind, (name, sub, *targets), "signature")
+        if payload_format := EC_INLINE_PAYLOAD_FORMATS.get(sub):
+            payload_size = struct.calcsize(payload_format)
+            size = 3 + payload_size
+            if offset + size > stop:
+                return _truncated_dispatch(exe, offset, name, sub, size)
+            payload = struct.unpack_from(payload_format, exe, offset + 3)
+            return _op(exe, offset, size, kind, (name, sub, *payload), "signature")
         return _op(exe, offset, 3, kind, (name, sub), "signature")
     family = "numeric" if vector == 0xED else "string"
     return _op(exe, offset, 3, "tb.function", (family, sub), "signature")
+
+
+def _truncated_dispatch(
+    exe: bytes, offset: int, name: str, sub: int, expected_size: int
+) -> Operation:
+    return _op(
+        exe,
+        offset,
+        3,
+        "tb.dispatch_truncated",
+        (name, sub, expected_size),
+        "structural",
+    )
 
 
 def _decode_near_branch(
