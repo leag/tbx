@@ -19,6 +19,7 @@ _OPERATION_KINDS = {
     "semantic.locate": "ir.locate",
     "semantic.read": "ir.read",
     "semantic.input_file": "ir.input_file",
+    "semantic.close": "ir.close",
     "semantic.print": "ir.print",
     "semantic.if_goto": "ir.if_goto",
     "semantic.inline": "ir.inline",

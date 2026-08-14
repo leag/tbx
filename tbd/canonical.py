@@ -52,6 +52,10 @@ def _normalize_statement(statement: Statement) -> Statement:
             operands[0],
             tuple(normalize_expression(item) for item in operands[1]),
         )
+    elif statement.kind == "Close":
+        operands = (
+            None if operands[0] is None else normalize_expression(operands[0]),
+        )
     elif statement.kind in {"Print", "Lprint"}:
         mode, items, newline = operands
         operands = mode, tuple(normalize_expression(item) for item in items), newline

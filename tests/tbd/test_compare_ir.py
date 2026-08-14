@@ -204,6 +204,23 @@ def test_scalar_input_file_chains_align_with_tbx():
     assert report.failures == 0
 
 
+def test_close_channels_are_exact_for_all_calibrated_forms():
+    paths = [
+        _CORPUS / f"{stem}.exe"
+        for stem in (
+            "t1_close",
+            "t1_file",
+            "v10_t1_file",
+            "t1_closevar",
+            "v10_t1_closevar",
+        )
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["Close"] == report.tbx_kinds["Close"] == 5
+    assert report.failures == 0
+
+
 def test_complete_field_descriptors_are_exact_in_both_dialects():
     paths = [
         _CORPUS / f"{prefix}t1_field.exe"

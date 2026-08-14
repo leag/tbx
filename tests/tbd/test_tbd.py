@@ -913,6 +913,36 @@ def test_input_file_rejects_an_incomplete_following_item():
     assert not any(fact.kind == "semantic.input_file" for fact in program.facts)
 
 
+def test_close_facts_preserve_bare_immediate_and_variable_channels():
+    stems = (
+        "t1_close",
+        "t1_file",
+        "v10_t1_file",
+        "t1_closevar",
+        "v10_t1_closevar",
+    )
+    for stem in stems:
+        image = (_CORPUS / f"{stem}.exe").read_bytes()
+        program = decode(image)
+        actual = [
+            (node.kind, node.operands)
+            for node in program.canonical_statements
+            if node.kind == "Close"
+        ]
+        exact = [
+            _tbx_statement(node)
+            for node in decode0.decode_user_code(image)
+            if isinstance(node, tbx_ir.Close)
+        ]
+        assert actual == exact
+
+
+def test_numbered_close_requires_a_complete_ax_source():
+    program = decode(bytes.fromhex("cd ec 18"))
+
+    assert not any(fact.kind == "semantic.close" for fact in program.facts)
+
+
 def test_runtime_facts_recover_complete_field_descriptors():
     for prefix in ("", "v10_"):
         image = (_CORPUS / f"{prefix}t1_field.exe").read_bytes()
@@ -1860,6 +1890,12 @@ def _tbx_statement(node):
         operands = (tuple(_tbx_expression(target) for target in node.targets),)
     elif isinstance(node, tbx_ir.InputFile):
         operands = node.num, tuple(_tbx_expression(target) for target in node.vars)
+    elif isinstance(node, tbx_ir.Close):
+        if node.num is None or isinstance(node.num, int):
+            value = node.num
+        else:
+            value = _tbx_expression(node.num)
+        operands = (value,)
     elif isinstance(node, tbx_ir.Field):
         operands = node.num, tuple(
             (_tbx_expression(width), _tbx_expression(target))

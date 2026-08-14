@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import struct
 from collections.abc import Iterable
 
 from tbd.facts import Evidence, NamedPass
 from tbd.ir import Fact, Operation
-from tbd.profile import EC_SOURCE_STATEMENTS
+from tbd.profile import EC_SOURCE_STATEMENTS, FP_TRANSFER_TYPES
 from tbd.semantic import combine_evidence, resolve_expression
 
 
@@ -23,6 +24,7 @@ def statement_facts(
         if statement is not None:
             yield statement
     yield from _defseg_facts(instructions, facts)
+    yield from _close_facts(instructions, facts)
     yield from _resume_facts(instructions, facts)
     yield from _static_dim_facts(evidence, facts)
     yield from _delay_facts(instructions, facts)
@@ -63,7 +65,7 @@ def _simple_statement(
         return None
     if len(operands) < 2 or not isinstance(operands[1], int):
         return None
-    if operands[1] == 0x26:
+    if operands[1] in {0x16, 0x18, 0x26}:
         return None
     source = EC_SOURCE_STATEMENTS.get(operands[1])
     if source is None:
@@ -76,6 +78,93 @@ def _simple_statement(
         signature.evidence,
         "signature",
     )
+
+
+def _close_facts(
+    instructions: dict[int, Operation], facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    by_end = {instruction.end: instruction for instruction in instructions.values()}
+    for close in instructions.values():
+        if close.kind != "tb.statement" or len(close.operands) < 2:
+            continue
+        sub = close.operands[1]
+        if sub == 0x16:
+            yield Fact(
+                "semantic.close",
+                (close.offset, close.end),
+                (None,),
+                (close.offset,),
+                "signature",
+            )
+            continue
+        if sub != 0x18:
+            continue
+        load = by_end.get(close.offset)
+        value = _immediate_ax(load)
+        evidence = (load.offset, close.offset) if load is not None else ()
+        if value is None:
+            bridged = _close_bridge(load, by_end)
+            if bridged is None:
+                continue
+            expression, evidence = bridged
+            resolved = resolve_expression(expression, facts)
+            if resolved is None:
+                continue
+            value = resolved.value
+            support = combine_evidence(evidence, resolved.evidence)
+            confidence = "anchored"
+        else:
+            support = evidence
+            confidence = "signature"
+        yield Fact(
+            "semantic.close",
+            (evidence[0], close.end),
+            (value,),
+            combine_evidence(support, (close.offset,)),
+            confidence,
+        )
+
+
+def _immediate_ax(instruction: Operation | None) -> object | None:
+    if (
+        instruction is not None
+        and instruction.kind == "x86.mov_imm"
+        and len(instruction.operands) == 2
+        and instruction.operands[0] == "ax"
+    ):
+        return instruction.operands[1]
+    return None
+
+
+def _close_bridge(
+    reload: Operation | None, by_end: dict[int, Operation]
+) -> tuple[object, tuple[int, ...]] | None:
+    if reload is None:
+        return None
+    reload_raw = bytes.fromhex(reload.raw)
+    if reload.kind != "tb.fp" or len(reload_raw) != 5 or reload_raw[:3] != b"\xcd\x3d\xa1":
+        return None
+    scratch = struct.unpack_from("<H", reload_raw, 3)[0]
+    store = by_end.get(reload.offset)
+    source = by_end.get(store.offset) if store is not None else None
+    if store is None or source is None:
+        return None
+    store_raw = bytes.fromhex(store.raw)
+    source_raw = bytes.fromhex(source.raw)
+    if (
+        len(store_raw) != 5
+        or store_raw[:3] != b"\xcd\x3b\x1e"
+        or struct.unpack_from("<H", store_raw, 3)[0] != scratch
+        or source.kind != "tb.fp"
+        or len(source_raw) != 5
+        or source_raw[0] != 0xCD
+        or source_raw[2] != 0x06
+        or source_raw[1] not in FP_TRANSFER_TYPES
+    ):
+        return None
+    address = struct.unpack_from("<H", source_raw, 3)[0]
+    expression = "memory", address, FP_TRANSFER_TYPES[source_raw[1]]
+    return expression, (source.offset, store.offset, reload.offset)
 
 
 def _defseg_facts(

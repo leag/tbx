@@ -399,6 +399,11 @@ one uniquely resolved file-number store in the compiler cell at 0x60. Numeric
 items require the final commit; string-only chains require a following boundary,
 and any incomplete next phase suppresses the whole statement. Integer scratch
 conversion and computed-array targets remain separate mechanisms.
+Dedicated CLOSE facts preserve the distinction between bare sub 16 and numbered
+sub 18. A numbered channel requires either an adjacent immediate AX load or the
+complete typed FP-source/integer-scratch/AX-reload bridge used for an expression;
+the generic profile statement no longer invents an operandless CLOSE when that
+source is unresolved.
 Device I/O likewise requires its whole compiler scaffold. Constant OUT is
 recovered only when two immediate AX loads are separated by the exact
 `mov bx,ax` staging move and followed contiguously by `mov dx,bx; out dx,al` in
