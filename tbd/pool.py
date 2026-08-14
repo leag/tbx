@@ -11,7 +11,6 @@ from tbd.ir import Operation
 from tbd.slots import VAR_BASE
 
 _MARKER = b"\x00\x80\x16\x00"
-_POOL_EOF_GAP = 0x2C
 _ARRAY_BLOCK = 0x36
 _ARRAY_TYPES = {
     0x00: "integer",
@@ -116,8 +115,8 @@ def infer_layout(
 
 
 def _pool_marker(image: bytes) -> int | None:
-    marker = image.rfind(_MARKER)
-    if marker < 0 or marker + 4 != len(image) - _POOL_EOF_GAP:
+    marker = image.find(_MARKER)
+    if marker < 0 or image.find(_MARKER, marker + 1) >= 0:
         return None
     return marker
 
@@ -185,7 +184,7 @@ def _literal_score(
     for address, kind in references:
         if kind == "string" and address in layout.descriptors:
             score += 4 if layout.string_base is not None else 2
-        elif kind in {"integer", "float"} and address >= layout.pool_base:
+        elif kind in {"integer", "float", "double"} and address >= layout.pool_base:
             score += 1
     return score
 
@@ -210,7 +209,7 @@ def _supports_observations(
             address == layout.pool_base - 4 or address in layout.descriptors
         ):
             continue
-        if kind in {"integer", "float"} and address >= layout.pool_base:
+        if kind in {"integer", "float", "double"} and address >= layout.pool_base:
             continue
         return False
     return True
@@ -354,6 +353,9 @@ def decode_literal(
         return "const", struct.unpack_from("<H", image, offset)[0]
     if kind == "float" and offset + 4 <= len(image):
         number = struct.unpack_from("<f", image, offset)[0]
+        return ("const", number) if math.isfinite(number) else None
+    if kind == "double" and offset + 8 <= len(image):
+        number = struct.unpack_from("<d", image, offset)[0]
         return ("const", number) if math.isfinite(number) else None
     return None
 

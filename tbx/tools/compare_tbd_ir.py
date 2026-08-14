@@ -181,6 +181,8 @@ def _expression(node: Any) -> object:
         return "array", node.name, tuple(_expression(item) for item in node.indices)
     if isinstance(node, ir.Lit):
         return "const", node.value
+    if isinstance(node, (ir.DblLit, ir.SingleLit)):
+        return "const", node.value
     if isinstance(node, ir.StrLit):
         return "string", node.value
     if isinstance(node, ir.BinOp):

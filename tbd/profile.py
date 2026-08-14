@@ -29,6 +29,12 @@ TB10 = CompilerProfile("1.0", b"\xcd\xec\xb8", 2, 6)
 PROFILES = (TB11, TB10)
 PROLOGUES = {profile.prologue: profile.name for profile in PROFILES}
 
+# Direct-memory types carried by Turbo Basic's emulated x87 escape vectors.
+# The analyzer consumes these as profile signatures; it does not infer widths
+# from the referenced bytes.
+FP_TRANSFER_TYPES = {0x35: "float", 0x39: "double", 0x3B: "integer"}
+FP_ARITHMETIC_TYPES = {0x34: "float", 0x38: "double"}
+
 
 def profile_for(dialect: str | None) -> CompilerProfile | None:
     return next((profile for profile in PROFILES if profile.name == dialect), None)

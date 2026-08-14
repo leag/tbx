@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from tbd.facts import Evidence, NamedPass
 from tbd.ir import Fact, Operation
+from tbd.profile import FP_ARITHMETIC_TYPES, FP_TRANSFER_TYPES
 
 
 @dataclass(frozen=True)
@@ -158,10 +159,10 @@ def _fp_constant(vector: int, modrm: int, mod: int) -> object | None:
 def _fp_transfer(
     vector: int, reg: int, address: int | None
 ) -> tuple[str, object] | None:
-    if vector not in (0x35, 0x3B) or address is None:
+    if vector not in FP_TRANSFER_TYPES or address is None:
         return None
     if reg == 0:
-        kind = "integer" if vector == 0x3B else "float"
+        kind = FP_TRANSFER_TYPES[vector]
         return "push", ("memory", address, kind)
     return ("store", address) if reg == 3 else None
 
@@ -169,7 +170,7 @@ def _fp_transfer(
 def _fp_arithmetic(
     vector: int, reg: int, address: int | None
 ) -> tuple[str, object] | None:
-    if vector not in (0x34, 0x36) or address is None:
+    if vector not in FP_ARITHMETIC_TYPES or address is None:
         return None
     if reg == 3:
         return "compare", ("memory", address)
@@ -189,8 +190,8 @@ def _apply_fp(
     value = stack.pop()
     evidence = _evidence(value.evidence, (instruction.offset,))
     if kind == "binary":
-        operator, right = operand
-        expression = "binary", operator, value.expression, right
+        operator, left = operand
+        expression = "binary", operator, left, value.expression
         stack.append(_Value(expression, evidence))
         return
     if kind == "store":

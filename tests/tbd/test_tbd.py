@@ -6,7 +6,7 @@ from tbd import cli, decode
 from tbd.canonical import canonicalize
 from tbd.facts import Evidence, analyze as analyze_facts
 from tbd.ir import Fact, Operation, Slot, Statement
-from tbd.pool import resolve as resolve_pool
+from tbd.pool import infer_layout, resolve as resolve_pool
 
 _CORPUS = Path(__file__).parents[1] / "fixtures" / "corpus"
 
@@ -277,6 +277,59 @@ def test_constant_pool_facts_match_legacy_literal_view():
     }
 
 
+def test_wide_fp_facts_recover_double_literals_and_direct_stores():
+    for prefix in ("", "v10_"):
+        image = (_CORPUS / f"{prefix}t1_convf.exe").read_bytes()
+        program = decode(image)
+        exact = [_tbx_statement(node) for node in decode0.decode_user_code(image)]
+        migrated = [
+            (node.kind, node.operands) for node in program.canonical_statements
+        ]
+
+        constants = {
+            fact.subject: fact.value
+            for fact in program.facts
+            if fact.kind == "constant"
+        }
+        layout = next(fact for fact in program.facts if fact.kind == "layout.pool")
+        slots = {
+            fact.subject[0]: fact.value[1]
+            for fact in program.facts
+            if fact.kind == "slot"
+        }
+        assert layout.value[2] == image.rfind(bytes.fromhex("00 80 16 00"))
+        assert constants == {
+            ("memory", 0x134): ("const", 2.7),
+            ("memory", 0x13C): ("const", 2.5),
+            ("memory", 0x144): ("const", 1.5),
+        }
+        assert slots[0x128] == ("double",)
+        assert migrated[:2] == exact[:2]
+        assert migrated[-1] == exact[-1] == ("End", ())
+
+
+def test_wide_fp_direct_array_reads_keep_array_identity():
+    image = (_CORPUS / "t1_dblarr.exe").read_bytes()
+    program = decode(image)
+    exact = [_tbx_statement(node) for node in decode0.decode_user_code(image)]
+    migrated = [
+        (node.kind, node.operands) for node in program.canonical_statements
+    ]
+
+    assert exact[3] in migrated
+    assert exact[6] in migrated
+    assert any(
+        fact.kind == "memory.read"
+        and fact.subject == (0x190,)
+        and fact.value == ("double",)
+        for fact in program.facts
+    )
+    assert not any(
+        fact.kind == "constant" and fact.subject == ("memory", 0x190)
+        for fact in program.facts
+    )
+
+
 def test_constant_pool_candidates_follow_evidenced_slot_extent():
     image = bytearray(0x200)
     marker = len(image) - 0x30
@@ -294,6 +347,14 @@ def test_constant_pool_candidates_follow_evidenced_slot_extent():
 
     assert changes == 1
     assert resolved[0].operands == (0x130, ("const", 42))
+
+
+def test_constant_pool_requires_a_unique_compiler_marker():
+    image = bytearray(0x200)
+    image[0x20:0x24] = bytes.fromhex("00 80 16 00")
+    image[-0x30:-0x2C] = bytes.fromhex("00 80 16 00")
+
+    assert infer_layout(bytes(image), {0x120}, ((0x140, "integer"),)) is None
 
 
 def test_static_array_layout_facts_anchor_codeless_dim_statements():
@@ -400,7 +461,7 @@ def test_runtime_pass_lifts_numeric_and_string_print_chains():
         ("console", (("slot", "V0001", 0x120, "float"),), True),
         (
             "console",
-            (("binary", "+", ("const", 1), ("slot", "V0001", 0x120)),),
+            (("binary", "+", ("slot", "V0001", 0x120), ("const", 1)),),
             True,
         ),
     ]
@@ -703,6 +764,8 @@ def _tbx_expression(node):
             tuple(_tbx_expression(item) for item in node.indices),
         )
     if isinstance(node, tbx_ir.Lit):
+        return "const", node.value
+    if isinstance(node, (tbx_ir.DblLit, tbx_ir.SingleLit)):
         return "const", node.value
     if isinstance(node, tbx_ir.StrLit):
         return "string", node.value

@@ -76,6 +76,21 @@ def test_explicit_static_array_bounds_compare_as_bounds():
     assert report.mismatches == ()
 
 
+def test_wide_fp_facts_improve_both_dialect_assignment_alignment():
+    paths = [
+        _CORPUS / f"{prefix}t1_convf.exe"
+        for prefix in ("", "v10_")
+    ]
+
+    report = compare_paths(paths)
+
+    assert report.failures == 0
+    assert report.tbx_statements == 8
+    assert report.tbd_statements == 6
+    assert report.aligned_by_kind["Assign"] == 4
+    assert report.aligned_by_kind["End"] == 2
+
+
 def test_comparison_cli_prints_coverage(capsys):
     result = main([str(_CORPUS / "t1_delay.exe"), "--examples", "0"])
 

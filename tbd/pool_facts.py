@@ -8,6 +8,7 @@ from collections.abc import Iterable
 from tbd.facts import Evidence, NamedPass
 from tbd.ir import Fact, Operation
 from tbd.pool import array_at, decode_literal, infer_layout
+from tbd.profile import FP_ARITHMETIC_TYPES, FP_TRANSFER_TYPES
 from tbd.slots import VAR_BASE
 
 
@@ -134,12 +135,12 @@ def _fp_access(
         return None
     address = struct.unpack_from("<H", raw, 3)[0]
     reg = (modrm >> 3) & 7
-    if vector in (0x35, 0x3B) and reg in (0, 3):
+    if vector in FP_TRANSFER_TYPES and reg in (0, 3):
         action = "read" if reg == 0 else "write"
-        kind = "integer" if vector == 0x3B else "float"
+        kind = FP_TRANSFER_TYPES[vector]
         return ((action, address, kind),)
-    if vector in (0x34, 0x36):
-        return (("read", address, "float"),)
+    if vector in FP_ARITHMETIC_TYPES:
+        return (("read", address, FP_ARITHMETIC_TYPES[vector]),)
     return None
 
 

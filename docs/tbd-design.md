@@ -216,12 +216,19 @@ the legacy operation rewriters. Instruction, signature, basic-block, and xref
 facts retain discovery provenance. Direct memory accesses now feed an anchored
 pool-layout fact and integer, single-precision, and string constant facts.
 The anchored boundary also produces address-stable scalar-slot and type facts.
+The pool sentinel is accepted at its unique evidenced file position rather than
+at a fixed distance from EOF: numeric payload width changes the trailing file
+distance, while multiple sentinels leave layout unresolved.
 Block-local register and emulated FP-stack interpretation produces value,
 store, update, and comparison facts with complete instruction provenance.
 Direct string-stack push/store pairs now produce string memory-role and store
 facts as well; incomplete or interrupted pairs remain unresolved. Turbo Basic
 1.0 dispatcher subs and service vectors are normalized by a compiler profile
 before any fact pass matches them.
+The same profile names direct emulated-FP memory widths. Wide loads, stores,
+folds, and comparisons therefore retain their 64-bit memory role, and finite
+pooled doubles can support assignments and expressions without replacing the
+underlying instruction evidence.
 Validated static-array descriptors now produce anchored layout facts without
 turning array storage into constants. Those facts recover codeless static
 `DIM` statements in source order, including explicit lower bounds, and resolve

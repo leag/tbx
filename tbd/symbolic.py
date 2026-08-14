@@ -106,8 +106,8 @@ def _apply_fp(
         return 0
     value = stack.pop()
     if kind == "binary":
-        operator, right = operand
-        stack.append(_Value(("binary", operator, value.expression, right), value.origins + [node]))
+        operator, left = operand
+        stack.append(_Value(("binary", operator, left, value.expression), value.origins + [node]))
         return 1
     if kind == "store":
         result.append(_merge(value.origins + [node], "machine.store", (operand, value.expression)))
