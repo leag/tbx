@@ -1526,6 +1526,28 @@ def test_trace_regions_use_complete_handler_statements_without_guessing_loops():
         ] == ["Tron", "Troff"]
 
 
+def test_final_trace_hook_ignores_control_inside_the_traced_region():
+    for prefix in ("", "v10_"):
+        program = decode((_CORPUS / f"{prefix}t1_tronerb.exe").read_bytes())
+        nested = decode((_CORPUS / f"{prefix}t1_troffin.exe").read_bytes())
+
+        assert [
+            statement.kind
+            for statement in program.canonical_statements
+            if statement.kind in {"Tron", "Troff"}
+        ] == ["Tron", "Troff"]
+        troff = next(
+            fact for fact in program.facts if fact.kind == "semantic.troff"
+        )
+        assert troff.confidence == "signature"
+        assert len(troff.evidence) > 1
+        assert [
+            statement.kind
+            for statement in nested.canonical_statements
+            if statement.kind in {"Tron", "Troff"}
+        ] == ["Tron"]
+
+
 def test_independent_trace_support_materializes_one_toggle_statement():
     program = decode((_CORPUS / "t1_tronsplit.exe").read_bytes())
 

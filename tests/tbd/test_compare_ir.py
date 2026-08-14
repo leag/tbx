@@ -378,6 +378,17 @@ def test_trace_hook_facts_align_simple_repeated_and_loop_regions():
     assert report.aligned_by_kind["Troff"] == report.tbx_kinds["Troff"] == 4
 
 
+def test_final_trace_hook_after_block_if_recovers_troff_in_both_dialects():
+    paths = [
+        _CORPUS / f"{prefix}t1_tronerb.exe"
+        for prefix in ("", "v10_")
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["Troff"] == report.tbx_kinds["Troff"] == 2
+    assert report.failures == 0
+
+
 def test_comparison_cli_prints_coverage(capsys):
     result = main([str(_CORPUS / "t1_delay.exe"), "--examples", "0"])
 

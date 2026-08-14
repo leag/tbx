@@ -67,8 +67,13 @@ def trace_region_facts(
         (fact for fact in source if _span(fact)[0] > last_payload),
         None,
     )
+    control_start = (
+        last_payload
+        if _is_end_at(last_payload, evidence.instructions)
+        else hooks[0].end
+    )
     if following is not None and not _has_control(
-        evidence.instructions, hooks[0].end, _span(following)[0]
+        evidence.instructions, control_start, _span(following)[0]
     ):
         support = combine_evidence(
             () if marker is None else (marker,),
@@ -122,6 +127,15 @@ def _payload_start(
     if following is not None and following.kind == "x86.int3":
         return following.end, following.offset
     return hook.end, None
+
+
+def _is_end_at(address: int, instructions: tuple[Operation, ...]) -> bool:
+    return any(
+        instruction.offset == address
+        and instruction.kind == "tb.statement"
+        and instruction.operands[:1] == ("END",)
+        for instruction in instructions
+    )
 
 
 def _between(

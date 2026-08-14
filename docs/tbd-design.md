@@ -97,6 +97,10 @@ four-byte signature. A hook run positively establishes a codeless TRON before
 its first traced statement. An unhooked semantic statement between two hooks,
 with no control-transfer instruction in that byte interval, establishes TROFF
 and the next TRON; the same evidence after the final hook establishes TROFF.
+A complete final `trace hook; END` adjacency establishes a top-level tail even
+when an earlier block IF contains control transfers. Other controlled regions
+retain the whole-region guard until their nested source structure can own a
+TROFF fact instead of flattening it into an incorrect top-level statement.
 Complex or single-hook shapes that do not prove a boundary remain unresolved.
 
 ## Required design choices
