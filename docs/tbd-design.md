@@ -218,10 +218,24 @@ pool-layout fact and integer, single-precision, and string constant facts.
 The anchored boundary also produces address-stable scalar-slot and type facts.
 Block-local register and emulated FP-stack interpretation produces value,
 store, update, and comparison facts with complete instruction provenance.
+Direct string-stack push/store pairs now produce string memory-role and store
+facts as well; incomplete or interrupted pairs remain unresolved. Turbo Basic
+1.0 dispatcher subs and service vectors are normalized by a compiler profile
+before any fact pass matches them.
+Validated static-array descriptors now produce anchored layout facts without
+turning array storage into constants. Those facts recover codeless static
+`DIM` statements in source order, including explicit lower bounds, and resolve
+constant element addresses to array references while leaving unsupported
+indexing unresolved.
+Complete string concatenation stacks produce ordered binary-expression facts;
+canonicalization preserves that order instead of treating string `+` as numeric
+commutative addition.
 Fully resolved stores and updates produce anchored source-shaped assignment
 facts; unresolved memory identities deliberately produce no semantic guess.
 Complete runtime PRINT chains likewise produce anchored semantic facts, while
 an item without its matching flush remains only runtime and expression evidence.
+PRINT item chains retain intervening mode-specific separator calls and their
+provenance rather than dropping the items before a comma-zone advance.
 `Program.fact_operations` now materializes migrated assignment and PRINT facts
 directly into operation IR. Conditional branch pairs and their resolved operands
 now produce `IfGoto` facts and operations as well. `Program.operations` remains

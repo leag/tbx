@@ -12,15 +12,13 @@ from tbd.fact_ir import build_operations
 from tbd.facts import EVIDENCE_PASSES, Evidence, analyze as analyze_facts
 from tbd.ir import Diagnostic, Program
 from tbd.pool_facts import POOL_FACT_PASSES
+from tbd.profile import PROLOGUES
 from tbd.runtime_facts import RUNTIME_FACT_PASSES
 from tbd.slot_facts import SLOT_FACT_PASSES, materialize_slots
 from tbd.slots import collect
 from tbd.statement_facts import STATEMENT_FACT_PASSES
 from tbd.statements import reconstruct
 from tbd.symbolic_facts import SYMBOLIC_FACT_PASSES
-
-_PROLOGUES = {b"\xcd\xec\xba": "1.1", b"\xcd\xec\xb8": "1.0"}
-
 
 def decode(
     exe: bytes, *, max_bytes: int | None = None, rounds: int = 8
@@ -106,7 +104,7 @@ def _entry_point(exe: bytes, image_end: int) -> int | None:
 def _find_prologue(exe: bytes, image_end: int) -> tuple[int | None, str | None]:
     matches = [
         (offset, dialect)
-        for marker, dialect in _PROLOGUES.items()
+        for marker, dialect in PROLOGUES.items()
         if (offset := exe.find(marker, 0, image_end)) >= 0
     ]
     return min(matches) if matches else (None, None)

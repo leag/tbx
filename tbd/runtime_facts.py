@@ -7,11 +7,12 @@ from dataclasses import dataclass
 
 from tbd.facts import Evidence, NamedPass
 from tbd.ir import Fact, Operation
-from tbd.semantic import combine_evidence, resolve_expression, resolve_string
+from tbd.semantic import combine_evidence, resolve_expression
 
 _NUMERIC_ITEMS = {0xBB: "console", 0xBD: "file", 0xBC: "printer"}
 _STRING_ITEMS = {0xBE: "console", 0xC0: "file", 0xBF: "printer"}
 _FLUSHES = {0xB8: "console", 0xBA: "file", 0xB9: "printer"}
+_SEPARATORS = {0xC1: "console", 0xC3: "file", 0xC2: "printer"}
 
 
 @dataclass(frozen=True)
@@ -23,6 +24,13 @@ class _Item:
     evidence: tuple[int, ...]
 
 
+@dataclass(frozen=True)
+class _Chain:
+    start: int
+    items: tuple[_Item, ...]
+    evidence: tuple[int, ...]
+
+
 def runtime_facts(
     evidence: Evidence, facts: frozenset[Fact]
 ) -> Iterable[Fact]:
@@ -31,20 +39,27 @@ def runtime_facts(
     expressions = _expression_index(facts, evidence.instructions)
     items = _print_items(evidence.instructions, expressions, facts)
     by_end = {item.end: item for item in items}
+    separators = {
+        instruction.end: instruction
+        for instruction in evidence.instructions
+        if _runtime_vector(instruction) in _SEPARATORS
+    }
     for instruction in evidence.instructions:
         mode = _FLUSHES.get(_runtime_vector(instruction))
         if mode is None:
             continue
-        chain = _item_chain(by_end, instruction.offset, mode)
+        chain = _item_chain(by_end, separators, instruction.offset, mode)
         if not chain:
             continue
-        values = tuple(item.value for item in chain)
+        values = tuple(item.value for item in chain.items)
         support = combine_evidence(
-            *(item.evidence for item in chain), (instruction.offset,)
+            *(item.evidence for item in chain.items),
+            chain.evidence,
+            (instruction.offset,),
         )
         yield Fact(
             "semantic.print",
-            (chain[0].start, instruction.end),
+            (chain.start, instruction.end),
             (mode, values, True),
             support,
             "anchored",
@@ -108,7 +123,9 @@ def _string_item(
     mode = _STRING_ITEMS.get(_runtime_vector(runtime))
     if not _is_string_setup(setup, read) or mode is None:
         return None
-    resolved = resolve_string(setup.operands[1], facts)
+    resolved = resolve_expression(
+        ("memory", setup.operands[1], "string"), facts
+    )
     if resolved is None:
         return None
     support = combine_evidence(
@@ -117,13 +134,34 @@ def _string_item(
     return _Item(setup.offset, runtime.end, mode, resolved.value, support)
 
 
-def _item_chain(by_end: dict[int, _Item], end: int, mode: str) -> tuple[_Item, ...]:
+def _item_chain(
+    by_end: dict[int, _Item],
+    separators: dict[int, Operation],
+    end: int,
+    mode: str,
+) -> _Chain | None:
     reverse = []
+    support = []
     cursor = end
-    while (item := by_end.get(cursor)) is not None and item.mode == mode:
-        reverse.append(item)
-        cursor = item.start
-    return tuple(reversed(reverse))
+    start = end
+    while True:
+        item = by_end.get(cursor)
+        if item is not None and item.mode == mode:
+            reverse.append(item)
+            cursor = start = item.start
+            continue
+        separator = separators.get(cursor)
+        if (
+            separator is not None
+            and _SEPARATORS[_runtime_vector(separator)] == mode
+        ):
+            support.append(separator.offset)
+            cursor = start = separator.offset
+            continue
+        break
+    if not reverse:
+        return None
+    return _Chain(start, tuple(reversed(reverse)), tuple(support))
 
 
 def _is_string_setup(setup: Operation, read: Operation) -> bool:

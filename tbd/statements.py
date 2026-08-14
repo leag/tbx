@@ -7,6 +7,7 @@ from tbd.ir import Operation, Statement
 _SIMPLE_KINDS = {
     "ir.assign": "Assign",
     "ir.delay": "Delay",
+    "ir.dim": "Dim",
     "ir.print": "Print",
     "ir.if_goto": "IfGoto",
     "flow.goto": "Goto",
@@ -68,6 +69,8 @@ def _delay(nodes: list[Operation]) -> Operation | None:
 def _statement(operation: Operation) -> tuple[str, tuple[object, ...]]:
     if operation.kind == "ir.delay":
         return "Delay", operation.operands
+    if operation.kind == "ir.dim":
+        return "Dim", operation.operands[1:]
     if operation.kind == "tb.statement":
         name = operation.operands[0]
         kind = "End" if name == "END" else str(name).title().replace("_", "")

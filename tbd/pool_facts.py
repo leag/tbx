@@ -7,7 +7,7 @@ from collections.abc import Iterable
 
 from tbd.facts import Evidence, NamedPass
 from tbd.ir import Fact, Operation
-from tbd.pool import decode_literal, infer_layout
+from tbd.pool import array_at, decode_literal, infer_layout
 from tbd.slots import VAR_BASE
 
 
@@ -30,14 +30,16 @@ def memory_access_facts(
 def string_reference_facts(
     evidence: Evidence, _facts: frozenset[Fact]
 ) -> Iterable[Fact]:
-    """Recognize the address load consumed by the string-read runtime helper."""
+    """Recognize direct string reads and writes through the SI runtime ABI."""
 
     for left, right in zip(evidence.instructions, evidence.instructions[1:]):
-        if not _is_string_reference(left, right):
+        access = _string_access(left, right)
+        if access is None:
             continue
+        action, address = access
         yield Fact(
-            "memory.read",
-            (left.operands[1],),
+            f"memory.{action}",
+            (address,),
             ("string",),
             (left.offset, right.offset),
             "signature",
@@ -64,7 +66,33 @@ def constant_pool_facts(
         support,
         "anchored",
     )
+    array_count = len(layout.arrays)
+    for record_index, array in enumerate(layout.arrays):
+        source_index = array_count - 1 - record_index
+        suffix = {
+            "integer": "%",
+            "long": "&",
+            "double": "#",
+            "string": "$",
+        }.get(array.kind, "")
+        yield Fact(
+            "layout.array",
+            ("static", array.slot),
+            (
+                source_index,
+                f"V{source_index}{suffix}",
+                array.bounds,
+                array.kind,
+                array.base,
+                array.element_size,
+                array.count,
+            ),
+            (array.record, layout.marker),
+            "anchored",
+        )
     for address, kind in references:
+        if array_at(layout, address) is not None:
+            continue
         literal = decode_literal(evidence.image, layout, address, kind)
         if literal is None:
             continue
@@ -115,14 +143,19 @@ def _fp_access(
     return None
 
 
-def _is_string_reference(left: Operation, right: Operation) -> bool:
-    return (
-        left.kind == "x86.mov_imm"
-        and left.operands[0] == "si"
-        and right.kind == "tb.runtime"
-        and right.operands == (0x9C,)
-        and left.end == right.offset
-    )
+def _string_access(
+    left: Operation, right: Operation
+) -> tuple[str, int] | None:
+    if (
+        left.kind != "x86.mov_imm"
+        or left.operands[0] != "si"
+        or not isinstance(left.operands[1], int)
+        or right.kind != "tb.runtime"
+        or left.end != right.offset
+    ):
+        return None
+    action = {(0x9C,): "read", (0xA0,): "write"}.get(right.operands)
+    return (action, left.operands[1]) if action is not None else None
 
 
 def _addresses(facts: frozenset[Fact], kind: str) -> set[int]:

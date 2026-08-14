@@ -6,7 +6,13 @@ from collections.abc import Iterable
 
 from tbd.facts import Evidence, NamedPass
 from tbd.ir import Fact
-from tbd.semantic import Resolved, combine_evidence, resolve_expression, resolve_slot
+from tbd.semantic import (
+    Resolved,
+    combine_evidence,
+    resolve_array_element,
+    resolve_expression,
+    resolve_slot,
+)
 
 
 def assignment_facts(
@@ -26,7 +32,7 @@ def _assignment(
     effect: Fact, evidence: Evidence, facts: frozenset[Fact]
 ) -> Fact | None:
     address = effect.subject[0] if effect.subject else None
-    target = resolve_slot(address, facts)
+    target = resolve_slot(address, facts) or resolve_array_element(address, facts)
     if target is None:
         return None
     value = _effect_value(effect, target.value, facts)

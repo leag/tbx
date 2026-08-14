@@ -23,7 +23,32 @@ def statement_facts(
         statement = _simple_statement(signature, instructions)
         if statement is not None:
             yield statement
+    yield from _static_dim_facts(evidence, facts)
     yield from _delay_facts(instructions, facts)
+
+
+def _static_dim_facts(
+    evidence: Evidence, facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    if not evidence.instructions:
+        return
+    code_start = evidence.instructions[0].offset
+    arrays = sorted(
+        (fact for fact in facts if fact.kind == "layout.array"),
+        key=lambda fact: fact.value[0],
+    )
+    for array in arrays:
+        order, name, bounds, _kind, _base, _size, _count = array.value
+        source_bounds = tuple(
+            high if low == 0 else (low, high) for low, high in bounds
+        )
+        yield Fact(
+            "semantic.dim",
+            (code_start, order),
+            (name, source_bounds, (), False),
+            combine_evidence(array.evidence, (code_start,)),
+            "anchored",
+        )
 
 
 def _simple_statement(

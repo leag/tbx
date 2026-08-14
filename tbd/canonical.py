@@ -14,9 +14,9 @@ def canonicalize(
 ) -> tuple[Statement, ...]:
     """Name address-based slots and normalize equivalent expression order."""
 
-    normalized = tuple(_normalize_statement(statement) for statement in statements)
     names = _Names(slots)
-    return tuple(names.statement(statement) for statement in normalized)
+    named = tuple(names.statement(statement) for statement in statements)
+    return tuple(_normalize_statement(statement) for statement in named)
 
 
 def _normalize_statement(statement: Statement) -> Statement:
@@ -47,15 +47,51 @@ def _normalize_expression(value: object) -> object:
     if value[0] == "binary" and len(value) == 4:
         left = _normalize_expression(value[2])
         right = _normalize_expression(value[3])
-        if value[1] in _COMMUTATIVE and _expression_key(right) < _expression_key(left):
+        commutative = value[1] in _COMMUTATIVE and not (
+            value[1] == "+"
+            and (_is_string_expression(left) or _is_string_expression(right))
+        )
+        if commutative and _expression_key(right) < _expression_key(left):
             left, right = right, left
         return "binary", value[1], left, right
     return tuple(_normalize_expression(item) for item in value)
 
 
+def _is_string_expression(value: object) -> bool:
+    if not isinstance(value, tuple) or not value:
+        return False
+    if value[0] == "string":
+        return True
+    if value[0] == "var":
+        if len(value) >= 2 and isinstance(value[1], str) and value[1].endswith("$"):
+            return True
+        return (
+            len(value) >= 3
+            and isinstance(value[2], tuple)
+            and len(value[2]) == 2
+            and value[2][0] == "types"
+            and "string" in value[2][1]
+        )
+    if value[0] == "slot":
+        return len(value) >= 4 and value[3] == "string"
+    return (
+        value[0] == "binary"
+        and len(value) == 4
+        and value[1] == "+"
+        and (_is_string_expression(value[2]) or _is_string_expression(value[3]))
+    )
+
+
 def _expression_key(value: object) -> tuple[int, str]:
     tag = value[0] if isinstance(value, tuple) and value else None
-    rank = {"slot": 0, "binary": 1, "const": 2, "string": 3}.get(tag, 4)
+    rank = {
+        "slot": 0,
+        "var": 0,
+        "array": 0,
+        "binary": 1,
+        "const": 2,
+        "string": 3,
+    }.get(tag, 4)
     return rank, repr(value)
 
 

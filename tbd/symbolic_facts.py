@@ -31,6 +31,87 @@ def symbolic_facts(
         yield from _interpret_block(block_nodes)
 
 
+def string_store_facts(
+    evidence: Evidence, _facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    """Recover complete direct string-stack assignments within one block."""
+
+    instructions = {item.offset: item for item in evidence.instructions}
+    for block in evidence.blocks:
+        block_nodes = tuple(
+            instructions[offset]
+            for offset in block.instruction_offsets
+            if offset in instructions
+        )
+        yield from _string_stores(block_nodes)
+
+
+def _string_stores(instructions: tuple[Operation, ...]) -> Iterable[Fact]:
+    stack: list[_Value] = []
+    index = 0
+    while index < len(instructions):
+        pair = instructions[index : index + 2]
+        access = _direct_string_access(pair)
+        if access is None:
+            if _is_runtime(instructions[index], 0x9B) and len(stack) >= 2:
+                right = stack.pop()
+                left = stack.pop()
+                evidence = _evidence(
+                    left.evidence, right.evidence, (instructions[index].offset,)
+                )
+                stack.append(
+                    _Value(
+                        ("binary", "+", left.expression, right.expression),
+                        evidence,
+                    )
+                )
+                index += 1
+                continue
+            stack.clear()
+            index += 1
+            continue
+        action, address = access
+        setup, runtime = pair
+        if action == "read":
+            stack.append(
+                _Value(
+                    ("memory", address, "string"),
+                    (setup.offset, runtime.offset),
+                )
+            )
+        elif stack:
+            value = stack.pop()
+            evidence = _evidence(
+                value.evidence, (setup.offset, runtime.offset)
+            )
+            yield _effect(
+                "machine.store", address, (value.expression,), evidence, "signature"
+            )
+        index += 2
+
+
+def _direct_string_access(
+    pair: tuple[Operation, ...]
+) -> tuple[str, int] | None:
+    if len(pair) != 2:
+        return None
+    setup, runtime = pair
+    if (
+        setup.kind != "x86.mov_imm"
+        or setup.operands[0] != "si"
+        or not isinstance(setup.operands[1], int)
+        or runtime.kind != "tb.runtime"
+        or setup.end != runtime.offset
+    ):
+        return None
+    action = {(0x9C,): "read", (0xA0,): "write"}.get(runtime.operands)
+    return (action, setup.operands[1]) if action is not None else None
+
+
+def _is_runtime(instruction: Operation, vector: int) -> bool:
+    return instruction.kind == "tb.runtime" and instruction.operands == (vector,)
+
+
 def _interpret_block(instructions: tuple[Operation, ...]) -> Iterable[Fact]:
     registers: dict[str, _Value] = {}
     stack: list[_Value] = []
@@ -230,4 +311,7 @@ def _evidence(*groups: tuple[int, ...]) -> tuple[int, ...]:
     return tuple(dict.fromkeys(address for group in groups for address in group))
 
 
-SYMBOLIC_FACT_PASSES: tuple[NamedPass, ...] = (("symbolic-effects", symbolic_facts),)
+SYMBOLIC_FACT_PASSES: tuple[NamedPass, ...] = (
+    ("symbolic-effects", symbolic_facts),
+    ("string-stores", string_store_facts),
+)

@@ -44,6 +44,38 @@ def test_anchored_slot_types_close_both_dialect_tree_mismatches():
     assert report.mismatches == ()
 
 
+def test_signature_complete_beep_is_an_exact_migrated_statement():
+    paths = [
+        _CORPUS / f"{prefix}t1_beep.exe"
+        for prefix in ("", "v10_")
+    ]
+
+    report = compare_paths(paths)
+
+    assert report.comparable_files == report.exact_files == 2
+    assert report.mismatches == ()
+
+
+def test_static_array_facts_close_both_dialect_tree_comparisons():
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in ("t1_arr1", "t1_arr2", "t1_arr_mix", "t1_arr_two")
+    ]
+
+    report = compare_paths(paths)
+
+    assert report.comparable_files == report.exact_files == 8
+    assert report.mismatches == ()
+
+
+def test_explicit_static_array_bounds_compare_as_bounds():
+    report = compare_paths([_CORPUS / "v10_t1_intarrconst.exe"])
+
+    assert report.comparable_files == report.exact_files == 1
+    assert report.mismatches == ()
+
+
 def test_comparison_cli_prints_coverage(capsys):
     result = main([str(_CORPUS / "t1_delay.exe"), "--examples", "0"])
 

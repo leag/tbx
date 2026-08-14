@@ -10,6 +10,7 @@ _OPERATION_KINDS = {
     "semantic.print": "ir.print",
     "semantic.if_goto": "ir.if_goto",
     "semantic.delay": "ir.delay",
+    "semantic.dim": "ir.dim",
     "semantic.statement": "tb.statement",
 }
 
@@ -22,6 +23,11 @@ def build_operations(
     operations = []
     for fact in facts:
         kind = _OPERATION_KINDS.get(fact.kind)
+        if kind == "ir.dim":
+            operation = _static_dim_operation(evidence, fact)
+            if operation is not None:
+                operations.append(operation)
+            continue
         span = _span(fact, len(evidence.image))
         if kind is None or span is None:
             continue
@@ -33,6 +39,29 @@ def build_operations(
     return tuple(sorted(operations, key=_operation_key))
 
 
+def _static_dim_operation(
+    evidence: Evidence, fact: Fact
+) -> Operation | None:
+    if len(fact.subject) != 2 or len(fact.value) != 4:
+        return None
+    start, order = fact.subject
+    if not isinstance(start, int) or not isinstance(order, int):
+        return None
+    raw = " ".join(
+        evidence.image[address : address + 1].hex()
+        for address in fact.evidence
+        if 0 <= address < len(evidence.image)
+    )
+    return Operation(
+        start,
+        0,
+        "ir.dim",
+        (order, *fact.value),
+        raw,
+        fact.confidence,
+    )
+
+
 def _span(fact: Fact, image_size: int) -> tuple[int, int] | None:
     if len(fact.subject) != 2:
         return None
@@ -42,5 +71,7 @@ def _span(fact: Fact, image_size: int) -> tuple[int, int] | None:
     return (start, end) if 0 <= start < end <= image_size else None
 
 
-def _operation_key(operation: Operation) -> tuple[int, int, str]:
-    return operation.offset, operation.end, operation.kind
+def _operation_key(operation: Operation) -> tuple[int, int, int, str]:
+    if operation.kind == "ir.dim":
+        return operation.offset, operation.end, operation.operands[0], ""
+    return operation.offset, operation.end, 1000, operation.kind

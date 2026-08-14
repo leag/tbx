@@ -11,21 +11,8 @@ from collections.abc import Iterable
 from typing import Any, Callable
 
 from tbd.ir import Operation
+from tbd.profile import EC_DISPATCH_NAMES, PROLOGUES, profile_for
 
-_PROLOGUES = {b"\xcd\xec\xba": "1.1", b"\xcd\xec\xb8": "1.0"}
-_RUNTIME_NAMES = {
-    0x14: "CLEAR", 0x16: "CLOSE_ALL", 0x18: "CLOSE", 0x1A: "CLS",
-    0x22: "COLOR", 0x26: "DEF_SEG", 0x28: "DELAY_INIT",
-    0x2A: "DELAY_POLL", 0x2C: "DIM_BEGIN", 0x2E: "DIM_END",
-    0x30: "DRAW", 0x32: "END", 0x36: "ERASE", 0x38: "ERASE_STATIC",
-    0x42: "FILES", 0x44: "FILES", 0x4E: "INPUT", 0x60: "KILL",
-    0x64: "LINE_INPUT", 0x66: "LINE_INPUT_FILE", 0x82: "OPEN",
-    0x84: "PAINT", 0x86: "PALETTE_RESET", 0x88: "PALETTE",
-    0x8A: "PALETTE_USING", 0x9A: "READ_NUMBER", 0x9C: "READ_STRING",
-    0x9E: "INPUT_FILE_NUMBER", 0xA0: "INPUT_FILE_STRING", 0xA2: "POKE",
-    0xA4: "PSET", 0xB2: "DATA_NUMBER", 0xB4: "DATA_STRING",
-    0xB8: "RESET", 0xE8: "EPILOGUE", 0xEA: "VIEW", 0xF2: "WINDOW",
-}
 _JCC = (
     "jo", "jno", "jb", "jae", "je", "jne", "jbe", "ja",
     "js", "jns", "jp", "jnp", "jl", "jge", "jle", "jg",
@@ -64,8 +51,8 @@ def decode_instruction(
     """Decode one instruction without raising on an unknown opcode."""
 
     marker = exe[offset : offset + 3]
-    if offset == code_start and marker in _PROLOGUES:
-        return _op(exe, offset, 3, "tb.prologue", (_PROLOGUES[marker],), "signature")
+    if offset == code_start and marker in PROLOGUES:
+        return _op(exe, offset, 3, "tb.prologue", (PROLOGUES[marker],), "signature")
     for decoder in _DECODERS:
         if operation := decoder(exe, offset, stop, code_start, dialect):
             return operation
@@ -83,9 +70,10 @@ def _decode_interrupt(
     if 0x34 <= vector <= 0x3D and offset + 2 < stop:
         size = min(stop - offset, 2 + _modrm_size(exe, offset + 2, stop))
         return _op(exe, offset, size, "tb.fp", (vector, exe[offset + 2]), "signature")
-    kind = "tb.runtime" if vector >= 0x80 else "x86.int"
-    confidence = "signature" if vector >= 0x80 else "structural"
-    return _op(exe, offset, 2, kind, (vector,), confidence)
+    canonical = _canonical_vector(vector, dialect)
+    kind = "tb.runtime" if canonical >= 0x80 else "x86.int"
+    confidence = "signature" if canonical >= 0x80 else "structural"
+    return _op(exe, offset, 2, kind, (canonical,), confidence)
 
 
 def _decode_tb_dispatch(
@@ -93,7 +81,7 @@ def _decode_tb_dispatch(
 ) -> Operation:
     sub = _canonical_sub(vector, exe[offset + 2], dialect)
     if vector == 0xEC:
-        name = _RUNTIME_NAMES.get(sub, f"SUB_{sub:02X}")
+        name = EC_DISPATCH_NAMES.get(sub, f"SUB_{sub:02X}")
         kind = "tb.epilogue" if sub == 0xE8 else "tb.statement"
         return _op(exe, offset, 3, kind, (name, sub), "signature")
     family = "numeric" if vector == 0xED else "string"
@@ -225,10 +213,13 @@ def _modrm_kind(opcode: int) -> str:
 
 
 def _canonical_sub(vector: int, sub: int, dialect: str | None) -> int:
-    if dialect != "1.0":
-        return sub
-    floor = 0x3C if vector == 0xED else (0x2C if vector == 0xEE else 0x28)
-    return sub + 2 if sub >= floor - 2 else sub
+    profile = profile_for(dialect)
+    return profile.canonical_sub(vector, sub) if profile is not None else sub
+
+
+def _canonical_vector(vector: int, dialect: str | None) -> int:
+    profile = profile_for(dialect)
+    return profile.canonical_vector(vector) if profile is not None else vector
 
 
 def _modrm_size(exe: bytes, offset: int, stop: int) -> int:

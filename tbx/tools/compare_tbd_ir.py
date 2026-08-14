@@ -22,7 +22,9 @@ from typing import Any
 from tbx import decode0, ir
 from tbd import decode
 
-MIGRATED_KINDS = frozenset({"Assign", "Delay", "End", "IfGoto", "Print"})
+MIGRATED_KINDS = frozenset(
+    {"Assign", "Beep", "Delay", "Dim", "End", "IfGoto", "Print"}
+)
 
 
 @dataclass(frozen=True)
@@ -133,6 +135,16 @@ def _align(
 def _statement(node: Any) -> tuple[str, tuple[object, ...]]:
     if isinstance(node, ir.Assign):
         operands = _expression(node.target), _expression(node.value)
+    elif isinstance(node, ir.Dim):
+        operands = (
+            node.name,
+            tuple(_bound(value) for value in node.bounds),
+            tuple(
+                (name, tuple(_bound(value) for value in bounds))
+                for name, bounds in node.also
+            ),
+            node.dynamic,
+        )
     elif isinstance(node, ir.Print):
         mode = "console" if node.file is None else node.file
         operands = mode, tuple(_expression(item) for item in node.items), node.newline
@@ -145,6 +157,17 @@ def _statement(node: Any) -> tuple[str, tuple[object, ...]]:
     return type(node).__name__, operands
 
 
+def _bound(node: Any) -> object:
+    if isinstance(node, int):
+        return node
+    if isinstance(node, tuple) and len(node) == 2:
+        return tuple(
+            item if isinstance(item, int) else _expression(item)
+            for item in node
+        )
+    return _expression(node)
+
+
 def _condition(node: Any) -> tuple[object, ...]:
     if isinstance(node, ir.RelOp):
         return node.op, _expression(node.lhs), _expression(node.rhs)
@@ -154,6 +177,8 @@ def _condition(node: Any) -> tuple[object, ...]:
 def _expression(node: Any) -> object:
     if isinstance(node, ir.Var):
         return "var", node.name
+    if isinstance(node, ir.ArrayRef):
+        return "array", node.name, tuple(_expression(item) for item in node.indices)
     if isinstance(node, ir.Lit):
         return "const", node.value
     if isinstance(node, ir.StrLit):

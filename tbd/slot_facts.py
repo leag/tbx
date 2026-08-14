@@ -6,7 +6,7 @@ from collections.abc import Iterable
 
 from tbd.facts import Evidence, NamedPass
 from tbd.ir import Fact, Slot
-from tbd.slots import VAR_BASE, is_slot, slot_name
+from tbd.slots import VAR_BASE, slot_name
 
 
 def slot_facts(
@@ -19,7 +19,9 @@ def slot_facts(
         return
     layout = layouts[0]
     pool_base, marker = layout.value[1], layout.value[2]
-    accesses = _slot_accesses(facts, pool_base)
+    array_count = len([fact for fact in facts if fact.kind == "layout.array"])
+    scalar_base = VAR_BASE + 0x36 * array_count
+    accesses = _slot_accesses(facts, pool_base, scalar_base)
     for address, related in sorted(accesses.items()):
         types = tuple(sorted({fact.value[0] for fact in related}))
         evidence = tuple(
@@ -28,37 +30,42 @@ def slot_facts(
         yield Fact(
             "slot",
             (address,),
-            (slot_name(address), types),
+            (_scalar_name(address, scalar_base), types),
             evidence,
             "anchored",
         )
 
 
 def _slot_accesses(
-    facts: frozenset[Fact], pool_base: object
+    facts: frozenset[Fact], pool_base: object, scalar_base: int
 ) -> dict[int, list[Fact]]:
     if not isinstance(pool_base, int):
         return {}
     found: dict[int, list[Fact]] = {}
     for fact in facts:
-        if not _is_slot_access(fact, pool_base):
+        if not _is_slot_access(fact, pool_base, scalar_base):
             continue
         address = fact.subject[0]
         found.setdefault(address, []).append(fact)
     return found
 
 
-def _is_slot_access(fact: Fact, pool_base: int) -> bool:
+def _is_slot_access(fact: Fact, pool_base: int, scalar_base: int) -> bool:
     if fact.kind not in {"memory.read", "memory.write"} or not fact.subject:
         return False
     address = fact.subject[0]
     return (
         isinstance(address, int)
-        and VAR_BASE <= address < pool_base - 4
-        and is_slot(address)
+        and scalar_base <= address < pool_base - 4
+        and (address - scalar_base) % 4 == 0
         and bool(fact.value)
         and isinstance(fact.value[0], str)
     )
+
+
+def _scalar_name(address: int, scalar_base: int) -> str:
+    index = (address - scalar_base) // 4 + 1
+    return f"V{index:04d}"
 
 
 def materialize_slots(facts: tuple[Fact, ...]) -> tuple[Slot, ...]:

@@ -163,6 +163,39 @@ def test_symbolic_facts_recover_values_stores_updates_and_provenance():
     assert len([fact for fact in conditional.facts if fact.kind == "expression.compare"]) == 2
 
 
+def test_string_store_facts_require_a_complete_direct_stack_pair():
+    complete = decode(bytes.fromhex("be 40 01 cd 9c be 20 01 cd a0"))
+    incomplete = decode(bytes.fromhex("be 40 01 cd 9c be 20 01"))
+
+    stores = [fact for fact in complete.facts if fact.kind == "machine.store"]
+    assert [fact.subject for fact in stores] == [(0x120,)]
+    assert stores[0].value == (("memory", 0x140, "string"),)
+    assert stores[0].evidence == (0, 3, 5, 8)
+    assert stores[0].confidence == "signature"
+    assert not any(fact.kind == "machine.store" for fact in incomplete.facts)
+
+
+def test_string_store_facts_require_both_concat_operands():
+    complete = decode(
+        bytes.fromhex("be 40 01 cd 9c be 44 01 cd 9c cd 9b be 20 01 cd a0")
+    )
+    incomplete = decode(
+        bytes.fromhex("be 40 01 cd 9c cd 9b be 20 01 cd a0")
+    )
+
+    store = next(fact for fact in complete.facts if fact.kind == "machine.store")
+    assert store.value == (
+        (
+            "binary",
+            "+",
+            ("memory", 0x140, "string"),
+            ("memory", 0x144, "string"),
+        ),
+    )
+    assert store.evidence == (0, 3, 5, 8, 10, 12, 15)
+    assert not any(fact.kind == "machine.store" for fact in incomplete.facts)
+
+
 def _fact_values(program, kind):
     return [fact.value[0] for fact in program.facts if fact.kind == kind]
 
@@ -263,6 +296,44 @@ def test_constant_pool_candidates_follow_evidenced_slot_extent():
     assert resolved[0].operands == (0x130, ("const", 42))
 
 
+def test_static_array_layout_facts_anchor_codeless_dim_statements():
+    for prefix in ("", "v10_"):
+        image = (_CORPUS / f"{prefix}t1_arr1.exe").read_bytes()
+        program = decode(image)
+        layout = next(fact for fact in program.facts if fact.kind == "layout.pool")
+        array = next(fact for fact in program.facts if fact.kind == "layout.array")
+        exact_dim = next(
+            node for node in decode0.decode_user_code(image)
+            if isinstance(node, tbx_ir.Dim)
+        )
+
+        assert layout.value[:2] == (34416 if not prefix else 28704, 0x164)
+        assert array.subject == ("static", 0x120)
+        assert array.value == (0, "V0", ((0, 10),), "float", 0x170, 4, 11)
+        assert array.confidence == "anchored"
+        assert program.canonical_statements[0] == Statement(
+            0, program.code_start, "Dim", ("V0", (10,), (), False)
+        )
+        assert program.canonical_statements[0].operands == _tbx_statement(exact_dim)[1]
+
+
+def test_static_array_record_order_restores_source_dim_order():
+    program = decode((_CORPUS / "t1_arr_two.exe").read_bytes())
+
+    dims = [
+        statement for statement in program.canonical_statements
+        if statement.kind == "Dim"
+    ]
+    assert [statement.operands for statement in dims] == [
+        ("V0", (10,), (), False),
+        ("V1", (5,), (), False),
+    ]
+    assert not any(
+        fact.kind == "constant" and fact.subject[1] in {0x1A0, 0x1C0}
+        for fact in program.facts
+    )
+
+
 def test_assignment_pass_lifts_store_and_update_expressions():
     program = decode((_CORPUS / "t1_addimm.exe").read_bytes())
     assignments = [node.operands for node in program.operations if node.kind == "ir.assign"]
@@ -287,6 +358,30 @@ def test_assignment_facts_match_legacy_assignments_when_fully_resolved():
         ]
         assert migrated == legacy
         assert all(fact.confidence == "anchored" for fact in program.facts if fact.kind == "semantic.assign")
+
+
+def test_string_assignments_anchor_slots_and_match_tbx_trees():
+    for prefix in ("", "v10_"):
+        image = (_CORPUS / f"{prefix}t1_str.exe").read_bytes()
+        program = decode(image)
+        exact = [_tbx_statement(node) for node in decode0.decode_user_code(image)]
+        migrated = [
+            (node.kind, node.operands) for node in program.canonical_statements
+        ]
+
+        slots = [fact for fact in program.facts if fact.kind == "slot"]
+        assert [fact.value[1] for fact in slots] == [("string",), ("string",)]
+        assert migrated == exact
+
+
+def test_string_concat_assignment_matches_tbx_tree():
+    image = (_CORPUS / "zz_op_concat.exe").read_bytes()
+    exact = [_tbx_statement(node) for node in decode0.decode_user_code(image)]
+    migrated = [
+        (node.kind, node.operands) for node in decode(image).canonical_statements
+    ]
+
+    assert migrated == exact
 
 
 def test_assignment_facts_wait_for_unique_memory_identity():
@@ -340,6 +435,24 @@ def test_runtime_facts_combine_adjacent_items_and_ignore_incomplete_chains():
         ("console", (("const", 1), ("const", 1)), True)
     ]
     assert not any(fact.kind == "semantic.print" for fact in incomplete.facts)
+
+
+def test_runtime_facts_preserve_items_across_print_separators():
+    for prefix in ("", "v10_"):
+        image = (_CORPUS / f"{prefix}t1_pcomma2.exe").read_bytes()
+        program = decode(image)
+        exact = [_tbx_statement(node) for node in decode0.decode_user_code(image)]
+        migrated = [
+            (node.kind, node.operands) for node in program.canonical_statements
+        ]
+
+        assert migrated == exact
+        separated = [
+            fact for fact in program.facts
+            if fact.kind == "semantic.print" and len(fact.value[1]) == 2
+        ]
+        assert len(separated) == 2
+        assert all(len(fact.evidence) >= 8 for fact in separated)
 
 
 def test_fact_operation_view_matches_migrated_legacy_operations():
@@ -438,6 +551,22 @@ def test_canonicalization_is_a_non_destructive_final_view():
     )
 
 
+def test_canonicalization_preserves_string_concat_order():
+    left = ("slot", "V0002", 0x124, "string")
+    right = ("slot", "V0001", 0x120, "string")
+    source = (Statement(0, 0x10, "Assign", (left, ("binary", "+", left, right))),)
+
+    result = canonicalize(
+        source,
+        (Slot(0x120, "V0001", ("string",)), Slot(0x124, "V0002", ("string",))),
+    )
+
+    assert result[0].operands == (
+        ("var", "A$"),
+        ("binary", "+", ("var", "A$"), ("var", "B$")),
+    )
+
+
 def test_canonicalization_uses_anchored_slot_types_without_a_typed_read():
     program = decode((_CORPUS / "t1_meta0.exe").read_bytes())
 
@@ -523,6 +652,16 @@ def test_cli_text_can_be_written_to_a_file(tmp_path):
 def _tbx_statement(node):
     if isinstance(node, tbx_ir.Assign):
         operands = _tbx_expression(node.target), _tbx_expression(node.value)
+    elif isinstance(node, tbx_ir.Dim):
+        operands = (
+            node.name,
+            tuple(_tbx_bound(value) for value in node.bounds),
+            tuple(
+                (name, tuple(_tbx_bound(value) for value in bounds))
+                for name, bounds in node.also
+            ),
+            node.dynamic,
+        )
     elif isinstance(node, tbx_ir.Print):
         operands = (
             "console" if node.file is None else node.file,
@@ -543,9 +682,26 @@ def _tbx_statement(node):
     return type(node).__name__, operands
 
 
+def _tbx_bound(node):
+    if isinstance(node, int):
+        return node
+    if isinstance(node, tuple) and len(node) == 2:
+        return tuple(
+            item if isinstance(item, int) else _tbx_expression(item)
+            for item in node
+        )
+    return _tbx_expression(node)
+
+
 def _tbx_expression(node):
     if isinstance(node, tbx_ir.Var):
         return "var", node.name
+    if isinstance(node, tbx_ir.ArrayRef):
+        return (
+            "array",
+            node.name,
+            tuple(_tbx_expression(item) for item in node.indices),
+        )
     if isinstance(node, tbx_ir.Lit):
         return "const", node.value
     if isinstance(node, tbx_ir.StrLit):
