@@ -28,6 +28,7 @@ MIGRATED_KINDS = frozenset(
         "Assign",
         "Beep",
         "Delay",
+        "DefSeg",
         "Dim",
         "End",
         "Gosub",
@@ -173,6 +174,8 @@ def _statement(node: Any) -> tuple[str, tuple[object, ...]]:
             operands = () if node.target is None else (node.target,)
     elif isinstance(node, ir.Delay):
         operands = (_expression(node.secs),)
+    elif isinstance(node, ir.DefSeg):
+        operands = () if node.seg is None else (_expression(node.seg),)
     else:
         operands = ()
     return type(node).__name__, operands

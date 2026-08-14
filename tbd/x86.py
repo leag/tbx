@@ -283,6 +283,35 @@ def _decode_procedure_control(
     return None
 
 
+def _decode_profile_direct(
+    exe: bytes, offset: int, stop: int, _start: int, dialect: str | None
+) -> Operation | None:
+    profile = profile_for(dialect)
+    if profile is None:
+        return None
+    if (
+        offset + 4 <= stop
+        and exe[offset : offset + 2] == b"\x8c\x1e"
+        and _word(exe, offset + 2) == profile.defseg_cell
+    ):
+        return _op(exe, offset, 4, "tb.defseg_reset", confidence="signature")
+    if (
+        profile.inline_defseg_set
+        and offset + 6 <= stop
+        and exe[offset : offset + 2] == b"\xc7\x06"
+        and _word(exe, offset + 2) == profile.defseg_cell
+    ):
+        return _op(
+            exe,
+            offset,
+            6,
+            "tb.defseg_set",
+            (_word(exe, offset + 4),),
+            "signature",
+        )
+    return None
+
+
 def _decode_register(
     exe: bytes, offset: int, stop: int, _start: int, _dialect: str | None
 ) -> Operation | None:
@@ -424,6 +453,7 @@ _DECODERS: tuple[Decoder, ...] = (
     _decode_near_branch,
     _decode_far_branch,
     _decode_procedure_control,
+    _decode_profile_direct,
     _decode_register,
     _decode_stack_immediate,
     _decode_alu_immediate,

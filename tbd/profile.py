@@ -13,6 +13,8 @@ class CompilerProfile:
     prologue: bytes
     sub_shift: int
     vector_shift: int
+    defseg_cell: int
+    inline_defseg_set: bool
 
     def canonical_sub(self, dispatcher: int, sub: int) -> int:
         floors = {0xEC: 0x28, 0xED: 0x3C, 0xEE: 0x2C}
@@ -31,8 +33,8 @@ class CompilerProfile:
         return target == code_start
 
 
-TB11 = CompilerProfile("1.1", b"\xcd\xec\xba", 0, 0)
-TB10 = CompilerProfile("1.0", b"\xcd\xec\xb8", 2, 6)
+TB11 = CompilerProfile("1.1", b"\xcd\xec\xba", 0, 0, 0x1C, False)
+TB10 = CompilerProfile("1.0", b"\xcd\xec\xb8", 2, 6, 0x1C, True)
 PROFILES = (TB11, TB10)
 PROLOGUES = {profile.prologue: profile.name for profile in PROFILES}
 PROCEDURE_ENTER = b"\x55\x8b\xec"

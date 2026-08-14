@@ -43,6 +43,8 @@ def _normalize_statement(statement: Statement) -> Statement:
         )
     elif statement.kind == "Delay":
         operands = tuple(normalize_expression(item) for item in operands)
+    elif statement.kind == "DefSeg":
+        operands = tuple(normalize_expression(item) for item in operands)
     elif statement.kind == "SubDef":
         name, parameters, body = operands
         operands = (

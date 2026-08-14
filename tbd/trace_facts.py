@@ -12,6 +12,7 @@ _SOURCE_FACTS = {
     "semantic.assign",
     "semantic.call",
     "semantic.delay",
+    "semantic.defseg",
     "semantic.gosub",
     "semantic.if_goto",
     "semantic.print",

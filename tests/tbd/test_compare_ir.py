@@ -108,6 +108,20 @@ def test_profiled_source_control_closes_checked_and_computed_calls():
     assert report.kind_match_files == len(stems)
 
 
+def test_defseg_profile_signatures_close_both_dialect_kind_sequences():
+    stems = (
+        "t1_defseg", "v10_t1_defseg",
+        "t1_bload0", "v10_t1_bload0",
+    )
+
+    report = compare_paths([_CORPUS / f"{stem}.exe" for stem in stems])
+
+    assert report.failures == 0
+    assert report.tbx_statements == report.tbd_statements == 14
+    assert report.aligned_kinds == 14
+    assert report.kind_match_files == len(stems)
+
+
 def test_static_array_facts_close_both_dialect_tree_comparisons():
     paths = [
         _CORPUS / f"{prefix}{stem}.exe"

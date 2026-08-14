@@ -282,6 +282,12 @@ than becoming synthetic `SubXX` statements. Inline option bytes, relative
 targets, and dynamic target tables belong to the dispatch instruction itself;
 discovery consumes the entire evidenced signature, while a truncated payload
 stays structural and cannot add a semantic statement.
+The profile also owns the DEF SEG compiler cell. Turbo Basic 1.0's complete
+direct immediate store, 1.1's FP-expression dispatch, and both dialects' DS
+restore instruction add the same source fact with an explicit value or bare
+reset. The same bytes without a matching profile, a truncated store, or an
+unresolved FP expression remain structural rather than producing a partial
+DEF SEG statement.
 The same profile names direct emulated-FP memory widths. Long-integer and wide
 loads, stores, folds, and comparisons therefore retain their 32- or 64-bit
 memory role, and finite pooled values can support assignments and expressions

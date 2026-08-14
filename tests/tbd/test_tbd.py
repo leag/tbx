@@ -716,6 +716,64 @@ def test_profile_run_jumps_retain_the_compiled_fallthrough():
     assert [node.kind for node in far.canonical_statements[-2:]] == ["Run", "End"]
 
 
+def test_defseg_facts_recover_set_and_reset_forms_in_both_dialects():
+    expected_instructions = {
+        "t1_defseg": [
+            (0x8706, "tb.statement", ("DEF_SEG", 0x26)),
+            (0x8718, "tb.defseg_reset", ()),
+        ],
+        "v10_t1_defseg": [
+            (0x70B3, "tb.defseg_set", (0,)),
+            (0x70C6, "tb.defseg_reset", ()),
+        ],
+    }
+    for stem, expected in expected_instructions.items():
+        image = (_CORPUS / f"{stem}.exe").read_bytes()
+        exact = [
+            _tbx_statement(node)
+            for node in decode0.decode_user_code(image)
+            if isinstance(node, tbx_ir.DefSeg)
+        ]
+        program = decode(image)
+        actual = [
+            (node.kind, node.operands)
+            for node in program.canonical_statements
+            if node.kind == "DefSeg"
+        ]
+        instructions = [
+            (node.offset, node.kind, node.operands)
+            for node in program.instructions
+            if node.kind in {"tb.statement", "tb.defseg_set", "tb.defseg_reset"}
+            and (
+                node.kind != "tb.statement"
+                or node.operands[:2] == ("DEF_SEG", 0x26)
+            )
+        ]
+
+        assert actual == exact == [("DefSeg", (("const", 0),)), ("DefSeg", ())]
+        assert instructions == expected
+
+    v10_bload = decode((_CORPUS / "v10_t1_bload0.exe").read_bytes())
+    assert v10_bload.canonical_statements[0].operands == (("const", 100),)
+
+
+def test_unprofiled_or_truncated_defseg_bytes_remain_structural():
+    inline = bytes.fromhex("c7 06 1c 00 64 00")
+    reset = bytes.fromhex("8c 1e 1c 00")
+
+    raw_inline = decode_instruction(inline, 0, len(inline), 0, None)
+    old_inline = decode_instruction(inline, 0, len(inline), 0, "1.0")
+    new_inline = decode_instruction(inline, 0, len(inline), 0, "1.1")
+    truncated = decode_instruction(inline, 0, len(inline) - 1, 0, "1.0")
+    profiled_reset = decode_instruction(reset, 0, len(reset), 0, "1.1")
+
+    assert raw_inline.kind == new_inline.kind == truncated.kind == "x86.mov"
+    assert (old_inline.kind, old_inline.operands) == ("tb.defseg_set", (100,))
+    assert (profiled_reset.kind, profiled_reset.operands) == (
+        "tb.defseg_reset", ()
+    )
+
+
 def test_procedure_returns_do_not_become_source_returns():
     program = decode((_CORPUS / "t1_subgsb.exe").read_bytes())
 
@@ -1206,6 +1264,8 @@ def _tbx_statement(node):
             operands = () if node.target is None else (node.target,)
     elif isinstance(node, tbx_ir.Delay):
         operands = (_tbx_expression(node.secs),)
+    elif isinstance(node, tbx_ir.DefSeg):
+        operands = () if node.seg is None else (_tbx_expression(node.seg),)
     else:
         operands = ()
     return type(node).__name__, operands

@@ -7,6 +7,7 @@ from tbd.ir import Operation, Statement
 _SIMPLE_KINDS = {
     "ir.assign": "Assign",
     "ir.delay": "Delay",
+    "ir.defseg": "DefSeg",
     "ir.dim": "Dim",
     "ir.print": "Print",
     "ir.if_goto": "IfGoto",

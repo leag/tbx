@@ -22,6 +22,7 @@ def statement_facts(
         statement = _simple_statement(signature, instructions)
         if statement is not None:
             yield statement
+    yield from _defseg_facts(instructions, facts)
     yield from _resume_facts(instructions, facts)
     yield from _static_dim_facts(evidence, facts)
     yield from _delay_facts(instructions, facts)
@@ -62,6 +63,8 @@ def _simple_statement(
         return None
     if len(operands) < 2 or not isinstance(operands[1], int):
         return None
+    if operands[1] == 0x26:
+        return None
     source = EC_SOURCE_STATEMENTS.get(operands[1])
     if source is None:
         return None
@@ -73,6 +76,59 @@ def _simple_statement(
         signature.evidence,
         "signature",
     )
+
+
+def _defseg_facts(
+    instructions: dict[int, Operation], facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    values = tuple(fact for fact in facts if fact.kind == "expression.value")
+    for instruction in instructions.values():
+        if instruction.kind == "tb.defseg_reset":
+            yield Fact(
+                "semantic.defseg",
+                (instruction.offset, instruction.end),
+                (),
+                (instruction.offset,),
+                "signature",
+            )
+            continue
+        if instruction.kind == "tb.defseg_set" and instruction.operands:
+            yield Fact(
+                "semantic.defseg",
+                (instruction.offset, instruction.end),
+                (("const", instruction.operands[0]),),
+                (instruction.offset,),
+                "signature",
+            )
+            continue
+        if not (
+            instruction.kind == "tb.statement"
+            and instruction.operands[:2] == ("DEF_SEG", 0x26)
+        ):
+            continue
+        candidates = [
+            value
+            for value in values
+            if value.evidence
+            and (last := instructions.get(value.evidence[-1])) is not None
+            and last.end == instruction.offset
+        ]
+        if len(candidates) != 1:
+            continue
+        resolved = resolve_expression(candidates[0].value[0], facts)
+        if resolved is None:
+            continue
+        yield Fact(
+            "semantic.defseg",
+            (candidates[0].evidence[0], instruction.end),
+            (resolved.value,),
+            combine_evidence(
+                candidates[0].evidence,
+                (instruction.offset,),
+                resolved.evidence,
+            ),
+            "signature",
+        )
 
 
 def _resume_facts(
