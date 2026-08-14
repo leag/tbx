@@ -913,6 +913,55 @@ def test_input_file_rejects_an_incomplete_following_item():
     assert not any(fact.kind == "semantic.input_file" for fact in program.facts)
 
 
+def test_open_facts_preserve_both_source_scaffolds():
+    paths = [
+        _CORPUS / "t1_open2.exe",
+        _CORPUS / "t1_openfor.exe",
+        _CORPUS / "v10_t1_openfor.exe",
+        _CORPUS / "v10_t1_openrandomlen.exe",
+    ]
+    for path in paths:
+        image = path.read_bytes()
+        program = decode(image)
+        actual = [
+            (node.kind, node.operands)
+            for node in program.canonical_statements
+            if node.kind == "Open"
+        ]
+        exact = [
+            _tbx_statement(node)
+            for node in decode0.decode_user_code(image)
+            if isinstance(node, tbx_ir.Open)
+        ]
+        assert actual == exact
+
+
+def test_open_fact_requires_the_complete_string_push_scaffold():
+    image = bytearray((_CORPUS / "t1_open2.exe").read_bytes())
+    complete = decode(bytes(image))
+    first_open = next(
+        instruction
+        for instruction in complete.instructions
+        if instruction.kind == "tb.statement"
+        and instruction.operands[:1] == ("OPEN",)
+    )
+    image[first_open.offset - 5 : first_open.offset - 3] = b"\x90\x90"
+    altered = decode(bytes(image))
+
+    assert not any(
+        fact.kind == "semantic.open" and fact.subject[1] == first_open.end
+        for fact in altered.facts
+    )
+
+
+def test_open_fact_does_not_promote_an_unwritten_slot_shaped_filename():
+    for prefix in ("", "v10_"):
+        image = (_CORPUS / f"{prefix}t1_inpfilearr.exe").read_bytes()
+        program = decode(image)
+
+        assert not any(fact.kind == "semantic.open" for fact in program.facts)
+
+
 def test_close_facts_preserve_bare_immediate_and_variable_channels():
     stems = (
         "t1_close",
@@ -1950,6 +1999,14 @@ def _tbx_statement(node):
         operands = (tuple(_tbx_expression(target) for target in node.targets),)
     elif isinstance(node, tbx_ir.InputFile):
         operands = node.num, tuple(_tbx_expression(target) for target in node.vars)
+    elif isinstance(node, tbx_ir.Open):
+        operands = (
+            _tbx_expression(node.mode),
+            node.num,
+            _tbx_expression(node.file),
+            None if node.reclen is None else _tbx_expression(node.reclen),
+            node.for_as,
+        )
     elif isinstance(node, tbx_ir.Close):
         if node.num is None or isinstance(node.num, int):
             value = node.num

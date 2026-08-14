@@ -14,6 +14,7 @@ from tbd.io_facts import IO_FACT_PASSES
 from tbd.input_file_facts import INPUT_FILE_FACT_PASSES
 from tbd.ir import Diagnostic, Program
 from tbd.locate_facts import LOCATE_FACT_PASSES
+from tbd.open_facts import OPEN_FACT_PASSES
 from tbd.pool_facts import POOL_FACT_PASSES
 from tbd.procedure_facts import PROCEDURE_FACT_PASSES
 from tbd.profile import PROLOGUES
@@ -54,6 +55,7 @@ def decode(
             + SYMBOLIC_FACT_PASSES
             + ASSIGNMENT_FACT_PASSES
             + IO_FACT_PASSES
+            + OPEN_FACT_PASSES
             + INPUT_FILE_FACT_PASSES
             + LOCATE_FACT_PASSES
             + READ_FACT_PASSES

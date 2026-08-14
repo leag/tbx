@@ -41,6 +41,7 @@ MIGRATED_KINDS = frozenset(
         "Locate",
         "MidAssign",
         "OnTrap",
+        "Open",
         "Out",
         "Print",
         "Read",
@@ -209,6 +210,14 @@ def _statement(node: Any) -> tuple[str, tuple[object, ...]]:
         operands = (tuple(_expression(target) for target in node.targets),)
     elif isinstance(node, ir.InputFile):
         operands = node.num, tuple(_expression(target) for target in node.vars)
+    elif isinstance(node, ir.Open):
+        operands = (
+            _expression(node.mode),
+            node.num,
+            _expression(node.file),
+            None if node.reclen is None else _expression(node.reclen),
+            node.for_as,
+        )
     elif isinstance(node, ir.Close):
         if node.num is None or isinstance(node.num, int):
             value = node.num

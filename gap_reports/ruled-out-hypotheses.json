@@ -11,6 +11,28 @@
  ],
  "hypotheses": [
   {
+   "id": "RO-TBD-OPEN-SCAFFOLD-COVERS-ALL-CORPUS",
+   "title": "The two local OPEN scaffolds are sufficient for all 63 corpus operands",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "tests/fixtures/corpus/t1_inpfilearr.exe",
+    "tests/fixtures/corpus/v10_t1_inpfilearr.exe"
+   ],
+   "signatures": [
+    "FOR-AS OPEN reads string address 0x194",
+    "layout.pool places 0x194 below pool_base 0x1a4 and names it as an unwritten slot"
+   ],
+   "hypothesis": "Matching the complete comma and FOR-AS scaffolds and resolving their direct string reads is enough to preserve exact operands for every kind-aligned OPEN in the fixture corpus.",
+   "negative_evidence": [
+    "The dedicated pass recovers 61 of 63 OPEN statements exactly, including pooled literals, assigned scalar filenames, both source spellings, both dialects, and non-default record lengths.",
+    "In t1_inpfilearr and v10_t1_inpfilearr, the anchored layout puts pool_base at 0x1a4 while OPEN reads 0x194. The slot pass therefore calls the filename V0003 even though the authored source and tbx IR identify TEST.DAT, and there is no independent write to establish a variable.",
+    "Accepting the existing slot fact emitted plausible but wrong OPEN operands in both files. Requiring prior write evidence for slot-shaped filenames makes those two statements remain structural while preserving genuine variables populated by assignment or LINE INPUT."
+   ],
+   "instead": "Repair or disambiguate DGROUP layout for the static-array shape in t1_inpfilearr before claiming 63/63 OPEN parity. Keep the OPEN matcher unchanged and fail closed on an unwritten slot-shaped filename; do not special-case address 0x194 or reinterpret every read-only string slot as a literal.",
+   "source": "tbd parity session 2026-08-14"
+  },
+  {
    "id": "RO-TBD-RANDOMIZE-IS-AN-ISOLATED-FP-CONSUMER",
    "title": "RANDOMIZE operands can be recovered independently of DGROUP layout",
    "disposition": "refuted",

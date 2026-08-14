@@ -73,7 +73,7 @@ def _simple_statement(
     if source is None:
         return None
     name, fixed_operands = source
-    if name in {"ON_TRAP", "TRAP_CTL"}:
+    if name in {"ON_TRAP", "OPEN", "TRAP_CTL"}:
         return None
     return Fact(
         "semantic.statement",

@@ -399,6 +399,15 @@ one uniquely resolved file-number store in the compiler cell at 0x60. Numeric
 items require the final commit; string-only chains require a following boundary,
 and any incomplete next phase suppresses the whole statement. Integer scratch
 conversion and computed-array targets remain separate mechanisms.
+OPEN requires one of two complete contiguous scaffolds. The comma form stores
+the immediate file number at 0x60, pushes the resolved filename and one-character
+mode strings, loads the immediate record length in AX, and dispatches. The
+`FOR ... AS` form instead pushes the filename first and constructs its
+one-character mode in the compiler's short-string cell before the same file
+number, record-length, and dispatch tail. Record length 128 canonicalizes to the
+omitted default. A slot-shaped filename also needs independent earlier write
+evidence, which keeps a misanchored literal descriptor from becoming a plausible
+variable. A missing or unresolved leg leaves the whole OPEN structural.
 Dedicated CLOSE facts preserve the distinction between bare sub 16 and numbered
 sub 18. A numbered channel requires either an adjacent immediate AX load or the
 complete typed FP-source/integer-scratch/AX-reload bridge used for an expression;

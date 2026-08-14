@@ -204,6 +204,19 @@ def test_scalar_input_file_chains_align_with_tbx():
     assert report.failures == 0
 
 
+def test_open_kinds_align_for_both_source_scaffolds():
+    paths = [
+        _CORPUS / "t1_open2.exe",
+        _CORPUS / "t1_openfor.exe",
+        _CORPUS / "v10_t1_openfor.exe",
+        _CORPUS / "v10_t1_openrandomlen.exe",
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["Open"] == report.tbx_kinds["Open"]
+    assert report.failures == 0
+
+
 def test_close_channels_are_exact_for_all_calibrated_forms():
     paths = [
         _CORPUS / f"{stem}.exe"
