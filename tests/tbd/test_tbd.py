@@ -1433,7 +1433,41 @@ def test_computed_call_tables_discover_every_return_target():
         assert [node.kind for node in program.canonical_statements] == [
             "Assign", "OnGosub", "End", "Return", "Return"
         ]
-        assert program.canonical_statements[1].operands == (3, 4)
+        exact = decode0.decode_user_code(
+            (_CORPUS / f"{prefix}t1_ongosub.exe").read_bytes()
+        )
+        assert (
+            program.canonical_statements[1].kind,
+            program.canonical_statements[1].operands,
+        ) == _tbx_statement(exact[1])
+
+
+def test_computed_dispatch_and_file_run_match_tbx_in_both_dialects():
+    for prefix in ("", "v10_"):
+        for stem, kind in (
+            ("t1_ongoto", "OnGoto"),
+            ("t1_ongosub", "OnGosub"),
+            ("t1_run2", "Run"),
+        ):
+            image = (_CORPUS / f"{prefix}{stem}.exe").read_bytes()
+            exact = decode0.decode_user_code(image)
+            expected = next(node for node in exact if type(node).__name__ == kind)
+            actual = next(
+                node for node in decode(image).canonical_statements if node.kind == kind
+            )
+
+            assert (actual.kind, actual.operands) == _tbx_statement(expected)
+
+
+def test_control_operands_require_complete_compiler_scaffolds():
+    missing_selector = decode(bytes.fromhex("cd ec 74 01 00 00 00 00 00"))
+    missing_file = decode(bytes.fromhex("cd ec c4"))
+
+    assert not any(
+        fact.kind == "semantic.on_goto" for fact in missing_selector.facts
+    )
+    assert not any(fact.kind == "semantic.run" for fact in missing_file.facts)
+    assert missing_selector.canonical_statements == missing_file.canonical_statements == ()
 
 
 def test_profile_run_jumps_retain_the_compiled_fallthrough():
@@ -2149,6 +2183,12 @@ def _tbx_statement(node):
     elif isinstance(node, tbx_ir.OnTrap):
         number = None if node.n is None else _tbx_expression(node.n)
         operands = node.event, number, node.target
+    elif isinstance(node, tbx_ir.OnError):
+        operands = (node.target,)
+    elif isinstance(node, (tbx_ir.OnGoto, tbx_ir.OnGosub)):
+        operands = (_tbx_expression(node.selector), *node.targets)
+    elif isinstance(node, tbx_ir.Run):
+        operands = () if node.file is None else (_tbx_expression(node.file),)
     elif isinstance(node, tbx_ir.Field):
         operands = node.num, tuple(
             (_tbx_expression(width), _tbx_expression(target))

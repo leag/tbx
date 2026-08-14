@@ -84,6 +84,10 @@ def _normalize_statement(statement: Statement) -> Statement:
             None if operands[1] is None else normalize_expression(operands[1]),
             operands[2],
         )
+    elif statement.kind in {"OnGoto", "OnGosub"}:
+        operands = (normalize_expression(operands[0]), *operands[1:])
+    elif statement.kind == "Run" and operands:
+        operands = (normalize_expression(operands[0]),)
     elif statement.kind in {"Print", "Lprint"}:
         mode, items, newline = operands
         if not isinstance(mode, (int, str)):

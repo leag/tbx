@@ -27,6 +27,8 @@ def statement_facts(
     yield from _close_facts(instructions, facts)
     yield from _trap_ctl_facts(instructions)
     yield from _on_trap_facts(instructions, facts)
+    yield from _on_dispatch_facts(instructions, facts)
+    yield from _file_run_facts(instructions, facts)
     yield from _resume_facts(instructions, facts)
     yield from _static_dim_facts(evidence, facts)
     yield from _delay_facts(instructions, facts)
@@ -73,7 +75,15 @@ def _simple_statement(
     if source is None:
         return None
     name, fixed_operands = source
-    if name in {"INPUT", "ON_TRAP", "OPEN", "TRAP_CTL"}:
+    if name in {
+        "INPUT",
+        "ON_GOSUB",
+        "ON_GOTO",
+        "ON_TRAP",
+        "OPEN",
+        "RUN",
+        "TRAP_CTL",
+    }:
         return None
     return Fact(
         "semantic.statement",
@@ -107,7 +117,7 @@ def _close_facts(
         value = _immediate_ax(load)
         evidence = (load.offset, close.offset) if load is not None else ()
         if value is None:
-            bridged = _close_bridge(load, by_end)
+            bridged = _fp_ax_bridge(load, by_end)
             if bridged is None:
                 continue
             expression, evidence = bridged
@@ -226,7 +236,7 @@ def _immediate_ax(instruction: Operation | None) -> object | None:
     return None
 
 
-def _close_bridge(
+def _fp_ax_bridge(
     reload: Operation | None, by_end: dict[int, Operation]
 ) -> tuple[object, tuple[int, ...]] | None:
     if reload is None:
@@ -255,6 +265,83 @@ def _close_bridge(
     address = struct.unpack_from("<H", source_raw, 3)[0]
     expression = "memory", address, FP_TRANSFER_TYPES[source_raw[1]]
     return expression, (source.offset, store.offset, reload.offset)
+
+
+def _on_dispatch_facts(
+    instructions: dict[int, Operation], facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    by_end = {instruction.end: instruction for instruction in instructions.values()}
+    kinds = {
+        "ON_GOTO": (0x74, "semantic.on_goto"),
+        "ON_GOSUB": (0x72, "semantic.on_gosub"),
+    }
+    for instruction in instructions.values():
+        if (
+            instruction.kind != "tb.statement"
+            or len(instruction.operands) < 3
+            or instruction.operands[0] not in kinds
+            or instruction.operands[1] != kinds[instruction.operands[0]][0]
+            or not all(isinstance(target, int) for target in instruction.operands[2:])
+        ):
+            continue
+        bridge = _fp_ax_bridge(by_end.get(instruction.offset), by_end)
+        if bridge is None:
+            continue
+        expression, bridge_evidence = bridge
+        resolved = resolve_expression(expression, facts)
+        if resolved is None:
+            continue
+        yield Fact(
+            kinds[instruction.operands[0]][1],
+            (bridge_evidence[0], instruction.end),
+            (resolved.value, *instruction.operands[2:]),
+            combine_evidence(
+                bridge_evidence,
+                resolved.evidence,
+                (instruction.offset,),
+            ),
+            "anchored",
+        )
+
+
+def _file_run_facts(
+    instructions: dict[int, Operation], facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    by_end = {instruction.end: instruction for instruction in instructions.values()}
+    for instruction in instructions.values():
+        if instruction.kind != "tb.statement" or instruction.operands[:2] != (
+            "RUN",
+            0xC4,
+        ):
+            continue
+        runtime = by_end.get(instruction.offset)
+        setup = by_end.get(runtime.offset) if runtime is not None else None
+        if (
+            runtime is None
+            or runtime.kind != "tb.runtime"
+            or runtime.operands != (0x9C,)
+            or setup is None
+            or setup.kind != "x86.mov_imm"
+            or len(setup.operands) != 2
+            or setup.operands[0] != "si"
+            or not isinstance(setup.operands[1], int)
+        ):
+            continue
+        resolved = resolve_expression(
+            ("memory", setup.operands[1], "string"), facts
+        )
+        if resolved is None:
+            continue
+        yield Fact(
+            "semantic.run",
+            (setup.offset, instruction.end),
+            (resolved.value,),
+            combine_evidence(
+                (setup.offset, runtime.offset, instruction.offset),
+                resolved.evidence,
+            ),
+            "anchored",
+        )
 
 
 def _defseg_facts(

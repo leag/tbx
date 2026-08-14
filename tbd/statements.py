@@ -29,6 +29,8 @@ _SIMPLE_KINDS = {
     "ir.close": "Close",
     "ir.trap_ctl": "TrapCtl",
     "ir.on_trap": "OnTrap",
+    "ir.on_goto": "OnGoto",
+    "ir.on_gosub": "OnGosub",
     "ir.gosub": "Gosub",
     "ir.return": "Return",
     "ir.resume": "Resume",
@@ -161,7 +163,9 @@ def _resolve_operands(
     if kind == "OnTrap" and len(operands) == 3:
         return operands[0], operands[1], _resolve(operands[2], addresses)
     if kind in {"OnGoto", "OnGosub"}:
-        return tuple(_resolve(target, addresses) for target in operands)
+        return operands[:1] + tuple(
+            _resolve(target, addresses) for target in operands[1:]
+        )
     return operands
 
 

@@ -56,6 +56,19 @@ def test_signature_complete_beep_is_an_exact_migrated_statement():
     assert report.mismatches == ()
 
 
+def test_control_operands_are_exact_migrated_statements():
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in ("t1_onerr", "t1_ongoto", "t1_ongosub", "t1_run2")
+    ]
+
+    report = compare_paths(paths)
+
+    assert report.comparable_files == report.exact_files == 8
+    assert report.mismatches == ()
+
+
 def test_complete_constant_out_scaffold_is_exact_in_both_dialects():
     paths = [
         _CORPUS / f"{prefix}t1_out.exe"
