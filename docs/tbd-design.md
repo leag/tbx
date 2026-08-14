@@ -381,6 +381,13 @@ false integer memory roles. When independent facts anchor both four-byte base
 slots, the signature adds one SWAP statement with all six instruction addresses
 as provenance. Array and mixed scalar/array SWAP use separate mechanisms and
 remain unsupported by this lift.
+LOCATE groups its independent runtime legs before adding a fact: CF carries
+row/column (with 0x8000 as the compiler's omitted-row sentinel), D0 carries the
+optional cursor flag, and CE carries cursor start/stop. A shape leg closes the
+statement itself; shorter forms require a following instruction that cannot
+begin an extension, or another complete row/column leg, as positive boundary
+evidence. An unresolved or truncated extension therefore cannot leave a stale
+partial LOCATE fact.
 Device I/O likewise requires its whole compiler scaffold. Constant OUT is
 recovered only when two immediate AX loads are separated by the exact
 `mov bx,ax` staging move and followed contiguously by `mov dx,bx; out dx,al` in

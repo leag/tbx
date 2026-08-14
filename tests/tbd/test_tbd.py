@@ -800,6 +800,45 @@ def test_scalar_swap_requires_the_complete_inline_template():
     assert not any(fact.kind == "semantic.swap" for fact in altered.facts)
 
 
+def test_grouped_locate_runtime_legs_recover_complete_constant_forms():
+    stems = (
+        "t1_locateomit",
+        "t1_locate5",
+        "t1_loccurs",
+        "v10_t1_loccurs",
+        "t1_scr2",
+        "v10_t1_scr2",
+    )
+    for stem in stems:
+        image = (_CORPUS / f"{stem}.exe").read_bytes()
+        program = decode(image)
+        actual = [
+            (node.kind, node.operands)
+            for node in program.canonical_statements
+            if node.kind == "Locate"
+        ]
+        exact = [
+            _tbx_statement(node)
+            for node in decode0.decode_user_code(image)
+            if isinstance(node, tbx_ir.Locate)
+        ]
+
+        assert actual == exact
+        assert all(
+            fact.confidence == "signature"
+            for fact in program.facts
+            if fact.kind == "semantic.locate"
+        )
+
+
+def test_locate_does_not_emit_a_partial_cursor_extension():
+    truncated = decode(
+        bytes.fromhex("b8 03 00 89 c3 b8 05 00 cd cf b8 01 00")
+    )
+
+    assert not any(fact.kind == "semantic.locate" for fact in truncated.facts)
+
+
 def test_runtime_facts_recover_complete_field_descriptors():
     for prefix in ("", "v10_"):
         image = (_CORPUS / f"{prefix}t1_field.exe").read_bytes()
@@ -1738,6 +1777,11 @@ def _tbx_statement(node):
         )
     elif isinstance(node, tbx_ir.Swap):
         operands = _tbx_expression(node.a), _tbx_expression(node.b)
+    elif isinstance(node, tbx_ir.Locate):
+        operands = tuple(
+            None if value is None else _tbx_expression(value)
+            for value in (node.row, node.col, node.cursor, node.start, node.stop)
+        )
     elif isinstance(node, tbx_ir.Field):
         operands = node.num, tuple(
             (_tbx_expression(width), _tbx_expression(target))

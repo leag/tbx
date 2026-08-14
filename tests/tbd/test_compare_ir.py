@@ -163,6 +163,21 @@ def test_scalar_swap_template_is_exact_in_both_dialects():
     assert report.mismatches == ()
 
 
+def test_grouped_constant_locate_forms_align_with_tbx():
+    stems = (
+        "t1_locateomit",
+        "t1_locate5",
+        "t1_loccurs",
+        "v10_t1_loccurs",
+        "t1_scr2",
+        "v10_t1_scr2",
+    )
+    report = compare_paths([_CORPUS / f"{stem}.exe" for stem in stems])
+
+    assert report.aligned_by_kind["Locate"] == report.tbx_kinds["Locate"] == 9
+    assert report.failures == 0
+
+
 def test_complete_field_descriptors_are_exact_in_both_dialects():
     paths = [
         _CORPUS / f"{prefix}t1_field.exe"

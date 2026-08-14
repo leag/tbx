@@ -40,6 +40,11 @@ def _normalize_statement(statement: Statement) -> Statement:
             normalize_expression(source),
             None if length is None else normalize_expression(length),
         )
+    elif statement.kind == "Locate":
+        operands = tuple(
+            None if operand is None else normalize_expression(operand)
+            for operand in operands
+        )
     elif statement.kind in {"Print", "Lprint"}:
         mode, items, newline = operands
         operands = mode, tuple(normalize_expression(item) for item in items), newline
