@@ -98,6 +98,13 @@ def test_resolved_lprint_chain_is_exact_in_both_dialects():
     assert report.mismatches == ()
 
 
+def test_consecutive_printer_flush_recovers_blank_lprint_exactly():
+    report = compare_paths([_CORPUS / "t1_lpstr.exe"])
+
+    assert report.comparable_files == report.exact_files == 1
+    assert report.mismatches == ()
+
+
 def test_immediate_printer_controls_produce_an_exact_lprint_tree():
     report = compare_paths([_CORPUS / "t1_ltab.exe"])
 

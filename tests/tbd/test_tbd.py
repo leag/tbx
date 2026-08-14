@@ -565,7 +565,7 @@ def test_runtime_facts_classify_resolved_printer_chains_as_lprint():
     for stem, expected_count in {
         "t1_lprint": 1,
         "v10_t1_lprint": 1,
-        "t1_lpstr": 2,
+        "t1_lpstr": 3,
     }.items():
         image = (_CORPUS / f"{stem}.exe").read_bytes()
         program = decode(image)
@@ -592,6 +592,24 @@ def test_runtime_facts_classify_resolved_printer_chains_as_lprint():
             for statement in decode0.decode_user_code(image)
         ]
         assert actual == exact
+
+    blank_image = (_CORPUS / "t1_lpstr.exe").read_bytes()
+    blank = decode(blank_image)
+    assert [
+        (statement.kind, statement.operands)
+        for statement in blank.canonical_statements
+    ] == [
+        _tbx_statement(statement)
+        for statement in decode0.decode_user_code(blank_image)
+    ]
+    single_flush = decode(bytes.fromhex("cd b9"))
+    double_flush = decode(bytes.fromhex("cd b9 cd b9"))
+    assert not any(
+        fact.kind == "semantic.lprint" for fact in single_flush.facts
+    )
+    assert [
+        fact.value for fact in double_flush.facts if fact.kind == "semantic.lprint"
+    ] == [("printer", (), True)]
 
 
 def test_runtime_facts_keep_tab_spc_items_in_their_chains():

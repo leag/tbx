@@ -77,9 +77,26 @@ def runtime_facts(
             support,
             "anchored",
         )
+    yield from _blank_lprint_facts(evidence.instructions)
     yield from _write_facts(evidence.instructions, facts)
     yield from _fixed_string_facts(evidence.instructions, facts)
     yield from _field_facts(evidence.instructions, facts)
+
+
+def _blank_lprint_facts(instructions: tuple[Operation, ...]) -> Iterable[Fact]:
+    for previous, current in zip(instructions, instructions[1:]):
+        if (
+            previous.end == current.offset
+            and _runtime_vector(previous) == 0xB9
+            and _runtime_vector(current) == 0xB9
+        ):
+            yield Fact(
+                "semantic.lprint",
+                (current.offset, current.end),
+                ("printer", (), True),
+                (previous.offset, current.offset),
+                "signature",
+            )
 
 
 def _field_facts(
