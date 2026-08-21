@@ -397,8 +397,11 @@ slots, the signature adds one SWAP statement with all six instruction addresses
 as provenance. Static numeric array SWAP is a separate composition: reusable
 array-address facts own the index conversion, element width, and static layout;
 the SWAP pass joins two such facts only across the compiler's DS-save/ES-restore
-pair and the complete one- or two-word exchange tail. Dynamic arrays and mixed
-scalar/array SWAP use separate mechanisms and remain unsupported by this lift.
+pair and the complete one- or two-word exchange tail. The mixed scalar/static
+string-array form likewise consumes an array-address fact, while a whole
+two-word descriptor matcher claims its integer-looking component operations so
+they do not pollute the scalar's string type. Dynamic-array SWAP remains a
+separate unsupported mechanism.
 LOCATE groups its independent runtime legs before adding a fact: CF carries
 row/column (with 0x8000 as the compiler's omitted-row sentinel), D0 carries the
 optional cursor flag, and CE carries cursor start/stop. A shape leg closes the

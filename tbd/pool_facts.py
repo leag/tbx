@@ -10,7 +10,7 @@ from tbd.ir import Fact, Operation
 from tbd.pool import array_at, decode_literal, infer_layout
 from tbd.profile import FP_ARITHMETIC_TYPES, FP_TRANSFER_TYPES
 from tbd.slots import VAR_BASE
-from tbd.swap_facts import scalar_swap_matches
+from tbd.swap_facts import mixed_string_array_swap_matches, scalar_swap_matches
 
 
 def memory_access_facts(
@@ -23,6 +23,11 @@ def memory_access_facts(
         for match in scalar_swap_matches(evidence.instructions)
         for offset in match.evidence
     }
+    claimed.update(
+        offset
+        for match in mixed_string_array_swap_matches(evidence.instructions)
+        for offset in match.components
+    )
     for instruction in evidence.instructions:
         if instruction.offset in claimed:
             continue

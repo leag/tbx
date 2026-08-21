@@ -114,16 +114,27 @@ def array_address_facts(
 def _static_array_address(
     operations: tuple[CompilerOp, ...], index: int, facts: frozenset[Fact]
 ) -> Fact | None:
-    operand = _integer_operand(operations, index, facts)
-    if operand is None:
-        return None
-    start, resolved, cursor = operand
+    start = operations[index]
+    direct_si = start.kind == "movsim" and len(start.args) == 1
+    if direct_si:
+        resolved = resolve_expression(
+            ("memory", start.args[0], "integer"), facts
+        )
+        cursor = index + 1
+        if resolved is None:
+            return None
+    else:
+        operand = _integer_operand(operations, index, facts)
+        if operand is None:
+            return None
+        start, resolved, cursor = operand
     before = cursor < len(operations) and operations[cursor].kind == "movbxsi"
     if before:
         cursor += 1
-    if cursor >= len(operations) or operations[cursor].kind != "movsiax":
-        return None
-    cursor += 1
+    if not direct_si:
+        if cursor >= len(operations) or operations[cursor].kind != "movsiax":
+            return None
+        cursor += 1
     after = cursor < len(operations) and operations[cursor].kind == "movaxbx"
     if after:
         cursor += 1

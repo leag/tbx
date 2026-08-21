@@ -962,6 +962,40 @@ def test_static_array_swap_consumes_shared_element_address_facts():
             assert swap.confidence == "anchored"
 
 
+def test_mixed_string_array_swap_claims_descriptor_exchange_components():
+    for prefix in ("", "v10_"):
+        image = (_CORPUS / f"{prefix}t1_swapstrelem.exe").read_bytes()
+        program = decode(image)
+        actual = [
+            (node.kind, node.operands)
+            for node in program.canonical_statements
+            if node.kind == "Swap"
+        ]
+        exact = [
+            _tbx_statement(node)
+            for node in decode0.decode_user_code(image)
+            if isinstance(node, tbx_ir.Swap)
+        ]
+
+        assert actual == exact
+        swap = next(
+            fact for fact in program.facts if fact.kind == "semantic.swap"
+        )
+        address = next(
+            fact
+            for fact in program.facts
+            if fact.kind == "reference.array_address"
+            and fact.subject[0] == swap.subject[0]
+        )
+        assert address.value[1:] == ("string", 4, False)
+        assert not any(
+            fact.kind in {"memory.read", "memory.write"}
+            and fact.subject in {(344,), (346,)}
+            and fact.value == ("integer",)
+            for fact in program.facts
+        )
+
+
 def test_grouped_locate_runtime_legs_recover_complete_constant_forms():
     stems = (
         "t1_locateomit",

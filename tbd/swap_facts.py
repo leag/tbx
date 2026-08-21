@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from tbd.compiler_ops import CompilerOp, operation_indexes, translate_operations
 from tbd.facts import Evidence, NamedPass
 from tbd.ir import Fact, Operation
-from tbd.semantic import combine_evidence, resolve_slot
+from tbd.semantic import combine_evidence, resolve_expression, resolve_slot
 
 
 @dataclass(frozen=True)
@@ -23,6 +23,18 @@ class ScalarSwapMatch:
     evidence: tuple[int, ...]
 
 
+@dataclass(frozen=True)
+class MixedStringArraySwapMatch:
+    """One static string-array/scalar descriptor exchange."""
+
+    start: int
+    end: int
+    array_end: int
+    scalar: int
+    evidence: tuple[int, ...]
+    components: tuple[int, ...]
+
+
 def scalar_swap_matches(
     instructions: tuple[Operation, ...],
 ) -> tuple[ScalarSwapMatch, ...]:
@@ -34,6 +46,54 @@ def scalar_swap_matches(
         match = _scalar_swap(window)
         if match is not None:
             matches.append(match)
+    return tuple(matches)
+
+
+def mixed_string_array_swap_matches(
+    instructions: tuple[Operation, ...],
+) -> tuple[MixedStringArraySwapMatch, ...]:
+    """Return complete index-plus-two-word exchange templates."""
+
+    matches = []
+    for index in range(len(instructions) - 9):
+        window = instructions[index : index + 10]
+        raw = tuple(bytes.fromhex(instruction.raw) for instruction in window)
+        if (
+            not _contiguous(window)
+            or len(raw[0]) != 4
+            or raw[0][:2] != b"\x8b\x36"
+            or raw[1:3] != (b"\xd1\xe6", b"\xd1\xe6")
+            or len(raw[3]) != 4
+            or raw[3][:2] != b"\x81\xc6"
+            or len(raw[4]) != 4
+            or raw[4][:2] != b"\x8b\x06"
+            or raw[5] != b"\x87\x04"
+            or len(raw[6]) != 4
+            or raw[6][:2] != b"\x89\x06"
+            or len(raw[7]) != 4
+            or raw[7][:2] != b"\x8b\x06"
+            or raw[8] != b"\x87\x44\x02"
+            or len(raw[9]) != 4
+            or raw[9][:2] != b"\x89\x06"
+        ):
+            continue
+        low = struct.unpack_from("<H", raw[4], 2)[0]
+        if (
+            struct.unpack_from("<H", raw[6], 2)[0] != low
+            or struct.unpack_from("<H", raw[7], 2)[0] != low + 2
+            or struct.unpack_from("<H", raw[9], 2)[0] != low + 2
+        ):
+            continue
+        matches.append(
+            MixedStringArraySwapMatch(
+                window[0].offset,
+                window[-1].end,
+                window[3].end,
+                low,
+                tuple(item.offset for item in window),
+                tuple(item.offset for item in window[4:]),
+            )
+        )
     return tuple(matches)
 
 
@@ -116,6 +176,38 @@ def _array_swap_facts(
             (left.subject[0], tail[-1].end),
             (left.value[0], right.value[0]),
             support,
+            "anchored",
+        )
+    yield from _mixed_string_array_swap_facts(evidence.instructions, facts)
+
+
+def _mixed_string_array_swap_facts(
+    instructions: tuple[Operation, ...],
+    facts: frozenset[Fact],
+) -> Iterable[Fact]:
+    addresses = {
+        (fact.subject[0], fact.subject[1]): fact
+        for fact in facts
+        if fact.kind == "reference.array_address"
+        and len(fact.subject) == 2
+        and fact.value[1:] == ("string", 4, False)
+    }
+    for match in mixed_string_array_swap_matches(instructions):
+        address = addresses.get((match.start, match.array_end))
+        if address is None:
+            continue
+        scalar = resolve_expression(("memory", match.scalar, "string"), facts)
+        if scalar is None:
+            continue
+        yield Fact(
+            "semantic.swap",
+            (match.start, match.end),
+            (scalar.value, address.value[0]),
+            combine_evidence(
+                address.evidence,
+                scalar.evidence,
+                match.evidence,
+            ),
             "anchored",
         )
 
