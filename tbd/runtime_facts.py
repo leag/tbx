@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from tbd.facts import Evidence, NamedPass
 from tbd.ir import Fact, Operation
+from tbd.matchers import fp_ax_bridge
 from tbd.semantic import combine_evidence, resolve_expression, resolve_slot
 
 _NUMERIC_ITEMS = {0xBB: "console", 0xBD: "file", 0xBC: "printer"}
@@ -520,6 +521,7 @@ def _print_items(
     facts: frozenset[Fact],
 ) -> tuple[_Item, ...]:
     result = []
+    by_end = {instruction.end: instruction for instruction in instructions}
     for index, instruction in enumerate(instructions):
         if item := _numeric_item(instruction, expressions, facts):
             result.append(item)
@@ -527,7 +529,7 @@ def _print_items(
             result.append(item)
         if item := _control_item(instructions[index : index + 2]):
             result.append(item)
-        if item := _bridged_control(instructions[index : index + 4], facts):
+        if item := _bridged_control(instruction, by_end, facts):
             result.append(item)
     return tuple(result)
 
@@ -593,43 +595,27 @@ def _control_item(pair: tuple[Operation, ...]) -> _Item | None:
 
 
 def _bridged_control(
-    window: tuple[Operation, ...], facts: frozenset[Fact]
+    runtime: Operation,
+    by_end: dict[int, Operation],
+    facts: frozenset[Fact],
 ) -> _Item | None:
-    if len(window) != 4:
-        return None
-    source, store, reload, runtime = window
     control = _CONTROL_ITEMS.get(_runtime_vector(runtime))
-    address = _fp_ax_reload(reload)
-    if control is None or address is None or not _contiguous(window):
+    reload = by_end.get(runtime.offset)
+    bridge = fp_ax_bridge(reload, by_end)
+    if control is None or bridge is None:
         return None
-    effects = [
-        fact
-        for fact in facts
-        if fact.kind == "machine.store"
-        and fact.subject == (address,)
-        and fact.evidence == (source.offset, store.offset)
-        and len(fact.value) == 1
-    ]
-    if len(effects) != 1:
-        return None
-    resolved = resolve_expression(effects[0].value[0], facts)
+    expression, evidence = bridge
+    resolved = resolve_expression(expression, facts)
     if resolved is None:
         return None
     name, mode = control
     value = "call", name, (resolved.value,)
     support = combine_evidence(
-        tuple(instruction.offset for instruction in window),
-        effects[0].evidence,
+        evidence,
+        (runtime.offset,),
         resolved.evidence,
     )
-    return _Item(source.offset, runtime.end, mode, value, support)
-
-
-def _fp_ax_reload(instruction: Operation) -> int | None:
-    raw = bytes.fromhex(instruction.raw)
-    if instruction.kind != "tb.fp" or len(raw) != 5 or raw[:3] != b"\xcd\x3d\xa1":
-        return None
-    return struct.unpack_from("<H", raw, 3)[0]
+    return _Item(evidence[0], runtime.end, mode, value, support)
 
 
 def _contiguous(instructions: tuple[Operation, ...]) -> bool:

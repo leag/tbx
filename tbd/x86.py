@@ -24,6 +24,7 @@ from tbd.profile import (
     PROLOGUES,
     RETURN_TO_VECTOR,
     TRACE_VECTOR,
+    TRANSCEND_FUNCTIONS,
     profile_for,
 )
 
@@ -79,12 +80,67 @@ def _decode_interrupt(
     if exe[offset] != 0xCD or offset + 1 >= stop:
         return None
     vector = exe[offset + 1]
+    if (
+        dialect is not None
+        and vector == 0x3E
+        and offset + 2 < stop
+        and exe[offset + 2] in TRANSCEND_FUNCTIONS
+    ):
+        return _op(
+            exe,
+            offset,
+            3,
+            "tb.fp_function",
+            (TRANSCEND_FUNCTIONS[exe[offset + 2]],),
+            "signature",
+        )
     if vector in (0xEC, 0xED, 0xEE) and offset + 2 < stop:
         return _decode_tb_dispatch(exe, offset, stop, code_start, vector, dialect)
-    if 0x34 <= vector <= 0x3D and offset + 2 < stop:
+    if (
+        vector == 0x3C
+        and offset + 3 < stop
+        and 0xD8 <= exe[offset + 2] <= 0xDF
+    ):
+        size = min(stop - offset, 3 + _modrm_size(exe, offset + 3, stop))
+        return _op(
+            exe,
+            offset,
+            size,
+            "tb.fp_far",
+            (exe[offset + 2], exe[offset + 3]),
+            "signature",
+        )
+    if vector == 0x3D:
+        return _op(exe, offset, 2, "tb.fwait", (), "signature")
+    if 0x34 <= vector <= 0x3B and offset + 2 < stop:
         size = min(stop - offset, 2 + _modrm_size(exe, offset + 2, stop))
         return _op(exe, offset, size, "tb.fp", (vector, exe[offset + 2]), "signature")
     canonical = _canonical_vector(vector, dialect)
+    bounds_kind = {
+        0x91: "base",
+        0x92: "span",
+        0x93: "index",
+        0x94: "base_bp",
+        0x96: "index_bp",
+    }.get(canonical)
+    if dialect is not None and bounds_kind is not None:
+        if offset + 4 > stop:
+            return _op(
+                exe,
+                offset,
+                2,
+                "tb.bounds_truncated",
+                (bounds_kind, 4),
+                "structural",
+            )
+        return _op(
+            exe,
+            offset,
+            4,
+            "tb.bounds",
+            (bounds_kind, _word(exe, offset + 2)),
+            "signature",
+        )
     if dialect is not None and canonical == CHECKED_GOSUB_VECTOR:
         if offset + 6 > stop:
             return _op(

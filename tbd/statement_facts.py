@@ -2,13 +2,29 @@
 
 from __future__ import annotations
 
-import struct
 from collections.abc import Iterable
 
 from tbd.facts import Evidence, NamedPass
 from tbd.ir import Fact, Operation
-from tbd.profile import EC_SOURCE_STATEMENTS, FP_TRANSFER_TYPES
+from tbd.matchers import fp_ax_bridge, string_push_scaffold
+from tbd.profile import EC_SOURCE_STATEMENTS
 from tbd.semantic import combine_evidence, resolve_expression
+from tbd.string_statement_facts import SINGLE_STRING_STATEMENT_NAMES
+
+_DEDICATED_STATEMENT_NAMES = SINGLE_STRING_STATEMENT_NAMES | frozenset(
+    {
+        "COLOR",
+        "FILES",
+        "INPUT",
+        "ON_GOSUB",
+        "ON_GOTO",
+        "ON_TRAP",
+        "OPEN",
+        "RUN",
+        "SCREEN",
+        "TRAP_CTL",
+    }
+)
 
 
 def statement_facts(
@@ -31,7 +47,29 @@ def statement_facts(
     yield from _file_run_facts(instructions, facts)
     yield from _resume_facts(instructions, facts)
     yield from _static_dim_facts(evidence, facts)
+    yield from _option_base_facts(evidence, facts)
     yield from _delay_facts(instructions, facts)
+
+
+def _option_base_facts(
+    evidence: Evidence, facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    if not evidence.instructions:
+        return
+    votes = [
+        fact
+        for fact in facts
+        if fact.kind == "option.base" and fact.value == (1,)
+    ]
+    if not votes:
+        return
+    yield Fact(
+        "semantic.option_base",
+        (evidence.instructions[0].offset, -1),
+        (1,),
+        combine_evidence(*(fact.evidence for fact in votes)),
+        "anchored",
+    )
 
 
 def _static_dim_facts(
@@ -39,23 +77,85 @@ def _static_dim_facts(
 ) -> Iterable[Fact]:
     if not evidence.instructions:
         return
+    has_runtime_dim = any(
+        instruction.kind == "tb.statement"
+        and instruction.operands[:1] == ("DIM_BEGIN",)
+        for instruction in evidence.instructions
+    )
+    if has_runtime_dim and not any(fact.kind == "option.base" for fact in facts):
+        return
+    has_procedure = any(
+        instruction.kind == "tb.proc_enter"
+        for instruction in evidence.instructions
+    )
+    procedures = tuple(
+        fact for fact in facts if fact.kind == "semantic.sub_def"
+    )
+    if has_procedure and not procedures:
+        return
     code_start = evidence.instructions[0].offset
     arrays = sorted(
         (fact for fact in facts if fact.kind == "layout.array"),
         key=lambda fact: fact.value[0],
     )
+    option_values = {
+        fact.value[0]
+        for fact in facts
+        if fact.kind == "option.base"
+        and len(fact.value) == 1
+        and fact.value[0] in {0, 1}
+    }
+    option_base = next(iter(option_values)) if len(option_values) == 1 else 0
     for array in arrays:
         order, name, bounds, _kind, _base, _size, _count = array.value
         source_bounds = tuple(
-            high if low == 0 else (low, high) for low, high in bounds
+            high if low == option_base else (low, high) for low, high in bounds
         )
+        owner = _static_array_owner(array, procedures, facts)
+        fact_kind = "semantic.local_dim" if owner is not None else "semantic.dim"
+        subject = (owner.value[0] + 1, order) if owner is not None else (code_start, order)
         yield Fact(
-            "semantic.dim",
-            (code_start, order),
+            fact_kind,
+            subject,
             (name, source_bounds, (), False),
             combine_evidence(array.evidence, (code_start,)),
             "anchored",
         )
+
+
+def _static_array_owner(
+    array: Fact,
+    procedures: tuple[Fact, ...],
+    facts: frozenset[Fact],
+) -> Fact | None:
+    _order, _name, _bounds, _kind, base, width, count = array.value
+    if not all(isinstance(value, int) for value in (base, width, count)):
+        return None
+    sources = {
+        source
+        for fact in facts
+        if fact.kind in {"memory.read", "memory.write"}
+        and fact.subject
+        and isinstance(fact.subject[0], int)
+        and base <= fact.subject[0] < base + width * count
+        for source in fact.evidence
+    }
+    if not sources:
+        return None
+    owners = {
+        procedure
+        for source in sources
+        for procedure in procedures
+        if procedure.subject[0] <= source < procedure.subject[1]
+    }
+    outside = any(
+        not any(
+            procedure.subject[0] <= source < procedure.subject[1]
+            for procedure in procedures
+        )
+        for source in sources
+    )
+    return next(iter(owners)) if len(owners) == 1 and not outside else None
 
 
 def _simple_statement(
@@ -75,15 +175,7 @@ def _simple_statement(
     if source is None:
         return None
     name, fixed_operands = source
-    if name in {
-        "INPUT",
-        "ON_GOSUB",
-        "ON_GOTO",
-        "ON_TRAP",
-        "OPEN",
-        "RUN",
-        "TRAP_CTL",
-    }:
+    if name in _DEDICATED_STATEMENT_NAMES:
         return None
     return Fact(
         "semantic.statement",
@@ -117,7 +209,7 @@ def _close_facts(
         value = _immediate_ax(load)
         evidence = (load.offset, close.offset) if load is not None else ()
         if value is None:
-            bridged = _fp_ax_bridge(load, by_end)
+            bridged = fp_ax_bridge(load, by_end)
             if bridged is None:
                 continue
             expression, evidence = bridged
@@ -236,37 +328,6 @@ def _immediate_ax(instruction: Operation | None) -> object | None:
     return None
 
 
-def _fp_ax_bridge(
-    reload: Operation | None, by_end: dict[int, Operation]
-) -> tuple[object, tuple[int, ...]] | None:
-    if reload is None:
-        return None
-    reload_raw = bytes.fromhex(reload.raw)
-    if reload.kind != "tb.fp" or len(reload_raw) != 5 or reload_raw[:3] != b"\xcd\x3d\xa1":
-        return None
-    scratch = struct.unpack_from("<H", reload_raw, 3)[0]
-    store = by_end.get(reload.offset)
-    source = by_end.get(store.offset) if store is not None else None
-    if store is None or source is None:
-        return None
-    store_raw = bytes.fromhex(store.raw)
-    source_raw = bytes.fromhex(source.raw)
-    if (
-        len(store_raw) != 5
-        or store_raw[:3] != b"\xcd\x3b\x1e"
-        or struct.unpack_from("<H", store_raw, 3)[0] != scratch
-        or source.kind != "tb.fp"
-        or len(source_raw) != 5
-        or source_raw[0] != 0xCD
-        or source_raw[2] != 0x06
-        or source_raw[1] not in FP_TRANSFER_TYPES
-    ):
-        return None
-    address = struct.unpack_from("<H", source_raw, 3)[0]
-    expression = "memory", address, FP_TRANSFER_TYPES[source_raw[1]]
-    return expression, (source.offset, store.offset, reload.offset)
-
-
 def _on_dispatch_facts(
     instructions: dict[int, Operation], facts: frozenset[Fact]
 ) -> Iterable[Fact]:
@@ -284,7 +345,7 @@ def _on_dispatch_facts(
             or not all(isinstance(target, int) for target in instruction.operands[2:])
         ):
             continue
-        bridge = _fp_ax_bridge(by_end.get(instruction.offset), by_end)
+        bridge = fp_ax_bridge(by_end.get(instruction.offset), by_end)
         if bridge is None:
             continue
         expression, bridge_evidence = bridge
@@ -314,19 +375,10 @@ def _file_run_facts(
             0xC4,
         ):
             continue
-        runtime = by_end.get(instruction.offset)
-        setup = by_end.get(runtime.offset) if runtime is not None else None
-        if (
-            runtime is None
-            or runtime.kind != "tb.runtime"
-            or runtime.operands != (0x9C,)
-            or setup is None
-            or setup.kind != "x86.mov_imm"
-            or len(setup.operands) != 2
-            or setup.operands[0] != "si"
-            or not isinstance(setup.operands[1], int)
-        ):
+        scaffold = string_push_scaffold(instruction, by_end)
+        if scaffold is None:
             continue
+        setup, runtime = scaffold
         resolved = resolve_expression(
             ("memory", setup.operands[1], "string"), facts
         )

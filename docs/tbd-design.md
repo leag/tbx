@@ -14,7 +14,9 @@ the calibrated, fail-loud architecture of `tbx`.
 - Produce useful partial IR for unknown, damaged, or only partly supported code.
 
 `tbd` does not promise byte-exact source reproduction and does not import the
-`tbx` decoder or emitter. `tbx` remains the calibration and comparison oracle.
+`tbx` decoder or emitter. `tbx` remains the calibration and comparison oracle,
+and its already-calibrated operation vocabulary and pure matcher decisions are
+ported into small `tbd` fact passes instead of being independently rediscovered.
 
 ## Pipeline
 
@@ -430,6 +432,20 @@ sub 18. A numbered channel requires either an adjacent immediate AX load or the
 complete typed FP-source/integer-scratch/AX-reload bridge used for an expression;
 the generic profile statement no longer invents an operandless CLOSE when that
 source is unresolved.
+COLOR and SCREEN facts likewise require every cell selected by the dispatch's
+presence mask, in source-operand order, immediately before the commit. COLOR
+accepts its calibrated immediate and typed-FP-to-AX store forms; SCREEN is
+limited to the immediate stores witnessed across its calibrated masks. Missing,
+misaddressed, dynamic, or truncated SCREEN cells remain structural rather than
+producing a partial statement.
+FILES facts preserve the distinct bare dispatch and require the complete
+adjacent string-push scaffold for a filespec. An unresolved descriptor or a
+missing setup leg leaves the specified form structural.
+The same complete string-push scaffold supplies the sole operand for CHDIR,
+DATE$/TIME$ assignment, DRAW, ENVIRON, KILL, MKDIR, PLAY, RMDIR, and SHELL;
+none becomes a source statement from its dispatch alone. An empty-string
+reading that also fits an unwritten string slot remains unresolved; this
+prevents an uninitialized variable from becoming a plausible literal.
 Dedicated trap-control facts retain the profiled event and ON/OFF/STOP mode.
 COM and KEY additionally require their adjacent immediate AX event number;
 unnumbered PEN, PLAY, STRIG, and TIMER forms use the dispatch signature alone.
@@ -452,6 +468,18 @@ and constant device-I/O facts directly into operation IR. Conditional branch
 pairs and their resolved operands now produce `IfGoto` facts and operations as
 well. `Program.operations` remains the legacy compatibility view until the
 remaining runtime consumers migrate.
+Direct INTEGER FOR/NEXT facts require one resolved loop-variable assignment,
+an unconditional jump to the test, a matching increment, an immediate or
+uniquely snapshotted variable limit, and the correctly oriented CFG back edge.
+Both a direct conditional back edge and the compiler's inverted-condition plus
+unconditional-jump trampoline are accepted when every target closes the same
+region.
+The header and tail facts cover their compiler scaffolds so those assignments
+do not leak as source statements. A normalized compiler-operation view mirrors
+the calibrated `tbx` vocabulary without importing it. Ported pure matchers use
+that view for variable INTEGER STEP (including long branches) and for SINGLE or
+DOUBLE FP loops, requiring their complete sign split and both consistent limit
+arms. Inconsistent or competing regions remain structural.
 Recognized source statements and complete DELAY loops are also additive facts;
 `Program.fact_statements` reconstructs statement indexes and branch targets only
 from the fact-built operation view. `Program.canonical_statements` is a final,

@@ -54,7 +54,22 @@ FP_TRANSFER_TYPES = {
     0x39: "double",
     0x3B: "integer",
 }
-FP_ARITHMETIC_TYPES = {0x34: "float", 0x36: "long", 0x38: "double"}
+FP_ARITHMETIC_TYPES = {
+    0x34: "float",
+    0x36: "long",
+    0x38: "double",
+    0x3A: "integer",
+}
+
+TRANSCEND_FUNCTIONS = {
+    0x00: "SIN",
+    0x02: "COS",
+    0x04: "TAN",
+    0x06: "ATN",
+    0x08: "LOG",
+    0x0C: "LOG10",
+    0x0E: "EXP",
+}
 
 
 def profile_for(dialect: str | None) -> CompilerProfile | None:

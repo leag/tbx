@@ -170,6 +170,7 @@ def _follow(
         if dialect is not None and (
             _wrapped_forward_gap(operation, start, stop)
             or _resume_jump_fallthrough(operation, instructions)
+            or _backward_jump_fallthrough(operation)
         ):
             _queue(next_offset, pending, queued, leaders, start, stop)
             xrefs.add(CrossReference(operation.offset, next_offset, "orphan"))
@@ -199,6 +200,17 @@ def _resume_jump_fallthrough(
         and begin.end == operation.offset
         and begin.kind == "tb.statement"
         and begin.operands[:2] == ("RESUME_BEGIN", 0xBC)
+    )
+
+
+def _backward_jump_fallthrough(operation: Operation) -> bool:
+    raw = bytes.fromhex(operation.raw)
+    target = operation.operands[0] if operation.operands else None
+    return (
+        operation.kind == "x86.jmp"
+        and raw[:1] == b"\xeb"
+        and isinstance(target, int)
+        and target < operation.offset
     )
 
 

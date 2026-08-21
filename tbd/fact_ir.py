@@ -22,6 +22,14 @@ _OPERATION_KINDS = {
     "semantic.input": "ir.input",
     "semantic.open": "ir.open",
     "semantic.close": "ir.close",
+    "semantic.color": "ir.color",
+    "semantic.screen": "ir.screen",
+    "semantic.files": "ir.files",
+    "semantic.for": "ir.for",
+    "semantic.next": "ir.next",
+    "semantic.do": "ir.do",
+    "semantic.do_codeless": "ir.do",
+    "semantic.loop": "ir.loop",
     "semantic.trap_ctl": "ir.trap_ctl",
     "semantic.on_trap": "ir.on_trap",
     "semantic.on_goto": "ir.on_goto",
@@ -32,6 +40,10 @@ _OPERATION_KINDS = {
     "semantic.delay": "ir.delay",
     "semantic.defseg": "ir.defseg",
     "semantic.dim": "ir.dim",
+    "semantic.local_dim": "ir.dim",
+    "semantic.common": "ir.common",
+    "semantic.option_base": "ir.option_base",
+    "semantic.dynamic_dim": "ir.dynamic_dim",
     "semantic.gosub": "ir.gosub",
     "semantic.return": "ir.return",
     "semantic.resume": "ir.resume",
@@ -57,8 +69,13 @@ def build_operations(
         if kind is None or identity in materialized:
             continue
         materialized.add(identity)
-        if kind == "ir.dim":
+        if kind in {"ir.dim", "ir.common", "ir.option_base"}:
             operation = _static_dim_operation(evidence, fact)
+            if operation is not None:
+                operations.append(operation)
+            continue
+        if fact.kind == "semantic.do_codeless":
+            operation = _codeless_operation(fact)
             if operation is not None:
                 operations.append(operation)
             continue
@@ -76,7 +93,7 @@ def build_operations(
 def _static_dim_operation(
     evidence: Evidence, fact: Fact
 ) -> Operation | None:
-    if len(fact.subject) != 2 or len(fact.value) != 4:
+    if len(fact.subject) != 2:
         return None
     start, order = fact.subject
     if not isinstance(start, int) or not isinstance(order, int):
@@ -86,12 +103,26 @@ def _static_dim_operation(
         for address in fact.evidence
         if 0 <= address < len(evidence.image)
     )
+    operands = (order, *fact.value)
     return Operation(
         start,
         0,
-        "ir.dim",
-        (order, *fact.value),
+        _OPERATION_KINDS[fact.kind],
+        operands,
         raw,
+        fact.confidence,
+    )
+
+
+def _codeless_operation(fact: Fact) -> Operation | None:
+    if len(fact.subject) != 1 or not isinstance(fact.subject[0], int):
+        return None
+    return Operation(
+        fact.subject[0],
+        0,
+        _OPERATION_KINDS[fact.kind],
+        fact.value,
+        "",
         fact.confidence,
     )
 
@@ -106,7 +137,9 @@ def _span(fact: Fact, image_size: int) -> tuple[int, int] | None:
 
 
 def _operation_key(operation: Operation) -> tuple[int, int, int, str]:
-    if operation.kind == "ir.dim":
+    if operation.kind in {"ir.dim", "ir.common", "ir.option_base"}:
         return operation.offset, operation.end, operation.operands[0], ""
     toggles = {"ir.tron": 0, "ir.troff": 1}
+    if operation.kind == "ir.do":
+        return operation.offset, operation.end, -1, operation.kind
     return operation.offset, operation.end, toggles.get(operation.kind, 1000), operation.kind

@@ -19,7 +19,7 @@ _TYPE_WIDTHS = {
 
 
 def slot_facts(
-    _evidence: Evidence, facts: frozenset[Fact]
+    evidence: Evidence, facts: frozenset[Fact]
 ) -> Iterable[Fact]:
     """Name supported scalar cells below one unambiguous pool boundary."""
 
@@ -27,10 +27,34 @@ def slot_facts(
     if len(layouts) != 1:
         return
     layout = layouts[0]
+    has_runtime_dim = any(
+        instruction.kind == "tb.statement"
+        and instruction.operands[:1] == ("DIM_BEGIN",)
+        for instruction in evidence.instructions
+    )
+    if has_runtime_dim and not any(
+        fact.kind == "layout.runtime_grid" for fact in facts
+    ):
+        return
     pool_base, marker = layout.value[1], layout.value[2]
+    runtime_grids = [fact for fact in facts if fact.kind == "layout.runtime_grid"]
     array_count = len([fact for fact in facts if fact.kind == "layout.array"])
     scalar_base = VAR_BASE + 0x36 * array_count
+    if len(runtime_grids) == 1 and isinstance(runtime_grids[0].value[2], int):
+        scalar_base = runtime_grids[0].value[2]
     accesses = _slot_accesses(facts, pool_base, scalar_base)
+    for common in facts:
+        if common.kind != "layout.common_slot":
+            continue
+        address = common.subject[0]
+        order, kind, _width = common.value
+        yield Fact(
+            "slot",
+            (address,),
+            (f"COMMON{order:04d}", (kind,)),
+            common.evidence,
+            "anchored",
+        )
     for address, related in sorted(accesses.items()):
         types = tuple(sorted({fact.value[0] for fact in related}))
         evidence = tuple(

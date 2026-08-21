@@ -1,7 +1,7 @@
 {
  "schema_version": 1,
  "document_type": "tbx.ruled_out_hypotheses",
- "updated": "2026-08-14",
+ "updated": "2026-08-21",
  "note": "Decoder-side hypotheses that were investigated and REJECTED: a cause that turned out not to be the cause, or a fix that was written, tested and reverted. The sibling ledger runtime-revision-assessments.json covers the other class, where the answer is a property of the compiler rather than of our code; a pattern that is unwitnessable by our oracle belongs there, not here. The point of both is that a rejected hypothesis is expensive evidence and is otherwise lost the moment a session ends -- PLAN.md records them chronologically, and this is the deduplicated index into it. An entry earns its place by saying what was tried, what killed it, and what a re-attempt should do instead.",
  "dispositions": [
   "refuted",
@@ -10,6 +10,106 @@
   "not-a-defect"
  ],
  "hypotheses": [
+  {
+   "id": "RO-TBD-UNTYPED-WORD-SCALAR-ALIGNMENT-FIXES-POOL-BASE",
+   "title": "Treating every aligned two-byte access as a scalar fixes ambiguous pool boundaries",
+   "disposition": "reverted",
+   "confidence": "high",
+   "files": [
+    "tests/fixtures/corpus/t1_inpfilearr.exe",
+    "tests/fixtures/corpus/t1_cmpsival.exe",
+    "tests/fixtures/corpus/zz_vm_l1.exe"
+   ],
+   "signatures": [
+    "OPEN filename at 0x194 misclassified below a provisional pool_base of 0x1a4",
+    "two-byte memory accesses adjacent to static-array and pooled-data witnesses"
+   ],
+   "hypothesis": "Relaxing the global scalar predicate so any word-aligned two-byte access can anchor the scalar band will select the correct pool boundary for t1_inpfilearr.",
+   "negative_evidence": [
+    "The relaxation did not move t1_inpfilearr's false pool_base and therefore did not recover either missing OPEN statement.",
+    "It admitted pooled words as scalar witnesses, regressing t1_cmpsival and the LONG-variable layout tests.",
+    "The change was reverted before continuing; the scalar predicate still requires the calibrated typed-band evidence."
+   ],
+   "instead": "Translate tbx's actual layout evidence: preserve target widths for typed two-byte stores and include every static-array add-si base witness. That selects pool_base 0x194 and closes both OPEN trees without weakening scalar classification or special-casing the address.",
+   "source": "tbd parity session 2026-08-21"
+  },
+  {
+   "id": "RO-TBD-FP-FOR-FROM-ASSIGNMENTS-AND-TWO-ARMS",
+   "title": "FP FOR/NEXT is recoverable from assignment facts plus its two comparison arms",
+   "disposition": "superseded",
+   "confidence": "high",
+   "files": [
+    "tests/fixtures/corpus/t1_for.exe",
+    "tests/fixtures/corpus/v10_t1_for.exe",
+    "tests/fixtures/corpus/t1_for2.exe",
+    "tests/fixtures/corpus/v10_t1_for2.exe",
+    "tests/fixtures/corpus/t1_forlongfp.exe",
+    "tests/fixtures/corpus/v10_t1_forlongfp.exe"
+   ],
+   "signatures": [
+    "three adjacent anchored FP assignments before the initial test jump",
+    "NEXT assignment adds the snapshotted STEP to the loop variable",
+    "step-sign split followed by positive and negative unsigned FP comparison arms"
+   ],
+   "hypothesis": "Existing semantic assignment facts identify the FP limit, step, variable, and NEXT update strongly enough that exact sign-bit and two-arm CFG checks can recover single- and double-precision FOR/NEXT without modeling x87 state.",
+   "negative_evidence": [
+    "The hypothesis was implemented as a fail-closed fact pass requiring consecutive limit/step/variable assignments, the FP update sequence, exact sign-bit test, exact load/subtract/compare scaffolds, and consistent direct or trampoline exits.",
+    "It produced zero FOR/NEXT facts for t1_for, t1_for2, and both loops in t1_forlongfp, in both compiler dialects; tbx proves eight FOR and eight NEXT nodes across those six files.",
+    "The same fixtures visibly contain assignment and CFG facts, so adding another guessed operand order or weakening an address equality would be iteration beyond the three-fixture probe budget rather than calibration. The attempted pass was removed.",
+    "CORRECTION: the hypothesis was sound but the implementation method was not. Porting tbx's normalized operation vocabulary and complete loose-FOR matcher exposed the missed invariant: commit/runtime glue is absent from the template stream, and the physical exit is the final branch end rather than the next translated operation. The port recovers all eight FOR and eight NEXT nodes exactly."
+   ],
+   "instead": "CLOSED by translating the calibrated tbx matcher into a pure tbd pass, with no tbx import. Reuse the normalized compiler-operation layer for further ports; do not reconstruct an independent raw-byte matcher from fixtures.",
+   "source": "tbd parity session 2026-08-21"
+  },
+  {
+   "id": "RO-TBD-VARIABLE-STEP-DIRECT-ARMS-COVER-LONG-BRANCH",
+   "title": "The direct variable-STEP INTEGER matcher also covers its long-branch form",
+   "disposition": "superseded",
+   "confidence": "high",
+   "files": [
+    "tests/fixtures/corpus/t1_forvarstep.exe",
+    "tests/fixtures/corpus/v10_t1_forvarstep.exe",
+    "tests/fixtures/corpus/t1_forvarstep2.exe",
+    "tests/fixtures/corpus/v10_t1_forvarstep2.exe",
+    "tests/fixtures/corpus/v10_t1_forvarstepinit.exe"
+   ],
+   "signatures": [
+    "INTEGER NEXT loads a snapshotted STEP, adds it to the loop variable, and tests AX's sign",
+    "positive and negative limit comparisons form two distinct continuation arms"
+   ],
+   "hypothesis": "One two-arm CFG matcher for the direct sign split and oriented comparisons is sufficient for both short and long-body variable-STEP INTEGER loops.",
+   "negative_evidence": [
+    "The matcher recovers t1_forvarstep, v10_t1_forvarstep, and v10_t1_forvarstepinit exactly, including the original STEP expression rather than its compiler snapshot.",
+    "Both t1_forvarstep2 dialect variants retain zero FOR/NEXT facts under the same matcher, while tbx proves one loop in each.",
+    "The direct forms remain exact complete files and an omitted negative comparison arm fails closed, so weakening the two-arm requirement would discard useful evidence without explaining the long form.",
+    "CORRECTION: tbx's match_var_step_branch already encodes both direct and inverse-jcc-plus-near-jump arms. Porting that matcher instead of extending the local CFG interpretation recovers both t1_forvarstep2 dialect variants exactly while retaining the complete two-arm gate."
+   ],
+   "instead": "CLOSED by translating match_var_step_branch and its enclosing sign-split checks into a pure tbd pass. Keep the port structurally aligned with the calibrated matcher rather than adding a parallel notion of arm exits.",
+   "source": "tbd parity session 2026-08-21"
+  },
+  {
+   "id": "RO-TBD-SINGLE-STRING-SCAFFOLD-COVERS-UNWRITTEN-SLOTS",
+   "title": "The shared string-push scaffold resolves uninitialized string-variable operands",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "tests/fixtures/corpus/t1_shellvar.exe",
+    "tests/fixtures/corpus/v10_t1_shellvar.exe"
+   ],
+   "signatures": [
+    "mov si,0x120; runtime string push; SHELL",
+    "layout.pool pool_base 0x124",
+    "constant string at pool_base-4 resolved as empty"
+   ],
+   "hypothesis": "Once the complete adjacent mov-si/string-push/dispatch scaffold is shared by single-string statements, the existing expression facts can safely recover both literal and variable operands.",
+   "negative_evidence": [
+    "The literal CHDIR, DATE$/TIME$ assignment, DRAW, ENVIRON, KILL, MKDIR, PLAY, RMDIR, and SHELL fixtures recover exactly in both dialects.",
+    "Both t1_shellvar variants instead resolve the uninitialized A$ descriptor at 0x120 as the special empty-string constant at pool_base-4, producing SHELL \"\" where tbx proves SHELL A$.",
+    "The variable has no preceding memory.write fact, so this local consumer has no independent evidence with which to choose the slot interpretation over the plausible empty literal."
+   ],
+   "instead": "Keep an empty-string reading that also fits an unwritten string slot unresolved. Repair or disambiguate the DGROUP pool boundary before recovering t1_shellvar; do not special-case SHELL, trust the empty constant, or weaken the complete scaffold matcher.",
+   "source": "tbd parity session 2026-08-21"
+  },
   {
    "id": "RO-TBD-DIRECT-INPUT-COVERS-ALL-SCALARS",
    "title": "Complete direct INPUT target chains recover every scalar corpus INPUT",
@@ -39,7 +139,7 @@
   {
    "id": "RO-TBD-OPEN-SCAFFOLD-COVERS-ALL-CORPUS",
    "title": "The two local OPEN scaffolds are sufficient for all 63 corpus operands",
-   "disposition": "refuted",
+   "disposition": "superseded",
    "confidence": "high",
    "files": [
     "tests/fixtures/corpus/t1_inpfilearr.exe",
@@ -53,9 +153,10 @@
    "negative_evidence": [
     "The dedicated pass recovers 61 of 63 OPEN statements exactly, including pooled literals, assigned scalar filenames, both source spellings, both dialects, and non-default record lengths.",
     "In t1_inpfilearr and v10_t1_inpfilearr, the anchored layout puts pool_base at 0x1a4 while OPEN reads 0x194. The slot pass therefore calls the filename V0003 even though the authored source and tbx IR identify TEST.DAT, and there is no independent write to establish a variable.",
-    "Accepting the existing slot fact emitted plausible but wrong OPEN operands in both files. Requiring prior write evidence for slot-shaped filenames makes those two statements remain structural while preserving genuine variables populated by assignment or LINE INPUT."
+    "Accepting the existing slot fact emitted plausible but wrong OPEN operands in both files. Requiring prior write evidence for slot-shaped filenames makes those two statements remain structural while preserving genuine variables populated by assignment or LINE INPUT.",
+    "CORRECTION: the OPEN matcher was already sufficient. Porting tbx's complete addsi-base array witnesses and retaining typed two-byte scalar writes selects pool_base 0x194 instead of the false 0x1a4 candidate. Address 0x194 then resolves to the real TEST.DAT string descriptor and both OPEN trees become exact."
    ],
-   "instead": "Repair or disambiguate DGROUP layout for the static-array shape in t1_inpfilearr before claiming 63/63 OPEN parity. Keep the OPEN matcher unchanged and fail closed on an unwritten slot-shaped filename; do not special-case address 0x194 or reinterpret every read-only string slot as a literal.",
+   "instead": "CLOSED by translating tbx's layout witnesses and typed scalar-band constraint. Keep the OPEN matcher unchanged; do not special-case address 0x194 or reinterpret read-only string slots locally.",
    "source": "tbd parity session 2026-08-14"
   },
   {

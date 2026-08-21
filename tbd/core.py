@@ -5,26 +5,36 @@ from __future__ import annotations
 import struct
 
 from tbd.analysis import discover, lift
+from tbd.array_facts import ARRAY_REFERENCE_PASSES
 from tbd.assignment_facts import ASSIGNMENT_FACT_PASSES
 from tbd.canonical import canonicalize
+from tbd.color_facts import COLOR_FACT_PASSES
+from tbd.common_facts import COMMON_LAYOUT_PASSES, COMMON_STATEMENT_PASSES
 from tbd.control_facts import CONTROL_FACT_PASSES
+from tbd.dim_facts import DYNAMIC_DIM_PASSES, RUNTIME_ARRAY_LAYOUT_PASSES
 from tbd.fact_ir import build_operations
 from tbd.facts import EVIDENCE_PASSES, Evidence, analyze as analyze_facts
+from tbd.for_facts import FOR_FACT_PASSES
+from tbd.for_fp_facts import FP_FOR_FACT_PASSES
+from tbd.for_variable_facts import VARIABLE_FOR_FACT_PASSES
 from tbd.io_facts import IO_FACT_PASSES
 from tbd.input_facts import INPUT_FACT_PASSES
 from tbd.input_file_facts import INPUT_FILE_FACT_PASSES
 from tbd.ir import Diagnostic, Program
 from tbd.locate_facts import LOCATE_FACT_PASSES
+from tbd.loop_facts import LOOP_FACT_PASSES
 from tbd.open_facts import OPEN_FACT_PASSES
 from tbd.pool_facts import POOL_FACT_PASSES
 from tbd.procedure_facts import PROCEDURE_FACT_PASSES
 from tbd.profile import PROLOGUES
 from tbd.read_facts import READ_FACT_PASSES
 from tbd.runtime_facts import RUNTIME_FACT_PASSES
+from tbd.screen_facts import SCREEN_FACT_PASSES
 from tbd.slot_facts import SLOT_FACT_PASSES, materialize_slots
 from tbd.slots import collect
 from tbd.statement_facts import STATEMENT_FACT_PASSES
 from tbd.statements import reconstruct
+from tbd.string_statement_facts import STRING_STATEMENT_FACT_PASSES
 from tbd.swap_facts import SWAP_FACT_PASSES
 from tbd.symbolic_facts import SYMBOLIC_FACT_PASSES
 from tbd.trace_facts import TRACE_FACT_PASSES
@@ -52,19 +62,31 @@ def decode(
         passes=(
             EVIDENCE_PASSES
             + POOL_FACT_PASSES
+            + RUNTIME_ARRAY_LAYOUT_PASSES
+            + COMMON_LAYOUT_PASSES
             + SLOT_FACT_PASSES
             + SYMBOLIC_FACT_PASSES
+            + ARRAY_REFERENCE_PASSES
             + ASSIGNMENT_FACT_PASSES
+            + DYNAMIC_DIM_PASSES
+            + COMMON_STATEMENT_PASSES
+            + FOR_FACT_PASSES
+            + VARIABLE_FOR_FACT_PASSES
+            + FP_FOR_FACT_PASSES
+            + LOOP_FACT_PASSES
             + IO_FACT_PASSES
             + INPUT_FACT_PASSES
             + OPEN_FACT_PASSES
             + INPUT_FILE_FACT_PASSES
+            + COLOR_FACT_PASSES
+            + SCREEN_FACT_PASSES
             + LOCATE_FACT_PASSES
             + READ_FACT_PASSES
             + RUNTIME_FACT_PASSES
             + SWAP_FACT_PASSES
             + CONTROL_FACT_PASSES
             + PROCEDURE_FACT_PASSES
+            + STRING_STATEMENT_FACT_PASSES
             + STATEMENT_FACT_PASSES
             + TRACE_FACT_PASSES
         ),

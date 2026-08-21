@@ -72,6 +72,41 @@ def _normalize_statement(statement: Statement) -> Statement:
         operands = (
             None if operands[0] is None else normalize_expression(operands[0]),
         )
+    elif statement.kind in {"Color", "Screen"}:
+        operands = tuple(
+            None if operand is None else normalize_expression(operand)
+            for operand in operands
+        )
+    elif statement.kind == "Files":
+        operands = (
+            None if operands[0] is None else normalize_expression(operands[0]),
+        )
+    elif statement.kind in {
+        "Chdir",
+        "Draw",
+        "Environ",
+        "Kill",
+        "Mkdir",
+        "Play",
+        "Rmdir",
+        "Shell",
+    }:
+        operands = (normalize_expression(operands[0]),)
+    elif statement.kind == "DateTimeSet":
+        operands = operands[0], normalize_expression(operands[1])
+    elif statement.kind == "For":
+        operands = tuple(normalize_expression(operand) for operand in operands)
+    elif statement.kind == "NextStmt":
+        operands = (normalize_expression(operands[0]),)
+    elif statement.kind in {"Do", "Loop"}:
+        kind, condition = operands
+        if isinstance(condition, tuple) and len(condition) == 3:
+            condition = (
+                condition[0],
+                normalize_expression(condition[1]),
+                normalize_expression(condition[2]),
+            )
+        operands = kind, condition
     elif statement.kind == "TrapCtl":
         operands = (
             operands[0],
@@ -114,6 +149,20 @@ def _normalize_statement(statement: Statement) -> Statement:
         operands = tuple(normalize_expression(item) for item in operands)
     elif statement.kind == "DefSeg":
         operands = tuple(normalize_expression(item) for item in operands)
+    elif statement.kind == "Dim":
+        name, bounds, also, dynamic = operands
+        operands = (
+            name,
+            tuple(normalize_expression(bound) for bound in bounds),
+            tuple(
+                (
+                    other_name,
+                    tuple(normalize_expression(bound) for bound in other_bounds),
+                )
+                for other_name, other_bounds in also
+            ),
+            dynamic,
+        )
     elif statement.kind == "SubDef":
         name, parameters, body = operands
         operands = (
@@ -192,6 +241,9 @@ class _Names:
         self._types = {slot.offset: slot.types for slot in slots}
         self._names: dict[int, str] = {}
         self._next = 0
+        for slot in slots:
+            if slot.name.startswith("COMMON"):
+                self._names[slot.offset] = self._new_name()
         self._procedures = {
             address: f"SUB{index}"
             for index, address in enumerate(procedures, start=1)

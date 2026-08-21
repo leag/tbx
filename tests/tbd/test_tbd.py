@@ -5,11 +5,23 @@ from tbx import decode0, ir as tbx_ir
 from tbd import cli, decode
 from tbd.canonical import canonicalize, normalize_expression
 from tbd.facts import Evidence, analyze as analyze_facts
+from tbd.for_facts import integer_for_facts
+from tbd.for_variable_facts import integer_variable_step_for_facts
 from tbd.ir import Fact, Operation, Slot, Statement
 from tbd.pool import infer_layout, resolve as resolve_pool
 from tbd.x86 import decode_instruction
 
 _CORPUS = Path(__file__).parents[1] / "fixtures" / "corpus"
+_TBX_STRING_STATEMENT_FIELDS = {
+    tbx_ir.Chdir: "path",
+    tbx_ir.Draw: "cmd",
+    tbx_ir.Environ: "s",
+    tbx_ir.Kill: "file",
+    tbx_ir.Mkdir: "path",
+    tbx_ir.Play: "music",
+    tbx_ir.Rmdir: "path",
+    tbx_ir.Shell: "cmd",
+}
 
 
 def test_known_program_has_standalone_lifted_ir_and_cfg():
@@ -481,6 +493,61 @@ def test_static_array_record_order_restores_source_dim_order():
     )
 
 
+def test_runtime_dim_templates_match_tbx_bounds_names_and_comma_chains():
+    stems = (
+        "t1_dim3v",
+        "t1_dimv",
+        "v10_t1_dimv",
+        "t1_dimv2",
+        "v10_t1_dimv2",
+        "t1_dimm",
+        "v10_t1_dimm",
+        "t1_mix",
+        "v10_t1_mix3",
+    )
+    for stem in stems:
+        image = (_CORPUS / f"{stem}.exe").read_bytes()
+        exact = [
+            _tbx_statement(node)
+            for node in decode0.decode_user_code(image)
+            if isinstance(node, tbx_ir.Dim)
+        ]
+        actual = [
+            (node.kind, node.operands)
+            for node in decode(image).canonical_statements
+            if node.kind == "Dim"
+        ]
+
+        assert actual == exact
+
+
+def test_runtime_dim_region_hides_descriptor_writes_from_source_slots():
+    program = decode((_CORPUS / "t1_dim3v.exe").read_bytes())
+
+    assert [
+        (node.kind, node.operands)
+        for node in program.canonical_statements[:5]
+    ] == [
+        ("Assign", (("var", "A"), ("const", 4))),
+        (
+            "Dim",
+            ("V0", (("const", 2), ("var", "A"), ("const", 3)), (), False),
+        ),
+        (
+            "For",
+            (("var", "B"), ("const", 0), ("const", 2), ("const", 1)),
+        ),
+        (
+            "For",
+            (("var", "C"), ("const", 0), ("const", 4), ("const", 1)),
+        ),
+        (
+            "For",
+            (("var", "D"), ("const", 0), ("const", 3), ("const", 1)),
+        ),
+    ]
+
+
 def test_assignment_pass_lifts_store_and_update_expressions():
     program = decode((_CORPUS / "t1_addimm.exe").read_bytes())
     assignments = [node.operands for node in program.operations if node.kind == "ir.assign"]
@@ -898,6 +965,408 @@ def test_locate_does_not_emit_a_partial_cursor_extension():
     assert not any(fact.kind == "semantic.locate" for fact in truncated.facts)
 
 
+def test_color_cell_scaffolds_recover_exact_optional_operands():
+    for prefix in ("", "v10_"):
+        for stem in ("t1_scr", "t1_scr2", "t1_color3", "t1_colorfp"):
+            image = (_CORPUS / f"{prefix}{stem}.exe").read_bytes()
+            program = decode(image)
+            actual = [
+                (node.kind, node.operands)
+                for node in program.canonical_statements
+                if node.kind == "Color"
+            ]
+            exact = [
+                _tbx_statement(node)
+                for node in decode0.decode_user_code(image)
+                if isinstance(node, tbx_ir.Color)
+            ]
+
+            assert actual == exact
+            assert all(
+                fact.confidence == "anchored"
+                for fact in program.facts
+                if fact.kind == "semantic.color"
+            )
+
+
+def test_color_requires_matching_cells_for_every_present_mask_bit():
+    missing = decode(bytes.fromhex("cd ec 22 04"))
+    wrong_cell = decode(bytes.fromhex("c7 06 94 00 01 00 cd ec 22 04"))
+    truncated = decode(bytes.fromhex("c7 06 88 00 01 00 cd ec 22"))
+
+    for program in (missing, wrong_cell, truncated):
+        assert not any(fact.kind == "semantic.color" for fact in program.facts)
+        assert program.canonical_statements == ()
+
+
+def test_screen_immediate_cell_scaffolds_recover_exact_optional_operands():
+    names = (
+        "t1_blitline.exe",
+        "t1_paintt.exe",
+        "t1_screen.exe",
+        "t1_screena.exe",
+        "t1_screenb.exe",
+        "t1_screenp.exe",
+        "t1_viewbare.exe",
+        "v10_t1_blitline.exe",
+        "v10_t1_screen.exe",
+        "v10_t1_viewbare.exe",
+    )
+    for name in names:
+        image = (_CORPUS / name).read_bytes()
+        program = decode(image)
+        actual = [
+            (node.kind, node.operands)
+            for node in program.canonical_statements
+            if node.kind == "Screen"
+        ]
+        exact = [
+            _tbx_statement(node)
+            for node in decode0.decode_user_code(image)
+            if isinstance(node, tbx_ir.Screen)
+        ]
+
+        assert actual == exact
+        assert all(
+            fact.confidence == "anchored"
+            for fact in program.facts
+            if fact.kind == "semantic.screen"
+        )
+
+
+def test_screen_requires_matching_immediate_cells_for_every_present_mask_bit():
+    missing = decode(bytes.fromhex("cd ec c6 08"))
+    wrong_cell = decode(bytes.fromhex("c7 06 94 00 01 00 cd ec c6 08"))
+    dynamic = decode(bytes.fromhex("89 06 88 00 cd ec c6 08"))
+    truncated = decode(bytes.fromhex("c7 06 88 00 01 00 cd ec c6"))
+
+    for program in (missing, wrong_cell, dynamic, truncated):
+        assert not any(fact.kind == "semantic.screen" for fact in program.facts)
+        assert program.canonical_statements == ()
+
+
+def test_files_requires_bare_dispatch_or_complete_resolved_string_scaffold():
+    for prefix in ("", "v10_"):
+        for stem in ("t1_files", "t1_files0"):
+            image = (_CORPUS / f"{prefix}{stem}.exe").read_bytes()
+            program = decode(image)
+            actual = [
+                (node.kind, node.operands)
+                for node in program.canonical_statements
+                if node.kind == "Files"
+            ]
+            exact = [
+                _tbx_statement(node)
+                for node in decode0.decode_user_code(image)
+                if isinstance(node, tbx_ir.Files)
+            ]
+
+            assert actual == exact
+            assert all(
+                fact.confidence in {"anchored", "signature"}
+                for fact in program.facts
+                if fact.kind == "semantic.files"
+            )
+
+    incomplete = decode(bytes.fromhex("cd ec 44"))
+    wrong_runtime = decode(bytes.fromhex("be 20 01 cd 9a cd ec 44"))
+    unresolved = decode(bytes.fromhex("be 20 01 cd 9c cd ec 44"))
+    for program in (incomplete, wrong_runtime, unresolved):
+        assert not any(fact.kind == "semantic.files" for fact in program.facts)
+        assert program.canonical_statements == ()
+
+
+def test_single_string_statements_require_complete_resolved_scaffolds():
+    stems = (
+        "t1_chdir",
+        "t1_dates",
+        "t1_draw",
+        "t1_environ",
+        "t1_kill",
+        "t1_mkdir",
+        "t1_play",
+        "t1_rmdir",
+        "t1_shell",
+        "t1_times",
+    )
+    statement_types = (
+        tbx_ir.Chdir,
+        tbx_ir.DateTimeSet,
+        tbx_ir.Draw,
+        tbx_ir.Environ,
+        tbx_ir.Kill,
+        tbx_ir.Mkdir,
+        tbx_ir.Play,
+        tbx_ir.Rmdir,
+        tbx_ir.Shell,
+    )
+    for prefix in ("", "v10_"):
+        for stem in stems:
+            image = (_CORPUS / f"{prefix}{stem}.exe").read_bytes()
+            program = decode(image)
+            actual = [
+                (node.kind, node.operands)
+                for node in program.canonical_statements
+                if node.kind in {item.__name__ for item in statement_types}
+            ]
+            exact = [
+                _tbx_statement(node)
+                for node in decode0.decode_user_code(image)
+                if isinstance(node, statement_types)
+            ]
+
+            assert actual == exact
+
+    for prefix in ("", "v10_"):
+        program = decode((_CORPUS / f"{prefix}t1_shellvar.exe").read_bytes())
+        assert not any(node.kind == "Shell" for node in program.canonical_statements)
+
+    missing = decode(bytes.fromhex("cd ec 10"))
+    wrong_runtime = decode(bytes.fromhex("be 20 01 cd 9a cd ec 10"))
+    unresolved = decode(bytes.fromhex("be 20 01 cd 9c cd ec 10"))
+    for program in (missing, wrong_runtime, unresolved):
+        assert not any(
+            fact.kind == "semantic.statement" and fact.value[0] == "CHDIR"
+            for fact in program.facts
+        )
+        assert program.canonical_statements == ()
+
+
+def test_direct_integer_for_facts_require_one_consistent_complete_region():
+    operations = (
+        Operation(6, 3, "x86.jmp", (13,), "e9 04 00", "structural"),
+        Operation(9, 4, "x86.op_ff", (), "ff 06 20 01", "structural"),
+        Operation(13, 5, "x86.op_83", (), "83 3e 20 01 05", "structural"),
+        Operation(18, 2, "x86.jle", (9,), "7e f5", "structural"),
+    )
+    evidence = Evidence(bytes(20), operations, (), ())
+    assignment = Fact(
+        "semantic.assign",
+        (0, 6),
+        (("slot", "V0", 0x120), ("const", 1)),
+        (0,),
+        "anchored",
+    )
+    goto = Fact("flow.goto", (6, 9), (13,), (6,), "structural")
+    branch = Fact("flow.branch", (18, 20), ("<=", 9), (18,), "structural")
+    slot = Fact("slot", (0x120,), ("V0", ("integer",)), (0,), "anchored")
+    base = frozenset((assignment, goto, branch, slot))
+
+    result = tuple(integer_for_facts(evidence, base))
+
+    assert [(fact.kind, fact.value) for fact in result] == [
+        (
+            "semantic.for",
+            (("slot", "V0", 0x120), ("const", 1), ("const", 5), ("const", 1)),
+        ),
+        ("semantic.next", (("slot", "V0", 0x120),)),
+    ]
+
+    wrong_branch = frozenset(
+        (
+            assignment,
+            goto,
+            slot,
+            Fact("flow.branch", (18, 20), (">=", 9), (18,), "structural"),
+        )
+    )
+    competing = frozenset(
+        (
+            *base,
+            Fact(
+                "semantic.assign",
+                (1, 6),
+                (("slot", "OTHER", 0x120), ("const", 2)),
+                (1,),
+                "anchored",
+            ),
+        )
+    )
+    assert tuple(integer_for_facts(evidence, wrong_branch)) == ()
+    assert tuple(integer_for_facts(evidence, competing)) == ()
+
+
+def test_direct_integer_for_accepts_only_a_complete_long_branch_trampoline():
+    operations = (
+        Operation(6, 3, "x86.jmp", (13,), "e9 04 00", "structural"),
+        Operation(9, 4, "x86.op_ff", (), "ff 06 20 01", "structural"),
+        Operation(13, 5, "x86.op_83", (), "83 3e 20 01 05", "structural"),
+        Operation(18, 2, "x86.jg", (23,), "7f 03", "structural"),
+        Operation(20, 3, "x86.jmp", (9,), "e9 f2 ff", "structural"),
+    )
+    evidence = Evidence(bytes(23), operations, (), ())
+    assignment = Fact(
+        "semantic.assign",
+        (0, 6),
+        (("slot", "V0", 0x120), ("const", 1)),
+        (0,),
+        "anchored",
+    )
+    goto = Fact("flow.goto", (6, 9), (13,), (6,), "structural")
+    branch = Fact("flow.branch", (18, 20), (">", 23), (18,), "structural")
+    slot = Fact("slot", (0x120,), ("V0", ("integer",)), (0,), "anchored")
+    complete = frozenset((assignment, goto, branch, slot))
+
+    result = tuple(integer_for_facts(evidence, complete))
+
+    assert [fact.subject for fact in result] == [(0, 9), (9, 23)]
+    malformed = Evidence(
+        bytes(23),
+        (*operations[:-1], Operation(20, 3, "x86.jmp", (10,), "e9 f3 ff", "structural")),
+        (),
+        (),
+    )
+    assert tuple(integer_for_facts(malformed, complete)) == ()
+
+
+def test_integer_for_variable_limit_snapshot_recovers_source_operand():
+    for name in (
+        "t1_fori.exe",
+        "t1_forvarlimneg.exe",
+        "v10_t1_forvarlimneg.exe",
+        "t1_forlong.exe",
+        "v10_t1_forlong.exe",
+        "t1_forvarlimfar.exe",
+        "v10_t1_forvarlimfar.exe",
+    ):
+        image = (_CORPUS / name).read_bytes()
+        actual = [
+            (node.kind, node.operands)
+            for node in decode(image).canonical_statements
+            if node.kind in {"For", "NextStmt"}
+        ]
+        exact = [
+            _tbx_statement(node)
+            for node in decode0.decode_user_code(image)
+            if isinstance(node, (tbx_ir.For, tbx_ir.NextStmt))
+        ]
+
+        assert actual == exact
+
+
+def test_integer_variable_step_recovers_only_complete_two_arm_regions():
+    for name in (
+        "t1_forvarstep.exe",
+        "v10_t1_forvarstep.exe",
+        "t1_forvarstep2.exe",
+        "v10_t1_forvarstep2.exe",
+        "v10_t1_forvarstepinit.exe",
+    ):
+        image = (_CORPUS / name).read_bytes()
+        program = decode(image)
+        actual = [
+            (node.kind, node.operands)
+            for node in program.canonical_statements
+            if node.kind in {"For", "NextStmt"}
+        ]
+        exact = [
+            _tbx_statement(node)
+            for node in decode0.decode_user_code(image)
+            if isinstance(node, (tbx_ir.For, tbx_ir.NextStmt))
+        ]
+
+        assert actual == exact
+
+    program = decode((_CORPUS / "t1_forvarstep.exe").read_bytes())
+    evidence = Evidence(
+        program.image_size * b"\0",
+        program.instructions,
+        program.blocks,
+        program.xrefs,
+    )
+    inputs = frozenset(
+        fact
+        for fact in program.facts
+        if fact.kind not in {"semantic.for", "semantic.next"}
+    )
+    complete = tuple(integer_variable_step_for_facts(evidence, inputs))
+    truncated = Evidence(
+        evidence.image,
+        tuple(
+            operation
+            for operation in evidence.instructions
+            if operation.offset != 34631
+        ),
+        evidence.blocks,
+        evidence.xrefs,
+    )
+
+    assert [fact.kind for fact in complete] == ["semantic.for", "semantic.next"]
+    assert tuple(integer_variable_step_for_facts(truncated, inputs)) == ()
+
+
+def test_fp_for_templates_recover_short_long_single_and_double_loops():
+    names = (
+        "t1_for.exe",
+        "v10_t1_for.exe",
+        "t1_for2.exe",
+        "v10_t1_for2.exe",
+        "t1_forlongfp.exe",
+        "v10_t1_forlongfp.exe",
+    )
+    for name in names:
+        image = (_CORPUS / name).read_bytes()
+        actual = [
+            (node.kind, node.operands)
+            for node in decode(image).canonical_statements
+            if node.kind in {"For", "NextStmt"}
+        ]
+        exact = [
+            _tbx_statement(node)
+            for node in decode0.decode_user_code(image)
+            if isinstance(node, (tbx_ir.For, tbx_ir.NextStmt))
+        ]
+
+        assert actual == exact
+
+
+def test_far_fp_escape_keeps_following_for_tail_aligned():
+    image = bytes.fromhex("cd 3c d9 1c cd 87 cd 35 06 20 01")
+
+    far = decode_instruction(image, 0, len(image), 0, "1.1")
+    commit = decode_instruction(image, far.end, len(image), 0, "1.1")
+    load = decode_instruction(image, commit.end, len(image), 0, "1.1")
+
+    assert (far.kind, far.size, far.operands) == ("tb.fp_far", 4, (0xD9, 0x1C))
+    assert (commit.kind, commit.offset) == ("tb.runtime", 4)
+    assert (load.kind, load.offset) == ("tb.fp", 6)
+
+
+def test_transcendental_dispatch_owns_its_selector_byte():
+    names = {0x00: "SIN", 0x08: "LOG", 0x0E: "EXP"}
+    for selector, name in names.items():
+        image = bytes((0xCD, 0x3E, selector, 0xCD, 0xEC, 0x32))
+        operation = decode_instruction(image, 0, len(image), 0, "1.1")
+
+        assert (operation.size, operation.kind, operation.operands) == (
+            3,
+            "tb.fp_function",
+            (name,),
+        )
+
+
+def test_profiled_backward_loop_keeps_physical_source_fallthrough():
+    program = decode((_CORPUS / "zz_ginf.exe").read_bytes())
+
+    assert program.canonical_statements[-1].kind == "End"
+    assert any(
+        xref.kind == "orphan" and xref.target == 0x871E
+        for xref in program.xrefs
+    )
+
+
+def test_bounds_vectors_own_descriptor_payloads_without_source_semantics():
+    for vector, role in {0x91: "base", 0x92: "span", 0x93: "index"}.items():
+        image = bytes((0xCD, vector, 0x34, 0x12, 0xCD, 0xEC, 0x32))
+        operation = decode_instruction(image, 0, len(image), 0, "1.1")
+
+        assert (operation.size, operation.kind, operation.operands) == (
+            4,
+            "tb.bounds",
+            (role, 0x1234),
+        )
+
+
 def test_numeric_read_facts_recover_complete_committed_chains():
     for prefix in ("", "v10_"):
         for stem in ("t1_readnum", "t1_readfp", "t1_readalt"):
@@ -996,7 +1465,7 @@ def test_console_input_facts_preserve_prompts_flags_and_scalar_targets():
         assert actual == exact
 
 
-def test_console_input_rejects_incomplete_and_integer_conversion_chains():
+def test_console_input_rejects_incomplete_target_chains():
     image = bytearray((_CORPUS / "t1_inp.exe").read_bytes())
     complete = decode(bytes(image))
     header = next(
@@ -1012,12 +1481,57 @@ def test_console_input_rejects_incomplete_and_integer_conversion_chains():
         for fact in incomplete.facts
     )
 
-    for prefix in ("", "v10_"):
-        converted = decode(
-            (_CORPUS / f"{prefix}t1_dimv2.exe").read_bytes()
+
+
+def test_console_integer_input_uses_the_calibrated_scratch_bridge():
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in ("t1_dimv2", "t1_swapstrelem")
+    ] + [_CORPUS / "t1_ifloopguard.exe"]
+    for path in paths:
+        image = path.read_bytes()
+        actual = [
+            (node.kind, node.operands)
+            for node in decode(image).canonical_statements
+            if node.kind == "Input"
+        ]
+        exact = [
+            _tbx_statement(node)
+            for node in decode0.decode_user_code(image)
+            if isinstance(node, tbx_ir.Input)
+        ]
+        assert actual == exact
+
+
+def test_console_array_input_consumes_shared_array_store_facts():
+    paths = [
+        _CORPUS / name
+        for name in (
+            "t1_inparr.exe",
+            "v10_t1_inparr.exe",
+            "t1_inpdynarr.exe",
+            "t1_inpdynconst.exe",
+            "t1_inpsarr.exe",
+            "v10_t1_inpsarr.exe",
         )
-        assert not any(
-            fact.kind == "semantic.input" for fact in converted.facts
+    ]
+    for path in paths:
+        image = path.read_bytes()
+        program = decode(image)
+        actual = [
+            (node.kind, node.operands)
+            for node in program.canonical_statements
+            if node.kind == "Input"
+        ]
+        exact = [
+            _tbx_statement(node)
+            for node in decode0.decode_user_code(image)
+            if isinstance(node, tbx_ir.Input)
+        ]
+        assert actual == exact
+        assert any(
+            fact.kind == "reference.array_store" for fact in program.facts
         )
 
 
@@ -1072,12 +1586,22 @@ def test_open_fact_requires_the_complete_string_push_scaffold():
     )
 
 
-def test_open_fact_does_not_promote_an_unwritten_slot_shaped_filename():
+def test_static_array_layout_resolves_read_only_open_filename():
     for prefix in ("", "v10_"):
         image = (_CORPUS / f"{prefix}t1_inpfilearr.exe").read_bytes()
         program = decode(image)
+        exact = next(
+            _tbx_statement(node)
+            for node in decode0.decode_user_code(image)
+            if isinstance(node, tbx_ir.Open)
+        )
+        actual = next(
+            (node.kind, node.operands)
+            for node in program.canonical_statements
+            if node.kind == "Open"
+        )
 
-        assert not any(fact.kind == "semantic.open" for fact in program.facts)
+        assert actual == exact
 
 
 def test_close_facts_preserve_bare_immediate_and_variable_channels():
@@ -2177,6 +2701,33 @@ def _tbx_statement(node):
         else:
             value = _tbx_expression(node.num)
         operands = (value,)
+    elif isinstance(node, tbx_ir.Color):
+        operands = tuple(
+            None if value is None else _tbx_expression(value)
+            for value in (node.fg, node.bg, node.border)
+        )
+    elif isinstance(node, tbx_ir.Screen):
+        operands = tuple(
+            None if value is None else _tbx_expression(value)
+            for value in (node.mode, node.burst, node.apage, node.vpage)
+        )
+    elif isinstance(node, tbx_ir.Files):
+        operands = (
+            None if node.spec is None else _tbx_expression(node.spec),
+        )
+    elif type(node) in _TBX_STRING_STATEMENT_FIELDS:
+        operands = (
+            _tbx_expression(getattr(node, _TBX_STRING_STATEMENT_FIELDS[type(node)])),
+        )
+    elif isinstance(node, tbx_ir.DateTimeSet):
+        operands = node.name, _tbx_expression(node.value)
+    elif isinstance(node, tbx_ir.For):
+        operands = tuple(
+            _tbx_expression(value)
+            for value in (node.var, node.init, node.limit, node.step)
+        )
+    elif isinstance(node, tbx_ir.NextStmt):
+        operands = (_tbx_expression(node.var),)
     elif isinstance(node, tbx_ir.TrapCtl):
         number = None if node.n is None else _tbx_expression(node.n)
         operands = node.event, number, node.mode

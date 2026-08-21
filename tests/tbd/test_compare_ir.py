@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from tbx.tools.compare_tbd_ir import compare_paths, main
+from tbx import decode0, ir as tbx_ir
+from tbx.tools.compare_tbd_ir import _statement, compare_paths, main
+from tbd import decode
 
 _CORPUS = Path(__file__).parents[1] / "fixtures" / "corpus"
 
@@ -53,6 +55,32 @@ def test_signature_complete_beep_is_an_exact_migrated_statement():
     report = compare_paths(paths)
 
     assert report.comparable_files == report.exact_files == 2
+    assert report.mismatches == ()
+
+
+def test_signature_complete_operandless_statements_are_exact():
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in ("t1_keylist", "t1_mtimer", "t1_reset", "t1_scr")
+    ]
+
+    report = compare_paths(paths)
+
+    assert report.comparable_files == report.exact_files == 8
+    assert report.mismatches == ()
+
+
+def test_signature_complete_key_toggle_operands_are_exact():
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in ("t1_keyoff", "t1_keyon")
+    ]
+
+    report = compare_paths(paths)
+
+    assert report.comparable_files == report.exact_files == 4
     assert report.mismatches == ()
 
 
@@ -189,6 +217,250 @@ def test_grouped_constant_locate_forms_align_with_tbx():
 
     assert report.aligned_by_kind["Locate"] == report.tbx_kinds["Locate"] == 9
     assert report.failures == 0
+
+
+def test_color_operands_are_exact_across_masks_and_dialects():
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in ("t1_scr", "t1_scr2", "t1_color3", "t1_colorfp")
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["Color"] == report.tbx_kinds["Color"] == 10
+    assert report.comparable_files == report.exact_files == 8
+    assert report.mismatches == ()
+
+
+def test_screen_operands_are_exact_across_calibrated_masks():
+    paths = [
+        _CORPUS / name
+        for name in (
+            "t1_blitline.exe",
+            "t1_paintt.exe",
+            "t1_screen.exe",
+            "t1_screena.exe",
+            "t1_screenb.exe",
+            "t1_screenp.exe",
+            "t1_viewbare.exe",
+            "v10_t1_blitline.exe",
+            "v10_t1_screen.exe",
+            "v10_t1_viewbare.exe",
+        )
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["Screen"] == report.tbx_kinds["Screen"] == 12
+    assert report.comparable_files == report.exact_files == 3
+
+
+def test_files_forms_are_exact_in_both_dialects():
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in ("t1_files", "t1_files0")
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["Files"] == report.tbx_kinds["Files"] == 4
+    assert report.comparable_files == report.exact_files == 4
+    assert report.mismatches == ()
+
+
+def test_single_string_statement_scaffolds_are_exact_in_both_dialects():
+    stems = (
+        "t1_chdir",
+        "t1_dates",
+        "t1_draw",
+        "t1_environ",
+        "t1_kill",
+        "t1_mkdir",
+        "t1_play",
+        "t1_rmdir",
+        "t1_shell",
+        "t1_times",
+    )
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in stems
+    ]
+    report = compare_paths(paths)
+
+    for kind in ("Chdir", "Draw", "Environ", "Kill", "Mkdir", "Play", "Rmdir"):
+        assert report.aligned_by_kind[kind] == report.tbx_kinds[kind] == 2
+    assert report.aligned_by_kind["DateTimeSet"] == report.tbx_kinds["DateTimeSet"] == 4
+    assert report.aligned_by_kind["Shell"] == report.tbx_kinds["Shell"] == 2
+    assert report.comparable_files == report.exact_files == 20
+    assert report.mismatches == ()
+
+
+def test_direct_integer_for_loops_are_exact_in_both_dialects():
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in (
+            "t1_forstep",
+            "t1_forstepm1",
+            "t1_forstepn",
+            "t1_forbig",
+            "t1_forvarinit",
+        )
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["For"] == report.tbx_kinds["For"] == 10
+    assert report.aligned_by_kind["NextStmt"] == report.tbx_kinds["NextStmt"] == 10
+    assert report.comparable_files == report.exact_files == 10
+    assert report.mismatches == ()
+
+
+def test_direct_integer_for_variable_limit_is_exact_in_both_dialects():
+    paths = [
+        _CORPUS / f"{prefix}t1_forvarlimneg.exe"
+        for prefix in ("", "v10_")
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["For"] == report.tbx_kinds["For"] == 2
+    assert report.aligned_by_kind["NextStmt"] == report.tbx_kinds["NextStmt"] == 2
+    assert report.comparable_files == report.exact_files == 2
+    assert report.mismatches == ()
+
+
+def test_direct_integer_variable_step_loops_are_exact():
+    paths = [
+        _CORPUS / name
+        for name in (
+            "t1_forvarstep.exe",
+            "v10_t1_forvarstep.exe",
+            "t1_forvarstep2.exe",
+            "v10_t1_forvarstep2.exe",
+            "v10_t1_forvarstepinit.exe",
+        )
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["For"] == report.tbx_kinds["For"] == 5
+    assert report.aligned_by_kind["NextStmt"] == report.tbx_kinds["NextStmt"] == 5
+    assert report.comparable_files == report.exact_files == 3
+
+
+def test_fp_for_templates_are_exact_across_dialects_widths_and_distances():
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in ("t1_for", "t1_for2", "t1_forlongfp")
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["For"] == report.tbx_kinds["For"] == 8
+    assert report.aligned_by_kind["NextStmt"] == report.tbx_kinds["NextStmt"] == 8
+    assert report.comparable_files == report.exact_files == 6
+    assert report.mismatches == ()
+
+
+def test_simple_do_loop_templates_are_exact():
+    paths = [
+        _CORPUS / name
+        for name in (
+            "t1_while.exe",
+            "v10_t1_while.exe",
+            "zz_do2.exe",
+            "zz_do3.exe",
+            "zz_do4.exe",
+            "zz_do7.exe",
+        )
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["Do"] == report.tbx_kinds["Do"] == 6
+    assert report.aligned_by_kind["Loop"] == report.tbx_kinds["Loop"] == 6
+    assert report.comparable_files == report.exact_files == 6
+    assert report.mismatches == ()
+
+
+def test_codeless_common_band_statements_are_exact():
+    paths = [
+        _CORPUS / name
+        for name in (
+            "t1_common1.exe",
+            "t1_common2.exe",
+            "v10_t1_common2.exe",
+        )
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["Common"] == report.tbx_kinds["Common"] == 3
+    assert report.comparable_files == report.exact_files == 3
+    assert report.mismatches == ()
+
+
+def test_common_slot_names_make_all_dim_trees_exact():
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in (
+            "t1_commonrt",
+            "t1_erasesubcommon",
+            "t1_locarrcom",
+        )
+    ]
+    expected = actual = 0
+    for path in paths:
+        exact = decode0.decode_user_code(path.read_bytes())
+        migrated = decode(path.read_bytes()).canonical_statements
+        exact_dims = [
+            _statement(node)
+            for node in exact
+            if isinstance(node, tbx_ir.Dim)
+        ]
+        migrated_dims = [
+            (node.kind, node.operands)
+            for node in migrated
+            if node.kind == "Dim"
+        ]
+        expected += len(exact_dims)
+        actual += len(migrated_dims)
+        assert migrated_dims == exact_dims
+
+    assert expected == actual == 8
+
+
+def test_option_base_votes_materialize_all_corpus_declarations_exactly():
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in (
+            "t1_dimm",
+            "t1_dimv2",
+            "t1_dimw",
+            "t1_dimw2",
+            "t1_dimw3",
+            "t1_mix",
+            "t1_mix2",
+            "t1_mix3",
+        )
+    ] + [_CORPUS / "fbd_t1_dimm.exe"]
+    expected = actual = 0
+    for path in paths:
+        exact = decode0.decode_user_code(path.read_bytes())
+        migrated = decode(path.read_bytes()).canonical_statements
+        exact_options = [
+            _statement(node)
+            for node in exact
+            if isinstance(node, tbx_ir.OptionBase)
+        ]
+        migrated_options = [
+            (node.kind, node.operands)
+            for node in migrated
+            if node.kind == "OptionBase"
+        ]
+        expected += len(exact_options)
+        actual += len(migrated_options)
+        assert migrated_options == exact_options
+
+    assert expected == actual == 17
 
 
 def test_numeric_read_chains_align_in_both_dialects():
@@ -537,6 +809,19 @@ def test_trace_hook_facts_align_simple_repeated_and_loop_regions():
     assert report.failures == 0
     assert report.aligned_by_kind["Tron"] == report.tbx_kinds["Tron"] == 12
     assert report.aligned_by_kind["Troff"] == report.tbx_kinds["Troff"] == 4
+
+
+def test_simple_trace_toggle_regions_are_exact_migrated_statements():
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in ("t1_tron", "t1_tron2r2")
+    ]
+
+    report = compare_paths(paths)
+
+    assert report.comparable_files == report.exact_files == 4
+    assert report.mismatches == ()
 
 
 def test_final_trace_hook_after_block_if_recovers_troff_in_both_dialects():

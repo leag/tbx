@@ -40,6 +40,7 @@ class PoolLayout:
     descriptors: dict[int, tuple[int, int]]
     string_base: int | None
     arrays: tuple[StaticArrayLayout, ...] = ()
+    static_base: int = VAR_BASE
 
 
 def resolve(
@@ -73,45 +74,94 @@ def infer_layout(
     image: bytes,
     targets: set[int],
     references: tuple[tuple[int, str], ...],
+    array_slots: tuple[int, ...] = (),
+    array_data: tuple[int, ...] = (),
+    static_base: int = VAR_BASE,
+    runtime_blocks: tuple[int, ...] = (),
+    target_widths: tuple[tuple[int, int], ...] = (),
 ) -> PoolLayout | None:
     """Choose the best anchored pool candidate for observed memory evidence."""
 
     marker = _pool_marker(image)
     if marker is None:
         return None
-    observed = {*targets, *(address for address, _kind in references)}
-    scalar_end = max((address + 4 for address in targets), default=VAR_BASE)
+    observed = {
+        *targets,
+        *array_data,
+        *(address for address, _kind in references),
+    }
+    widths = dict(target_widths)
+    scalar_end = max(
+        (address + widths.get(address, 4) for address in targets),
+        default=VAR_BASE,
+    )
     legacy_first = _align16(scalar_end) + 4
     highest_reference = max(observed, default=legacy_first)
     last_base = max(legacy_first, _align16(highest_reference + 4) + 4)
+    witnessed_arrays = max(
+        (
+            (slot - VAR_BASE) // _ARRAY_BLOCK + 1
+            for slot in array_slots
+            if slot >= VAR_BASE and (slot - VAR_BASE) % _ARRAY_BLOCK == 0
+        ),
+        default=0,
+    )
+    if witnessed_arrays:
+        last_base = max(
+            last_base,
+            _align16(VAR_BASE + _ARRAY_BLOCK * witnessed_arrays) + 4,
+        )
     legacy_candidates = [
         layout
         for pool_base in range(legacy_first, last_base + 1, 16)
-        if (layout := _candidate_layout(image, marker, pool_base)) is not None
+        if (
+            layout := _candidate_layout(
+                image, marker, pool_base, static_base, runtime_blocks
+            )
+        )
+        is not None
     ]
     legacy = (
         max(legacy_candidates, key=lambda layout: _literal_score(layout, references))
         if legacy_candidates
         else None
     )
-    array_first = _align16(VAR_BASE) + 4
+    array_first = _align16(static_base) + 4
     array_candidates = [
         layout
         for pool_base in range(array_first, last_base + 1, 16)
-        if (layout := _candidate_layout(image, marker, pool_base)) is not None
+        if (
+            layout := _candidate_layout(
+                image, marker, pool_base, static_base, runtime_blocks
+            )
+        )
+        is not None
         and layout.arrays
-        and _supports_observations(layout, targets, references)
-        and any(_array_at(layout, address) is not None for address in observed)
+        and _supports_observations(
+            layout, targets, references, target_widths
+        )
+        and _supports_array_witnesses(layout, array_slots, array_data)
+        and (
+            any(_array_at(layout, address) is not None for address in observed)
+            or bool(array_slots)
+        )
     ]
     if not array_candidates:
         return legacy
     scored = [
-        (layout, _evidence_score(layout, targets, references))
+        (
+            layout,
+            _evidence_score(layout, targets, references, array_slots, array_data),
+        )
         for layout in array_candidates
     ]
     best = max(score for _layout, score in scored)
     winners = [layout for layout, score in scored if score == best]
-    return winners[0] if len(winners) == 1 else None
+    if len(winners) == 1:
+        return winners[0]
+    if array_slots or array_data:
+        return min(winners, key=lambda layout: layout.pool_base)
+    return None
 
 
 def _pool_marker(image: bytes) -> int | None:
@@ -131,15 +181,35 @@ def _assigned_targets(nodes: list[Operation]) -> set[int]:
 
 
 def _candidate_layout(
-    image: bytes, marker: int, pool_base: int
+    image: bytes,
+    marker: int,
+    pool_base: int,
+    static_base: int = VAR_BASE,
+    runtime_blocks: tuple[int, ...] = (),
 ) -> PoolLayout | None:
     ds = marker - (pool_base - 4)
     if ds < 0 or image[ds + pool_base - 4 : ds + pool_base] != _MARKER:
         return None
+    if runtime_blocks and not all(
+        _runtime_record_at(image, ds + block) for block in runtime_blocks
+    ):
+        return None
     descriptors, after = _descriptors(image, ds, pool_base)
     string_base = _string_base(image, ds, descriptors, after)
-    arrays = _static_arrays(image, ds, pool_base)
-    return PoolLayout(marker, ds, pool_base, descriptors, string_base, arrays)
+    arrays = _static_arrays(image, ds, pool_base, static_base)
+    return PoolLayout(
+        marker, ds, pool_base, descriptors, string_base, arrays, static_base
+    )
+
+
+def _runtime_record_at(image: bytes, offset: int) -> bool:
+    return (
+        0 <= offset
+        and offset + 4 <= len(image)
+        and image[offset : offset + 2] == b"\x00\x00"
+        and image[offset + 2] in _ARRAY_TYPES
+        and image[offset + 3] in {1, 2, 3}
+    )
 
 
 def _reference_addresses(nodes: list[Operation]) -> tuple[tuple[int, str], ...]:
@@ -169,12 +239,32 @@ def _evidence_score(
     layout: PoolLayout,
     targets: set[int],
     references: tuple[tuple[int, str], ...],
-) -> tuple[int, int, int]:
+    array_slots: tuple[int, ...] = (),
+    array_data: tuple[int, ...] = (),
+) -> tuple[int, int, int, int]:
     array_accesses = sum(
         _array_at(layout, address) is not None
         for address in {*targets, *(item[0] for item in references)}
     )
-    return array_accesses, len(layout.arrays), _literal_score(layout, references)
+    witnessed = sum(slot in {array.slot for array in layout.arrays} for slot in array_slots)
+    data_accesses = sum(_array_at(layout, address) is not None for address in array_data)
+    return (
+        witnessed + data_accesses,
+        array_accesses,
+        len(layout.arrays),
+        _literal_score(layout, references),
+    )
+
+
+def _supports_array_witnesses(
+    layout: PoolLayout,
+    slots: tuple[int, ...],
+    data: tuple[int, ...],
+) -> bool:
+    known_slots = {array.slot for array in layout.arrays}
+    return set(slots) <= known_slots and all(
+        _array_at(layout, address) is not None for address in data
+    )
 
 
 def _literal_score(
@@ -193,17 +283,27 @@ def _supports_observations(
     layout: PoolLayout,
     targets: set[int],
     references: tuple[tuple[int, str], ...],
+    target_widths: tuple[tuple[int, int], ...] = (),
 ) -> bool:
-    scalar_base = VAR_BASE + _ARRAY_BLOCK * len(layout.arrays)
+    scalar_base = layout.static_base + _ARRAY_BLOCK * len(layout.arrays)
+    widths = dict(target_widths)
     for address in targets:
         if _array_at(layout, address) is not None:
             continue
-        if not _is_scalar(address, scalar_base, layout.pool_base):
+        width = widths.get(address)
+        if (
+            not _is_typed_scalar(address, width, scalar_base, layout.pool_base)
+            if width is not None
+            else not _is_scalar(address, scalar_base, layout.pool_base)
+        ):
             return False
     for address, kind in references:
         if _array_at(layout, address) is not None:
             continue
-        if _is_scalar(address, scalar_base, layout.pool_base):
+        width = {"integer": 2, "long": 4, "float": 4, "double": 8, "string": 4}.get(
+            kind
+        )
+        if _is_typed_scalar(address, width, scalar_base, layout.pool_base):
             continue
         if kind == "string" and (
             address == layout.pool_base - 4 or address in layout.descriptors
@@ -223,6 +323,17 @@ def _is_scalar(address: int, scalar_base: int, pool_base: int) -> bool:
     )
 
 
+def _is_typed_scalar(
+    address: int, width: int | None, scalar_base: int, pool_base: int
+) -> bool:
+    return (
+        isinstance(width, int)
+        and scalar_base <= address
+        and address + width <= pool_base - 4
+        and (address - scalar_base) % 2 == 0
+    )
+
+
 def _array_at(layout: PoolLayout, address: int) -> StaticArrayLayout | None:
     return next(
         (
@@ -235,13 +346,13 @@ def _array_at(layout: PoolLayout, address: int) -> StaticArrayLayout | None:
 
 
 def _static_arrays(
-    image: bytes, ds: int, pool_base: int
+    image: bytes, ds: int, pool_base: int, static_base: int = VAR_BASE
 ) -> tuple[StaticArrayLayout, ...]:
     arrays = []
-    cursor = ds + VAR_BASE
+    cursor = ds + static_base
     stop = min(len(image), ds + pool_base)
     while cursor + 8 <= stop:
-        slot = VAR_BASE + _ARRAY_BLOCK * len(arrays)
+        slot = static_base + _ARRAY_BLOCK * len(arrays)
         array = _static_array(image, cursor, slot)
         if array is None:
             cursor += 2
@@ -300,6 +411,14 @@ def _static_array(
         element_size,
         count,
     )
+
+
+def static_array_at(
+    image: bytes, record: int, slot: int
+) -> StaticArrayLayout | None:
+    """Parse one compiler static-array record at a calibrated grid position."""
+
+    return _static_array(image, record, slot)
 
 
 def _target_address(value: object) -> int | None:

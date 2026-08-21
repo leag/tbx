@@ -9,6 +9,9 @@ _SIMPLE_KINDS = {
     "ir.delay": "Delay",
     "ir.defseg": "DefSeg",
     "ir.dim": "Dim",
+    "ir.dynamic_dim": "Dim",
+    "ir.common": "Common",
+    "ir.option_base": "OptionBase",
     "ir.print": "Print",
     "ir.if_goto": "IfGoto",
     "ir.inline": "Inline",
@@ -27,6 +30,13 @@ _SIMPLE_KINDS = {
     "ir.input": "Input",
     "ir.open": "Open",
     "ir.close": "Close",
+    "ir.color": "Color",
+    "ir.screen": "Screen",
+    "ir.files": "Files",
+    "ir.for": "For",
+    "ir.next": "NextStmt",
+    "ir.do": "Do",
+    "ir.loop": "Loop",
     "ir.trap_ctl": "TrapCtl",
     "ir.on_trap": "OnTrap",
     "ir.on_goto": "OnGoto",
@@ -63,6 +73,11 @@ def _reconstruct_scope(candidates: list[Operation]) -> tuple[Statement, ...]:
 def _visible_operations(candidates: list[Operation]) -> list[Operation]:
     procedures = [node for node in candidates if node.kind == "ir.sub_def"]
     inline = [node for node in candidates if node.kind == "ir.inline"]
+    covered_regions = [
+        node
+        for node in candidates
+        if node.kind in {"ir.for", "ir.next", "ir.dynamic_dim"}
+    ]
     return [
         node
         for node in candidates
@@ -74,6 +89,10 @@ def _visible_operations(candidates: list[Operation]) -> list[Operation]:
             node.kind == "ir.inline"
             or not any(_covered_by_inline(node, region) for region in inline)
         )
+        and (
+            node.kind in {"ir.for", "ir.next", "ir.dynamic_dim"}
+            or not any(_covered_by_inline(node, region) for region in covered_regions)
+        )
     ]
 
 
@@ -82,7 +101,11 @@ def _inside(node: Operation, procedure: Operation) -> bool:
 
 
 def _covered_by_inline(node: Operation, region: Operation) -> bool:
-    return region.offset <= node.offset and node.end <= region.end
+    return (
+        region.offset <= node.offset
+        and node.offset < region.end
+        and node.end <= region.end
+    )
 
 
 def _statement_operations(nodes: list[Operation]) -> list[Operation]:
@@ -137,6 +160,10 @@ def _statement(
         return "Delay", operation.operands
     if operation.kind == "ir.dim":
         return "Dim", operation.operands[1:]
+    if operation.kind == "ir.common":
+        return "Common", operation.operands[1:]
+    if operation.kind == "ir.option_base":
+        return "OptionBase", operation.operands[1:]
     if operation.kind == "tb.statement":
         name = operation.operands[0]
         kind = "End" if name == "END" else str(name).title().replace("_", "")

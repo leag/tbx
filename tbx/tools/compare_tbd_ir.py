@@ -27,38 +27,74 @@ MIGRATED_KINDS = frozenset(
     {
         "Assign",
         "Beep",
+        "Chdir",
         "Close",
+        "Common",
+        "Cls",
+        "Color",
+        "DateTimeSet",
         "Delay",
         "DefSeg",
         "Dim",
+        "Draw",
+        "Do",
         "End",
+        "Environ",
         "Field",
+        "Files",
+        "For",
         "Gosub",
         "IfGoto",
         "Input",
         "InputFile",
+        "Key",
+        "KeyList",
+        "Kill",
         "Lprint",
         "Lset",
         "Locate",
+        "Loop",
         "MidAssign",
+        "Mtimer",
+        "Mkdir",
+        "NextStmt",
         "OnError",
         "OnGosub",
         "OnGoto",
         "OnTrap",
         "Open",
+        "OptionBase",
         "Out",
+        "Play",
         "Print",
         "Read",
+        "Reset",
+        "Rmdir",
         "Return",
         "Resume",
         "Run",
+        "Screen",
+        "Shell",
         "Rset",
         "Swap",
         "TrapCtl",
+        "Troff",
+        "Tron",
         "Wait",
         "Write",
     }
 )
+
+_STRING_STATEMENT_FIELDS = {
+    ir.Chdir: "path",
+    ir.Draw: "cmd",
+    ir.Environ: "s",
+    ir.Kill: "file",
+    ir.Mkdir: "path",
+    ir.Play: "music",
+    ir.Rmdir: "path",
+    ir.Shell: "cmd",
+}
 
 
 @dataclass(frozen=True)
@@ -179,6 +215,10 @@ def _statement(node: Any) -> tuple[str, tuple[object, ...]]:
             ),
             node.dynamic,
         )
+    elif isinstance(node, ir.Common):
+        operands = (node.names,)
+    elif isinstance(node, ir.OptionBase):
+        operands = (node.n,)
     elif isinstance(node, ir.Print):
         if node.file is None or isinstance(node.file, int):
             mode = "console" if node.file is None else node.file
@@ -244,6 +284,37 @@ def _statement(node: Any) -> tuple[str, tuple[object, ...]]:
         else:
             value = _expression(node.num)
         operands = (value,)
+    elif isinstance(node, ir.Color):
+        operands = tuple(
+            None if value is None else _expression(value)
+            for value in (node.fg, node.bg, node.border)
+        )
+    elif isinstance(node, ir.Screen):
+        operands = tuple(
+            None if value is None else _expression(value)
+            for value in (node.mode, node.burst, node.apage, node.vpage)
+        )
+    elif isinstance(node, ir.Files):
+        operands = (
+            None if node.spec is None else _expression(node.spec),
+        )
+    elif isinstance(node, ir.For):
+        operands = tuple(
+            _expression(value) for value in (node.var, node.init, node.limit, node.step)
+        )
+    elif isinstance(node, ir.NextStmt):
+        operands = (_expression(node.var),)
+    elif isinstance(node, (ir.Do, ir.Loop)):
+        operands = (
+            node.kind,
+            None if node.cond is None else _condition(node.cond),
+        )
+    elif type(node) in _STRING_STATEMENT_FIELDS:
+        operands = (_expression(getattr(node, _STRING_STATEMENT_FIELDS[type(node)])),)
+    elif isinstance(node, ir.DateTimeSet):
+        operands = node.name, _expression(node.value)
+    elif isinstance(node, ir.Key):
+        operands = (node.on,)
     elif isinstance(node, ir.TrapCtl):
         number = None if node.n is None else _expression(node.n)
         operands = node.event, number, node.mode
