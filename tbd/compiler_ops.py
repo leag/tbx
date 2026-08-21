@@ -58,6 +58,8 @@ def _translate(instruction: Operation) -> CompilerOp | None:
         return _op(instruction, "movesdx")
     if raw == b"\x89\xc6":
         return _op(instruction, "movsiax")
+    if raw == b"\x89\xc3":
+        return _op(instruction, "movbxax")
     if raw == b"\x03\xf0":
         return _op(instruction, "addsiax")
     if raw == b"\x09\xc0":
@@ -141,6 +143,10 @@ def _direct_integer_operation(
         return _op(instruction, "movm_ax_si")
     if raw == b"\x26\x89\x04":
         return _op(instruction, "far_movm_ax_si")
+    if raw == b"\x8b\x04":
+        return _op(instruction, "movax_si")
+    if raw == b"\x26\x8b\x04":
+        return _op(instruction, "far_movax_si")
     if len(raw) == 4 and raw[:2] in {b"\xff\x06", b"\xff\x0e"}:
         kind = "inc_m" if raw[1] == 0x06 else "dec_m"
         return _op(instruction, kind, _u16(raw, 2))

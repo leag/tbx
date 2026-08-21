@@ -49,6 +49,53 @@ def array_store_facts(
             yield match
 
 
+def array_read_facts(
+    evidence: Evidence, facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    """Name complete rank-1 INTEGER element reads used as AX operands."""
+
+    operations = translate_operations(evidence.instructions)
+    for index, load in enumerate(operations):
+        if load.kind != "movsim" or len(load.args) != 1:
+            continue
+        resolved = resolve_expression(
+            ("memory", load.args[0], "integer"), facts
+        )
+        if resolved is None:
+            continue
+        cursor = index + 1
+        while cursor < len(operations) and operations[cursor].kind == "shlsi":
+            cursor += 1
+        shifts = cursor - index - 1
+        if shifts == 0 or cursor >= len(operations):
+            continue
+        anchor = operations[cursor]
+        cursor += 1
+        staged = cursor < len(operations) and operations[cursor].kind == "movbxax"
+        if staged:
+            cursor += 1
+        if cursor >= len(operations) or operations[cursor].kind != "movax_si":
+            continue
+        terminal = operations[cursor]
+        if not _contiguous(operations[index : cursor + 1]):
+            continue
+        layout = _static_layout(anchor, "integer", shifts, facts)
+        if layout is None:
+            continue
+        name, layout_evidence = layout
+        yield Fact(
+            "reference.array_read",
+            (load.offset, terminal.end),
+            (("array", name, (resolved.value,)), "integer", staged),
+            combine_evidence(
+                tuple(item.offset for item in operations[index : cursor + 1]),
+                resolved.evidence,
+                layout_evidence,
+            ),
+            "anchored",
+        )
+
+
 def _numeric_indexed_store(
     operations: tuple[CompilerOp, ...], index: int, facts: frozenset[Fact]
 ) -> Fact | None:
@@ -444,4 +491,5 @@ def _contiguous(operations: tuple[CompilerOp, ...]) -> bool:
 
 ARRAY_REFERENCE_PASSES: tuple[NamedPass, ...] = (
     ("array-references", array_store_facts),
+    ("array-reads", array_read_facts),
 )

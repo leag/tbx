@@ -25,6 +25,33 @@ def locate_statement_facts(
     """Resolve whole LOCATE statements without emitting partial call legs."""
 
     instructions = evidence.instructions
+    by_offset = {instruction.offset: instruction for instruction in instructions}
+    reads = sorted(
+        (
+            fact
+            for fact in facts
+            if fact.kind == "reference.array_read"
+            and len(fact.subject) == 2
+            and len(fact.value) == 3
+        ),
+        key=lambda fact: fact.subject,
+    )
+    for row, column in zip(reads, reads[1:]):
+        runtime = by_offset.get(column.subject[1])
+        if (
+            row.subject[1] != column.subject[0]
+            or column.value[2] is not True
+            or runtime is None
+            or _runtime_vector(runtime) != 0xCF
+        ):
+            continue
+        yield Fact(
+            "semantic.locate",
+            (row.subject[0], runtime.end),
+            (row.value[0], column.value[0], None, None, None),
+            combine_evidence(row.evidence, column.evidence, (runtime.offset,)),
+            "anchored",
+        )
     index = 0
     while index < len(instructions):
         expression = _string_length_row_col(
