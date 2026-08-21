@@ -1160,6 +1160,36 @@ def test_dynamic_array_swap_consumes_runtime_element_address_facts():
             )
 
 
+def test_computed_array_values_feed_print_items_without_redecoding_indices():
+    for stem in (
+        "t1_arrswapf",
+        "v10_t1_arrswapf",
+        "t1_swap_dyndbl",
+        "v10_swap_dyndbl",
+        "t1_swap_dynstr",
+        "v10_swap_dynstr",
+    ):
+        image = (_CORPUS / f"{stem}.exe").read_bytes()
+        program = decode(image)
+        actual = [
+            (node.kind, node.operands)
+            for node in program.canonical_statements
+            if node.kind == "Print"
+        ]
+        exact = [
+            _tbx_statement(node)
+            for node in decode0.decode_user_code(image)
+            if isinstance(node, tbx_ir.Print)
+        ]
+
+        assert actual == exact
+        values = [
+            fact for fact in program.facts if fact.kind == "reference.array_value"
+        ]
+        assert len(values) == 2
+        assert all(fact.confidence == "anchored" for fact in values)
+
+
 def test_grouped_locate_runtime_legs_recover_complete_constant_forms():
     stems = (
         "t1_locateomit",

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from tbd.facts import Evidence, NamedPass
 from tbd.ir import Fact, Operation
 from tbd.matchers import fp_ax_bridge
-from tbd.semantic import combine_evidence, resolve_expression, resolve_slot
+from tbd.semantic import Resolved, combine_evidence, resolve_expression, resolve_slot
 
 _NUMERIC_ITEMS = {0xBB: "console", 0xBD: "file", 0xBC: "printer"}
 _STRING_ITEMS = {0xBE: "console", 0xC0: "file", 0xBF: "printer"}
@@ -600,9 +600,12 @@ def _expression_index(
     ends = {instruction.offset: instruction.end for instruction in instructions}
     candidates: dict[int, list[Fact]] = {}
     for fact in facts:
-        if fact.kind != "expression.value" or not fact.evidence:
+        if fact.kind == "reference.array_value" and len(fact.subject) == 2:
+            end = fact.subject[1]
+        elif fact.kind == "expression.value" and fact.evidence:
+            end = ends.get(fact.evidence[-1])
+        else:
             continue
-        end = ends.get(fact.evidence[-1])
         if end is not None:
             candidates.setdefault(end, []).append(fact)
     return {
@@ -875,13 +878,29 @@ def _numeric_item(
 ) -> _Item | None:
     mode = _NUMERIC_ITEMS.get(_runtime_vector(runtime))
     expression = expressions.get(runtime.offset)
+    if (
+        mode is None
+        and expression is not None
+        and expression.kind == "reference.array_value"
+        and expression.value[1] == "string"
+    ):
+        mode = _STRING_ITEMS.get(_runtime_vector(runtime))
     if mode is None or expression is None:
         return None
-    resolved = resolve_expression(expression.value[0], facts)
+    resolved = (
+        Resolved(expression.value[0], expression.evidence)
+        if expression.kind == "reference.array_value"
+        else resolve_expression(expression.value[0], facts)
+    )
     if resolved is None:
         return None
     support = combine_evidence(expression.evidence, resolved.evidence, (runtime.offset,))
-    return _Item(expression.evidence[0], runtime.end, mode, resolved.value, support)
+    start = (
+        expression.subject[0]
+        if expression.kind == "reference.array_value"
+        else expression.evidence[0]
+    )
+    return _Item(start, runtime.end, mode, resolved.value, support)
 
 
 def _string_item(

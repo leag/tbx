@@ -433,6 +433,10 @@ Two adjacent reads become LOCATE row/column operands only when the second
 access contains the compiler's `mov bx,ax` row-preservation shuttle and is
 immediately followed by the LOCATE dispatch. The LOCATE pass never repeats the
 index, width, or array-layout calculation.
+Computed float, double, and string loads similarly extend an array-address fact
+through the single calibrated load/push operation. Runtime PRINT consumes that
+array-value fact exactly like a scalar expression; it does not inspect the
+index chain, element width, or static/runtime layout.
 READ groups consecutive DATA_NUMBER and DATA_STRING phases into one target
 chain. Direct scalar stores, the shared FP-to-INTEGER bridge, and shared
 computed-array store facts all resolve through their owning passes. Any chain

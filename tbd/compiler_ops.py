@@ -104,6 +104,11 @@ def _translate(instruction: Operation) -> CompilerOp | None:
         return _op(instruction, "strassign")
     if instruction.kind == "tb.runtime" and instruction.operands == (0xA1,):
         return _op(instruction, "far_strassign")
+    if instruction.kind == "tb.runtime" and instruction.operands in {
+        (0x9C,),
+        (0x9D,),
+    }:
+        return _op(instruction, "spush")
     if instruction.kind == "tb.fwait":
         return _op(instruction, "fwait")
     if (

@@ -113,6 +113,38 @@ def array_address_facts(
             yield matched
 
 
+def array_value_facts(
+    evidence: Evidence, facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    """Load values from already resolved computed element addresses."""
+
+    operations = translate_operations(evidence.instructions)
+    by_offset = {operation.offset: operation for operation in operations}
+    loads = {
+        "float": {"fld_si", "far_fld_si"},
+        "double": {"fld_si64", "far_fld_si64"},
+        "string": {"spush"},
+    }
+    for address in facts:
+        if (
+            address.kind != "reference.array_address"
+            or len(address.subject) != 2
+            or len(address.value) != 4
+        ):
+            continue
+        kind = address.value[1]
+        terminal = by_offset.get(address.subject[1])
+        if terminal is None or terminal.kind not in loads.get(kind, set()):
+            continue
+        yield Fact(
+            "reference.array_value",
+            (address.subject[0], terminal.end),
+            (address.value[0], kind),
+            combine_evidence(address.evidence, (terminal.offset,)),
+            "anchored",
+        )
+
+
 def _static_array_address(
     operations: tuple[CompilerOp, ...], index: int, facts: frozenset[Fact]
 ) -> Fact | None:
@@ -741,5 +773,6 @@ def _contiguous(operations: tuple[CompilerOp, ...]) -> bool:
 ARRAY_REFERENCE_PASSES: tuple[NamedPass, ...] = (
     ("array-references", array_store_facts),
     ("array-addresses", array_address_facts),
+    ("array-values", array_value_facts),
     ("array-reads", array_read_facts),
 )
