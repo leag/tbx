@@ -403,12 +403,13 @@ statement itself; shorter forms require a following instruction that cannot
 begin an extension, or another complete row/column leg, as positive boundary
 evidence. An unresolved or truncated extension therefore cannot leave a stale
 partial LOCATE fact.
-Numeric READ groups consecutive DATA_NUMBER phases with their typed direct FP
-stores and requires the final statement-commit call. Every target must resolve
-before the anchored chain becomes one READ fact. A preceding DATA_STRING item
-keeps a mixed chain wholly unresolved rather than exposing a numeric suffix;
-string READ remains uncalibrated after its fixture failed whole-image oracle
-verification.
+READ groups consecutive DATA_NUMBER and DATA_STRING phases into one target
+chain. Direct scalar stores, the shared FP-to-INTEGER bridge, and shared
+computed-array store facts all resolve through their owning passes. Any chain
+containing a numeric target requires the final statement-commit call; a
+string-only chain closes at its last complete store. Every target must resolve,
+and an incomplete following phase suppresses the whole statement rather than
+exposing a valid-looking suffix.
 Console INPUT uses its inline prompt descriptor and flags as the chain header.
 The low six flag bits give the exact number of additional targets, per-position
 high bits distinguish numeric from string targets, and 0x40/0x80 retain the

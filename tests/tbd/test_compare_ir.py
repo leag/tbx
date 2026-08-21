@@ -471,9 +471,21 @@ def test_numeric_read_chains_align_in_both_dialects():
         for prefix in ("", "v10_")
         for stem in ("t1_readnum", "t1_readfp", "t1_readalt")
     ]
+    paths += [
+        _CORPUS / f"{stem}.exe"
+        for stem in (
+            "t1_databig",
+            "t1_datasharedlit",
+            "t1_readsarr",
+            "t1_readstr",
+            "v10_t1_readiarr",
+            "v10_t1_readsarr",
+            "v10_t1_readstr",
+        )
+    ]
     report = compare_paths(paths)
 
-    assert report.aligned_by_kind["Read"] == report.tbx_kinds["Read"] == 6
+    assert report.aligned_by_kind["Read"] == report.tbx_kinds["Read"] == 13
     assert report.failures == 0
 
 

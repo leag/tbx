@@ -107,16 +107,16 @@ def _string_indexed_store(
     while cursor < len(operations) and operations[cursor].kind == "shlsi":
         cursor += 1
     shifts = cursor - index - 1
-    if shifts == 0 or cursor + 1 >= len(operations):
+    if shifts == 0 or cursor >= len(operations):
         return None
-    anchor, terminal = operations[cursor : cursor + 2]
-    if (
-        anchor.kind != "addsi"
-        or terminal.kind != "strassign"
-        or not _contiguous(operations[index : cursor + 2])
-    ):
+    anchor = operations[cursor]
+    terminal_match = _indexed_terminal(operations, cursor + 1)
+    if anchor.kind != "addsi" or terminal_match is None:
         return None
-    layout = _static_layout(anchor, "string", shifts, facts)
+    terminal, target_kind, stop = terminal_match
+    if not _contiguous(operations[index:stop]):
+        return None
+    layout = _static_layout(anchor, target_kind, shifts, facts)
     resolved = resolve_expression(("memory", load.args[0], "integer"), facts)
     if layout is None or resolved is None:
         return None
@@ -126,9 +126,9 @@ def _string_indexed_store(
         terminal,
         name,
         (resolved.value,),
-        "string",
+        target_kind,
         combine_evidence(
-            tuple(item.offset for item in operations[index : cursor + 2]),
+            tuple(item.offset for item in operations[index:stop]),
             resolved.evidence,
             layout_evidence,
         ),

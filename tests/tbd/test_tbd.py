@@ -1385,7 +1385,34 @@ def test_numeric_read_facts_recover_complete_committed_chains():
             assert actual == exact
 
 
-def test_numeric_read_does_not_lift_incomplete_or_mixed_suffixes():
+def test_read_facts_reuse_string_integer_and_array_targets():
+    stems = (
+        "t1_databig",
+        "t1_datasharedlit",
+        "t1_readsarr",
+        "t1_readstr",
+        "v10_t1_readiarr",
+        "v10_t1_readsarr",
+        "v10_t1_readstr",
+    )
+    for stem in stems:
+        image = (_CORPUS / f"{stem}.exe").read_bytes()
+        program = decode(image)
+        actual = [
+            (node.kind, node.operands)
+            for node in program.canonical_statements
+            if node.kind == "Read"
+        ]
+        exact = [
+            _tbx_statement(node)
+            for node in decode0.decode_user_code(image)
+            if isinstance(node, tbx_ir.Read)
+        ]
+
+        assert actual == exact
+
+
+def test_read_does_not_lift_incomplete_or_unresolved_mixed_suffixes():
     incomplete = decode(bytes.fromhex("cd ec b2 cd 35 1e 20 01"))
     mixed = decode(
         bytes.fromhex(
