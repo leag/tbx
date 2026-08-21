@@ -459,17 +459,18 @@ target. COM, KEY, and PLAY require their adjacent immediate AX event number,
 TIMER requires one uniquely resolved adjacent FP expression, and PEN has no
 number. An incomplete numbered scaffold remains structural instead of producing
 an operand-truncated ON event GOSUB statement.
-Device I/O likewise requires its whole compiler scaffold. Constant OUT is
-recovered only when two immediate AX loads are separated by the exact
-`mov bx,ax` staging move and followed contiguously by `mov dx,bx; out dx,al` in
-one basic block. A non-immediate load, altered move, or truncated tail remains
-structural. Three-argument constant WAIT additionally requires the complete
-mask/xor register shuffle, `in; xor; and` polling body, and a decoded backward
-`JE` whose branch and fallthrough CFG edges close the loop. The two-argument
-form remains structural pending a byte-exact acceptance fixture. In every case,
-the individual instructions and their byte evidence are never replaced.
+Device I/O likewise requires its whole compiler scaffold. OUT resolves each
+AX operand from either an immediate or a uniquely named direct INTEGER load;
+the port and value are separated by the exact `mov bx,ax` staging move and
+followed contiguously by `mov dx,bx; out dx,al` in one basic block. An
+unresolved load, altered move, or truncated tail remains structural.
+Three-argument WAIT requires the complete mask/xor register shuffle and
+`in; xor; and` polling body. Its two-argument sibling requires the shorter
+mask/port shuffle and `in; and` body. Both require the exact decoded backward
+`JE` plus its branch and fallthrough CFG edges. In every case, the individual
+instructions and their byte evidence are never replaced.
 `Program.fact_operations` now materializes migrated assignment, PRINT, LPRINT,
-and constant device-I/O facts directly into operation IR. Conditional branch
+and device-I/O facts directly into operation IR. Conditional branch
 pairs and their resolved operands now produce `IfGoto` facts and operations as
 well. `Program.operations` remains the legacy compatibility view until the
 remaining runtime consumers migrate.

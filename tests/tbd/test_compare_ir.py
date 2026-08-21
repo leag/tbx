@@ -97,31 +97,33 @@ def test_control_operands_are_exact_migrated_statements():
     assert report.mismatches == ()
 
 
-def test_complete_constant_out_scaffold_is_exact_in_both_dialects():
+def test_complete_out_scaffolds_are_exact_in_both_dialects():
     paths = [
-        _CORPUS / f"{prefix}t1_out.exe"
+        _CORPUS / f"{prefix}{stem}.exe"
         for prefix in ("", "v10_")
+        for stem in ("t1_out", "t1_out2")
     ]
 
     report = compare_paths(paths)
 
-    assert report.tbx_statements == report.tbd_statements == 4
-    assert report.aligned_kinds == 4
-    assert report.comparable_files == report.exact_files == 2
+    assert report.tbx_statements == report.tbd_statements == 10
+    assert report.aligned_kinds == 10
+    assert report.comparable_files == report.exact_files == 4
     assert report.mismatches == ()
 
 
-def test_complete_three_argument_wait_is_exact_in_both_dialects():
+def test_complete_wait_scaffolds_are_exact_in_both_dialects():
     paths = [
-        _CORPUS / f"{prefix}t1_wait3.exe"
+        _CORPUS / f"{prefix}{stem}.exe"
         for prefix in ("", "v10_")
+        for stem in ("t1_wait", "t1_wait3")
     ]
 
     report = compare_paths(paths)
 
-    assert report.tbx_statements == report.tbd_statements == 4
-    assert report.aligned_kinds == 4
-    assert report.comparable_files == report.exact_files == 2
+    assert report.tbx_statements == report.tbd_statements == 8
+    assert report.aligned_kinds == 8
+    assert report.comparable_files == report.exact_files == 4
     assert report.mismatches == ()
 
 

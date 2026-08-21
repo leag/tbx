@@ -1735,18 +1735,32 @@ def test_device_io_facts_recover_complete_out_scaffolds():
         assert out.confidence == "signature"
         assert len(out.evidence) == 5
 
+    for prefix in ("", "v10_"):
+        image = (_CORPUS / f"{prefix}t1_out2.exe").read_bytes()
+        program = decode(image)
+
+        assert [
+            (statement.kind, statement.operands)
+            for statement in program.canonical_statements
+        ] == [
+            _tbx_statement(statement)
+            for statement in decode0.decode_user_code(image)
+        ]
+        out = next(fact for fact in program.facts if fact.kind == "semantic.out")
+        assert out.value == (
+            ("const", 888),
+            ("slot", "V0001", 0x120, "integer"),
+        )
+
 
 def test_device_io_facts_leave_incomplete_or_altered_out_structural():
     complete = bytes.fromhex("b8 78 03 89 c3 b8 01 00 8b d3 ee")
     truncated = decode(complete[:-1])
     altered = decode(complete[:3] + b"\x89\xc1" + complete[5:])
-    variable = decode((_CORPUS / "t1_out2.exe").read_bytes())
 
     assert not any(fact.kind == "semantic.out" for fact in truncated.facts)
     assert not any(fact.kind == "semantic.out" for fact in altered.facts)
-    assert not any(fact.kind == "semantic.out" for fact in variable.facts)
     assert truncated.canonical_statements == altered.canonical_statements == ()
-    assert [node.kind for node in variable.canonical_statements] == ["Assign", "End"]
 
 
 def test_device_io_facts_recover_complete_three_argument_wait():
@@ -1771,6 +1785,21 @@ def test_device_io_facts_recover_complete_three_argument_wait():
         assert wait.confidence == "signature"
         assert len(wait.evidence) == 11
 
+    for prefix in ("", "v10_"):
+        image = (_CORPUS / f"{prefix}t1_wait.exe").read_bytes()
+        program = decode(image)
+
+        assert [
+            (statement.kind, statement.operands)
+            for statement in program.canonical_statements
+        ] == [
+            _tbx_statement(statement)
+            for statement in decode0.decode_user_code(image)
+        ]
+        wait = next(fact for fact in program.facts if fact.kind == "semantic.wait")
+        assert wait.value == (("const", 888), ("const", 1))
+        assert len(wait.evidence) == 7
+
 
 def test_device_io_facts_leave_unverified_or_incomplete_wait_structural():
     complete = bytes.fromhex(
@@ -1779,13 +1808,10 @@ def test_device_io_facts_leave_unverified_or_incomplete_wait_structural():
     )
     truncated = decode(complete[:-1])
     altered = decode(complete[:18] + b"\x30\xc8" + complete[20:])
-    two_argument = decode((_CORPUS / "t1_wait.exe").read_bytes())
 
     assert not any(fact.kind == "semantic.wait" for fact in truncated.facts)
     assert not any(fact.kind == "semantic.wait" for fact in altered.facts)
-    assert not any(fact.kind == "semantic.wait" for fact in two_argument.facts)
     assert truncated.canonical_statements == altered.canonical_statements == ()
-    assert [node.kind for node in two_argument.canonical_statements] == ["End"]
 
 
 def test_fact_operation_view_matches_migrated_legacy_operations():
