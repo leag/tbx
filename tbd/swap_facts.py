@@ -178,7 +178,80 @@ def _array_swap_facts(
             support,
             "anchored",
         )
+    yield from _dynamic_array_swap_facts(
+        operations, indexes, by_offset, addresses
+    )
     yield from _mixed_string_array_swap_facts(evidence.instructions, facts)
+
+
+def _dynamic_array_swap_facts(
+    operations: tuple[CompilerOp, ...],
+    indexes: dict[int, int],
+    by_offset: dict[int, CompilerOp],
+    addresses: dict[object, Fact],
+) -> Iterable[Fact]:
+    for left in addresses.values():
+        if left.value[3] is not False:
+            continue
+        save = by_offset.get(left.subject[1])
+        if save is None or save.kind != "movm_es" or len(save.args) != 1:
+            continue
+        right = addresses.get(save.end)
+        if (
+            right is None
+            or right.value[3] is not True
+            or left.value[1:3] != right.value[1:3]
+        ):
+            continue
+        alias = by_offset.get(right.subject[1])
+        if alias is None or alias.kind != "movds_m" or alias.args != save.args:
+            continue
+        tail_kinds = _dynamic_array_swap_tail(left.value[1], left.value[2])
+        if not tail_kinds:
+            continue
+        alias_index = indexes[alias.offset]
+        tail = operations[alias_index + 1 : alias_index + 1 + len(tail_kinds)]
+        if (
+            tuple(item.kind for item in tail) != tail_kinds
+            or len(tail[-2].args) != 1
+            or not _compiler_contiguous(
+                (
+                    save,
+                    *operations[indexes[save.offset] + 1 : alias_index + 1],
+                    *tail,
+                )
+            )
+        ):
+            continue
+        yield Fact(
+            "semantic.swap",
+            (left.subject[0], tail[-1].end),
+            (left.value[0], right.value[0]),
+            combine_evidence(
+                left.evidence,
+                right.evidence,
+                (save.offset, alias.offset, *(item.offset for item in tail)),
+            ),
+            "anchored",
+        )
+
+
+def _dynamic_array_swap_tail(kind: object, width: object) -> tuple[str, ...]:
+    low = ("movbxax", "movax_bx", "far_xchgsi", "movm_ax_bx")
+    high = ("movax_bx2", "far_xchgsi2", "movm_ax_bx2")
+    restore = ("movdx", "movdsdx")
+    if kind == "string" and width == 4:
+        return low + high + restore
+    if kind == "double" and width == 8:
+        return low + high + (
+            "movax_bx4",
+            "far_xchgsi4",
+            "movm_ax_bx4",
+            "movax_bx6",
+            "far_xchgsi6",
+            "movm_ax_bx6",
+        ) + restore
+    return ()
 
 
 def _mixed_string_array_swap_facts(

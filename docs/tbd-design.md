@@ -400,8 +400,9 @@ the SWAP pass joins two such facts only across the compiler's DS-save/ES-restore
 pair and the complete one- or two-word exchange tail. The mixed scalar/static
 string-array form likewise consumes an array-address fact, while a whole
 two-word descriptor matcher claims its integer-looking component operations so
-they do not pollute the scalar's string type. Dynamic-array SWAP remains a
-separate unsupported mechanism.
+they do not pollute the scalar's string type. Dynamic string and DOUBLE arrays
+reuse runtime-array address facts and require the calibrated ES-save/DS-alias
+sequence, every exchanged descriptor/value word, and the final DS restore.
 LOCATE groups its independent runtime legs before adding a fact: CF carries
 row/column (with 0x8000 as the compiler's omitted-row sentinel), D0 carries the
 optional cursor flag, and CE carries cursor start/stop. A shape leg closes the

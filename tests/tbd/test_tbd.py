@@ -996,6 +996,51 @@ def test_mixed_string_array_swap_claims_descriptor_exchange_components():
         )
 
 
+def test_dynamic_array_swap_consumes_runtime_element_address_facts():
+    for prefix in ("t1_", "v10_"):
+        for suffix, kind, width in (
+            ("swap_dynstr", "string", 4),
+            ("swap_dyndbl", "double", 8),
+        ):
+            image = (_CORPUS / f"{prefix}{suffix}.exe").read_bytes()
+            program = decode(image)
+            actual = [
+                (node.kind, node.operands)
+                for node in program.canonical_statements
+                if node.kind == "Swap"
+            ]
+            exact = [
+                _tbx_statement(node)
+                for node in decode0.decode_user_code(image)
+                if isinstance(node, tbx_ir.Swap)
+            ]
+
+            assert actual == exact
+            swap = next(
+                fact for fact in program.facts if fact.kind == "semantic.swap"
+            )
+            addresses = sorted(
+                (
+                    fact
+                    for fact in program.facts
+                    if fact.kind == "reference.array_address"
+                    and swap.subject[0] <= fact.subject[0] < swap.subject[1]
+                ),
+                key=lambda fact: fact.subject,
+            )
+            assert [fact.value[1:] for fact in addresses] == [
+                (kind, width, False),
+                (kind, width, True),
+            ]
+
+            altered = bytearray(image)
+            altered[swap.subject[1] - 2 : swap.subject[1]] = b"\x8e\xc2"
+            assert not any(
+                fact.kind == "semantic.swap"
+                for fact in decode(bytes(altered)).facts
+            )
+
+
 def test_grouped_locate_runtime_legs_recover_complete_constant_forms():
     stems = (
         "t1_locateomit",

@@ -217,6 +217,21 @@ def test_static_array_swap_templates_align_with_tbx():
     assert report.aligned_by_kind["Swap"] == report.tbx_kinds["Swap"] == 6
 
 
+def test_dynamic_array_swap_templates_align_with_tbx():
+    paths = [
+        _CORPUS / f"{stem}.exe"
+        for stem in (
+            "t1_swap_dyndbl",
+            "t1_swap_dynstr",
+            "v10_swap_dyndbl",
+            "v10_swap_dynstr",
+        )
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["Swap"] == report.tbx_kinds["Swap"] == 4
+
+
 def test_grouped_constant_locate_forms_align_with_tbx():
     stems = (
         "t1_locateomit",
