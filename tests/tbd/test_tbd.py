@@ -946,6 +946,40 @@ def test_runtime_facts_leave_incomplete_mid_assign_scaffolds_structural():
     )
 
 
+def test_array_mid_assign_consumes_a_shared_static_address_fact():
+    image = (_CORPUS / "v10_t1_midarrelem.exe").read_bytes()
+    program = decode(image)
+    actual = [
+        (node.kind, node.operands)
+        for node in program.canonical_statements
+        if node.kind == "MidAssign"
+    ]
+    exact = [
+        _tbx_statement(node)
+        for node in decode0.decode_user_code(image)
+        if isinstance(node, tbx_ir.MidAssign)
+    ]
+
+    assert actual == exact
+    statement = next(
+        fact for fact in program.facts if fact.kind == "semantic.mid_assign"
+    )
+    target = next(
+        fact
+        for fact in program.facts
+        if fact.kind == "reference.array_address"
+        and statement.subject[0] < fact.subject[0] < statement.subject[1]
+    )
+    assert target.value[1:] == ("string", 4, False)
+
+    altered = bytearray(image)
+    altered[statement.subject[1] - 1] = 0xAE
+    assert not any(
+        fact.kind == "semantic.mid_assign"
+        for fact in decode(bytes(altered)).facts
+    )
+
+
 def test_scalar_swap_signature_recovers_slots_without_component_aliases():
     for prefix in ("", "v10_"):
         image = (_CORPUS / f"{prefix}t1_swap.exe").read_bytes()

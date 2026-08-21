@@ -207,6 +207,13 @@ def test_scalar_mid_assignments_are_exact_in_both_dialects():
     assert report.mismatches == ()
 
 
+def test_static_array_mid_assignment_aligns_with_tbx():
+    report = compare_paths([_CORPUS / "v10_t1_midarrelem.exe"])
+
+    assert report.aligned_by_kind["MidAssign"] == 1
+    assert report.tbx_kinds["MidAssign"] == 1
+
+
 def test_scalar_swap_template_is_exact_in_both_dialects():
     paths = [
         _CORPUS / f"{prefix}t1_swap.exe"

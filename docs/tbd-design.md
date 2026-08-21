@@ -392,8 +392,10 @@ Both require resolved source and target string descriptors plus the adjacent
 relocated-DGROUP `mov DX,imm; mov ES,DX` pair. The immediate segment value is
 deliberately not fixed because link layout changes it. A recognized scaffold
 adds a string write role for its scalar target, while only fully resolved
-operands add the anchored MID$ statement fact. Computed array targets remain a
-separate unsupported mechanism.
+operands add the anchored MID$ statement fact. The calibrated three-argument
+static-array form consumes a shared string array-address fact before applying
+the same ES setup and AF ABI; the MID$ pass does not repeat index or layout
+recovery.
 Scalar SWAP is a complete 24-byte inline signature: two low-word
 load/exchange/store triples followed by the corresponding high-word triples.
 Those component operations remain instruction evidence but do not create six

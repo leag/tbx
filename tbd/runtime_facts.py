@@ -314,6 +314,86 @@ def _mid_assign_facts(
                 support,
                 "anchored",
             )
+    yield from _array_mid_assign_facts(instructions, facts)
+
+
+def _array_mid_assign_facts(
+    instructions: tuple[Operation, ...], facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    by_offset = {instruction.offset: instruction for instruction in instructions}
+    by_end = {instruction.end: instruction for instruction in instructions}
+    targets = [
+        fact
+        for fact in facts
+        if fact.kind == "reference.array_address"
+        and len(fact.subject) == 2
+        and fact.value[1:] == ("string", 4, False)
+    ]
+    for target in targets:
+        source_read = by_end.get(target.subject[0])
+        source_setup = by_end.get(source_read.offset) if source_read else None
+        length_load = by_end.get(source_setup.offset) if source_setup else None
+        stage = by_end.get(length_load.offset) if length_load else None
+        start_load = by_end.get(stage.offset) if stage else None
+        segment_load = by_offset.get(target.subject[1])
+        segment_set = by_offset.get(segment_load.end) if segment_load else None
+        terminal = by_offset.get(segment_set.end) if segment_set else None
+        if (
+            source_setup is None
+            or source_read is None
+            or not _is_string_setup(source_setup, source_read)
+            or start_load is None
+            or stage is None
+            or length_load is None
+            or bytes.fromhex(stage.raw) != b"\x89\xc3"
+            or segment_load is None
+            or segment_load.kind != "x86.mov_imm"
+            or segment_load.operands[:1] != ("dx",)
+            or len(segment_load.operands) != 2
+            or segment_set is None
+            or bytes.fromhex(segment_set.raw) != b"\x8e\xc2"
+            or terminal is None
+            or _runtime_vector(terminal) != 0xAF
+        ):
+            continue
+        start = _ax_expression(start_load)
+        length = _ax_expression(length_load)
+        source = resolve_expression(
+            ("memory", source_setup.operands[1], "string"), facts
+        )
+        start_value = resolve_expression(start, facts) if start is not None else None
+        length_value = (
+            resolve_expression(length, facts) if length is not None else None
+        )
+        if source is None or start_value is None or length_value is None:
+            continue
+        yield Fact(
+            "semantic.mid_assign",
+            (start_load.offset, terminal.end),
+            (
+                target.value[0],
+                start_value.value,
+                source.value,
+                length_value.value,
+            ),
+            combine_evidence(
+                target.evidence,
+                source.evidence,
+                start_value.evidence,
+                length_value.evidence,
+                (
+                    start_load.offset,
+                    stage.offset,
+                    length_load.offset,
+                    source_setup.offset,
+                    source_read.offset,
+                    segment_load.offset,
+                    segment_set.offset,
+                    terminal.offset,
+                ),
+            ),
+            "anchored",
+        )
 
 
 def _mid_assign_template(
