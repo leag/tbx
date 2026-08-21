@@ -1430,6 +1430,26 @@ def test_input_file_facts_recover_complete_scalar_chains():
         else:
             assert actual == exact
 
+    for prefix in ("", "v10_"):
+        image = (_CORPUS / f"{prefix}t1_fileint.exe").read_bytes()
+        program = decode(image)
+        actual = [
+            (node.kind, node.operands)
+            for node in program.canonical_statements
+            if node.kind == "InputFile"
+        ]
+        exact = [
+            _tbx_statement(node)
+            for node in decode0.decode_user_code(image)
+            if isinstance(node, tbx_ir.InputFile)
+        ]
+
+        assert actual == exact
+        input_fact = next(
+            fact for fact in program.facts if fact.kind == "semantic.input_file"
+        )
+        assert len(input_fact.value[1]) == 2
+
 
 def test_console_input_facts_preserve_prompts_flags_and_scalar_targets():
     stems = (

@@ -421,8 +421,10 @@ than becoming partial INPUT statements.
 Scalar INPUT # uses the analogous numeric and string target items, preceded by
 one uniquely resolved file-number store in the compiler cell at 0x60. Numeric
 items require the final commit; string-only chains require a following boundary,
-and any incomplete next phase suppresses the whole statement. Integer scratch
-conversion and computed-array targets remain separate mechanisms.
+and any incomplete next phase suppresses the whole statement. INTEGER targets
+reuse the console INPUT pass's calibrated FP-to-INTEGER scratch bridge, with
+the file-input phase as the only parameter; computed-array targets remain a
+separate mechanism owned by array-reference facts.
 OPEN requires one of two complete contiguous scaffolds. The comma form stores
 the immediate file number at 0x60, pushes the resolved filename and one-character
 mode strings, loads the immediate record length in AX, and dispatches. The

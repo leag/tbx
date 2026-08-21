@@ -130,7 +130,7 @@ def _item(
     numeric = _numeric_item(instructions[index : index + 2])
     if numeric is not None:
         return numeric
-    integer = _integer_item(instructions[index : index + 5], compiler_ops)
+    integer = integer_input_item(instructions[index : index + 5], compiler_ops)
     if integer is not None:
         return integer
     array = _array_item(instructions, index, facts)
@@ -161,12 +161,15 @@ def _numeric_item(pair: tuple[Operation, ...]) -> _Item | None:
     )
 
 
-def _integer_item(
-    window: tuple[Operation, ...], compiler_ops: dict[int, CompilerOp]
+def integer_input_item(
+    window: tuple[Operation, ...],
+    compiler_ops: dict[int, CompilerOp],
+    *,
+    phase_name: str = "READ_NUMBER",
 ) -> _Item | None:
     """Port tbx's calibrated FP-to-INTEGER INPUT scratch bridge."""
 
-    if len(window) != 5 or _phase_name(window[0]) != "READ_NUMBER":
+    if len(window) != 5 or _phase_name(window[0]) != phase_name:
         return None
     operations = tuple(compiler_ops.get(item.offset) for item in window[1:])
     if any(operation is None for operation in operations):

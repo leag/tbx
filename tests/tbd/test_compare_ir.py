@@ -484,10 +484,12 @@ def test_scalar_input_file_chains_align_with_tbx():
         "t1_file2",
         "v10_t1_file2",
         "t1_open2",
+        "t1_fileint",
+        "v10_t1_fileint",
     )
     report = compare_paths([_CORPUS / f"{stem}.exe" for stem in stems])
 
-    assert report.aligned_by_kind["InputFile"] == report.tbx_kinds["InputFile"] == 7
+    assert report.aligned_by_kind["InputFile"] == report.tbx_kinds["InputFile"] == 9
     assert report.failures == 0
 
 

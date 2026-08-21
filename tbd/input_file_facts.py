@@ -6,7 +6,9 @@ import struct
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from tbd.compiler_ops import CompilerOp, translate_operations
 from tbd.facts import Evidence, NamedPass
+from tbd.input_facts import integer_input_item
 from tbd.ir import Fact, Operation
 from tbd.profile import FP_TRANSFER_TYPES
 from tbd.semantic import (
@@ -31,10 +33,14 @@ def input_file_statement_facts(
     """Recover scalar INPUT # chains with a resolved file-number store."""
 
     instructions = evidence.instructions
+    compiler_ops = {
+        operation.offset: operation
+        for operation in translate_operations(instructions)
+    }
     by_end = {instruction.end: instruction for instruction in instructions}
     index = 0
     while index < len(instructions):
-        first = _item(instructions, index)
+        first = _item(instructions, index, compiler_ops)
         if first is None:
             index += 1
             continue
@@ -45,7 +51,7 @@ def input_file_statement_facts(
         file_number, start, file_support = file_result
         items = []
         cursor = index
-        while item := _item(instructions, cursor):
+        while item := _item(instructions, cursor, compiler_ops):
             items.append(item)
             cursor += item.size
         following = instructions[cursor] if cursor < len(instructions) else None
@@ -84,11 +90,27 @@ def input_file_statement_facts(
         index = cursor + (1 if commit is not None else 0)
 
 
-def _item(instructions: tuple[Operation, ...], index: int) -> _Item | None:
+def _item(
+    instructions: tuple[Operation, ...],
+    index: int,
+    compiler_ops: dict[int, CompilerOp],
+) -> _Item | None:
     numeric = _numeric_item(instructions[index : index + 2])
-    return numeric if numeric is not None else _string_item(
-        instructions[index : index + 3]
+    if numeric is not None:
+        return numeric
+    integer = integer_input_item(
+        instructions[index : index + 5],
+        compiler_ops,
+        phase_name="INPUT_FILE_NUMBER",
     )
+    if integer is not None and isinstance(integer.reference, int):
+        return _Item(
+            integer.size,
+            integer.reference,
+            integer.kind,
+            integer.evidence,
+        )
+    return _string_item(instructions[index : index + 3])
 
 
 def _numeric_item(pair: tuple[Operation, ...]) -> _Item | None:
@@ -104,6 +126,7 @@ def _numeric_item(pair: tuple[Operation, ...]) -> _Item | None:
         or raw[0] != 0xCD
         or raw[2] != 0x1E
         or raw[1] not in FP_TRANSFER_TYPES
+        or FP_TRANSFER_TYPES[raw[1]] == "integer"
     ):
         return None
     return _Item(
