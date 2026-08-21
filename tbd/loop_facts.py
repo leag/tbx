@@ -34,7 +34,7 @@ class _Loop:
 def loop_statement_facts(
     evidence: Evidence, facts: frozenset[Fact]
 ) -> Iterable[Fact]:
-    """Recover simple numeric head tests, tail tests, and bare short loops."""
+    """Recover simple numeric head and tail comparison loops."""
 
     operations = translate_operations(evidence.instructions)
     indexes, _by_address = operation_indexes(operations)

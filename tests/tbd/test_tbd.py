@@ -2107,6 +2107,55 @@ def test_framed_procedure_facts_nest_bodies_and_name_calls():
         ]
 
 
+def test_fallthrough_into_trailing_sub_declarations_is_discovered():
+    expected = {
+        "t1_declnoend": ["Assign", "SubDef", "Print"],
+        "v10_t1_declnoend": ["Assign", "SubDef", "Print"],
+        "t1_gotosubline": [
+            "Assign", "IfGoto", "Print", "SubDef", "Print", "End"
+        ],
+    }
+    for stem, kinds in expected.items():
+        program = decode((_CORPUS / f"{stem}.exe").read_bytes())
+
+        assert [node.kind for node in program.canonical_statements] == kinds
+        definition = next(
+            node for node in program.canonical_statements if node.kind == "SubDef"
+        )
+        declaration = next(
+            instruction.offset
+            for instruction in program.instructions
+            if instruction.kind == "x86.jmp"
+            and instruction.end
+            == next(
+                entered.offset
+                for entered in program.instructions
+                if entered.kind == "tb.proc_enter"
+            )
+        )
+        assert definition.address == declaration
+        assert any(
+            xref.source == declaration
+            and xref.target == declaration + 3
+            and xref.kind == "orphan"
+            for xref in program.xrefs
+        )
+        if stem == "t1_gotosubline":
+            exact = next(
+                _tbx_statement(node)
+                for node in decode0.decode_user_code(
+                    (_CORPUS / f"{stem}.exe").read_bytes()
+                )
+                if isinstance(node, tbx_ir.IfGoto)
+            )
+            actual = next(
+                (node.kind, node.operands)
+                for node in program.canonical_statements
+                if node.kind == "IfGoto"
+            )
+            assert actual == exact
+
+
 def test_procedure_frame_uncertainty_stays_explicit_across_nested_calls():
     program = decode((_CORPUS / "t1_argrefonly.exe").read_bytes())
 

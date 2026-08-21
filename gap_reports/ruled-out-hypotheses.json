@@ -11,6 +11,35 @@
  ],
  "hypotheses": [
   {
+   "id": "RO-TBD-SHORT-BACKEDGE-IS-BARE-DO",
+   "title": "Every short backward jump to a statement is a bare DO/LOOP pair",
+   "disposition": "reverted",
+   "confidence": "high",
+   "files": [
+    "tests/fixtures/corpus/zz_ginf.exe",
+    "tests/fixtures/corpus/t1_andchain.exe",
+    "tests/fixtures/corpus/blkgoto.exe",
+    "tests/fixtures/corpus/errcmp.exe",
+    "tests/fixtures/corpus/miderr.exe",
+    "tests/fixtures/corpus/orchain.exe",
+    "tests/fixtures/corpus/resumel.exe",
+    "tests/fixtures/corpus/returngosub.exe",
+    "tests/fixtures/corpus/tronerr.exe"
+   ],
+   "signatures": [
+    "short x86 JMP with a lower target",
+    "target coincides with a recovered semantic statement"
+   ],
+   "hypothesis": "A short backward jump whose target is a semantic statement supplies enough evidence to synthesize a codeless DO at the target and a bare LOOP at the jump.",
+   "negative_evidence": [
+    "The fallback made zz_ginf exact but produced 20 false DO/LOOP pairs across IF/GOTO, RESUME, GOSUB/RETURN, and trace-control witnesses.",
+    "The global comparison then reported 62 recovered DO/LOOP nodes against 72 in tbx despite the apparent local gain, proving that raw direction and distance do not establish region ownership.",
+    "Removing the fallback eliminated the false pairs while retaining six exact comparison-loop fixtures through the calibrated numeric head- and tail-test templates."
+   ],
+   "instead": "Keep bare backward jumps structural until folded control and statement-target facts establish that no IF, GOTO, RESUME, GOSUB/RETURN, or other region owns the edge. Continue translating complete tbx loop templates; do not classify a raw backedge locally.",
+   "source": "tbd parity session 2026-08-21"
+  },
+  {
    "id": "RO-TBD-UNTYPED-WORD-SCALAR-ALIGNMENT-FIXES-POOL-BASE",
    "title": "Treating every aligned two-byte access as a scalar fixes ambiguous pool boundaries",
    "disposition": "reverted",

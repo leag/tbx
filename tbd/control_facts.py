@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from tbd.compiler_ops import translate_operations
 from tbd.facts import Evidence, NamedPass
 from tbd.ir import Fact, Operation
 from tbd.procedure_facts import inline_procedure_regions
@@ -36,6 +37,14 @@ _SOURCE_CONDITIONS = {
 _JUMPS = {"x86.jmp", "x86.jmp_far"}
 _CALLS = {"x86.call", "x86.call_far", "tb.checked_gosub"}
 _RETURNS = {"x86.ret", "x86.retf", "x86.iret", "tb.checked_return"}
+_INTEGER_SKIP_RELATIONS = {
+    0x74: "<>",
+    0x75: "=",
+    0x7C: "<=",
+    0x7D: ">",
+    0x7E: "<",
+    0x7F: ">=",
+}
 
 
 def control_flow_facts(
@@ -66,6 +75,56 @@ def if_goto_facts(
         result = _if_goto(compare, instructions, flow, facts)
         if result is not None:
             yield result
+
+
+def direct_integer_if_goto_facts(
+    evidence: Evidence, facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    """Port the complete ``movax; cmpax_m; jcc skip; jmp target`` idiom."""
+
+    operations = translate_operations(evidence.instructions)
+    for index in range(len(operations) - 3):
+        load, compare, branch, jump = operations[index : index + 4]
+        if (
+            load.kind != "movax"
+            or compare.kind != "cmpax_m"
+            or branch.kind != "jcc"
+            or jump.kind != "jmp"
+            or load.end != compare.offset
+            or compare.end != branch.offset
+            or branch.end != jump.offset
+            or len(load.args) != 1
+            or len(compare.args) != 1
+            or len(branch.args) != 2
+            or len(jump.args) != 1
+            or branch.args[1] != jump.end
+        ):
+            continue
+        relation = _INTEGER_SKIP_RELATIONS.get(branch.args[0])
+        memory = resolve_expression(("memory", compare.args[0], "integer"), facts)
+        if (
+            relation is None
+            or memory is None
+            or not isinstance(jump.args[0], int)
+        ):
+            continue
+        support = combine_evidence(
+            (load.offset, compare.offset, branch.offset, jump.offset),
+            memory.evidence,
+        )
+        yield Fact(
+            "semantic.if_goto",
+            (load.offset, jump.end),
+            (
+                relation,
+                memory.value,
+                ("const", load.args[0]),
+                jump.args[0],
+                branch.args[1],
+            ),
+            support,
+            "signature",
+        )
 
 
 def source_subroutine_facts(
@@ -271,5 +330,6 @@ CONTROL_FACT_PASSES: tuple[NamedPass, ...] = (
     ("control-flow", control_flow_facts),
     ("source-subroutines", source_subroutine_facts),
     ("source-run", source_run_facts),
+    ("direct-integer-if-gotos", direct_integer_if_goto_facts),
     ("if-gotos", if_goto_facts),
 )

@@ -786,13 +786,16 @@ def test_framed_procedures_align_definition_and_call_structure():
             "v10_subdef",
             "t1_argrefonly",
             "v10_t1_argrefonly",
+            "t1_declnoend",
+            "v10_t1_declnoend",
+            "t1_gotosubline",
         )
     ]
 
     report = compare_paths(paths)
 
     assert report.failures == 0
-    assert report.kind_match_files == 4
+    assert report.kind_match_files == 7
     assert report.aligned_by_kind["SubDef"] == report.tbx_kinds["SubDef"]
     assert report.aligned_by_kind["CallStmt"] == report.tbx_kinds["CallStmt"]
 

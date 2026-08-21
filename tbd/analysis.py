@@ -70,6 +70,7 @@ def discover(
             for byte in range(cursor, operation.end):
                 occupied[byte] = cursor
             cursor, end_path = _follow(
+                exe,
                 operation,
                 instructions,
                 pending,
@@ -129,6 +130,7 @@ def lift(
 
 
 def _follow(
+    exe: bytes,
     operation: Operation,
     instructions: dict[int, Operation],
     pending: list[int],
@@ -171,6 +173,9 @@ def _follow(
             _wrapped_forward_gap(operation, start, stop)
             or _resume_jump_fallthrough(operation, instructions)
             or _backward_jump_fallthrough(operation)
+            or _procedure_declaration_fallthrough(
+                exe, operation, start, stop, dialect
+            )
         ):
             _queue(next_offset, pending, queued, leaders, start, stop)
             xrefs.add(CrossReference(operation.offset, next_offset, "orphan"))
@@ -212,6 +217,22 @@ def _backward_jump_fallthrough(operation: Operation) -> bool:
         and isinstance(target, int)
         and target < operation.offset
     )
+
+
+def _procedure_declaration_fallthrough(
+    exe: bytes,
+    operation: Operation,
+    start: int,
+    stop: int,
+    dialect: str,
+) -> bool:
+    """Open compiler declaration glue only when its physical body has a signature."""
+
+    target = operation.operands[0] if operation.operands else None
+    if not isinstance(target, int) or target <= operation.end:
+        return False
+    successor = decode_instruction(exe, operation.end, stop, start, dialect)
+    return successor.kind == "tb.proc_enter"
 
 
 def _is_multi_target_dispatch(operation: Operation) -> bool:

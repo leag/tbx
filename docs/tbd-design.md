@@ -74,11 +74,16 @@ not a source ErrorStmt; an authored ERROR outside that exact guard remains a
 normal statement, while truncated or unprofiled bytes remain structural.
 Framed SUB definitions similarly require a procedure-entry signature and one
 procedure-return signature before the next entry. Their compiler skip jump,
-when present, supplies the declaration address. Calls targeting a recovered
-entry and semantic body facts inside the complete region then form a nested
-source view without consuming any of that evidence. A nonzero return-frame pop
-is retained as unresolved parameter and argument metadata until independent
-frame facts can distinguish caller arguments from procedure-local storage.
+when present, supplies the declaration address. A forward skip whose physical
+successor decodes as the procedure-entry signature opens that otherwise
+unreachable body as a separate discovery root; this covers both main-code
+fallthrough into trailing declarations and branches to a SUB declaration line
+without treating ordinary forward jumps as reachable fallthrough. Calls
+targeting a recovered entry and semantic body facts inside the complete region
+then form a nested source view without consuming any of that evidence. A
+nonzero return-frame pop is retained as unresolved parameter and argument
+metadata until independent frame facts can distinguish caller arguments from
+procedure-local storage.
 An unframed `$INLINE` SUB requires three independent pieces of compiler
 evidence: a declaration skip jump whose fallthrough is the entry, a later far
 call to that entry, and the compiler-appended bare RETF immediately before the

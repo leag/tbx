@@ -127,6 +127,8 @@ def _direct_integer_operation(
         return _op(instruction, "movm_imm", _u16(raw, 2), _u16(raw, 4))
     if len(raw) == 4 and raw[:2] == b"\x39\x06":
         return _op(instruction, "cmpm_ax", _u16(raw, 2))
+    if len(raw) == 4 and raw[:2] == b"\x3b\x06":
+        return _op(instruction, "cmpax_m", _u16(raw, 2))
     if len(raw) == 4 and raw[:2] == b"\x01\x06":
         return _op(instruction, "addm_ax", _u16(raw, 2))
     if len(raw) == 4 and raw[:2] in {b"\xff\x06", b"\xff\x0e"}:
