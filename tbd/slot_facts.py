@@ -24,7 +24,29 @@ def slot_facts(
     """Name supported scalar cells below one unambiguous pool boundary."""
 
     layouts = [fact for fact in facts if fact.kind == "layout.pool"]
+    runtime_grids = [fact for fact in facts if fact.kind == "layout.runtime_grid"]
     if len(layouts) != 1:
+        if len(runtime_grids) == 1 and isinstance(runtime_grids[0].value[2], int):
+            scalar_base = runtime_grids[0].value[2]
+            for address, related in sorted(
+                _runtime_grid_writes(facts, scalar_base).items()
+            ):
+                types = tuple(sorted({fact.value[0] for fact in related}))
+                support = tuple(
+                    sorted(
+                        {
+                            *runtime_grids[0].evidence,
+                            *(source for fact in related for source in fact.evidence),
+                        }
+                    )
+                )
+                yield Fact(
+                    "slot",
+                    (address,),
+                    (_scalar_name(address, scalar_base), types),
+                    support,
+                    "anchored",
+                )
         return
     layout = layouts[0]
     has_runtime_dim = any(
@@ -37,7 +59,6 @@ def slot_facts(
     ):
         return
     pool_base, marker = layout.value[1], layout.value[2]
-    runtime_grids = [fact for fact in facts if fact.kind == "layout.runtime_grid"]
     array_count = len([fact for fact in facts if fact.kind == "layout.array"])
     scalar_base = VAR_BASE + 0x36 * array_count
     if len(runtime_grids) == 1 and isinstance(runtime_grids[0].value[2], int):
@@ -57,16 +78,36 @@ def slot_facts(
         )
     for address, related in sorted(accesses.items()):
         types = tuple(sorted({fact.value[0] for fact in related}))
-        evidence = tuple(
+        support = tuple(
             sorted({marker, *(source for fact in related for source in fact.evidence)})
         )
         yield Fact(
             "slot",
             (address,),
             (_scalar_name(address, scalar_base), types),
-            evidence,
+            support,
             "anchored",
         )
+
+
+def _runtime_grid_writes(
+    facts: frozenset[Fact], scalar_base: int
+) -> dict[int, list[Fact]]:
+    found: dict[int, list[Fact]] = {}
+    for fact in facts:
+        if fact.kind != "memory.write" or not fact.subject or not fact.value:
+            continue
+        address = fact.subject[0]
+        kind = fact.value[0]
+        width = _TYPE_WIDTHS.get(kind) if isinstance(kind, str) else None
+        if (
+            isinstance(address, int)
+            and isinstance(width, int)
+            and address >= scalar_base
+            and (address - scalar_base) % 2 == 0
+        ):
+            found.setdefault(address, []).append(fact)
+    return found
 
 
 def _slot_accesses(

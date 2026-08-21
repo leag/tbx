@@ -60,6 +60,8 @@ def _translate(instruction: Operation) -> CompilerOp | None:
         return _op(instruction, "movsiax")
     if raw == b"\x89\xc3":
         return _op(instruction, "movbxax")
+    if raw == b"\x89\xd8":
+        return _op(instruction, "movaxbx")
     if raw == b"\x03\xf0":
         return _op(instruction, "addsiax")
     if raw == b"\x09\xc0":
@@ -137,6 +139,8 @@ def _direct_integer_operation(
         return _op(instruction, "cmpax_m", _u16(raw, 2))
     if len(raw) == 4 and raw[:2] == b"\x01\x06":
         return _op(instruction, "addm_ax", _u16(raw, 2))
+    if len(raw) == 4 and raw[:2] == b"\x2b\x06":
+        return _op(instruction, "subax_m", _u16(raw, 2))
     if len(raw) == 4 and raw[:2] == b"\xf7\x2e":
         return _op(instruction, "imul_m", _u16(raw, 2))
     if raw == b"\x89\x04":

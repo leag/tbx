@@ -56,6 +56,9 @@ def array_read_facts(
 
     operations = translate_operations(evidence.instructions)
     for index, load in enumerate(operations):
+        runtime = _runtime_array_read(operations, index, facts)
+        if runtime is not None:
+            yield runtime
         if load.kind != "movsim" or len(load.args) != 1:
             continue
         resolved = resolve_expression(
@@ -94,6 +97,94 @@ def array_read_facts(
             ),
             "anchored",
         )
+
+
+def _runtime_array_read(
+    operations: tuple[CompilerOp, ...], index: int, facts: frozenset[Fact]
+) -> Fact | None:
+    if index + 6 >= len(operations):
+        return None
+    load = operations[index]
+    if load.kind != "movax_m" or len(load.args) != 1:
+        return None
+    resolved = resolve_expression(
+        ("memory", load.args[0], "integer"), facts
+    )
+    if resolved is None:
+        return None
+    cursor = index + 1
+    normalize = operations[cursor]
+    if normalize.kind != "subax_m" or len(normalize.args) != 1:
+        return None
+    cursor += 1
+    if operations[cursor].kind != "movsiax":
+        return None
+    cursor += 1
+    if cursor < len(operations) and operations[cursor].kind == "movaxbx":
+        cursor += 1
+    shift_start = cursor
+    while cursor < len(operations) and operations[cursor].kind == "shlsi":
+        cursor += 1
+    shifts = cursor - shift_start
+    if shifts == 0 or cursor >= len(operations):
+        return None
+    anchor = operations[cursor]
+    if anchor.kind != "moves_m" or len(anchor.args) != 1:
+        return None
+    cursor += 1
+    staged = cursor < len(operations) and operations[cursor].kind == "movbxax"
+    if staged:
+        cursor += 1
+    if cursor >= len(operations) or operations[cursor].kind != "far_movax_si":
+        return None
+    cursor += 1
+    trailing = cursor < len(operations) and operations[cursor].kind == "movbxax"
+    if trailing:
+        cursor += 1
+    if not _contiguous(operations[index:cursor]):
+        return None
+    layout = _runtime_read_layout(
+        anchor.args[0], normalize.args[0], shifts, facts
+    )
+    if layout is None:
+        return None
+    name, layout_evidence = layout
+    end = operations[cursor - 1].end
+    return Fact(
+        "reference.array_read",
+        (load.offset, end),
+        (("array", name, (resolved.value,)), "integer", staged),
+        combine_evidence(
+            tuple(item.offset for item in operations[index:cursor]),
+            resolved.evidence,
+            layout_evidence,
+        ),
+        "anchored",
+    )
+
+
+def _runtime_read_layout(
+    block: object,
+    lower_bound: object,
+    shifts: int,
+    facts: frozenset[Fact],
+) -> tuple[str, tuple[int, ...]] | None:
+    if not isinstance(block, int) or lower_bound != block + 8:
+        return None
+    matches = [
+        fact
+        for fact in facts
+        if fact.kind == "layout.runtime_array"
+        and fact.subject == ("runtime", block)
+        and len(fact.value) == 6
+        and isinstance(fact.value[1], str)
+        and fact.value[2] == "integer"
+        and fact.value[3] == 1
+        and fact.value[4] == 1 << shifts
+    ]
+    if len(matches) != 1:
+        return None
+    return matches[0].value[1], matches[0].evidence
 
 
 def _numeric_indexed_store(

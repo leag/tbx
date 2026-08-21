@@ -408,11 +408,14 @@ row in AX, a resolved string descriptor pushed into LEN, row staged in BX,
 then `neg ax; add ax,[constant]` before the LOCATE dispatch. It becomes the
 source subtraction `constant - LEN(string)` only when all eight operations
 are contiguous and both operands resolve uniquely.
-Rank-1 static INTEGER element reads are likewise owned by array-reference
-facts. Two adjacent reads become LOCATE row/column operands only when the
-second access contains the compiler's `mov bx,ax` row-preservation shuttle and
-is immediately followed by the LOCATE dispatch. The LOCATE pass never repeats
-the index, width, or static-layout calculation.
+Rank-1 INTEGER element reads are likewise owned by array-reference facts. The
+same pass translates both the static DS-relative template and the far
+`COMMON` template anchored by a runtime-array layout fact; a runtime-grid fact
+anchors typed scalar index slots when that form has no static pool boundary.
+Two adjacent reads become LOCATE row/column operands only when the second
+access contains the compiler's `mov bx,ax` row-preservation shuttle and is
+immediately followed by the LOCATE dispatch. The LOCATE pass never repeats the
+index, width, or array-layout calculation.
 READ groups consecutive DATA_NUMBER and DATA_STRING phases into one target
 chain. Direct scalar stores, the shared FP-to-INTEGER bridge, and shared
 computed-array store facts all resolve through their owning passes. Any chain
