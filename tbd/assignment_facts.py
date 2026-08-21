@@ -33,6 +33,62 @@ def assignment_facts(
         )
         if assignment is not None:
             yield assignment
+    yield from _computed_array_assignments(evidence.instructions, facts)
+
+
+def _computed_array_assignments(
+    instructions: tuple[Operation, ...], facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    by_end = {instruction.end: instruction for instruction in instructions}
+    instruction_ends = {
+        instruction.offset: instruction.end for instruction in instructions
+    }
+    expressions: dict[int, list[Fact]] = {}
+    for fact in facts:
+        if fact.kind != "expression.value" or not fact.evidence:
+            continue
+        end = instruction_ends.get(fact.evidence[-1])
+        if end is not None:
+            expressions.setdefault(end, []).append(fact)
+    for target in facts:
+        if (
+            target.kind != "reference.array_store"
+            or len(target.subject) != 2
+            or len(target.value) != 2
+        ):
+            continue
+        source = None
+        source_start = None
+        candidates = expressions.get(target.subject[0], ())
+        if len(candidates) == 1:
+            expression = candidates[0]
+            source = resolve_expression(expression.value[0], facts)
+            source_start = expression.evidence[0]
+        if source is None and target.value[1] == "string":
+            read = by_end.get(target.subject[0])
+            setup = by_end.get(read.offset) if read is not None else None
+            if (
+                setup is not None
+                and read is not None
+                and setup.kind == "x86.mov_imm"
+                and setup.operands[:1] == ("si",)
+                and len(setup.operands) == 2
+                and read.kind == "tb.runtime"
+                and read.operands == (0x9C,)
+            ):
+                source = resolve_expression(
+                    ("memory", setup.operands[1], "string"), facts
+                )
+                source_start = setup.offset
+        if source is None or not isinstance(source_start, int):
+            continue
+        yield Fact(
+            "semantic.assign",
+            (source_start, target.subject[1]),
+            (target.value[0], source.value),
+            combine_evidence(target.evidence, source.evidence, (source_start,)),
+            "anchored",
+        )
 
 
 def _assignment(

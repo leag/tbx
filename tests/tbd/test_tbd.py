@@ -1183,11 +1183,30 @@ def test_computed_array_values_feed_print_items_without_redecoding_indices():
         ]
 
         assert actual == exact
+        assert [
+            (node.kind, node.operands) for node in program.canonical_statements
+        ] == [
+            _tbx_statement(node) for node in decode0.decode_user_code(image)
+        ]
         values = [
             fact for fact in program.facts if fact.kind == "reference.array_value"
         ]
         assert len(values) == 2
         assert all(fact.confidence == "anchored" for fact in values)
+        if "swap_dyn" in stem:
+            stores = [
+                fact
+                for fact in program.facts
+                if fact.kind == "reference.array_store"
+            ]
+            assignments = [
+                fact
+                for fact in program.facts
+                if fact.kind == "semantic.assign"
+                and isinstance(fact.value[0], tuple)
+                and fact.value[0][:1] == ("array",)
+            ]
+            assert len(stores) == len(assignments) == 2
 
 
 def test_grouped_locate_runtime_legs_recover_complete_constant_forms():

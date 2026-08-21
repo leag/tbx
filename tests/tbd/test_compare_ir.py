@@ -280,6 +280,8 @@ def test_computed_numeric_and_string_array_prints_align_with_tbx():
     report = compare_paths(paths)
 
     assert report.aligned_by_kind["Print"] == report.tbx_kinds["Print"] == 6
+    assert report.comparable_files == report.exact_files == 6
+    assert report.mismatches == ()
 
 
 def test_grouped_constant_locate_forms_align_with_tbx():

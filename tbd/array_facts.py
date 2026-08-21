@@ -468,6 +468,34 @@ def _direct_dynamic_store(
 ) -> Fact | None:
     if index + 1 >= len(operations):
         return None
+    string = operations[index : index + 3]
+    if (
+        len(string) == 3
+        and string[0].kind == "moves_m"
+        and len(string[0].args) == 1
+        and string[1].kind == "movsi"
+        and len(string[1].args) == 1
+        and string[2].kind == "far_strassign"
+        and _contiguous(string)
+    ):
+        runtime = _runtime_layout(string[0].args[0], "string", facts)
+        if runtime is None or not isinstance(string[1].args[0], int):
+            return None
+        name, width, layout_evidence = runtime
+        displacement = string[1].args[0]
+        low = _runtime_low(name, facts)
+        if low is None or displacement < 0 or displacement % width:
+            return None
+        return _store_fact(
+            string[0],
+            string[2],
+            name,
+            (("const", low + displacement // width),),
+            "string",
+            combine_evidence(
+                tuple(item.offset for item in string), layout_evidence
+            ),
+        )
     anchor, terminal = operations[index : index + 2]
     target_kind = _NUMERIC_STORES.get(terminal.kind)
     if (

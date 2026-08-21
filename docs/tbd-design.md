@@ -437,6 +437,10 @@ Computed float, double, and string loads similarly extend an array-address fact
 through the single calibrated load/push operation. Runtime PRINT consumes that
 array-value fact exactly like a scalar expression; it does not inspect the
 index chain, element width, or static/runtime layout.
+Computed array-store facts likewise own their whole target, including the
+runtime string form's descriptor displacement. The assignment pass only joins
+a uniquely adjacent numeric expression or string push to that resolved target;
+input and READ producers cannot be mistaken for assignments.
 READ groups consecutive DATA_NUMBER and DATA_STRING phases into one target
 chain. Direct scalar stores, the shared FP-to-INTEGER bridge, and shared
 computed-array store facts all resolve through their owning passes. Any chain
