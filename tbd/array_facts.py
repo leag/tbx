@@ -99,6 +99,85 @@ def array_read_facts(
         )
 
 
+def array_address_facts(
+    evidence: Evidence, facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    """Resolve complete static rank-1 element-address calculations."""
+
+    operations = translate_operations(evidence.instructions)
+    for index in range(len(operations)):
+        matched = _static_array_address(operations, index, facts)
+        if matched is not None:
+            yield matched
+
+
+def _static_array_address(
+    operations: tuple[CompilerOp, ...], index: int, facts: frozenset[Fact]
+) -> Fact | None:
+    operand = _integer_operand(operations, index, facts)
+    if operand is None:
+        return None
+    start, resolved, cursor = operand
+    before = cursor < len(operations) and operations[cursor].kind == "movbxsi"
+    if before:
+        cursor += 1
+    if cursor >= len(operations) or operations[cursor].kind != "movsiax":
+        return None
+    cursor += 1
+    after = cursor < len(operations) and operations[cursor].kind == "movaxbx"
+    if after:
+        cursor += 1
+    if before != after:
+        return None
+    shift_start = cursor
+    while cursor < len(operations) and operations[cursor].kind == "shlsi":
+        cursor += 1
+    shifts = cursor - shift_start
+    if shifts == 0 or cursor >= len(operations):
+        return None
+    anchor = operations[cursor]
+    if anchor.kind != "addsi" or not _contiguous(operations[index : cursor + 1]):
+        return None
+    layout = _static_address_layout(anchor, shifts, facts)
+    if layout is None:
+        return None
+    name, kind, width, layout_evidence = layout
+    return Fact(
+        "reference.array_address",
+        (start.offset, anchor.end),
+        (("array", name, (resolved.value,)), kind, width, before),
+        combine_evidence(
+            tuple(item.offset for item in operations[index : cursor + 1]),
+            resolved.evidence,
+            layout_evidence,
+        ),
+        "anchored",
+    )
+
+
+def _static_address_layout(
+    anchor: CompilerOp, shifts: int, facts: frozenset[Fact]
+) -> tuple[str, str, int, tuple[int, ...]] | None:
+    if len(anchor.args) != 1 or not isinstance(anchor.args[0], int):
+        return None
+    matches = [
+        fact
+        for fact in facts
+        if fact.kind == "layout.array"
+        and len(fact.value) == 7
+        and isinstance(fact.value[1], str)
+        and isinstance(fact.value[2], tuple)
+        and len(fact.value[2]) == 1
+        and isinstance(fact.value[3], str)
+        and fact.value[4] == anchor.args[0]
+        and fact.value[5] == 1 << shifts
+    ]
+    if len(matches) != 1:
+        return None
+    match = matches[0]
+    return match.value[1], match.value[3], match.value[5], match.evidence
+
+
 def _runtime_array_read(
     operations: tuple[CompilerOp, ...], index: int, facts: frozenset[Fact]
 ) -> Fact | None:
@@ -582,5 +661,6 @@ def _contiguous(operations: tuple[CompilerOp, ...]) -> bool:
 
 ARRAY_REFERENCE_PASSES: tuple[NamedPass, ...] = (
     ("array-references", array_store_facts),
+    ("array-addresses", array_address_facts),
     ("array-reads", array_read_facts),
 )

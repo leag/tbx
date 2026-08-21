@@ -6,6 +6,7 @@ import struct
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from tbd.compiler_ops import CompilerOp, operation_indexes, translate_operations
 from tbd.facts import Evidence, NamedPass
 from tbd.ir import Fact, Operation
 from tbd.semantic import combine_evidence, resolve_slot
@@ -53,6 +54,79 @@ def swap_statement_facts(
             combine_evidence(match.evidence, left.evidence, right.evidence),
             "anchored",
         )
+    yield from _array_swap_facts(evidence, facts)
+
+
+def _array_swap_facts(
+    evidence: Evidence, facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    operations = translate_operations(evidence.instructions)
+    indexes, by_offset = operation_indexes(operations)
+    addresses = {
+        fact.subject[0]: fact
+        for fact in facts
+        if fact.kind == "reference.array_address"
+        and len(fact.subject) == 2
+        and len(fact.value) == 4
+    }
+    for left in addresses.values():
+        if left.value[3] is not False:
+            continue
+        save = by_offset.get(left.subject[1])
+        if save is None or save.kind != "movm_ds" or len(save.args) != 1:
+            continue
+        right = addresses.get(save.end)
+        if (
+            right is None
+            or right.value[3] is not True
+            or left.value[1:3] != right.value[1:3]
+        ):
+            continue
+        restore = by_offset.get(right.subject[1])
+        if (
+            restore is None
+            or restore.kind != "moves_m"
+            or restore.args != save.args
+        ):
+            continue
+        width = left.value[2]
+        tail_kinds = _array_swap_tail(width)
+        if not tail_kinds:
+            continue
+        restore_index = indexes[restore.offset]
+        tail = operations[restore_index + 1 : restore_index + 1 + len(tail_kinds)]
+        if (
+            tuple(item.kind for item in tail) != tail_kinds
+            or not _compiler_contiguous(
+                (
+                    save,
+                    *operations[indexes[save.offset] + 1 : restore_index + 1],
+                    *tail,
+                )
+            )
+        ):
+            continue
+        support = combine_evidence(
+            left.evidence,
+            right.evidence,
+            (save.offset, restore.offset, *(item.offset for item in tail)),
+        )
+        yield Fact(
+            "semantic.swap",
+            (left.subject[0], tail[-1].end),
+            (left.value[0], right.value[0]),
+            support,
+            "anchored",
+        )
+
+
+def _array_swap_tail(width: object) -> tuple[str, ...]:
+    low = ("movbxax", "far_movax_bx", "xchgsi", "far_movm_ax_bx")
+    if width == 2:
+        return low
+    if width == 4:
+        return low + ("far_movax_bx2", "xchgsi2", "far_movm_ax_bx2")
+    return ()
 
 
 def _scalar_swap(window: tuple[Operation, ...]) -> ScalarSwapMatch | None:
@@ -84,6 +158,13 @@ def _scalar_swap(window: tuple[Operation, ...]) -> ScalarSwapMatch | None:
 
 
 def _contiguous(instructions: tuple[Operation, ...]) -> bool:
+    return all(
+        left.end == right.offset
+        for left, right in zip(instructions, instructions[1:])
+    )
+
+
+def _compiler_contiguous(instructions: tuple[CompilerOp, ...]) -> bool:
     return all(
         left.end == right.offset
         for left, right in zip(instructions, instructions[1:])

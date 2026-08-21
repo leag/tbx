@@ -394,8 +394,11 @@ load/exchange/store triples followed by the corresponding high-word triples.
 Those component operations remain instruction evidence but do not create six
 false integer memory roles. When independent facts anchor both four-byte base
 slots, the signature adds one SWAP statement with all six instruction addresses
-as provenance. Array and mixed scalar/array SWAP use separate mechanisms and
-remain unsupported by this lift.
+as provenance. Static numeric array SWAP is a separate composition: reusable
+array-address facts own the index conversion, element width, and static layout;
+the SWAP pass joins two such facts only across the compiler's DS-save/ES-restore
+pair and the complete one- or two-word exchange tail. Dynamic arrays and mixed
+scalar/array SWAP use separate mechanisms and remain unsupported by this lift.
 LOCATE groups its independent runtime legs before adding a fact: CF carries
 row/column (with 0x8000 as the compiler's omitted-row sentinel), D0 carries the
 optional cursor flag, and CE carries cursor start/stop. A shape leg closes the

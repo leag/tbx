@@ -60,8 +60,12 @@ def _translate(instruction: Operation) -> CompilerOp | None:
         return _op(instruction, "movsiax")
     if raw == b"\x89\xc3":
         return _op(instruction, "movbxax")
+    if raw == b"\x8b\xd8":
+        return _op(instruction, "movbxax")
     if raw == b"\x89\xd8":
         return _op(instruction, "movaxbx")
+    if raw == b"\x89\xf3":
+        return _op(instruction, "movbxsi")
     if raw == b"\x03\xf0":
         return _op(instruction, "addsiax")
     if raw == b"\x09\xc0":
@@ -74,6 +78,8 @@ def _translate(instruction: Operation) -> CompilerOp | None:
         return _op(instruction, "addsi", _u16(raw, 2))
     if len(raw) == 4 and raw[:2] == b"\x8e\x06":
         return _op(instruction, "moves_m", _u16(raw, 2))
+    if len(raw) == 4 and raw[:2] == b"\x8c\x1e":
+        return _op(instruction, "movm_ds", _u16(raw, 2))
     if len(raw) == 4 and raw[:2] == b"\x8b\x36":
         return _op(instruction, "movsim", _u16(raw, 2))
     if instruction.kind == "tb.statement" and instruction.operands:
@@ -151,6 +157,16 @@ def _direct_integer_operation(
         return _op(instruction, "movax_si")
     if raw == b"\x26\x8b\x04":
         return _op(instruction, "far_movax_si")
+    exchange = {
+        b"\x26\x8b\x07": "far_movax_bx",
+        b"\x87\x04": "xchgsi",
+        b"\x26\x89\x07": "far_movm_ax_bx",
+        b"\x26\x8b\x47\x02": "far_movax_bx2",
+        b"\x87\x44\x02": "xchgsi2",
+        b"\x26\x89\x47\x02": "far_movm_ax_bx2",
+    }.get(raw)
+    if exchange is not None:
+        return _op(instruction, exchange)
     if len(raw) == 4 and raw[:2] in {b"\xff\x06", b"\xff\x0e"}:
         kind = "inc_m" if raw[1] == 0x06 else "dec_m"
         return _op(instruction, kind, _u16(raw, 2))

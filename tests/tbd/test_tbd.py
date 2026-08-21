@@ -926,6 +926,42 @@ def test_scalar_swap_requires_the_complete_inline_template():
     assert not any(fact.kind == "semantic.swap" for fact in altered.facts)
 
 
+def test_static_array_swap_consumes_shared_element_address_facts():
+    for prefix in ("", "v10_"):
+        for stem, width in (("t1_arrswap", 2), ("t1_arrswapf", 4)):
+            image = (_CORPUS / f"{prefix}{stem}.exe").read_bytes()
+            program = decode(image)
+            actual = [
+                (node.kind, node.operands)
+                for node in program.canonical_statements
+                if node.kind == "Swap"
+            ]
+            exact = [
+                _tbx_statement(node)
+                for node in decode0.decode_user_code(image)
+                if isinstance(node, tbx_ir.Swap)
+            ]
+
+            assert actual == exact
+            swap = next(
+                fact for fact in program.facts if fact.kind == "semantic.swap"
+            )
+            addresses = sorted(
+                (
+                    fact
+                    for fact in program.facts
+                    if fact.kind == "reference.array_address"
+                    and swap.subject[0] <= fact.subject[0] < swap.subject[1]
+                ),
+                key=lambda fact: fact.subject,
+            )
+            assert [fact.value[2:] for fact in addresses] == [
+                (width, False),
+                (width, True),
+            ]
+            assert swap.confidence == "anchored"
+
+
 def test_grouped_locate_runtime_legs_recover_complete_constant_forms():
     stems = (
         "t1_locateomit",

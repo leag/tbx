@@ -206,6 +206,17 @@ def test_scalar_swap_template_is_exact_in_both_dialects():
     assert report.mismatches == ()
 
 
+def test_static_array_swap_templates_align_with_tbx():
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in ("t1_arrswap", "t1_arrswapf")
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["Swap"] == report.tbx_kinds["Swap"] == 4
+
+
 def test_grouped_constant_locate_forms_align_with_tbx():
     stems = (
         "t1_locateomit",
