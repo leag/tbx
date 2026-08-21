@@ -403,6 +403,11 @@ statement itself; shorter forms require a following instruction that cannot
 begin an extension, or another complete row/column leg, as positive boundary
 evidence. An unresolved or truncated extension therefore cannot leave a stale
 partial LOCATE fact.
+The calibrated string-length column form is a separate complete template:
+row in AX, a resolved string descriptor pushed into LEN, row staged in BX,
+then `neg ax; add ax,[constant]` before the LOCATE dispatch. It becomes the
+source subtraction `constant - LEN(string)` only when all eight operations
+are contiguous and both operands resolve uniquely.
 READ groups consecutive DATA_NUMBER and DATA_STRING phases into one target
 chain. Direct scalar stores, the shared FP-to-INTEGER bridge, and shared
 computed-array store facts all resolve through their owning passes. Any chain

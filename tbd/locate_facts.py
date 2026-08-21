@@ -27,6 +27,13 @@ def locate_statement_facts(
     instructions = evidence.instructions
     index = 0
     while index < len(instructions):
+        expression = _string_length_row_col(
+            instructions[index : index + 8], facts
+        )
+        if expression is not None:
+            yield expression
+            index += 8
+            continue
         row_col = _row_col(instructions[index : index + 4])
         cursor = None
         shape = None
@@ -49,6 +56,56 @@ def locate_statement_facts(
             if fact is not None:
                 yield fact
         index = end_index
+
+
+def _string_length_row_col(
+    window: tuple[Operation, ...], facts: frozenset[Fact]
+) -> Fact | None:
+    if len(window) != 8 or not _contiguous(window):
+        return None
+    row, setup, push, stage, function, negate, add, runtime = window
+    row_value = _ax_value(row)
+    add_raw = bytes.fromhex(add.raw)
+    if (
+        row_value is None
+        or setup.kind != "x86.mov_imm"
+        or setup.operands[:1] != ("si",)
+        or len(setup.operands) != 2
+        or not isinstance(setup.operands[1], int)
+        or _runtime_vector(push) != 0x9C
+        or bytes.fromhex(stage.raw) != b"\x89\xc3"
+        or function.kind != "tb.function"
+        or function.operands != ("numeric", 0x22)
+        or bytes.fromhex(negate.raw) != b"\xf7\xd8"
+        or len(add_raw) != 4
+        or add_raw[:2] != b"\x03\x06"
+        or _runtime_vector(runtime) != 0xCF
+    ):
+        return None
+    row_result = resolve_expression(row_value, facts)
+    string = resolve_expression(
+        ("memory", setup.operands[1], "string"), facts
+    )
+    constant = resolve_expression(
+        ("memory", struct.unpack_from("<H", add_raw, 2)[0], "integer"),
+        facts,
+    )
+    if row_result is None or string is None or constant is None:
+        return None
+    length = "call", "LEN", (string.value,)
+    column = "binary", "-", constant.value, length
+    return Fact(
+        "semantic.locate",
+        (row.offset, runtime.end),
+        (row_result.value, column, None, None, None),
+        combine_evidence(
+            tuple(item.offset for item in window),
+            row_result.evidence,
+            string.evidence,
+            constant.evidence,
+        ),
+        "signature",
+    )
 
 
 def _locate_fact(

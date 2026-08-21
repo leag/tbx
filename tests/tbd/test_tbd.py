@@ -934,6 +934,8 @@ def test_grouped_locate_runtime_legs_recover_complete_constant_forms():
         "v10_t1_loccurs",
         "t1_scr2",
         "v10_t1_scr2",
+        "t1_addpool",
+        "v10_t1_addpool",
     )
     for stem in stems:
         image = (_CORPUS / f"{stem}.exe").read_bytes()

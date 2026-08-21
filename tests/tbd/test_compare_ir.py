@@ -214,10 +214,12 @@ def test_grouped_constant_locate_forms_align_with_tbx():
         "v10_t1_loccurs",
         "t1_scr2",
         "v10_t1_scr2",
+        "t1_addpool",
+        "v10_t1_addpool",
     )
     report = compare_paths([_CORPUS / f"{stem}.exe" for stem in stems])
 
-    assert report.aligned_by_kind["Locate"] == report.tbx_kinds["Locate"] == 9
+    assert report.aligned_by_kind["Locate"] == report.tbx_kinds["Locate"] == 11
     assert report.failures == 0
 
 

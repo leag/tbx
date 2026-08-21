@@ -177,7 +177,11 @@ def _memory_accesses(instruction: Operation) -> tuple[tuple[str, int, str], ...]
     if len(raw) == 4 and raw[:2] in {b"\x01\x06", b"\x29\x06"}:
         address = struct.unpack_from("<H", raw, 2)[0]
         return ("read", address, "integer"), ("write", address, "integer")
-    if len(raw) == 4 and raw[:2] in {b"\x8b\x06", b"\x3b\x06"}:
+    if len(raw) == 4 and raw[:2] in {
+        b"\x03\x06",
+        b"\x8b\x06",
+        b"\x3b\x06",
+    }:
         return (("read", struct.unpack_from("<H", raw, 2)[0], "integer"),)
     if instruction.kind == "x86.mov_acc_mem":
         action = "write" if instruction.operands[1] == "store" else "read"
