@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 from tbd.compiler_ops import CompilerOp, translate_operations
 from tbd.facts import Evidence, NamedPass
-from tbd.input_facts import integer_input_item
+from tbd.input_facts import array_input_item, integer_input_item
 from tbd.ir import Fact, Operation
 from tbd.profile import FP_TRANSFER_TYPES
 from tbd.semantic import (
@@ -22,7 +22,7 @@ from tbd.semantic import (
 @dataclass(frozen=True)
 class _Item:
     size: int
-    address: int
+    reference: object
     kind: str
     evidence: tuple[int, ...]
 
@@ -40,7 +40,7 @@ def input_file_statement_facts(
     by_end = {instruction.end: instruction for instruction in instructions}
     index = 0
     while index < len(instructions):
-        first = _item(instructions, index, compiler_ops)
+        first = _item(instructions, index, compiler_ops, facts)
         if first is None:
             index += 1
             continue
@@ -51,7 +51,7 @@ def input_file_statement_facts(
         file_number, start, file_support = file_result
         items = []
         cursor = index
-        while item := _item(instructions, cursor, compiler_ops):
+        while item := _item(instructions, cursor, compiler_ops, facts):
             items.append(item)
             cursor += item.size
         following = instructions[cursor] if cursor < len(instructions) else None
@@ -67,13 +67,17 @@ def input_file_statement_facts(
         targets = []
         support = [file_support]
         for item in items:
-            target = resolve_slot(item.address, facts) or resolve_array_element(
-                item.address, facts
-            )
-            if target is None:
-                break
-            targets.append(target.value + (item.kind,))
-            support.extend((item.evidence, target.evidence))
+            if isinstance(item.reference, int):
+                target = resolve_slot(
+                    item.reference, facts
+                ) or resolve_array_element(item.reference, facts)
+                if target is None:
+                    break
+                targets.append(target.value + (item.kind,))
+                support.extend((item.evidence, target.evidence))
+            else:
+                targets.append(item.reference)
+                support.append(item.evidence)
         else:
             if commit is None:
                 end = instructions[cursor - 1].end
@@ -94,6 +98,7 @@ def _item(
     instructions: tuple[Operation, ...],
     index: int,
     compiler_ops: dict[int, CompilerOp],
+    facts: frozenset[Fact],
 ) -> _Item | None:
     numeric = _numeric_item(instructions[index : index + 2])
     if numeric is not None:
@@ -109,6 +114,20 @@ def _item(
             integer.reference,
             integer.kind,
             integer.evidence,
+        )
+    array = array_input_item(
+        instructions,
+        index,
+        facts,
+        numeric_phase="INPUT_FILE_NUMBER",
+        string_phase="INPUT_FILE_STRING",
+    )
+    if array is not None:
+        return _Item(
+            array.size,
+            array.reference,
+            array.kind,
+            array.evidence,
         )
     return _string_item(instructions[index : index + 3])
 

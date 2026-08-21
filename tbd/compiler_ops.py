@@ -58,6 +58,8 @@ def _translate(instruction: Operation) -> CompilerOp | None:
         return _op(instruction, "movesdx")
     if raw == b"\x89\xc6":
         return _op(instruction, "movsiax")
+    if raw == b"\x03\xf0":
+        return _op(instruction, "addsiax")
     if raw == b"\x09\xc0":
         return _op(instruction, "orax")
     if instruction.kind == "x86.inc" and instruction.operands == ("ax",):
@@ -84,6 +86,8 @@ def _translate(instruction: Operation) -> CompilerOp | None:
         return _op(instruction, "fstsw")
     if instruction.kind == "tb.runtime" and instruction.operands == (0xA0,):
         return _op(instruction, "strassign")
+    if instruction.kind == "tb.runtime" and instruction.operands == (0xA1,):
+        return _op(instruction, "far_strassign")
     if instruction.kind == "tb.fwait":
         return _op(instruction, "fwait")
     if (
@@ -131,6 +135,12 @@ def _direct_integer_operation(
         return _op(instruction, "cmpax_m", _u16(raw, 2))
     if len(raw) == 4 and raw[:2] == b"\x01\x06":
         return _op(instruction, "addm_ax", _u16(raw, 2))
+    if len(raw) == 4 and raw[:2] == b"\xf7\x2e":
+        return _op(instruction, "imul_m", _u16(raw, 2))
+    if raw == b"\x89\x04":
+        return _op(instruction, "movm_ax_si")
+    if raw == b"\x26\x89\x04":
+        return _op(instruction, "far_movm_ax_si")
     if len(raw) == 4 and raw[:2] in {b"\xff\x06", b"\xff\x0e"}:
         kind = "inc_m" if raw[1] == 0x06 else "dec_m"
         return _op(instruction, kind, _u16(raw, 2))

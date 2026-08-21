@@ -133,7 +133,7 @@ def _item(
     integer = integer_input_item(instructions[index : index + 5], compiler_ops)
     if integer is not None:
         return integer
-    array = _array_item(instructions, index, facts)
+    array = array_input_item(instructions, index, facts)
     return array if array is not None else _string_item(instructions[index : index + 3])
 
 
@@ -218,8 +218,13 @@ def _string_item(window: tuple[Operation, ...]) -> _Item | None:
     )
 
 
-def _array_item(
-    instructions: tuple[Operation, ...], index: int, facts: frozenset[Fact]
+def array_input_item(
+    instructions: tuple[Operation, ...],
+    index: int,
+    facts: frozenset[Fact],
+    *,
+    numeric_phase: str = "READ_NUMBER",
+    string_phase: str = "READ_STRING",
 ) -> _Item | None:
     if index >= len(instructions):
         return None
@@ -237,7 +242,7 @@ def _array_item(
         return None
     match = matches[0]
     kind = match.value[1]
-    expected_phase = "READ_STRING" if kind == "string" else "READ_NUMBER"
+    expected_phase = string_phase if kind == "string" else numeric_phase
     if _phase_name(phase) != expected_phase:
         return None
     terminal = next(

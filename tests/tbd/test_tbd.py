@@ -1451,6 +1451,35 @@ def test_input_file_facts_recover_complete_scalar_chains():
         assert len(input_fact.value[1]) == 2
 
 
+def test_input_file_reuses_computed_array_store_facts():
+    stems = (
+        "t1_inpfilearr",
+        "v10_t1_inpfilearr",
+        "t1_sarr2",
+        "v10_t1_sarr2",
+    )
+    for stem in stems:
+        image = (_CORPUS / f"{stem}.exe").read_bytes()
+        program = decode(image)
+        actual = [
+            (node.kind, node.operands)
+            for node in program.canonical_statements
+            if node.kind == "InputFile"
+        ]
+        exact = [
+            _tbx_statement(node)
+            for node in decode0.decode_user_code(image)
+            if isinstance(node, tbx_ir.InputFile)
+        ]
+
+        assert actual == exact
+        references = [
+            fact for fact in program.facts if fact.kind == "reference.array_store"
+        ]
+        assert len(references) == 2
+        assert all(fact.confidence == "anchored" for fact in references)
+
+
 def test_console_input_facts_preserve_prompts_flags_and_scalar_targets():
     stems = (
         "t1_inp",

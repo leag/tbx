@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from tbd.compiler_ops import CompilerOp, translate_operations
 from tbd.facts import Evidence, NamedPass
 from tbd.ir import Fact
-from tbd.semantic import combine_evidence, resolve_expression
+from tbd.semantic import Resolved, combine_evidence, resolve_expression
 
 _INDEX_LOADS = {
     "fild": "integer",
@@ -38,7 +38,9 @@ def array_store_facts(
 
     operations = translate_operations(evidence.instructions)
     for index in range(len(operations)):
-        match = _numeric_indexed_store(operations, index, facts)
+        match = _rank2_indexed_store(operations, index, facts)
+        if match is None:
+            match = _numeric_indexed_store(operations, index, facts)
         if match is None:
             match = _string_indexed_store(operations, index, facts)
         if match is None:
@@ -71,7 +73,7 @@ def _numeric_indexed_store(
     if shifts == 0 or cursor + 1 >= len(operations):
         return None
     anchor, terminal = operations[cursor : cursor + 2]
-    target_kind = _NUMERIC_STORES.get(terminal.kind)
+    target_kind = _store_kind(terminal.kind)
     if target_kind is None or not _contiguous(operations[index : cursor + 2]):
         return None
     layout = _indexed_layout(anchor, terminal, target_kind, shifts, facts)
@@ -85,7 +87,7 @@ def _numeric_indexed_store(
         load,
         terminal,
         name,
-        resolved.value,
+        (resolved.value,),
         target_kind,
         combine_evidence(
             tuple(item.offset for item in operations[index : cursor + 2]),
@@ -123,7 +125,7 @@ def _string_indexed_store(
         load,
         terminal,
         name,
-        resolved.value,
+        (resolved.value,),
         "string",
         combine_evidence(
             tuple(item.offset for item in operations[index : cursor + 2]),
@@ -164,7 +166,7 @@ def _direct_dynamic_store(
         anchor,
         terminal,
         name,
-        ("const", low + displacement // width),
+        (("const", low + displacement // width),),
         target_kind,
         combine_evidence((anchor.offset, terminal.offset), layout_evidence),
     )
@@ -257,17 +259,183 @@ def _store_fact(
     start: CompilerOp,
     terminal: CompilerOp,
     name: str,
-    index: object,
+    indices: tuple[object, ...],
     kind: str,
     support: tuple[int, ...],
 ) -> Fact:
     return Fact(
         "reference.array_store",
         (start.offset, terminal.end),
-        (("array", name, (index,)), kind),
+        (("array", name, indices), kind),
         support,
         "anchored",
     )
+
+
+def _rank2_indexed_store(
+    operations: tuple[CompilerOp, ...], index: int, facts: frozenset[Fact]
+) -> Fact | None:
+    if index + 7 > len(operations):
+        return None
+    first_match = _integer_operand(operations, index, facts)
+    if first_match is None:
+        return None
+    first, left, cursor = first_match
+    if cursor + 2 >= len(operations):
+        return None
+    span, stage = operations[cursor : cursor + 2]
+    if (
+        span.kind != "imul_m"
+        or len(span.args) != 1
+        or not isinstance(span.args[0], int)
+        or stage.kind != "movsiax"
+    ):
+        return None
+    second_match = _integer_operand(operations, cursor + 2, facts)
+    if second_match is None:
+        return None
+    _second, right, cursor = second_match
+    if cursor >= len(operations) or operations[cursor].kind != "addsiax":
+        return None
+    cursor += 1
+    shift_start = cursor
+    while cursor < len(operations) and operations[cursor].kind == "shlsi":
+        cursor += 1
+    shifts = cursor - shift_start
+    if shifts == 0 or cursor >= len(operations):
+        return None
+    anchor = operations[cursor]
+    terminal_match = _indexed_terminal(operations, cursor + 1)
+    if terminal_match is None:
+        return None
+    terminal, target_kind, stop = terminal_match
+    if not _contiguous(operations[index:stop]):
+        return None
+    layout = _rank2_layout(
+        span.args[0], anchor, target_kind, shifts, facts
+    )
+    if layout is None:
+        return None
+    name, layout_evidence = layout
+    return _store_fact(
+        first,
+        terminal,
+        name,
+        (right.value, left.value),
+        target_kind,
+        combine_evidence(
+            tuple(item.offset for item in operations[index:stop]),
+            left.evidence,
+            right.evidence,
+            layout_evidence,
+        ),
+    )
+
+
+def _indexed_terminal(
+    operations: tuple[CompilerOp, ...], index: int
+) -> tuple[CompilerOp, str, int] | None:
+    if index >= len(operations):
+        return None
+    direct = operations[index]
+    kind = _store_kind(direct.kind)
+    if kind is not None:
+        return direct, kind, index + 1
+    bridge = operations[index : index + 4]
+    if (
+        len(bridge) == 4
+        and (bridge[0].kind, bridge[0].args) == ("fistp", (0x2C,))
+        and bridge[1].kind == "fwait"
+        and (bridge[2].kind, bridge[2].args) == ("movaxmem", (0x2C,))
+        and bridge[3].kind in {"movm_ax_si", "far_movm_ax_si"}
+    ):
+        return bridge[3], "integer", index + 4
+    return None
+
+
+def _rank2_layout(
+    span: int,
+    anchor: CompilerOp,
+    kind: str,
+    shifts: int,
+    facts: frozenset[Fact],
+) -> tuple[str, tuple[int, ...]] | None:
+    matches = []
+    for fact in facts:
+        if fact.kind == "layout.array" and len(fact.value) == 7:
+            block = fact.subject[1] if len(fact.subject) == 2 else None
+            valid_anchor = anchor.kind == "addsi" and anchor.args == (fact.value[4],)
+            rank = len(fact.value[2]) if isinstance(fact.value[2], tuple) else 0
+            fact_kind = fact.value[3]
+            width = fact.value[5]
+        elif fact.kind == "layout.runtime_array" and len(fact.value) == 6:
+            block = fact.subject[1] if len(fact.subject) == 2 else None
+            valid_anchor = anchor.kind == "moves_m" and anchor.args == (block,)
+            fact_kind = fact.value[2]
+            rank, width = fact.value[3:5]
+        else:
+            continue
+        if (
+            isinstance(block, int)
+            and span == block + 0x0C
+            and valid_anchor
+            and isinstance(fact.value[1], str)
+            and fact_kind == kind
+            and rank == 2
+            and width == 1 << shifts
+        ):
+            matches.append(fact)
+    if len(matches) != 1:
+        return None
+    return matches[0].value[1], matches[0].evidence
+
+
+def _integer_value(
+    operation: CompilerOp, facts: frozenset[Fact]
+) -> Resolved | None:
+    if operation.kind == "movax" and len(operation.args) == 1:
+        return resolve_expression(("const", operation.args[0]), facts)
+    if (
+        operation.kind == "movax_m"
+        and len(operation.args) == 1
+        and isinstance(operation.args[0], int)
+    ):
+        return resolve_expression(("memory", operation.args[0], "integer"), facts)
+    return None
+
+
+def _integer_operand(
+    operations: tuple[CompilerOp, ...], index: int, facts: frozenset[Fact]
+) -> tuple[CompilerOp, Resolved, int] | None:
+    if index >= len(operations):
+        return None
+    first = operations[index]
+    direct = _integer_value(first, facts)
+    if direct is not None:
+        return first, direct, index + 1
+    bridge = operations[index : index + 4]
+    source_kind = _INDEX_LOADS.get(first.kind)
+    if (
+        len(bridge) == 4
+        and source_kind is not None
+        and len(first.args) == 1
+        and isinstance(first.args[0], int)
+        and (bridge[1].kind, bridge[1].args) == ("fistp", (0x2C,))
+        and bridge[2].kind == "fwait"
+        and (bridge[3].kind, bridge[3].args) == ("movaxmem", (0x2C,))
+    ):
+        resolved = resolve_expression(
+            ("memory", first.args[0], source_kind), facts
+        )
+        if resolved is not None:
+            return first, resolved, index + 4
+    return None
+
+
+def _store_kind(kind: str) -> str | None:
+    if kind in {"strassign", "far_strassign"}:
+        return "string"
+    return _NUMERIC_STORES.get(kind)
 
 
 def _contiguous(operations: tuple[CompilerOp, ...]) -> bool:
