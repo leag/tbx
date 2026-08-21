@@ -857,6 +857,35 @@ def test_runtime_facts_translate_printer_using_clauses_and_commit_boundaries():
         for item in outer.value[1]
     ) == 2
 
+    for stem, expected in (
+        ("t1_using", 3),
+        ("t1_pr2", 3),
+        ("v10_t1_pr2", 3),
+        ("t1_usingtab", 1),
+        ("v10_t1_usingtab", 1),
+    ):
+        image = (_CORPUS / f"{stem}.exe").read_bytes()
+        program = decode(image)
+        assert [
+            (statement.kind, statement.operands)
+            for statement in program.canonical_statements
+        ] == [
+            _tbx_statement(statement)
+            for statement in decode0.decode_user_code(image)
+        ]
+        assert sum(
+            fact.kind == "semantic.print_using" for fact in program.facts
+        ) == expected
+
+    file_using = [
+        statement
+        for statement in decode(
+            (_CORPUS / "t1_pr2.exe").read_bytes()
+        ).canonical_statements
+        if statement.kind == "PrintUsing" and statement.operands[0] != "console"
+    ]
+    assert [statement.operands[0] for statement in file_using] == [1]
+
 
 def test_runtime_facts_recover_complete_console_and_file_write_chains():
     for prefix in ("", "v10_"):

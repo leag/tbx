@@ -51,8 +51,16 @@ def runtime_facts(
     using_clauses = _print_using_clauses(
         evidence.instructions, expressions, facts
     )
+    nested_using = _nested_using_subjects(
+        evidence.instructions, using_clauses
+    )
     items = _print_items(
-        evidence.instructions, expressions, facts, using_clauses
+        evidence.instructions,
+        expressions,
+        facts,
+        tuple(
+            clause for clause in using_clauses if clause.subject in nested_using
+        ),
     )
     by_end = {item.end: item for item in items}
     instructions_by_end = {
@@ -96,7 +104,7 @@ def runtime_facts(
         )
     yield from using_clauses
     yield from _standalone_print_using_facts(
-        evidence.instructions, items, using_clauses
+        evidence.instructions, items, using_clauses, nested_using, facts
     )
     yield from _blank_lprint_facts(evidence.instructions)
     yield from _blank_file_print_facts(evidence.instructions, facts)
@@ -662,7 +670,18 @@ def _print_using_clauses(
                 instructions, cursor, expressions, facts
             )
             if emitted is None:
-                break
+                control = _control_item(instructions[cursor : cursor + 2])
+                if (
+                    control is None
+                    or mode is None
+                    or control.mode != mode
+                    or not _using_emit_follows(instructions, cursor + 2)
+                ):
+                    break
+                values.append(control.value)
+                support.append(control.evidence)
+                cursor += 2
+                continue
             value, leg_mode, stop, item_evidence = emitted
             if mode is not None and leg_mode != mode:
                 break
@@ -670,7 +689,7 @@ def _print_using_clauses(
             values.append(value)
             support.append(item_evidence)
             cursor = stop
-        if not values or mode != "printer":
+        if not values or mode is None:
             continue
         result.append(
             Fact(
@@ -682,6 +701,37 @@ def _print_using_clauses(
             )
         )
     return tuple(result)
+
+
+def _using_emit_follows(
+    instructions: tuple[Operation, ...], index: int
+) -> bool:
+    for instruction in instructions[index : index + 12]:
+        vector = _runtime_vector(instruction)
+        if vector in {0xCB, 0xCC}:
+            return True
+        if vector in {0x87, 0xB8, 0xB9, 0xBA, 0xCA}:
+            return False
+    return False
+
+
+def _nested_using_subjects(
+    instructions: tuple[Operation, ...], clauses: tuple[Fact, ...]
+) -> frozenset[tuple[object, ...]]:
+    nested: set[tuple[object, ...]] = set()
+    ordered = sorted(clauses, key=lambda clause: clause.subject)
+    for left, right in zip(ordered, ordered[1:]):
+        between = (
+            instruction
+            for instruction in instructions
+            if left.subject[1] <= instruction.offset < right.subject[0]
+        )
+        if not any(
+            _runtime_vector(instruction) in {0x87, 0xB8, 0xB9, 0xBA}
+            for instruction in between
+        ):
+            nested.update((left.subject, right.subject))
+    return frozenset(nested)
 
 
 def _using_value(
@@ -757,6 +807,8 @@ def _standalone_print_using_facts(
     instructions: tuple[Operation, ...],
     items: tuple[_Item, ...],
     clauses: tuple[Fact, ...],
+    nested: frozenset[tuple[object, ...]],
+    facts: frozenset[Fact],
 ) -> Iterable[Fact]:
     by_offset = {instruction.offset: instruction for instruction in instructions}
     by_end = {item.end: item for item in items}
@@ -769,15 +821,33 @@ def _standalone_print_using_facts(
         if _runtime_vector(instruction) in _SEPARATORS
     }
     for clause in clauses:
-        following = by_offset.get(clause.subject[1])
-        if _runtime_vector(following) != 0x87:
+        if clause.subject in nested:
             continue
+        following = by_offset.get(clause.subject[1])
+        vector = _runtime_vector(following) if following is not None else None
         mode, fmt, values = clause.value
+        expected_flush = {"console": 0xB8, "file": 0xBA, "printer": 0xB9}.get(
+            mode
+        )
+        committed = vector == 0x87 and mode == "printer"
+        flushed = vector == expected_flush
+        if following is None or (not committed and not flushed):
+            continue
+        statement_mode: object = mode
+        start = clause.subject[0]
+        file_evidence: tuple[int, ...] = ()
+        if mode == "file":
+            file_result = _write_file_number(facts, instruction_by_end, start)
+            if file_result is None:
+                continue
+            statement_mode, start, file_evidence = file_result
         yield Fact(
             "semantic.print_using",
-            (clause.subject[0], following.end),
-            (mode, fmt, values, False),
-            combine_evidence(clause.evidence, (following.offset,)),
+            (start, following.end),
+            (statement_mode, fmt, values, flushed),
+            combine_evidence(
+                clause.evidence, file_evidence, (following.offset,)
+            ),
             "anchored",
         )
         preceding = _item_chain(by_end, separators, clause.subject[0], mode)

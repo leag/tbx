@@ -354,11 +354,14 @@ whole PRINT without leaving a stale partial statement behind.
 An additional consecutive printer flush is a complete empty LPRINT statement:
 the first B9 has already closed the preceding chain, so every directly adjacent
 B9 after it adds one empty statement fact with both flushes as evidence.
-Printer USING clauses are reusable reference facts over the resolved format,
-every CB/CC value emit, and its BF printer leg. A following runtime commit makes
-the clause a standalone `PrintUsing` statement and closes directly preceding
-printer items without a newline. Two clauses with no intervening commit instead
-remain ordered items of the one LPRINT chain that reaches the B9 flush.
+USING clauses are reusable reference facts over the resolved format, every
+CB/CC value emit, intervening TAB/SPC items that lead to another emit, and the
+matching console/file/printer leg. A mode-specific flush makes a standalone
+newline `PrintUsing`; the printer's following runtime commit makes its
+no-newline form. File mode reuses the independently resolved `[0060]` channel
+store. Directly preceding ordinary items close as a separate no-newline PRINT
+or LPRINT. Two clauses with no intervening commit or flush instead remain
+ordered items of the one outer chain.
 File PRINT chains require the uniquely resolved adjacent store to the compiler's
 0x60 channel cell and retain that channel instead of a generic file-mode label.
 For an empty file PRINT, that store followed immediately by the file flush is
