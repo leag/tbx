@@ -32,6 +32,13 @@ def _normalize_statement(statement: Statement) -> Statement:
         operands = (normalize_expression(operands[0]), normalize_expression(operands[1]))
     elif statement.kind in {"Lset", "Rset", "Swap"}:
         operands = (normalize_expression(operands[0]), normalize_expression(operands[1]))
+    elif statement.kind == "PrintUsing":
+        operands = (
+            operands[0],
+            normalize_expression(operands[1]),
+            tuple(normalize_expression(value) for value in operands[2]),
+            operands[3],
+        )
     elif statement.kind == "MidAssign":
         target, start, source, length = operands
         operands = (

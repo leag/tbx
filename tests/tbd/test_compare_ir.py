@@ -157,6 +157,19 @@ def test_immediate_printer_controls_produce_an_exact_lprint_tree():
     assert report.mismatches == ()
 
 
+def test_printer_using_statements_and_nested_clauses_are_exact():
+    paths = [
+        _CORPUS / f"{stem}.exe"
+        for stem in ("t1_lpusing", "v10_t1_lpusing", "t1_usingtwice")
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["Lprint"] == report.tbx_kinds["Lprint"] == 5
+    assert report.aligned_by_kind["PrintUsing"] == 2
+    assert report.comparable_files == report.exact_files == 3
+    assert report.mismatches == ()
+
+
 def test_complete_write_chains_align_in_both_modes_and_dialects():
     paths = [
         _CORPUS / f"{prefix}{stem}.exe"

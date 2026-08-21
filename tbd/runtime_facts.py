@@ -48,7 +48,12 @@ def runtime_facts(
     """Resolve complete runtime statements without consuming instructions."""
 
     expressions = _expression_index(facts, evidence.instructions)
-    items = _print_items(evidence.instructions, expressions, facts)
+    using_clauses = _print_using_clauses(
+        evidence.instructions, expressions, facts
+    )
+    items = _print_items(
+        evidence.instructions, expressions, facts, using_clauses
+    )
     by_end = {item.end: item for item in items}
     instructions_by_end = {
         instruction.end: instruction for instruction in evidence.instructions
@@ -89,6 +94,10 @@ def runtime_facts(
             support,
             "anchored",
         )
+    yield from using_clauses
+    yield from _standalone_print_using_facts(
+        evidence.instructions, items, using_clauses
+    )
     yield from _blank_lprint_facts(evidence.instructions)
     yield from _blank_file_print_facts(evidence.instructions, facts)
     yield from _write_facts(evidence.instructions, facts)
@@ -519,6 +528,7 @@ def _print_items(
     instructions: tuple[Operation, ...],
     expressions: dict[int, Fact],
     facts: frozenset[Fact],
+    using_clauses: tuple[Fact, ...] = (),
 ) -> tuple[_Item, ...]:
     result = []
     by_end = {instruction.end: instruction for instruction in instructions}
@@ -531,7 +541,181 @@ def _print_items(
             result.append(item)
         if item := _bridged_control(instruction, by_end, facts):
             result.append(item)
+    for clause in using_clauses:
+        mode, fmt, values = clause.value
+        result.append(
+            _Item(
+                clause.subject[0],
+                clause.subject[1],
+                mode,
+                ("print_using", mode, fmt, values, False),
+                clause.evidence,
+            )
+        )
     return tuple(result)
+
+
+def _print_using_clauses(
+    instructions: tuple[Operation, ...],
+    expressions: dict[int, Fact],
+    facts: frozenset[Fact],
+) -> tuple[Fact, ...]:
+    """Translate complete CA/(CB|CC,item)+ compiler chains."""
+
+    result = []
+    for index in range(2, len(instructions)):
+        begin = instructions[index]
+        if _runtime_vector(begin) != 0xCA:
+            continue
+        setup, read = instructions[index - 2 : index]
+        if not _is_string_setup(setup, read) or read.end != begin.offset:
+            continue
+        fmt = resolve_expression(("memory", setup.operands[1], "string"), facts)
+        if fmt is None:
+            continue
+        cursor = index + 1
+        values = []
+        support = [fmt.evidence, (setup.offset, read.offset, begin.offset)]
+        mode = None
+        while cursor < len(instructions):
+            emitted = _using_value(
+                instructions, cursor, expressions, facts
+            )
+            if emitted is None:
+                break
+            value, leg_mode, stop, item_evidence = emitted
+            if mode is not None and leg_mode != mode:
+                break
+            mode = leg_mode
+            values.append(value)
+            support.append(item_evidence)
+            cursor = stop
+        if not values or mode != "printer":
+            continue
+        result.append(
+            Fact(
+                "reference.print_using",
+                (setup.offset, instructions[cursor - 1].end),
+                (mode, fmt.value, tuple(values)),
+                combine_evidence(*support),
+                "anchored",
+            )
+        )
+    return tuple(result)
+
+
+def _using_value(
+    instructions: tuple[Operation, ...],
+    index: int,
+    expressions: dict[int, Fact],
+    facts: frozenset[Fact],
+) -> tuple[object, str, int, tuple[int, ...]] | None:
+    emit_index = index
+    expression = expressions.get(instructions[index].offset)
+    if _runtime_vector(instructions[index]) != 0xCB:
+        for candidate in range(index + 1, min(index + 12, len(instructions))):
+            operation = instructions[candidate]
+            matched = expressions.get(operation.offset)
+            if (
+                _runtime_vector(operation) == 0xCB
+                and matched is not None
+                and matched.evidence[:1] == (instructions[index].offset,)
+                and _contiguous(instructions[index : candidate + 1])
+            ):
+                emit_index = candidate
+                expression = matched
+                break
+    emit = instructions[emit_index]
+    if _runtime_vector(emit) == 0xCB and emit_index + 1 < len(instructions):
+        leg = instructions[emit_index + 1]
+        mode = _STRING_ITEMS.get(_runtime_vector(leg))
+        expression = expression or expressions.get(emit.offset)
+        resolved = (
+            resolve_expression(expression.value[0], facts)
+            if expression is not None
+            else None
+        )
+        if mode is None or resolved is None or emit.end != leg.offset:
+            return None
+        return (
+            resolved.value,
+            mode,
+            emit_index + 2,
+            combine_evidence(
+                expression.evidence,
+                resolved.evidence,
+                (emit.offset, leg.offset),
+            ),
+        )
+    window = instructions[index : index + 4]
+    if len(window) != 4:
+        return None
+    setup, read, emit, leg = window
+    mode = _STRING_ITEMS.get(_runtime_vector(leg))
+    if (
+        not _is_string_setup(setup, read)
+        or _runtime_vector(emit) != 0xCC
+        or mode is None
+        or not _contiguous(window)
+    ):
+        return None
+    resolved = resolve_expression(("memory", setup.operands[1], "string"), facts)
+    if resolved is None:
+        return None
+    return (
+        resolved.value,
+        mode,
+        index + 4,
+        combine_evidence(
+            resolved.evidence,
+            tuple(item.offset for item in window),
+        ),
+    )
+
+
+def _standalone_print_using_facts(
+    instructions: tuple[Operation, ...],
+    items: tuple[_Item, ...],
+    clauses: tuple[Fact, ...],
+) -> Iterable[Fact]:
+    by_offset = {instruction.offset: instruction for instruction in instructions}
+    by_end = {item.end: item for item in items}
+    instruction_by_end = {
+        instruction.end: instruction for instruction in instructions
+    }
+    separators = {
+        instruction.end: instruction
+        for instruction in instructions
+        if _runtime_vector(instruction) in _SEPARATORS
+    }
+    for clause in clauses:
+        following = by_offset.get(clause.subject[1])
+        if _runtime_vector(following) != 0x87:
+            continue
+        mode, fmt, values = clause.value
+        yield Fact(
+            "semantic.print_using",
+            (clause.subject[0], following.end),
+            (mode, fmt, values, False),
+            combine_evidence(clause.evidence, (following.offset,)),
+            "anchored",
+        )
+        preceding = _item_chain(by_end, separators, clause.subject[0], mode)
+        if not preceding or _has_preceding_item(
+            instruction_by_end, preceding.start, mode
+        ):
+            continue
+        yield Fact(
+            "semantic.lprint" if mode == "printer" else "semantic.print",
+            (preceding.start, clause.subject[0]),
+            (mode, tuple(item.value for item in preceding.items), False),
+            combine_evidence(
+                *(item.evidence for item in preceding.items),
+                preceding.evidence,
+                clause.evidence,
+            ),
+            "anchored",
+        )
 
 
 def _numeric_item(

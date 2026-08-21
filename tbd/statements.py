@@ -18,6 +18,7 @@ _SIMPLE_KINDS = {
     "ir.out": "Out",
     "ir.wait": "Wait",
     "ir.lprint": "Lprint",
+    "ir.print_using": "PrintUsing",
     "ir.write": "Write",
     "ir.lset": "Lset",
     "ir.rset": "Rset",

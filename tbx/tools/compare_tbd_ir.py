@@ -67,6 +67,7 @@ MIGRATED_KINDS = frozenset(
         "Out",
         "Play",
         "Print",
+        "PrintUsing",
         "Read",
         "Reset",
         "Rmdir",
@@ -227,6 +228,19 @@ def _statement(node: Any) -> tuple[str, tuple[object, ...]]:
         operands = mode, tuple(_expression(item) for item in node.items), node.newline
     elif isinstance(node, ir.Lprint):
         operands = "printer", tuple(_expression(item) for item in node.items), node.newline
+    elif isinstance(node, ir.PrintUsing):
+        if node.lprint:
+            mode = "printer"
+        elif node.file is None or isinstance(node.file, int):
+            mode = "console" if node.file is None else node.file
+        else:
+            mode = _expression(node.file)
+        operands = (
+            mode,
+            _expression(node.fmt),
+            tuple(_expression(value) for value in node.values),
+            node.newline,
+        )
     elif isinstance(node, ir.Write):
         if node.file is None or isinstance(node.file, int):
             file_number = node.file
@@ -383,6 +397,20 @@ def _expression(node: Any) -> object:
         return "string", node.value
     if isinstance(node, ir.Call):
         return "call", node.name, tuple(_expression(item) for item in node.args)
+    if isinstance(node, ir.PrintUsing):
+        if node.lprint:
+            mode = "printer"
+        elif node.file is None or isinstance(node.file, int):
+            mode = "console" if node.file is None else node.file
+        else:
+            mode = _expression(node.file)
+        return (
+            "print_using",
+            mode,
+            _expression(node.fmt),
+            tuple(_expression(value) for value in node.values),
+            node.newline,
+        )
     if isinstance(node, ir.BinOp):
         return normalize_expression(
             ("binary", node.op, _expression(node.lhs), _expression(node.rhs))

@@ -802,6 +802,62 @@ def test_runtime_facts_keep_tab_spc_items_in_their_chains():
     )
 
 
+def test_runtime_facts_translate_printer_using_clauses_and_commit_boundaries():
+    for stem in ("t1_lpusing", "v10_t1_lpusing"):
+        image = (_CORPUS / f"{stem}.exe").read_bytes()
+        program = decode(image)
+
+        assert [
+            (statement.kind, statement.operands)
+            for statement in program.canonical_statements
+        ] == [
+            _tbx_statement(statement)
+            for statement in decode0.decode_user_code(image)
+        ]
+        assert sum(
+            fact.kind == "reference.print_using" for fact in program.facts
+        ) == 1
+        assert sum(
+            fact.kind == "semantic.print_using" for fact in program.facts
+        ) == 1
+        assert sum(fact.kind == "semantic.lprint" for fact in program.facts) == 2
+
+        clause = next(
+            fact
+            for fact in program.facts
+            if fact.kind == "reference.print_using"
+        )
+        altered = bytearray(image)
+        altered[clause.subject[1] - 1] = 0xB7
+        assert not any(
+            fact.kind in {"reference.print_using", "semantic.print_using"}
+            for fact in decode(bytes(altered)).facts
+        )
+
+    nested_image = (_CORPUS / "t1_usingtwice.exe").read_bytes()
+    nested = decode(nested_image)
+    assert [
+        (statement.kind, statement.operands)
+        for statement in nested.canonical_statements
+    ] == [
+        _tbx_statement(statement)
+        for statement in decode0.decode_user_code(nested_image)
+    ]
+    assert sum(
+        fact.kind == "reference.print_using" for fact in nested.facts
+    ) == 2
+    assert not any(
+        fact.kind == "semantic.print_using" for fact in nested.facts
+    )
+    outer = next(
+        fact for fact in nested.facts if fact.kind == "semantic.lprint"
+    )
+    assert sum(
+        isinstance(item, tuple) and item[:1] == ("print_using",)
+        for item in outer.value[1]
+    ) == 2
+
+
 def test_runtime_facts_recover_complete_console_and_file_write_chains():
     for prefix in ("", "v10_"):
         for stem in ("t1_write", "t1_writefile"):
@@ -2930,6 +2986,19 @@ def _tbx_statement(node):
             tuple(_tbx_expression(item) for item in node.items),
             node.newline,
         )
+    elif isinstance(node, tbx_ir.PrintUsing):
+        if node.lprint:
+            mode = "printer"
+        elif node.file is None or isinstance(node.file, int):
+            mode = "console" if node.file is None else node.file
+        else:
+            mode = _tbx_expression(node.file)
+        operands = (
+            mode,
+            _tbx_expression(node.fmt),
+            tuple(_tbx_expression(value) for value in node.values),
+            node.newline,
+        )
     elif isinstance(node, tbx_ir.Write):
         if node.file is None or isinstance(node.file, int):
             file_number = node.file
@@ -3085,6 +3154,20 @@ def _tbx_expression(node):
         return "string", node.value
     if isinstance(node, tbx_ir.Call):
         return "call", node.name, tuple(_tbx_expression(item) for item in node.args)
+    if isinstance(node, tbx_ir.PrintUsing):
+        if node.lprint:
+            mode = "printer"
+        elif node.file is None or isinstance(node.file, int):
+            mode = "console" if node.file is None else node.file
+        else:
+            mode = _tbx_expression(node.file)
+        return (
+            "print_using",
+            mode,
+            _tbx_expression(node.fmt),
+            tuple(_tbx_expression(value) for value in node.values),
+            node.newline,
+        )
     if isinstance(node, tbx_ir.BinOp):
         return normalize_expression(
             (
