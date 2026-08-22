@@ -467,6 +467,12 @@ reuse array-reference facts: the array pass owns the descriptor span,
 column-major subscript accumulation, element-width scaling, and near/far
 terminal store, while INPUT # only supplies the source phase and groups the
 resolved targets.
+The same ownership applies to ordinary INTEGER element assignments and reads.
+The array pass recognizes the compiler's paired `mov bx,ax` / `mov ax,bx`
+preservation around index conversion, names the complete store, and carries a
+subsequent `mov ax,[si]` through the exact integer-to-FP print bridge. Assignment
+and PRINT consumers use those reference facts rather than decoding the index a
+second time.
 OPEN requires one of two complete contiguous scaffolds. The comma form stores
 the immediate file number at 0x60, pushes the resolved filename and one-character
 mode strings, loads the immediate record length in AX, and dispatches. The

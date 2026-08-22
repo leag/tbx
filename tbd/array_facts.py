@@ -16,6 +16,8 @@ _INDEX_LOADS = {
     "fld64": "double",
 }
 _NUMERIC_STORES = {
+    "movm_ax_si": "integer",
+    "far_movm_ax_si": "integer",
     "fistp_si": "integer",
     "fistp_si32": "long",
     "fstp_si": "float",
@@ -134,13 +136,36 @@ def array_value_facts(
             continue
         kind = address.value[1]
         terminal = by_offset.get(address.subject[1])
-        if terminal is None or terminal.kind not in loads.get(kind, set()):
+        if terminal is None:
+            continue
+        support = (terminal.offset,)
+        end = terminal.end
+        if kind == "integer" and terminal.kind in {"movax_si", "far_movax_si"}:
+            bridge = (
+                terminal,
+                by_offset.get(terminal.end),
+            )
+            stage = bridge[1]
+            reload = by_offset.get(stage.end) if stage is not None else None
+            if (
+                stage is None
+                or reload is None
+                or stage.kind != "movmem_ax"
+                or len(stage.args) != 1
+                or (reload.kind, reload.args) != ("fild", stage.args)
+                or terminal.end != stage.offset
+                or stage.end != reload.offset
+            ):
+                continue
+            support = (terminal.offset, stage.offset, reload.offset)
+            end = reload.end
+        elif terminal.kind not in loads.get(kind, set()):
             continue
         yield Fact(
             "reference.array_value",
-            (address.subject[0], terminal.end),
+            (address.subject[0], end),
             (address.value[0], kind),
-            combine_evidence(address.evidence, (terminal.offset,)),
+            combine_evidence(address.evidence, support),
             "anchored",
         )
 
@@ -382,22 +407,37 @@ def _numeric_indexed_store(
 ) -> Fact | None:
     if index + 6 >= len(operations):
         return None
-    load, convert, sync, reload, transfer = operations[index : index + 5]
+    load, convert = operations[index : index + 2]
     source_kind = _INDEX_LOADS.get(load.kind)
     if (
         source_kind is None
         or len(load.args) != 1
         or not isinstance(load.args[0], int)
         or (convert.kind, convert.args) != ("fistp", (0x2C,))
-        or sync.kind != "fwait"
-        or (reload.kind, reload.args) != ("movaxmem", (0x2C,))
-        or transfer.kind != "movsiax"
     ):
         return None
-    cursor = index + 5
+    cursor = index + 2
+    staged = cursor < len(operations) and operations[cursor].kind == "movbxax"
+    if staged:
+        cursor += 1
+    bridge = operations[cursor : cursor + 3]
+    if (
+        len(bridge) != 3
+        or bridge[0].kind != "fwait"
+        or (bridge[1].kind, bridge[1].args) != ("movaxmem", (0x2C,))
+        or bridge[2].kind != "movsiax"
+    ):
+        return None
+    cursor += 3
+    restored = cursor < len(operations) and operations[cursor].kind == "movaxbx"
+    if staged != restored:
+        return None
+    if restored:
+        cursor += 1
+    shift_start = cursor
     while cursor < len(operations) and operations[cursor].kind == "shlsi":
         cursor += 1
-    shifts = cursor - (index + 5)
+    shifts = cursor - shift_start
     if shifts == 0 or cursor + 1 >= len(operations):
         return None
     anchor, terminal = operations[cursor : cursor + 2]

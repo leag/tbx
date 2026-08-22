@@ -45,7 +45,9 @@ def _computed_array_assignments(
     }
     expressions: dict[int, list[Fact]] = {}
     for fact in facts:
-        if fact.kind != "expression.value" or not fact.evidence:
+        if fact.kind not in {"expression.value", "register.value"} or not fact.evidence:
+            continue
+        if fact.kind == "register.value" and fact.subject[1:] != ("ax",):
             continue
         end = instruction_ends.get(fact.evidence[-1])
         if end is not None:

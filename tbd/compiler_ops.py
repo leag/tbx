@@ -114,9 +114,12 @@ def _translate(instruction: Operation) -> CompilerOp | None:
     if (
         instruction.kind == "x86.mov_acc_mem"
         and len(instruction.operands) == 2
-        and instruction.operands[1] == "load"
     ):
-        return _op(instruction, "movaxmem", instruction.operands[0])
+        direction = instruction.operands[1]
+        if direction == "load":
+            return _op(instruction, "movaxmem", instruction.operands[0])
+        if direction == "store":
+            return _op(instruction, "movmem_ax", instruction.operands[0])
     if instruction.kind in {"tb.fp", "tb.fp_far"}:
         return _fp_operation(instruction, raw)
     return _integer_operation(instruction, raw)
@@ -166,6 +169,14 @@ def _direct_integer_operation(
         return _op(instruction, "far_movm_ax_si")
     if raw == b"\x8b\x04":
         return _op(instruction, "movax_si")
+    if raw == b"\x03\x04":
+        return _op(instruction, "addax_si")
+    if raw == b"\x2b\x04":
+        return _op(instruction, "subax_si")
+    if raw == b"\x3b\x04":
+        return _op(instruction, "cmpax_si")
+    if raw == b"\xf7\x2c":
+        return _op(instruction, "imul_si")
     if raw == b"\x26\x8b\x04":
         return _op(instruction, "far_movax_si")
     exchange = {

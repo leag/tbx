@@ -608,11 +608,16 @@ def _expression_index(
             continue
         if end is not None:
             candidates.setdefault(end, []).append(fact)
-    return {
-        end: matches[0]
-        for end, matches in candidates.items()
-        if len(matches) == 1
-    }
+    result = {}
+    for end, matches in candidates.items():
+        references = [
+            fact for fact in matches if fact.kind == "reference.array_value"
+        ]
+        if len(references) == 1:
+            result[end] = references[0]
+        elif not references and len(matches) == 1:
+            result[end] = matches[0]
+    return result
 
 
 def _print_items(

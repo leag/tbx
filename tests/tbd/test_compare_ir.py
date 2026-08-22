@@ -284,6 +284,19 @@ def test_computed_numeric_and_string_array_prints_align_with_tbx():
     assert report.mismatches == ()
 
 
+def test_staged_integer_array_assignments_and_prints_align_with_tbx():
+    paths = [
+        _CORPUS / f"{prefix}t1_arrwrite.exe"
+        for prefix in ("", "v10_")
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["Assign"] == report.tbx_kinds["Assign"] == 6
+    assert report.aligned_by_kind["Print"] == report.tbx_kinds["Print"] == 2
+    assert report.comparable_files == report.exact_files == 2
+    assert report.mismatches == ()
+
+
 def test_grouped_constant_locate_forms_align_with_tbx():
     stems = (
         "t1_locateomit",
