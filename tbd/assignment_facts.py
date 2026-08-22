@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from tbd.compiler_ops import translate_operations
 from tbd.facts import Evidence, NamedPass
 from tbd.ir import Fact, Operation
 from tbd.semantic import (
@@ -34,6 +35,49 @@ def assignment_facts(
         if assignment is not None:
             yield assignment
     yield from _computed_array_assignments(evidence.instructions, facts)
+    yield from _computed_value_assignments(evidence.instructions, facts)
+
+
+def _computed_value_assignments(
+    instructions: tuple[Operation, ...], facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    operations = {
+        operation.offset: operation
+        for operation in translate_operations(instructions)
+    }
+    stores = {
+        "fistp": "integer",
+        "fistp32": "long",
+        "fstp": "float",
+        "fstp64": "double",
+    }
+    for value in facts:
+        if (
+            value.kind != "reference.array_value"
+            or len(value.subject) != 2
+            or len(value.value) != 2
+        ):
+            continue
+        terminal = operations.get(value.subject[1])
+        target_kind = stores.get(terminal.kind) if terminal is not None else None
+        if (
+            terminal is None
+            or target_kind != value.value[1]
+            or len(terminal.args) != 1
+        ):
+            continue
+        target = resolve_slot(terminal.args[0], facts) or resolve_array_element(
+            terminal.args[0], facts
+        )
+        if target is None:
+            continue
+        yield Fact(
+            "semantic.assign",
+            (value.subject[0], terminal.end),
+            (target.value, value.value[0]),
+            combine_evidence(value.evidence, target.evidence, (terminal.offset,)),
+            "anchored",
+        )
 
 
 def _computed_array_assignments(

@@ -310,6 +310,25 @@ def test_integer_array_folds_align_assignments_and_conditionals_with_tbx():
     assert report.aligned_by_kind["Print"] == report.tbx_kinds["Print"] == 6
 
 
+def test_fp_and_common_array_consumers_are_exact_in_both_dialects():
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in (
+            "t1_arrv",
+            "t1_commonarr",
+            "t1_commonarr2",
+            "t1_commonarrmix",
+        )
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["Assign"] == report.tbx_kinds["Assign"] == 16
+    assert report.aligned_by_kind["Print"] == report.tbx_kinds["Print"] == 6
+    assert report.comparable_files == report.exact_files == 8
+    assert report.mismatches == ()
+
+
 def test_grouped_constant_locate_forms_align_with_tbx():
     stems = (
         "t1_locateomit",

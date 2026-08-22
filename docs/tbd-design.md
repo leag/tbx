@@ -477,6 +477,11 @@ The INTEGER terminal vocabulary also composes `add`, `sub`, and `imul` element
 reads with the AX expression preserved across index calculation. Scalar stores
 and complete compare/commit/branch/jump conditionals consume that composed value
 or address fact; an incomplete control tail remains structural.
+FP element terminals follow the same split: array-address facts own runtime
+lower-bound normalization and near/far addressing, array-value facts compose
+the calibrated `fold [si]` operation, and assignments or PRINT consume the
+result. This covers static and COMMON arrays without either consumer learning
+descriptor layout.
 OPEN requires one of two complete contiguous scaffolds. The comma form stores
 the immediate file number at 0x60, pushes the resolved filename and one-character
 mode strings, loads the immediate record length in AX, and dispatches. The

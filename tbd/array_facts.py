@@ -54,6 +54,42 @@ def array_store_facts(
             match = _direct_dynamic_store(operations, index, facts)
         if match is not None:
             yield match
+    yield from _addressed_array_stores(operations, facts)
+
+
+def _addressed_array_stores(
+    operations: tuple[CompilerOp, ...], facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    """Attach typed store terminals to independently resolved addresses."""
+
+    by_offset = {operation.offset: operation for operation in operations}
+    existing = {
+        (fact.subject, fact.value)
+        for fact in facts
+        if fact.kind == "reference.array_store"
+    }
+    for address in facts:
+        if (
+            address.kind != "reference.array_address"
+            or len(address.subject) != 2
+            or len(address.value) != 4
+        ):
+            continue
+        terminal = by_offset.get(address.subject[1])
+        target_kind = _store_kind(terminal.kind) if terminal is not None else None
+        if terminal is None or target_kind != address.value[1]:
+            continue
+        subject = address.subject[0], terminal.end
+        value = address.value[0], target_kind
+        if (subject, value) in existing:
+            continue
+        yield Fact(
+            "reference.array_store",
+            subject,
+            value,
+            combine_evidence(address.evidence, (terminal.offset,)),
+            "anchored",
+        )
 
 
 def array_read_facts(
@@ -147,6 +183,7 @@ def array_value_facts(
         if terminal is None:
             continue
         support = (terminal.offset,)
+        start = address.subject[0]
         end = terminal.end
         value = address.value[0]
         if kind == "integer":
@@ -159,9 +196,11 @@ def array_value_facts(
                 operator = "+" if terminal.kind == "addax_si" else "*"
                 value = ("binary", operator, value, source.value)
                 support = combine_evidence(support, source.evidence)
+                start = source.evidence[0]
             elif terminal.kind == "subax_si" and source is not None:
                 value = ("binary", "-", source.value, value)
                 support = combine_evidence(support, source.evidence)
+                start = source.evidence[0]
             else:
                 continue
             stage = by_offset.get(terminal.end)
@@ -180,10 +219,25 @@ def array_value_facts(
                 )
                 end = reload.end
         elif terminal.kind not in loads.get(kind, set()):
-            continue
+            if terminal.kind == "fold_si" and terminal.args:
+                source = resolve_expression_before(
+                    address.subject[0], facts, instruction_ends
+                )
+                if source is None:
+                    continue
+                value = (
+                    "binary",
+                    terminal.args[0],
+                    address.value[0],
+                    source.value,
+                )
+                support = combine_evidence(support, source.evidence)
+                start = source.evidence[0]
+            else:
+                continue
         yield Fact(
             "reference.array_value",
-            (address.subject[0], end),
+            (start, end),
             (value, kind),
             combine_evidence(address.evidence, support),
             "anchored",
@@ -278,6 +332,14 @@ def _runtime_array_address(
     if operand is None:
         return None
     start, resolved, cursor, staged_ax = operand
+    lower_bound = None
+    if (
+        cursor < len(operations)
+        and operations[cursor].kind == "subax_m"
+        and len(operations[cursor].args) == 1
+    ):
+        lower_bound = operations[cursor].args[0]
+        cursor += 1
     before = cursor < len(operations) and operations[cursor].kind == "movbxsi"
     if before:
         cursor += 1
@@ -299,6 +361,10 @@ def _runtime_array_address(
         return None
     anchor = operations[cursor]
     if anchor.kind != "moves_m" or not _contiguous(operations[index : cursor + 1]):
+        return None
+    if lower_bound is not None and (
+        not anchor.args or lower_bound != anchor.args[0] + 8
+    ):
         return None
     layout = _runtime_address_layout(anchor, shifts, facts)
     if layout is None:

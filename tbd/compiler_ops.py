@@ -261,7 +261,8 @@ def _fp_operation(instruction: Operation, raw: bytes) -> CompilerOp | None:
     mode, rm = modrm >> 6, modrm & 7
     prefix = "far_" if far else ""
     if mode == 0 and rm == 4:
-        return _op(instruction, prefix + _si_kind(base))
+        args = ("+",) if base in {"fold", "fold64"} else ()
+        return _op(instruction, prefix + _si_kind(base), *args)
     address = _modrm_address(raw, modrm_index)
     if address is None:
         return None

@@ -1286,6 +1286,38 @@ def test_integer_array_folds_feed_assignments_and_if_goto_facts():
         )
 
 
+def test_fp_array_folds_and_runtime_addresses_feed_shared_consumers():
+    for prefix in ("", "v10_"):
+        static_image = (_CORPUS / f"{prefix}t1_arrv.exe").read_bytes()
+        static = decode(static_image)
+        assert [
+            (node.kind, node.operands) for node in static.canonical_statements
+        ] == [
+            _tbx_statement(node) for node in decode0.decode_user_code(static_image)
+        ]
+        folded = next(
+            fact for fact in static.facts
+            if fact.kind == "reference.array_value"
+        )
+        assert folded.value[0][:2] == ("binary", "+")
+
+        runtime_image = (_CORPUS / f"{prefix}t1_commonarr2.exe").read_bytes()
+        runtime = decode(runtime_image)
+        assert [
+            (node.kind, node.operands) for node in runtime.canonical_statements
+            if node.kind != "Common"
+        ] == [
+            _tbx_statement(node) for node in decode0.decode_user_code(runtime_image)
+            if not isinstance(node, tbx_ir.Common)
+        ]
+        assert sum(
+            fact.kind == "reference.array_store" for fact in runtime.facts
+        ) == 2
+        assert sum(
+            fact.kind == "reference.array_value" for fact in runtime.facts
+        ) == 2
+
+
 def test_grouped_locate_runtime_legs_recover_complete_constant_forms():
     stems = (
         "t1_locateomit",
