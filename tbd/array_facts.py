@@ -196,11 +196,11 @@ def array_value_facts(
                 operator = "+" if terminal.kind == "addax_si" else "*"
                 value = ("binary", operator, value, source.value)
                 support = combine_evidence(support, source.evidence)
-                start = source.evidence[0]
+                start = source.start if source.start is not None else source.evidence[0]
             elif terminal.kind == "subax_si" and source is not None:
                 value = ("binary", "-", source.value, value)
                 support = combine_evidence(support, source.evidence)
-                start = source.evidence[0]
+                start = source.start if source.start is not None else source.evidence[0]
             else:
                 continue
             stage = by_offset.get(terminal.end)
@@ -232,7 +232,7 @@ def array_value_facts(
                     source.value,
                 )
                 support = combine_evidence(support, source.evidence)
-                start = source.evidence[0]
+                start = source.start if source.start is not None else source.evidence[0]
             else:
                 continue
         yield Fact(
@@ -242,6 +242,155 @@ def array_value_facts(
             combine_evidence(address.evidence, support),
             "anchored",
         )
+    for anchor, terminal in zip(operations, operations[1:]):
+        direct = _direct_runtime_reference(anchor, terminal, facts)
+        if direct is None or terminal.kind not in {"far_fld", "far_fld64"}:
+            continue
+        reference, kind, layout_evidence = direct
+        yield Fact(
+            "reference.array_value",
+            (anchor.offset, terminal.end),
+            (reference, kind),
+            combine_evidence(
+                (anchor.offset, terminal.offset), layout_evidence
+            ),
+            "anchored",
+        )
+
+
+def array_compare_facts(
+    evidence: Evidence, facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    """Compose array operands into the reference decoder's FP compare order."""
+
+    operations = translate_operations(evidence.instructions)
+    by_offset = {operation.offset: operation for operation in operations}
+    instruction_ends = {
+        instruction.offset: instruction.end for instruction in evidence.instructions
+    }
+    compare_kinds = {
+        "fcomp": "float",
+        "fcomp64": "double",
+        "fcomp_si": "float",
+        "fcomp_si64": "double",
+        "far_fcomp": "float",
+        "far_fcomp64": "double",
+    }
+    for address in facts:
+        if (
+            address.kind != "reference.array_address"
+            or len(address.subject) != 2
+            or len(address.value) != 4
+        ):
+            continue
+        terminal = by_offset.get(address.subject[1])
+        source = resolve_expression_before(
+            address.subject[0], facts, instruction_ends
+        )
+        if (
+            terminal is None
+            or compare_kinds.get(terminal.kind) != address.value[1]
+            or source is None
+        ):
+            continue
+        yield Fact(
+            "expression.compare",
+            (source.start if source.start is not None else source.evidence[0],),
+            (source.value, address.value[0]),
+            combine_evidence(
+                source.evidence, address.evidence, (terminal.offset,)
+            ),
+            "anchored",
+        )
+    for value in facts:
+        if (
+            value.kind != "reference.array_value"
+            or len(value.subject) != 2
+            or len(value.value) != 2
+        ):
+            continue
+        terminal = by_offset.get(value.subject[1])
+        if (
+            terminal is not None
+            and compare_kinds.get(terminal.kind) == value.value[1]
+            and len(terminal.args) == 1
+        ):
+            other = resolve_expression(
+                ("memory", terminal.args[0], value.value[1]), facts
+            )
+            if other is not None:
+                yield Fact(
+                    "expression.compare",
+                    (value.subject[0],),
+                    (value.value[0], other.value),
+                    combine_evidence(
+                        value.evidence, other.evidence, (terminal.offset,)
+                    ),
+                    "anchored",
+                )
+                continue
+        anchor = terminal
+        comparison = by_offset.get(anchor.end) if anchor is not None else None
+        direct = (
+            _direct_runtime_reference(anchor, comparison, facts)
+            if anchor is not None and comparison is not None
+            else None
+        )
+        if (
+            direct is None
+            or comparison is None
+            or compare_kinds.get(comparison.kind) != value.value[1]
+        ):
+            continue
+        reference, _kind, layout_evidence = direct
+        yield Fact(
+            "expression.compare",
+            (value.subject[0],),
+            (value.value[0], reference),
+            combine_evidence(
+                value.evidence,
+                layout_evidence,
+                (anchor.offset, comparison.offset),
+            ),
+            "anchored",
+        )
+
+
+def _direct_runtime_reference(
+    anchor: CompilerOp,
+    terminal: CompilerOp,
+    facts: frozenset[Fact],
+) -> tuple[object, str, tuple[int, ...]] | None:
+    kinds = {
+        "far_fld": "float",
+        "far_fcomp": "float",
+        "far_fld64": "double",
+        "far_fcomp64": "double",
+    }
+    kind = kinds.get(terminal.kind)
+    if (
+        anchor.kind != "moves_m"
+        or len(anchor.args) != 1
+        or kind is None
+        or len(terminal.args) != 1
+        or anchor.end != terminal.offset
+        or not isinstance(terminal.args[0], int)
+    ):
+        return None
+    layout = _runtime_layout(anchor.args[0], kind, facts)
+    if layout is None:
+        return None
+    name, width, layout_evidence = layout
+    displacement = terminal.args[0]
+    low = _runtime_low(name, facts)
+    if low is None or displacement < 0 or displacement % width:
+        return None
+    reference = (
+        "array",
+        name,
+        (("const", low + displacement // width),),
+    )
+    return reference, kind, layout_evidence
 
 
 def _static_array_address(
@@ -945,5 +1094,6 @@ ARRAY_REFERENCE_PASSES: tuple[NamedPass, ...] = (
     ("array-references", array_store_facts),
     ("array-addresses", array_address_facts),
     ("array-values", array_value_facts),
+    ("array-comparisons", array_compare_facts),
     ("array-reads", array_read_facts),
 )

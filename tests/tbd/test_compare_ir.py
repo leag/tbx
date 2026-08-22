@@ -329,6 +329,18 @@ def test_fp_and_common_array_consumers_are_exact_in_both_dialects():
     assert report.mismatches == ()
 
 
+def test_fp_array_comparisons_are_exact_across_operand_orders():
+    paths = [
+        _CORPUS / f"{stem}.exe"
+        for stem in ("t1_dyndblcmp", "t1_dblarr", "t1_dblar2")
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["IfGoto"] == report.tbx_kinds["IfGoto"] == 3
+    assert report.comparable_files == report.exact_files == 3
+    assert report.mismatches == ()
+
+
 def test_grouped_constant_locate_forms_align_with_tbx():
     stems = (
         "t1_locateomit",

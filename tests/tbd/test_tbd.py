@@ -1318,6 +1318,32 @@ def test_fp_array_folds_and_runtime_addresses_feed_shared_consumers():
         ) == 2
 
 
+def test_fp_array_comparisons_feed_the_existing_if_goto_consumer():
+    for stem in ("t1_dyndblcmp", "t1_dblarr", "t1_dblar2"):
+        image = (_CORPUS / f"{stem}.exe").read_bytes()
+        program = decode(image)
+
+        assert [
+            (node.kind, node.operands) for node in program.canonical_statements
+        ] == [
+            _tbx_statement(node) for node in decode0.decode_user_code(image)
+        ]
+        comparison = next(
+            fact for fact in program.facts
+            if fact.kind == "expression.compare"
+            and any(
+                isinstance(value, tuple) and value[:1] == ("array",)
+                for value in fact.value
+            )
+        )
+        conditional = next(
+            fact for fact in program.facts
+            if fact.kind == "semantic.if_goto"
+            and comparison.subject[0] == fact.subject[0]
+        )
+        assert comparison.confidence == conditional.confidence == "anchored"
+
+
 def test_grouped_locate_runtime_legs_recover_complete_constant_forms():
     stems = (
         "t1_locateomit",

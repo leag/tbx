@@ -179,7 +179,10 @@ def computed_array_if_goto_facts(
             continue
         yield Fact(
             "semantic.if_goto",
-            (source.evidence[0], jump.end),
+            (
+                source.start if source.start is not None else source.evidence[0],
+                jump.end,
+            ),
             (
                 relation,
                 address.value[0],
@@ -349,7 +352,7 @@ def _if_goto(
     )
     return Fact(
         "semantic.if_goto",
-        (compare.evidence[0], jump.subject[1]),
+        (compare.subject[0], jump.subject[1]),
         (condition, memory.value, top.value, jump.value[0], branch.value[1]),
         support,
         "anchored",
@@ -379,12 +382,14 @@ def _runtime_pair(
 ) -> tuple[Operation, Operation] | None:
     if not compare.evidence:
         return None
-    last_compare = instructions.get(compare.evidence[-1])
-    status = instructions.get(last_compare.end) if last_compare else None
-    commit = instructions.get(status.end) if status else None
-    if not _runtime(status, 0x99) or not _runtime(commit, 0x87):
-        return None
-    return status, commit
+    matches = []
+    for address in compare.evidence:
+        last_compare = instructions.get(address)
+        status = instructions.get(last_compare.end) if last_compare else None
+        commit = instructions.get(status.end) if status else None
+        if _runtime(status, 0x99) and _runtime(commit, 0x87):
+            matches.append((status, commit))
+    return matches[0] if len(matches) == 1 else None
 
 
 def _runtime(instruction: Operation | None, vector: int) -> bool:

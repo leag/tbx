@@ -14,6 +14,7 @@ _PRECEDENCE = {"+": 5, "-": 5, "*": 8, "/": 8}
 class Resolved:
     value: object
     evidence: tuple[int, ...] = ()
+    start: int | None = None
 
 
 def resolve_expression(value: Any, facts: frozenset[Fact]) -> Resolved | None:
@@ -24,6 +25,8 @@ def resolve_expression(value: Any, facts: frozenset[Fact]) -> Resolved | None:
     if value and value[0] == "binary" and len(value) == 4:
         return _resolve_binary(value, facts)
     if value and value[0] in {"const", "string"}:
+        return Resolved(value)
+    if value and value[0] in {"array", "slot", "var", "call"}:
         return Resolved(value)
     return None
 
@@ -98,7 +101,7 @@ def resolve_expression_before(
     matches = []
     for fact in facts:
         if fact.kind == "reference.array_value" and fact.subject[1:] == (offset,):
-            matches.append(Resolved(fact.value[0], fact.evidence))
+            matches.append(Resolved(fact.value[0], fact.evidence, fact.subject[0]))
             continue
         if fact.kind not in {"expression.value", "register.value"} or not fact.evidence:
             continue
@@ -112,6 +115,7 @@ def resolve_expression_before(
                 Resolved(
                     resolved.value,
                     combine_evidence(fact.evidence, resolved.evidence),
+                    fact.evidence[0],
                 )
             )
     return matches[0] if len(matches) == 1 else None

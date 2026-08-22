@@ -482,6 +482,11 @@ lower-bound normalization and near/far addressing, array-value facts compose
 the calibrated `fold [si]` operation, and assignments or PRINT consume the
 result. This covers static and COMMON arrays without either consumer learning
 descriptor layout.
+Array comparisons likewise become ordinary ordered `expression.compare` facts.
+The array pass owns near/far and constant/computed element selection; the
+existing compare/status/commit/branch/jump pass owns the `IfGoto` relation and
+target. Both x87 operand orders and direct dynamic DOUBLE elements retain the
+same fail-closed control tail.
 OPEN requires one of two complete contiguous scaffolds. The comma form stores
 the immediate file number at 0x60, pushes the resolved filename and one-character
 mode strings, loads the immediate record length in AX, and dispatches. The
