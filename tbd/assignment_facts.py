@@ -136,6 +136,15 @@ def _effect_value(
     effect: Fact, target: object, facts: frozenset[Fact]
 ) -> Resolved | None:
     if effect.kind == "machine.store":
+        if effect.value == (("register", "ax"),) and effect.evidence:
+            matches = [
+                fact
+                for fact in facts
+                if fact.kind == "reference.array_value"
+                and fact.subject[1:] == (effect.evidence[-1],)
+            ]
+            if len(matches) == 1:
+                return Resolved(matches[0].value[0], matches[0].evidence)
         return resolve_expression(effect.value[0], facts)
     operator, operand = effect.value
     right = resolve_expression(operand, facts)

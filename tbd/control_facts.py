@@ -8,7 +8,11 @@ from tbd.compiler_ops import translate_operations
 from tbd.facts import Evidence, NamedPass
 from tbd.ir import Fact, Operation
 from tbd.procedure_facts import inline_procedure_regions
-from tbd.semantic import combine_evidence, resolve_expression
+from tbd.semantic import (
+    combine_evidence,
+    resolve_expression,
+    resolve_expression_before,
+)
 
 _BRANCH_TESTS = {
     "x86.je": "=",
@@ -124,6 +128,71 @@ def direct_integer_if_goto_facts(
             ),
             support,
             "signature",
+        )
+
+
+def computed_array_if_goto_facts(
+    evidence: Evidence, facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    """Port the complete computed-INTEGER-element comparison idiom."""
+
+    instructions = {
+        instruction.offset: instruction for instruction in evidence.instructions
+    }
+    compiler_operations = {
+        operation.offset: operation
+        for operation in translate_operations(evidence.instructions)
+    }
+    ends = {
+        instruction.offset: instruction.end for instruction in evidence.instructions
+    }
+    for address in facts:
+        if (
+            address.kind != "reference.array_address"
+            or len(address.subject) != 2
+            or len(address.value) != 4
+            or address.value[1] != "integer"
+        ):
+            continue
+        compare = instructions.get(address.subject[1])
+        compiler_compare = compiler_operations.get(address.subject[1])
+        commit = instructions.get(compare.end) if compare is not None else None
+        branch = instructions.get(commit.end) if commit is not None else None
+        jump = instructions.get(branch.end) if branch is not None else None
+        if (
+            compare is None
+            or compiler_compare is None
+            or compiler_compare.kind != "cmpax_si"
+            or not _runtime(commit, 0x87)
+            or branch is None
+            or branch.kind not in _BRANCH_TESTS
+            or jump is None
+            or jump.kind != "x86.jmp"
+            or not branch.operands
+            or not jump.operands
+            or branch.operands[0] != jump.end
+        ):
+            continue
+        relation = _INTEGER_SKIP_RELATIONS.get(bytes.fromhex(branch.raw)[0])
+        source = resolve_expression_before(address.subject[0], facts, ends)
+        if relation is None or source is None:
+            continue
+        yield Fact(
+            "semantic.if_goto",
+            (source.evidence[0], jump.end),
+            (
+                relation,
+                address.value[0],
+                source.value,
+                jump.operands[0],
+                branch.operands[0],
+            ),
+            combine_evidence(
+                address.evidence,
+                source.evidence,
+                (compare.offset, commit.offset, branch.offset, jump.offset),
+            ),
+            "anchored",
         )
 
 
@@ -331,5 +400,6 @@ CONTROL_FACT_PASSES: tuple[NamedPass, ...] = (
     ("source-subroutines", source_subroutine_facts),
     ("source-run", source_run_facts),
     ("direct-integer-if-gotos", direct_integer_if_goto_facts),
+    ("computed-array-if-gotos", computed_array_if_goto_facts),
     ("if-gotos", if_goto_facts),
 )

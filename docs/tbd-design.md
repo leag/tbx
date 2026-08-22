@@ -473,6 +473,10 @@ preservation around index conversion, names the complete store, and carries a
 subsequent `mov ax,[si]` through the exact integer-to-FP print bridge. Assignment
 and PRINT consumers use those reference facts rather than decoding the index a
 second time.
+The INTEGER terminal vocabulary also composes `add`, `sub`, and `imul` element
+reads with the AX expression preserved across index calculation. Scalar stores
+and complete compare/commit/branch/jump conditionals consume that composed value
+or address fact; an incomplete control tail remains structural.
 OPEN requires one of two complete contiguous scaffolds. The comma form stores
 the immediate file number at 0x60, pushes the resolved filename and one-character
 mode strings, loads the immediate record length in AX, and dispatches. The

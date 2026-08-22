@@ -7,7 +7,12 @@ from collections.abc import Iterable
 from tbd.compiler_ops import CompilerOp, translate_operations
 from tbd.facts import Evidence, NamedPass
 from tbd.ir import Fact
-from tbd.semantic import Resolved, combine_evidence, resolve_expression
+from tbd.semantic import (
+    Resolved,
+    combine_evidence,
+    resolve_expression,
+    resolve_expression_before,
+)
 
 _INDEX_LOADS = {
     "fild": "integer",
@@ -122,6 +127,9 @@ def array_value_facts(
 
     operations = translate_operations(evidence.instructions)
     by_offset = {operation.offset: operation for operation in operations}
+    instruction_ends = {
+        instruction.offset: instruction.end for instruction in evidence.instructions
+    }
     loads = {
         "float": {"fld_si", "far_fld_si"},
         "double": {"fld_si64", "far_fld_si64"},
@@ -140,31 +148,43 @@ def array_value_facts(
             continue
         support = (terminal.offset,)
         end = terminal.end
-        if kind == "integer" and terminal.kind in {"movax_si", "far_movax_si"}:
-            bridge = (
-                terminal,
-                by_offset.get(terminal.end),
+        value = address.value[0]
+        if kind == "integer":
+            source = resolve_expression_before(
+                address.subject[0], facts, instruction_ends
             )
-            stage = bridge[1]
+            if terminal.kind in {"movax_si", "far_movax_si"}:
+                pass
+            elif terminal.kind in {"addax_si", "imul_si"} and source is not None:
+                operator = "+" if terminal.kind == "addax_si" else "*"
+                value = ("binary", operator, value, source.value)
+                support = combine_evidence(support, source.evidence)
+            elif terminal.kind == "subax_si" and source is not None:
+                value = ("binary", "-", source.value, value)
+                support = combine_evidence(support, source.evidence)
+            else:
+                continue
+            stage = by_offset.get(terminal.end)
             reload = by_offset.get(stage.end) if stage is not None else None
             if (
-                stage is None
-                or reload is None
-                or stage.kind != "movmem_ax"
-                or len(stage.args) != 1
-                or (reload.kind, reload.args) != ("fild", stage.args)
-                or terminal.end != stage.offset
-                or stage.end != reload.offset
+                stage is not None
+                and reload is not None
+                and stage.kind == "movmem_ax"
+                and len(stage.args) == 1
+                and (reload.kind, reload.args) == ("fild", stage.args)
+                and terminal.end == stage.offset
+                and stage.end == reload.offset
             ):
-                continue
-            support = (terminal.offset, stage.offset, reload.offset)
-            end = reload.end
+                support = combine_evidence(
+                    support, (stage.offset, reload.offset)
+                )
+                end = reload.end
         elif terminal.kind not in loads.get(kind, set()):
             continue
         yield Fact(
             "reference.array_value",
             (address.subject[0], end),
-            (address.value[0], kind),
+            (value, kind),
             combine_evidence(address.evidence, support),
             "anchored",
         )
@@ -180,13 +200,14 @@ def _static_array_address(
             ("memory", start.args[0], "integer"), facts
         )
         cursor = index + 1
+        staged_ax = False
         if resolved is None:
             return None
     else:
         operand = _integer_operand(operations, index, facts)
         if operand is None:
             return None
-        start, resolved, cursor = operand
+        start, resolved, cursor, staged_ax = operand
     before = cursor < len(operations) and operations[cursor].kind == "movbxsi"
     if before:
         cursor += 1
@@ -197,7 +218,9 @@ def _static_array_address(
     after = cursor < len(operations) and operations[cursor].kind == "movaxbx"
     if after:
         cursor += 1
-    if before != after:
+    if before and staged_ax:
+        return None
+    if after != (before or staged_ax):
         return None
     shift_start = cursor
     while cursor < len(operations) and operations[cursor].kind == "shlsi":
@@ -254,7 +277,7 @@ def _runtime_array_address(
     operand = _integer_operand(operations, index, facts)
     if operand is None:
         return None
-    start, resolved, cursor = operand
+    start, resolved, cursor, staged_ax = operand
     before = cursor < len(operations) and operations[cursor].kind == "movbxsi"
     if before:
         cursor += 1
@@ -264,7 +287,9 @@ def _runtime_array_address(
     after = cursor < len(operations) and operations[cursor].kind == "movaxbx"
     if after:
         cursor += 1
-    if before != after:
+    if before and staged_ax:
+        return None
+    if after != (before or staged_ax):
         return None
     shift_start = cursor
     while cursor < len(operations) and operations[cursor].kind == "shlsi":
@@ -676,7 +701,9 @@ def _rank2_indexed_store(
     first_match = _integer_operand(operations, index, facts)
     if first_match is None:
         return None
-    first, left, cursor = first_match
+    first, left, cursor, first_staged = first_match
+    if first_staged:
+        return None
     if cursor + 2 >= len(operations):
         return None
     span, stage = operations[cursor : cursor + 2]
@@ -690,7 +717,9 @@ def _rank2_indexed_store(
     second_match = _integer_operand(operations, cursor + 2, facts)
     if second_match is None:
         return None
-    _second, right, cursor = second_match
+    _second, right, cursor, second_staged = second_match
+    if second_staged:
+        return None
     if cursor >= len(operations) or operations[cursor].kind != "addsiax":
         return None
     cursor += 1
@@ -802,29 +831,37 @@ def _integer_value(
 
 def _integer_operand(
     operations: tuple[CompilerOp, ...], index: int, facts: frozenset[Fact]
-) -> tuple[CompilerOp, Resolved, int] | None:
+) -> tuple[CompilerOp, Resolved, int, bool] | None:
     if index >= len(operations):
         return None
     first = operations[index]
     direct = _integer_value(first, facts)
     if direct is not None:
-        return first, direct, index + 1
-    bridge = operations[index : index + 4]
+        return first, direct, index + 1, False
     source_kind = _INDEX_LOADS.get(first.kind)
     if (
-        len(bridge) == 4
-        and source_kind is not None
+        source_kind is not None
         and len(first.args) == 1
         and isinstance(first.args[0], int)
-        and (bridge[1].kind, bridge[1].args) == ("fistp", (0x2C,))
-        and bridge[2].kind == "fwait"
-        and (bridge[3].kind, bridge[3].args) == ("movaxmem", (0x2C,))
+        and index + 1 < len(operations)
+        and (operations[index + 1].kind, operations[index + 1].args)
+        == ("fistp", (0x2C,))
     ):
-        resolved = resolve_expression(
-            ("memory", first.args[0], source_kind), facts
-        )
-        if resolved is not None:
-            return first, resolved, index + 4
+        cursor = index + 2
+        staged = cursor < len(operations) and operations[cursor].kind == "movbxax"
+        if staged:
+            cursor += 1
+        bridge = operations[cursor : cursor + 2]
+        if (
+            len(bridge) == 2
+            and bridge[0].kind == "fwait"
+            and (bridge[1].kind, bridge[1].args) == ("movaxmem", (0x2C,))
+        ):
+            resolved = resolve_expression(
+                ("memory", first.args[0], source_kind), facts
+            )
+            if resolved is not None:
+                return first, resolved, cursor + 2, staged
     return None
 
 

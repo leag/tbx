@@ -86,6 +86,37 @@ def combine_evidence(*groups: tuple[int, ...]) -> tuple[int, ...]:
     return tuple(sorted({address for group in groups for address in group}))
 
 
+def resolve_expression_before(
+    offset: int,
+    facts: frozenset[Fact],
+    instruction_ends: dict[int, int],
+    *,
+    register: str = "ax",
+) -> Resolved | None:
+    """Resolve the unique semantic value ending exactly at ``offset``."""
+
+    matches = []
+    for fact in facts:
+        if fact.kind == "reference.array_value" and fact.subject[1:] == (offset,):
+            matches.append(Resolved(fact.value[0], fact.evidence))
+            continue
+        if fact.kind not in {"expression.value", "register.value"} or not fact.evidence:
+            continue
+        if fact.kind == "register.value" and fact.subject[1:] != (register,):
+            continue
+        if instruction_ends.get(fact.evidence[-1]) != offset:
+            continue
+        resolved = resolve_expression(fact.value[0], facts)
+        if resolved is not None:
+            matches.append(
+                Resolved(
+                    resolved.value,
+                    combine_evidence(fact.evidence, resolved.evidence),
+                )
+            )
+    return matches[0] if len(matches) == 1 else None
+
+
 def orient_memory_fold(operator: str, memory: object, top: object) -> object:
     """Recover Turbo Basic's source ordering for a direct FP memory fold."""
 

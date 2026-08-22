@@ -1232,6 +1232,60 @@ def test_staged_integer_array_store_and_print_reuse_reference_facts():
         assert stores[0].confidence == values[0].confidence == "anchored"
 
 
+def test_integer_array_folds_feed_assignments_and_if_goto_facts():
+    for prefix in ("", "v10_"):
+        read_image = (_CORPUS / f"{prefix}t1_arrread.exe").read_bytes()
+        read = decode(read_image)
+        assert [
+            (node.kind, node.operands) for node in read.canonical_statements
+        ] == [
+            _tbx_statement(node) for node in decode0.decode_user_code(read_image)
+        ]
+        value = next(
+            fact for fact in read.facts
+            if fact.kind == "reference.array_value"
+        )
+        assert value.value[0][:2] == ("binary", "+")
+
+        compare_image = (_CORPUS / f"{prefix}t1_arrcmp.exe").read_bytes()
+        compared = decode(compare_image)
+        actual = [
+            (node.kind, node.operands)
+            for node in compared.canonical_statements
+            if node.kind == "IfGoto"
+        ]
+        exact = [
+            _tbx_statement(node)
+            for node in decode0.decode_user_code(compare_image)
+            if isinstance(node, tbx_ir.IfGoto)
+        ]
+        assert len(actual) == len(exact) == 1
+        assert actual[0][0] == exact[0][0]
+        assert actual[0][1][:3] == exact[0][1][:3]
+        conditional = next(
+            fact for fact in compared.facts
+            if fact.kind == "semantic.if_goto"
+            and isinstance(fact.value[1], tuple)
+            and fact.value[1][:1] == ("array",)
+        )
+        assert conditional.confidence == "anchored"
+
+        commit = next(
+            instruction for instruction in compared.instructions
+            if instruction.offset in conditional.evidence
+            and instruction.kind == "tb.runtime"
+            and instruction.operands == (0x87,)
+        )
+        altered = bytearray(compare_image)
+        altered[commit.offset + 1] = 0x88
+        assert not any(
+            fact.kind == "semantic.if_goto"
+            and isinstance(fact.value[1], tuple)
+            and fact.value[1][:1] == ("array",)
+            for fact in decode(bytes(altered)).facts
+        )
+
+
 def test_grouped_locate_runtime_legs_recover_complete_constant_forms():
     stems = (
         "t1_locateomit",

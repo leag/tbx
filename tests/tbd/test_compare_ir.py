@@ -297,6 +297,19 @@ def test_staged_integer_array_assignments_and_prints_align_with_tbx():
     assert report.mismatches == ()
 
 
+def test_integer_array_folds_align_assignments_and_conditionals_with_tbx():
+    paths = [
+        _CORPUS / f"{prefix}{stem}.exe"
+        for prefix in ("", "v10_")
+        for stem in ("t1_arrread", "t1_arrcmp")
+    ]
+    report = compare_paths(paths)
+
+    assert report.aligned_by_kind["Assign"] == report.tbx_kinds["Assign"] == 14
+    assert report.aligned_by_kind["IfGoto"] == report.tbx_kinds["IfGoto"] == 2
+    assert report.aligned_by_kind["Print"] == report.tbx_kinds["Print"] == 6
+
+
 def test_grouped_constant_locate_forms_align_with_tbx():
     stems = (
         "t1_locateomit",
