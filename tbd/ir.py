@@ -45,14 +45,6 @@ class CrossReference:
 
 
 @dataclass(frozen=True)
-class PassReport:
-    round: int
-    name: str
-    changes: int
-    nodes: int
-
-
-@dataclass(frozen=True)
 class Fact:
     """A hashable conclusion with the addresses that support it."""
 
@@ -100,7 +92,6 @@ class Program:
     instructions: tuple[Operation, ...] = ()
     blocks: tuple[BasicBlock, ...] = ()
     xrefs: tuple[CrossReference, ...] = ()
-    passes: tuple[PassReport, ...] = ()
     facts: tuple[Fact, ...] = ()
     fact_passes: tuple[FactReport, ...] = ()
     fact_operations: tuple[Operation, ...] = ()
@@ -150,7 +141,6 @@ class Program:
             lines.extend(
                 _render_statements(self.canonical_statements, "canonical-statements")
             )
-        lines.extend(_render_passes(self.passes))
         lines.extend(_render_statements(self.statements))
         for diagnostic in self.diagnostics:
             where = "" if diagnostic.offset is None else f" at {diagnostic.offset:#x}"
@@ -166,15 +156,6 @@ def _render_operation(operation: Operation) -> str:
         f"{operation.offset:05x}  {raw:<54} "
         f"{operation.kind}{suffix} [{operation.confidence}]"
     )
-
-
-def _render_passes(passes: tuple[PassReport, ...]) -> list[str]:
-    if not passes:
-        return []
-    return ["passes"] + [
-        f"  {item.round}:{item.name} changes={item.changes} nodes={item.nodes}"
-        for item in passes
-    ]
 
 
 def _render_facts(

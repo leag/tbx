@@ -603,7 +603,11 @@ def _expression_index(
         if fact.kind == "reference.array_value" and len(fact.subject) == 2:
             end = fact.subject[1]
         elif fact.kind == "expression.value" and fact.evidence:
-            end = ends.get(fact.evidence[-1])
+            end = (
+                fact.subject[1]
+                if len(fact.subject) == 2 and isinstance(fact.subject[1], int)
+                else ends.get(fact.evidence[-1])
+            )
         else:
             continue
         if end is not None:
@@ -890,6 +894,17 @@ def _numeric_item(
         and expression.value[1] == "string"
     ):
         mode = _STRING_ITEMS.get(_runtime_vector(runtime))
+    if (
+        mode is None
+        and expression is not None
+        and expression.kind == "expression.value"
+        and expression.value
+        and isinstance(expression.value[0], tuple)
+        and len(expression.value[0]) == 4
+        and expression.value[0][0] == "fn-call"
+        and expression.value[0][3] == "string"
+    ):
+        mode = _STRING_ITEMS.get(_runtime_vector(runtime))
     if mode is None or expression is None:
         return None
     resolved = (
@@ -902,7 +917,7 @@ def _numeric_item(
     support = combine_evidence(expression.evidence, resolved.evidence, (runtime.offset,))
     start = (
         expression.subject[0]
-        if expression.kind == "reference.array_value"
+        if expression.kind == "reference.array_value" or len(expression.subject) == 2
         else expression.evidence[0]
     )
     return _Item(start, runtime.end, mode, resolved.value, support)

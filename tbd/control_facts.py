@@ -49,6 +49,18 @@ _INTEGER_SKIP_RELATIONS = {
     0x7E: "<",
     0x7F: ">=",
 }
+_INTEGER_DIRECT_RELATIONS = {
+    0x72: ">",
+    0x73: "<=",
+    0x74: "=",
+    0x75: "<>",
+    0x76: ">=",
+    0x77: "<",
+    0x7C: ">",
+    0x7D: "<=",
+    0x7E: ">=",
+    0x7F: "<",
+}
 
 
 def control_flow_facts(
@@ -131,6 +143,57 @@ def direct_integer_if_goto_facts(
         )
 
 
+def direct_system_if_goto_facts(
+    evidence: Evidence, facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    """Lift a direct true branch comparing a literal with ERR or ERL."""
+
+    operations = translate_operations(evidence.instructions)
+    for load, compare, branch in zip(
+        operations,
+        operations[1:],
+        operations[2:],
+    ):
+        if (
+            load.kind != "movax"
+            or compare.kind != "cmpax_m"
+            or branch.kind != "jcc"
+            or load.end != compare.offset
+            or compare.end != branch.offset
+            or len(load.args) != 1
+            or len(compare.args) != 1
+            or len(branch.args) != 2
+        ):
+            continue
+        relation = _INTEGER_DIRECT_RELATIONS.get(branch.args[0])
+        system = resolve_expression(("memory", compare.args[0], "integer"), facts)
+        if (
+            relation is None
+            or system is None
+            or not isinstance(system.value, tuple)
+            or system.value[:2] != ("call", "ERR")
+            and system.value[:2] != ("call", "ERL")
+            or not isinstance(branch.args[1], int)
+        ):
+            continue
+        yield Fact(
+            "semantic.if_goto",
+            (load.offset, branch.end),
+            (
+                relation,
+                system.value,
+                ("const", load.args[0]),
+                branch.args[1],
+                branch.end,
+            ),
+            combine_evidence(
+                (load.offset, compare.offset, branch.offset),
+                system.evidence,
+            ),
+            "anchored",
+        )
+
+
 def computed_array_if_goto_facts(
     evidence: Evidence, facts: frozenset[Fact]
 ) -> Iterable[Fact]:
@@ -194,6 +257,106 @@ def computed_array_if_goto_facts(
                 address.evidence,
                 source.evidence,
                 (compare.offset, commit.offset, branch.offset, jump.offset),
+            ),
+            "anchored",
+        )
+
+
+def direct_expression_if_goto_facts(
+    evidence: Evidence, facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    """Lift a resolved comparison followed immediately by its true branch."""
+
+    instructions = {
+        instruction.offset: instruction for instruction in evidence.instructions
+    }
+    branches = {
+        fact.subject[0]: fact
+        for fact in facts
+        if fact.kind == "flow.branch" and len(fact.subject) == 2
+    }
+    for comparison in facts:
+        if (
+            comparison.kind != "expression.compare"
+            or len(comparison.value) != 2
+            or not comparison.evidence
+        ):
+            continue
+        compare = instructions.get(comparison.evidence[-1])
+        branch = branches.get(compare.end) if compare is not None else None
+        relation = branch.value[0] if branch is not None else None
+        if (
+            compare is None
+            or compare.raw != "3b c3"
+            or branch is None
+            or relation not in _SOURCE_CONDITIONS
+            or not isinstance(branch.value[1], int)
+        ):
+            continue
+        left = resolve_expression(comparison.value[0], facts)
+        right = resolve_expression(comparison.value[1], facts)
+        if left is None or right is None:
+            continue
+        yield Fact(
+            "semantic.if_goto",
+            (comparison.subject[0], branch.subject[1]),
+            (
+                relation,
+                left.value,
+                right.value,
+                branch.value[1],
+                branch.subject[1],
+            ),
+            combine_evidence(
+                comparison.evidence,
+                branch.evidence,
+                left.evidence,
+                right.evidence,
+            ),
+            "anchored",
+        )
+
+
+def function_truth_if_goto_facts(
+    evidence: Evidence, facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    """Lift a proven boolean intrinsic followed by its true jump pair."""
+
+    instructions = {
+        instruction.offset: instruction for instruction in evidence.instructions
+    }
+    for expression in facts:
+        if (
+            expression.kind != "expression.value"
+            or len(expression.value) != 1
+            or not expression.evidence
+            or not isinstance(expression.value[0], tuple)
+            or expression.value[0][:2] != ("call", "EOF")
+        ):
+            continue
+        call = instructions.get(expression.evidence[-1])
+        test = instructions.get(call.end) if call is not None else None
+        branch = instructions.get(test.end) if test is not None else None
+        jump = instructions.get(branch.end) if branch is not None else None
+        if (
+            test is None
+            or test.raw != "09 c0"
+            or branch is None
+            or branch.raw[:2] != "74"
+            or len(branch.operands) != 1
+            or jump is None
+            or jump.kind != "x86.jmp"
+            or len(jump.operands) != 1
+            or branch.operands[0] != jump.end
+        ):
+            continue
+        yield Fact(
+            "semantic.if_goto_condition",
+            (expression.subject[0], jump.end),
+            (("truth", expression.value[0]), jump.operands[0], jump.end),
+            combine_evidence(
+                expression.evidence,
+                (test.offset, branch.offset, jump.offset),
             ),
             "anchored",
         )
@@ -405,6 +568,9 @@ CONTROL_FACT_PASSES: tuple[NamedPass, ...] = (
     ("source-subroutines", source_subroutine_facts),
     ("source-run", source_run_facts),
     ("direct-integer-if-gotos", direct_integer_if_goto_facts),
+    ("direct-system-if-gotos", direct_system_if_goto_facts),
     ("computed-array-if-gotos", computed_array_if_goto_facts),
+    ("direct-expression-if-gotos", direct_expression_if_goto_facts),
+    ("function-truth-if-gotos", function_truth_if_goto_facts),
     ("if-gotos", if_goto_facts),
 )

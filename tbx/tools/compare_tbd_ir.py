@@ -33,8 +33,11 @@ MIGRATED_KINDS = frozenset(
         "Cls",
         "Color",
         "DateTimeSet",
+        "Data",
         "Delay",
         "DefSeg",
+        "DefFn",
+        "DefType",
         "Dim",
         "Draw",
         "Do",
@@ -43,8 +46,10 @@ MIGRATED_KINDS = frozenset(
         "Field",
         "Files",
         "For",
+        "Goto",
         "Gosub",
         "IfGoto",
+        "IfInline",
         "Input",
         "InputFile",
         "Key",
@@ -186,7 +191,7 @@ def _compare_file(
         return
     totals["comparable_files"] += 1
     left = tuple(_statement(node) for node in exact)
-    right = tuple((node.kind, node.operands) for node in migrated)
+    right = tuple(_tbd_statement(node) for node in migrated)
     if left == right:
         totals["exact_files"] += 1
     else:
@@ -215,6 +220,10 @@ def _statement(node: Any) -> tuple[str, tuple[object, ...]]:
                 for name, bounds in node.also
             ),
             node.dynamic,
+        )
+    elif isinstance(node, ir.Data):
+        operands = (
+            tuple((item.text, item.is_str) for item in node.items),
         )
     elif isinstance(node, ir.Common):
         operands = (node.names,)
@@ -343,6 +352,16 @@ def _statement(node: Any) -> tuple[str, tuple[object, ...]]:
         operands = () if node.file is None else (_expression(node.file),)
     elif isinstance(node, ir.IfGoto):
         operands = (*_condition(node.cond), node.target)
+    elif isinstance(node, ir.IfInline):
+        operands = (
+            _condition(node.cond),
+            tuple(_statement(statement) for statement in node.body),
+            None
+            if node.else_body is None
+            else tuple(_statement(statement) for statement in node.else_body),
+        )
+    elif isinstance(node, ir.Goto):
+        operands = (node.target,)
     elif isinstance(node, ir.Gosub):
         operands = (node.target,)
     elif isinstance(node, ir.Return):
@@ -356,6 +375,17 @@ def _statement(node: Any) -> tuple[str, tuple[object, ...]]:
         operands = (_expression(node.secs),)
     elif isinstance(node, ir.DefSeg):
         operands = () if node.seg is None else (_expression(node.seg),)
+    elif isinstance(node, ir.DefFn):
+        body = (
+            tuple(_statement(statement) for statement in node.body)
+            if node.is_block
+            else _expression(node.body)
+        )
+        operands = node.name, node.params, body, node.is_block
+    elif isinstance(node, ir.FnResult):
+        operands = (_expression(node.value),)
+    elif isinstance(node, ir.ExitDef):
+        operands = ()
     elif isinstance(node, ir.Out):
         operands = _expression(node.port), _expression(node.value)
     elif isinstance(node, ir.Wait):
@@ -365,6 +395,30 @@ def _statement(node: Any) -> tuple[str, tuple[object, ...]]:
     else:
         operands = ()
     return type(node).__name__, operands
+
+
+def _tbd_statement(node: Any) -> tuple[str, tuple[object, ...]]:
+    operands = node.operands
+    if node.kind == "IfInline":
+        condition, body, else_body = operands
+        operands = (
+            condition,
+            tuple(_tbd_statement(statement) for statement in body),
+            None
+            if else_body is None
+            else tuple(_tbd_statement(statement) for statement in else_body),
+        )
+    elif node.kind == "DefFn":
+        name, parameters, body, is_block = operands
+        operands = (
+            name,
+            parameters,
+            tuple(_tbd_statement(statement) for statement in body)
+            if is_block
+            else body,
+            is_block,
+        )
+    return node.kind, operands
 
 
 def _bound(node: Any) -> object:
@@ -381,7 +435,13 @@ def _bound(node: Any) -> object:
 def _condition(node: Any) -> tuple[object, ...]:
     if isinstance(node, ir.RelOp):
         return node.op, _expression(node.lhs), _expression(node.rhs)
-    return "unsupported-condition", type(node).__name__
+    if isinstance(node, ir.BinOp) and node.op in {"=", "<>", "<", "<=", ">", ">="}:
+        return node.op, _expression(node.lhs), _expression(node.rhs)
+    if isinstance(node, (ir.LogOp, ir.BinOp)) and node.op in {"AND", "OR"}:
+        return node.op, _condition(node.lhs), _condition(node.rhs)
+    if isinstance(node, ir.Group):
+        return "group", _condition(node.inner)
+    return "truth", _expression(node)
 
 
 def _expression(node: Any) -> object:
@@ -395,8 +455,26 @@ def _expression(node: Any) -> object:
         return "const", node.value
     if isinstance(node, ir.StrLit):
         return "string", node.value
-    if isinstance(node, ir.Call):
+    if isinstance(node, (ir.Call, ir.FnCall)):
         return "call", node.name, tuple(_expression(item) for item in node.args)
+    if isinstance(node, ir.Nullary):
+        return "call", node.name, ()
+    if isinstance(node, ir.Err):
+        return "call", "ERR", ()
+    if isinstance(node, ir.Erl):
+        return "call", "ERL", ()
+    if isinstance(node, ir.Neg):
+        operand = _expression(node.operand)
+        if (
+            isinstance(operand, tuple)
+            and len(operand) == 2
+            and operand[0] == "const"
+            and isinstance(operand[1], (int, float))
+        ):
+            return "const", -operand[1]
+        return "unary", "-", operand
+    if isinstance(node, ir.Group):
+        return _expression(node.inner)
     if isinstance(node, ir.PrintUsing):
         if node.lprint:
             mode = "printer"

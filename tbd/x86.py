@@ -116,6 +116,28 @@ def _decode_interrupt(
         size = min(stop - offset, 2 + _modrm_size(exe, offset + 2, stop))
         return _op(exe, offset, size, "tb.fp", (vector, exe[offset + 2]), "signature")
     canonical = _canonical_vector(vector, dialect)
+    if dialect is not None and canonical == 0x8F:
+        return _op(exe, offset, 2, "tb.fn_return", (), "signature")
+    if dialect is not None and canonical in {0x8D, 0x8E}:
+        if offset + 7 > stop:
+            return _op(
+                exe,
+                offset,
+                2,
+                "tb.fn_call_truncated",
+                (7,),
+                "structural",
+            )
+        far_offset, segment = struct.unpack_from("<HH", exe, offset + 3)
+        target = code_start + segment * 16 + far_offset
+        return _op(
+            exe,
+            offset,
+            7,
+            "tb.fn_call",
+            (target, canonical, exe[offset + 2]),
+            "signature",
+        )
     bounds_kind = {
         0x91: "base",
         0x92: "span",

@@ -4,19 +4,23 @@ from __future__ import annotations
 
 import struct
 
-from tbd.analysis import discover, lift
+from tbd.analysis import discover
 from tbd.array_facts import ARRAY_REFERENCE_PASSES
 from tbd.assignment_facts import ASSIGNMENT_FACT_PASSES
 from tbd.canonical import canonicalize
+from tbd.codeless_facts import CODELESS_FACT_PASSES
 from tbd.color_facts import COLOR_FACT_PASSES
 from tbd.common_facts import COMMON_LAYOUT_PASSES, COMMON_STATEMENT_PASSES
 from tbd.control_facts import CONTROL_FACT_PASSES
+from tbd.data_facts import DATA_FACT_PASSES
+from tbd.def_fn_facts import DEF_FN_FACT_PASSES
 from tbd.dim_facts import DYNAMIC_DIM_PASSES, RUNTIME_ARRAY_LAYOUT_PASSES
-from tbd.fact_ir import build_operations
+from tbd.fact_ir import build_operations, build_program_operations
 from tbd.facts import EVIDENCE_PASSES, Evidence, analyze as analyze_facts
 from tbd.for_facts import FOR_FACT_PASSES
 from tbd.for_fp_facts import FP_FOR_FACT_PASSES
 from tbd.for_variable_facts import VARIABLE_FOR_FACT_PASSES
+from tbd.function_facts import FUNCTION_FACT_PASSES
 from tbd.io_facts import IO_FACT_PASSES
 from tbd.input_facts import INPUT_FACT_PASSES
 from tbd.input_file_facts import INPUT_FILE_FACT_PASSES
@@ -28,16 +32,18 @@ from tbd.pool_facts import POOL_FACT_PASSES
 from tbd.procedure_facts import PROCEDURE_FACT_PASSES
 from tbd.profile import PROLOGUES
 from tbd.read_facts import READ_FACT_PASSES
+from tbd.region_facts import REGION_FACT_PASSES
 from tbd.runtime_facts import RUNTIME_FACT_PASSES
 from tbd.screen_facts import SCREEN_FACT_PASSES
 from tbd.slot_facts import SLOT_FACT_PASSES, materialize_slots
-from tbd.slots import collect
 from tbd.statement_facts import STATEMENT_FACT_PASSES
 from tbd.statements import reconstruct
 from tbd.string_statement_facts import STRING_STATEMENT_FACT_PASSES
+from tbd.string_condition_facts import STRING_CONDITION_FACT_PASSES
 from tbd.swap_facts import SWAP_FACT_PASSES
 from tbd.symbolic_facts import SYMBOLIC_FACT_PASSES
 from tbd.trace_facts import TRACE_FACT_PASSES
+
 
 def decode(
     exe: bytes, *, max_bytes: int | None = None, rounds: int = 8
@@ -66,6 +72,8 @@ def decode(
             + COMMON_LAYOUT_PASSES
             + SLOT_FACT_PASSES
             + SYMBOLIC_FACT_PASSES
+            + FUNCTION_FACT_PASSES
+            + DEF_FN_FACT_PASSES
             + ARRAY_REFERENCE_PASSES
             + ASSIGNMENT_FACT_PASSES
             + DYNAMIC_DIM_PASSES
@@ -82,17 +90,21 @@ def decode(
             + SCREEN_FACT_PASSES
             + LOCATE_FACT_PASSES
             + READ_FACT_PASSES
+            + DATA_FACT_PASSES
             + RUNTIME_FACT_PASSES
             + SWAP_FACT_PASSES
+            + STRING_CONDITION_FACT_PASSES
             + CONTROL_FACT_PASSES
+            + REGION_FACT_PASSES
             + PROCEDURE_FACT_PASSES
             + STRING_STATEMENT_FACT_PASSES
             + STATEMENT_FACT_PASSES
             + TRACE_FACT_PASSES
+            + CODELESS_FACT_PASSES
         ),
     )
-    operations, passes = lift(instructions, blocks, xrefs, image=exe, rounds=rounds)
     fact_operations = build_operations(evidence, facts)
+    operations = build_program_operations(evidence, fact_operations)
     fact_statements = reconstruct(fact_operations)
     fact_slots = materialize_slots(facts)
     if not facts_converged:
@@ -112,12 +124,11 @@ def decode(
         instructions=instructions,
         blocks=blocks,
         xrefs=xrefs,
-        passes=passes,
         facts=facts,
         fact_passes=fact_passes,
         fact_operations=fact_operations,
-        slots=collect(operations),
-        statements=reconstruct(operations),
+        slots=fact_slots,
+        statements=fact_statements,
         fact_statements=fact_statements,
         canonical_statements=canonicalize(fact_statements, fact_slots),
         diagnostics=tuple(diagnostics) + found,

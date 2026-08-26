@@ -4,15 +4,8 @@ from __future__ import annotations
 
 import heapq
 import struct
-from collections.abc import Callable
 
-from tbd.assignments import lift_assignments
-from tbd.branches import lift_if_gotos
-from tbd.ir import BasicBlock, CrossReference, Diagnostic, Operation, PassReport
-from tbd.pool import resolve as resolve_pool
-from tbd.runtime import lift_runtime
-from tbd.slots import identify
-from tbd.symbolic import evaluate
+from tbd.ir import BasicBlock, CrossReference, Diagnostic, Operation
 from tbd.x86 import decode_instruction
 
 _CONDITIONAL = {
@@ -23,18 +16,15 @@ _CONDITIONAL = {
     )),
 }
 _JUMPS = {"x86.jmp", "x86.jmp_far"}
-_CALLS = {"x86.call", "x86.call_far", "tb.checked_gosub"}
+_CALLS = {"x86.call", "x86.call_far", "tb.checked_gosub", "tb.fn_call"}
 _RETURNS = {"x86.ret", "x86.retf", "x86.iret", "tb.checked_return"}
 _TARGETED_RETURNS = {"tb.return_to"}
-_TERMINALS = _RETURNS | {"tb.epilogue", "tb.proc_return", "x86.hlt"}
-_CONDITIONS = {
-    "x86.je": "=", "x86.jne": "<>", "x86.jb": "<u",
-    "x86.jae": ">=u", "x86.jbe": "<=u", "x86.ja": ">u",
-    "x86.jl": "<", "x86.jge": ">=", "x86.jle": "<=", "x86.jg": ">",
+_TERMINALS = _RETURNS | {
+    "tb.epilogue",
+    "tb.proc_return",
+    "tb.fn_return",
+    "x86.hlt",
 }
-Rewrite = Callable[[list[Operation], set[int]], tuple[list[Operation], int]]
-
-
 def discover(
     exe: bytes,
     start: int,
@@ -90,45 +80,6 @@ def discover(
     return ordered, blocks, tuple(sorted(xrefs, key=_xref_key)), diagnostics
 
 
-def lift(
-    instructions: tuple[Operation, ...],
-    blocks: tuple[BasicBlock, ...],
-    xrefs: tuple[CrossReference, ...],
-    *,
-    image: bytes,
-    rounds: int = 8,
-) -> tuple[tuple[Operation, ...], tuple[PassReport, ...]]:
-    """Apply simple rewrites until a round makes no further progress."""
-
-    nodes = list(instructions)
-    protected = {block.start for block in blocks} | {xref.target for xref in xrefs}
-    signature_count = sum(node.confidence == "signature" for node in nodes)
-    reports = [PassReport(0, "signatures", signature_count, len(nodes))]
-    rewrites: tuple[tuple[str, Rewrite], ...] = (
-        ("symbols", evaluate),
-        ("constant-pool", lambda nodes, protected: resolve_pool(nodes, protected, image)),
-        ("dgroup-slots", identify),
-        ("assignments", lift_assignments),
-        ("runtime", lift_runtime),
-        ("register-arguments", _fold_register_arguments),
-        ("stack-arguments", _fold_stack_arguments),
-        ("conditions", _fold_conditions),
-        ("control-flow", _lift_control_flow),
-        ("if-gotos", lift_if_gotos),
-    )
-    for round_number in range(1, rounds + 1):
-        changed = 0
-        for name, rewrite in rewrites:
-            nodes, count = rewrite(nodes, protected)
-            reports.append(PassReport(round_number, name, count, len(nodes)))
-            changed += count
-        if changed == 0:
-            break
-    nodes, count = _group_unknown(nodes, {block.start for block in blocks})
-    reports.append(PassReport(round_number, "unknown-regions", count, len(nodes)))
-    return tuple(nodes), tuple(reports)
-
-
 def _follow(
     exe: bytes,
     operation: Operation,
@@ -174,6 +125,9 @@ def _follow(
             or _resume_jump_fallthrough(operation, instructions)
             or _backward_jump_fallthrough(operation)
             or _procedure_declaration_fallthrough(
+                exe, operation, start, stop, dialect
+            )
+            or _function_declaration_fallthrough(
                 exe, operation, start, stop, dialect
             )
         ):
@@ -233,6 +187,27 @@ def _procedure_declaration_fallthrough(
         return False
     successor = decode_instruction(exe, operation.end, stop, start, dialect)
     return successor.kind == "tb.proc_enter"
+
+
+def _function_declaration_fallthrough(
+    exe: bytes,
+    operation: Operation,
+    start: int,
+    stop: int,
+    dialect: str,
+) -> bool:
+    """Open only a compiler-bracketed DEF FN body skipped by its declaration JMP."""
+
+    target = operation.operands[0] if operation.operands else None
+    if (
+        operation.kind != "x86.jmp"
+        or not isinstance(target, int)
+        or target <= operation.end + 2
+        or target > stop
+    ):
+        return False
+    returned = decode_instruction(exe, target - 2, stop, start, dialect)
+    return returned.kind == "tb.fn_return" and returned.end == target
 
 
 def _is_multi_target_dispatch(operation: Operation) -> bool:
@@ -332,140 +307,6 @@ def _successors(
     if operation.kind in _TERMINALS:
         return ()
     return (operation.end,) if operation.end in instructions else ()
-
-
-def _fold_register_arguments(
-    nodes: list[Operation], protected: set[int]
-) -> tuple[list[Operation], int]:
-    def replacement(left: Operation, right: Operation) -> Operation | None:
-        if left.kind != "x86.mov_imm" or not right.kind.startswith("tb."):
-            return None
-        argument = ("register", left.operands[0], left.operands[1])
-        return _merge((left, right), right.kind, right.operands + (argument,), right.confidence)
-
-    return _rewrite_pairs(nodes, protected, replacement)
-
-
-def _fold_stack_arguments(
-    nodes: list[Operation], protected: set[int]
-) -> tuple[list[Operation], int]:
-    def replacement(left: Operation, right: Operation) -> Operation | None:
-        if left.kind != "x86.push_imm" or not right.kind.startswith("tb."):
-            return None
-        argument = ("stack", left.operands[0])
-        return _merge((left, right), right.kind, right.operands + (argument,), right.confidence)
-
-    return _rewrite_pairs(nodes, protected, replacement)
-
-
-def _fold_conditions(
-    nodes: list[Operation], protected: set[int]
-) -> tuple[list[Operation], int]:
-    def replacement(left: Operation, right: Operation) -> Operation | None:
-        if left.kind not in ("x86.cmp", "x86.or") or right.kind not in _CONDITIONAL:
-            return None
-        condition = _CONDITIONS.get(right.kind, right.kind.removeprefix("x86."))
-        operands = (condition, right.operands[0], ("flags-from", left.kind))
-        return _merge((left, right), "flow.if", operands)
-
-    return _rewrite_pairs(nodes, protected, replacement)
-
-
-def _lift_control_flow(
-    nodes: list[Operation], _protected: set[int]
-) -> tuple[list[Operation], int]:
-    result = []
-    changed = 0
-    for node in nodes:
-        replacement = _flow_operation(node)
-        result.append(replacement)
-        changed += replacement is not node
-    return result, changed
-
-
-def _flow_operation(node: Operation) -> Operation:
-    if node.kind in _CONDITIONAL:
-        condition = _CONDITIONS.get(node.kind, node.kind.removeprefix("x86."))
-        return _replace(node, "flow.branch", (condition, node.operands[0]))
-    if node.kind in _JUMPS:
-        return _replace(node, "flow.goto", (node.operands[0],))
-    if node.kind in _CALLS:
-        return _replace(node, "flow.call", (node.operands[0],))
-    if node.kind in _RETURNS:
-        return _replace(node, "flow.return", node.operands)
-    return node
-
-
-def _rewrite_pairs(
-    nodes: list[Operation],
-    protected: set[int],
-    replacement: Callable[[Operation, Operation], Operation | None],
-) -> tuple[list[Operation], int]:
-    result = []
-    changed = 0
-    index = 0
-    while index < len(nodes):
-        if index + 1 < len(nodes):
-            left, right = nodes[index : index + 2]
-            if left.end == right.offset and right.offset not in protected:
-                if merged := replacement(left, right):
-                    result.append(merged)
-                    changed += 1
-                    index += 2
-                    continue
-        result.append(nodes[index])
-        index += 1
-    return result, changed
-
-
-def _group_unknown(
-    nodes: list[Operation], boundaries: set[int]
-) -> tuple[list[Operation], int]:
-    result = []
-    group: list[Operation] = []
-    changes = 0
-    for node in nodes:
-        if _is_unknown(node) and _can_join(group, node, boundaries):
-            group.append(node)
-            continue
-        changes += _flush_unknown(group, result)
-        group = [node] if _is_unknown(node) else []
-        if not group:
-            result.append(node)
-    changes += _flush_unknown(group, result)
-    return result, changes
-
-
-def _is_unknown(node: Operation) -> bool:
-    high_level = ("tb.prologue", "tb.statement", "tb.epilogue", "tb.commit")
-    semantic = ("flow.", "ir.", "expr.", "machine.")
-    return not (node.kind in high_level or node.kind.startswith(semantic))
-
-
-def _can_join(group: list[Operation], node: Operation, boundaries: set[int]) -> bool:
-    return not group or (group[-1].end == node.offset and node.offset not in boundaries)
-
-
-def _flush_unknown(group: list[Operation], result: list[Operation]) -> int:
-    if not group:
-        return 0
-    kinds = tuple(dict.fromkeys(node.kind for node in group))
-    result.append(_merge(group, "unknown.region", (len(group), kinds), "opaque"))
-    return max(0, len(group) - 1)
-
-
-def _merge(
-    nodes: list[Operation] | tuple[Operation, ...],
-    kind: str,
-    operands: tuple[object, ...],
-    confidence: str = "semantic",
-) -> Operation:
-    raw = " ".join(node.raw for node in nodes)
-    return Operation(nodes[0].offset, nodes[-1].end - nodes[0].offset, kind, operands, raw, confidence)
-
-
-def _replace(node: Operation, kind: str, operands: tuple[object, ...]) -> Operation:
-    return Operation(node.offset, node.size, kind, operands, node.raw, "semantic")
 
 
 def _discovery_diagnostics(

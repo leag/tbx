@@ -21,7 +21,15 @@ def canonicalize(
         and statement.operands
         and isinstance(statement.operands[0], int)
     )
-    names = _Names(slots, procedures)
+    functions = tuple(
+        (statement.operands[0], statement.operands[1])
+        for statement in statements
+        if statement.kind == "DefFn"
+        and len(statement.operands) == 5
+        and isinstance(statement.operands[0], int)
+        and isinstance(statement.operands[1], str)
+    )
+    names = _Names(slots, procedures, functions)
     named = tuple(names.statement(statement) for statement in statements)
     return tuple(_normalize_statement(statement) for statement in named)
 
@@ -145,12 +153,16 @@ def _normalize_statement(statement: Statement) -> Statement:
             for width, target in fields
         )
     elif statement.kind == "IfGoto":
-        condition, left, right, target = operands
+        *condition, target = operands
+        operands = (*_normalize_condition(tuple(condition)), target)
+    elif statement.kind == "IfInline":
+        condition, body, else_body = operands
         operands = (
-            condition,
-            normalize_expression(left),
-            normalize_expression(right),
-            target,
+            _normalize_condition(condition),
+            tuple(_normalize_statement(item) for item in body),
+            None
+            if else_body is None
+            else tuple(_normalize_statement(item) for item in else_body),
         )
     elif statement.kind == "Delay":
         operands = tuple(normalize_expression(item) for item in operands)
@@ -177,12 +189,44 @@ def _normalize_statement(statement: Statement) -> Statement:
             parameters,
             tuple(_normalize_statement(item) for item in body),
         )
+    elif statement.kind == "DefFn":
+        name, parameters, body, is_block = operands
+        operands = (
+            name,
+            parameters,
+            tuple(_normalize_statement(item) for item in body)
+            if is_block
+            else normalize_expression(body),
+            is_block,
+        )
+    elif statement.kind == "FnResult":
+        operands = (normalize_expression(operands[0]),)
     elif statement.kind == "CallStmt":
         name, arguments = operands
         if not _unresolved(arguments):
             arguments = tuple(normalize_expression(item) for item in arguments)
         operands = name, arguments
     return Statement(statement.index, statement.address, statement.kind, operands)
+
+
+def _normalize_condition(value: object) -> object:
+    if not isinstance(value, tuple) or not value:
+        return value
+    if len(value) == 2 and value[0] == "group":
+        return "group", _normalize_condition(value[1])
+    if len(value) == 2 and value[0] == "truth":
+        return "truth", normalize_expression(value[1])
+    if len(value) == 3:
+        return (
+            value[0],
+            _normalize_condition(value[1])
+            if value[0] in {"AND", "OR"}
+            else normalize_expression(value[1]),
+            _normalize_condition(value[2])
+            if value[0] in {"AND", "OR"}
+            else normalize_expression(value[2]),
+        )
+    return value
 
 
 def normalize_expression(value: object) -> object:
@@ -202,6 +246,17 @@ def normalize_expression(value: object) -> object:
         if commutative and _expression_key(right) < _expression_key(left):
             left, right = right, left
         return "binary", value[1], left, right
+    if value[0] == "unary" and len(value) == 3:
+        operand = normalize_expression(value[2])
+        if (
+            value[1] == "-"
+            and isinstance(operand, tuple)
+            and len(operand) == 2
+            and operand[0] == "const"
+            and isinstance(operand[1], (int, float))
+        ):
+            return "const", -operand[1]
+        return "unary", value[1], operand
     return tuple(normalize_expression(item) for item in value)
 
 
@@ -244,7 +299,12 @@ def _expression_key(value: object) -> tuple[int, str]:
 
 
 class _Names:
-    def __init__(self, slots: tuple[Slot, ...], procedures: tuple[int, ...]) -> None:
+    def __init__(
+        self,
+        slots: tuple[Slot, ...],
+        procedures: tuple[int, ...],
+        functions: tuple[tuple[object, object], ...] = (),
+    ) -> None:
         self._types = {slot.offset: slot.types for slot in slots}
         self._names: dict[int, str] = {}
         self._next = 0
@@ -255,6 +315,11 @@ class _Names:
             address: f"SUB{index}"
             for index, address in enumerate(procedures, start=1)
         }
+        self._functions = {
+            address: f"FNFN{index}{_SUFFIXES.get(kind, '')}"
+            for index, (address, kind) in enumerate(functions, start=1)
+        }
+        self._function_parameters: dict[tuple[int, int], str] = {}
 
     def statement(self, statement: Statement) -> Statement:
         if statement.kind == "SubDef":
@@ -263,6 +328,30 @@ class _Names:
                 self._procedure(entry),
                 self._value(parameters),
                 tuple(self.statement(item) for item in body),
+            )
+            return Statement(statement.index, statement.address, statement.kind, operands)
+        if statement.kind == "DefFn":
+            entry, _result_kind, parameters, body, is_block = statement.operands
+            parameter_names = tuple(
+                self._function_parameter(parameter) for parameter in parameters
+            )
+            operands = (
+                self._function(entry),
+                parameter_names,
+                tuple(self.statement(item) for item in body)
+                if is_block
+                else self._value(body),
+                is_block,
+            )
+            return Statement(statement.index, statement.address, statement.kind, operands)
+        if statement.kind == "IfInline":
+            condition, body, else_body = statement.operands
+            operands = (
+                self._value(condition),
+                tuple(self.statement(item) for item in body),
+                None
+                if else_body is None
+                else tuple(self.statement(item) for item in else_body),
             )
             return Statement(statement.index, statement.address, statement.kind, operands)
         if statement.kind == "CallStmt":
@@ -275,11 +364,42 @@ class _Names:
     def _procedure(self, address: object) -> object:
         return self._procedures.get(address, ("procedure", address))
 
+    def _function(self, address: object) -> object:
+        return self._functions.get(address, ("function", address))
+
+    def _function_parameter(self, parameter: object) -> object:
+        if not (
+            isinstance(parameter, tuple)
+            and len(parameter) == 4
+            and parameter[0] == "fn-param"
+            and isinstance(parameter[1], int)
+            and isinstance(parameter[2], int)
+            and isinstance(parameter[3], str)
+        ):
+            return parameter
+        name = self._new_name() + _SUFFIXES.get(parameter[3], "")
+        self._function_parameters[(parameter[1], parameter[2])] = name
+        return name
+
     def _value(self, value: object) -> object:
         if not isinstance(value, tuple) or not value:
             return value
         if value[0] == "slot" and len(value) >= 3 and isinstance(value[2], int):
             return self._variable(value)
+        if (
+            value[0] == "fn-param"
+            and len(value) == 4
+            and isinstance(value[1], int)
+            and isinstance(value[2], int)
+        ):
+            name = self._function_parameters.get((value[1], value[2]))
+            return ("var", name) if name is not None else value
+        if value[0] == "fn-call" and len(value) in {3, 4}:
+            return (
+                "call",
+                self._function(value[1]),
+                tuple(self._value(argument) for argument in value[2]),
+            )
         return tuple(self._value(item) for item in value)
 
     def _variable(self, slot: tuple[object, ...]) -> tuple[object, ...]:

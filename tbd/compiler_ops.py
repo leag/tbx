@@ -72,6 +72,10 @@ def _translate(instruction: Operation) -> CompilerOp | None:
         return _op(instruction, "addsiax")
     if raw == b"\x09\xc0":
         return _op(instruction, "orax")
+    if raw == b"\x23\xc3":
+        return _op(instruction, "andaxbx")
+    if raw in {b"\x09\xd8", b"\x0b\xc3"}:
+        return _op(instruction, "oraxbx")
     if instruction.kind == "x86.inc" and instruction.operands == ("ax",):
         return _op(instruction, "incax")
     if raw == b"\xd1\xe6":
@@ -96,6 +100,10 @@ def _translate(instruction: Operation) -> CompilerOp | None:
             return _op(instruction, dim_kind)
     if instruction.kind == "x86.jmp" and len(instruction.operands) == 1:
         return _op(instruction, "jmp", instruction.operands[0])
+    if instruction.kind == "tb.fn_return":
+        return _op(instruction, "fn_ret")
+    if instruction.kind == "tb.fn_call" and instruction.operands:
+        return _op(instruction, "fn_call", instruction.operands[0])
     if instruction.kind.startswith("x86.j") and raw and 0x70 <= raw[0] <= 0x7F:
         return _op(instruction, "jcc", raw[0], instruction.operands[0])
     if instruction.kind == "tb.runtime" and instruction.operands == (0x99,):
@@ -109,8 +117,12 @@ def _translate(instruction: Operation) -> CompilerOp | None:
         (0x9D,),
     }:
         return _op(instruction, "spush")
+    if instruction.kind == "tb.runtime" and instruction.operands == (0x9A,):
+        return _op(instruction, "strcmp")
     if instruction.kind == "tb.fwait":
         return _op(instruction, "fwait")
+    if instruction.kind == "tb.fp" and raw in {b"\xcd\x35\xe8", b"\xcd\x35\xee"}:
+        return _op(instruction, "fld1" if raw[-1] == 0xE8 else "fldz")
     if (
         instruction.kind == "x86.mov_acc_mem"
         and len(instruction.operands) == 2
@@ -161,6 +173,8 @@ def _direct_integer_operation(
         return _op(instruction, "addm_ax", _u16(raw, 2))
     if len(raw) == 4 and raw[:2] == b"\x2b\x06":
         return _op(instruction, "subax_m", _u16(raw, 2))
+    if len(raw) == 4 and raw[:2] == b"\x23\x06":
+        return _op(instruction, "andax_m", _u16(raw, 2))
     if len(raw) == 4 and raw[:2] == b"\xf7\x2e":
         return _op(instruction, "imul_m", _u16(raw, 2))
     if raw == b"\x89\x04":
@@ -214,9 +228,20 @@ def _direct_integer_operation(
 
 
 def _bp_integer_operation(instruction: Operation, raw: bytes) -> CompilerOp | None:
+    if len(raw) in {5, 6} and raw[:2] in {b"\xc7\x46", b"\xc7\x86"}:
+        return _op(
+            instruction,
+            "mov_bp_imm",
+            _bp_displacement(raw),
+            _u16(raw, len(raw) - 2),
+        )
     forms = {
         b"\x8b\x46": "movax_bp",
         b"\x8b\x86": "movax_bp",
+        b"\x03\x46": "addax_bp",
+        b"\x03\x86": "addax_bp",
+        b"\x89\x46": "movm_ax_bp",
+        b"\x89\x86": "movm_ax_bp",
         b"\x39\x46": "cmpm_ax_bp",
         b"\x39\x86": "cmpm_ax_bp",
         b"\x01\x46": "addm_ax_bp",
@@ -242,10 +267,14 @@ def _fp_operation(instruction: Operation, raw: bytes) -> CompilerOp | None:
         return None
     modrm = raw[modrm_index]
     register = (modrm >> 3) & 7
+    arithmetic_operator = (
+        {0: "+", 1: "*", 5: "-", 7: "/"}.get(register)
+        if escape in {0xD8, 0xDC}
+        else None
+    )
     base = {
         (0xD9, 0): "fld",
         (0xD9, 3): "fstp",
-        (0xD8, 0): "fold",
         (0xD8, 3): "fcomp",
         (0xDD, 0): "fld64",
         (0xDD, 3): "fstp64",
@@ -253,21 +282,26 @@ def _fp_operation(instruction: Operation, raw: bytes) -> CompilerOp | None:
         (0xDB, 3): "fistp32",
         (0xDF, 0): "fild",
         (0xDF, 3): "fistp",
-        (0xDC, 0): "fold64",
         (0xDC, 3): "fcomp64",
     }.get((escape, register))
+    if base is None and arithmetic_operator is not None:
+        base = "fold64" if escape == 0xDC else "fold"
     if base is None:
         return None
     mode, rm = modrm >> 6, modrm & 7
     prefix = "far_" if far else ""
     if mode == 0 and rm == 4:
-        args = ("+",) if base in {"fold", "fold64"} else ()
+        args = (arithmetic_operator,) if base in {"fold", "fold64"} else ()
         return _op(instruction, prefix + _si_kind(base), *args)
     address = _modrm_address(raw, modrm_index)
     if address is None:
         return None
     kind = f"{base}_bp" if _is_bp_modrm(modrm) else base
-    args = ("+", address) if base in {"fold", "fold64"} else (address,)
+    args = (
+        (arithmetic_operator, address)
+        if base in {"fold", "fold64"}
+        else (address,)
+    )
     kind = prefix + kind
     return _op(instruction, kind, *args)
 

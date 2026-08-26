@@ -37,9 +37,14 @@ _OPERATION_KINDS = {
     "semantic.on_gosub": "ir.on_gosub",
     "semantic.print": "ir.print",
     "semantic.if_goto": "ir.if_goto",
+    "semantic.if_goto_condition": "ir.if_goto_condition",
+    "semantic.if_inline": "ir.if_inline",
+    "semantic.goto": "ir.goto",
     "semantic.inline": "ir.inline",
     "semantic.delay": "ir.delay",
     "semantic.defseg": "ir.defseg",
+    "semantic.def_type": "ir.def_type",
+    "semantic.data": "ir.data",
     "semantic.dim": "ir.dim",
     "semantic.local_dim": "ir.dim",
     "semantic.common": "ir.common",
@@ -51,6 +56,9 @@ _OPERATION_KINDS = {
     "semantic.run": "ir.run",
     "semantic.call": "ir.call",
     "semantic.sub_def": "ir.sub_def",
+    "semantic.def_fn": "ir.def_fn",
+    "semantic.fn_result": "ir.fn_result",
+    "semantic.exit_def": "ir.exit_def",
     "semantic.tron": "ir.tron",
     "semantic.troff": "ir.troff",
     "semantic.statement": "tb.statement",
@@ -75,7 +83,11 @@ def build_operations(
             if operation is not None:
                 operations.append(operation)
             continue
-        if fact.kind == "semantic.do_codeless":
+        if fact.kind in {
+            "semantic.data",
+            "semantic.def_type",
+            "semantic.do_codeless",
+        }:
             operation = _codeless_operation(fact)
             if operation is not None:
                 operations.append(operation)
@@ -89,6 +101,63 @@ def build_operations(
             Operation(start, end - start, kind, fact.value, raw, fact.confidence)
         )
     return tuple(sorted(operations, key=_operation_key))
+
+
+def build_program_operations(
+    evidence: Evidence, semantic: tuple[Operation, ...]
+) -> tuple[Operation, ...]:
+    """Merge fact-owned semantics with lossless uncovered instruction regions."""
+
+    claimed = tuple(
+        (operation.offset, operation.end)
+        for operation in semantic
+        if operation.size > 0
+    )
+    boundaries = {block.start for block in evidence.blocks}
+    structural: list[Operation] = []
+    unknown: list[Operation] = []
+    for instruction in evidence.instructions:
+        if any(
+            start <= instruction.offset and instruction.end <= end
+            for start, end in claimed
+        ):
+            continue
+        if instruction.kind in {
+            "tb.prologue",
+            "tb.statement",
+            "tb.epilogue",
+            "tb.commit",
+        }:
+            _flush_unknown(unknown, structural)
+            structural.append(instruction)
+            continue
+        if unknown and (
+            unknown[-1].end != instruction.offset
+            or instruction.offset in boundaries
+        ):
+            _flush_unknown(unknown, structural)
+        unknown.append(instruction)
+    _flush_unknown(unknown, structural)
+    return tuple(sorted((*semantic, *structural), key=_operation_key))
+
+
+def _flush_unknown(
+    pending: list[Operation], result: list[Operation]
+) -> None:
+    if not pending:
+        return
+    kinds = tuple(dict.fromkeys(instruction.kind for instruction in pending))
+    result.append(
+        Operation(
+            pending[0].offset,
+            pending[-1].end - pending[0].offset,
+            "unknown.region",
+            (len(pending), kinds),
+            " ".join(instruction.raw for instruction in pending),
+            "opaque",
+        )
+    )
+    pending.clear()
 
 
 def _static_dim_operation(
@@ -116,13 +185,19 @@ def _static_dim_operation(
 
 
 def _codeless_operation(fact: Fact) -> Operation | None:
-    if len(fact.subject) != 1 or not isinstance(fact.subject[0], int):
+    if not fact.subject or not isinstance(fact.subject[0], int):
         return None
+    if fact.kind == "semantic.data":
+        operands = (*fact.subject[1:], *fact.value)
+    elif fact.kind == "semantic.def_type":
+        operands = fact.subject[1:]
+    else:
+        operands = fact.value
     return Operation(
         fact.subject[0],
         0,
         _OPERATION_KINDS[fact.kind],
-        fact.value,
+        operands,
         "",
         fact.confidence,
     )
@@ -141,6 +216,8 @@ def _operation_key(operation: Operation) -> tuple[int, int, int, str]:
     if operation.kind in {"ir.dim", "ir.common", "ir.option_base"}:
         return operation.offset, operation.end, operation.operands[0], ""
     toggles = {"ir.tron": 0, "ir.troff": 1}
+    if operation.kind in {"ir.data", "ir.def_type"}:
+        return operation.offset, operation.end, operation.operands[0], operation.kind
     if operation.kind == "ir.do":
         return operation.offset, operation.end, -1, operation.kind
     return operation.offset, operation.end, toggles.get(operation.kind, 1000), operation.kind

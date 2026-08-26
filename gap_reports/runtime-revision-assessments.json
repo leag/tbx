@@ -1,7 +1,7 @@
 {
  "schema_version": 1,
  "document_type": "tbx.runtime_revision_assessments",
- "updated": "2026-08-09",
+ "updated": "2026-08-26",
  "corpus_fingerprint": "2043f80bf6bf929b0a8058ebb0b83e3ec6b63664855e4428b4781db63c4924a3",
  "evidence_classes": [
   "oracle-verified",
@@ -13,6 +13,28 @@
   "unresolved"
  ],
  "assessments": [
+  {
+   "id": "RR-TBD-T1-PEEK-11",
+   "title": "The Turbo Basic 1.1 t1_peek fixture is not oracle-byte-comparable",
+   "signatures": [
+    "FILD argument; ED/2c PEEK; AX scratch store; FILD scratch",
+    "same-size oracle rebuild with approximately six differing bytes"
+   ],
+   "disposition": "candidate",
+   "evidence_class": "candidate-runtime-revision",
+   "confidence": "medium",
+   "files": [
+    "tests/fixtures/corpus/t1_peek.exe",
+    "tests/fixtures/corpus/v10_t1_peek.exe"
+   ],
+   "assessment": "Both fixture binaries use the same complete PEEK argument/result bridge and tbd recovers both canonical trees exactly. The 1.0 source recompiles byte-for-byte through the oracle; the 1.1 source produces the same image size but approximately six differing bytes, so the 1.1 fixture is not an acceptance witness for this mapping.",
+   "negative_evidence": [
+    "`verify_fixture t1_peek` reports `MISMATCH: 34736 B vs 34736 B, ~6 bytes differ` with the checked-in source unchanged.",
+    "`verify_fixture v10_t1_peek` reports byte-exact success, independently accepting the source construct and normalized operation family."
+   ],
+   "promotion_criteria": "Identify the 1.1 compiler/runtime or source-layout difference that reproduces the checked-in image before treating t1_peek as a 1.1 oracle baseline.",
+   "source": "tbd parity session 2026-08-26"
+  },
   {
    "id": "RR-METRIC-INKEY-LEN-TEST",
    "title": "metric.exe optimized LEN(INKEY$)=0 zero test",

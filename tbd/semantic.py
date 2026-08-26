@@ -24,10 +24,45 @@ def resolve_expression(value: Any, facts: frozenset[Fact]) -> Resolved | None:
         return _resolve_memory(value, facts)
     if value and value[0] == "binary" and len(value) == 4:
         return _resolve_binary(value, facts)
+    if value and value[0] == "unary" and len(value) == 3:
+        operand = resolve_expression(value[2], facts)
+        if operand is None:
+            return None
+        return Resolved(
+            ("unary", value[1], operand.value),
+            operand.evidence,
+        )
     if value and value[0] in {"const", "string"}:
         return Resolved(value)
-    if value and value[0] in {"array", "slot", "var", "call"}:
+    if value and value[0] == "call" and len(value) == 3:
+        if not isinstance(value[2], tuple):
+            return None
+        arguments = tuple(resolve_expression(argument, facts) for argument in value[2])
+        if any(argument is None for argument in arguments):
+            return None
+        resolved = tuple(argument for argument in arguments if argument is not None)
+        return Resolved(
+            ("call", value[1], tuple(argument.value for argument in resolved)),
+            combine_evidence(*(argument.evidence for argument in resolved)),
+        )
+    if value and value[0] in {"array", "slot", "var", "fn-param"}:
         return Resolved(value)
+    if value and value[0] == "fn-call" and len(value) in {3, 4}:
+        if not isinstance(value[2], tuple):
+            return None
+        arguments = tuple(resolve_expression(argument, facts) for argument in value[2])
+        if any(argument is None for argument in arguments):
+            return None
+        resolved = tuple(argument for argument in arguments if argument is not None)
+        return Resolved(
+            (
+                "fn-call",
+                value[1],
+                tuple(argument.value for argument in resolved),
+                *value[3:],
+            ),
+            combine_evidence(*(argument.evidence for argument in resolved)),
+        )
     return None
 
 
@@ -107,7 +142,13 @@ def resolve_expression_before(
             continue
         if fact.kind == "register.value" and fact.subject[1:] != (register,):
             continue
-        if instruction_ends.get(fact.evidence[-1]) != offset:
+        explicit_span = (
+            fact.kind == "expression.value"
+            and len(fact.subject) == 2
+            and fact.subject[1] == offset
+            and isinstance(fact.subject[0], int)
+        )
+        if not explicit_span and instruction_ends.get(fact.evidence[-1]) != offset:
             continue
         resolved = resolve_expression(fact.value[0], facts)
         if resolved is not None:
@@ -115,7 +156,7 @@ def resolve_expression_before(
                 Resolved(
                     resolved.value,
                     combine_evidence(fact.evidence, resolved.evidence),
-                    fact.evidence[0],
+                    fact.subject[0] if explicit_span else fact.evidence[0],
                 )
             )
     return matches[0] if len(matches) == 1 else None
@@ -151,6 +192,10 @@ def _resolve_memory(value: tuple[Any, ...], facts: frozenset[Fact]) -> Resolved 
     if len(value) < 2 or not isinstance(value[1], int):
         return None
     address = value[1]
+    if value[2:] == ("integer",):
+        system = unique_fact(facts, "expression.system", (address,))
+        if system is not None and len(system.value) == 1:
+            return Resolved(system.value[0], system.evidence)
     constant_kind = "string" if value[2:] == ("string",) else "memory"
     constant = unique_fact(facts, "constant", (constant_kind, address))
     slot = resolve_slot(address, facts)

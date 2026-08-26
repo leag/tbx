@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import struct
 from collections.abc import Iterable
 
 from tbd.compiler_ops import translate_operations
@@ -12,6 +13,7 @@ from tbd.semantic import (
     combine_evidence,
     resolve_array_element,
     resolve_expression,
+    resolve_expression_before,
     resolve_slot,
 )
 
@@ -24,18 +26,107 @@ def assignment_facts(
     instructions = {
         instruction.offset: instruction for instruction in evidence.instructions
     }
+    instruction_ends = {
+        instruction.offset: instruction.end for instruction in evidence.instructions
+    }
     targets: dict[object, Resolved | None] = {}
     values: dict[tuple[object, ...], Resolved | None] = {}
     for effect in facts:
         if effect.kind not in {"machine.store", "machine.update"}:
             continue
         assignment = _assignment(
-            effect, facts, instructions, targets, values
+            effect, facts, instructions, instruction_ends, targets, values
         )
         if assignment is not None:
             yield assignment
     yield from _computed_array_assignments(evidence.instructions, facts)
     yield from _computed_value_assignments(evidence.instructions, facts)
+    yield from _string_function_assignments(evidence.instructions, facts)
+    yield from _direct_fp_function_assignments(evidence.instructions, facts)
+
+
+def _direct_fp_function_assignments(
+    instructions: tuple[Operation, ...], facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    """Store a proven AX-argument intrinsic's direct FP result."""
+
+    by_offset = {instruction.offset: instruction for instruction in instructions}
+    for expression in facts:
+        if (
+            expression.kind != "expression.value"
+            or len(expression.value) != 1
+            or not isinstance(expression.value[0], tuple)
+            or expression.value[0][:2] != ("call", "LOC")
+            or not expression.evidence
+        ):
+            continue
+        call = by_offset.get(expression.evidence[-1])
+        store = by_offset.get(call.end) if call is not None else None
+        raw = bytes.fromhex(store.raw) if store is not None else b""
+        if (
+            store is None
+            or store.kind != "tb.fp"
+            or len(raw) != 5
+            or raw[:3] != b"\xcd\x35\x1e"
+        ):
+            continue
+        address = struct.unpack_from("<H", raw, 3)[0]
+        target = resolve_slot(address, facts)
+        if target is None:
+            continue
+        yield Fact(
+            "semantic.assign",
+            (expression.subject[0], store.end),
+            (target.value, expression.value[0]),
+            combine_evidence(
+                expression.evidence,
+                target.evidence,
+                (store.offset,),
+            ),
+            "anchored",
+        )
+
+
+def _string_function_assignments(
+    instructions: tuple[Operation, ...], facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    """Store one proven string-stack function result into its target slot."""
+
+    by_offset = {instruction.offset: instruction for instruction in instructions}
+    for expression in facts:
+        if (
+            expression.kind != "expression.value"
+            or expression.value != (("call", "INKEY$", ()),)
+            or not expression.evidence
+        ):
+            continue
+        source = by_offset.get(expression.evidence[-1])
+        setup = by_offset.get(source.end) if source is not None else None
+        store = by_offset.get(setup.end) if setup is not None else None
+        if (
+            setup is None
+            or setup.kind != "x86.mov_imm"
+            or setup.operands[:1] != ("si",)
+            or len(setup.operands) != 2
+            or store is None
+            or store.kind != "tb.runtime"
+            or store.operands != (0xA0,)
+        ):
+            continue
+        target = resolve_slot(setup.operands[1], facts)
+        if target is None:
+            continue
+        yield Fact(
+            "semantic.assign",
+            (source.offset, store.end),
+            (target.value, expression.value[0]),
+            combine_evidence(
+                expression.evidence,
+                target.evidence,
+                (setup.offset, store.offset),
+            ),
+            "anchored",
+        )
 
 
 def _computed_value_assignments(
@@ -141,6 +232,7 @@ def _assignment(
     effect: Fact,
     facts: frozenset[Fact],
     instructions: dict[int, Operation],
+    instruction_ends: dict[int, int],
     targets: dict[object, Resolved | None],
     values: dict[tuple[object, ...], Resolved | None],
 ) -> Fact | None:
@@ -152,9 +244,20 @@ def _assignment(
     target = targets[address]
     if target is None:
         return None
-    value_key = effect.kind, effect.value, target.value
+    value_key = effect.kind, effect.value, target.value, effect.evidence
     if value_key not in values:
-        values[value_key] = _effect_value(effect, target.value, facts)
+        direct = (
+            resolve_expression_before(
+                effect.evidence[-1],
+                facts,
+                instruction_ends,
+            )
+            if effect.kind == "machine.store"
+            and effect.value == (("register", "ax"),)
+            and effect.evidence
+            else None
+        )
+        values[value_key] = direct or _effect_value(effect, target.value, facts)
     value = values[value_key]
     if value is None:
         return None

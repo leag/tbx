@@ -487,6 +487,47 @@ The array pass owns near/far and constant/computed element selection; the
 existing compare/status/commit/branch/jump pass owns the `IfGoto` relation and
 target. Both x87 operand orders and direct dynamic DOUBLE elements retain the
 same fail-closed control tail.
+Materialized numeric relations add a separate address-bounded value fact only
+for the complete `compare; status; mov AX,FFFF; Jcc; inc AX` protocol. Exact
+short-circuit convergence addresses then compose those leaves into one
+`control.compound_condition` fact. Flat two- and three-term chains are folded
+through their observed AND/OR gates. Mixed-precedence groups compose only when
+an outer branch's false edge begins exactly one complete right-hand decision
+and its taken edge lands on that decision's observed value-combine point. This
+address proof can repeat across several groups. A locally complete group with
+an incoming outer short-circuit, or a differently-precedenced continuation
+without that unique convergence, remains unresolved instead of becoming a
+partial conditional.
+A terminal true-jump decision adds `IfGoto`. A terminal forward false jump adds
+an immutable `region.if_inline` owner containing only its condition and body
+bounds. The semantic `IfInline` is delayed until an independent statement fact
+exists inside those bounds, and recursive statement reconstruction derives the
+body from the final fact set rather than copying it into the owner. Opaque
+machine-code `Inline` procedure bodies remain a distinct mechanism and IR kind.
+Direct string comparisons add an ordered expression fact only for two complete
+`mov SI,descriptor; string-push` operands followed contiguously by the runtime
+compare. Its forward flag table feeds both direct `IfGoto` and the same
+materialized compound-condition owner used by numeric relations. A raw jump
+inside an owned inline body becomes source `GOTO` only when it immediately
+follows one independently proven body statement and no condition fact already
+claims it; other unowned jumps remain structural.
+The compiler's direct ERR and ERL cells are named independently from both load
+and compare evidence. A contiguous literal comparison can feed a direct true
+branch, while the complete `FFFF / Jcc / inc` materialization protocol feeds
+the shared compound-condition owner. Optional AX/BX preservation is part of
+the relation span, so chained AND/OR convergence starts at the actual outer
+false edge rather than at the later literal load.
+The same materialized relation chain can terminate in one direct backward Jcc
+instead of an IF branch/jump pair. When its target is an independently recovered
+statement start, the complete chain owns a codeless `DO` at that target and a
+conditional `LOOP` over the relation span; zero and nonzero backedges preserve
+the compiler's UNTIL and WHILE polarity. Bare backward jumps remain structural.
+String comparison operands are separate contiguous facts. Besides descriptor
+pushes, an immediate AX load followed by the CHR$ runtime produces one operand;
+two operands followed by string compare reuse the same ordered comparison and
+materialization facts. Computed string leaves retain their observed value-group
+syntax. A zero-argument INKEY$ producer likewise feeds its exact target-store
+assignment, which can independently establish a compound loop's body target.
 OPEN requires one of two complete contiguous scaffolds. The comma form stores
 the immediate file number at 0x60, pushes the resolved filename and one-character
 mode strings, loads the immediate record length in AX, and dispatches. The
@@ -533,11 +574,13 @@ Three-argument WAIT requires the complete mask/xor register shuffle and
 mask/port shuffle and `in; and` body. Both require the exact decoded backward
 `JE` plus its branch and fallthrough CFG edges. In every case, the individual
 instructions and their byte evidence are never replaced.
-`Program.fact_operations` now materializes migrated assignment, PRINT, LPRINT,
-and device-I/O facts directly into operation IR. Conditional branch
-pairs and their resolved operands now produce `IfGoto` facts and operations as
-well. `Program.operations` remains the legacy compatibility view until the
-remaining runtime consumers migrate.
+`Program.fact_operations` materializes assignment, PRINT, LPRINT, device-I/O,
+control-flow, region, and statement facts directly into semantic operation IR.
+`Program.operations` is now the fact-owned public view: it contains those
+semantic operations plus high-level compiler signatures and lossless
+`unknown.region` groups for every discovered instruction not claimed by a
+semantic fact. The destructive rewrite loop is no longer executed by
+`decode()`.
 Direct INTEGER FOR/NEXT facts require one resolved loop-variable assignment,
 an unconditional jump to the test, a matching increment, an immediate or
 uniquely snapshotted variable limit, and the correctly oriented CFG back edge.
@@ -562,16 +605,101 @@ well. Statement reconstruction nests already-recovered body facts inside their
 region, while final canonicalization gives definition and call addresses the
 same stable procedure name. Frame cleanup that cannot yet distinguish parameters
 from LOCAL storage remains explicit unresolved metadata.
+Profiled DEF FN return and call vectors are likewise complete instructions,
+including the call's embedded far target. A declaration skip opens an otherwise
+unreachable function body only when its target lands exactly after the profiled
+function return. Definition, parameter, result, and invocation identities remain
+address-based facts until canonicalization assigns FN names and frame-parameter
+names. Supported SINGLE frames cover direct and forward single-line definitions,
+block results, and the exact inline EXIT DEF region; supported INTEGER frames
+cover literal or direct integer expressions, compact zero-argument calls, and
+stack-relative literal argument staging. Supported STRING frames cover exact
+single-line and block result descriptors, string and numeric parameters,
+concatenation, STR$, caller descriptor staging, string result readback, and the
+complete cleanup epilogue. A block with any unowned prefix—most notably LOCAL
+initialization—does not materialize a partial DefFn merely because its final
+result store is recognizable. The discovered body and call bytes remain
+immutable evidence for later frame passes.
 Profiled trace-hook facts now recover supported codeless TRON/TROFF regions.
 Several independent facts may support the same toggle conclusion; the fact
 store retains each provenance chain while semantic operation materialization
 emits the source statement once.
+An active error-trap line table is anchored only when its complete monotonic
+offset/line sequence names discovered statement or block starts and terminates
+at the profiled epilogue. Repeated offsets retain the earlier row as a codeless
+orphan. DATA rows are claimed first; when no DATA, array, COMMON, OPTION BASE,
+or codeless-loop fact can own the remaining rows, each becomes the canonical
+payload-free `DefType` statement. Ambiguous codeless ownership remains
+unresolved.
+The complete `xor AX,AX; INKEY$; mov BX,AX; LEN; cmp AX,BX` scaffold adds both
+a reusable nested-call expression and its ordered zero comparison. An adjacent
+conditional branch then becomes an `IfGoto`; codeless declarations that borrow
+the same address are retained in source order but skipped as branch targets.
+Calibrated AX-argument intrinsics expose reusable expression values as well:
+an immediate argument names EOF, LOC, or REG, and a zeroed AX names LPOS, PEN,
+STICK, or STRIG. A unique value ending at a direct AX store feeds the ordinary
+assignment owner; LOC's FP result instead requires its exact direct FP store.
+No-setup CSRLIN, POS, PLAY, and INSTAT calls use the same AX-store consumer, while
+zero-argument TIMER and MTIMER enter through the FP stack. SCREEN requires its
+complete two-immediate AX/BX staging sequence before it becomes an expression.
+PEEK composes one uniquely pending FP argument, returns through AX, and crosses
+the compiler scratch word before its final FP store. Composed expressions use
+explicit start/end subjects, so later layout provenance does not masquerade as
+their execution terminal; a uniquely written scratch cell may therefore retain
+the proven expression rather than only a literal.
+EOF followed by the complete `OR AX; JE skip; JMP target` truth test becomes a
+condition fact and `IfGoto`; the comparison view represents this as
+`truth(call)` rather than pretending the compiler emitted a relational
+operator.
+The anchored string-descriptor walk remains ownership-neutral until a unique
+maximal paragraph-aligned pointer table names DATA descriptors in source order.
+That table preserves shared and repeated literals while excluding code-only
+descriptors. Error-line-table orphans provide codeless DATA grouping and exact
+placement; without such rows, one complete DATA group is emitted only when a
+READ phase proves its use and no competing codeless declaration is present.
+Targeted RESTORE remains unresolved until its item-index mapping is calibrated.
+Direct reads of the profiled ERR/ERL cells become reusable nullary-expression
+facts, allowing their ordinary assignment consumers to establish statement
+starts without embedding error-cell knowledge in the assignment pass.
+The calibrated bare and one-argument RND dispatches act as FP-stack producers,
+so the ordinary store/assignment facts can consume their results. RND arguments
+still pass through normal expression resolution. A literal negated in AX and
+written once to a below-DGROUP scratch cell remains recoverable through the
+native accumulator store and later FP reload; non-unique scratch writes remain
+unresolved.
+Profiled unary transcendental dispatches use the same FP-stack composition:
+ATN, COS, SIN, TAN, EXP, LOG, and LOG10 wrap the uniquely pending argument and
+feed the ordinary store facts without statement-specific assignment handlers.
+The witnessed x87 FABS and FSQRT terminals analogously produce ABS and SQR;
+runtime INT consumes one FP value, while SGN consumes one FP value and returns
+through the proven AX scratch bridge. All four remain ordinary call expressions
+to their assignment and PRINT consumers.
+The block-local CPU interpreter also composes direct AX addition, negated
+subtraction, and signed multiplication. Below-DGROUP scratch cells retain the
+most recent direct CPU or FP store only within the block and are cleared across
+runtime calls; this preserves compiler numeric-conversion bridges without
+turning ordinary mutable variables into speculative symbolic state.
+Profiled x87 register-stack reductions retain their calibrated operand order:
+the supported reverse subtract and divide forms combine the top value with the
+lower value, multiplication remains commutative, and FCHS produces a unary
+negation expression. Grouping is comparison-only syntax and normalizes to the
+same expression tree without changing the recovered operation provenance.
+FCOMPP is the corresponding two-stack-value comparison terminal. It records
+stack top first and lower value second, matching the existing FP comparison
+convention, so compare/status/branch ownership can orient both source operands
+without a second expression parser.
+An FP-to-integer transient retains an internal conversion tag. Reloading that
+tag into FP exposes the compiler's explicit CINT or CLNG expression bridge;
+storing it into an ordinary typed target strips the tag as an implicit
+assignment conversion. The tag never escapes into canonical IR.
 
 1. Add `Fact` and a fact store alongside `Program.instructions`.
 2. Port constant-pool, slot, and symbolic results to additive facts.
-3. Build current `Program.operations` from evidence plus facts.
+3. Build current `Program.operations` from evidence plus facts. (complete)
 4. Port runtime and control-flow lifts, retaining their current output shapes.
+   (complete for the public operation view)
 5. Stop destructive operation rewriting once all consumers use facts.
+   (complete)
 6. Move Turbo Basic tables and layout rules behind a profile boundary.
 7. Add final variable naming and expression canonicalization.
 

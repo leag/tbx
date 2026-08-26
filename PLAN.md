@@ -10294,3 +10294,84 @@ machinery.
 
 Wild corpus 96 -> 99 decode-ok of 108, 4 failures: night.exe, sabpcv3.exe,
 slimmer.exe, swbb.exe.
+
+## tbd compound-backedge calibration (2026-08-26)
+
+`probe_backward_compound_if.bas` first compared as seven reference statements
+against five tbd statements: the missing pair was `Do` / `Loop`, not `IfGoto`.
+The authored source used a backward compound `IF A < 5 AND B = 0 THEN 20`, but
+the compiler emitted the same complete materialized-condition/direct-backedge
+topology as a conditional tail loop and the reference decoder canonically owns
+it that way. The probe compiled cleanly through the 1.1 oracle and is retained
+under `wild/probes/` with its EXE. This supports a complete compound backedge
+owner; it does not support promoting a bare backward JMP.
+
+## tbd fact-owned DEF FN frames (2026-08-26)
+
+`tbd` now discovers an unreachable DEF FN body only from the compiler's exact
+`JMP body ... fn_ret; target` bracket. Profile-normalized `fn_ret` and the
+seven-byte `fn_call` are standalone instructions in both dialects, so discovery
+and xrefs no longer split their payload bytes into plausible x86.
+
+The new additive frame pass owns definition entry/result/parameter identities,
+caller argument staging, call-result readback, block result statements, and the
+calibrated inline `EXIT DEF` region. Canonicalization assigns function and frame
+names only after facts stabilize. It covers:
+
+- SINGLE single-line and block definitions, including declarations after END;
+- direct SINGLE argument frames and nested PRINT consumers;
+- INTEGER result slots, literal/direct integer bodies, stack-relative literal
+  arguments, compact zero-argument calls, and call expressions inside SUBs.
+
+The first draft aligned 15/44 DefFn nodes but seven were LOCAL-frame bodies for
+which only the final result was understood. Those partial definitions were
+withdrawn: any unowned body prefix now leaves the whole source definition
+unmaterialized. The initial numeric corpus result was 13/44 DefFn, with every
+claimed authored tree exact. Remaining families are LOCAL frame bodies and
+nested calls/control.
+
+Oracle acceptance stayed within two probes per slice and is byte-exact for:
+`zz_deffn1`, `zz_deffn2`, `zz_mdeffn1`, `zz_mdeffn2`, `t1_fnforward` plus
+`v10_t1_fnforward`, `t1_fnintcall` plus `v10_t1_fnintcall`,
+`t1_fnlitresult` plus `v10_t1_fnlitresult`, and `t1_fnintarith` plus
+`v10_t1_fnintarith`. The subsequent STRING slice stayed within the same budget:
+`t1_fnstr` and `t1_fnstrb` both recompile byte-for-byte. Their exact descriptor
+prologues, string/numeric argument staging, result push, and cleanup epilogue
+raise DefFn coverage to 15/44 without admitting partial frames.
+
+Final 1,151-file comparison: 0 failures; 11,742/12,170 statements recovered;
+11,593 aligned kinds (95.3%); 814 count-matching and 786 kind-matching files;
+461/461 exact comparable trees. This is +31 recovered statements, +19 aligned
+kinds, +13 count matches, +13 kind matches, and +6 exact comparable files over
+the preceding baseline. `tests/tbd` is 247 passed; Ruff, diff whitespace, JSON
+ledgers, and the production no-`tbx`-import gate are clean.
+
+After the STRING slice, the same 1,151-file comparison remains at 0 failures
+and advances to 11,746/12,170 statements, 11,597 aligned kinds (95.3%), 816
+count-matching and 788 kind-matching files, and 463/463 exact comparable trees.
+This slice contributes exactly two DefFn and two Print alignments. The full
+`tests/tbd` gate remains 247 passed, and the two authored oracle probes are
+byte-exact.
+
+## tbd fact-owned public IR cutover (2026-08-26)
+
+`Program.operations`, `Program.slots`, and `Program.statements` are now built
+from immutable facts. The public operation stream merges fact-materialized
+semantic operations with compiler signatures and block-bounded
+`unknown.region` nodes for every discovered instruction not claimed by a
+semantic fact, so the forgiving evidence contract survives the cutover.
+`Program.fact_operations` remains the semantic-only provenance view.
+
+`decode()` no longer invokes the destructive rewrite loop. Its orchestration
+and helper implementation were removed from `analysis.py`; that module now owns
+recursive discovery only. The obsolete empty `Program.passes` field and
+`PassReport` API were removed in favor of `Program.fact_passes` and
+`FactReport`. Tests that had served as migration comparisons now assert the
+fact-owned public contract directly.
+
+The cutover is source-neutral across all 1,151 corpus programs: 0 decode
+failures; 11,746/12,170 statements; 11,597 aligned kinds; 816 count-matching
+and 788 kind-matching files; 463/463 exact comparable trees. Final gates are
+247 passing `tests/tbd` tests, 3,596 passing repository tests with 10 skips,
+Ruff clean, diff whitespace clean, both JSON ledgers valid, and no production
+`tbd` import of `tbx`.

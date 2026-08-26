@@ -481,6 +481,30 @@ def decode_literal(
     return None
 
 
+def decode_string_descriptors(
+    image: bytes,
+    ds: object,
+    pool_base: object,
+    string_base: object,
+) -> tuple[tuple[int, str], ...] | None:
+    """Decode the anchored descriptor walk without assigning source ownership."""
+
+    if not all(isinstance(value, int) for value in (ds, pool_base, string_base)):
+        return None
+    assert isinstance(ds, int)
+    assert isinstance(pool_base, int)
+    assert isinstance(string_base, int)
+    descriptors, _after = _descriptors(image, ds, pool_base)
+    decoded = []
+    for displacement, (length, pointer) in descriptors.items():
+        start = ds + string_base + pointer
+        stop = start + length
+        if not 0 <= start <= stop <= len(image):
+            return None
+        decoded.append((displacement, image[start:stop].decode("latin-1")))
+    return tuple(decoded)
+
+
 def array_at(
     layout: PoolLayout, address: object
 ) -> StaticArrayLayout | None:

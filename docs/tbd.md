@@ -37,6 +37,8 @@ for fact in program.facts:
     print(fact.kind, fact.subject, fact.value, fact.evidence)
 for statement in program.statements:
     print(statement.index, statement.kind, statement.operands)
+for statement in program.canonical_statements:
+    print(statement.kind, statement.operands)
 ```
 
 ## Analysis model
@@ -46,25 +48,25 @@ The pipeline is deliberately small:
 1. Read the MZ bounds, entry point, and Turbo Basic prologue signature.
 2. Discover instructions recursively and record basic blocks and cross-references.
 3. Record signature matches for Turbo Basic dispatches and runtime calls.
-4. Repeatedly propagate register and FP-stack values, solve anchored constant-
-   pool candidates, name DGROUP slots, lift assignments and PRINT chains,
-   recover call arguments and conditions, and normalize control flow until a
-   complete round makes no changes.
-5. Group everything not yet lifted into `unknown.region` nodes.
+4. Repeatedly add immutable register, FP-stack, layout, source-statement, and
+   control-flow facts until a complete round adds nothing.
+5. Materialize semantic operations from stable facts and group every uncovered
+   discovered instruction into a lossless `unknown.region` node.
 6. Reconstruct a source-shaped statement sequence from the stable operation
    stream, resolving branch addresses to statement indexes when possible.
 
 `Program.instructions` retains the low-level evidence. `Program.operations`
-is the compact IR and is what the CLI emits by default. `Program.passes`
-records every pass, round, change count, and resulting node count, making it
+is the compact fact-owned IR and is what the CLI emits by default. It combines
+recognized semantic operations with high-level signatures and uncovered byte
+regions, so unsupported input remains visible. `Program.fact_passes` records
+every fact pass, round, addition count, and resulting fact count, making it
 clear whether another round helped.
 
-`Program.statements` is a second, source-shaped view. It currently recovers
-simple assignments, PRINT statements, IF/GOTO pairs, DELAY, END, and generic
-runtime statements. This view is intentionally lossy and incomplete: a value
-stays a memory or string-pool address until a pass has enough evidence to name
-or decode it. The operation stream remains available to explain every lifted
-statement.
+`Program.statements` is a fact-owned, address-bearing source view.
+`Program.canonical_statements` applies stable procedure, function, parameter,
+and variable names plus comparison-only expression normalization. Both remain
+intentionally incomplete: unsupported shapes stay in the operation evidence
+instead of becoming guessed source.
 
 The pool lift is generic across the simple Turbo Basic scalar layout, rather
 than across arbitrary executable formats. It derives candidates from evidenced

@@ -27,14 +27,21 @@ _TBX_STRING_STATEMENT_FIELDS = {
 def test_known_program_has_standalone_lifted_ir_and_cfg():
     program = decode((_CORPUS / "t1_delay.exe").read_bytes())
 
-    names = [operation.operands[0] for operation in program.operations
-             if operation.kind == "tb.statement"]
     assert program.dialect == "1.1"
-    assert {"DELAY_INIT", "DELAY_POLL", "END"} <= set(names)
+    assert [operation.kind for operation in program.operations] == [
+        "tb.prologue",
+        "ir.delay",
+        "tb.statement",
+        "tb.epilogue",
+    ]
+    assert program.operations[2].operands[0] == "END"
     assert program.instructions
     assert len(program.blocks) == 3
     assert any(xref.kind == "branch" for xref in program.xrefs)
-    assert any(report.name == "control-flow" for report in program.passes)
+    assert any(
+        report.name == "control-flow" and report.additions
+        for report in program.fact_passes
+    )
 
 
 def test_unknown_input_becomes_ir_instead_of_an_exception():
@@ -56,6 +63,30 @@ def test_recursive_discovery_skips_unreachable_bytes():
     assert [item.offset for item in program.instructions] == [0, 4]
     assert len(program.blocks) == 2
     assert program.xrefs[0].target == 4
+
+
+def test_def_fn_discovery_opens_only_exact_skip_return_brackets():
+    program = decode((_CORPUS / "zz_deffn1.exe").read_bytes())
+
+    assert any(
+        instruction.kind == "tb.fn_return" for instruction in program.instructions
+    )
+    assert any(
+        instruction.kind == "tb.fn_call"
+        and instruction.operands[0] == program.code_start + 6
+        for instruction in program.instructions
+    )
+    assert any(
+        xref.kind == "orphan"
+        and xref.source == program.code_start + 3
+        and xref.target == program.code_start + 6
+        for xref in program.xrefs
+    )
+
+    incomplete = decode(bytes.fromhex("cd ec ba e9 04 00 cd 35 ee cd 8f"))
+    assert not any(
+        instruction.offset == 6 for instruction in incomplete.instructions
+    )
 
 
 def test_wrapped_near_branches_discover_compiled_orphan_source_regions():
@@ -110,6 +141,186 @@ def test_fact_engine_preserves_instruction_signature_and_xref_evidence():
     )
 
 
+def test_error_line_table_anchors_codeless_def_type_statements():
+    program = decode((_CORPUS / "t1_deftype.exe").read_bytes())
+
+    line_table = next(
+        fact for fact in program.facts if fact.kind == "layout.line_table"
+    )
+    declarations = [
+        fact for fact in program.facts if fact.kind == "semantic.def_type"
+    ]
+    assert len(line_table.value[1]) == len(declarations) == 3
+    assert all(fact.confidence == "anchored" for fact in declarations)
+    assert [
+        statement.kind for statement in program.canonical_statements
+    ] == [
+        "DefType",
+        "OnError",
+        "DefType",
+        "IfGoto",
+        "DefType",
+        "IfGoto",
+        "End",
+        "Resume",
+    ]
+    assert [
+        statement.operands[-1]
+        for statement in program.canonical_statements
+        if statement.kind == "IfGoto"
+    ] == [3, 5]
+
+    ordinary = decode((_CORPUS / "t1_onerr.exe").read_bytes())
+    assert any(fact.kind == "layout.line_table" for fact in ordinary.facts)
+    assert not any(fact.kind == "semantic.def_type" for fact in ordinary.facts)
+
+    mixed = decode((_CORPUS / "t1_databig.exe").read_bytes())
+    assert sum(fact.kind == "semantic.def_type" for fact in mixed.facts) == 3
+
+
+def test_data_pointer_table_owns_codeless_items_and_line_grouping():
+    stems = (
+        "t1_readnum",
+        "v10_t1_readnum",
+        "t1_dataorph",
+        "v10_t1_dataorph",
+        "t1_databig",
+        "t1_datasharedlit",
+    )
+    for stem in stems:
+        image = (_CORPUS / f"{stem}.exe").read_bytes()
+        program = decode(image)
+        actual = [
+            (statement.kind, statement.operands)
+            for statement in program.canonical_statements
+            if statement.kind == "Data"
+        ]
+        exact = [
+            _tbx_statement(statement)
+            for statement in decode0.decode_user_code(image)
+            if isinstance(statement, tbx_ir.Data)
+        ]
+
+        assert actual == exact
+        assert any(fact.kind == "layout.data_items" for fact in program.facts)
+        assert all(
+            fact.confidence == "anchored"
+            for fact in program.facts
+            if fact.kind == "semantic.data"
+        )
+
+    shared = decode((_CORPUS / "t1_datasharedlit.exe").read_bytes())
+    items = next(
+        fact.value[0]
+        for fact in shared.facts
+        if fact.kind == "layout.data_items"
+    )
+    assert tuple((text, is_string) for text, is_string, _address in items) == (
+        ("P", True),
+        ("D", True),
+        ("0", False),
+    )
+
+
+def test_targeted_restore_leaves_data_grouping_unresolved():
+    for prefix in ("", "v10_"):
+        program = decode((_CORPUS / f"{prefix}t1_restoreline.exe").read_bytes())
+
+        assert any(fact.kind == "layout.data_items" for fact in program.facts)
+        assert not any(fact.kind == "semantic.data" for fact in program.facts)
+
+
+def test_rnd_intrinsics_flow_through_fp_store_assignments():
+    for prefix in ("", "v10_"):
+        image = (_CORPUS / f"{prefix}t1_rnd.exe").read_bytes()
+        program = decode(image)
+
+        assert [
+            (statement.kind, statement.operands)
+            for statement in program.canonical_statements
+        ] == [
+            _tbx_statement(statement)
+            for statement in decode0.decode_user_code(image)
+        ]
+
+    sequence = decode((_CORPUS / "t1_rndseq.exe").read_bytes())
+    assert [
+        statement.operands[1]
+        for statement in sequence.canonical_statements
+        if statement.kind == "Assign"
+    ] == [("call", "RND", ())] * 6
+
+    arguments = decode((_CORPUS / "t1_rndfn.exe").read_bytes())
+    recovered = [
+        statement.operands[1]
+        for statement in arguments.canonical_statements
+        if statement.kind == "Assign"
+    ]
+    assert recovered == [
+        ("call", "RND", ()),
+        ("call", "RND", (("const", 0),)),
+        ("call", "RND", (("const", 0),)),
+        ("call", "RND", (("const", -3),)),
+        ("call", "RND", ()),
+        ("call", "RND", (("const", 5),)),
+    ]
+
+
+def test_profiled_unary_fp_intrinsics_flow_through_assignments():
+    for prefix in ("", "v10_"):
+        for stem in ("t1_trig", "t1_explog"):
+            image = (_CORPUS / f"{prefix}{stem}.exe").read_bytes()
+            program = decode(image)
+
+            assert [
+                (statement.kind, statement.operands)
+                for statement in program.canonical_statements
+            ] == [
+                _tbx_statement(statement)
+                for statement in decode0.decode_user_code(image)
+            ]
+
+
+def test_direct_integer_arithmetic_and_scratch_conversions_are_exact():
+    for prefix in ("", "v10_"):
+        image = (_CORPUS / f"{prefix}t1_int2.exe").read_bytes()
+        program = decode(image)
+
+        assert [
+            (statement.kind, statement.operands)
+            for statement in program.canonical_statements
+        ] == [
+            _tbx_statement(statement)
+            for statement in decode0.decode_user_code(image)
+        ]
+
+
+def test_profiled_x87_stack_expressions_are_exact():
+    image = (_CORPUS / "tier1_expr2.exe").read_bytes()
+    program = decode(image)
+
+    assert [
+        (statement.kind, statement.operands)
+        for statement in program.canonical_statements
+    ] == [
+        _tbx_statement(statement)
+        for statement in decode0.decode_user_code(image)
+    ]
+
+
+def test_explicit_cint_bridge_survives_transient_scratch_storage():
+    image = (_CORPUS / "zz_cv_cint.exe").read_bytes()
+    program = decode(image)
+
+    assert [
+        (statement.kind, statement.operands)
+        for statement in program.canonical_statements
+    ] == [
+        _tbx_statement(statement)
+        for statement in decode0.decode_user_code(image)
+    ]
+
+
 def test_fact_engine_is_monotonic_and_pass_order_independent():
     seed = Fact("seed", (0,), (), (0,), "structural")
     derived = Fact("derived", (0,), (), (0,), "anchored")
@@ -136,34 +347,37 @@ def test_fact_engine_is_monotonic_and_pass_order_independent():
     assert forward[2] and reverse[2]
 
 
-def test_repeated_passes_reveal_arguments_until_stable():
+def test_fact_rounds_retain_register_values_until_stable():
     binary = bytes.fromhex("b8 01 00 bb 02 00 cd ec 22 00 ea 00 00 00 00")
     program = decode(binary)
 
-    statement = program.operations[0]
-    assert statement.kind == "tb.statement"
-    assert statement.operands == (
-        "COLOR", 0x22, 0, ("register", "bx", 2), ("register", "ax", 1)
+    assert [operation.kind for operation in program.operations] == [
+        "unknown.region",
+        "tb.statement",
+        "tb.epilogue",
+    ]
+    assert program.operations[1].operands == ("COLOR", 0x22, 0)
+    assert {
+        (fact.subject[1], fact.value[0])
+        for fact in program.facts
+        if fact.kind == "register.value"
+    } == {("ax", ("const", 1)), ("bx", ("const", 2))}
+    final_round = max(report.round for report in program.fact_passes)
+    assert all(
+        report.additions == 0
+        for report in program.fact_passes
+        if report.round == final_round
     )
-    changed_rounds = {
-        report.round
-        for report in program.passes
-        if report.name == "register-arguments" and report.changes
-    }
-    assert changed_rounds == {1, 2}
 
 
-def test_symbolic_pass_evaluates_fp_stack_and_direct_memory_effects():
+def test_symbolic_facts_evaluate_fp_stack_and_direct_memory_effects():
     delay = decode((_CORPUS / "t1_delay.exe").read_bytes())
     arithmetic = decode((_CORPUS / "t1_addimm.exe").read_bytes())
 
+    assert _fact_values(delay, "expression.value") == [("const", 1)]
     assert any(
-        operation.kind == "expr.value" and operation.operands == (("const", 1),)
-        for operation in delay.operations
-    )
-    assert any(
-        report.name == "symbols" and report.changes >= 2
-        for report in arithmetic.passes
+        report.name == "symbolic-effects" and report.additions >= 2
+        for report in arithmetic.fact_passes
     )
 
 
@@ -246,7 +460,10 @@ def test_dgroup_pass_names_slots_without_touching_runtime_cells():
     assert [slot.name for slot in program.slots[:3]] == ["V0001", "V0002", "V0003"]
     assert [slot.offset for slot in program.slots[:3]] == [0x120, 0x124, 0x128]
     assert all(slot.offset < 0x134 for slot in program.slots)
-    assert any(report.name == "dgroup-slots" and report.changes for report in program.passes)
+    assert any(
+        report.name == "dgroup-slots" and report.additions
+        for report in program.fact_passes
+    )
 
 
 def test_slot_facts_match_legacy_identities_and_retain_types():
@@ -279,8 +496,8 @@ def test_constant_pool_pass_resolves_numeric_and_string_literals():
     assert conditional.statements[1].operands[1] == ("const", 2)
     assert conditional.statements[3].operands[1] == ("const", 5)
     assert any(
-        report.name == "constant-pool" and report.changes
-        for report in printed.passes
+        report.name == "constant-pool" and report.additions
+        for report in printed.fact_passes
     )
 
 
@@ -605,7 +822,7 @@ def test_assignment_facts_wait_for_unique_memory_identity():
     assert not any(fact.kind == "semantic.assign" for fact in program.facts)
 
 
-def test_runtime_pass_lifts_numeric_and_string_print_chains():
+def test_runtime_facts_lift_numeric_and_string_print_chains():
     program = decode((_CORPUS / "t1_print.exe").read_bytes())
     prints = [node.operands for node in program.operations if node.kind == "ir.print"]
 
@@ -618,7 +835,12 @@ def test_runtime_pass_lifts_numeric_and_string_print_chains():
             True,
         ),
     ]
-    assert any(node.kind == "tb.commit" for node in program.operations)
+    assert not any(node.kind == "tb.commit" for node in program.operations)
+    assert all(
+        fact.evidence
+        for fact in program.facts
+        if fact.kind == "semantic.print"
+    )
 
 
 def test_runtime_facts_match_legacy_prints_with_complete_provenance():
@@ -2323,13 +2545,13 @@ def test_device_io_facts_leave_unverified_or_incomplete_wait_structural():
     assert truncated.canonical_statements == altered.canonical_statements == ()
 
 
-def test_fact_operation_view_matches_migrated_legacy_operations():
+def test_public_operation_view_contains_every_fact_operation():
     for stem in ("t1_addimm", "t1_print", "t1_if"):
         program = decode((_CORPUS / f"{stem}.exe").read_bytes())
         migrated_kinds = {
             "ir.assign", "ir.print", "ir.if_goto", "ir.delay", "tb.statement"
         }
-        legacy = [
+        public = [
             (node.offset, node.end, node.kind, node.operands)
             for node in program.operations
             if node.kind in migrated_kinds
@@ -2338,7 +2560,7 @@ def test_fact_operation_view_matches_migrated_legacy_operations():
             (node.offset, node.end, node.kind, node.operands)
             for node in program.fact_operations
         ]
-        assert facts == legacy
+        assert facts == public
         assert all(node.raw for node in program.fact_operations)
 
 
@@ -2352,31 +2574,272 @@ def test_branch_pair_pass_lifts_source_conditions_and_true_targets():
     ]
 
 
-def test_control_facts_match_legacy_branches_and_if_gotos():
+def test_control_facts_materialize_branches_and_if_gotos():
     delay = decode((_CORPUS / "t1_delay.exe").read_bytes())
     conditional = decode((_CORPUS / "t1_if.exe").read_bytes())
 
-    legacy_branch = next(node for node in delay.operations if node.kind == "flow.branch")
     fact_branch = next(fact for fact in delay.facts if fact.kind == "flow.branch")
-    assert fact_branch.subject == (legacy_branch.offset, legacy_branch.end)
-    assert fact_branch.value == legacy_branch.operands
+    assert fact_branch.subject == (0x870E, 0x8710)
+    assert fact_branch.value == ("<>", 0x8709)
 
-    legacy_ifs = [
+    materialized = [
         node for node in conditional.operations if node.kind == "ir.if_goto"
     ]
     fact_ifs = [
         fact for fact in conditional.facts if fact.kind == "semantic.if_goto"
     ]
-    assert [fact.value for fact in fact_ifs] == [node.operands for node in legacy_ifs]
+    assert [fact.value for fact in fact_ifs] == [
+        node.operands for node in materialized
+    ]
     assert [fact.subject for fact in fact_ifs] == [
-        (node.offset, node.end) for node in legacy_ifs
+        (node.offset, node.end) for node in materialized
     ]
     migrated = [node for node in conditional.fact_operations if node.kind == "ir.if_goto"]
     assert [
         (node.offset, node.end, node.operands) for node in migrated
     ] == [
-        (node.offset, node.end, node.operands) for node in legacy_ifs
+        (node.offset, node.end, node.operands) for node in materialized
     ]
+
+
+def test_inline_if_regions_own_proven_bodies_without_copying_body_facts():
+    expected = {
+        "t1_ifin": ("AND", 2),
+        "t1_boolflags": ("group", 1),
+    }
+    for stem, (condition_kind, body_size) in expected.items():
+        program = decode((_CORPUS / f"{stem}.exe").read_bytes())
+        regions = [fact for fact in program.facts if fact.kind == "region.if_inline"]
+        semantics = [
+            fact for fact in program.facts if fact.kind == "semantic.if_inline"
+        ]
+        statements = [
+            statement
+            for statement in program.canonical_statements
+            if statement.kind == "IfInline"
+        ]
+
+        assert len(regions) == len(semantics) == len(statements) == 1
+        assert regions[0].value[0][0] == condition_kind
+        assert semantics[0].value[1:3] == regions[0].value[1:3]
+        assert len(statements[0].operands[1]) == body_size
+        assert all(
+            not isinstance(item, Statement) for item in semantics[0].value
+        )
+
+
+def test_compound_condition_chain_reaches_one_terminal_if_goto():
+    program = decode((_CORPUS / "t1_and3.exe").read_bytes())
+    decisions = [
+        fact for fact in program.facts if fact.kind == "control.compound_condition"
+    ]
+    conditionals = [
+        fact for fact in program.facts if fact.kind == "semantic.if_goto"
+    ]
+
+    assert len(decisions) == len(conditionals) == 1
+    assert not any(fact.kind == "region.if_inline" for fact in program.facts)
+    assert conditionals[0].value[:3] == (
+        "AND",
+        (
+            "AND",
+            (">", ("slot", "V0003", 296), ("const", 1)),
+            ("<", ("slot", "V0002", 292), ("const", 5)),
+        ),
+        ("=", ("slot", "V0001", 288), ("const", 2)),
+    )
+
+
+def test_mixed_precedence_groups_have_one_outer_decision():
+    expected = {
+        "t1_mixedbool2": ("OR", "=", "AND"),
+        "t1_mixedbool3": ("OR", "OR", "AND"),
+    }
+    for stem, operators in expected.items():
+        for prefix in ("", "v10_"):
+            program = decode((_CORPUS / f"{prefix}{stem}.exe").read_bytes())
+            decisions = [
+                fact
+                for fact in program.facts
+                if fact.kind == "control.compound_condition"
+            ]
+            conditionals = [
+                fact
+                for fact in program.facts
+                if fact.kind in {"semantic.if_goto", "semantic.if_goto_condition"}
+            ]
+
+            assert len(decisions) == len(conditionals) == 1
+            condition = decisions[0].value[0]
+            assert (condition[0], condition[1][0], condition[2][0]) == operators
+
+
+def test_err_relations_feed_direct_and_compound_condition_owners():
+    direct = decode((_CORPUS / "t1_errcmp.exe").read_bytes())
+    conditional = next(
+        fact for fact in direct.facts if fact.kind == "semantic.if_goto"
+    )
+    assert conditional.value[:3] == (
+        "=",
+        ("call", "ERR", ()),
+        ("const", 24),
+    )
+
+    for stem, operator in (("t1_andchain", "AND"), ("t1_orchain", "OR")):
+        program = decode((_CORPUS / f"{stem}.exe").read_bytes())
+        relations = [
+            fact
+            for fact in program.facts
+            if fact.kind == "expression.relation_value"
+        ]
+        decisions = [
+            fact
+            for fact in program.facts
+            if fact.kind == "control.compound_condition"
+        ]
+
+        assert len(relations) == 3
+        assert len(decisions) == 1
+        assert decisions[0].value[0][0] == operator
+
+
+def test_compound_backedges_own_codeless_do_and_conditional_loop():
+    expected = {
+        "t1_booluntil": ("UNTIL", "AND"),
+        "t1_boolwh": ("WHILE", "OR"),
+    }
+    for stem, (kind, operator) in expected.items():
+        program = decode((_CORPUS / f"{stem}.exe").read_bytes())
+        openers = [fact for fact in program.facts if fact.kind == "semantic.do_codeless"]
+        closers = [fact for fact in program.facts if fact.kind == "semantic.loop"]
+
+        assert len(openers) == len(closers) == 1
+        assert openers[0].value == (None, None)
+        assert closers[0].value[0] == kind
+        assert closers[0].value[1][0] == operator
+        assert [statement.kind for statement in program.canonical_statements] == [
+            "Do",
+            "Input",
+            "Loop",
+            "Print",
+        ]
+
+
+def test_string_function_operands_feed_assignment_and_compound_loop():
+    program = decode((_CORPUS / "t1_boolloopuntil.exe").read_bytes())
+    assignment = next(
+        fact
+        for fact in program.facts
+        if fact.kind == "semantic.assign"
+        and fact.value[1] == ("call", "INKEY$", ())
+    )
+    operands = [
+        fact
+        for fact in program.facts
+        if fact.kind == "expression.string_operand"
+        and isinstance(fact.value[0], tuple)
+        and fact.value[0][:2] == ("call", "CHR$")
+    ]
+    loop = next(fact for fact in program.facts if fact.kind == "semantic.loop")
+
+    assert assignment.subject == (34685, 34693)
+    assert len(operands) == 2
+    assert loop.value[0] == "UNTIL"
+    assert loop.value[1][0] == "OR"
+    assert loop.value[1][1][0] == loop.value[1][2][0] == "group"
+
+
+def test_ax_intrinsic_expressions_feed_stores_and_truth_control():
+    values = decode((_CORPUS / "t1_filef.exe").read_bytes())
+    assignments = [
+        fact.value
+        for fact in values.facts
+        if fact.kind == "semantic.assign"
+    ]
+    assert [value[1][1] for value in assignments] == ["EOF", "LPOS"]
+
+    expected = {
+        "t1_csrlin": "CSRLIN",
+        "t1_instat": "INSTAT",
+        "t1_loc2": "LOC",
+        "t1_mtimerf": "MTIMER",
+        "t1_penf": "PEN",
+        "t1_peek": "PEEK",
+        "t1_playf": "PLAY",
+        "t1_pos": "POS",
+        "t1_reg": "REG",
+        "t1_screenf": "SCREEN",
+        "t1_stick": "STICK",
+        "t1_strigf": "STRIG",
+        "t1_timerf": "TIMER",
+    }
+    for stem, name in expected.items():
+        program = decode((_CORPUS / f"{stem}.exe").read_bytes())
+        assignment = next(
+            fact for fact in program.facts if fact.kind == "semantic.assign"
+        )
+        assert assignment.value[1][1] == name
+
+    branch = decode((_CORPUS / "t1_bareiffn.exe").read_bytes())
+    conditional = next(
+        fact
+        for fact in branch.facts
+        if fact.kind == "semantic.if_goto_condition"
+    )
+    assert conditional.value[0] == (
+        "truth",
+        ("call", "EOF", (("const", 1),)),
+    )
+
+
+def test_x87_stack_comparisons_feed_existing_if_goto_owner():
+    program = decode((_CORPUS / "t1_fcmp.exe").read_bytes())
+    comparisons = [
+        fact for fact in program.facts if fact.kind == "expression.compare"
+    ]
+    conditionals = [
+        fact for fact in program.facts if fact.kind == "semantic.if_goto"
+    ]
+
+    assert len(comparisons) == len(conditionals) == 2
+    assert [fact.value[0] for fact in conditionals] == ["<=", "<>"]
+
+
+def test_calibrated_unary_numeric_functions_feed_assignments():
+    program = decode((_CORPUS / "t1_fn.exe").read_bytes())
+    calls = [
+        fact.value[1][1]
+        for fact in program.facts
+        if fact.kind == "semantic.assign"
+        and isinstance(fact.value[1], tuple)
+        and fact.value[1][:1] == ("call",)
+    ]
+
+    assert calls == ["ABS", "SQR", "INT", "SGN"]
+
+
+def test_string_comparisons_feed_direct_and_region_owned_control():
+    direct = decode((_CORPUS / "t1_strif.exe").read_bytes())
+    assert sum(fact.kind == "expression.string_compare" for fact in direct.facts) == 2
+    assert [
+        statement.operands[0]
+        for statement in direct.canonical_statements
+        if statement.kind == "IfGoto"
+    ] == ["<>", ">="]
+
+    nested = decode((_CORPUS / "t1_ifgoto.exe").read_bytes())
+    region = next(fact for fact in nested.facts if fact.kind == "region.if_inline")
+    body_gotos = [fact for fact in nested.facts if fact.kind == "semantic.goto"]
+    assert len(body_gotos) == 1
+    assert region.value[1:3] == (34932, 34938)
+    assert body_gotos[0].subject == (34935, 34938)
+    inline = next(
+        statement
+        for statement in nested.canonical_statements
+        if statement.kind == "IfInline"
+    )
+    assert [statement.kind for statement in inline.operands[1]] == ["Cls", "Goto"]
+    assert inline.operands[1][1].operands == (5,)
 
 
 def test_source_subroutine_facts_match_near_gosub_and_return_trees():
@@ -2933,6 +3396,165 @@ def test_profile_trace_hooks_consume_the_embedded_line_word():
         assert truncated.size == 2
 
 
+def test_profile_def_fn_control_signatures_are_complete_instructions():
+    cases = {
+        "1.1": (bytes.fromhex("cd 8d 00 06 00 00 00"), bytes.fromhex("cd 8f")),
+        "1.0": (bytes.fromhex("cd 87 00 06 00 00 00"), bytes.fromhex("cd 89")),
+    }
+    for dialect, (call_image, return_image) in cases.items():
+        call = decode_instruction(call_image, 0, len(call_image), 0x8700, dialect)
+        truncated = decode_instruction(call_image, 0, len(call_image) - 1, 0x8700, dialect)
+        returned = decode_instruction(
+            return_image, 0, len(return_image), 0x8700, dialect
+        )
+
+        assert (call.kind, call.size, call.operands) == (
+            "tb.fn_call",
+            7,
+            (0x8706, 0x8D, 0),
+        )
+        assert (truncated.kind, truncated.size, truncated.operands) == (
+            "tb.fn_call_truncated",
+            2,
+            (7,),
+        )
+        assert (returned.kind, returned.size) == ("tb.fn_return", 2)
+
+
+def test_def_fn_facts_own_frames_results_calls_and_block_exits():
+    for stem in ("zz_deffn1", "zz_deffn2", "zz_mdeffn1", "zz_mdeffn2"):
+        program = decode((_CORPUS / f"{stem}.exe").read_bytes())
+
+        assert [statement.kind for statement in program.canonical_statements] == [
+            "DefFn",
+            "Print",
+        ]
+        definition, printed = program.canonical_statements
+        assert definition.operands[0] == "FNFN1"
+        assert printed.operands[1][0][0:2] == ("call", "FNFN1")
+        assert any(fact.kind == "semantic.def_fn" for fact in program.facts)
+        assert any(
+            fact.kind == "expression.value" and "fn-call" in repr(fact.value)
+            for fact in program.facts
+        )
+
+    block = decode((_CORPUS / "zz_mdeffn2.exe").read_bytes())
+    body = block.canonical_statements[0].operands[2]
+    assert [statement.kind for statement in body] == ["IfInline", "FnResult"]
+    assert body[0].operands[1][0].kind == "ExitDef"
+
+    for stem in ("t1_fnforward", "v10_t1_fnforward"):
+        forward = decode((_CORPUS / f"{stem}.exe").read_bytes())
+        assert [statement.kind for statement in forward.canonical_statements] == [
+            "Print",
+            "End",
+            "DefFn",
+        ]
+        assert forward.canonical_statements[0].operands[1][0][0:2] == (
+            "call",
+            "FNFN1",
+        )
+
+    for stem in ("t1_fnargcall", "t1_fnlocalint"):
+        unsupported = decode((_CORPUS / f"{stem}.exe").read_bytes())
+        assert not any(fact.kind == "semantic.def_fn" for fact in unsupported.facts)
+
+    for stem in ("t1_fnintcall", "v10_t1_fnintcall"):
+        integer = decode((_CORPUS / f"{stem}.exe").read_bytes())
+        definition, sub, call, end = integer.canonical_statements
+        assert [definition.kind, sub.kind, call.kind, end.kind] == [
+            "DefFn",
+            "SubDef",
+            "CallStmt",
+            "End",
+        ]
+        assert definition.operands[:2] == ("FNFN1%", ("A%",))
+        assignment = sub.operands[2][0]
+        assert assignment.operands[1] == (
+            "call",
+            "FNFN1%",
+            (("const", 2),),
+        )
+
+    unsupported_integer = decode(
+        (_CORPUS / "t1_fnintarith.exe").read_bytes()
+    )
+    assert unsupported_integer.canonical_statements[0].operands == (
+        "FNFN1%",
+        (),
+        (
+            Statement(
+                0,
+                unsupported_integer.code_start + 11,
+                "FnResult",
+                (("binary", "AND", ("var", "A%"), ("const", 15)),),
+            ),
+        ),
+        True,
+    )
+
+    literal = decode((_CORPUS / "t1_fnlitresult.exe").read_bytes())
+    assert literal.canonical_statements[0].operands[0:2] == ("FNFN1%", ())
+    nested_assignment = literal.canonical_statements[1].operands[2][0]
+    assert nested_assignment.operands[1] == (
+        "binary",
+        "-",
+        ("call", "FNFN1%", ()),
+        ("const", 7),
+    )
+
+    expected_string_definitions = {
+        "t1_fnstr": (
+            "FNFN1$",
+            ("A$", "B"),
+            (
+                "binary",
+                "+",
+                ("var", "A$"),
+                ("call", "STR$", (("var", "B"),)),
+            ),
+            False,
+        ),
+        "t1_fnstrb": (
+            "FNFN1$",
+            ("A$",),
+            (
+                Statement(
+                    0,
+                    34576,
+                    "FnResult",
+                    (("binary", "+", ("var", "A$"), ("string", "!")),),
+                ),
+            ),
+            True,
+        ),
+    }
+    for stem, expected in expected_string_definitions.items():
+        string_function = decode((_CORPUS / f"{stem}.exe").read_bytes())
+        definition, printed, end = string_function.canonical_statements
+
+        assert definition.operands == expected
+        assert printed.operands[1][0][0:2] == ("call", "FNFN1$")
+        assert end.kind == "End"
+        assert any(
+            fact.kind == "expression.value"
+            and fact.value
+            and isinstance(fact.value[0], tuple)
+            and fact.value[0][0] == "fn-call"
+            and fact.value[0][-1] == "string"
+            for fact in string_function.facts
+        )
+
+    malformed = bytearray((_CORPUS / "t1_fnstr.exe").read_bytes())
+    epilogue = bytes.fromhex("c4 b6 04 00 cd d3 cd 8f")
+    assert malformed.count(epilogue) == 1
+    malformed[malformed.index(epilogue) + 5] = 0xD2
+    unsupported_string = decode(bytes(malformed))
+    assert not any(
+        fact.kind == "semantic.def_fn" for fact in unsupported_string.facts
+    )
+
+
 def test_profile_dispatches_consume_complete_inline_payloads():
     cases = {
         "1.1": (bytes.fromhex("cd ec 12 08"), 0x12),
@@ -3221,6 +3843,8 @@ def _tbx_statement(node):
             ),
             node.dynamic,
         )
+    elif isinstance(node, tbx_ir.Data):
+        operands = (tuple((item.text, item.is_str) for item in node.items),)
     elif isinstance(node, tbx_ir.Print):
         operands = (
             "console" if node.file is None else node.file,
@@ -3401,6 +4025,20 @@ def _tbx_expression(node):
         return "string", node.value
     if isinstance(node, tbx_ir.Call):
         return "call", node.name, tuple(_tbx_expression(item) for item in node.args)
+    if isinstance(node, tbx_ir.Nullary):
+        return "call", node.name, ()
+    if isinstance(node, tbx_ir.Neg):
+        operand = _tbx_expression(node.operand)
+        if (
+            isinstance(operand, tuple)
+            and len(operand) == 2
+            and operand[0] == "const"
+            and isinstance(operand[1], (int, float))
+        ):
+            return "const", -operand[1]
+        return "unary", "-", operand
+    if isinstance(node, tbx_ir.Group):
+        return _tbx_expression(node.inner)
     if isinstance(node, tbx_ir.PrintUsing):
         if node.lprint:
             mode = "printer"

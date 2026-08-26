@@ -22,6 +22,7 @@ _RELATIONS = {
     0x7D: ">=",
     0x7E: "<=",
 }
+_LOGICAL_GATES = {0x75: ("AND", "andaxbx"), 0x74: ("OR", "orax")}
 
 
 @dataclass(frozen=True)
@@ -52,6 +53,83 @@ def loop_statement_facts(
             loops.append(loop)
             yield loop.opener
             yield loop.closer
+
+
+def compound_tail_loop_facts(
+    evidence: Evidence, facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    """Recover a folded boolean condition ending in a direct backedge."""
+
+    operations = translate_operations(evidence.instructions)
+    indexes, by_address = operation_indexes(operations)
+    relations = sorted(
+        (
+            fact
+            for fact in facts
+            if fact.kind == "expression.relation_value"
+            and len(fact.subject) == 2
+        ),
+        key=lambda fact: fact.subject,
+    )
+    statements = _statement_starts(facts)
+    emitted: set[Fact] = set()
+    for first in relations:
+        loop = _compound_backedge_loop(
+            first,
+            relations,
+            operations,
+            indexes,
+            by_address,
+            statements,
+        )
+        if loop is None:
+            continue
+        for fact in (loop.opener, loop.closer):
+            if fact not in emitted:
+                emitted.add(fact)
+                yield fact
+
+
+def compound_condition_loop_facts(
+    _evidence: Evidence, facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    """Own an inverted branch/jump decision whose jump is the backedge."""
+
+    statements = _statement_starts(facts)
+    for decision in facts:
+        if (
+            decision.kind != "control.compound_condition"
+            or len(decision.subject) != 2
+            or len(decision.value) != 4
+        ):
+            continue
+        start, end = decision.subject
+        condition, polarity, target, false_target = decision.value
+        if (
+            not isinstance(start, int)
+            or not isinstance(end, int)
+            or polarity not in {0x74, 0x75}
+            or not isinstance(target, int)
+            or target >= start
+            or target not in statements
+            or false_target != end
+        ):
+            continue
+        kind = "UNTIL" if polarity == 0x75 else "WHILE"
+        yield Fact(
+            "semantic.do_codeless",
+            (target,),
+            (None, None),
+            decision.evidence,
+            "anchored",
+        )
+        yield Fact(
+            "semantic.loop",
+            decision.subject,
+            (kind, condition),
+            decision.evidence,
+            "anchored",
+        )
 
 
 def _comparison_loop(
@@ -132,6 +210,112 @@ def _comparison_loop(
     )
 
 
+def _compound_backedge_loop(
+    first: Fact,
+    relations: list[Fact],
+    operations: tuple[CompilerOp, ...],
+    indexes: dict[int, int],
+    by_address: dict[int, CompilerOp],
+    statements: set[int],
+) -> _Loop | None:
+    gate = by_address.get(first.subject[1])
+    pair = _following(operations, indexes, gate, 2)
+    if gate is None or gate.kind != "orax" or pair is None:
+        return None
+    dispatch, jump = pair
+    logical = _logical_pair(dispatch, jump)
+    if logical is None:
+        return None
+    following = _next_relation(relations, by_address, jump, logical)
+    if following is None:
+        return None
+    relation, combine = following
+    condition: object = (logical[0], first.value, relation.value)
+    support_facts = [first, relation]
+    support_ops = [gate, dispatch, jump, combine]
+    while True:
+        tail = _following(operations, indexes, combine, 2)
+        if tail is None:
+            return None
+        terminal = tail[0]
+        if (
+            terminal.kind == "jcc"
+            and len(terminal.args) == 2
+            and terminal.args[0] in {0x74, 0x75}
+            and isinstance(terminal.args[1], int)
+            and terminal.args[1] < first.subject[0]
+            and terminal.args[1] in statements
+        ):
+            kind = "UNTIL" if terminal.args[0] == 0x74 else "WHILE"
+            support = combine_evidence(
+                *(fact.evidence for fact in support_facts),
+                tuple(operation.offset for operation in (*support_ops, terminal)),
+            )
+            return _Loop(
+                Fact(
+                    "semantic.do_codeless",
+                    (terminal.args[1],),
+                    (None, None),
+                    support,
+                    "anchored",
+                ),
+                Fact(
+                    "semantic.loop",
+                    (first.subject[0], terminal.end),
+                    (kind, condition),
+                    support,
+                    "anchored",
+                ),
+                terminal.offset,
+            )
+        dispatch, jump = tail
+        logical = _logical_pair(dispatch, jump)
+        if logical is None:
+            return None
+        following = _next_relation(relations, by_address, jump, logical)
+        if following is None:
+            return None
+        relation, combine = following
+        condition = (logical[0], condition, relation.value)
+        support_facts.append(relation)
+        support_ops.extend((dispatch, jump, combine))
+
+
+def _logical_pair(
+    dispatch: CompilerOp, jump: CompilerOp
+) -> tuple[str, str] | None:
+    if (
+        dispatch.kind != "jcc"
+        or len(dispatch.args) != 2
+        or jump.kind != "jmp"
+        or len(jump.args) != 1
+        or dispatch.args[1] != jump.end
+    ):
+        return None
+    return _LOGICAL_GATES.get(dispatch.args[0])
+
+
+def _next_relation(
+    relations: list[Fact],
+    by_address: dict[int, CompilerOp],
+    jump: CompilerOp,
+    logical: tuple[str, str],
+) -> tuple[Fact, CompilerOp] | None:
+    operator, combine_kind = logical
+    matches = []
+    for relation in relations:
+        if relation.subject[0] != jump.end:
+            continue
+        combine = by_address.get(relation.subject[1])
+        if (
+            combine is not None
+            and combine.kind == combine_kind
+            and jump.args[0] == combine.offset + (2 if operator == "AND" else 0)
+        ):
+            matches.append((relation, combine))
+    return matches[0] if len(matches) == 1 else None
+
+
 def _materialization(
     operations: tuple[CompilerOp, ...], index: int
 ) -> tuple[CompilerOp, CompilerOp, CompilerOp, int] | None:
@@ -163,6 +347,19 @@ def _materialization(
     return first, true_branch, exit_branch, index + 8
 
 
+def _following(
+    operations: tuple[CompilerOp, ...],
+    indexes: dict[int, int],
+    operation: CompilerOp | None,
+    count: int,
+) -> tuple[CompilerOp, ...] | None:
+    if operation is None or operation.offset not in indexes:
+        return None
+    start = indexes[operation.offset] + 1
+    result = operations[start : start + count]
+    return result if len(result) == count else None
+
+
 def _condition(
     comparison: Fact, materialize: CompilerOp, facts: frozenset[Fact]
 ) -> tuple[object, ...] | None:
@@ -187,4 +384,8 @@ def _statement_starts(facts: frozenset[Fact]) -> set[int]:
     }
 
 
-LOOP_FACT_PASSES: tuple[NamedPass, ...] = (("loops", loop_statement_facts),)
+LOOP_FACT_PASSES: tuple[NamedPass, ...] = (
+    ("loops", loop_statement_facts),
+    ("compound-tail-loops", compound_tail_loop_facts),
+    ("compound-condition-loops", compound_condition_loop_facts),
+)

@@ -1,7 +1,7 @@
 {
  "schema_version": 1,
  "document_type": "tbx.ruled_out_hypotheses",
- "updated": "2026-08-21",
+ "updated": "2026-08-25",
  "note": "Decoder-side hypotheses that were investigated and REJECTED: a cause that turned out not to be the cause, or a fix that was written, tested and reverted. The sibling ledger runtime-revision-assessments.json covers the other class, where the answer is a property of the compiler rather than of our code; a pattern that is unwitnessable by our oracle belongs there, not here. The point of both is that a rejected hypothesis is expensive evidence and is otherwise lost the moment a session ends -- PLAN.md records them chronologically, and this is the deduplicated index into it. An entry earns its place by saying what was tried, what killed it, and what a re-attempt should do instead.",
  "dispositions": [
   "refuted",
@@ -10,6 +10,33 @@
   "not-a-defect"
  ],
  "hypotheses": [
+  {
+   "id": "RO-TBD-UNCONSUMED-DIRECT-JMP-IS-GOTO",
+   "title": "An unconsumed direct jump at a source boundary is a GOTO",
+   "disposition": "refuted",
+   "confidence": "high",
+   "files": [
+    "tests/fixtures/corpus/t1_goto.exe",
+    "tests/fixtures/corpus/t1_gotobeforefor.exe",
+    "tests/fixtures/corpus/t1_trongoto.exe",
+    "tests/fixtures/corpus/t1_erasepre.exe",
+    "tests/fixtures/corpus/t1_ifgoto.exe"
+   ],
+   "signatures": [
+    "direct x86 JMP whose target begins a recovered semantic statement",
+    "branch is not inside the final span or provenance of another semantic fact",
+    "branch follows a recovered statement or the compiler prologue"
+   ],
+   "hypothesis": "A direct jump can become semantic GOTO when its target is a recovered statement, no final semantic fact consumes the edge, and its source follows a recovered source boundary.",
+   "negative_evidence": [
+    "The rule finds the authored GOTOs in t1_gotobeforefor and t1_trongoto, but it also invents a GOTO in t1_ifgoto and finds two candidates where t1_erasepre has only one source GOTO.",
+    "The same rule misses basic t1_goto because the source assignment fact ends before its trailing runtime commit, leaving a real instruction gap before the jump.",
+    "The calibrated tbx path excludes active DO/FOR/procedure/structured-IF regions before its final GOTO fallback; local adjacency and final fact non-ownership do not reproduce that stateful distinction.",
+    "Oracle verification passed for t1_goto, t1_gotobeforefor, and t1_trongoto, so the contradictory shapes are compiler-authentic rather than stale fixtures."
+   ],
+   "instead": "Defer raw GOTO promotion until tbd has explicit region-ownership facts for loop setup/backedges, procedure skips, and structured IF/SELECT scaffolds, or introduce a monotonic ownership barrier that proves those consumers have had a chance to claim the edge. Do not weaken the local boundary rule or default an unclaimed JMP to source semantics.",
+   "source": "tbd parity session 2026-08-25"
+  },
   {
    "id": "RO-TBD-SHORT-BACKEDGE-IS-BARE-DO",
    "title": "Every short backward jump to a statement is a bare DO/LOOP pair",
