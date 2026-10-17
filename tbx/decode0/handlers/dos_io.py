@@ -222,7 +222,12 @@ def bounds(state: DecodeState, op, addr, kind) -> bool:
     """Dispatch family: bchk0, bchk_span, bchk_base_bp, bchk_idx_bp."""
     m, e, l, c = state.machine, state.expr, state.layout_state, state.control
     if kind == "bchk0":  # Bounds: xor si,si starts a checked index; reset the
-        e.bchk_subs = []  # pending non-final subscripts (F3.4/F3.5)
+        if e.bchk_subs:  # pending non-final subscripts (F3.4/F3.5)
+            # A subscript that is itself a checked array element starts its
+            # own access before the outer one combines: keep the outer stash
+            # (wild stat.exe: `V9#(V6%(I%), J%)`).
+            e.bchk_stack.append(e.bchk_subs)
+        e.bchk_subs = []
         e.bchk_bp = None
         state.advance()
         return True

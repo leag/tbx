@@ -54,10 +54,6 @@ def test_string_local_witnesses_decode(stem):
 
     program = decode0.decode_user_code(wild_hits_bytes(stem))
     assert program
-    if stem == "bmaster.exe":
-        assert emit0.emit(program)
-    else:
-        # The decoder now reaches the emitter; its unresolved cross-body edge
-        # is the next documented gap for IFI, not the old INT 8C scanner stop.
-        with pytest.raises(KeyError, match="35551"):
-            emit0.emit(program)
+    # Wild recovery retargets IFI's unresolved cross-body edge to the nearest
+    # statement, so both programs now reach source.
+    assert emit0.emit(program)

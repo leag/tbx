@@ -1,13 +1,12 @@
-"""OPEN facts over the compiler's two complete source scaffolds."""
-
 from __future__ import annotations
 
 import struct
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from tbd.facts import Evidence, NamedPass
+from tbd.facts import Evidence, NamedPass, reads
 from tbd.ir import Fact, Operation
+from tbd.operation_helpers import contiguous as _contiguous
 from tbd.semantic import combine_evidence, resolve_expression
 
 _OPEN_MODES = frozenset({"A", "B", "I", "O", "R"})
@@ -15,7 +14,7 @@ _OPEN_MODES = frozenset({"A", "B", "I", "O", "R"})
 
 @dataclass(frozen=True)
 class OpenMatch:
-    """One complete comma-form or FOR-AS OPEN scaffold."""
+    """Decoded OPEN statement fields and evidence offsets."""
 
     start: int
     end: int
@@ -29,8 +28,7 @@ class OpenMatch:
 
 
 def open_matches(instructions: tuple[Operation, ...]) -> tuple[OpenMatch, ...]:
-    """Return every complete OPEN template without consulting semantic facts."""
-
+    """Find all OPEN runtime scaffolds in an instruction stream."""
     matches = []
     for index in range(len(instructions) - 6):
         window = instructions[index : index + 7]
@@ -40,18 +38,21 @@ def open_matches(instructions: tuple[Operation, ...]) -> tuple[OpenMatch, ...]:
     return tuple(matches)
 
 
-def open_statement_facts(
-    evidence: Evidence, facts: frozenset[Fact]
-) -> Iterable[Fact]:
-    """Resolve complete OPEN matches into exact source-shaped facts."""
-
+@reads(
+    "constant",
+    "expression.system",
+    "layout.array",
+    "memory.write",
+    "slot",
+    "tb.runtime",
+    "tb.statement",
+    "x86.mov_imm",
+)
+def open_statement_facts(evidence: Evidence, facts: frozenset[Fact]) -> Iterable[Fact]:
+    """Recover OPEN statements and their file configuration."""
     for match in open_matches(evidence.instructions):
-        file_name = resolve_expression(
-            ("memory", match.file_address, "string"), facts
-        )
-        if file_name is None or not _supported_file_name(
-            file_name.value, match, facts
-        ):
+        file_name = resolve_expression(("memory", match.file_address, "string"), facts)
+        if file_name is None:
             continue
         if match.mode is None:
             resolved_mode = resolve_expression(
@@ -71,9 +72,7 @@ def open_statement_facts(
             mode = "string", match.mode
             mode_evidence = ()
         record_length = (
-            None
-            if match.record_length == 128
-            else ("const", match.record_length)
+            None if match.record_length == 128 else ("const", match.record_length)
         )
         yield Fact(
             "semantic.open",
@@ -122,20 +121,6 @@ def _comma_open(window: tuple[Operation, ...]) -> OpenMatch | None:
         record_length,
         False,
         tuple(instruction.offset for instruction in window),
-    )
-
-
-def _supported_file_name(
-    value: object, match: OpenMatch, facts: frozenset[Fact]
-) -> bool:
-    if not isinstance(value, tuple) or value[:1] != ("slot",):
-        return True
-    return any(
-        fact.kind == "memory.write"
-        and fact.subject == (match.file_address,)
-        and fact.evidence
-        and fact.evidence[-1] < match.start
-        for fact in facts
     )
 
 
@@ -209,16 +194,9 @@ def _immediate_ax(instruction: Operation) -> int | None:
 
 
 def _is_open(instruction: Operation) -> bool:
-    return (
-        instruction.kind == "tb.statement"
-        and instruction.operands[:2] == ("OPEN", 0x82)
-    )
-
-
-def _contiguous(instructions: tuple[Operation, ...]) -> bool:
-    return all(
-        left.end == right.offset
-        for left, right in zip(instructions, instructions[1:])
+    return instruction.kind == "tb.statement" and instruction.operands[:2] == (
+        "OPEN",
+        0x82,
     )
 
 

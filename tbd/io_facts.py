@@ -1,20 +1,29 @@
-"""Source device-I/O facts over complete compiler instruction scaffolds."""
-
 from __future__ import annotations
 
-from collections.abc import Iterable
 import struct
+from collections.abc import Iterable
 
-from tbd.facts import Evidence, NamedPass
+from tbd.facts import Evidence, NamedPass, reads
 from tbd.ir import Fact, Operation
-from tbd.semantic import combine_evidence, resolve_expression
+from tbd.operation_helpers import contiguous as _contiguous
+from tbd.semantic import Resolved, combine_evidence, resolve_expression
 
 
-def io_statement_facts(
-    evidence: Evidence, _facts: frozenset[Fact]
-) -> Iterable[Fact]:
-    """Recover calibrated I/O statements only from complete scaffolds."""
-
+@reads(
+    "constant",
+    "expression.system",
+    "layout.array",
+    "signature",
+    "slot",
+    "x86.and",
+    "x86.in_al_dx",
+    "x86.je",
+    "x86.mov_imm",
+    "x86.out_dx_al",
+    "x86.xor",
+)
+def io_statement_facts(evidence: Evidence, _facts: frozenset[Fact]) -> Iterable[Fact]:
+    """Recover console, printer, and timing I/O statements."""
     instructions = {item.offset: item for item in evidence.instructions}
     for block in evidence.blocks:
         nodes = tuple(
@@ -27,10 +36,7 @@ def io_statement_facts(
             if statement is not None:
                 yield statement
     nodes = tuple(sorted(evidence.instructions, key=lambda item: item.offset))
-    edges = {
-        (xref.source, xref.target, xref.kind)
-        for xref in evidence.xrefs
-    }
+    edges = {(xref.source, xref.target, xref.kind) for xref in evidence.xrefs}
     for index in range(len(nodes) - 10):
         statement = _wait3_statement(nodes[index : index + 11], edges)
         if statement is not None:
@@ -156,22 +162,17 @@ def _ax_constant(instruction: Operation) -> object | None:
     return None
 
 
-def _ax_value(instruction: Operation, facts: frozenset[Fact]):
+def _ax_value(instruction: Operation, facts: frozenset[Fact]) -> Resolved | None:
     constant = _ax_constant(instruction)
     if constant is not None:
         return resolve_expression(("const", constant), facts)
     raw = bytes.fromhex(instruction.raw)
+    if raw == b"\x31\xc0":
+        return resolve_expression(("const", 0), facts)
     if len(raw) == 4 and raw[:2] == b"\x8b\x06":
         address = struct.unpack_from("<H", raw, 2)[0]
         return resolve_expression(("memory", address, "integer"), facts)
     return None
-
-
-def _contiguous(instructions: tuple[Operation, ...]) -> bool:
-    return all(
-        left.end == right.offset
-        for left, right in zip(instructions, instructions[1:])
-    )
 
 
 IO_FACT_PASSES: tuple[NamedPass, ...] = (("device-io", io_statement_facts),)

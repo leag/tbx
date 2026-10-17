@@ -10,3 +10,6 @@ wild/hits/
 /*.bas
 wild/pcsig8-scan.log
 .vscode
+wild/hits
+build/
+oracle/snapshots/

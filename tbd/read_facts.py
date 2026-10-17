@@ -1,5 +1,3 @@
-"""READ facts over complete scalar and computed-target item chains."""
-
 from __future__ import annotations
 
 import struct
@@ -7,9 +5,10 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from tbd.compiler_ops import CompilerOp, translate_operations
-from tbd.facts import Evidence, NamedPass
-from tbd.input_facts import array_input_item, integer_input_item
+from tbd.facts import Evidence, NamedPass, reads
+from tbd.input_facts import _array_stores_by_start, array_input_item, integer_input_item
 from tbd.ir import Fact, Operation
+from tbd.operation_helpers import statement_name as _phase_name
 from tbd.profile import FP_TRANSFER_TYPES
 from tbd.semantic import combine_evidence, resolve_array_element, resolve_slot
 
@@ -22,25 +21,45 @@ class _Item:
     evidence: tuple[int, ...]
 
 
-def read_statement_facts(
-    evidence: Evidence, facts: frozenset[Fact]
-) -> Iterable[Fact]:
-    """Recover maximal READ chains, requiring the numeric commit when used."""
+@reads(
+    "layout.array",
+    "reference.array_store",
+    "slot",
+    "tb.fn_call",
+    "tb.fn_return",
+    "tb.fp",
+    "tb.fp_far",
+    "tb.fwait",
+    "tb.runtime",
+    "tb.statement",
+    "x86.inc",
+    "x86.j",
+    "x86.jmp",
+    "x86.mov_acc_mem",
+    "x86.mov_imm",
+)
+def read_statement_facts(evidence: Evidence, facts: frozenset[Fact]) -> Iterable[Fact]:
+    """Recover READ statements and their typed destinations."""
 
     instructions = evidence.instructions
     compiler_ops = {
-        operation.offset: operation
-        for operation in translate_operations(instructions)
+        operation.offset: operation for operation in translate_operations(instructions)
     }
+    array_stores = _array_stores_by_start(facts)
+    instruction_ends = {item.end: index for index, item in enumerate(instructions)}
     index = 0
     while index < len(instructions):
-        first = _item(instructions, index, compiler_ops, facts)
+        first = _item(
+            instructions, index, compiler_ops, facts, array_stores, instruction_ends
+        )
         if first is None:
             index += 1
             continue
         items = []
         cursor = index
-        while item := _item(instructions, cursor, compiler_ops, facts):
+        while item := _item(
+            instructions, cursor, compiler_ops, facts, array_stores, instruction_ends
+        ):
             items.append(item)
             cursor += item.size
         following = instructions[cursor] if cursor < len(instructions) else None
@@ -53,14 +72,16 @@ def read_statement_facts(
         if incomplete or (has_numeric and commit is None):
             index = cursor
             continue
-        targets = []
-        support = []
+        targets: list[object] = []
+        support: list[tuple[int, ...]] = []
         for item in items:
             if isinstance(item.reference, int):
-                target = resolve_slot(
+                target = resolve_slot(item.reference, facts) or resolve_array_element(
                     item.reference, facts
-                ) or resolve_array_element(item.reference, facts)
+                )
                 if target is None:
+                    break
+                if not isinstance(target.value, tuple):
                     break
                 targets.append(target.value + (item.kind,))
                 support.extend((item.evidence, target.evidence))
@@ -87,6 +108,8 @@ def _item(
     index: int,
     compiler_ops: dict[int, CompilerOp],
     facts: frozenset[Fact],
+    array_stores: dict[int, Fact] | None = None,
+    instruction_ends: dict[int, int] | None = None,
 ) -> _Item | None:
     numeric = _numeric_item(instructions[index : index + 2])
     if numeric is not None:
@@ -97,13 +120,13 @@ def _item(
         phase_name="DATA_NUMBER",
     )
     if integer is not None:
-        return _Item(
-            integer.size, integer.reference, integer.kind, integer.evidence
-        )
+        return _Item(integer.size, integer.reference, integer.kind, integer.evidence)
     array = array_input_item(
         instructions,
         index,
         facts,
+        array_stores=array_stores,
+        instruction_ends=instruction_ends,
         numeric_phase="DATA_NUMBER",
         string_phase="DATA_STRING",
     )
@@ -157,13 +180,6 @@ def _string_item(window: tuple[Operation, ...]) -> _Item | None:
         "string",
         (phase.offset, setup.offset, store.offset),
     )
-
-
-def _phase_name(instruction: Operation) -> str | None:
-    if instruction.kind != "tb.statement" or not instruction.operands:
-        return None
-    name = instruction.operands[0]
-    return name if isinstance(name, str) else None
 
 
 def _runtime_vector(instruction: Operation | None) -> int | None:

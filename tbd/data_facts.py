@@ -1,11 +1,9 @@
-"""DATA pool ownership and codeless source-statement facts."""
-
 from __future__ import annotations
 
 import struct
 from collections.abc import Iterable
 
-from tbd.facts import Evidence, NamedPass
+from tbd.facts import Evidence, NamedPass, reads
 from tbd.ir import Fact
 from tbd.pool import decode_string_descriptors
 from tbd.semantic import combine_evidence, unique_fact
@@ -13,18 +11,15 @@ from tbd.semantic import combine_evidence, unique_fact
 DataItem = tuple[str, bool, int]
 
 
-def data_item_facts(
-    evidence: Evidence, facts: frozenset[Fact]
-) -> Iterable[Fact]:
-    """Recover the unique source-order descriptor-pointer table."""
+@reads("layout.pool", "memory.read", "reference.input_prompt")
+def data_item_facts(evidence: Evidence, facts: frozenset[Fact]) -> Iterable[Fact]:
+    """Recover DATA values and their static storage locations."""
 
     layout = unique_fact(facts, "layout.pool", ("dgroup",))
     if layout is None or len(layout.value) != 4:
         return
     ds, pool_base, _marker, string_base = layout.value
-    descriptors = decode_string_descriptors(
-        evidence.image, ds, pool_base, string_base
-    )
+    descriptors = decode_string_descriptors(evidence.image, ds, pool_base, string_base)
     if (
         descriptors is None
         or not descriptors
@@ -76,17 +71,65 @@ def data_item_facts(
     )
 
 
-def data_statement_facts(
-    evidence: Evidence, facts: frozenset[Fact]
-) -> Iterable[Fact]:
-    """Group anchored DATA items at codeless line-table positions."""
+@reads(
+    "layout.array",
+    "layout.common_band",
+    "layout.data_items",
+    "layout.line_table",
+    "layout.pool",
+    "layout.runtime_array",
+    "option.base",
+    "semantic.common",
+    "semantic.dim",
+    "semantic.do_codeless",
+    "semantic.dynamic_dim",
+    "semantic.local_dim",
+    "semantic.option_base",
+    "tb.statement",
+)
+def data_statement_facts(evidence: Evidence, facts: frozenset[Fact]) -> Iterable[Fact]:
+    """Convert recovered DATA items into source-level statements."""
 
     data = [fact for fact in facts if fact.kind == "layout.data_items"]
+    if not data:
+        phases = [
+            instruction
+            for instruction in evidence.instructions
+            if instruction.kind == "tb.statement"
+            and instruction.operands[:1] in {("DATA_NUMBER",), ("DATA_STRING",)}
+        ]
+        layout = unique_fact(facts, "layout.pool", ("dgroup",))
+        if len(phases) == 1 and layout is not None and len(layout.value) == 4:
+            ds, pool_base, _marker, string_base = layout.value
+            descriptors = decode_string_descriptors(
+                evidence.image, ds, pool_base, string_base
+            )
+            if descriptors is not None and len(descriptors) == 1:
+                yield Fact(
+                    "semantic.data",
+                    (phases[0].offset, 0),
+                    (((descriptors[0][1], True),),),
+                    (phases[0].offset,),
+                    "anchored",
+                )
+        numeric_items = _numeric_data_items(
+            evidence.image, layout.value if layout is not None else None
+        )
+        if phases and numeric_items and evidence.instructions:
+            yield Fact(
+                "semantic.data",
+                (evidence.instructions[0].offset, 0),
+                (numeric_items,),
+                (phases[0].offset,),
+                "anchored",
+            )
+        return
     if len(data) != 1 or len(data[0].value) != 1:
         return
     items = data[0].value[0]
     if not isinstance(items, tuple) or not items or _has_targeted_restore(evidence):
         return
+    layout = unique_fact(facts, "layout.pool", ("dgroup",))
     tables = [fact for fact in facts if fact.kind == "layout.line_table"]
     if len(tables) == 1 and len(tables[0].value) == 2:
         orphans = tables[0].value[1]
@@ -97,6 +140,18 @@ def data_statement_facts(
                 return
             selected = items[order : order + 1] if order + 1 < count else items[order:]
             yield _data_statement(data[0], orphan, order, selected)
+        return
+    numeric_items = _numeric_data_items(
+        evidence.image, layout.value if layout else None
+    )
+    if numeric_items:
+        yield Fact(
+            "semantic.data",
+            (evidence.instructions[0].offset, 0),
+            (numeric_items,),
+            data[0].evidence,
+            "anchored",
+        )
         return
     if (
         tables
@@ -144,11 +199,52 @@ def _pointer_tables(
         for candidate in candidates
         if not any(
             other[0] < candidate[0]
-            and other[0] + 2 * len(other[1])
-            >= candidate[0] + 2 * len(candidate[1])
+            and other[0] + 2 * len(other[1]) >= candidate[0] + 2 * len(candidate[1])
             for other in candidates
         )
     ]
+
+
+def _numeric_data_items(image: bytes, layout: object) -> tuple[tuple[str, bool], ...]:
+    if not isinstance(layout, tuple) or len(layout) != 4:
+        return ()
+    ds, _pool_base, _marker, string_base = layout
+    if not all(isinstance(value, int) for value in (ds, string_base)):
+        return ()
+    text_base = ds + string_base
+    sentinel = None
+    for candidate in range(text_base - 64, text_base):
+        if (
+            candidate >= 0
+            and image[candidate : candidate + 2] == b"\0\x80"
+            and candidate + 5 < len(image)
+            and image[candidate + 5] == 0x80
+            and image[candidate + 4] != 0
+        ):
+            sentinel = candidate
+            break
+    if sentinel is None:
+        return ()
+    base = struct.unpack_from("<H", image, sentinel + 2)[0]
+    result: list[tuple[str, bool]] = []
+    cursor = sentinel + 4
+    while cursor + 4 <= text_base:
+        length, tag = image[cursor], image[cursor + 1]
+        if tag != 0x80 or length == 0:
+            break
+        offset = struct.unpack_from("<H", image, cursor + 2)[0] - base
+        start = text_base + base + offset
+        if offset < 0 or start + length > len(image):
+            return ()
+        text = image[start : start + length].decode("latin-1")
+        try:
+            float(text)
+            is_string = False
+        except ValueError:
+            is_string = True
+        result.append((text, is_string))
+        cursor += 4
+    return tuple(result[::-1])
 
 
 def _contains_in_order(values: tuple[int, ...], anchors: tuple[int, ...]) -> bool:

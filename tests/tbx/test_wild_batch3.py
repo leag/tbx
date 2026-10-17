@@ -115,11 +115,12 @@ def test_scan_wild_sabpcv3_clears_its_inline_subs():
 
     exe = wild_hits_bytes("sabpcv3.exe")
     start, dialect = decode0.find_prologue(exe)
-    # The inline-sub contamination gap is closed; the scan now reaches the
-    # independent INT EC variant at the end of the program.
-    import pytest
-    with pytest.raises(ValueError, match=r"unhandled INT EC sub 02 at 0x11322"):
-        decode0._scan(exe, start, dialect, set())
+    # The inline-sub contamination gap is closed; the scan reaches the
+    # independent INT EC variant at the end of the program, which wild
+    # recovery keeps as an opaque op and scans past.
+    ops = decode0._scan(exe, start, dialect, set())
+    assert (0x11322, "rt_opaque", 0x02) in ops
+    assert ops[-1][1] == "epilogue"
 
 
 def test_decode_t1_strif():
@@ -1926,8 +1927,8 @@ def test_wild_mf_compound_if_far_exit_advances():
     # independent string-descriptor recovery gap.
     program = decode0.decode_user_code(wild_hits_bytes("mf.exe"))
     assert program
-    with pytest.raises(KeyError, match="60358"):
-        emit0.emit(program)
+    # Wild recovery now retargets the unresolvable edge, so mf.exe emits.
+    assert emit0.emit(program)
 
 
 def test_wild_mcmurphy_double_for_next_wraparound_advances():

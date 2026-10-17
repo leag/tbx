@@ -726,6 +726,13 @@ def int_alu(state: DecodeState, op, addr, kind) -> bool:
                         f"bounds subscript count != array rank at {addr:#x}"
                     )
                 m.si = ("idx", blk, subs)
+            elif (
+                expr_.bchk_stack
+                and blk in l.slot_info
+                and l.slot_info[blk]["rank"] == len(expr_.bchk_stack[-1]) + 1
+            ):
+                subs = tuple(reversed(expr_.bchk_stack.pop() + [m.si]))
+                m.si = ("idx", blk, subs)
             else:
                 if blk not in l.slot_info or l.slot_info[blk]["rank"] != 1:
                     logger.warning(

@@ -1,12 +1,11 @@
-"""FP FOR/NEXT facts translated from calibrated compiler templates."""
-
 from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import cast
 
 from tbd.compiler_ops import CompilerOp, operation_indexes, translate_operations
-from tbd.facts import Evidence, NamedPass
+from tbd.facts import Evidence, NamedPass, reads
 from tbd.for_facts import (
     ForEvidence,
     _assignment_ending,
@@ -15,12 +14,13 @@ from tbd.for_facts import (
 )
 from tbd.for_templates import FpForTemplate, match_fp_for_test
 from tbd.ir import Fact, Operation
-from tbd.semantic import combine_evidence
+from tbd.operation_helpers import slot_address as _slot_address
+from tbd.semantic import combine_evidence, unique_fact
 
 
 @dataclass(frozen=True)
 class FpHeader:
-    """Three staged assignments and their initial jump to NEXT."""
+    """Floating-point FOR-loop initialization facts."""
 
     jump: Operation
     limit: Fact
@@ -30,14 +30,32 @@ class FpHeader:
 
 @dataclass(frozen=True)
 class FpTail:
-    """The translated FP STEP update immediately before the sign test."""
+    """Floating-point FOR-loop increment and termination facts."""
 
     start: int
     evidence: tuple[int, ...]
 
 
+@reads(
+    "flow.branch",
+    "flow.goto",
+    "semantic.assign",
+    "slot",
+    "tb.fn_call",
+    "tb.fn_return",
+    "tb.fp",
+    "tb.fp_far",
+    "tb.fwait",
+    "tb.runtime",
+    "tb.statement",
+    "x86.inc",
+    "x86.j",
+    "x86.jmp",
+    "x86.mov_acc_mem",
+    "x86.mov_imm",
+)
 def fp_for_facts(evidence: Evidence, facts: frozenset[Fact]) -> Iterable[Fact]:
-    """Translate the reference decoder's x87 FOR decisions into facts."""
+    """Recover floating-point FOR/NEXT loop facts."""
 
     context = _for_evidence(evidence.instructions, facts)
     operations = translate_operations(evidence.instructions)
@@ -93,7 +111,20 @@ def _fp_for_match(
     index = indexes.get(target)
     if index is None or any(address is None for address in slots):
         return None
-    template = match_fp_for_test(operations, index, slots)
+    limit_address, step_address, variable_address = slots
+    if not all(
+        isinstance(address, int)
+        for address in (limit_address, step_address, variable_address)
+    ):
+        return None
+    template = match_fp_for_test(
+        operations,
+        index,
+        cast(
+            tuple[int, int, int],
+            (limit_address, step_address, variable_address),
+        ),
+    )
     if template is None:
         return None
     tail = _fp_tail(
@@ -122,9 +153,7 @@ def _fp_tail(
         return None
     load, fold, store = operations[index - 3 : index]
     expected = (
-        ("fld64", "fold64", "fstp64")
-        if template.wide
-        else ("fld", "fold", "fstp")
+        ("fld64", "fold64", "fstp64") if template.wide else ("fld", "fold", "fstp")
     )
     if (load.kind, fold.kind, store.kind) != expected:
         return None
@@ -153,12 +182,15 @@ def _fp_header(goto: Fact, context: ForEvidence) -> FpHeader | None:
     commit = context.by_end.get(jump.offset) if jump is not None else None
     if jump is None or not _runtime_commit(commit):
         return None
+    assert commit is not None
     variable = _assignment_ending(context.assignments, commit.offset)
     step = _previous_assignment(variable, context.assignments)
     limit = _previous_assignment(step, context.assignments)
     if variable is None or step is None or limit is None:
         return None
-    if any(_string_slot(item.value[0], context.facts) for item in (limit, step, variable)):
+    if any(
+        _string_slot(item.value[0], context.facts) for item in (limit, step, variable)
+    ):
         return None
     return FpHeader(jump, limit, step, variable)
 
@@ -173,25 +205,10 @@ def _previous_assignment(
     )
 
 
-def _slot_address(value: object) -> int | None:
-    if (
-        isinstance(value, tuple)
-        and len(value) >= 3
-        and value[0] == "slot"
-        and isinstance(value[2], int)
-    ):
-        return value[2]
-    return None
-
-
 def _string_slot(value: object, facts: frozenset[Fact]) -> bool:
     address = _slot_address(value)
-    return any(
-        fact.kind == "slot"
-        and fact.subject == (address,)
-        and fact.value[1] == ("string",)
-        for fact in facts
-    )
+    slot = unique_fact(facts, "slot", (address,))
+    return slot is not None and slot.value[1] == ("string",)
 
 
 def _fp_increment(value: object, variable: object, step: object) -> bool:

@@ -1,6 +1,7 @@
 """Instruction scan: walk the INT/ESC stream into the op list."""
 
 from __future__ import annotations
+import logging
 import struct
 from typing import Any
 
@@ -31,6 +32,8 @@ from tbx.decode0.opaque import find_opaque_helpers
 from tbx.decode0.opaque_helpers import (
     OPAQUE_HELPERS,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _scan_direct(exe, p, b, dia, ops, start, cs=None) -> int | None:
@@ -2026,7 +2029,13 @@ def _scan_pass(
             if runtime is not None:
                 p = runtime
                 continue
-            raise ValueError(f"unhandled INT EC sub {sub:02x} at {p:#x}")
+            # Wild recovery: a runtime service outside the calibrated
+            # vocabulary (another runtime revision). Keep it as an opaque
+            # statement and continue after the INT.
+            logger.warning("unhandled INT EC sub %02x at %x; kept as a comment", sub, p)
+            ops.append((p, "rt_opaque", sub))
+            p += 3
+            continue
         vec = dia.canon_vec(vec)
         np = _scan_int(exe, p, commits, dia, ops, start, vec)
         if np is not None:

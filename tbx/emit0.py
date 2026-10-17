@@ -58,9 +58,9 @@ _TOP_LEVEL_BLOCK_END = re.compile(
 
 
 def _source_bytes(text: str) -> int:
-    """Size as Turbo Basic reads it: emitted source is an 8-bit byte stream."""
+    """Size as Turbo Basic reads it: an 8-bit byte stream with DOS CRLF lines."""
     try:
-        return len(text.encode("latin-1"))
+        return len(text.encode("latin-1")) + text.count("\n") - text.count("\r\n")
     except UnicodeEncodeError as exc:
         raise ValueError("emitted source contains a non-Latin-1 character") from exc
 
@@ -538,13 +538,15 @@ def emit(
     *,
     compact: bool = False,
     dense: bool = False,
+    sparse: bool = False,
     line_starts: list[int] | None = None,
 ) -> str:
     """Render canonical Turbo Basic source.
 
     Dense output removes optional spacing and line labels which are not used
     as transfer targets. Programs carrying recovered error/trace line data
-    retain their complete physical numbering.
+    retain their complete physical numbering. ``sparse`` drops the unused
+    labels but keeps the spacing.
     """
 
     def validate_loop_exits(body, do_depth=0, path=()):
@@ -621,6 +623,11 @@ def emit(
         # are renumbered the way a program carrying no table at all is -- which
         # compiles, where the grouped spelling could not be compiled to be
         # judged. All 52 corpus fixtures with a table have a real one.
+        orig = None
+    if orig is not None and len(orig) != len(stmts):
+        # Wild recovery can lose or add statements after the error-trap
+        # table was matched; a table that no longer lines up cannot number
+        # the program, so renumber it (wild hfprop.exe).
         orig = None
     if orig is not None:
         line = {i: ln for i, ln in enumerate(orig)}
@@ -706,7 +713,7 @@ def emit(
     # except where a statement is the target of a source-level transfer. A
     # recovered line table or trace/split metadata makes physical numbering
     # byte-significant, so retain the complete numbering in those cases.
-    sparse_labels = dense and orig is None and not any(
+    sparse_labels = (dense or sparse) and orig is None and not any(
         (
             getattr(stmts, "hook_seq", ()),
             getattr(stmts, "traced", ()),
@@ -731,6 +738,13 @@ def emit(
                     f"body-line target {t} does not fit the line-number gap"
                 )
             return line[t.stmt] + t.phys
+        if isinstance(t, int) and t >= len(stmts):
+            # Wild recovery: a target past the last statement (a RESTORE whose
+            # DATA was not recovered); use the last line.
+            t = len(stmts) - 1
+        elif not isinstance(t, int) and t not in line:
+            # An address that never resolved to a statement.
+            t = len(stmts) - 1
         # A procedure return immediately before an INLINE SUB is represented
         # by the next executable procedure address after the opaque inline
         # body.  Turbo Basic source targets the numbered INLINE SUB line

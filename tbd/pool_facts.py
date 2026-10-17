@@ -1,22 +1,20 @@
-"""Memory-access and constant-pool facts derived from immutable evidence."""
-
 from __future__ import annotations
 
 import struct
 from collections.abc import Iterable
 
-from tbd.facts import Evidence, NamedPass
+from tbd.cache import identity_cache
+from tbd.facts import Evidence, NamedPass, reads
 from tbd.ir import Fact, Operation
-from tbd.pool import array_at, decode_literal, infer_layout
+from tbd.pool import array_at, decode_literal, infer_layout, static_array_at
 from tbd.profile import FP_ARITHMETIC_TYPES, FP_TRANSFER_TYPES
 from tbd.slots import VAR_BASE
 from tbd.swap_facts import mixed_string_array_swap_matches, scalar_swap_matches
 
 
-def memory_access_facts(
-    evidence: Evidence, _facts: frozenset[Fact]
-) -> Iterable[Fact]:
-    """Describe supported direct memory reads and writes."""
+@reads("tb.fp", "x86.mov_acc_mem")
+def memory_access_facts(evidence: Evidence, _facts: frozenset[Fact]) -> Iterable[Fact]:
+    """Recover reads and writes to the static memory pool."""
 
     claimed = {
         offset
@@ -41,10 +39,11 @@ def memory_access_facts(
             )
 
 
+@reads("signature", "tb.runtime", "x86.mov_imm")
 def string_reference_facts(
     evidence: Evidence, _facts: frozenset[Fact]
 ) -> Iterable[Fact]:
-    """Recognize direct string reads and writes through the SI runtime ABI."""
+    """Recover references to pooled strings."""
 
     for left, right in zip(evidence.instructions, evidence.instructions[1:]):
         access = _string_access(left, right)
@@ -60,32 +59,50 @@ def string_reference_facts(
         )
 
 
-def constant_pool_facts(
-    evidence: Evidence, facts: frozenset[Fact]
-) -> Iterable[Fact]:
-    """Infer one anchored pool layout and decode its referenced literals."""
+@reads(
+    "memory.read",
+    "memory.write",
+    "reference.input_prompt",
+    "signature",
+    "tb.fp",
+    "tb.runtime",
+    "tb.statement",
+    "x86.mov_acc_mem",
+    "x86.mov_imm",
+)
+def constant_pool_facts(evidence: Evidence, facts: frozenset[Fact]) -> Iterable[Fact]:
+    """Recover typed constants from the compiler's constant pool."""
 
+    # Every pass sees the previous round's snapshot.  Array witnesses already
+    # exist in round one, but memory facts do not: scoring that partial evidence
+    # can permanently add a conflicting layout to the monotone fact set.
+    local = _pool_memory_facts(evidence)
+    facts = facts | local
     writes = _addresses(facts, "memory.write")
     write_widths = _write_widths(facts)
     references = _references(facts)
-    if not writes and not references:
-        return
     array_slots, array_data, array_support = _array_witnesses(evidence.instructions)
+    if not array_slots:
+        code_end = evidence.instructions[-1].end if evidence.instructions else 0
+        descriptor_records = tuple(
+            record
+            for record in range(max(VAR_BASE, code_end), len(evidence.image) - 8, 2)
+            if static_array_at(evidence.image, record, VAR_BASE) is not None
+        )
+        if len(descriptor_records) == 1:
+            array_slots = (VAR_BASE,)
+            array_support = (descriptor_records[0],)
+    if not writes and not references and not array_slots and not array_data:
+        return
     runtime_blocks = _runtime_dim_blocks(evidence.instructions)
     common_blocks = runtime_blocks if runtime_blocks[:1] == (0x110,) else ()
     static_base = (
-        _align16(common_blocks[-1] + 0x36) + 0x10
-        if common_blocks
-        else VAR_BASE
+        _align16(common_blocks[-1] + 0x36) + 0x10 if common_blocks else VAR_BASE
     )
     if common_blocks:
         writes = {address for address in writes if address >= static_base}
-        write_widths = tuple(
-            item for item in write_widths if item[0] >= static_base
-        )
-        references = tuple(
-            item for item in references if item[0] >= static_base
-        )
+        write_widths = tuple(item for item in write_widths if item[0] >= static_base)
+        references = tuple(item for item in references if item[0] >= static_base)
     if runtime_blocks:
         writes = {
             address
@@ -114,8 +131,10 @@ def constant_pool_facts(
     )
     if layout is None:
         return
+    # Support from the instructions alone, so the layout is one fact across
+    # rounds rather than a new one each time other passes add memory facts.
     support = (
-        _support(facts, {"memory.read", "memory.write"})
+        _support(local, {"memory.read", "memory.write"})
         + array_support
         + (layout.marker,)
     )
@@ -150,7 +169,15 @@ def constant_pool_facts(
             (array.record, layout.marker),
             "anchored",
         )
-    for address, kind in references:
+    # Operands of ``imul [m]`` and ``sub ax,[m]`` are pool constants when they
+    # lie in the pool (``256 * ASC(...)``). They stay out of the layout
+    # evidence: array descriptors' stride words are multiplied the same way.
+    operands = tuple(
+        (address, "integer")
+        for address in _arithmetic_operands(evidence.instructions)
+        if address >= layout.pool_base
+    )
+    for address, kind in sorted({*references, *operands}):
         if array_at(layout, address) is not None:
             continue
         literal = (
@@ -160,8 +187,11 @@ def constant_pool_facts(
         )
         if literal is None:
             continue
+        if not isinstance(literal, tuple):
+            continue
         subject = ("string", address) if kind == "string" else ("memory", address)
-        evidence_addresses = _reference_support(facts, address, kind) + (layout.marker,)
+        # As for the layout, only the instructions' own accesses support it.
+        evidence_addresses = _reference_support(local, address, kind) + (layout.marker,)
         yield Fact(
             "constant",
             subject,
@@ -169,6 +199,16 @@ def constant_pool_facts(
             tuple(sorted(set(evidence_addresses))),
             "anchored",
         )
+
+
+@identity_cache
+def _pool_memory_facts(evidence: Evidence) -> frozenset[Fact]:
+    return frozenset(
+        (
+            *memory_access_facts(evidence, frozenset()),
+            *string_reference_facts(evidence, frozenset()),
+        )
+    )
 
 
 def _memory_accesses(instruction: Operation) -> tuple[tuple[str, int, str], ...]:
@@ -197,7 +237,7 @@ def _memory_accesses(instruction: Operation) -> tuple[tuple[str, int, str], ...]
 def instruction_memory_accesses(
     instruction: Operation,
 ) -> tuple[tuple[str, int, str], ...]:
-    """Expose calibrated direct-memory roles to other independent fact passes."""
+    """Describe memory operands used by one decoded instruction."""
 
     return _memory_accesses(instruction)
 
@@ -225,9 +265,9 @@ def _native_fp_access(
 def _array_witnesses(
     instructions: tuple[Operation, ...],
 ) -> tuple[tuple[int, ...], tuple[int, ...], tuple[int, ...]]:
-    slots = []
-    data = []
-    support = []
+    slots: list[int] = []
+    data: list[int] = []
+    support: list[int] = []
     for index, instruction in enumerate(instructions):
         slot_match = _array_slot_witness(instructions, index)
         if slot_match is not None:
@@ -277,26 +317,32 @@ def _array_slot_witness(
             far[1].offset,
             far[2].offset,
         )
+    palette = instructions[index + 1 : index + 4]
+    if (
+        len(palette) == 3
+        and palette[0].kind == "x86.mov_imm"
+        and palette[0].operands[0] == "dx"
+        and bytes.fromhex(palette[1].raw) == b"\x8e\xc2"
+        and palette[2].kind == "tb.statement"
+        and palette[2].operands[:1] == ("PALETTE_USING",)
+        and setup.end == palette[0].offset
+        and palette[0].end == palette[1].offset
+        and palette[1].end == palette[2].offset
+    ):
+        return VAR_BASE, (
+            setup.offset,
+            palette[0].offset,
+            palette[1].offset,
+            palette[2].offset,
+        )
     return None
 
 
 def _gfx_statement(instruction: Operation) -> bool:
-    return (
-        instruction.kind == "tb.statement"
-        and instruction.operands[:1] in {("GET_GFX",), ("PUT_GFX",)}
-    )
-
-
-def _pushes_far_si(instructions: tuple[Operation, ...], index: int) -> bool:
-    tail = instructions[index : index + 5]
-    for left, right in zip(tail, tail[1:]):
-        if (
-            bytes.fromhex(left.raw) == b"\x06"
-            and bytes.fromhex(right.raw) == b"\x56"
-            and left.end == right.offset
-        ):
-            return True
-    return False
+    return instruction.kind == "tb.statement" and instruction.operands[:1] in {
+        ("GET_GFX",),
+        ("PUT_GFX",),
+    }
 
 
 def _runtime_dim_blocks(instructions: tuple[Operation, ...]) -> tuple[int, ...]:
@@ -347,9 +393,7 @@ def _fp_access(
     return None
 
 
-def _string_access(
-    left: Operation, right: Operation
-) -> tuple[str, int] | None:
+def _string_access(left: Operation, right: Operation) -> tuple[str, int] | None:
     if (
         left.kind != "x86.mov_imm"
         or left.operands[0] != "si"
@@ -392,6 +436,16 @@ def _write_widths(facts: frozenset[Fact]) -> tuple[tuple[int, int], ...]:
     )
 
 
+def _arithmetic_operands(instructions: tuple[Operation, ...]) -> set[int]:
+    """Memory operands of ``imul word [m]`` and ``sub ax,[m]``."""
+    found = set()
+    for instruction in instructions:
+        raw = bytes.fromhex(instruction.raw)
+        if len(raw) == 4 and raw[:2] in {b"\xf7\x2e", b"\x2b\x06"}:
+            found.add(struct.unpack_from("<H", raw, 2)[0])
+    return found
+
+
 def _references(facts: frozenset[Fact]) -> tuple[tuple[int, str], ...]:
     return tuple(
         sorted(
@@ -425,18 +479,19 @@ def _support(facts: frozenset[Fact], kinds: set[str]) -> tuple[int, ...]:
 def _reference_support(
     facts: frozenset[Fact], address: int, kind: str
 ) -> tuple[int, ...]:
-    return tuple(
-        sorted(
-            {
-                source
-                for fact in facts
-                if fact.kind in {"memory.read", "reference.input_prompt"}
-                and fact.subject == (address,)
-                and fact.value == (kind,)
-                for source in fact.evidence
-            }
-        )
-    )
+    return _reference_support_index(facts).get(((address,), (kind,)), ())
+
+
+@identity_cache
+def _reference_support_index(
+    facts: frozenset[Fact],
+) -> dict[tuple[tuple, tuple], tuple[int, ...]]:
+    """Collect source offsets once per snapshot, preserving exact lookup keys."""
+    sources: dict[tuple[tuple, tuple], set[int]] = {}
+    for fact in facts:
+        if fact.kind in {"memory.read", "reference.input_prompt"}:
+            sources.setdefault((fact.subject, fact.value), set()).update(fact.evidence)
+    return {key: tuple(sorted(offsets)) for key, offsets in sources.items()}
 
 
 POOL_FACT_PASSES: tuple[NamedPass, ...] = (

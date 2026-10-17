@@ -1,19 +1,16 @@
-"""Codeless source facts anchored by the compiler's error line table."""
-
 from __future__ import annotations
 
 import struct
 from collections.abc import Iterable
 
-from tbd.facts import Evidence, NamedPass
+from tbd.facts import Evidence, NamedPass, reads
 from tbd.ir import Fact, Operation
 from tbd.semantic import combine_evidence
 
 
-def line_table_facts(
-    evidence: Evidence, facts: frozenset[Fact]
-) -> Iterable[Fact]:
-    """Locate one complete error-trap line table from immutable code evidence."""
+@reads("semantic.", "tb.epilogue", "tb.prologue", "tb.statement")
+def line_table_facts(evidence: Evidence, facts: frozenset[Fact]) -> Iterable[Fact]:
+    """Recover declarations encoded in Turbo Basic line tables."""
 
     prologues = [
         instruction
@@ -53,10 +50,24 @@ def line_table_facts(
     )
 
 
-def def_type_facts(
-    _evidence: Evidence, facts: frozenset[Fact]
-) -> Iterable[Fact]:
-    """Recover payload-free DEFtype declarations from unclaimed table rows."""
+@reads(
+    "layout.array",
+    "layout.common_band",
+    "layout.data_items",
+    "layout.line_table",
+    "layout.pool",
+    "layout.runtime_array",
+    "option.base",
+    "semantic.common",
+    "semantic.data",
+    "semantic.dim",
+    "semantic.do_codeless",
+    "semantic.dynamic_dim",
+    "semantic.local_dim",
+    "semantic.option_base",
+)
+def def_type_facts(_evidence: Evidence, facts: frozenset[Fact]) -> Iterable[Fact]:
+    """Recover DEF-type declarations from codeless program evidence."""
 
     if _has_competing_codeless_evidence(facts):
         return
@@ -72,9 +83,7 @@ def def_type_facts(
         return
     orphans = tables[0].value[1]
     claimed = {
-        statement.subject[:2]
-        for statement in statements
-        if len(statement.subject) >= 2
+        statement.subject[:2] for statement in statements if len(statement.subject) >= 2
     }
     for order, orphan in enumerate(orphans):
         if (
@@ -90,7 +99,7 @@ def def_type_facts(
         yield Fact(
             "semantic.def_type",
             (address, order),
-            (),
+            ("SNG", "A", "Z"),
             combine_evidence((record,), tables[0].evidence),
             "anchored",
         )
@@ -107,7 +116,8 @@ def _active_error_sites(instructions: tuple[Operation, ...]) -> tuple[int, ...]:
 def _active_error_instruction(instruction: Operation) -> bool:
     return (
         instruction.kind == "tb.statement"
-        and instruction.operands[:1] in {
+        and instruction.operands[:1]
+        in {
             ("ON_ERROR",),
             ("RESUME_BEGIN",),
             ("ERROR",),
@@ -122,9 +132,7 @@ def _statement_offsets(
     epilogue: int,
 ) -> set[int]:
     addresses = {
-        block.start
-        for block in evidence.blocks
-        if start < block.start < epilogue
+        block.start for block in evidence.blocks if start < block.start < epilogue
     }
     addresses.update(
         fact.subject[0]
@@ -172,13 +180,16 @@ def _parse_line_table(
     start: int,
     terminal: int,
     valid_offsets: set[int],
-) -> tuple[
-    tuple[tuple[int, int, int], ...],
-    tuple[tuple[int, int, int], ...],
-    tuple[int, ...],
-] | None:
+) -> (
+    tuple[
+        tuple[tuple[int, int, int], ...],
+        tuple[tuple[int, int, int], ...],
+        tuple[int, ...],
+    ]
+    | None
+):
     entries: dict[int, tuple[int, int]] = {}
-    orphans = []
+    orphans: list[tuple[int, int, int]] = []
     records = []
     cursor, previous_offset, previous_line = table_offset, 0, 0
     while cursor + 4 <= len(image):

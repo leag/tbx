@@ -1,22 +1,17 @@
-"""Compiler-template operations translated from immutable evidence.
-
-The names intentionally mirror the calibrated operation vocabulary used by
-the reference decoder.  This module contains no ``tbx`` import: it translates
-``tbd`` instructions so small fact passes can port proven template matchers
-instead of rediscovering byte patterns independently.
-"""
-
 from __future__ import annotations
 
 import struct
 from dataclasses import dataclass
+from functools import lru_cache
 
+from tbd.cache import identity_cache
 from tbd.ir import Operation
+from tbd.operation_helpers import raw_bytes
 
 
 @dataclass(frozen=True)
 class CompilerOp:
-    """One normalized operation consumed by compiler-template passes."""
+    """Normalized compiler operation used by the fact recognizers."""
 
     offset: int
     end: int
@@ -24,8 +19,9 @@ class CompilerOp:
     args: tuple[object, ...] = ()
 
 
+@identity_cache
 def translate_operations(instructions: tuple[Operation, ...]) -> tuple[CompilerOp, ...]:
-    """Translate recognized instructions into the calibrated template vocabulary."""
+    """Translate decoded IR instructions into compact compiler operations."""
 
     result = []
     for instruction in instructions:
@@ -35,10 +31,11 @@ def translate_operations(instructions: tuple[Operation, ...]) -> tuple[CompilerO
     return tuple(result)
 
 
+@identity_cache
 def operation_indexes(
     operations: tuple[CompilerOp, ...],
 ) -> tuple[dict[int, int], dict[int, CompilerOp]]:
-    """Return stable address-to-index and address-to-operation views."""
+    """Index compiler operations by position and byte offset."""
 
     return (
         {operation.offset: index for index, operation in enumerate(operations)},
@@ -46,8 +43,32 @@ def operation_indexes(
     )
 
 
+@lru_cache(maxsize=256)
+def contains_kind(operations: tuple[CompilerOp, ...], kind: str) -> bool:
+    """Return whether a translated operation stream contains ``kind``."""
+    return any(operation.kind == kind for operation in operations)
+
+
+@identity_cache
+def without_fwait(
+    operations: tuple[CompilerOp, ...],
+) -> tuple[tuple[CompilerOp, ...], tuple[int, ...]]:
+    """Return the non-FWAIT stream and its original-index lookup."""
+    filtered_items = []
+    indexes = []
+    for operation in operations:
+        indexes.append(len(filtered_items))
+        if operation.kind != "fwait":
+            filtered_items.append(operation)
+    filtered = tuple(filtered_items)
+    return filtered, tuple(indexes)
+
+
 def _translate(instruction: Operation) -> CompilerOp | None:
-    raw = bytes.fromhex(instruction.raw)
+    raw = raw_bytes(instruction.raw)
+    x87 = _x87_operation(instruction, raw)
+    if x87 is not None:
+        return x87
     if instruction.kind == "x86.mov_imm" and len(instruction.operands) == 2:
         register, value = instruction.operands
         if register in {"si", "dx"}:
@@ -68,6 +89,8 @@ def _translate(instruction: Operation) -> CompilerOp | None:
         return _op(instruction, "movaxbx")
     if raw == b"\x89\xf3":
         return _op(instruction, "movbxsi")
+    if raw == b"\x89\xde":
+        return _op(instruction, "movsibx")
     if raw == b"\x03\xf0":
         return _op(instruction, "addsiax")
     if raw == b"\x09\xc0":
@@ -123,10 +146,7 @@ def _translate(instruction: Operation) -> CompilerOp | None:
         return _op(instruction, "fwait")
     if instruction.kind == "tb.fp" and raw in {b"\xcd\x35\xe8", b"\xcd\x35\xee"}:
         return _op(instruction, "fld1" if raw[-1] == 0xE8 else "fldz")
-    if (
-        instruction.kind == "x86.mov_acc_mem"
-        and len(instruction.operands) == 2
-    ):
+    if instruction.kind == "x86.mov_acc_mem" and len(instruction.operands) == 2:
         direction = instruction.operands[1]
         if direction == "load":
             return _op(instruction, "movaxmem", instruction.operands[0])
@@ -137,10 +157,49 @@ def _translate(instruction: Operation) -> CompilerOp | None:
     return _integer_operation(instruction, raw)
 
 
+def _x87_operation(instruction: Operation, raw: bytes) -> CompilerOp | None:
+    """Translate the short native-8087 forms emitted by the FPU profile.
+
+    The interrupt-based FP profile is handled below by ``_fp_operation``.
+    Native-8087 programs use the same arithmetic templates with raw D8--DF
+    opcodes instead.  Keep this deliberately small: only direct memory forms
+    and the two constant loads have stable Turbo Basic semantics here.
+    """
+    if raw == b"\x9b":
+        return _op(instruction, "fwait")
+    if len(raw) < 2 or raw[0] not in range(0xD8, 0xE0):
+        return None
+    modrm = raw[1]
+    if raw[0] == 0xD9 and modrm in (0xE8, 0xEE):
+        return _op(instruction, "fld1" if modrm == 0xE8 else "fldz")
+    if len(raw) != 4 or (modrm >> 6) != 0 or (modrm & 7) != 6:
+        return None
+    address = _u16(raw, 2)
+    register = (modrm >> 3) & 7
+    if raw[0] == 0xDF and register == 0:
+        return _op(instruction, "fild", address)
+    if raw[0] == 0xDF and register == 3:
+        return _op(instruction, "fistp", address)
+    if raw[0] == 0xDD and register == 0:
+        return _op(instruction, "fld64", address)
+    if raw[0] == 0xDD and register == 3:
+        return _op(instruction, "fstp64", address)
+    if raw[0] == 0xD9 and register == 0:
+        return _op(instruction, "fld", address)
+    if raw[0] == 0xD9 and register == 3:
+        return _op(instruction, "fstp", address)
+    if raw[0] == 0xD8 and register in {0, 1, 5, 7}:
+        operator = {0: "+", 1: "*", 5: "-", 7: "/"}[register]
+        return _op(instruction, "fold", operator, address)
+    return None
+
+
 def _integer_operation(instruction: Operation, raw: bytes) -> CompilerOp | None:
     direct = _direct_integer_operation(instruction, raw)
     if direct is not None:
         return direct
+    if raw == b"\xf7\xd8":
+        return _op(instruction, "negax")
     if raw == b"\x0b\xc0":
         return _op(instruction, "orax_self")
     if len(raw) >= 4 and raw[:2] == b"\xf7\x06":
@@ -156,9 +215,7 @@ def _integer_operation(instruction: Operation, raw: bytes) -> CompilerOp | None:
     return None
 
 
-def _direct_integer_operation(
-    instruction: Operation, raw: bytes
-) -> CompilerOp | None:
+def _direct_integer_operation(instruction: Operation, raw: bytes) -> CompilerOp | None:
     if len(raw) == 4 and raw[:2] == b"\x8b\x06":
         return _op(instruction, "movax_m", _u16(raw, 2))
     if len(raw) == 4 and raw[:2] == b"\x89\x06":
@@ -171,16 +228,26 @@ def _direct_integer_operation(
         return _op(instruction, "cmpax_m", _u16(raw, 2))
     if len(raw) == 4 and raw[:2] == b"\x01\x06":
         return _op(instruction, "addm_ax", _u16(raw, 2))
+    if len(raw) == 4 and raw[:2] == b"\x03\x06":
+        return _op(instruction, "addax_m", _u16(raw, 2))
     if len(raw) == 4 and raw[:2] == b"\x2b\x06":
         return _op(instruction, "subax_m", _u16(raw, 2))
     if len(raw) == 4 and raw[:2] == b"\x23\x06":
         return _op(instruction, "andax_m", _u16(raw, 2))
+    if len(raw) == 4 and raw[:2] == b"\x0b\x06":
+        return _op(instruction, "orax_m", _u16(raw, 2))
+    if len(raw) == 4 and raw[:2] == b"\x33\x06":
+        return _op(instruction, "xorax_m", _u16(raw, 2))
     if len(raw) == 4 and raw[:2] == b"\xf7\x2e":
         return _op(instruction, "imul_m", _u16(raw, 2))
     if raw == b"\x89\x04":
         return _op(instruction, "movm_ax_si")
     if raw == b"\x26\x89\x04":
         return _op(instruction, "far_movm_ax_si")
+    if len(raw) == 5 and raw[:3] == b"\x26\x89\x06":
+        return _op(instruction, "far_movm_ax_disp", _u16(raw, 3))
+    if len(raw) == 5 and raw[:3] == b"\x26\x03\x06":
+        return _op(instruction, "far_addax_disp", _u16(raw, 3))
     if raw == b"\x8b\x04":
         return _op(instruction, "movax_si")
     if raw == b"\x03\x04":
@@ -193,6 +260,16 @@ def _direct_integer_operation(
         return _op(instruction, "imul_si")
     if raw == b"\x26\x8b\x04":
         return _op(instruction, "far_movax_si")
+    if raw == b"\x26\x39\x04":
+        return _op(instruction, "far_cmpm_ax_si")
+    if raw == b"\x26\xff\x04":
+        return _op(instruction, "far_inc_si")
+    if raw == b"\x26\xff\x0c":
+        return _op(instruction, "far_dec_si")
+    if raw == b"\xff\x04":
+        return _op(instruction, "inc_si")
+    if raw == b"\xff\x0c":
+        return _op(instruction, "dec_si")
     exchange = {
         b"\x26\x8b\x07": "far_movax_bx",
         b"\x87\x04": "xchgsi",
@@ -235,17 +312,25 @@ def _bp_integer_operation(instruction: Operation, raw: bytes) -> CompilerOp | No
             _bp_displacement(raw),
             _u16(raw, len(raw) - 2),
         )
+    if len(raw) in {3, 4} and raw[:2] in {b"\xf7\x6e", b"\xf7\xae"}:
+        return _op(instruction, "imul_bp", _bp_displacement(raw))
     forms = {
         b"\x8b\x46": "movax_bp",
         b"\x8b\x86": "movax_bp",
+        b"\x8b\x76": "movsi_bp",
+        b"\x8b\xb6": "movsi_bp",
         b"\x03\x46": "addax_bp",
         b"\x03\x86": "addax_bp",
         b"\x89\x46": "movm_ax_bp",
         b"\x89\x86": "movm_ax_bp",
+        b"\x3b\x46": "cmpax_bp",
+        b"\x3b\x86": "cmpax_bp",
         b"\x39\x46": "cmpm_ax_bp",
         b"\x39\x86": "cmpm_ax_bp",
         b"\x01\x46": "addm_ax_bp",
         b"\x01\x86": "addm_ax_bp",
+        b"\x29\x46": "subm_ax_bp",
+        b"\x29\x86": "subm_ax_bp",
     }
     kind = forms.get(raw[:2])
     if kind is not None:
@@ -254,11 +339,15 @@ def _bp_integer_operation(instruction: Operation, raw: bytes) -> CompilerOp | No
 
 
 def _fp_operation(instruction: Operation, raw: bytes) -> CompilerOp | None:
+    if raw[:2] == b"\xcd\x3e":
+        return _op(instruction, "fpow")
     if len(raw) < 3 or raw[0] != 0xCD:
         return None
     far = instruction.kind == "tb.fp_far"
     if far:
         escape = raw[2] if raw[1] == 0x3C else None
+        if escape is not None and 0x58 <= escape <= 0x5F:
+            escape |= 0x80
         modrm_index = 3
     else:
         escape = 0xD8 + raw[1] - 0x34 if 0x34 <= raw[1] <= 0x3B else None
@@ -280,6 +369,7 @@ def _fp_operation(instruction: Operation, raw: bytes) -> CompilerOp | None:
         (0xDD, 3): "fstp64",
         (0xDB, 0): "fild32",
         (0xDB, 3): "fistp32",
+        (0xDA, 3): "ficomp32",
         (0xDF, 0): "fild",
         (0xDF, 3): "fistp",
         (0xDC, 3): "fcomp64",
@@ -291,17 +381,15 @@ def _fp_operation(instruction: Operation, raw: bytes) -> CompilerOp | None:
     mode, rm = modrm >> 6, modrm & 7
     prefix = "far_" if far else ""
     if mode == 0 and rm == 4:
-        args = (arithmetic_operator,) if base in {"fold", "fold64"} else ()
+        args: tuple[object, ...] = (
+            (arithmetic_operator,) if base in {"fold", "fold64"} else ()
+        )
         return _op(instruction, prefix + _si_kind(base), *args)
     address = _modrm_address(raw, modrm_index)
     if address is None:
         return None
     kind = f"{base}_bp" if _is_bp_modrm(modrm) else base
-    args = (
-        (arithmetic_operator, address)
-        if base in {"fold", "fold64"}
-        else (address,)
-    )
+    args = (arithmetic_operator, address) if base in {"fold", "fold64"} else (address,)
     kind = prefix + kind
     return _op(instruction, kind, *args)
 

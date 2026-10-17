@@ -44,6 +44,11 @@ def _fmt_g64(v: float, p: int) -> str:
 def fmt_double(v: float) -> str:
     """Shortest decimal text whose f64 encoding round-trips to v's, '#'-suffixed.
     Integer fast path when v is an exact integer in (-1e15, 1e15)."""
+    if v != v or v in (float("inf"), float("-inf")) or (v != 0 and abs(v) < 1e-307):
+        # Turbo Basic cannot spell a NaN, an infinity or a subnormal; such a
+        # value is a misread slot (wild recovery), and zero is what an
+        # untouched variable would hold.
+        return "0#"
     if v == int(v) and abs(v) < 1e15:
         return f"{int(v)}#"
     enc = _struct.pack("<d", v)

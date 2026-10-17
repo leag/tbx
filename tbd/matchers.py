@@ -1,17 +1,16 @@
-"""Shared immutable matchers for complete compiler instruction templates."""
-
 from __future__ import annotations
 
 import struct
 
 from tbd.ir import Operation
+from tbd.operation_helpers import ax_reload_scratch as _ax_reload_scratch
 from tbd.profile import FP_TRANSFER_TYPES
 
 
 def fp_ax_bridge(
     reload: Operation | None, by_end: dict[int, Operation]
 ) -> tuple[object, tuple[int, ...]] | None:
-    """Match a direct FP load converted through scratch storage into AX."""
+    """Match a floating-point operation bridged through AX."""
 
     scratch = _ax_reload_scratch(reload)
     if reload is None or scratch is None:
@@ -20,7 +19,7 @@ def fp_ax_bridge(
     source = by_end.get(store.offset) if store is not None else None
     if not _stores_ax_scratch(store, scratch):
         return None
-    expression = _direct_fp_source(source)
+    expression = direct_fp_source(source)
     if expression is None or store is None or source is None:
         return None
     return expression, (
@@ -29,24 +28,6 @@ def fp_ax_bridge(
         *(item.offset for item in synchronization),
         reload.offset,
     )
-
-
-def _ax_reload_scratch(reload: Operation | None) -> int | None:
-    if reload is None:
-        return None
-    if (
-        reload.kind == "x86.mov_acc_mem"
-        and len(reload.operands) == 2
-        and isinstance(reload.operands[0], int)
-        and reload.operands[1] == "load"
-    ):
-        return reload.operands[0]
-    if reload.kind != "tb.fp":
-        return None
-    raw = bytes.fromhex(reload.raw)
-    if len(raw) != 5 or raw[:3] != b"\xcd\x3d\xa1":
-        return None
-    return struct.unpack_from("<H", raw, 3)[0]
 
 
 def _bridge_store(
@@ -75,7 +56,8 @@ def _stores_ax_scratch(store: Operation | None, scratch: int) -> bool:
     )
 
 
-def _direct_fp_source(source: Operation | None) -> object | None:
+def direct_fp_source(source: Operation | None) -> object | None:
+    """Return the memory operand a direct floating-point load reads."""
     if source is None or source.kind != "tb.fp":
         return None
     raw = bytes.fromhex(source.raw)
@@ -93,7 +75,7 @@ def _direct_fp_source(source: Operation | None) -> object | None:
 def string_push_scaffold(
     commit: Operation, by_end: dict[int, Operation]
 ) -> tuple[Operation, Operation] | None:
-    """Match ``mov si,address; runtime string push`` before a commit."""
+    """Match the stack scaffold used to pass a string argument."""
 
     runtime = by_end.get(commit.offset)
     setup = by_end.get(runtime.offset) if runtime is not None else None

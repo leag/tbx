@@ -1,19 +1,39 @@
-"""Recursive code discovery and small fixed-point lifting passes."""
-
 from __future__ import annotations
 
+import bisect
 import heapq
 import struct
 
 from tbd.ir import BasicBlock, CrossReference, Diagnostic, Operation
-from tbd.x86 import decode_instruction
+from tbd.profile import EC_RELATIVE_TARGET_SUBS
+from tbd.x86 import decode_instruction, rebase_near_target
 
 _CONDITIONAL = {
-    *(f"x86.{name}" for name in (
-        "jo", "jno", "jb", "jae", "je", "jne", "jbe", "ja",
-        "js", "jns", "jp", "jnp", "jl", "jge", "jle", "jg",
-        "loopne", "loope", "loop", "jcxz",
-    )),
+    *(
+        f"x86.{name}"
+        for name in (
+            "jo",
+            "jno",
+            "jb",
+            "jae",
+            "je",
+            "jne",
+            "jbe",
+            "ja",
+            "js",
+            "jns",
+            "jp",
+            "jnp",
+            "jl",
+            "jge",
+            "jle",
+            "jg",
+            "loopne",
+            "loope",
+            "loop",
+            "jcxz",
+        )
+    ),
 }
 _JUMPS = {"x86.jmp", "x86.jmp_far"}
 _CALLS = {"x86.call", "x86.call_far", "tb.checked_gosub", "tb.fn_call"}
@@ -25,6 +45,8 @@ _TERMINALS = _RETURNS | {
     "tb.fn_return",
     "x86.hlt",
 }
+
+
 def discover(
     exe: bytes,
     start: int,
@@ -36,7 +58,7 @@ def discover(
     tuple[CrossReference, ...],
     tuple[Diagnostic, ...],
 ]:
-    """Follow control flow from *start*, like a small auto-analysis queue."""
+    """Discover reachable instructions, blocks, cross-references, and diagnostics."""
 
     pending = [start]
     queued = {start}
@@ -46,6 +68,10 @@ def discover(
     xrefs: set[CrossReference] = set()
     conflicts = 0
     reached_limit = False
+    # Bases of the code segments far transfers have named so far.  A near
+    # jump's rel16 wraps within the segment it sits in, and code past the
+    # first 64 KB lives in segments that only a far jump or call names.
+    segment_bases = [start]
     while pending:
         cursor = heapq.heappop(pending)
         while start <= cursor < stop and cursor not in instructions:
@@ -53,6 +79,13 @@ def discover(
                 conflicts += 1
                 break
             operation = decode_instruction(exe, cursor, stop, start, dialect)
+            base = segment_bases[bisect.bisect_right(segment_bases, cursor) - 1]
+            if base != start:
+                operation = rebase_near_target(exe, operation, base)
+            if operation.kind in {"x86.jmp_far", "x86.call_far"}:
+                named = start + operation.operands[1] * 16
+                if start < named < stop and named not in segment_bases:
+                    bisect.insort(segment_bases, named)
             if any(byte in occupied for byte in range(cursor, operation.end)):
                 conflicts += 1
                 break
@@ -93,6 +126,10 @@ def _follow(
     dialect: str | None,
 ) -> tuple[int, bool]:
     next_offset = operation.end
+    handler = _handler_target(operation)
+    if handler is not None:
+        xrefs.add(CrossReference(operation.offset, handler, "handler"))
+        _queue(handler, pending, queued, leaders, start, stop)
     if operation.kind in _CALLS:
         _add_target(operation, "call", pending, queued, leaders, xrefs, start, stop)
         return next_offset, False
@@ -103,6 +140,17 @@ def _follow(
         return next_offset, True
     if operation.kind in _TARGETED_RETURNS:
         _add_target(operation, "return", pending, queued, leaders, xrefs, start, stop)
+        if operation.kind in {"x86.ret", "x86.retf"} and next_offset < stop:
+            declaration = decode_instruction(exe, next_offset, stop, start, dialect)
+            if (
+                declaration is not None
+                and dialect is not None
+                and _function_declaration_fallthrough(
+                    exe, declaration, start, stop, dialect
+                )
+            ):
+                _queue(next_offset, pending, queued, leaders, start, stop)
+                xrefs.add(CrossReference(operation.offset, next_offset, "orphan"))
         return next_offset, True
     if operation.kind == "tb.run":
         _add_target(operation, "run", pending, queued, leaders, xrefs, start, stop)
@@ -124,16 +172,23 @@ def _follow(
             _wrapped_forward_gap(operation, start, stop)
             or _resume_jump_fallthrough(operation, instructions)
             or _backward_jump_fallthrough(operation)
-            or _procedure_declaration_fallthrough(
-                exe, operation, start, stop, dialect
-            )
-            or _function_declaration_fallthrough(
-                exe, operation, start, stop, dialect
-            )
+            or _procedure_declaration_fallthrough(exe, operation, start, stop, dialect)
+            or _function_declaration_fallthrough(exe, operation, start, stop, dialect)
         ):
             _queue(next_offset, pending, queued, leaders, start, stop)
             xrefs.add(CrossReference(operation.offset, next_offset, "orphan"))
         return next_offset, True
+    if operation.kind in _RETURNS and next_offset < stop:
+        declaration = decode_instruction(exe, next_offset, stop, start, dialect)
+        if (
+            declaration is not None
+            and dialect is not None
+            and _function_declaration_fallthrough(
+                exe, declaration, start, stop, dialect
+            )
+        ):
+            _queue(next_offset, pending, queued, leaders, start, stop)
+            xrefs.add(CrossReference(operation.offset, next_offset, "orphan"))
     return next_offset, operation.kind in _TERMINALS
 
 
@@ -180,7 +235,6 @@ def _procedure_declaration_fallthrough(
     stop: int,
     dialect: str,
 ) -> bool:
-    """Open compiler declaration glue only when its physical body has a signature."""
 
     target = operation.operands[0] if operation.operands else None
     if not isinstance(target, int) or target <= operation.end:
@@ -196,7 +250,6 @@ def _function_declaration_fallthrough(
     stop: int,
     dialect: str,
 ) -> bool:
-    """Open only a compiler-bracketed DEF FN body skipped by its declaration JMP."""
 
     target = operation.operands[0] if operation.operands else None
     if (
@@ -208,6 +261,17 @@ def _function_declaration_fallthrough(
         return False
     returned = decode_instruction(exe, target - 2, stop, start, dialect)
     return returned.kind == "tb.fn_return" and returned.end == target
+
+
+def _handler_target(operation: Operation) -> int | None:
+    if (
+        operation.kind == "tb.statement"
+        and len(operation.operands) == 3
+        and operation.operands[1] in EC_RELATIVE_TARGET_SUBS
+        and isinstance(operation.operands[2], int)
+    ):
+        return operation.operands[2]
+    return None
 
 
 def _is_multi_target_dispatch(operation: Operation) -> bool:
@@ -274,11 +338,9 @@ def _block_offsets(
     while cursor in instructions:
         operation = instructions[cursor]
         offsets.append(cursor)
-        if (
-            operation.kind
-            in _CONDITIONAL | _JUMPS | _TARGETED_RETURNS | _TERMINALS | {"tb.run"}
-            or _is_multi_target_dispatch(operation)
-        ):
+        if operation.kind in _CONDITIONAL | _JUMPS | _TARGETED_RETURNS | _TERMINALS | {
+            "tb.run"
+        } or _is_multi_target_dispatch(operation):
             break
         cursor = operation.end
         if cursor in leaders:
@@ -291,7 +353,9 @@ def _successors(
 ) -> tuple[int, ...]:
     target = operation.operands[0] if operation.operands else None
     if operation.kind in _CONDITIONAL:
-        return tuple(value for value in (target, operation.end) if value in instructions)
+        return tuple(
+            value for value in (target, operation.end) if value in instructions
+        )
     if operation.kind in _JUMPS:
         return (target,) if target in instructions else ()
     if operation.kind in _TARGETED_RETURNS:
@@ -317,7 +381,9 @@ def _discovery_diagnostics(
     if opaque:
         diagnostics.append(Diagnostic(f"preserved {opaque} unrecognized byte(s)"))
     if conflicts:
-        diagnostics.append(Diagnostic(f"ignored {conflicts} overlapping code target(s)"))
+        diagnostics.append(
+            Diagnostic(f"ignored {conflicts} overlapping code target(s)")
+        )
     if reached_limit:
         diagnostics.append(Diagnostic("code discovery reached the scan limit"))
     return tuple(diagnostics)

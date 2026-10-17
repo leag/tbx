@@ -244,6 +244,15 @@ def unparse(e) -> str:
         return f"NOT {unparse(e.operand)}"
     if isinstance(e, StrLit):
         return f'"{e.value}"'
+    if e is None or isinstance(e, tuple):
+        # An operand wild recovery could not read (or an internal marker it
+        # left behind); zero keeps the statement.
+        return "0"
+    if isinstance(e, (RelOp, LogOp, Group)):
+        # A comparison used as a value (an operand of AND/OR or arithmetic),
+        # as wild recovery can produce: parenthesize it.
+        text = unparse_cond(e)
+        return text if isinstance(e, Group) else f"({text})"
     raise TypeError(f"not an Expr: {e!r}")
 
 
@@ -313,7 +322,10 @@ def _us_decl(s) -> str | None:
         if isinstance(s.value, VarSeg):  # bare `mov ax,ds`: any DGROUP var
             t = unparse(s.target)  # round-trips; use the target itself
             return f"{t} = VARSEG({t})"
-        return f"{unparse(s.target)} = {unparse(s.value)}"
+        target = unparse(s.target)
+        if (s.value is None or isinstance(s.value, tuple)) and target.endswith("$"):
+            return f'{target} = ""'
+        return f"{target} = {unparse(s.value)}"
     if isinstance(s, End):
         return "END"
     if isinstance(s, Tron):
@@ -758,7 +770,13 @@ def _us_procdata(s) -> str | None:
     if isinstance(s, ErrorStmt):
         return f"ERROR {unparse(s.code)}"
     if isinstance(s, RegSet):
-        return f"REG {unparse(s.n)}, {unparse(s.value)}"
+        value = unparse(s.value)
+        if value.endswith("$"):
+            # A register holds a number; a string operand can only be its
+            # address (wild recovery read the descriptor slot as the value).
+            # Turbo Basic has no SADD; VARPTR names the descriptor.
+            value = f"VARPTR({value})"
+        return f"REG {unparse(s.n)}, {value}"
     if isinstance(s, DateTimeSet):
         return f"{s.name} = {unparse(s.value)}"
     if isinstance(s, CallInterrupt):

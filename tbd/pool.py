@@ -1,10 +1,9 @@
-"""Conservative scalar and string constant-pool recovery."""
-
 from __future__ import annotations
 
 import math
 import struct
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any
 
 from tbd.ir import Operation
@@ -23,6 +22,8 @@ _ARRAY_TYPES = {
 
 @dataclass(frozen=True)
 class StaticArrayLayout:
+    """Descriptor for one statically allocated array."""
+
     record: int
     slot: int
     base: int
@@ -34,6 +35,8 @@ class StaticArrayLayout:
 
 @dataclass(frozen=True)
 class PoolLayout:
+    """Inferred addresses and records for a compiler data pool."""
+
     marker: int
     ds: int
     pool_base: int
@@ -41,27 +44,6 @@ class PoolLayout:
     string_base: int | None
     arrays: tuple[StaticArrayLayout, ...] = ()
     static_base: int = VAR_BASE
-
-
-def resolve(
-    nodes: list[Operation], _protected: set[int], image: bytes
-) -> tuple[list[Operation], int]:
-    """Replace supported pool references with literals when layout is anchored."""
-
-    layout = _layout(nodes, image)
-    if layout is None:
-        return nodes, 0
-    result = []
-    changes = 0
-    for node in nodes:
-        operands = tuple(_rewrite(value, layout, image) for value in node.operands)
-        if operands != node.operands:
-            node = Operation(
-                node.offset, node.size, node.kind, operands, node.raw, node.confidence
-            )
-            changes += 1
-        result.append(node)
-    return result, changes
 
 
 def _layout(nodes: list[Operation], image: bytes) -> PoolLayout | None:
@@ -80,11 +62,80 @@ def infer_layout(
     runtime_blocks: tuple[int, ...] = (),
     target_widths: tuple[tuple[int, int], ...] = (),
 ) -> PoolLayout | None:
-    """Choose the best anchored pool candidate for observed memory evidence."""
+    """Infer pool, descriptor, and static-array addresses from evidence."""
 
-    marker = _pool_marker(image)
-    if marker is None:
-        return None
+    return _infer_layout(
+        image,
+        frozenset(targets),
+        references,
+        array_slots,
+        array_data,
+        static_base,
+        runtime_blocks,
+        target_widths,
+    )
+
+
+@lru_cache(maxsize=32)
+def _infer_layout(
+    image: bytes,
+    targets: frozenset[int],
+    references: tuple[tuple[int, str], ...],
+    array_slots: tuple[int, ...],
+    array_data: tuple[int, ...],
+    static_base: int,
+    runtime_blocks: tuple[int, ...],
+    target_widths: tuple[tuple[int, int], ...],
+) -> PoolLayout | None:
+    """Reuse layout scoring while the complete pool evidence stays unchanged.
+
+    The pool starts at the compiler's marker. When the bytes of the marker
+    also occur elsewhere past the code, the layout each would give is
+    scored, and the one whose pool the program's references fit is kept.
+    """
+    layouts = [
+        layout
+        for marker in _pool_markers(image)
+        if (
+            layout := _layout_at(
+                image,
+                marker,
+                targets,
+                references,
+                array_slots,
+                array_data,
+                static_base,
+                runtime_blocks,
+                target_widths,
+            )
+        )
+        is not None
+    ]
+    if len(layouts) <= 1:
+        return layouts[0] if layouts else None
+    scores = [
+        (
+            -_pool_contradictions(layout, targets, references),
+            _literal_score(layout, references),
+        )
+        for layout in layouts
+    ]
+    best = max(scores)
+    winners = [layout for layout, score in zip(layouts, scores) if score == best]
+    return winners[0] if len(winners) == 1 else None
+
+
+def _layout_at(
+    image: bytes,
+    marker: int,
+    targets: frozenset[int],
+    references: tuple[tuple[int, str], ...],
+    array_slots: tuple[int, ...],
+    array_data: tuple[int, ...],
+    static_base: int,
+    runtime_blocks: tuple[int, ...],
+    target_widths: tuple[tuple[int, int], ...],
+) -> PoolLayout | None:
     observed = {
         *targets,
         *array_data,
@@ -122,7 +173,13 @@ def infer_layout(
         is not None
     ]
     legacy = (
-        max(legacy_candidates, key=lambda layout: _literal_score(layout, references))
+        max(
+            legacy_candidates,
+            key=lambda layout: (
+                -_pool_contradictions(layout, targets, references),
+                _literal_score(layout, references),
+            ),
+        )
         if legacy_candidates
         else None
     )
@@ -137,13 +194,15 @@ def infer_layout(
         )
         is not None
         and layout.arrays
-        and _supports_observations(
-            layout, targets, references, target_widths
+        and (
+            _supports_observations(layout, targets, references, target_widths)
+            or len(layout.arrays) == 1
         )
         and _supports_array_witnesses(layout, array_slots, array_data)
         and (
             any(_array_at(layout, address) is not None for address in observed)
             or bool(array_slots)
+            or len(layout.arrays) == 1
         )
     ]
     if not array_candidates:
@@ -164,11 +223,13 @@ def infer_layout(
     return None
 
 
-def _pool_marker(image: bytes) -> int | None:
+def _pool_markers(image: bytes) -> list[int]:
+    found = []
     marker = image.find(_MARKER)
-    if marker < 0 or image.find(_MARKER, marker + 1) >= 0:
-        return None
-    return marker
+    while marker >= 0:
+        found.append(marker)
+        marker = image.find(_MARKER, marker + 1)
+    return found
 
 
 def _assigned_targets(nodes: list[Operation]) -> set[int]:
@@ -180,6 +241,7 @@ def _assigned_targets(nodes: list[Operation]) -> set[int]:
     return targets
 
 
+@lru_cache(maxsize=16_384)
 def _candidate_layout(
     image: bytes,
     marker: int,
@@ -213,7 +275,7 @@ def _runtime_record_at(image: bytes, offset: int) -> bool:
 
 
 def _reference_addresses(nodes: list[Operation]) -> tuple[tuple[int, str], ...]:
-    found = []
+    found: list[tuple[int, str]] = []
     for node in nodes:
         _collect_references(node.operands, found)
     return tuple(found)
@@ -237,19 +299,24 @@ def _collect_references(value: object, found: list[tuple[int, str]]) -> None:
 
 def _evidence_score(
     layout: PoolLayout,
-    targets: set[int],
+    targets: set[int] | frozenset[int],
     references: tuple[tuple[int, str], ...],
     array_slots: tuple[int, ...] = (),
     array_data: tuple[int, ...] = (),
-) -> tuple[int, int, int, int]:
+) -> tuple[int, int, int, int, int]:
     array_accesses = sum(
         _array_at(layout, address) is not None
         for address in {*targets, *(item[0] for item in references)}
     )
-    witnessed = sum(slot in {array.slot for array in layout.arrays} for slot in array_slots)
-    data_accesses = sum(_array_at(layout, address) is not None for address in array_data)
+    witnessed = sum(
+        slot in {array.slot for array in layout.arrays} for slot in array_slots
+    )
+    data_accesses = sum(
+        _array_at(layout, address) is not None for address in array_data
+    )
     return (
         witnessed + data_accesses,
+        -_pool_contradictions(layout, targets, references),
         array_accesses,
         len(layout.arrays),
         _literal_score(layout, references),
@@ -267,21 +334,51 @@ def _supports_array_witnesses(
     )
 
 
-def _literal_score(
-    layout: PoolLayout, references: tuple[tuple[int, str], ...]
+def _pool_contradictions(
+    layout: PoolLayout,
+    targets: set[int] | frozenset[int],
+    references: tuple[tuple[int, str], ...],
 ) -> int:
+    """Count evidence a pool placed here contradicts.
+
+    Every descriptor in the pool exists because code uses that literal, and
+    string variables' descriptors sit in the scalar band below it. A pool
+    placed too high turns the first literals into string variables nothing
+    assigns (year086.exe, sprogh.exe: every literal misread); one placed too
+    low puts assigned variables inside the constant pool (reformat.exe).
+    """
+    unwritten = sum(
+        1
+        for address, kind in references
+        if kind == "string"
+        and address < layout.pool_base - 4
+        and address not in targets
+        and _array_at(layout, address) is None
+    )
+    written = sum(
+        1
+        for address in targets
+        if address >= layout.pool_base - 4 and _array_at(layout, address) is None
+    )
+    return unwritten + written
+
+
+def _literal_score(layout: PoolLayout, references: tuple[tuple[int, str], ...]) -> int:
     score = 0
     for address, kind in references:
         if kind == "string" and address in layout.descriptors:
             score += 4 if layout.string_base is not None else 2
-        elif kind in {"integer", "long", "float", "double"} and address >= layout.pool_base:
+        elif (
+            kind in {"integer", "long", "float", "double"}
+            and address >= layout.pool_base
+        ):
             score += 1
     return score
 
 
 def _supports_observations(
     layout: PoolLayout,
-    targets: set[int],
+    targets: set[int] | frozenset[int],
     references: tuple[tuple[int, str], ...],
     target_widths: tuple[tuple[int, int], ...] = (),
 ) -> bool:
@@ -309,7 +406,10 @@ def _supports_observations(
             address == layout.pool_base - 4 or address in layout.descriptors
         ):
             continue
-        if kind in {"integer", "long", "float", "double"} and address >= layout.pool_base:
+        if (
+            kind in {"integer", "long", "float", "double"}
+            and address >= layout.pool_base
+        ):
             continue
         return False
     return True
@@ -348,7 +448,7 @@ def _array_at(layout: PoolLayout, address: int) -> StaticArrayLayout | None:
 def _static_arrays(
     image: bytes, ds: int, pool_base: int, static_base: int = VAR_BASE
 ) -> tuple[StaticArrayLayout, ...]:
-    arrays = []
+    arrays: list[StaticArrayLayout] = []
     cursor = ds + static_base
     stop = min(len(image), ds + pool_base)
     while cursor + 8 <= stop:
@@ -362,9 +462,8 @@ def _static_arrays(
     return tuple(arrays)
 
 
-def _static_array(
-    image: bytes, record: int, slot: int
-) -> StaticArrayLayout | None:
+@lru_cache(maxsize=65_536)
+def _static_array(image: bytes, record: int, slot: int) -> StaticArrayLayout | None:
     if record < 0 or record + 8 > len(image):
         return None
     paragraph, typed_rank, count, element_size = struct.unpack_from(
@@ -413,10 +512,8 @@ def _static_array(
     )
 
 
-def static_array_at(
-    image: bytes, record: int, slot: int
-) -> StaticArrayLayout | None:
-    """Parse one compiler static-array record at a calibrated grid position."""
+def static_array_at(image: bytes, record: int, slot: int) -> StaticArrayLayout | None:
+    """Decode a static-array descriptor at a pool record and slot."""
 
     return _static_array(image, record, slot)
 
@@ -445,9 +542,7 @@ def _rewrite(value: Any, layout: PoolLayout, image: bytes) -> Any:
     return tuple(_rewrite(item, layout, image) for item in value)
 
 
-def _literal(
-    value: tuple[Any, ...], layout: PoolLayout, image: bytes
-) -> object | None:
+def _literal(value: tuple[Any, ...], layout: PoolLayout, image: bytes) -> object | None:
     if len(value) >= 2 and value[0] == "string-address":
         return decode_literal(image, layout, value[1], "string")
     memory = _memory_reference(value)
@@ -459,7 +554,7 @@ def _literal(
 def decode_literal(
     image: bytes, layout: PoolLayout, address: object, kind: str
 ) -> object | None:
-    """Decode one supported reference under an already anchored layout."""
+    """Decode a numeric or string literal referenced by a pool address."""
 
     if kind == "string":
         return _string_literal(address, layout, image)
@@ -487,7 +582,7 @@ def decode_string_descriptors(
     pool_base: object,
     string_base: object,
 ) -> tuple[tuple[int, str], ...] | None:
-    """Decode the anchored descriptor walk without assigning source ownership."""
+    """Decode string descriptor records into displacement/value pairs."""
 
     if not all(isinstance(value, int) for value in (ds, pool_base, string_base)):
         return None
@@ -505,10 +600,8 @@ def decode_string_descriptors(
     return tuple(decoded)
 
 
-def array_at(
-    layout: PoolLayout, address: object
-) -> StaticArrayLayout | None:
-    """Return the uniquely containing static array element span, if any."""
+def array_at(layout: PoolLayout, address: object) -> StaticArrayLayout | None:
+    """Return the static array containing ``address``, if any."""
 
     if not isinstance(address, int):
         return None
@@ -575,9 +668,7 @@ def _is_string_record(image: bytes, position: int, header: bytes, total: int) ->
     )
 
 
-def _string_literal(
-    address: object, layout: PoolLayout, image: bytes
-) -> object | None:
+def _string_literal(address: object, layout: PoolLayout, image: bytes) -> object | None:
     if not isinstance(address, int) or layout.string_base is None:
         return None
     descriptor = layout.descriptors.get(address)

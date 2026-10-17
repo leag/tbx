@@ -90,6 +90,15 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
             "cmp_mi16",
             "cmpm_ax",
             "movsim",
+            # Integer ALU reads of a slot are integer evidence too; without
+            # them a variable only compared or combined (`IF R% >= 7` after a
+            # CALL that sets it) was typed single (wild dirmain1.exe).
+            "cmpax_m",
+            "subax_m",
+            "andax_m",
+            "orax_m",
+            "xorax_m",
+            "idiv_m",
         )
         and o[2] >= VAR_BASE
     }
@@ -173,6 +182,16 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
         - whole_array_disps
     )
     prompt_disps = {o[2] for o in ops if o[1] in ("input", "line_input")}
+    # A descriptor loaded right before a string assignment is a string slot,
+    # whatever integer traffic (length-word reads) also touches it (wild
+    # hebrew.exe typed such a slot `%` and emitted `Y% = ""`).
+    str_store_disps = {
+        ops[i][2]
+        for i in range(len(ops) - 1)
+        if ops[i][1] == "movsi"
+        and ops[i + 1][1] == "strassign"
+        and ops[i][2] in movsi_disps
+    }
     addsi_bases = {o[2] for o in ops if o[1] == "addsi"}
     def band_evidence():
         """The typed-disp sets, filtered at 0x110 instead of VAR_BASE.
@@ -247,7 +266,11 @@ def _layout(exe: bytes, ops: list[tuple[Any, ...]]) -> dict[str, Any]:
         guessed = set()
         run, strs, d = {}, set(), sb
         while True:
-            if d in ints or (d in filds and d not in fp_disps and d not in f64s):
+            if d in str_store_disps and d not in fp_disps and d not in f64s:
+                run[d] = 4
+                strs.add(d)
+                d += 4
+            elif d in ints or (d in filds and d not in fp_disps and d not in f64s):
                 run[d] = 2
                 d += 2
             elif d in f64s:

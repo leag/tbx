@@ -1,10 +1,8 @@
-"""TRON/TROFF region facts over immutable compiler trace hooks."""
-
 from __future__ import annotations
 
 from collections.abc import Iterable
 
-from tbd.facts import Evidence, NamedPass
+from tbd.facts import Evidence, NamedPass, reads
 from tbd.ir import Fact, Operation
 from tbd.semantic import combine_evidence
 
@@ -36,10 +34,40 @@ _CONTROL = {
 }
 
 
-def trace_region_facts(
-    evidence: Evidence, facts: frozenset[Fact]
-) -> Iterable[Fact]:
-    """Recover toggles only where hook boundaries positively prove them."""
+@reads(
+    "semantic.assign",
+    "semantic.call",
+    "semantic.defseg",
+    "semantic.delay",
+    "semantic.gosub",
+    "semantic.if_goto",
+    "semantic.print",
+    "semantic.resume",
+    "semantic.return",
+    "semantic.run",
+    "semantic.statement",
+    "semantic.troff",
+    "semantic.tron",
+    "signature",
+    "tb.prologue",
+    "tb.return_to",
+    "tb.statement",
+    "tb.trace",
+    "x86.call",
+    "x86.call_far",
+    "x86.int3",
+    "x86.iret",
+    "x86.j",
+    "x86.jmp",
+    "x86.jmp_far",
+    "x86.loop",
+    "x86.loope",
+    "x86.loopne",
+    "x86.ret",
+    "x86.retf",
+)
+def trace_region_facts(evidence: Evidence, facts: frozenset[Fact]) -> Iterable[Fact]:
+    """Recover tracing regions and their output hooks."""
 
     hooks = tuple(
         instruction
@@ -64,7 +92,7 @@ def trace_region_facts(
         yield _toggle("semantic.tron", right, support)
     last_payload, marker = _payload_start(hooks[-1], evidence.instructions)
     following = next(
-        (fact for fact in source if _span(fact)[0] > last_payload),
+        (fact for fact in source if _span_start(fact) > last_payload),
         None,
     )
     control_start = (
@@ -73,7 +101,7 @@ def trace_region_facts(
         else hooks[0].end
     )
     if following is not None and not _has_control(
-        evidence.instructions, control_start, _span(following)[0]
+        evidence.instructions, control_start, _span_start(following)
     ):
         support = combine_evidence(
             () if marker is None else (marker,),
@@ -112,7 +140,7 @@ def _source_facts(facts: frozenset[Fact]) -> tuple[Fact, ...]:
                 for fact in facts
                 if fact.kind in _SOURCE_FACTS and _span(fact) is not None
             ),
-            key=lambda fact: (*_span(fact), fact.kind),
+            key=lambda fact: (*_span_key(fact), fact.kind),
         )
     )
 
@@ -138,21 +166,14 @@ def _is_end_at(address: int, instructions: tuple[Operation, ...]) -> bool:
     )
 
 
-def _between(
-    facts: tuple[Fact, ...], start: int, end: int
-) -> tuple[Fact, ...]:
-    return tuple(fact for fact in facts if start < _span(fact)[0] < end)
+def _between(facts: tuple[Fact, ...], start: int, end: int) -> tuple[Fact, ...]:
+    return tuple(fact for fact in facts if start < _span_start(fact) < end)
 
 
-def _has_control(
-    instructions: tuple[Operation, ...], start: int, end: int
-) -> bool:
+def _has_control(instructions: tuple[Operation, ...], start: int, end: int) -> bool:
     return any(
         start <= instruction.offset < end
-        and (
-            instruction.kind in _CONTROL
-            or instruction.kind.startswith("x86.j")
-        )
+        and (instruction.kind in _CONTROL or instruction.kind.startswith("x86.j"))
         for instruction in instructions
     )
 
@@ -176,6 +197,17 @@ def _span(fact: Fact) -> tuple[int, int] | None:
     return start, end
 
 
-TRACE_FACT_PASSES: tuple[NamedPass, ...] = (
-    ("trace-regions", trace_region_facts),
-)
+def _span_key(fact: Fact) -> tuple[int, int]:
+    """Return a sortable span for a fact known to have one."""
+    span = _span(fact)
+    if span is None:
+        raise ValueError("fact has no valid span")
+    return span
+
+
+def _span_start(fact: Fact) -> int:
+    """Return the start offset for a fact known to have a valid span."""
+    return _span_key(fact)[0]
+
+
+TRACE_FACT_PASSES: tuple[NamedPass, ...] = (("trace-regions", trace_region_facts),)

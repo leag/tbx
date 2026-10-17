@@ -52,6 +52,11 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
     counter = [0]
 
     def name(old: str) -> str:
+        if not isinstance(old, str):
+            # Wild recovery can leave an operand that resolved to an address
+            # rather than a variable; give it a stable placeholder name.
+            logger.warning("operand %r recovered as placeholder variable", old)
+            old = f"V{old[-1] & 0xFFFF:04X}" if isinstance(old, tuple) else f"V{old}"
         if old not in names:
             cand = _letters(counter[0])
             while cand in _RESERVED:

@@ -1,16 +1,14 @@
-"""Dynamic-array layout and statement facts ported from calibrated templates."""
-
 from __future__ import annotations
 
-import struct
 from collections.abc import Iterable
 from dataclasses import dataclass
 
 from tbd.compiler_ops import CompilerOp, translate_operations
-from tbd.facts import Evidence, NamedPass
+from tbd.facts import Evidence, NamedPass, fact_key, reads
 from tbd.ir import Fact, Operation
+from tbd.operation_helpers import ax_reload_scratch as _ax_reload_scratch
 from tbd.pool import static_array_at
-from tbd.semantic import combine_evidence, resolve_expression, unique_fact
+from tbd.semantic import Resolved, combine_evidence, resolve_expression, unique_fact
 from tbd.slots import VAR_BASE
 
 _ARRAY_BLOCK = 0x36
@@ -27,7 +25,7 @@ _TYPES = {
 
 @dataclass(frozen=True)
 class DimBracket:
-    """One normalized four-operation DIM descriptor bracket."""
+    """One compiler bracket delimiting a runtime DIM operation."""
 
     start: int
     dispatch_start: int
@@ -39,7 +37,7 @@ class DimBracket:
 
 @dataclass(frozen=True)
 class DynamicDim:
-    """One complete source DIM item before comma-chain folding."""
+    """Recovered runtime DIM declaration and its bounds."""
 
     start: int
     end: int
@@ -51,10 +49,26 @@ class DynamicDim:
     evidence: tuple[int, ...]
 
 
+@reads(
+    "layout.array",
+    "layout.pool",
+    "tb.fn_call",
+    "tb.fn_return",
+    "tb.fp",
+    "tb.fp_far",
+    "tb.fwait",
+    "tb.runtime",
+    "tb.statement",
+    "x86.inc",
+    "x86.j",
+    "x86.jmp",
+    "x86.mov_acc_mem",
+    "x86.mov_imm",
+)
 def runtime_array_layout_facts(
     evidence: Evidence, facts: frozenset[Fact]
 ) -> Iterable[Fact]:
-    """Recover the calibrated runtime-array grid from DIM brackets."""
+    """Recover the runtime array descriptor layout."""
 
     layout = unique_fact(facts, "layout.pool", ("dgroup",))
     brackets = _dim_brackets(translate_operations(evidence.instructions))
@@ -96,10 +110,28 @@ def runtime_array_layout_facts(
         )
 
 
-def dynamic_dim_facts(
-    evidence: Evidence, facts: frozenset[Fact]
-) -> Iterable[Fact]:
-    """Assemble descriptor-cell writes into complete dynamic DIM facts."""
+@reads(
+    "constant",
+    "expression.system",
+    "layout.array",
+    "layout.runtime_array",
+    "machine.store",
+    "slot",
+    "tb.fn_call",
+    "tb.fn_return",
+    "tb.fp",
+    "tb.fp_far",
+    "tb.fwait",
+    "tb.runtime",
+    "tb.statement",
+    "x86.inc",
+    "x86.j",
+    "x86.jmp",
+    "x86.mov_acc_mem",
+    "x86.mov_imm",
+)
+def dynamic_dim_facts(evidence: Evidence, facts: frozenset[Fact]) -> Iterable[Fact]:
+    """Recover dynamic DIM statements from descriptor operations."""
 
     brackets = _dim_brackets(translate_operations(evidence.instructions))
     opens: dict[int, DimBracket] = {}
@@ -111,14 +143,10 @@ def dynamic_dim_facts(
             opens[bracket.block] = bracket
             continue
         opening = opens.pop(bracket.block, None)
-        layout = unique_fact(
-            facts, "layout.runtime_array", ("runtime", bracket.block)
-        )
+        layout = unique_fact(facts, "layout.runtime_array", ("runtime", bracket.block))
         if opening is None or layout is None:
             continue
-        dim = _dynamic_dim(
-            opening, bracket, layout, facts, instructions, by_end
-        )
+        dim = _dynamic_dim(opening, bracket, layout, facts, instructions, by_end)
         if dim is not None:
             dims.append(dim)
     yield from _fold_dim_chains(tuple(dims))
@@ -129,8 +157,7 @@ def _dim_brackets(operations: tuple[CompilerOp, ...]) -> tuple[DimBracket, ...]:
     for index in range(len(operations) - 3):
         setup, segment, load, dispatch = operations[index : index + 4]
         if (
-            (setup.kind, segment.kind, load.kind)
-            != ("movsi", "movdx", "movesdx")
+            (setup.kind, segment.kind, load.kind) != ("movsi", "movdx", "movesdx")
             or dispatch.kind not in {"dim_begin", "dim_end"}
             or not setup.args
             or not isinstance(setup.args[0], int)
@@ -191,19 +218,19 @@ def _common_static_count(image: bytes, ds: int, blocks: tuple[int, ...]) -> int:
     static_base = (blocks[-1] + _ARRAY_BLOCK + 15) & ~15
     static_base += 0x10
     count = 0
-    while static_array_at(
-        image,
-        ds + static_base + count * _ARRAY_BLOCK,
-        static_base + count * _ARRAY_BLOCK,
-    ) is not None:
+    while (
+        static_array_at(
+            image,
+            ds + static_base + count * _ARRAY_BLOCK,
+            static_base + count * _ARRAY_BLOCK,
+        )
+        is not None
+    ):
         count += 1
     return count
 
 
-def _runtime_ds(
-    image: bytes, blocks: tuple[int, ...], pool_ds: object
-) -> int | None:
-    """Anchor DGROUP on the compiler's bare runtime descriptor records."""
+def _runtime_ds(image: bytes, blocks: tuple[int, ...], pool_ds: object) -> int | None:
 
     if not blocks:
         return None
@@ -235,9 +262,7 @@ def _dynamic_dim(
     _index, name, _kind, rank, _width, common = layout.value
     if not isinstance(name, str) or not isinstance(rank, int):
         return None
-    cells = _bound_cell_facts(
-        facts, opening.block, rank, opening.end, closing.start
-    )
+    cells = _bound_cell_facts(facts, opening.block, rank, opening.end, closing.start)
     if cells is None:
         return None
     resolved = {}
@@ -257,6 +282,8 @@ def _dynamic_dim(
         if not explicit and low not in {("const", 0), ("const", 1)}:
             return None
         if not explicit:
+            if not isinstance(low, tuple) or len(low) < 2:
+                return None
             base_values.add(low[1])
         bounds.append((low, high) if explicit else high)
     if len(base_values) > 1:
@@ -300,7 +327,7 @@ def _bound_value(
     facts: frozenset[Fact],
     instructions: dict[int, Operation],
     by_end: dict[int, Operation],
-):
+) -> Resolved | None:
     value = effect.value[0] if effect.value else None
     resolved = resolve_expression(value, facts)
     if resolved is not None:
@@ -308,7 +335,7 @@ def _bound_value(
     store = instructions.get(effect.evidence[-1]) if effect.evidence else None
     reload = by_end.get(store.offset) if store is not None else None
     scratch = _ax_reload_scratch(reload)
-    if scratch is None:
+    if reload is None or scratch is None:
         return None
     candidates = [
         fact
@@ -320,34 +347,16 @@ def _bound_value(
     ]
     if not candidates:
         return None
-    scratch_effect = max(candidates, key=lambda fact: fact.evidence[-1])
+    scratch_effect = max(
+        candidates, key=lambda fact: (fact.evidence[-1], fact_key(fact))
+    )
     return resolve_expression(scratch_effect.value[0], facts)
-
-
-def _ax_reload_scratch(reload: Operation | None) -> int | None:
-    if reload is None:
-        return None
-    if (
-        reload.kind == "x86.mov_acc_mem"
-        and len(reload.operands) == 2
-        and isinstance(reload.operands[0], int)
-        and reload.operands[1] == "load"
-    ):
-        return reload.operands[0]
-    if reload.kind != "tb.fp":
-        return None
-    raw = bytes.fromhex(reload.raw)
-    if len(raw) != 5 or raw[:3] != b"\xcd\x3d\xa1":
-        return None
-    return struct.unpack_from("<H", raw, 3)[0]
 
 
 def _constant_high(bound: object) -> bool:
     high = (
         bound[1]
-        if isinstance(bound, tuple)
-        and len(bound) == 2
-        and isinstance(bound[0], tuple)
+        if isinstance(bound, tuple) and len(bound) == 2 and isinstance(bound[0], tuple)
         else bound
     )
     return (
@@ -391,6 +400,4 @@ RUNTIME_ARRAY_LAYOUT_PASSES: tuple[NamedPass, ...] = (
     ("runtime-array-layout", runtime_array_layout_facts),
 )
 
-DYNAMIC_DIM_PASSES: tuple[NamedPass, ...] = (
-    ("dynamic-dim", dynamic_dim_facts),
-)
+DYNAMIC_DIM_PASSES: tuple[NamedPass, ...] = (("dynamic-dim", dynamic_dim_facts),)

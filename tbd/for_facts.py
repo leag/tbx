@@ -1,19 +1,18 @@
-"""FOR/NEXT facts for complete direct INTEGER loop regions."""
-
 from __future__ import annotations
 
 import struct
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from tbd.facts import Evidence, NamedPass
+from tbd.facts import Evidence, NamedPass, reads
 from tbd.ir import Fact, Operation
-from tbd.semantic import combine_evidence, resolve_expression
+from tbd.semantic import Resolved, combine_evidence, resolve_expression
+from tbd.slots import VAR_BASE
 
 
 @dataclass(frozen=True)
 class IntegerForMatch:
-    """One complete direct INTEGER FOR header, back edge, and NEXT tail."""
+    """Matched integer FOR-loop header and body boundaries."""
 
     header_start: int
     header_end: int
@@ -28,7 +27,7 @@ class IntegerForMatch:
 
 @dataclass(frozen=True)
 class ForEvidence:
-    """Indexes of immutable facts and instructions used by FOR matching."""
+    """Indexed operation and fact context for FOR-loop matching."""
 
     instructions: dict[int, Operation]
     by_end: dict[int, Operation]
@@ -40,19 +39,19 @@ class ForEvidence:
 
 @dataclass(frozen=True)
 class IntegerTest:
-    """Resolved direct INTEGER loop test beginning at a jump target."""
+    """Decoded integer loop termination test."""
 
     start: int
     end: int
     variable_address: int
     limit: object
-    limit_address: int | None
+    limit_address: object | None
     evidence: tuple[int, ...]
 
 
 @dataclass(frozen=True)
 class ForSource:
-    """Source operands and header extent recovered from setup assignments."""
+    """Source expression and evidence for a FOR-loop variable."""
 
     header_start: int
     variable: object
@@ -61,10 +60,21 @@ class ForSource:
     evidence: tuple[int, ...]
 
 
-def integer_for_facts(
-    evidence: Evidence, facts: frozenset[Fact]
-) -> Iterable[Fact]:
-    """Recover loops only when setup, test, and CFG edges form one template."""
+@reads(
+    "constant",
+    "expression.system",
+    "expression.value",
+    "flow.branch",
+    "flow.goto",
+    "layout.array",
+    "semantic.assign",
+    "slot",
+    "tb.stack_check",
+    "x86.into",
+    "x86.jmp",
+)
+def integer_for_facts(evidence: Evidence, facts: frozenset[Fact]) -> Iterable[Fact]:
+    """Recover integer FOR/NEXT loop facts."""
 
     context = _for_evidence(evidence.instructions, facts)
     for goto in (fact for fact in facts if fact.kind == "flow.goto"):
@@ -140,6 +150,13 @@ def _integer_for_match(
     assignment = _assignment_ending(context.assignments, jump.offset)
     if branch is None or increment is None or advanced is None or assignment is None:
         return None
+    # A local counted up to a local limit is incremented in the frame.
+    if (
+        isinstance(test.limit_address, tuple)
+        and test.variable_address < VAR_BASE
+        and bytes.fromhex(increment.raw)[:2] not in {b"\xff\x46", b"\xff\x4e"}
+    ):
+        return None
     source = _for_source(assignment, test, context.assignments)
     if source is None:
         return None
@@ -152,6 +169,8 @@ def _integer_for_match(
     ):
         return None
     body_start = jump.end
+    if branch_instruction is None:
+        return None
     loop_end = _loop_end(
         branch_instruction,
         branch,
@@ -185,7 +204,6 @@ def _integer_for_match(
 def _previous_source_instruction(
     end: int, by_end: dict[int, Operation]
 ) -> Operation | None:
-    """Port tbx's adjacency rule across source-less toggle instrumentation."""
 
     instruction = by_end.get(end)
     while instruction is not None and instruction.kind in {
@@ -202,6 +220,14 @@ def _for_source(
     assignments: tuple[Fact, ...],
 ) -> ForSource | None:
     variable, initial = assignment.value
+    # A local counts within its own procedure's frame.
+    if (
+        isinstance(test.limit_address, tuple)
+        and isinstance(variable, tuple)
+        and variable[:1] == ("proc-local",)
+        and variable[:2] != test.limit_address[:2]
+    ):
+        return None
     if test.limit_address is None:
         return ForSource(
             assignment.subject[0],
@@ -224,15 +250,13 @@ def _for_source(
     )
 
 
-def _assignment_ending(
-    assignments: tuple[Fact, ...], end: int
-) -> Fact | None:
+def _assignment_ending(assignments: tuple[Fact, ...], end: int) -> Fact | None:
     matches = [fact for fact in assignments if fact.subject[1] == end]
     return matches[0] if len(matches) == 1 else None
 
 
 def _assignment_to_address_ending(
-    assignments: tuple[Fact, ...], address: int, end: int
+    assignments: tuple[Fact, ...], address: object, end: int
 ) -> Fact | None:
     matches = [
         fact
@@ -240,8 +264,10 @@ def _assignment_to_address_ending(
         if fact.subject[1] == end
         and isinstance(fact.value[0], tuple)
         and len(fact.value[0]) >= 3
-        and fact.value[0][0] == "slot"
-        and fact.value[0][2] == address
+        and (
+            fact.value[0] == address
+            or (fact.value[0][0] == "slot" and fact.value[0][2] == address)
+        )
     ]
     return matches[0] if len(matches) == 1 else None
 
@@ -300,17 +326,60 @@ def _variable_compare(
     load_raw = bytes.fromhex(load.raw)
     compare = context.instructions.get(load.end)
     compare_raw = b"" if compare is None else bytes.fromhex(compare.raw)
-    if (
-        len(load_raw) != 4
-        or load_raw[:2] != b"\x8b\x06"
-        or compare is None
-        or len(compare_raw) != 4
-        or compare_raw[:2] != b"\x39\x06"
-    ):
+    if compare is None or len(load_raw) not in {3, 4} or len(compare_raw) not in {3, 4}:
         return None
-    limit_address = struct.unpack_from("<H", load_raw, 2)[0]
-    variable_address = struct.unpack_from("<H", compare_raw, 2)[0]
-    limit = resolve_expression(("memory", limit_address, "integer"), context.facts)
+    if load_raw[:2] == b"\x8b\x06" and compare_raw[:2] == b"\x39\x06":
+        limit_address = struct.unpack_from("<H", load_raw, 2)[0]
+        variable_address = struct.unpack_from("<H", compare_raw, 2)[0]
+        limit_expression = ("memory", limit_address, "integer")
+    elif (
+        load_raw[:2] == b"\x8b\x46"
+        and compare_raw[:2] == b"\x39\x06"
+        and len(compare_raw) == 4
+    ):
+        # A variable of the program counted up to a SUB's local limit.
+        local = _local_limit(load, load_raw[2], context.facts)
+        if local is None:
+            return None
+        return IntegerTest(
+            load.offset,
+            compare.end,
+            struct.unpack_from("<H", compare_raw, 2)[0],
+            local.value,
+            local.value,
+            combine_evidence((load.offset, compare.offset), local.evidence),
+        )
+    elif load_raw[:2] == b"\x8b\x46" and compare_raw[:2] == b"\x39\x46":
+        local = _local_limit(load, load_raw[2], context.facts)
+        if local is not None:
+            return IntegerTest(
+                load.offset,
+                compare.end,
+                compare_raw[2],
+                local.value,
+                local.value,
+                combine_evidence((load.offset, compare.offset), local.evidence),
+            )
+        limit_address = load_raw[2]
+        variable_address = compare_raw[2]
+        limit_expression = ("memory", limit_address, "integer")
+    else:
+        return None
+    limit = resolve_expression(limit_expression, context.facts)
+    if limit is None and load_raw[:2] == b"\x8b\x46":
+        prior = [
+            fact
+            for fact in context.facts
+            if fact.kind == "expression.value"
+            and len(fact.subject) == 1
+            and fact.subject[0] < load.offset
+            and len(fact.value) == 1
+            and isinstance(fact.value[0], tuple)
+            and fact.value[0][0] == "proc-param"
+        ]
+        if len(prior) == 1:
+            limit = Resolved(prior[0].value[0], prior[0].evidence)
+            limit_address = None
     if limit is None:
         return None
     return IntegerTest(
@@ -323,6 +392,25 @@ def _variable_compare(
     )
 
 
+def _local_limit(
+    load: Operation, displacement: int, facts: frozenset[Fact]
+) -> Resolved | None:
+    matches = [
+        fact
+        for fact in facts
+        if fact.kind == "expression.value"
+        and fact.subject == (load.offset,)
+        and len(fact.value) == 1
+        and isinstance(fact.value[0], tuple)
+        and len(fact.value[0]) == 4
+        and fact.value[0][0] == "proc-local"
+        and fact.value[0][2:] == (displacement, "integer")
+    ]
+    if len(matches) != 1:
+        return None
+    return Resolved(matches[0].value[0], matches[0].evidence)
+
+
 def _immediate_compare(instruction: Operation | None) -> tuple[int, int] | None:
     if instruction is None:
         return None
@@ -332,6 +420,8 @@ def _immediate_compare(instruction: Operation | None) -> tuple[int, int] | None:
         return address, struct.unpack_from("<b", raw, 4)[0]
     if len(raw) == 6 and raw[:2] == b"\x81\x3e":
         return struct.unpack_from("<Hh", raw, 2)
+    if len(raw) == 4 and raw[:2] == b"\x83\x7e":
+        return raw[2], struct.unpack_from("<b", raw, 3)[0]
     return None
 
 
@@ -339,6 +429,8 @@ def _integer_increment(instruction: Operation | None) -> tuple[int, int] | None:
     if instruction is None:
         return None
     raw = bytes.fromhex(instruction.raw)
+    if len(raw) == 3 and raw[:2] in {b"\xff\x46", b"\xff\x4e"}:
+        return raw[2], 1 if raw[1] == 0x46 else -1
     if len(raw) == 4 and raw[:2] in {b"\xff\x06", b"\xff\x0e"}:
         address = struct.unpack_from("<H", raw, 2)[0]
         return address, 1 if raw[1] == 0x06 else -1
@@ -359,9 +451,16 @@ def _same_integer_variable(
     return bool(
         isinstance(variable, tuple)
         and len(variable) >= 3
-        and variable[0] == "slot"
+        and variable[0] in {"slot", "proc-local"}
         and variable[2] == compare_address == increment_address
-        and variable[2] in integer_slots
+        and (
+            variable[2] in integer_slots
+            or (
+                variable[0] == "proc-local"
+                and len(variable) >= 4
+                and variable[3] == "integer"
+            )
+        )
     )
 
 

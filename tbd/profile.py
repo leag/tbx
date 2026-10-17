@@ -1,4 +1,4 @@
-"""Turbo Basic compiler signatures and dialect normalization."""
+"""Compiler dialect profiles and runtime statement metadata."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class CompilerProfile:
-    """Version-specific encodings normalized to the Turbo Basic 1.1 ABI."""
+    """Version-specific Turbo Basic encoding conventions."""
 
     name: str
     prologue: bytes
@@ -17,16 +17,18 @@ class CompilerProfile:
     inline_defseg_set: bool
 
     def canonical_sub(self, dispatcher: int, sub: int) -> int:
+        """Normalize a dispatcher sub-operation to the canonical numbering."""
         floors = {0xEC: 0x28, 0xED: 0x3C, 0xEE: 0x2C}
         floor = floors[dispatcher]
         return sub + self.sub_shift if sub >= floor - self.sub_shift else sub
 
     def canonical_vector(self, vector: int) -> int:
+        """Normalize a runtime vector to the canonical numbering."""
         upper = 0xEC - self.vector_shift
         return vector + self.vector_shift if 0x40 <= vector < upper else vector
 
     def is_run_jump(self, opcode: int, target: int, code_start: int) -> bool:
-        """Whether one direct jump is this compiler's bare RUN spelling."""
+        """Return whether a jump is the compiler's initial RUN transfer."""
 
         if self.name == "1.0":
             return opcode == 0xE9 and target == code_start + 3
@@ -45,9 +47,7 @@ TRACE_VECTOR = 0x97
 CHECKED_GOSUB_VECTOR = 0x8A
 CHECKED_RETURN_VECTOR = 0x8B
 
-# Direct-memory types carried by Turbo Basic's emulated x87 escape vectors.
-# The analyzer consumes these as profile signatures; it does not infer widths
-# from the referenced bytes.
+
 FP_TRANSFER_TYPES = {
     0x35: "float",
     0x37: "long",
@@ -73,12 +73,10 @@ TRANSCEND_FUNCTIONS = {
 
 
 def profile_for(dialect: str | None) -> CompilerProfile | None:
+    """Return the compiler profile matching ``dialect``, when known."""
     return next((profile for profile in PROFILES if profile.name == dialect), None)
 
 
-# Complete source statements carried by one canonical INT EC dispatch. The
-# tuple after the source name contains operands fixed by the selected subcode;
-# expression and register operands are recovered by separate passes.
 EC_SOURCE_STATEMENTS = {
     0x00: ("BEEP", ()),
     0x04: ("BLOAD", ()),
@@ -175,11 +173,8 @@ EC_SOURCE_STATEMENTS = {
     0xF2: ("WINDOW", ()),
 }
 
-# Every known dispatcher name remains evidence, including phases that must be
-# combined before they can become source statements.
-EC_DISPATCH_NAMES = {
-    sub: source[0] for sub, source in EC_SOURCE_STATEMENTS.items()
-} | {
+
+EC_DISPATCH_NAMES = {sub: source[0] for sub, source in EC_SOURCE_STATEMENTS.items()} | {
     0x04: "BLOAD_DEFAULT",
     0x16: "CLOSE_ALL",
     0x28: "DELAY_INIT",
@@ -224,21 +219,20 @@ EC_DISPATCH_NAMES = {
 EC_RELATIVE_TARGET_SUBS = frozenset({0x70, 0x76, 0x78, 0x7A, 0x7C, 0x80})
 EC_TARGET_TABLE_SUBS = frozenset({0x72, 0x74})
 
-# Inline payloads that are part of one dispatcher instruction. Values are
-# ``struct`` formats; decoding the whole signature prevents payload bytes from
-# becoming unrelated x86 evidence during recursive discovery.
+
 EC_INLINE_PAYLOAD_FORMATS = {
-    0x12: "<B",    # CIRCLE option tag
-    0x22: "<B",    # COLOR option tag
-    0x4A: "<B",    # graphics GET option tag
-    0x4E: "<HH",   # INPUT destination and flags
-    0x62: "<B",    # LINE option tag
-    0x64: "<HB",   # LINE INPUT destination and flags
-    0x84: "<B",    # PAINT option tag
-    0xA4: "<B",    # PSET option tag
-    0xAA: "<B",    # graphics PUT option tag
-    0xC6: "<B",    # SCREEN option tag
-    0xDC: "<B",    # tiled PAINT option tag
-    0xEA: "<B",    # VIEW option tag
-    0xF2: "<B",    # WINDOW option tag
+    0x12: "<B",
+    0x22: "<B",
+    0x4A: "<B",
+    0x4E: "<HH",
+    0x62: "<B",
+    0x64: "<HB",
+    0x84: "<B",
+    0xA4: "<B",
+    0xAA: "<B",
+    0xC6: "<B",
+    0xDC: "<B",
+    0xEA: "<B",
+    0xF2: "<B",
 }
+"""Compiler dialect profiles and runtime statement metadata."""

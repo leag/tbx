@@ -1,4 +1,4 @@
-"""Small data model for recursive discovery and lifted recovery IR."""
+"""Typed intermediate-representation records shared by the decoder stages."""
 
 from __future__ import annotations
 
@@ -8,6 +8,8 @@ from typing import Any
 
 @dataclass(frozen=True)
 class Diagnostic:
+    """A non-fatal condition encountered during analysis."""
+
     message: str
     offset: int | None = None
     severity: str = "warning"
@@ -15,7 +17,7 @@ class Diagnostic:
 
 @dataclass(frozen=True)
 class Operation:
-    """An instruction, signature match, or lifted semantic operation."""
+    """An instruction or lifted semantic operation."""
 
     offset: int
     size: int
@@ -26,11 +28,14 @@ class Operation:
 
     @property
     def end(self) -> int:
+        """Return the first image offset after this operation."""
         return self.offset + self.size
 
 
 @dataclass(frozen=True)
 class BasicBlock:
+    """A control-flow block and its outgoing edges."""
+
     start: int
     end: int
     instruction_offsets: tuple[int, ...]
@@ -39,6 +44,8 @@ class BasicBlock:
 
 @dataclass(frozen=True)
 class CrossReference:
+    """A directed reference between two image offsets."""
+
     source: int
     target: int
     kind: str
@@ -46,7 +53,7 @@ class CrossReference:
 
 @dataclass(frozen=True)
 class Fact:
-    """A hashable conclusion with the addresses that support it."""
+    """Immutable evidence-backed semantic fact."""
 
     kind: str
     subject: tuple[Any, ...]
@@ -57,14 +64,19 @@ class Fact:
 
 @dataclass(frozen=True)
 class FactReport:
+    """Summary of one fact-analysis pass."""
+
     round: int
     name: str
     additions: int
     facts: int
+    seconds: float = 0.0
 
 
 @dataclass(frozen=True)
 class Slot:
+    """A named memory slot inferred from compiler metadata."""
+
     offset: int
     name: str
     types: tuple[str, ...] = ()
@@ -72,6 +84,8 @@ class Slot:
 
 @dataclass(frozen=True)
 class Statement:
+    """A recovered Turbo Basic statement."""
+
     index: int
     address: int
     kind: str
@@ -80,7 +94,7 @@ class Statement:
 
 @dataclass(frozen=True)
 class Program:
-    """A standalone best-effort decode, including evidence and lifted IR."""
+    """Complete intermediate representation produced by :func:`decode`."""
 
     format: str
     image_size: int
@@ -104,6 +118,7 @@ class Program:
     def to_dict(
         self, *, include_instructions: bool = False, include_facts: bool = False
     ) -> dict[str, Any]:
+        """Serialize the program, optionally including analysis internals."""
         result = asdict(self)
         if not include_instructions:
             result.pop("instructions")
@@ -118,8 +133,7 @@ class Program:
     def render(
         self, *, show_instructions: bool = False, show_facts: bool = False
     ) -> str:
-        """Render lifted IR by default, or the discovered instructions."""
-
+        """Render a human-readable report of the recovered program."""
         dialect = self.dialect or "unknown"
         lines = [
             f"program format={self.format} dialect={dialect} quality=best-effort",
@@ -146,6 +160,12 @@ class Program:
             where = "" if diagnostic.offset is None else f" at {diagnostic.offset:#x}"
             lines.append(f"{diagnostic.severity}{where}: {diagnostic.message}")
         return "\n".join(lines) + "\n"
+
+    def to_basic(self, *, strict: bool = False) -> str:
+        """Render recovered canonical statements as Turbo Basic source."""
+        from tbd.basic import to_basic
+
+        return to_basic(self, strict=strict)
 
 
 def _render_operation(operation: Operation) -> str:
@@ -191,7 +211,7 @@ def _hex(value: int | None) -> str:
     return "none" if value is None else f"{value:#x}"
 
 
-def _render_arg(value: Any) -> str:
+def _render_arg(value: object) -> str:
     if isinstance(value, int):
         return f"{value:#x}"
     return str(value)

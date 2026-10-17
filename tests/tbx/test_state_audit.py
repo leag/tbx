@@ -59,7 +59,7 @@ def test_the_state_surface_is_the_size_it_says_it_is():
     """
     owned, _, _ = _access_counts()
 
-    assert len(owned) == 102
+    assert len(owned) == 103
     assert not owned & INFRASTRUCTURE_FIELDS, (
         "migration scaffolding must not be claimed as decode state"
     )

@@ -1,5 +1,3 @@
-"""Pure FOR/NEXT matchers ported from the calibrated decoder vocabulary."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -9,7 +7,7 @@ from tbd.compiler_ops import CompilerOp
 
 @dataclass(frozen=True)
 class FpForTemplate:
-    """The complete x87 sign split and its two comparison arms."""
+    """Instruction template for a floating-point FOR test."""
 
     stop: int
     end: int
@@ -23,7 +21,7 @@ class FpForTemplate:
 
 @dataclass(frozen=True)
 class VariableStepBranch:
-    """One INTEGER computed-STEP comparison arm."""
+    """Branch shape used by a variable-step FOR loop."""
 
     stop: int
     limit_kind: str
@@ -32,7 +30,7 @@ class VariableStepBranch:
 
 @dataclass(frozen=True)
 class VariableStepTemplate:
-    """Complete computed-STEP sign split and matching comparison arms."""
+    """Instruction template for an integer variable-step FOR loop."""
 
     stop: int
     end: int
@@ -46,7 +44,7 @@ def match_fp_for_test(
     index: int,
     staged: tuple[int, int, int],
 ) -> FpForTemplate | None:
-    """Port the reference decoder's complete loose/x87 FOR matcher."""
+    """Match a floating-point FOR termination-test template."""
 
     prefix = _fp_prefix(operations, index)
     if prefix is None:
@@ -61,22 +59,31 @@ def match_fp_for_test(
     exit_jump = operations[cursor]
     cursor += 1
     negative_start = cursor
-    cursor = _fp_compare(operations, cursor, pair)
-    if cursor is None:
+    compare_cursor = _fp_compare(operations, cursor, pair)
+    if compare_cursor is None:
         return None
+    cursor = compare_cursor
     negative = _body_branch(operations, cursor, 0x76, 0x77, body)
     if negative is None:
         return None
     body, cursor = negative
+    if (
+        len(skip.args) < 1
+        or not isinstance(skip.args[0], int)
+        or len(exit_jump.args) < 1
+        or not isinstance(exit_jump.args[0], int)
+        or not isinstance(test.args[0], int)
+        or not isinstance(first_load.args[0], int)
+        or not isinstance(first_compare.args[0], int)
+    ):
+        return None
     if not _same_code_offset(skip.args[0], operations[negative_start].offset):
         return None
     limit, variable = first_load.args[0], first_compare.args[0]
     step = test.args[0] - (6 if pair[0] == "fld64" else 2)
     if staged != (limit, step, variable):
         return None
-    # The reference operation stream omits commit/runtime glue.  The template's
-    # physical exit is therefore the end of its final branch, not the address
-    # of the next translated operation (which may be a later source construct).
+
     end = operations[cursor - 1].end
     if not _same_code_offset(exit_jump.args[0], end):
         return None
@@ -102,7 +109,7 @@ def match_variable_step_branch(
     wanted: tuple[int, ...],
     inverse: tuple[int, ...],
 ) -> VariableStepBranch | None:
-    """Port one computed-STEP INTEGER comparison arm."""
+    """Match the branch that exits a variable-step FOR loop."""
 
     if index >= len(operations):
         return None
@@ -118,15 +125,15 @@ def match_variable_step_branch(
         expected = {"movax_m": "cmpm_ax", "movax_bp": "cmpm_ax_bp"}[first.kind]
         if compare.kind != expected or compare.args[0] != variable:
             return None
+        if not isinstance(first.args[0], int):
+            return None
         limit_kind, limit, branch_index = "cell", first.args[0], index + 2
     else:
         return None
     stop = _branch_stop(operations, branch_index, body, wanted, inverse)
-    return (
-        None
-        if stop is None
-        else VariableStepBranch(stop, limit_kind, limit)
-    )
+    if stop is None or not isinstance(limit, int):
+        return None
+    return VariableStepBranch(stop, limit_kind, limit)
 
 
 def match_variable_step_test(
@@ -136,7 +143,7 @@ def match_variable_step_test(
     variable: int,
     body: int,
 ) -> VariableStepTemplate | None:
-    """Port the reference decoder's complete computed-STEP NEXT matcher."""
+    """Match a complete variable-step FOR test template."""
 
     if index + 2 >= len(operations) or operations[index].kind != "orax_self":
         return None
@@ -181,9 +188,13 @@ def match_variable_step_test(
     ):
         return None
     end = operations[descending.stop - 1].end
+    if not skip.args or not isinstance(skip.args[0], int):
+        return None
     if not _same_code_offset(skip.args[0], end):
         return None
-    evidence = tuple(operation.offset for operation in operations[index:descending.stop])
+    evidence = tuple(
+        operation.offset for operation in operations[index : descending.stop]
+    )
     return VariableStepTemplate(
         descending.stop,
         end,
@@ -242,7 +253,12 @@ def _body_branch(
     if index >= len(operations):
         return None
     branch = operations[index]
-    if branch.kind == "jcc" and branch.args[0] == wanted:
+    if (
+        branch.kind == "jcc"
+        and len(branch.args) >= 2
+        and isinstance(branch.args[1], int)
+        and branch.args[0] == wanted
+    ):
         target = branch.args[1]
         if body is None or _same_code_offset(target, body):
             return target, index + 1
@@ -251,9 +267,13 @@ def _body_branch(
     jump = operations[index + 1]
     if (
         branch.kind == "jcc"
+        and len(branch.args) >= 2
+        and isinstance(branch.args[1], int)
         and branch.args[0] == inverse
         and branch.args[1] == branch.offset + 5
         and jump.kind == "jmp"
+        and len(jump.args) >= 1
+        and isinstance(jump.args[0], int)
         and (body is None or _same_code_offset(jump.args[0], body))
     ):
         return jump.args[0], index + 2

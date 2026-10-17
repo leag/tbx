@@ -1,5 +1,6 @@
-"""Public API for the compact best-effort Turbo Basic decoder."""
+"""Public API for decoding Turbo Basic executables."""
 
+from tbd.basic import BasicTranslationError, emit_basic, to_basic
 from tbd.core import decode
 from tbd.ir import (
     BasicBlock,
@@ -17,6 +18,7 @@ decode_user_code = decode
 
 __all__ = [
     "BasicBlock",
+    "BasicTranslationError",
     "CrossReference",
     "Diagnostic",
     "Fact",
@@ -27,4 +29,6 @@ __all__ = [
     "Statement",
     "decode",
     "decode_user_code",
+    "emit_basic",
+    "to_basic",
 ]

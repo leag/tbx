@@ -1,5 +1,3 @@
-"""Scalar INPUT # facts over complete file-item chains."""
-
 from __future__ import annotations
 
 import struct
@@ -7,9 +5,11 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from tbd.compiler_ops import CompilerOp, translate_operations
-from tbd.facts import Evidence, NamedPass
-from tbd.input_facts import array_input_item, integer_input_item
+from tbd.facts import Evidence, NamedPass, reads
+from tbd.input_facts import _array_stores_by_start, array_input_item, integer_input_item
 from tbd.ir import Fact, Operation
+from tbd.operation_helpers import runtime_vector as _runtime_vector
+from tbd.operation_helpers import statement_name as _phase_name
 from tbd.profile import FP_TRANSFER_TYPES
 from tbd.semantic import (
     combine_evidence,
@@ -27,20 +27,43 @@ class _Item:
     evidence: tuple[int, ...]
 
 
+@reads(
+    "constant",
+    "expression.system",
+    "layout.array",
+    "machine.store",
+    "reference.array_store",
+    "slot",
+    "tb.fn_call",
+    "tb.fn_return",
+    "tb.fp",
+    "tb.fp_far",
+    "tb.fwait",
+    "tb.runtime",
+    "tb.statement",
+    "x86.inc",
+    "x86.j",
+    "x86.jmp",
+    "x86.mov_acc_mem",
+    "x86.mov_imm",
+)
 def input_file_statement_facts(
     evidence: Evidence, facts: frozenset[Fact]
 ) -> Iterable[Fact]:
-    """Recover scalar INPUT # chains with a resolved file-number store."""
+    """Recover file-backed INPUT statements and destinations."""
 
     instructions = evidence.instructions
     compiler_ops = {
-        operation.offset: operation
-        for operation in translate_operations(instructions)
+        operation.offset: operation for operation in translate_operations(instructions)
     }
+    array_stores = _array_stores_by_start(facts)
+    instruction_ends = {item.end: index for index, item in enumerate(instructions)}
     by_end = {instruction.end: instruction for instruction in instructions}
     index = 0
     while index < len(instructions):
-        first = _item(instructions, index, compiler_ops, facts)
+        first = _item(
+            instructions, index, compiler_ops, facts, array_stores, instruction_ends
+        )
         if first is None:
             index += 1
             continue
@@ -51,7 +74,9 @@ def input_file_statement_facts(
         file_number, start, file_support = file_result
         items = []
         cursor = index
-        while item := _item(instructions, cursor, compiler_ops, facts):
+        while item := _item(
+            instructions, cursor, compiler_ops, facts, array_stores, instruction_ends
+        ):
             items.append(item)
             cursor += item.size
         following = instructions[cursor] if cursor < len(instructions) else None
@@ -64,18 +89,27 @@ def input_file_statement_facts(
         if incomplete_item or (has_numeric and commit is None) or following is None:
             index = cursor
             continue
-        targets = []
-        support = [file_support]
+        targets: list[tuple[object, ...]] = []
+        support: list[tuple[int, ...]] = [file_support]
         for item in items:
             if isinstance(item.reference, int):
-                target = resolve_slot(
+                target = resolve_slot(item.reference, facts) or resolve_array_element(
                     item.reference, facts
-                ) or resolve_array_element(item.reference, facts)
+                )
                 if target is None:
                     break
-                targets.append(target.value + (item.kind,))
+                if not isinstance(target.value, tuple):
+                    break
+                # A slot names its type; an array element's name already does.
+                targets.append(
+                    target.value + (item.kind,)
+                    if target.value[:1] == ("slot",)
+                    else target.value
+                )
                 support.extend((item.evidence, target.evidence))
             else:
+                if not isinstance(item.reference, tuple):
+                    break
                 targets.append(item.reference)
                 support.append(item.evidence)
         else:
@@ -99,6 +133,8 @@ def _item(
     index: int,
     compiler_ops: dict[int, CompilerOp],
     facts: frozenset[Fact],
+    array_stores: dict[int, Fact] | None = None,
+    instruction_ends: dict[int, int] | None = None,
 ) -> _Item | None:
     numeric = _numeric_item(instructions[index : index + 2])
     if numeric is not None:
@@ -119,6 +155,8 @@ def _item(
         instructions,
         index,
         facts,
+        array_stores=array_stores,
+        instruction_ends=instruction_ends,
         numeric_phase="INPUT_FILE_NUMBER",
         string_phase="INPUT_FILE_STRING",
     )
@@ -130,6 +168,95 @@ def _item(
             array.evidence,
         )
     return _string_item(instructions[index : index + 3])
+
+
+@reads(
+    "constant",
+    "expression.system",
+    "layout.array",
+    "machine.store",
+    "reference.array_store",
+    "slot",
+    "tb.runtime",
+    "tb.statement",
+    "x86.mov_imm",
+)
+def line_input_file_statement_facts(
+    evidence: Evidence, facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    """Recover LINE INPUT statements reading from an open file."""
+    instructions = evidence.instructions
+    by_end = {instruction.end: instruction for instruction in instructions}
+    for index, statement in enumerate(instructions):
+        if statement.kind != "tb.statement" or statement.operands != (
+            "LINE_INPUT_FILE",
+            0x66,
+        ):
+            continue
+        file_result = _file_number(facts, by_end, statement.offset)
+        target = _line_input_target(instructions, index + 1, statement.end, facts)
+        if file_result is None or target is None:
+            continue
+        file_number, start, file_support = file_result
+        target_value, end, target_support = target
+        yield Fact(
+            "semantic.statement",
+            (start, end),
+            (
+                "LINE_INPUT",
+                0x66,
+                file_number,
+                None,
+                target_value,
+                False,
+            ),
+            combine_evidence(
+                file_support,
+                (statement.offset,),
+                target_support,
+            ),
+            "anchored",
+        )
+
+
+def _line_input_target(
+    instructions: tuple[Operation, ...],
+    index: int,
+    start: int,
+    facts: frozenset[Fact],
+) -> tuple[object, int, tuple[int, ...]] | None:
+    tail = instructions[index : index + 2]
+    if len(tail) == 2:
+        setup, store = tail
+        if (
+            setup.kind == "x86.mov_imm"
+            and setup.operands[:1] == ("si",)
+            and len(setup.operands) == 2
+            and isinstance(setup.operands[1], int)
+            and setup.offset == start
+            and setup.end == store.offset
+            and _runtime_vector(store) == 0xA0
+        ):
+            target = resolve_slot(setup.operands[1], facts)
+            if target is not None and isinstance(target.value, tuple):
+                return (
+                    target.value + ("string",),
+                    store.end,
+                    combine_evidence((setup.offset, store.offset), target.evidence),
+                )
+    arrays = [
+        fact
+        for fact in facts
+        if fact.kind == "reference.array_store"
+        and len(fact.subject) == 2
+        and fact.subject[0] == start
+        and len(fact.value) == 2
+        and fact.value[1] == "string"
+        and isinstance(fact.subject[1], int)
+    ]
+    if len(arrays) != 1:
+        return None
+    return arrays[0].value[0], arrays[0].subject[1], arrays[0].evidence
 
 
 def _numeric_item(pair: tuple[Operation, ...]) -> _Item | None:
@@ -199,25 +326,14 @@ def _file_number(
     value = resolved.value
     if isinstance(value, tuple) and value[:1] == ("const",):
         value = value[1]
-    return value, effects[0].evidence[0], combine_evidence(
-        effects[0].evidence, resolved.evidence
+    return (
+        value,
+        effects[0].evidence[0],
+        combine_evidence(effects[0].evidence, resolved.evidence),
     )
-
-
-def _phase_name(instruction: Operation) -> str | None:
-    if instruction.kind != "tb.statement" or not instruction.operands:
-        return None
-    name = instruction.operands[0]
-    return name if isinstance(name, str) else None
-
-
-def _runtime_vector(instruction: Operation) -> int | None:
-    if instruction.kind != "tb.runtime" or not instruction.operands:
-        return None
-    vector = instruction.operands[0]
-    return vector if isinstance(vector, int) else None
 
 
 INPUT_FILE_FACT_PASSES: tuple[NamedPass, ...] = (
     ("input-file", input_file_statement_facts),
+    ("line-input-file", line_input_file_statement_facts),
 )

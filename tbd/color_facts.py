@@ -1,12 +1,10 @@
-"""COLOR facts over the compiler's complete optional-cell scaffold."""
-
 from __future__ import annotations
 
 import struct
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from tbd.facts import Evidence, NamedPass
+from tbd.facts import Evidence, NamedPass, reads
 from tbd.ir import Fact, Operation
 from tbd.matchers import fp_ax_bridge
 from tbd.semantic import combine_evidence, resolve_expression
@@ -16,7 +14,7 @@ _COLOR_CELLS = ((0x04, 0x88), (0x02, 0x94), (0x01, 0xA0))
 
 @dataclass(frozen=True)
 class ColorMatch:
-    """One exact COLOR cell-staging chain and commit signature."""
+    """Decoded COLOR statement operands and supporting offsets."""
 
     start: int
     end: int
@@ -24,10 +22,19 @@ class ColorMatch:
     evidence: tuple[int, ...]
 
 
-def color_statement_facts(
-    evidence: Evidence, facts: frozenset[Fact]
-) -> Iterable[Fact]:
-    """Resolve complete canonical COLOR scaffolds into source-shaped facts."""
+@reads(
+    "constant",
+    "expression.system",
+    "layout.array",
+    "reference.array_value",
+    "slot",
+    "tb.fp",
+    "tb.fwait",
+    "tb.statement",
+    "x86.mov_acc_mem",
+)
+def color_statement_facts(evidence: Evidence, facts: frozenset[Fact]) -> Iterable[Fact]:
+    """Recover COLOR statements from their runtime call scaffold."""
 
     by_end = {instruction.end: instruction for instruction in evidence.instructions}
     for instruction in evidence.instructions:
@@ -92,9 +99,22 @@ def _color_store(
         return None
     if struct.unpack_from("<H", raw, 2)[0] != address:
         return None
+    load = by_end.get(store.offset)
+    load_raw = bytes.fromhex(load.raw) if load is not None else b""
+    if len(load_raw) == 4 and load_raw[:2] == b"\x8b\x06":
+        # An integer argument is loaded into AX from its variable.
+        source = struct.unpack_from("<H", load_raw, 2)[0]
+        loaded = resolve_expression(("memory", source, "integer"), facts)
+        if loaded is None:
+            return None
+        return (
+            loaded.value,
+            load.offset,
+            combine_evidence(loaded.evidence, (load.offset, store.offset)),
+        )
     bridge = fp_ax_bridge(by_end.get(store.offset), by_end)
     if bridge is None:
-        return None
+        return _element_through_ax(store, by_end, facts)
     expression, bridge_evidence = bridge
     resolved = resolve_expression(expression, facts)
     if resolved is None:
@@ -103,6 +123,50 @@ def _color_store(
         resolved.value,
         bridge_evidence[0],
         combine_evidence(bridge_evidence, resolved.evidence, (store.offset,)),
+    )
+
+
+def _element_through_ax(
+    store: Operation, by_end: dict[int, Operation], facts: frozenset[Fact]
+) -> tuple[object, int, tuple[int, ...]] | None:
+    """Read a numeric array element rounded to an integer through AX.
+
+    ``fld [si]`` of the element, ``fistp [t]; fwait; mov ax,[t]``, then the
+    store: ``COLOR V1(I%)`` (``smenu0.exe`` 0xe349).
+    """
+    reload = by_end.get(store.offset)
+    if reload is None or reload.kind != "x86.mov_acc_mem":
+        return None
+    rounding = by_end.get(reload.offset)
+    if rounding is not None and rounding.kind == "tb.fwait":
+        rounding = by_end.get(rounding.offset)
+    if rounding is None or rounding.kind != "tb.fp":
+        return None
+    raw = bytes.fromhex(rounding.raw)
+    # ``fistp word [t]`` into the temporary AX reloads.
+    if (
+        len(raw) != 5
+        or raw[:3] != b"\xcd\x3b\x1e"
+        or reload.operands[:1] != (struct.unpack_from("<H", raw, 3)[0],)
+    ):
+        return None
+    elements = [
+        fact
+        for fact in facts
+        if fact.kind == "reference.array_value"
+        and len(fact.subject) == 2
+        and fact.subject[1] == rounding.offset
+        and fact.value[1:] in {("float",), ("double",), ("integer",)}
+    ]
+    if len(elements) != 1:
+        return None
+    element = elements[0]
+    return (
+        element.value[0],
+        element.subject[0],
+        combine_evidence(
+            element.evidence, (rounding.offset, reload.offset, store.offset)
+        ),
     )
 
 

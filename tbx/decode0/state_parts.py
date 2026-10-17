@@ -109,6 +109,7 @@ class ExprState(StateView):
     fields = frozenset(
         {
             "bchk_bp",
+            "bchk_stack",
             "bchk_subs",
             "color_cells",
             "direct_bool_gate",

@@ -1,10 +1,8 @@
-"""DGROUP slot facts derived from memory roles and an anchored pool boundary."""
-
 from __future__ import annotations
 
 from collections.abc import Iterable
 
-from tbd.facts import Evidence, NamedPass
+from tbd.facts import Evidence, NamedPass, reads
 from tbd.ir import Fact, Slot
 from tbd.semantic import resolve_array_element
 from tbd.slots import VAR_BASE, slot_name
@@ -18,19 +16,33 @@ _TYPE_WIDTHS = {
 }
 
 
-def slot_facts(
-    evidence: Evidence, facts: frozenset[Fact]
-) -> Iterable[Fact]:
-    """Name supported scalar cells below one unambiguous pool boundary."""
+@reads(
+    "constant",
+    "layout.array",
+    "layout.common_slot",
+    "layout.pool",
+    "layout.runtime_grid",
+    "memory.read",
+    "memory.write",
+    "tb.statement",
+)
+def slot_facts(evidence: Evidence, facts: frozenset[Fact]) -> Iterable[Fact]:
+    """Recover typed scalar slots from pool accesses."""
+    """Infer typed scalar slots from layout and memory-access facts."""
 
     layouts = [fact for fact in facts if fact.kind == "layout.pool"]
     runtime_grids = [fact for fact in facts if fact.kind == "layout.runtime_grid"]
+    # The same layout can be recorded twice with different support.
+    if len({fact.value for fact in layouts}) == 1:
+        layouts = [min(layouts, key=lambda fact: fact.evidence)]
     if len(layouts) != 1:
         if len(runtime_grids) == 1 and isinstance(runtime_grids[0].value[2], int):
             scalar_base = runtime_grids[0].value[2]
             for address, related in sorted(
                 _runtime_grid_writes(facts, scalar_base).items()
             ):
+                if resolve_array_element(address, facts) is not None:
+                    continue
                 types = tuple(sorted({fact.value[0] for fact in related}))
                 support = tuple(
                     sorted(
@@ -76,7 +88,14 @@ def slot_facts(
             common.evidence,
             "anchored",
         )
+    common_addresses = {
+        fact.subject[0]
+        for fact in facts
+        if fact.kind == "layout.common_slot" and fact.subject
+    }
     for address, related in sorted(accesses.items()):
+        if address in common_addresses:
+            continue
         types = tuple(sorted({fact.value[0] for fact in related}))
         support = tuple(
             sorted({marker, *(source for fact in related for source in fact.evidence)})
@@ -137,6 +156,7 @@ def _slot_accesses(
 
 
 def _is_slot_access(fact: Fact, pool_base: int, scalar_base: int) -> bool:
+    """Return whether a typed memory access identifies a scalar slot."""
     if fact.kind not in {"memory.read", "memory.write"} or not fact.subject:
         return False
     address = fact.subject[0]
@@ -146,7 +166,7 @@ def _is_slot_access(fact: Fact, pool_base: int, scalar_base: int) -> bool:
         isinstance(address, int)
         and isinstance(width, int)
         and scalar_base <= address
-        and address + width <= pool_base
+        and (address + width <= pool_base or address == pool_base)
         and (address - scalar_base) % 2 == 0
     )
 
@@ -158,7 +178,7 @@ def _scalar_name(address: int, scalar_base: int) -> str:
 
 
 def materialize_slots(facts: tuple[Fact, ...]) -> tuple[Slot, ...]:
-    """Build the canonical slot view from additive slot conclusions."""
+    """Build stable source names for recovered scalar slots."""
 
     found: dict[int, tuple[set[str], set[str]]] = {}
     for fact in facts:
@@ -190,4 +210,88 @@ def _valid_slot_fact(fact: Fact) -> bool:
     )
 
 
-SLOT_FACT_PASSES: tuple[NamedPass, ...] = (("dgroup-slots", slot_facts),)
+_SCRATCH_END = 0x100
+"""Cells below this address are the compiler's scratch, not variables."""
+
+
+@reads("layout.pool")
+def select_temp_slot_facts(
+    evidence: Evidence, _facts: frozenset[Fact]
+) -> Iterable[Fact]:
+    """Name the scratch cell a string SELECT CASE keeps its selector in.
+
+    ``SELECT CASE s$`` stores the selector in a scratch string cell once and
+    each ``CASE`` pushes that cell next to its guard for a string compare.
+    Read as a variable, the arms become ``IF cell$ = guard`` against a value
+    computed once, which is what the program does; left unnamed, the compare
+    has no operand.  A cell is named only when it is both stored and compared.
+    """
+    instructions = evidence.instructions
+    stored: dict[int, list[int]] = {}
+    compared: dict[int, list[int]] = {}
+    for index, (setup, runtime) in enumerate(zip(instructions, instructions[1:])):
+        if (
+            setup.kind != "x86.mov_imm"
+            or setup.operands[:1] != ("si",)
+            or len(setup.operands) != 2
+            or not isinstance(setup.operands[1], int)
+            or not 0 < setup.operands[1] < _SCRATCH_END
+            or setup.end != runtime.offset
+            or runtime.kind != "tb.runtime"
+        ):
+            continue
+        cell = setup.operands[1]
+        if runtime.operands == (0xA0,):
+            stored.setdefault(cell, []).append(setup.offset)
+        elif runtime.operands in {(0x9C,), (0x9E,)}:
+            following = instructions[index + 2 : index + 7]
+            if any(
+                item.kind == "tb.runtime" and item.operands == (0x9A,)
+                for item in following
+            ):
+                compared.setdefault(cell, []).append(setup.offset)
+    # A real selector is kept as a double: ``fstp qword [cell]`` once, and
+    # ``fcomp qword [cell]`` against each guard.
+    doubles: dict[int, tuple[list[int], list[int]]] = {}
+    for item in instructions:
+        raw = bytes.fromhex(item.raw)
+        if item.kind != "tb.fp" or len(raw) != 5:
+            continue
+        cell = int.from_bytes(raw[3:5], "little")
+        if raw[:3] in {b"\xcd\x39\x1e", b"\xcd\x38\x1e"} and 0 < cell < _SCRATCH_END:
+            uses = doubles.setdefault(cell, ([], []))
+            uses[0 if raw[1] == 0x39 else 1].append(item.offset)
+    # The compiler reuses a scratch cell for numeric SELECTs too; a cell also
+    # read or written as a word is not a string variable.
+    numeric = {
+        int.from_bytes(raw[2:4], "little")
+        for raw in (bytes.fromhex(item.raw) for item in instructions)
+        if len(raw) >= 4 and raw[0] in (0x89, 0x8B, 0x3B, 0x39, 0xC7) and raw[1] == 0x06
+    } | {
+        int.from_bytes(raw[1:3], "little")
+        for raw in (bytes.fromhex(item.raw) for item in instructions)
+        if len(raw) == 3 and raw[0] in (0xA1, 0xA3)
+    }
+    for cell in sorted((stored.keys() & compared.keys()) - numeric):
+        yield Fact(
+            "slot",
+            (cell,),
+            (f"SEL{cell:03X}", ("string",)),
+            tuple(sorted({*stored[cell], *compared[cell]})),
+            "anchored",
+        )
+    for cell, (stores, compares) in sorted(doubles.items()):
+        if stores and compares and cell not in numeric and cell not in stored:
+            yield Fact(
+                "slot",
+                (cell,),
+                (f"SEL{cell:03X}", ("double",)),
+                tuple(sorted({*stores, *compares})),
+                "anchored",
+            )
+
+
+SLOT_FACT_PASSES: tuple[NamedPass, ...] = (
+    ("dgroup-slots", slot_facts),
+    ("select-temp-slots", select_temp_slot_facts),
+)

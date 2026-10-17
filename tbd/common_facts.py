@@ -1,11 +1,11 @@
-"""COMMON-band facts translated from calibrated compiler layout stamps."""
-
 from __future__ import annotations
 
 import struct
 from collections.abc import Iterable
+from itertools import count, islice
 
-from tbd.facts import Evidence, NamedPass
+from tbd.canonical import _RESERVED, _letters
+from tbd.facts import Evidence, NamedPass, fact_key, reads
 from tbd.ir import Fact
 from tbd.pool_facts import instruction_memory_accesses
 from tbd.semantic import combine_evidence
@@ -16,10 +16,9 @@ _WIDTHS = {"integer": 2, "long": 4, "float": 4, "double": 8, "string": 4}
 _SUFFIXES = {"integer": "%", "long": "&", "double": "#", "string": "$"}
 
 
-def common_band_facts(
-    evidence: Evidence, facts: frozenset[Fact]
-) -> Iterable[Fact]:
-    """Recover ordered persistent scalar slots from the COMMON band."""
+@reads("layout.runtime_grid", "tb.fp", "x86.mov_acc_mem")
+def common_band_facts(evidence: Evidence, facts: frozenset[Fact]) -> Iterable[Fact]:
+    """Recover COMMON declarations from the shared-data layout."""
 
     stamped = _common_stamp(evidence.image)
     typed = _typed_evidence(evidence)
@@ -27,8 +26,7 @@ def common_band_facts(
     if not slots:
         slots = _runtime_common_slots(facts, typed)
     if stamped is None and not any(
-        fact.kind == "layout.runtime_grid" and fact.value[3] is True
-        for fact in facts
+        fact.kind == "layout.runtime_grid" and fact.value[3] is True for fact in facts
     ):
         return
     summary = stamped[1:] if stamped is not None else (0, 0, 0)
@@ -49,14 +47,20 @@ def common_band_facts(
         )
 
 
+@reads(
+    "layout.common_band",
+    "layout.common_slot",
+    "layout.runtime_array",
+    "semantic.dynamic_dim",
+)
 def common_statement_facts(
     evidence: Evidence, facts: frozenset[Fact]
 ) -> Iterable[Fact]:
-    """Materialize the source-level codeless COMMON declaration."""
+    """Convert COMMON layout facts into source-level statements."""
 
     scalar_facts = sorted(
         (fact for fact in facts if fact.kind == "layout.common_slot"),
-        key=lambda fact: fact.value[0],
+        key=lambda fact: (fact.value[0], fact_key(fact)),
     )
     arrays = sorted(
         (
@@ -64,29 +68,23 @@ def common_statement_facts(
             for fact in facts
             if fact.kind == "layout.runtime_array" and fact.value[-1] is True
         ),
-        key=lambda fact: fact.value[0],
+        key=lambda fact: (fact.value[0], fact_key(fact)),
     )
     if not any(fact.kind == "layout.common_band" for fact in facts):
         return
     if not scalar_facts and not arrays:
         return
-    array_names = tuple(
-        f"{fact.value[1]}({fact.value[3]})" for fact in arrays
-    )
+    array_names = tuple(f"{fact.value[1]}({fact.value[3]})" for fact in arrays)
     scalar_names = tuple(
         _scalar_name(fact.value[0], fact.value[1]) for fact in scalar_facts
     )
-    dynamic_dims = [
-        fact for fact in facts if fact.kind == "semantic.dynamic_dim"
-    ]
+    dynamic_dims = [fact for fact in facts if fact.kind == "semantic.dynamic_dim"]
     address = (
         max(fact.subject[1] for fact in dynamic_dims)
         if arrays and dynamic_dims
         else evidence.instructions[0].offset
     )
-    support = combine_evidence(
-        *(fact.evidence for fact in (*arrays, *scalar_facts))
-    )
+    support = combine_evidence(*(fact.evidence for fact in (*arrays, *scalar_facts)))
     yield Fact(
         "semantic.common",
         (address, 0),
@@ -132,9 +130,7 @@ def _stamped_slots(
         address += _WIDTHS[kind]
     for address in range(numeric_end, numeric_end + string_size, 4):
         support = typed.get(address, ("string", ()))[1]
-        slots.append(
-            (address, "string", combine_evidence(support, (stamp_address,)))
-        )
+        slots.append((address, "string", combine_evidence(support, (stamp_address,))))
     return tuple(slots)
 
 
@@ -156,7 +152,11 @@ def _runtime_common_slots(
     static_base = scalar_base - _ARRAY_BLOCK * n_static
     addresses = sorted(address for address in typed if start <= address < static_base)
     return tuple(
-        (address, typed[address][0], combine_evidence(typed[address][1], grids[0].evidence))
+        (
+            address,
+            typed[address][0],
+            combine_evidence(typed[address][1], grids[0].evidence),
+        )
         for address in addresses
     )
 
@@ -180,17 +180,16 @@ def _typed_evidence(
 
 
 def _scalar_name(order: int, kind: str) -> str:
-    index = order + 1
-    letters = ""
-    while index:
-        index, remainder = divmod(index - 1, 26)
-        letters = chr(ord("A") + remainder) + letters
-    return letters + _SUFFIXES.get(kind, "")
+    """Name the ``order``-th COMMON variable as the program's names do.
+
+    The program names its variables A, B, ... skipping BASIC's reserved
+    words, COMMON variables first, so the declaration must skip them too.
+    """
+    names = (name for index in count() if (name := _letters(index)) not in _RESERVED)
+    return next(islice(names, order, None)) + _SUFFIXES.get(kind, "")
 
 
-COMMON_LAYOUT_PASSES: tuple[NamedPass, ...] = (
-    ("common-band", common_band_facts),
-)
+COMMON_LAYOUT_PASSES: tuple[NamedPass, ...] = (("common-band", common_band_facts),)
 
 COMMON_STATEMENT_PASSES: tuple[NamedPass, ...] = (
     ("common-statement", common_statement_facts),

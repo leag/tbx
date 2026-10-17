@@ -1,13 +1,13 @@
-"""LOCATE facts over complete grouped runtime-call legs."""
-
 from __future__ import annotations
 
 import struct
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from tbd.facts import Evidence, NamedPass
+from tbd.facts import Evidence, NamedPass, fact_key, reads
 from tbd.ir import Fact, Operation
+from tbd.matchers import direct_fp_source, fp_ax_bridge
+from tbd.operation_helpers import contiguous as _contiguous
 from tbd.semantic import combine_evidence, resolve_expression
 
 
@@ -19,11 +19,23 @@ class _Leg:
     evidence: tuple[int, ...]
 
 
+@reads(
+    "constant",
+    "expression.system",
+    "layout.array",
+    "reference.array_read",
+    "signature",
+    "slot",
+    "tb.epilogue",
+    "tb.function",
+    "tb.runtime",
+    "tb.statement",
+    "x86.mov_imm",
+)
 def locate_statement_facts(
     evidence: Evidence, facts: frozenset[Fact]
 ) -> Iterable[Fact]:
-    """Resolve whole LOCATE statements without emitting partial call legs."""
-
+    """Recover LOCATE statements and their row/column expressions."""
     instructions = evidence.instructions
     by_offset = {instruction.offset: instruction for instruction in instructions}
     reads = sorted(
@@ -34,7 +46,7 @@ def locate_statement_facts(
             and len(fact.subject) == 2
             and len(fact.value) == 3
         ),
-        key=lambda fact: fact.subject,
+        key=lambda fact: (fact.subject, fact_key(fact)),
     )
     for row, column in zip(reads, reads[1:]):
         runtime = by_offset.get(column.subject[1])
@@ -52,11 +64,17 @@ def locate_statement_facts(
             combine_evidence(row.evidence, column.evidence, (runtime.offset,)),
             "anchored",
         )
+    by_end = {instruction.end: instruction for instruction in instructions}
+    for instruction in instructions:
+        if _runtime_vector(instruction) == 0xCF:
+            converted = _converted_row_col(instruction, by_end, facts)
+            if converted is None:
+                converted = _converted_row(instruction, by_end, facts)
+            if converted is not None:
+                yield converted
     index = 0
     while index < len(instructions):
-        expression = _string_length_row_col(
-            instructions[index : index + 8], facts
-        )
+        expression = _string_length_row_col(instructions[index : index + 8], facts)
         if expression is not None:
             yield expression
             index += 8
@@ -65,7 +83,9 @@ def locate_statement_facts(
         cursor = None
         shape = None
         if row_col is not None:
-            cursor = _cursor(instructions[index + row_col.size : index + row_col.size + 2])
+            cursor = _cursor(
+                instructions[index + row_col.size : index + row_col.size + 2]
+            )
             used = row_col.size + (cursor.size if cursor else 0)
             shape = _shape(instructions[index + used : index + used + 4])
         else:
@@ -83,6 +103,103 @@ def locate_statement_facts(
             if fact is not None:
                 yield fact
         index = end_index
+
+
+def _converted_row_col(
+    runtime: Operation, by_end: dict[int, Operation], facts: frozenset[Fact]
+) -> Fact | None:
+    """Recover ``LOCATE r, c`` whose column is converted from a real.
+
+    A single-precision column reaches AX through the scratch word, and the
+    compiler stages the row in BX inside that conversion:
+    ``fld [c]; fistp [2Ch]; mov bx,ax; fwait; mov ax,[2Ch]``.  The row is the
+    AX value before it, itself converted the same way or loaded directly.
+    """
+    reload = by_end.get(runtime.offset)
+    wait = by_end.get(reload.offset) if reload is not None else None
+    stage = by_end.get(wait.offset) if wait is not None else None
+    store = by_end.get(stage.offset) if stage is not None else None
+    load = by_end.get(store.offset) if store is not None else None
+    if (
+        reload is None
+        or bytes.fromhex(reload.raw) != b"\xa1\x2c\x00"
+        or wait is None
+        or wait.kind != "tb.fwait"
+        or stage is None
+        or bytes.fromhex(stage.raw) != b"\x89\xc3"
+        or store is None
+        or bytes.fromhex(store.raw) != b"\xcd\x3b\x1e\x2c\x00"
+    ):
+        return None
+    column_source = direct_fp_source(load)
+    row_end = by_end.get(load.offset) if load is not None else None
+    if column_source is None or row_end is None or load is None:
+        return None
+    bridge = fp_ax_bridge(row_end, by_end)
+    if bridge is not None:
+        row_source, row_evidence = bridge
+    else:
+        row_source = _ax_value(row_end)
+        row_evidence = (row_end.offset,)
+    if row_source is None:
+        return None
+    row = resolve_expression(row_source, facts)
+    column = resolve_expression(column_source, facts)
+    if row is None or column is None:
+        return None
+    return Fact(
+        "semantic.locate",
+        (min(row_evidence), runtime.end),
+        (row.value, column.value, None, None, None),
+        combine_evidence(
+            row_evidence,
+            row.evidence,
+            column.evidence,
+            (load.offset, store.offset, stage.offset, wait.offset, reload.offset),
+            (runtime.offset,),
+        ),
+        "anchored",
+    )
+
+
+def _converted_row(
+    runtime: Operation, by_end: dict[int, Operation], facts: frozenset[Fact]
+) -> Fact | None:
+    """Recover ``LOCATE r, c`` whose row is converted from a real.
+
+    ``fld [r]; fistp [2Ch]; fwait; mov ax,[2Ch]; mov bx,ax; mov ax,c``: the
+    row is staged in BX before the column is loaded.
+    """
+    column_end = by_end.get(runtime.offset)
+    stage = by_end.get(column_end.offset) if column_end is not None else None
+    row_end = by_end.get(stage.offset) if stage is not None else None
+    column_source = _ax_value(column_end) if column_end is not None else None
+    if (
+        stage is None
+        or bytes.fromhex(stage.raw) != b"\x89\xc3"
+        or column_source is None
+    ):
+        return None
+    bridge = fp_ax_bridge(row_end, by_end)
+    if bridge is None:
+        return None
+    row_source, row_evidence = bridge
+    row = resolve_expression(row_source, facts)
+    column = resolve_expression(column_source, facts)
+    if row is None or column is None:
+        return None
+    return Fact(
+        "semantic.locate",
+        (min(row_evidence), runtime.end),
+        (row.value, column.value, None, None, None),
+        combine_evidence(
+            row_evidence,
+            row.evidence,
+            column.evidence,
+            (stage.offset, column_end.offset, runtime.offset),
+        ),
+        "anchored",
+    )
 
 
 def _string_length_row_col(
@@ -110,9 +227,7 @@ def _string_length_row_col(
     ):
         return None
     row_result = resolve_expression(row_value, facts)
-    string = resolve_expression(
-        ("memory", setup.operands[1], "string"), facts
-    )
+    string = resolve_expression(("memory", setup.operands[1], "string"), facts)
     constant = resolve_expression(
         ("memory", struct.unpack_from("<H", add_raw, 2)[0], "integer"),
         facts,
@@ -141,12 +256,12 @@ def _locate_fact(
     legs: tuple[_Leg, ...],
     facts: frozenset[Fact],
 ) -> Fact | None:
-    values = [None, None, None, None, None]
+    values: list[object | None] = [None, None, None, None, None]
     for leg in legs:
         values[leg.position : leg.position + len(leg.values)] = leg.values
     if values[0] == ("const", 0x8000):
         values[0] = None
-    resolved = []
+    resolved: list[object | None] = []
     support = [leg.evidence for leg in legs]
     for value in values:
         if value is None:
@@ -225,13 +340,24 @@ def _ax_value(instruction: Operation) -> object | None:
 
 
 def _has_boundary(instructions: tuple[Operation, ...], index: int) -> bool:
+    """Report whether the LOCATE ends here rather than continuing.
+
+    A following AX load is held back because it may begin a cursor or shape
+    leg of this same LOCATE.  When it begins neither, it belongs to the next
+    statement and cannot extend this one.
+    """
     if index >= len(instructions):
         return False
     following = instructions[index]
+    if following.kind in {"tb.statement", "tb.epilogue"}:
+        return True
+    if _row_col(instructions[index : index + 4]) is not None:
+        return True
+    if _ax_value(following) is None:
+        return True
     return (
-        following.kind in {"tb.statement", "tb.epilogue"}
-        or _row_col(instructions[index : index + 4]) is not None
-        or _ax_value(following) is None
+        _cursor(instructions[index : index + 2]) is None
+        and _shape(instructions[index : index + 4]) is None
     )
 
 
@@ -244,13 +370,6 @@ def _runtime_vector(instruction: Operation) -> int | None:
 
 def _support(window: tuple[Operation, ...]) -> tuple[int, ...]:
     return tuple(instruction.offset for instruction in window)
-
-
-def _contiguous(instructions: tuple[Operation, ...]) -> bool:
-    return all(
-        left.end == right.offset
-        for left, right in zip(instructions, instructions[1:])
-    )
 
 
 LOCATE_FACT_PASSES: tuple[NamedPass, ...] = (("locate", locate_statement_facts),)

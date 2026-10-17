@@ -1,35 +1,30 @@
-"""Fact-owned user DEF FN definitions, frames, results, and invocations."""
-
 from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
 
 from tbd.compiler_ops import CompilerOp, translate_operations
-from tbd.facts import Evidence, NamedPass
+from tbd.def_fn_array_facts import local_array_body_facts
+from tbd.def_fn_call_args import numeric_call_result_tail, stage_call_arguments
+from tbd.def_fn_model import FnDefinition, FnResult
+from tbd.def_fn_numeric_facts import (
+    numeric_block_body,
+    numeric_body_facts,
+    numeric_bridge_body_expression,
+)
+from tbd.def_fn_string_facts import (
+    string_block_body,
+    string_body_expression,
+    string_call_scaffold,
+    string_reference_assignment_facts,
+)
+from tbd.facts import Evidence, NamedPass, reads
 from tbd.ir import Fact, Operation
 from tbd.semantic import (
     combine_evidence,
     orient_memory_fold,
     resolve_expression,
-    resolve_expression_before,
 )
-
-
-@dataclass(frozen=True)
-class FnDefinition:
-    """One compiler-bracketed function body and its immutable frame signature."""
-
-    declaration: int
-    entry: int
-    end: int
-    returned: int
-    result_kind: str
-    parameters: tuple[tuple[int, str], ...]
-    block: bool
-    expression: object
-    result_span: tuple[int, int]
-    evidence: tuple[int, ...]
 
 
 @dataclass(frozen=True)
@@ -39,23 +34,63 @@ class _StackValue:
     start: int
 
 
+@reads(
+    "constant",
+    "control.compound_condition",
+    "control.condition_prefix",
+    "expression.string_operand",
+    "expression.system",
+    "expression.value",
+    "layout.array",
+    "layout.pool",
+    "reference.array_value",
+    "register.value",
+    "semantic.statement",
+    "signature",
+    "slot",
+    "tb.fn_call",
+    "tb.fn_return",
+    "tb.fp",
+    "tb.fp_far",
+    "tb.function",
+    "tb.fwait",
+    "tb.runtime",
+    "tb.statement",
+    "x86.inc",
+    "x86.j",
+    "x86.jmp",
+    "x86.mov_acc_mem",
+    "x86.mov_imm",
+)
 def def_fn_facts(evidence: Evidence, facts: frozenset[Fact]) -> Iterable[Fact]:
-    """Recover definitions only from an exact declaration/body/return bracket."""
+    """Recover DEF FN declarations and their body parameters."""
 
-    for definition in _definitions(evidence):
-        resolved = resolve_expression(definition.expression, facts)
-        if resolved is None:
+    for definition in _definitions(evidence, facts):
+        results = tuple(
+            (resolve_expression(result.expression, facts), result)
+            for result in definition.results
+        )
+        if any(resolved is None for resolved, _result in results):
             continue
+        resolved_results = tuple(
+            (resolved, result) for resolved, result in results if resolved is not None
+        )
         parameters = tuple(
             ("fn-param", definition.entry, offset, kind)
             for offset, kind in definition.parameters
         )
-        support = combine_evidence(definition.evidence, resolved.evidence)
+        support = combine_evidence(
+            definition.evidence,
+            *(
+                combine_evidence(result.evidence, resolved.evidence)
+                for resolved, result in resolved_results
+            ),
+        )
         value = (
             definition.entry,
             definition.result_kind,
             parameters,
-            resolved.value if not definition.block else True,
+            resolved_results[0][0].value if not definition.block else True,
             definition.block,
         )
         yield Fact(
@@ -66,22 +101,79 @@ def def_fn_facts(evidence: Evidence, facts: frozenset[Fact]) -> Iterable[Fact]:
             "signature",
         )
         if definition.block:
-            yield Fact(
-                "semantic.fn_result",
-                definition.result_span,
-                (resolved.value,),
-                support,
-                "anchored",
-            )
-        yield from _exit_def_facts(evidence, definition)
+            for resolved, result in resolved_results:
+                yield Fact(
+                    "semantic.fn_result",
+                    result.span,
+                    (resolved.value,),
+                    combine_evidence(
+                        definition.evidence,
+                        result.evidence,
+                        resolved.evidence,
+                    ),
+                    "anchored",
+                )
+        yield from string_reference_assignment_facts(
+            evidence,
+            facts,
+            entry=definition.entry,
+            returned=definition.returned,
+            parameters=definition.parameters,
+            locals=definition.locals,
+            local_bytes=definition.local_bytes,
+            envelope_evidence=(definition.declaration, definition.returned),
+        )
+        yield from numeric_body_facts(
+            evidence,
+            facts,
+            entry=definition.entry,
+            returned=definition.returned,
+            parameters=definition.parameters,
+            locals=definition.locals,
+            local_span=definition.local_span,
+            local_evidence=definition.local_evidence,
+        )
+        yield from local_array_body_facts(
+            evidence,
+            facts,
+            entry=definition.entry,
+            returned=definition.returned,
+            parameters=definition.parameters,
+            locals=definition.locals,
+        )
+        yield from _exit_def_facts(evidence, facts, definition)
 
 
-def def_fn_call_facts(
-    evidence: Evidence, facts: frozenset[Fact]
-) -> Iterable[Fact]:
-    """Compose complete caller frames into value-producing user-function calls."""
+@reads(
+    "constant",
+    "expression.system",
+    "expression.value",
+    "layout.array",
+    "reference.array_value",
+    "register.value",
+    "semantic.statement",
+    "signature",
+    "slot",
+    "tb.fn_call",
+    "tb.fn_return",
+    "tb.fp",
+    "tb.fp_far",
+    "tb.function",
+    "tb.fwait",
+    "tb.runtime",
+    "tb.statement",
+    "x86.inc",
+    "x86.j",
+    "x86.jmp",
+    "x86.mov_acc_mem",
+    "x86.mov_imm",
+)
+def def_fn_call_facts(evidence: Evidence, facts: frozenset[Fact]) -> Iterable[Fact]:
+    """Recover calls to previously identified DEF FN declarations."""
 
-    definitions = {definition.entry: definition for definition in _definitions(evidence)}
+    definitions = {
+        definition.entry: definition for definition in _definitions(evidence, facts)
+    }
     instructions = evidence.instructions
     instruction_ends = {
         instruction.offset: instruction.end for instruction in instructions
@@ -136,7 +228,11 @@ def def_fn_call_facts(
         )
 
 
-def _definitions(evidence: Evidence) -> tuple[FnDefinition, ...]:
+def _definitions(
+    evidence: Evidence, facts: frozenset[Fact]
+) -> tuple[FnDefinition, ...]:
+    """Find function bodies and infer parameters used by their statements."""
+
     instructions = evidence.instructions
     by_offset = {instruction.offset: instruction for instruction in instructions}
     compiler = translate_operations(instructions)
@@ -152,7 +248,11 @@ def _definitions(evidence: Evidence) -> tuple[FnDefinition, ...]:
             continue
         returned = by_offset.get(target - 2)
         entry = declaration.end
-        if returned is None or returned.kind != "tb.fn_return" or returned.end != target:
+        if (
+            returned is None
+            or returned.kind != "tb.fn_return"
+            or returned.end != target
+        ):
             continue
         body = tuple(
             compiler_by_offset[instruction.offset]
@@ -162,23 +262,92 @@ def _definitions(evidence: Evidence) -> tuple[FnDefinition, ...]:
         )
         parsed = _body_expression(body, entry, returned.offset)
         if parsed is None:
-            parsed = _string_body_expression(
+            parsed = string_body_expression(
                 evidence.instructions, entry, returned.offset
             )
-        if parsed is None:
-            continue
-        expression, result_kind, result_span, parameters, support = parsed
-        block = _block_prefix(body, result_kind)
-        if not _supported_body(
-            evidence,
+        bridge = numeric_bridge_body_expression(
+            evidence.instructions,
+            facts,
             entry,
             returned.offset,
-            result_span[0],
-            result_span[1],
-            block,
-            result_kind,
-        ):
-            continue
+        )
+        if bridge is not None:
+            parsed = bridge
+        if parsed is not None:
+            expression, result_kind, result_span, parameters, support = parsed
+            block = _block_prefix(body, result_kind)
+            if not _supported_body(
+                evidence,
+                entry,
+                returned.offset,
+                result_span[0],
+                result_span[1],
+                block,
+                result_kind,
+                facts,
+            ):
+                parsed = None
+        if parsed is None:
+            block_body = _integer_block_body(body, entry)
+            if block_body is None:
+                string_body = string_block_body(
+                    evidence.instructions,
+                    entry,
+                    returned.offset,
+                )
+                if string_body is not None:
+                    results = tuple(
+                        FnResult(
+                            result.expression,
+                            result.span,
+                            result.evidence,
+                        )
+                        for result in string_body.results
+                    )
+                    result_kind = "string"
+                    parameters = string_body.parameters
+                    support = string_body.evidence
+                    locals_by_offset = string_body.locals
+                    local_span = string_body.local_span
+                    local_evidence = string_body.local_evidence
+                    local_bytes = string_body.local_bytes
+                else:
+                    numeric_body = numeric_block_body(
+                        evidence.instructions,
+                        entry,
+                        returned.offset,
+                    )
+                    if numeric_body is None:
+                        continue
+                    results = tuple(
+                        FnResult(
+                            result.expression,
+                            result.span,
+                            result.evidence,
+                        )
+                        for result in numeric_body.results
+                    )
+                    result_kind = numeric_body.results[0].kind
+                    parameters = numeric_body.parameters
+                    support = numeric_body.evidence
+                    locals_by_offset = numeric_body.locals
+                    local_span = numeric_body.local_span
+                    local_evidence = numeric_body.local_evidence
+                    local_bytes = numeric_body.local_bytes
+            else:
+                results, parameters, support = block_body
+                result_kind = "integer"
+                locals_by_offset = ()
+                local_span = None
+                local_evidence = ()
+                local_bytes = 0
+            block = True
+        else:
+            results = (FnResult(expression, result_span, support),)
+            locals_by_offset = ()
+            local_span = None
+            local_evidence = ()
+            local_bytes = 0
         evidence_addresses = combine_evidence(
             (declaration.offset, returned.offset), support
         )
@@ -191,23 +360,156 @@ def _definitions(evidence: Evidence) -> tuple[FnDefinition, ...]:
                 result_kind,
                 parameters,
                 block,
-                expression,
-                result_span,
+                results,
                 evidence_addresses,
+                locals_by_offset,
+                local_span,
+                local_evidence,
+                local_bytes,
             )
         )
     return tuple(result)
 
 
+def _integer_block_body(
+    operations: tuple[CompilerOp, ...], entry: int
+) -> (
+    tuple[
+        tuple[FnResult, ...],
+        tuple[tuple[int, str], ...],
+        tuple[int, ...],
+    ]
+    | None
+):
+    """Parse independent integer result stores inside a block DEF FN.
+
+    The first ``[bp+0] = 0`` store is the block-function marker. Every later
+    store to that reserved cell is a source-level ``FNname% = value`` even
+    when its value is also zero. Control flow and other statements may occur
+    between stores, so each result is decoded from its own local expression
+    window rather than treating the whole body as one expression.
+    """
+
+    if not operations or not (
+        operations[0].kind == "mov_bp_imm" and operations[0].args == (0, 0)
+    ):
+        return None
+    stores = [
+        index
+        for index, operation in enumerate(operations[1:], start=1)
+        if (operation.kind == "movm_ax_bp" and operation.args == (0,))
+        or (
+            operation.kind == "mov_bp_imm"
+            and len(operation.args) == 2
+            and operation.args[0] == 0
+        )
+    ]
+    if not stores:
+        return None
+    results = []
+    parameters: dict[int, str] = {}
+    for index in stores:
+        parsed = _integer_result_at(operations, index, entry)
+        if parsed is None:
+            return None
+        value, span, result_parameters, support = parsed
+        results.append(FnResult(value, span, support))
+        parameters.update(result_parameters)
+    return (
+        tuple(results),
+        tuple(sorted(parameters.items())),
+        combine_evidence(
+            (operations[0].offset,),
+            *(result.evidence for result in results),
+        ),
+    )
+
+
+def _integer_result_at(
+    operations: tuple[CompilerOp, ...], index: int, entry: int
+) -> (
+    tuple[
+        object,
+        tuple[int, int],
+        dict[int, str],
+        tuple[int, ...],
+    ]
+    | None
+):
+    store = operations[index]
+    if store.kind == "mov_bp_imm":
+        return (
+            ("const", store.args[1]),
+            (store.offset, store.end),
+            {},
+            (store.offset,),
+        )
+    cursor = index - 1
+    arithmetic = []
+    while cursor >= 0 and operations[cursor].kind in {
+        "movax",
+        "negax",
+        "addax_bp",
+        "andax_m",
+    }:
+        arithmetic.append(operations[cursor])
+        cursor -= 1
+    arithmetic.reverse()
+    if (
+        not arithmetic
+        or arithmetic[0].kind != "movax"
+        or len(arithmetic[0].args) != 1
+        or arithmetic[-1].end != store.offset
+        or any(
+            left.end != right.offset for left, right in zip(arithmetic, arithmetic[1:])
+        )
+    ):
+        return None
+    value: object = ("const", arithmetic[0].args[0])
+    parameters: dict[int, str] = {}
+    for operation in arithmetic[1:]:
+        # ``FNX% = -1``: ``mov ax,1; neg ax``.
+        if operation.kind == "negax" and value[:1] == ("const",):
+            value = ("const", -value[1])
+            continue
+        if len(operation.args) != 1:
+            return None
+        if operation.kind == "addax_bp":
+            offset = operation.args[0]
+            if not isinstance(offset, int) or offset < 2:
+                return None
+            parameters[offset] = "integer"
+            value = (
+                "binary",
+                "+",
+                ("fn-param", entry, offset, "integer"),
+                value,
+            )
+        elif operation.kind == "andax_m":
+            value = (
+                "binary",
+                "AND",
+                ("memory", operation.args[0], "integer"),
+                value,
+            )
+        else:
+            return None
+    support = tuple(operation.offset for operation in (*arithmetic, store))
+    return value, (arithmetic[0].offset, store.end), parameters, support
+
+
 def _body_expression(
     operations: tuple[CompilerOp, ...], entry: int, returned: int
-) -> tuple[
-    object,
-    str,
-    tuple[int, int],
-    tuple[tuple[int, str], ...],
-    tuple[int, ...],
-] | None:
+) -> (
+    tuple[
+        object,
+        str,
+        tuple[int, int],
+        tuple[tuple[int, str], ...],
+        tuple[int, ...],
+    ]
+    | None
+):
     result_indexes = [
         index
         for index, operation in enumerate(operations)
@@ -237,14 +539,22 @@ def _body_expression(
             if not stack or len(operation.args) != 2:
                 return None
             operator, offset = operation.args
-            if not isinstance(operator, str) or not isinstance(offset, int) or offset <= 2:
+            if (
+                not isinstance(operator, str)
+                or not isinstance(offset, int)
+                or offset <= 2
+            ):
                 return None
             parameters.setdefault(offset, _operand_kind(operation.kind))
             top = stack.pop()
             memory = ("fn-param", entry, offset, parameters[offset])
             value = orient_memory_fold(operator, memory, top.value)
             stack.append(
-                _StackValue(value, combine_evidence(top.evidence, (operation.offset,)), top.start)
+                _StackValue(
+                    value,
+                    combine_evidence(top.evidence, (operation.offset,)),
+                    top.start,
+                )
             )
             support.append(operation.offset)
             continue
@@ -276,19 +586,20 @@ def _body_expression(
 
 def _integer_body_expression(
     operations: tuple[CompilerOp, ...], entry: int
-) -> tuple[
-    object,
-    str,
-    tuple[int, int],
-    tuple[tuple[int, str], ...],
-    tuple[int, ...],
-] | None:
+) -> (
+    tuple[
+        object,
+        str,
+        tuple[int, int],
+        tuple[tuple[int, str], ...],
+        tuple[int, ...],
+    ]
+    | None
+):
     stores = [
         (index, operation)
         for index, operation in enumerate(operations)
-        if (
-            operation.kind == "movm_ax_bp" and operation.args == (0,)
-        )
+        if (operation.kind == "movm_ax_bp" and operation.args == (0,))
         or (
             operation.kind == "mov_bp_imm"
             and len(operation.args) == 2
@@ -300,6 +611,8 @@ def _integer_body_expression(
         return None
     result_index, store = stores[0]
     parameters: dict[int, str] = {}
+    value: object
+    support: tuple[int, ...]
     if store.kind == "mov_bp_imm":
         value = ("const", store.args[1])
         start = store.offset
@@ -317,11 +630,14 @@ def _integer_body_expression(
             arithmetic.append(operations[cursor])
             cursor -= 1
         arithmetic.reverse()
-        if not arithmetic or arithmetic[0].kind != "movax" or len(arithmetic[0].args) != 1:
+        if (
+            not arithmetic
+            or arithmetic[0].kind != "movax"
+            or len(arithmetic[0].args) != 1
+        ):
             return None
         if arithmetic[-1].end != store.offset or any(
-            left.end != right.offset
-            for left, right in zip(arithmetic, arithmetic[1:])
+            left.end != right.offset for left, right in zip(arithmetic, arithmetic[1:])
         ):
             return None
         value = ("const", arithmetic[0].args[0])
@@ -350,151 +666,33 @@ def _integer_body_expression(
                 return None
         start = arithmetic[0].offset
         support = tuple(operation.offset for operation in (*arithmetic, store))
-    return value, "integer", (start, store.end), tuple(sorted(parameters.items())), support
-
-
-def _string_body_expression(
-    instructions: tuple[Operation, ...], entry: int, returned: int
-) -> tuple[
-    object,
-    str,
-    tuple[int, int],
-    tuple[tuple[int, str], ...],
-    tuple[int, ...],
-] | None:
-    nodes = tuple(
-        instruction
-        for instruction in instructions
-        if entry <= instruction.offset < returned
-    )
-    compiler = {
-        operation.offset: operation
-        for operation in translate_operations(instructions)
-    }
-    stack: list[_StackValue] = []
-    parameters: dict[int, str] = {}
-    result: tuple[object, tuple[int, int], tuple[int, ...]] | None = None
-    cursor = 0
-    while cursor < len(nodes):
-        instruction = nodes[cursor]
-        if (
-            instruction.raw in {"c7 46 00 00 00", "c7 46 02 00 00"}
-            and not stack
-            and result is None
-        ):
-            cursor += 1
-            continue
-        pair = nodes[cursor : cursor + 2]
-        if len(pair) == 2 and _movsi_runtime(pair, 0x9E):
-            offset = pair[0].operands[1]
-            if not isinstance(offset, int) or offset < 4:
-                return None
-            parameters[offset] = "string"
-            stack.append(
-                _StackValue(
-                    ("fn-param", entry, offset, "string"),
-                    (pair[0].offset, pair[1].offset),
-                    pair[0].offset,
-                )
-            )
-            cursor += 2
-            continue
-        if len(pair) == 2 and _movsi_runtime(pair, 0x9C):
-            address = pair[0].operands[1]
-            stack.append(
-                _StackValue(
-                    ("memory", address, "string"),
-                    (pair[0].offset, pair[1].offset),
-                    pair[0].offset,
-                )
-            )
-            cursor += 2
-            continue
-        operation = compiler.get(instruction.offset)
-        following = nodes[cursor + 1] if cursor + 1 < len(nodes) else None
-        if (
-            operation is not None
-            and operation.kind == "fld_bp"
-            and len(operation.args) == 1
-            and isinstance(operation.args[0], int)
-            and operation.args[0] >= 4
-            and following is not None
-            and following.kind == "tb.function"
-            and following.operands == ("string", 0x20)
-        ):
-            offset = operation.args[0]
-            parameters[offset] = "float"
-            stack.append(
-                _StackValue(
-                    (
-                        "call",
-                        "STR$",
-                        (("fn-param", entry, offset, "float"),),
-                    ),
-                    (instruction.offset, following.offset),
-                    instruction.offset,
-                )
-            )
-            cursor += 2
-            continue
-        if instruction.kind == "tb.runtime" and instruction.operands == (0x9B,):
-            if len(stack) < 2:
-                return None
-            right = stack.pop()
-            left = stack.pop()
-            stack.append(
-                _StackValue(
-                    ("binary", "+", left.value, right.value),
-                    combine_evidence(
-                        left.evidence, right.evidence, (instruction.offset,)
-                    ),
-                    left.start,
-                )
-            )
-            cursor += 1
-            continue
-        if len(pair) == 2 and _movsi_runtime(pair, 0xA2):
-            if pair[0].operands[1] != 0 or len(stack) != 1 or result is not None:
-                return None
-            value = stack.pop()
-            support = combine_evidence(
-                value.evidence, (pair[0].offset, pair[1].offset)
-            )
-            result = value.value, (value.start, pair[1].end), support
-            cursor += 2
-            break
-        return None
-    if result is None:
-        return None
-    value, span, support = result
-    return value, "string", span, tuple(sorted(parameters.items())), support
-
-
-def _movsi_runtime(nodes: tuple[Operation, ...], vector: int) -> bool:
     return (
-        len(nodes) == 2
-        and nodes[0].kind == "x86.mov_imm"
-        and nodes[0].operands[:1] == ("si",)
-        and len(nodes[0].operands) == 2
-        and nodes[1].kind == "tb.runtime"
-        and nodes[1].operands == (vector,)
-        and nodes[0].end == nodes[1].offset
+        value,
+        "integer",
+        (start, store.end),
+        tuple(sorted(parameters.items())),
+        support,
     )
 
 
 def _expression_operation(operation: CompilerOp) -> bool:
-    return operation.kind in {
-        "fld",
-        "fld64",
-        "fild",
-        "fild32",
-        "fld_bp",
-        "fld64_bp",
-        "fild_bp",
-        "fild32_bp",
-        "fld1",
-        "fldz",
-    } or operation.kind.startswith("fold") and operation.kind.endswith("_bp")
+    return (
+        operation.kind
+        in {
+            "fld",
+            "fld64",
+            "fild",
+            "fild32",
+            "fld_bp",
+            "fld64_bp",
+            "fild_bp",
+            "fild32_bp",
+            "fld1",
+            "fldz",
+        }
+        or operation.kind.startswith("fold")
+        and operation.kind.endswith("_bp")
+    )
 
 
 def _body_parameters(
@@ -574,8 +772,8 @@ def _supported_body(
     result_end: int,
     block: bool,
     result_kind: str,
+    facts: frozenset[Fact],
 ) -> bool:
-    """Reject partial block recovery when statements before the result are opaque."""
 
     prefix = tuple(
         instruction
@@ -607,8 +805,7 @@ def _supported_body(
         return not prefix
     if result_kind == "integer":
         return (
-            len(prefix) == 1
-            and bytes.fromhex(prefix[0].raw) == b"\xc7\x46\x00\x00\x00"
+            len(prefix) == 1 and bytes.fromhex(prefix[0].raw) == b"\xc7\x46\x00\x00\x00"
         )
     if result_kind == "string":
         return (
@@ -624,6 +821,8 @@ def _supported_body(
     if len(prefix) == 2:
         return True
     tail = prefix[2:]
+    if _covered_block_prefix(tail, facts):
+        return True
     if len(tail) != 7:
         return False
     top, compare, status, commit, branch, skip, exit_jump = tail
@@ -650,8 +849,31 @@ def _supported_body(
     )
 
 
+def _covered_block_prefix(
+    instructions: tuple[Operation, ...], facts: frozenset[Fact]
+) -> bool:
+    spans = tuple(
+        fact.subject
+        for fact in facts
+        if fact.kind == "semantic.statement"
+        and len(fact.subject) == 2
+        and all(isinstance(value, int) for value in fact.subject)
+    )
+    return bool(instructions) and all(
+        instruction.kind == "tb.runtime"
+        and instruction.operands == (0x87,)
+        or any(
+            span[0] <= instruction.offset and instruction.end <= span[1]
+            for span in spans
+        )
+        for instruction in instructions
+    )
+
+
 def _exit_def_facts(
-    evidence: Evidence, definition: FnDefinition
+    evidence: Evidence,
+    facts: frozenset[Fact],
+    definition: FnDefinition,
 ) -> Iterable[Fact]:
     if not definition.block:
         return
@@ -664,6 +886,38 @@ def _exit_def_facts(
         operation.offset: operation
         for operation in translate_operations(evidence.instructions)
     }
+    condition_spans = tuple(
+        fact.subject
+        for fact in facts
+        if fact.kind in {"control.condition_prefix", "control.compound_condition"}
+        and len(fact.subject) == 2
+        and all(isinstance(value, int) for value in fact.subject)
+    )
+    exit_targets = {definition.returned}
+    # Before it returns, the function releases its string locals, whatever
+    # its result's type; a jump to the first release leaves it too.
+    cleanup = _string_cleanup_start(instructions)
+    if cleanup is not None:
+        exit_targets.add(cleanup)
+    exits = tuple(
+        instruction
+        for instruction in instructions
+        if instruction.kind == "x86.jmp"
+        and len(instruction.operands) == 1
+        and instruction.operands[0] in exit_targets
+        and not any(
+            start <= instruction.offset < instruction.end <= end
+            for start, end in condition_spans
+        )
+    )
+    for exit_jump in exits:
+        yield Fact(
+            "semantic.exit_def",
+            (exit_jump.offset, exit_jump.end),
+            (),
+            combine_evidence(definition.evidence, (exit_jump.offset,)),
+            "signature",
+        )
     relations = {
         0x77: "<",
         0x73: "<=",
@@ -714,19 +968,30 @@ def _exit_def_facts(
             tuple(item.offset for item in instructions[index : index + 7]),
         )
         yield Fact(
-            "semantic.exit_def",
-            (exit_jump.offset, exit_jump.end),
-            (),
-            support,
-            "signature",
-        )
-        yield Fact(
             "semantic.if_inline",
             (top.offset, exit_jump.end),
             (condition, exit_jump.offset, exit_jump.end, None),
             support,
             "anchored",
         )
+
+
+def _string_cleanup_start(
+    instructions: tuple[Operation, ...],
+) -> int | None:
+    for index in range(len(instructions) - 1):
+        suffix = instructions[index:]
+        if len(suffix) % 2:
+            continue
+        if all(
+            bytes.fromhex(load.raw)[:2] in {b"\xc4\xb6", b"\xc4\x76"}
+            and release.kind == "tb.runtime"
+            and release.operands == (0xD3,)
+            and load.end == release.offset
+            for load, release in zip(suffix[::2], suffix[1::2])
+        ):
+            return suffix[0].offset
+    return None
 
 
 def _operand_kind(operation_kind: str) -> str:
@@ -752,24 +1017,39 @@ def _call_scaffold(
     instruction_ends: dict[int, int],
 ) -> tuple[int, int, tuple[object, ...], tuple[int, ...]] | None:
     if definition.result_kind == "string":
-        return _string_call_scaffold(
+        return string_call_scaffold(
             instructions,
             call_index,
-            definition,
-            compiler_by_offset,
-            facts,
+            result_kind=definition.result_kind,
+            parameters=definition.parameters,
+            definition_evidence=definition.evidence,
+            compiler_by_offset=compiler_by_offset,
+            facts=facts,
+            local_bytes=definition.local_bytes,
         )
-    if definition.result_kind == "integer":
-        return _integer_call_scaffold(
+    if all(kind == "integer" for _offset, kind in definition.parameters):
+        integer_arguments = _integer_call_scaffold(
             instructions, call_index, definition, compiler_by_offset
         )
+        if integer_arguments is not None:
+            return integer_arguments
     if call_index < 6 or call_index + 4 >= len(instructions):
         return None
+    expected_size = (
+        _frame_width(definition.result_kind)
+        + sum(_frame_width(kind) for _offset, kind in definition.parameters)
+        + definition.local_bytes
+    )
     frame_index = next(
         (
             index
-            for index in range(call_index - 1, max(-1, call_index - 24), -1)
-            if bytes.fromhex(instructions[index].raw) == b"\x8b\xec"
+            for index in range(call_index - 1, max(-1, call_index - 48), -1)
+            if index >= 3
+            and bytes.fromhex(instructions[index].raw) == b"\x8b\xec"
+            and bytes.fromhex(instructions[index - 1].raw)
+            == bytes((0x83, 0xEC, expected_size))
+            and bytes.fromhex(instructions[index - 2].raw)[:2] == b"\x89\x26"
+            and bytes.fromhex(instructions[index - 3].raw) == b"\x55"
         ),
         None,
     )
@@ -786,53 +1066,36 @@ def _call_scaffold(
         and reserve.end == frame.offset
     ):
         return None
-    expected_size = _frame_width(definition.result_kind) + sum(
-        _frame_width(kind) for _offset, kind in definition.parameters
-    )
     reserve_raw = bytes.fromhex(reserve.raw)
     if len(reserve_raw) != 3 or reserve_raw[2] != expected_size:
         return None
-    staged: dict[int, object] = {}
-    argument_evidence = []
-    for instruction in instructions[frame_index + 1 : call_index]:
-        operation = compiler_by_offset.get(instruction.offset)
-        if operation is None or operation.kind not in {
-            "fstp_bp",
-            "fstp64_bp",
-            "fistp_bp",
-            "fistp32_bp",
-        }:
-            continue
-        if len(operation.args) != 1 or not isinstance(operation.args[0], int):
-            return None
-        offset = operation.args[0]
-        resolved = resolve_expression_before(
-            instruction.offset, facts, instruction_ends
-        )
-        if resolved is None or offset in staged:
-            return None
-        staged[offset] = resolved.value
-        argument_evidence.extend((resolved.evidence, (instruction.offset,)))
+    staged_arguments = stage_call_arguments(
+        instructions[frame_index + 1 : call_index],
+        definition.parameters,
+        compiler_by_offset,
+        facts,
+        instruction_ends,
+    )
+    if staged_arguments is None:
+        return None
+    staged, argument_evidence = staged_arguments
     expected_offsets = tuple(offset for offset, _kind in definition.parameters)
     if tuple(sorted(staged)) != expected_offsets:
         return None
-    result_load, wait, release, pop = instructions[call_index + 1 : call_index + 5]
-    result_operation = compiler_by_offset.get(result_load.offset)
-    if not (
-        result_operation is not None
-        and result_operation.kind in {"fld_bp", "fld64_bp", "fild_bp", "fild32_bp"}
-        and result_operation.args == (0,)
-        and wait.kind == "tb.fwait"
-        and result_load.end == wait.offset
-        and bytes.fromhex(release.raw) == bytes((0x83, 0xC4, expected_size))
-        and bytes.fromhex(pop.raw) == b"\x5d"
-        and wait.end == release.offset
-        and release.end == pop.offset
-    ):
+    result_tail = numeric_call_result_tail(
+        instructions,
+        call_index,
+        definition.result_kind,
+        expected_size,
+        compiler_by_offset,
+    )
+    if result_tail is None:
         return None
+    _result_load, pop, tail_evidence = result_tail
     arguments = tuple(staged[offset] for offset in expected_offsets)
     support = combine_evidence(
-        tuple(item.offset for item in instructions[frame_index - 3 : call_index + 5]),
+        tuple(item.offset for item in instructions[frame_index - 3 : call_index + 1]),
+        tail_evidence,
         *(group for group in argument_evidence),
         definition.evidence,
     )
@@ -845,11 +1108,23 @@ def _integer_call_scaffold(
     definition: FnDefinition,
     compiler_by_offset: dict[int, CompilerOp],
 ) -> tuple[int, int, tuple[object, ...], tuple[int, ...]] | None:
-    if call_index < 8 or call_index + 3 >= len(instructions):
+    if call_index < 8:
         return None
-    expected_size = _frame_width(definition.result_kind) + sum(
-        _frame_width(kind) for _offset, kind in definition.parameters
+    expected_size = (
+        _frame_width(definition.result_kind)
+        + sum(_frame_width(kind) for _offset, kind in definition.parameters)
+        + definition.local_bytes
     )
+    result_tail = numeric_call_result_tail(
+        instructions,
+        call_index,
+        definition.result_kind,
+        expected_size,
+        compiler_by_offset,
+    )
+    if result_tail is None:
+        return None
+    result_load, pop, tail_evidence = result_tail
     frame_index = next(
         (
             index
@@ -871,6 +1146,29 @@ def _integer_call_scaffold(
     )
     if reserve_index is None or reserve_index < 2:
         return None
+    if not definition.parameters:
+        push = instructions[reserve_index - 1]
+        if (
+            bytes.fromhex(push.raw) == b"\x55"
+            and push.end == instructions[reserve_index].offset
+            and instructions[reserve_index].end == instructions[frame_index].offset
+            and instructions[frame_index].end == instructions[call_index].offset
+        ):
+            return (
+                push.offset,
+                pop.end,
+                (),
+                combine_evidence(
+                    tuple(
+                        instruction.offset
+                        for instruction in instructions[
+                            reserve_index - 1 : call_index + 1
+                        ]
+                    ),
+                    tail_evidence,
+                    definition.evidence,
+                ),
+            )
     push, save = instructions[reserve_index - 2 : reserve_index]
     if not (
         bytes.fromhex(push.raw) == b"\x55"
@@ -905,139 +1203,13 @@ def _integer_call_scaffold(
     expected_offsets = tuple(offset for offset, _kind in definition.parameters)
     if cursor != frame_index or tuple(sorted(staged)) != expected_offsets:
         return None
-    result_load, release, pop = instructions[call_index + 1 : call_index + 4]
-    result_operation = compiler_by_offset.get(result_load.offset)
-    if not (
-        result_operation is not None
-        and result_operation.kind == "movax_bp"
-        and result_operation.args == (0,)
-        and bytes.fromhex(release.raw) == bytes((0x83, 0xC4, expected_size))
-        and bytes.fromhex(pop.raw) == b"\x5d"
-        and result_load.end == release.offset
-        and release.end == pop.offset
-    ):
-        return None
     arguments = tuple(staged[offset] for offset in expected_offsets)
     support = combine_evidence(
         tuple(
             instruction.offset
-            for instruction in instructions[reserve_index - 2 : call_index + 4]
+            for instruction in instructions[reserve_index - 2 : call_index + 1]
         ),
-        definition.evidence,
-    )
-    return push.offset, pop.end, arguments, support
-
-
-def _string_call_scaffold(
-    instructions: tuple[Operation, ...],
-    call_index: int,
-    definition: FnDefinition,
-    compiler_by_offset: dict[int, CompilerOp],
-    facts: frozenset[Fact],
-) -> tuple[int, int, tuple[object, ...], tuple[int, ...]] | None:
-    if call_index < 8 or call_index + 3 >= len(instructions):
-        return None
-    expected_size = _frame_width(definition.result_kind) + sum(
-        _frame_width(kind) for _offset, kind in definition.parameters
-    )
-    frame_index = next(
-        (
-            index
-            for index in range(call_index - 1, max(-1, call_index - 30), -1)
-            if bytes.fromhex(instructions[index].raw) == b"\x8b\xec"
-        ),
-        None,
-    )
-    if frame_index is None or frame_index < 3:
-        return None
-    push, save, reserve = instructions[frame_index - 3 : frame_index]
-    if not (
-        bytes.fromhex(push.raw) == b"\x55"
-        and bytes.fromhex(save.raw)[:2] == b"\x89\x26"
-        and bytes.fromhex(reserve.raw) == bytes((0x83, 0xEC, expected_size))
-    ):
-        return None
-    staged: dict[int, object] = {}
-    stage_support: list[tuple[int, ...]] = []
-    body = instructions[frame_index + 1 : call_index]
-    instruction_ends = {item.offset: item.end for item in instructions}
-    for position, instruction in enumerate(body):
-        operation = compiler_by_offset.get(instruction.offset)
-        if (
-            operation is not None
-            and operation.kind in {"fstp_bp", "fstp64_bp", "fistp_bp", "fistp32_bp"}
-            and len(operation.args) == 1
-            and isinstance(operation.args[0], int)
-        ):
-            resolved = resolve_expression_before(
-                instruction.offset, facts, instruction_ends
-            )
-            if resolved is None:
-                return None
-            staged[operation.args[0]] = resolved.value
-            stage_support.append(
-                combine_evidence(resolved.evidence, (instruction.offset,))
-            )
-            continue
-        if not (
-            instruction.kind == "tb.runtime"
-            and instruction.operands == (0xA2,)
-            and position > 0
-        ):
-            continue
-        destination = body[position - 1]
-        if not (
-            destination.kind == "x86.mov_imm"
-            and destination.operands[:1] == ("si",)
-            and len(destination.operands) == 2
-            and isinstance(destination.operands[1], int)
-        ):
-            return None
-        source_pair = next(
-            (
-                body[source : source + 2]
-                for source in range(position - 2, -1, -1)
-                if _movsi_runtime(body[source : source + 2], 0x9C)
-            ),
-            None,
-        )
-        if source_pair is None:
-            return None
-        source_address = source_pair[0].operands[1]
-        resolved = resolve_expression(
-            ("memory", source_address, "string"), facts
-        )
-        if resolved is None:
-            return None
-        offset = destination.operands[1]
-        staged[offset] = resolved.value
-        stage_support.append(
-            combine_evidence(
-                resolved.evidence,
-                (source_pair[0].offset, source_pair[1].offset),
-                (destination.offset, instruction.offset),
-            )
-        )
-    expected_offsets = tuple(offset for offset, _kind in definition.parameters)
-    if tuple(sorted(staged)) != expected_offsets:
-        return None
-    result_push, release, pop = instructions[call_index + 1 : call_index + 4]
-    if not (
-        result_push.kind == "tb.runtime"
-        and result_push.operands == (0x9F,)
-        and bytes.fromhex(release.raw) == bytes((0x83, 0xC4, expected_size))
-        and bytes.fromhex(pop.raw) == b"\x5d"
-        and result_push.end == release.offset
-        and release.end == pop.offset
-    ):
-        return None
-    arguments = tuple(staged[offset] for offset in expected_offsets)
-    support = combine_evidence(
-        tuple(
-            instruction.offset
-            for instruction in instructions[frame_index - 3 : call_index + 4]
-        ),
-        *stage_support,
+        tail_evidence,
         definition.evidence,
     )
     return push.offset, pop.end, arguments, support
@@ -1049,11 +1221,11 @@ def _compact_integer_call(
     definition: FnDefinition,
     compiler_by_offset: dict[int, CompilerOp],
 ) -> tuple[int, int, object, tuple[int, ...]] | None:
-    """Recover the no-argument integer call kept between an AX literal and fold."""
 
     if (
         definition.result_kind != "integer"
         or definition.parameters
+        or definition.local_bytes
         or call_index < 4
         or call_index + 5 >= len(instructions)
     ):
@@ -1064,9 +1236,7 @@ def _compact_integer_call(
     ]
     literal_op = compiler_by_offset.get(literal.offset)
     result_op = compiler_by_offset.get(result_load.offset)
-    operator = {b"\x2b\xc3": "-", b"\x03\xc3": "+"}.get(
-        bytes.fromhex(combine.raw)
-    )
+    operator = {b"\x2b\xc3": "-", b"\x03\xc3": "+"}.get(bytes.fromhex(combine.raw))
     if not (
         literal_op is not None
         and literal_op.kind == "movax"
@@ -1084,8 +1254,28 @@ def _compact_integer_call(
         and all(
             left.end == right.offset
             for left, right in zip(
-                (literal, push, reserve, frame, instructions[call_index], shuttle, result_load, release, pop),
-                (push, reserve, frame, instructions[call_index], shuttle, result_load, release, pop, combine),
+                (
+                    literal,
+                    push,
+                    reserve,
+                    frame,
+                    instructions[call_index],
+                    shuttle,
+                    result_load,
+                    release,
+                    pop,
+                ),
+                (
+                    push,
+                    reserve,
+                    frame,
+                    instructions[call_index],
+                    shuttle,
+                    result_load,
+                    release,
+                    pop,
+                    combine,
+                ),
             )
         )
     ):

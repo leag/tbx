@@ -1,12 +1,10 @@
-"""SCREEN facts over the compiler's complete optional-cell scaffold."""
-
 from __future__ import annotations
 
 import struct
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from tbd.facts import Evidence, NamedPass
+from tbd.facts import Evidence, NamedPass, reads
 from tbd.ir import Fact, Operation
 
 _SCREEN_CELLS = ((0x08, 0x88), (0x04, 0x94), (0x02, 0xA0), (0x01, 0xAC))
@@ -14,7 +12,7 @@ _SCREEN_CELLS = ((0x08, 0x88), (0x04, 0x94), (0x02, 0xA0), (0x01, 0xAC))
 
 @dataclass(frozen=True)
 class ScreenMatch:
-    """One exact immediate SCREEN cell-staging chain and commit signature."""
+    """Decoded SCREEN statement operands and supporting offsets."""
 
     start: int
     end: int
@@ -22,10 +20,11 @@ class ScreenMatch:
     evidence: tuple[int, ...]
 
 
+@reads("tb.statement")
 def screen_statement_facts(
     evidence: Evidence, _facts: frozenset[Fact]
 ) -> Iterable[Fact]:
-    """Resolve complete calibrated SCREEN scaffolds into source-shaped facts."""
+    """Recover SCREEN statements from their runtime call scaffold."""
 
     by_end = {instruction.end: instruction for instruction in evidence.instructions}
     for instruction in evidence.instructions:

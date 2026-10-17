@@ -1,12 +1,10 @@
-"""Computed-STEP INTEGER FOR/NEXT facts from calibrated templates."""
-
 from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
 
 from tbd.compiler_ops import CompilerOp, operation_indexes, translate_operations
-from tbd.facts import Evidence, NamedPass
+from tbd.facts import Evidence, NamedPass, fact_key, reads
 from tbd.for_facts import (
     ForEvidence,
     _assignment_ending,
@@ -17,12 +15,13 @@ from tbd.for_facts import (
 )
 from tbd.for_templates import VariableStepTemplate, match_variable_step_test
 from tbd.ir import Fact
+from tbd.operation_helpers import slot_address as _slot_address
 from tbd.semantic import combine_evidence
 
 
 @dataclass(frozen=True)
 class VariableStepMatch:
-    """One complete INTEGER loop whose STEP is snapshotted in memory."""
+    """Matched variable-step FOR-loop header."""
 
     header_start: int
     header_end: int
@@ -37,7 +36,7 @@ class VariableStepMatch:
 
 @dataclass(frozen=True)
 class VariableStepUpdate:
-    """The translated load/add pair at a computed-STEP NEXT tail."""
+    """Update expression and evidence for a variable-step loop."""
 
     start: int
     variable_address: int
@@ -47,7 +46,7 @@ class VariableStepUpdate:
 
 @dataclass(frozen=True)
 class HeaderSources:
-    """Source operands recovered from compiler snapshot assignments."""
+    """Resolved initial, limit, and step expressions for a FOR header."""
 
     start: int
     limit: object
@@ -55,18 +54,37 @@ class HeaderSources:
     evidence: tuple[int, ...]
 
 
+@reads(
+    "expression.value",
+    "flow.branch",
+    "flow.goto",
+    "semantic.assign",
+    "semantic.sub_def",
+    "slot",
+    "tb.fn_call",
+    "tb.fn_return",
+    "tb.fp",
+    "tb.fp_far",
+    "tb.fwait",
+    "tb.runtime",
+    "tb.statement",
+    "x86.inc",
+    "x86.j",
+    "x86.jmp",
+    "x86.mov_acc_mem",
+    "x86.mov_imm",
+)
 def integer_variable_step_for_facts(
     evidence: Evidence, facts: frozenset[Fact]
 ) -> Iterable[Fact]:
-    """Translate the reference computed-STEP matcher into additive facts."""
+    """Recover integer FOR loops whose step is computed or variable."""
 
+    yield from _byref_for_facts(evidence, facts)
     context = _for_evidence(evidence.instructions, facts)
     operations = translate_operations(evidence.instructions)
     indexes, by_address = operation_indexes(operations)
     for goto in (fact for fact in facts if fact.kind == "flow.goto"):
-        match = _variable_step_match(
-            goto, context, operations, indexes, by_address
-        )
+        match = _variable_step_match(goto, context, operations, indexes, by_address)
         if match is None:
             continue
         yield Fact(
@@ -83,6 +101,95 @@ def integer_variable_step_for_facts(
             match.evidence,
             "anchored",
         )
+
+
+def _byref_for_facts(evidence: Evidence, facts: frozenset[Fact]) -> Iterable[Fact]:
+    """Recognize an integer FOR whose variable is a BYREF parameter.
+
+    The loop is the SUB's own: its initialization, increment and test all lie
+    inside the SUB in that order, and the test branches back into the body
+    between them.  Pieces with the same bytes elsewhere in the program belong
+    to other statements.
+    """
+    instructions = evidence.instructions
+    owners = sorted(
+        (
+            fact
+            for fact in facts
+            if fact.kind == "semantic.sub_def"
+            and len(fact.subject) == 2
+            and all(isinstance(bound, int) for bound in fact.subject)
+            and len(fact.value) == 2
+            and isinstance(fact.value[1], tuple)
+            and fact.value[1]
+        ),
+        key=lambda fact: (fact.subject, fact_key(fact)),
+    )
+    values = [
+        fact
+        for fact in facts
+        if fact.kind == "expression.value"
+        and len(fact.value) == 1
+        and isinstance(fact.subject[0], int)
+    ]
+    for owner in owners:
+        entry = owner.value[0]
+        low, high = owner.subject
+        variable = _unique_parameter(values, entry, 10, low, high)
+        limit = _unique_parameter(values, entry, 6, low, high)
+        inside = [item for item in instructions if low <= item.offset < high]
+        inits = [item for item in inside if item.raw == "26 c7 04 01 00"]
+        increments = [item for item in inside if item.raw == "26 ff 04"]
+        branches = [
+            item
+            for item in inside
+            if item.raw.startswith("7e ")
+            and item.operands
+            and isinstance(item.operands[0], int)
+        ]
+        if (
+            variable is None
+            or limit is None
+            or len(inits) != 1
+            or len(increments) != 1
+            or len(branches) != 1
+        ):
+            continue
+        init, increment, branch = inits[0], increments[0], branches[0]
+        body = branch.operands[0]
+        if not (init.offset < body <= increment.offset < branch.offset):
+            continue
+        yield Fact(
+            "semantic.for",
+            (init.offset, body),
+            (variable, ("const", 1), limit, ("const", 1)),
+            (init.offset, branch.offset, increment.offset),
+            "anchored",
+        )
+        yield Fact(
+            "semantic.next",
+            (increment.offset, increment.end),
+            (variable,),
+            (increment.offset, branch.offset),
+            "anchored",
+        )
+
+
+def _unique_parameter(
+    values: list[Fact], entry: object, offset: int, low: int, high: int
+) -> object | None:
+    """Return the integer parameter at ``offset`` read inside a SUB, if unique."""
+    found = {
+        fact.value[0]
+        for fact in values
+        if isinstance(fact.value[0], tuple)
+        and fact.value[0][:2] == ("proc-param", entry)
+        and len(fact.value[0]) == 4
+        and fact.value[0][3] == "integer"
+        and fact.value[0][2] == offset
+        and low < fact.subject[0] < high
+    }
+    return next(iter(found)) if len(found) == 1 else None
 
 
 def _variable_step_match(
@@ -103,9 +210,7 @@ def _variable_step_match(
     if jump is None or preload is None or step_address is None:
         return None
     assignment = _assignment_ending(context.assignments, preload.offset)
-    update = _variable_step_update(
-        goto.value[0], context, operations, indexes
-    )
+    update = _variable_step_update(goto.value[0], context, operations, indexes)
     if assignment is None or update is None or update.step_address != step_address:
         return None
     variable, initial = assignment.value
@@ -130,9 +235,7 @@ def _variable_step_match(
     )
     if template is None:
         return None
-    sources = _header_sources(
-        assignment, template, step_address, context.assignments
-    )
+    sources = _header_sources(assignment, template, step_address, context.assignments)
     if sources is None:
         return None
     support = combine_evidence(
@@ -199,17 +302,6 @@ def _memory_add(operation: CompilerOp | None) -> int | None:
     )
 
 
-def _slot_address(value: object) -> int | None:
-    if (
-        isinstance(value, tuple)
-        and len(value) >= 3
-        and value[0] == "slot"
-        and isinstance(value[2], int)
-    ):
-        return value[2]
-    return None
-
-
 def _header_sources(
     assignment: Fact,
     template: VariableStepTemplate,
@@ -245,9 +337,7 @@ def _previous_snapshot(
     matches = [
         (address, snapshot)
         for address in needed
-        if (
-            snapshot := _assignment_to_address_ending(assignments, address, end)
-        )
+        if (snapshot := _assignment_to_address_ending(assignments, address, end))
         is not None
     ]
     return matches[0] if len(matches) == 1 else None

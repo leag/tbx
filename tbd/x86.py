@@ -1,14 +1,9 @@
-"""Tiny 16-bit instruction decoder used for code discovery.
-
-It only needs boundaries, branch targets, and a small semantic vocabulary.
-Anything else remains a sized structural instruction or one opaque byte.
-"""
-
 from __future__ import annotations
 
 import struct
-from collections.abc import Iterable
-from typing import Any, Callable
+from collections.abc import Callable, Iterable
+from dataclasses import replace
+from typing import Any
 
 from tbd.ir import Operation
 from tbd.profile import (
@@ -29,41 +24,107 @@ from tbd.profile import (
 )
 
 _JCC = (
-    "jo", "jno", "jb", "jae", "je", "jne", "jbe", "ja",
-    "js", "jns", "jp", "jnp", "jl", "jge", "jle", "jg",
+    "jo",
+    "jno",
+    "jb",
+    "jae",
+    "je",
+    "jne",
+    "jbe",
+    "ja",
+    "js",
+    "jns",
+    "jp",
+    "jnp",
+    "jl",
+    "jge",
+    "jle",
+    "jg",
 )
 _REGS = ("ax", "cx", "dx", "bx", "sp", "bp", "si", "di")
 _ALU = ("add", "or", "adc", "sbb", "and", "sub", "xor", "cmp")
 _SEGMENT_PUSH = {0x06: "es", 0x0E: "cs", 0x16: "ss", 0x1E: "ds"}
 _SEGMENT_POP = {0x07: "es", 0x17: "ss", 0x1F: "ds"}
 _STRING_OPS = {
-    0xA4: "movs", 0xA5: "movs", 0xA6: "cmps", 0xA7: "cmps",
-    0xAA: "stos", 0xAB: "stos", 0xAC: "lods", 0xAD: "lods",
-    0xAE: "scas", 0xAF: "scas",
+    0xA4: "movs",
+    0xA5: "movs",
+    0xA6: "cmps",
+    0xA7: "cmps",
+    0xAA: "stos",
+    0xAB: "stos",
+    0xAC: "lods",
+    0xAD: "lods",
+    0xAE: "scas",
+    0xAF: "scas",
 }
 _SIMPLE = {
-    0x90: "nop", 0x98: "cbw", 0x99: "cwd", 0x9B: "wait",
-    0x9C: "pushf", 0x9D: "popf", 0xC3: "ret", 0xCB: "retf",
-    0xCC: "int3", 0xCE: "into", 0xCF: "iret", 0xEC: "in_al_dx",
-    0xED: "in_ax_dx", 0xEE: "out_dx_al", 0xEF: "out_dx_ax",
-    0xF4: "hlt", 0xF5: "cmc", 0xF8: "clc", 0xF9: "stc",
-    0xFA: "cli", 0xFB: "sti", 0xFC: "cld", 0xFD: "std",
+    0x90: "nop",
+    0x98: "cbw",
+    0x99: "cwd",
+    0x9B: "wait",
+    0x9C: "pushf",
+    0x9D: "popf",
+    0xC3: "ret",
+    0xCB: "retf",
+    0xCC: "int3",
+    0xCE: "into",
+    0xCF: "iret",
+    0xEC: "in_al_dx",
+    0xED: "in_ax_dx",
+    0xEE: "out_dx_al",
+    0xEF: "out_dx_ax",
+    0xF4: "hlt",
+    0xF5: "cmc",
+    0xF8: "clc",
+    0xF9: "stc",
+    0xFA: "cli",
+    0xFB: "sti",
+    0xFC: "cld",
+    0xFD: "std",
 }
 _MODRM = {
-    *range(0x00, 0x04), *range(0x08, 0x0C), *range(0x10, 0x14),
-    *range(0x18, 0x1C), *range(0x20, 0x24), *range(0x28, 0x2C),
-    *range(0x30, 0x34), *range(0x38, 0x3C), 0x62, 0x63,
-    *range(0x80, 0x90), 0xC0, 0xC1, 0xC4, 0xC5, 0xC6, 0xC7,
-    *range(0xD0, 0xD4), *range(0xD8, 0xE0), 0xF6, 0xF7, 0xFE, 0xFF,
+    *range(0x00, 0x04),
+    *range(0x08, 0x0C),
+    *range(0x10, 0x14),
+    *range(0x18, 0x1C),
+    *range(0x20, 0x24),
+    *range(0x28, 0x2C),
+    *range(0x30, 0x34),
+    *range(0x38, 0x3C),
+    0x62,
+    0x63,
+    *range(0x80, 0x90),
+    0xC0,
+    0xC1,
+    0xC4,
+    0xC5,
+    0xC6,
+    0xC7,
+    *range(0xD0, 0xD4),
+    *range(0xD8, 0xE0),
+    0xF6,
+    0xF7,
+    0xFE,
+    0xFF,
 }
 _PREFIXES = {0x26, 0x2E, 0x36, 0x3E, 0x64, 0x65, 0x66, 0x67, 0xF0, 0xF2, 0xF3}
 Decoder = Callable[[bytes, int, int, int, str | None], Operation | None]
 
 
+def _far_offset(exe: bytes, at: int) -> int:
+    """Return the code offset of a far target stored as offset then segment.
+
+    The compiler names statement targets as ``segment:offset`` relative to
+    the code start; in a program under 64 KB the segment is zero.
+    """
+    target, segment = struct.unpack_from("<HH", exe, at)
+    return segment * 16 + target
+
+
 def decode_instruction(
     exe: bytes, offset: int, stop: int, code_start: int, dialect: str | None
 ) -> Operation:
-    """Decode one instruction without raising on an unknown opcode."""
+    """Decode one x86 instruction at ``offset`` in the executable image."""
 
     marker = exe[offset : offset + 3]
     if offset == code_start and marker in PROLOGUES:
@@ -72,6 +133,28 @@ def decode_instruction(
         if operation := decoder(exe, offset, stop, code_start, dialect):
             return operation
     return _op(exe, offset, 1, "opaque.byte", (exe[offset],), "opaque")
+
+
+def rebase_near_target(exe: bytes, operation: Operation, base: int) -> Operation:
+    """Recompute a near jump or call's target against its code segment.
+
+    A rel16 target wraps within the 64 KB code segment the instruction sits
+    in.  A program whose code outgrows 64 KB has later segments, named by the
+    far jumps into them, and those do not start a multiple of 64 KB from the
+    first; decoding wraps against the first, so a near transfer in a later
+    segment has to be recomputed against that segment's base.
+    """
+    if (
+        operation.kind not in {"x86.jmp", "x86.call"}
+        or operation.size != 3
+        or exe[operation.offset] not in (0xE8, 0xE9)
+    ):
+        return operation
+    relative = struct.unpack_from("<h", exe, operation.offset + 1)[0]
+    target = base + ((operation.offset + 3 + relative - base) & 0xFFFF)
+    if operation.operands == (target,):
+        return operation
+    return replace(operation, operands=(target,))
 
 
 def _decode_interrupt(
@@ -94,12 +177,14 @@ def _decode_interrupt(
             (TRANSCEND_FUNCTIONS[exe[offset + 2]],),
             "signature",
         )
+    if dialect is not None and vector == 0x3E:
+        return _op(exe, offset, 3, "tb.fp", (vector, exe[offset + 2]), "signature")
     if vector in (0xEC, 0xED, 0xEE) and offset + 2 < stop:
         return _decode_tb_dispatch(exe, offset, stop, code_start, vector, dialect)
     if (
         vector == 0x3C
         and offset + 3 < stop
-        and 0xD8 <= exe[offset + 2] <= 0xDF
+        and (0xD8 <= exe[offset + 2] <= 0xDF or 0x58 <= exe[offset + 2] <= 0x5F)
     ):
         size = min(stop - offset, 3 + _modrm_size(exe, offset + 3, stop))
         return _op(
@@ -107,7 +192,7 @@ def _decode_interrupt(
             offset,
             size,
             "tb.fp_far",
-            (exe[offset + 2], exe[offset + 3]),
+            (exe[offset + 2] | 0x80, exe[offset + 3]),
             "signature",
         )
     if vector == 0x3D:
@@ -244,7 +329,11 @@ def _decode_tb_dispatch(
                     "structural",
                 )
             relative = struct.unpack_from("<i", exe, offset + 3)[0]
-            target = None if sub == 0x70 and relative == -1 else code_start + relative
+            target = (
+                None
+                if sub == 0x70 and relative == -1
+                else code_start + _far_offset(exe, offset + 3)
+            )
             return _op(exe, offset, 7, kind, (name, sub, target), "signature")
         if sub in EC_TARGET_TABLE_SUBS:
             if offset + 5 > stop:
@@ -254,7 +343,7 @@ def _decode_tb_dispatch(
             if offset + size > stop:
                 return _truncated_dispatch(exe, offset, name, sub, size)
             targets = tuple(
-                code_start + struct.unpack_from("<I", exe, offset + 5 + index * 4)[0]
+                code_start + _far_offset(exe, offset + 5 + index * 4)
                 for index in range(count)
             )
             return _op(exe, offset, size, kind, (name, sub, *targets), "signature")
@@ -338,7 +427,9 @@ def _decode_procedure_control(
     exe: bytes, offset: int, stop: int, _start: int, _dialect: str | None
 ) -> Operation | None:
     if exe.startswith(PROCEDURE_ENTER, offset, stop):
-        return _op(exe, offset, len(PROCEDURE_ENTER), "tb.proc_enter", confidence="signature")
+        return _op(
+            exe, offset, len(PROCEDURE_ENTER), "tb.proc_enter", confidence="signature"
+        )
     if exe.startswith(PROCEDURE_RETURN, offset, stop):
         return _op(
             exe,
@@ -452,7 +543,9 @@ def _decode_accumulator_memory(
     byte = exe[offset]
     if 0xA0 <= byte <= 0xA3 and offset + 2 < stop:
         direction = "store" if byte & 2 else "load"
-        return _op(exe, offset, 3, "x86.mov_acc_mem", (_word(exe, offset + 1), direction))
+        return _op(
+            exe, offset, 3, "x86.mov_acc_mem", (_word(exe, offset + 1), direction)
+        )
     return None
 
 
@@ -474,7 +567,9 @@ def _decode_modrm(
     exe: bytes, offset: int, stop: int, _start: int, _dialect: str | None
 ) -> Operation | None:
     prefix_end = offset
-    while prefix_end < stop and exe[prefix_end] in _PREFIXES and prefix_end - offset < 4:
+    while (
+        prefix_end < stop and exe[prefix_end] in _PREFIXES and prefix_end - offset < 4
+    ):
         prefix_end += 1
     if prefix_end + 1 >= stop or exe[prefix_end] not in _MODRM:
         return None
@@ -506,7 +601,9 @@ def _canonical_vector(vector: int, dialect: str | None) -> int:
 def _modrm_size(exe: bytes, offset: int, stop: int) -> int:
     modrm = exe[offset]
     mod, rm = modrm >> 6, modrm & 7
-    displacement = 2 if mod == 0 and rm == 6 else (1 if mod == 1 else (2 if mod == 2 else 0))
+    displacement = (
+        2 if mod == 0 and rm == 6 else (1 if mod == 1 else (2 if mod == 2 else 0))
+    )
     return min(1 + displacement, stop - offset)
 
 

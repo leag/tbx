@@ -1627,7 +1627,7 @@ def _lift_midblock_troff(stmts, addrs, trace_tbl, orphans, stmt_addr, hook_seq):
         return new_s, new_a, fixed_lines, partial
 
 
-def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
+def _resolve_targets(stmts, addrs, stmt_addr=None, lenient=False) -> list[Any]:
     """Replace ("addr", a) jump targets with statement indices. (Synthesized statements
     like Dim carry a None address and are never jump targets.)
 
@@ -1698,6 +1698,8 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
                 a = stmt_addr.get(id(b))
                 if a is not None and a not in index:
                     if multi:
+                        if lenient:
+                            continue
                         raise ValueError(
                             f"jump target {a:#x}: body line not addressable past "
                             "a multi-line statement"
@@ -1744,6 +1746,22 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
             )
             map_body(i, body, 1)
 
+    def statement_start(a):
+        if a in index:
+            return a
+        if not lenient or not index:
+            raise ValueError(f"jump target {a:#x} is not a statement start")
+        # Wild recovery: the target lies outside every recovered statement
+        # (code the scanner skipped, or a far address it misread). Use the
+        # nearest statement so the source stays compilable.
+        replacement = min(
+            (c for c in index if isinstance(index[c], int)),
+            key=lambda c: abs(c - a),
+            default=min(index, key=lambda c: abs(c - a)),
+        )
+        logger.warning("retargeting unresolvable jump %05x -> %05x", a, replacement)
+        return replacement
+
     def fix(s):
         if isinstance(s, (ir.Goto, ir.IfGoto, ir.Gosub)) or (
             isinstance(s, ir.Return) and s.target is not None
@@ -1751,8 +1769,7 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
             tag, a = s.target
             assert tag == "addr"
             a = resolve_addr(a)
-            if a not in index:
-                raise ValueError(f"jump target {a:#x} is not a statement start")
+            a = statement_start(a)
             if isinstance(s, ir.Goto):
                 return ir.Goto(index[a])
             if isinstance(s, ir.Gosub):
@@ -1765,8 +1782,7 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
             for tag, a in s.targets:
                 assert tag == "addr"
                 a = resolve_addr(a)
-                if a not in index:
-                    raise ValueError(f"jump target {a:#x} is not a statement start")
+                a = statement_start(a)
                 new.append(index[a])
             cls = ir.OnGoto if isinstance(s, ir.OnGoto) else ir.OnGosub
             return cls(s.selector, tuple(new))
@@ -1774,8 +1790,7 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
             tag, a = s.target
             assert tag == "addr"
             a = resolve_addr(a)
-            if a not in index:
-                raise ValueError(f"jump target {a:#x} is not a statement start")
+            a = statement_start(a)
             if isinstance(s, ir.OnError):
                 return ir.OnError(index[a])
             return ir.Resume(target=index[a])
@@ -1783,8 +1798,7 @@ def _resolve_targets(stmts, addrs, stmt_addr=None) -> list[Any]:
             tag, a = s.target
             assert tag == "addr"
             a = resolve_addr(a)
-            if a not in index:
-                raise ValueError(f"jump target {a:#x} is not a statement start")
+            a = statement_start(a)
             return ir.OnTrap(s.event, s.n, index[a])
         if isinstance(s, ir.IfInline):
             return ir.IfInline(

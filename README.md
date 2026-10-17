@@ -1,150 +1,84 @@
-# tbx — a byte-exact Borland Turbo Basic decompiler
+# tbdc — Turbo Basic decompiler
 
-[![CI](https://github.com/leag/tbx/actions/workflows/ci.yml/badge.svg)](https://github.com/leag/tbx/actions/workflows/ci.yml)
+`tbdc` recovers BASIC source from MS-DOS programs compiled with Borland
+Turbo Basic 1.0 or 1.1. It combines the two decoders built before it:
 
-> **Parked 2026-07-29 and unattended.** The decoder works as described below and
-> the test suite is green, but the wild-corpus campaign is stopped mid-tail and no
-> release was cut. Read [`STATUS.md`](STATUS.md) before starting any work here.
+- **tbx**, the calibrated decoder: every byte pattern it knows was witnessed
+  by a compiled fixture and verified by recompiling to the identical EXE. It
+  runs first, with its wild-recovery mode on, so a program that strays outside
+  the calibrated vocabulary still decodes.
+- **tbd**, the best-effort analyzer: it never gives up on a region and marks
+  what it could not lift with `REM TBD` lines. It takes over when tbx fails.
 
-`tbx` recovers source from 16-bit MS-DOS executables compiled by Borland Turbo
-Basic 1.0 or 1.1. A recovery is considered correct only when recompiling the
-emitted source with the original Borland toolchain reproduces the input EXE
-byte-for-byte.
+On top of them `tbdc` repairs what Turbo Basic would reject, so the output
+can be loaded and compiled: blocks that cross (a `LOOP` inside an `IF` begun
+after the `DO`) are rewritten with labelled `GOTO`s, `CALL` arguments are
+reconciled with the `SUB` signatures, unreachable statements after a `GOTO`
+are dropped, unmatched block openers/closers become `REM TBDC:` comments,
+programs past the editor limit are split into `$INCLUDE` files, and LZEXE
+packed executables are unpacked first. Each repair is reported.
 
-## Quick start
+## Usage
 
-```sh
-pip install .
-tbx PROGRAM.EXE                 # recovered source on stdout
-tbx PROGRAM.EXE -o PROGRAM.BAS  # write recovered source
-tbx PROGRAM.EXE -o PROGRAM.BAS --dense --split  # minimize labels and add .INC files
-tbx PROGRAM.EXE --ops           # inspect the canonical op stream
-```
-
-For best-effort inspection of unknown or damaged binaries, the same install
-also provides the standalone `tbd` analyzer. It recursively discovers code,
-applies compiler/runtime signatures, and repeats small lifting passes until
-the IR stops changing. Unresolved instructions are grouped into opaque regions:
-
-```sh
-tbd PROGRAM.EXE                 # JSON IR
-tbd PROGRAM.EXE --text          # compact text IR
-tbd PROGRAM.EXE --instructions  # include low-level disassembly evidence
-tbd PROGRAM.EXE --facts         # include immutable facts and provenance
-```
-
-Unlike `tbx`, `tbd` does not claim that recovered semantics will recompile
-byte-for-byte. See [`docs/tbd.md`](docs/tbd.md) for its API and guarantees, and
-[`docs/tbd-design.md`](docs/tbd-design.md) for the analysis design.
-
-The core package has no runtime dependencies and requires Python 3.11 or
-newer. For development:
-
-```sh
+```bash
 uv sync
-uv run pytest
-uv run ruff check
+uv run tbdc PROGRAM.EXE                    # source on stdout
+uv run tbdc PROGRAM.EXE -o PROGRAM.BAS     # writes PROGRAM.BAS (+ .INC/.BIN files when needed)
+uv run tbdc PROGRAM.EXE -o PROGRAM.BAS --report report.json
+uv run tbdc DIR -o OUTDIR                  # every .EXE in DIR, one folder each
 ```
 
-The optional `debug` extra installs [iced-x86](https://pypi.org/project/iced-x86/)
-for CFG/disassembly triage tools:
+| Option | Effect |
+| --- | --- |
+| `-o PATH` | Output `.BAS` (directory for a directory input). Files are DOS text (CRLF, Latin-1). |
+| `--engine auto\|tbx\|tbd` | Force a decoder (default `auto`: tbx, then tbd). |
+| `--numbered` | Number every line (default: only lines that are jump targets). |
+| `--dense` | Also remove optional spaces (tbx's compact layout). |
+| `--no-split` | Never split into `$INCLUDE` files. |
+| `--report FILE` | JSON: engine, dialect, compiler toggles, warnings, every repair. |
+| `--verify` | Recompile the output with Turbo Basic under QEMU and compare with the input. |
+| `--repair` | With `--verify`: comment out each line Turbo Basic rejects until it compiles. |
 
-```sh
-pip install '.[debug]'
+The report's `toggles` are the IDE options (8087, Keyboard break, Bounds,
+Overflow, Stack test) the program was compiled with; set them in the IDE when
+rebuilding.
+
+### Verifying with the real compiler
+
+`--verify`, `--repair` and `scripts/evaluate.py` drive the original compiler
+with the QEMU harness in `oracle_qemu/` (from tbd). They need
+`qemu-system-i386`, mtools, and the disk images in `oracle/`
+(`freedos.img`, `tb10_floppy.img` for TB 1.0, `tb_floppy.img` for TB 1.1),
+or another directory named by `TBDC_IMAGES`.
+
+```bash
+uv run tbdc PROGRAM.EXE -o out/PROGRAM.BAS --verify --repair
 ```
 
-Python callers can use the same pipeline directly:
+## Results on the wild corpus
 
-```python
-from tbx import decode0, emit0
+`scripts/evaluate.py` decompiles every EXE in a directory, recompiles each
+output with the matching Turbo Basic, compares the rebuilt EXE with the
+original, and (with `--behavior SECONDS`) runs both under QEMU without input
+and compares the screens.
 
-exe = open("PROGRAM.EXE", "rb").read()
-source = emit0.emit(decode0.decode_user_code(exe))
+```bash
+uv run python scripts/evaluate.py wild/hits --out build/eval --jobs 6 --behavior 8 --repair
 ```
 
-Pass `dense=True` to `emit0.emit` or use `--dense` on the command line to
-remove optional spacing and omit line labels that are not branch, error, or
-DATA targets. Recovered error/trace line tables remain fully numbered. For
-programs beyond Turbo Basic's editor limit, combine it with `--split` and an
-output path so the remaining source is written as procedure-safe `.INC`
-chunks.
+RESULTS_TABLE
 
-## What it recovers
+## Layout
 
-Turbo Basic combines compact x86 templates with runtime-dispatch calls. The
-decoder recognizes the x87 emulation encoding, INT ECh/EDh/EEh statement
-sub-vectors, and raw x86 control flow. It automatically detects TB 1.0 versus
-1.1 and normalizes their dispatch-number differences.
+| Path | Contents |
+| --- | --- |
+| `tbdc/` | the front end: `pipeline.py` (engines and repairs), `structure.py` (block repair), `calls.py` (CALL/SUB reconciliation), `fixups.py`, `unpack.py` (LZEXE), `repair.py`/`verify.py` (compiler-driven checks), `cli.py` |
+| `tbx/` | the calibrated decoder (see `docs/tbx-README.md`, `STATUS.md`, `docs/decoder-architecture.md`) |
+| `tbd/` | the best-effort analyzer (see `docs/tbd.md`) |
+| `oracle_qemu/` | headless QEMU + FreeDOS Turbo Basic harness |
+| `scripts/` | `evaluate.py`, `fixture_roundtrip.py`, `errline.py`, `recompile.py` |
+| `tests/` | tbx's fixture suite (byte-exact goldens) and `tests/tbdc/` |
 
-The pipeline is:
-
-1. Scan the user-code region into a canonical operation stream.
-2. Solve DGROUP layout from code references and the executable's tail data.
-3. Lift operations into typed IR, folding structured control flow.
-4. Emit canonical BASIC with stable formatting and byte-significant line
-   numbers preserved where required.
-
-The corpus covers the handbook's statements, intrinsic functions, arrays,
-SUB/DEF FN procedures, graphics, files, events, error handling, and TRON
-regions across both compiler dialects.
-
-## Correctness model
-
-The decoder is deliberately fail-loud: an uncalibrated byte pattern raises an
-error instead of being guessed. New syntax is admitted only after a compiled
-fixture witnesses its encoding and an oracle round trip verifies the result.
-Compiler losses are normalized only when the canonical spelling recompiles
-identically (for example, `STOP`/`SYSTEM` to `END`).
-
-The committed fixtures contain operation-stream, IR, and emitted-source
-goldens. The default regression suite is emulator-free and suitable for the
-per-PR loop:
-
-```sh
-uv run pytest
+```bash
+uv run pytest -q --ignore=tests/tbx/test_web_api.py
 ```
-
-On a provisioned oracle machine, add the real-compiler smoke tests with
-`uv run pytest --oracle`. Multi-minute large-source compiler coverage is a
-separate release/nightly tier: `uv run pytest --oracle --oracle-slow`.
-
-## Oracle verification
-
-The repository includes the headless v86 harness and its patched emulator
-under `oracle/`, but does **not** distribute Borland's proprietary `TB.EXE`
-or the compiler floppy images. Those ignored assets must be provisioned
-locally before calibration. The oracle is used for new fixtures and release
-checks, never at runtime. Install its Node dependencies and follow
-[the oracle guide](oracle/README.tbx.md), then:
-
-```sh
-uv run python -m tbx.tools.verify_fixture \
-  --jobs 2 t1_print t1_gosub t1_subsh t1_dim3v zz_sc3 v10_subdef tier1_expr
-```
-
-Set `TBX_ORACLE` only when using another compatible v86 harness. See the
-[release checklist](docs/release-checklist.md) for the required sample and
-paper trail.
-
-## Debugging a decode failure
-
-`tbx PROGRAM.EXE --ops` shows how far scanning progressed. For a missing raw
-instruction template, install the `debug` extra and use:
-
-```sh
-python -m tbx.tools.cfgview PROGRAM.EXE [--out cfg.dot]
-```
-
-`dump_ops.py` and `dump_user_code.py` regenerate committed goldens after an
-intended decoder change. Wild-corpus probes belong in `wild/probes/` only after
-they compile successfully with the oracle and their first failure is recorded.
-
-## Experimental native backend
-
-The C recompiler and its runtime are maintained separately on the
-[`experimental/c0` branch](https://github.com/leag/tbx/tree/experimental/c0).
-They are not included in this decoder release.
-
-## License
-
-MIT — see [LICENSE](LICENSE).

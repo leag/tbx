@@ -154,6 +154,7 @@ class DecodeState:
     arrs: Any = None
     ax: Any = None
     bchk_subs: Any = None
+    bchk_stack: Any = None
     bchk_bp: Any = None
     block_if_addrs: Any = None
     bx: Any = None
@@ -1904,6 +1905,21 @@ def _resolve_calls(
             return v if not changes else replace(v, **changes)
         return v
 
+    def pending_fn(v) -> bool:
+        """Does a condition hold an FN call still named by its address?"""
+        if isinstance(v, ir.FnCall) and isinstance(v.name, tuple):
+            return True
+        if isinstance(v, tuple):
+            return any(pending_fn(x) for x in v)
+        if is_dataclass(v):
+            return any(pending_fn(getattr(v, f.name)) for f in fields(v))
+        return False
+
+    def fix_cond(c):
+        # Rebuild a condition only when it needs it: emission keys some
+        # boolean shapes off the node's identity.
+        return fix_value(c) if pending_fn(c) else c
+
     params_by_name = {
         proc_names[a]: proc_params[a] for a in proc_names if a in proc_params
     }
@@ -1954,6 +1970,10 @@ def _resolve_calls(
     def _fix(s):
         if isinstance(s, ir.CallStmt):
             new_args, args_changed = fix_args(s.args)
+            # FN calls inside the arguments resolve like any other value.
+            resolved_args = tuple(fix_value(a) for a in new_args)
+            if any(a is not b for a, b in zip(resolved_args, new_args)):
+                new_args, args_changed = resolved_args, True
             if isinstance(s.name, tuple):
                 target = s.name[1]
                 if target in proc_names:
@@ -1997,16 +2017,18 @@ def _resolve_calls(
         if isinstance(s, ir.IfInline):
             new_body = walk(s.body)
             new_else = None if s.else_body is None else tuple(walk(s.else_body))
-            if new_body is s.body and new_else == s.else_body:
+            new_cond = fix_cond(s.cond)
+            if new_body is s.body and new_else == s.else_body and new_cond is s.cond:
                 return s
-            return ir.IfInline(s.cond, tuple(new_body), new_else)
+            return ir.IfInline(new_cond, tuple(new_body), new_else)
         if isinstance(s, ir.IfBlock):
             changed = False
             arms = []
             for c, b in s.arms:
                 nb = walk(b)
-                changed = changed or nb is not b
-                arms.append((c, tuple(nb)))
+                nc = fix_cond(c)
+                changed = changed or nb is not b or nc is not c
+                arms.append((nc, tuple(nb)))
             else_body = s.else_body
             if s.else_body is not None:
                 neb = walk(s.else_body)
@@ -2019,15 +2041,18 @@ def _resolve_calls(
             arms = []
             for arm in s.arms:
                 nb = walk(arm.body)
-                changed = changed or nb is not arm.body
-                arms.append(ir.CaseArm(arm.guards, tuple(nb)))
+                ng = fix_cond(arm.guards)
+                changed = changed or nb is not arm.body or ng is not arm.guards
+                arms.append(ir.CaseArm(ng, tuple(nb)))
             case_else = s.case_else
             if s.case_else is not None:
                 nce = walk(s.case_else)
                 if nce is not s.case_else:
                     changed = True
                     case_else = tuple(nce)
-            return s if not changed else ir.SelectCase(s.selector, tuple(arms), case_else)
+            selector = fix_cond(s.selector)
+            changed = changed or selector is not s.selector
+            return s if not changed else ir.SelectCase(selector, tuple(arms), case_else)
         return fix_value(s)
 
     resolved = walk(stmts)
@@ -2824,6 +2849,21 @@ def _finalize_data_recovery(state, data_orphan_lines, suppress_pool_fallback=Fal
         }
         - set(item_to_stmt)
     )
+    if unplaced and data_block:
+        # Wild recovery: a DATA item that shares its descriptor with a code
+        # literal is lost by exclusion-based pool recovery, so the RESTORE
+        # index points past the recovered items. Point it at the DATA
+        # statement holding the nearest recovered item instead.
+        logger.warning(
+            "RESTORE item index %d is past the %d recovered DATA items; "
+            "restoring the nearest DATA statement (wild recovery)",
+            unplaced[0],
+            len(items),
+        )
+        for target in unplaced:
+            below = [index for index in item_to_stmt if index <= target]
+            item_to_stmt[target] = item_to_stmt[max(below)] if below else 0
+        unplaced = []
     if unplaced:
         at = next(
             (
@@ -3202,7 +3242,9 @@ def _finalize(state: DecodeState, addr) -> Program:
             resolved = _resolve_targets(out.stmts, out.addrs, out.stmt_addr)
         except ValueError as exc:
             logger.warning("continuing wild recovery with unresolved jump: %s", exc)
-            resolved = out.stmts
+            resolved = _resolve_targets(
+                out.stmts, out.addrs, out.stmt_addr, lenient=True
+            )
         canonical = canonical_rename(resolved)
 
         # Turbo Basic compile-time `%name` constants leave their values in the
@@ -4673,6 +4715,13 @@ def fp_dispatch(state: DecodeState, op, addr, kind) -> None:
             # final wild recovery can retain unresolved targets.
             state.put(ir.Goto(("addr", op[2])), c.cur)
         c.cur = None
+    elif kind == "rt_opaque":
+        # An unrecognized runtime call (scan kept it): note it in the source
+        # and drop whatever operand staging led up to it.
+        state.put(ir.MetaStmt(f"REM TBDC: unrecognized runtime call INT ECh {op[2]:02X}h"), c.cur)
+        c.cur = None
+        m = state.machine
+        m.ax = None
     elif kind == "arg_push_arr":
         # A helper-side computed-array address can occur outside the normal
         # element consumer template. Preserve the call staging boundary while
@@ -4727,6 +4776,7 @@ def _decode_user_code(
     # generic register assignment maintain a separate provenance flag.
     e.reg_logical_results = []
     e.bchk_subs = []  # Bounds: pending non-final subscripts (F3.5)
+    e.bchk_stack = []  # stashes of outer accesses interrupted by a nested one
     e.bchk_bp = None  # Bounds: open BP-relative LOCAL-array descriptor
     e.pend_bool = None  # compound-IF first term awaiting its tail
     e.pend_bool_outer = None  # enclosing accumulator awaiting a deferred
