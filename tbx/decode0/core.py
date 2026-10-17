@@ -3696,6 +3696,8 @@ def _fp_integer_ops(state: DecodeState, op, kind) -> bool:
     if kind == "fild32":  # m32 int load: long var or pooled i32
         if op[2] == 0x6E:  # runtime dword cell [006E]: ERADR
             e.stack.append(ir.Nullary("ERADR"))
+        elif op[2] == 0x72:  # runtime revision with a dword ERL (ERR at
+            e.stack.append(ir.Erl())  # [0076]; wild billadd.exe)
         else:
             try:
                 e.stack.append(state.loc(op[2]))
@@ -6321,8 +6323,8 @@ def _decode_user_code(
             continue
 
         if kind == "movax_m":  # int var load (right operand first)
-            if op[2] == 0x74:  # runtime cells, not user slots:
-                m.ax = ir.Err()
+            if op[2] in (0x74, 0x76):  # runtime cells, not user slots:
+                m.ax = ir.Err()  # [0076] in the dword-ERL revision
             elif op[2] == 0x72:  # ERR = [0074], ERL = [0072]
                 m.ax = ir.Erl()
             else:

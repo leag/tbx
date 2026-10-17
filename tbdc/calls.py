@@ -113,6 +113,15 @@ def reconcile_calls(source: str) -> tuple[str, list[str]]:
                     notes.append(f"dropped extra argument {arg.strip()!r} in CALL {name}")
                     continue
                 kind, is_array = params[i]
+                literal = arg.strip()
+                if not is_array and kind == "$" and re.fullmatch(r"-?\d+(\.\d*)?#?!?", literal):
+                    notes.append(f"replaced number {literal} with \"\" for a string parameter of CALL {name}")
+                    new_args.append('""')
+                    continue
+                if not is_array and kind != "$" and re.fullmatch(r'"[^"]*"', literal):
+                    notes.append(f"replaced string {literal} with 0 for a numeric parameter of CALL {name}")
+                    new_args.append("0")
+                    continue
                 lv = _LVALUE.match(arg)
                 if lv and lv.group(3) and lv.group(1).upper() in _BUILTINS:
                     lv = None
