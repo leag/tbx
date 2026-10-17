@@ -2989,29 +2989,43 @@ def _recover_data_pointer_table(state) -> None:
                 wanted = next(pending, None)
         return wanted is None
 
-    candidates = []
-    for start in range(0x100, lyt.ss_base, 0x10):
-        items = []
-        disp = start
-        while disp + 2 <= lyt.ss_base:
-            pointer = struct.unpack_from("<H", img.exe, lyt.dsd + disp)[0]
-            item = by_disp.get(pointer)
-            if item is None:
-                break
-            items.append(item)
-            disp += 2
-        if items and contains_in_order(items, lyt.data_items):
-            candidates.append((start, items))
-    # A later-starting run inside a longer one repeats its tail; the outermost
-    # start is the table.  Keep only maximal runs before demanding uniqueness.
-    candidates = [
-        items
-        for start, items in candidates
-        if not any(
-            other < start and other + 2 * len(rest) >= start + 2 * len(items)
-            for other, rest in candidates
-        )
-    ]
+    def runs(first, accept):
+        found = []
+        for start in range(max(first, -lyt.dsd), lyt.ss_base, 0x10):
+            items = []
+            disp = start
+            while disp + 2 <= lyt.ss_base:
+                pointer = struct.unpack_from("<H", img.exe, lyt.dsd + disp)[0]
+                item = by_disp.get(pointer)
+                if item is None:
+                    break
+                items.append(item)
+                disp += 2
+            if items and accept(items):
+                found.append((start, items))
+        # A later-starting run inside a longer one repeats its tail; the
+        # outermost start is the table.  Keep only maximal runs before
+        # demanding uniqueness.
+        return [
+            items
+            for start, items in found
+            if not any(
+                other < start and other + 2 * len(rest) >= start + 2 * len(items)
+                for other, rest in found
+            )
+        ]
+
+    candidates = runs(0x100, lambda items: contains_in_order(items, lyt.data_items))
+    if not candidates:
+        # Wild recovery: a long table can begin below 0x100 (wild pcagent.exe:
+        # 254 entries from DS:0), and exclusion lists each distinct string
+        # once in pool order, not table order.  Accept the run holding every
+        # exclusion-derived item.
+        wanted = set(lyt.data_items)
+        candidates = runs(-0x200, lambda items: len(items) >= len(wanted) and wanted <= set(items))
+        if len(candidates) > 1:
+            longest = max(len(items) for items in candidates)
+            candidates = [items for items in candidates if len(items) == longest]
     if len(candidates) == 1:
         lyt.data_items = candidates[0]
 

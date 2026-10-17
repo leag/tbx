@@ -277,6 +277,16 @@ def _adopt_argument_families(lines, subs, types, notes):
     wrong (wild catalog.exe: `SUB SUB16(..., BO)` called with `STRING$(...)`).
     """
 
+    uses = _scalar_uses(lines)
+    passed: dict[str, int] = {}
+    for line in lines:
+        if "CALL" in line.upper():
+            for _, _, _, args in _calls(line, subs):
+                for arg in args:
+                    lv = _LVALUE.match(arg)
+                    if lv and not lv.group(3):
+                        word = (lv.group(1) + lv.group(2)).upper()
+                        passed[word] = passed.get(word, 0) + 1
     seen: dict[str, list[set]] = {}
     for line in lines:
         if "CALL" not in line.upper():
@@ -284,6 +294,13 @@ def _adopt_argument_families(lines, subs, types, notes):
         for name, _, _, args in _calls(line, subs):
             slots = seen.setdefault(name, [set() for _ in subs[name]])
             for i, arg in enumerate(args[: len(slots)]):
+                lv = _LVALUE.match(arg)
+                if lv and not lv.group(3):
+                    word = (lv.group(1) + lv.group(2)).upper()
+                    if uses.get(word, 0) == passed.get(word, 0):
+                        # used nowhere else: its spelling carries no evidence
+                        slots[i].add(None)
+                        continue
                 slots[i].add(_family(arg, types))
     changed = False
     for name, slots in seen.items():
