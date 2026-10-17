@@ -127,6 +127,8 @@ def behave(exe: Path, work: Path, snapshots: Path, dialect: str, seconds: float)
             return {"behavior": "error", "behavior_error": str(exc)[:200]}
         (work / f"screen-{name}.txt").write_text(result.screen)
         screens.append(result.screen)
+    # A runtime error names the code address, which moves when code does.
+    screens = [re.sub(r"pgm-ctr: \d+", "pgm-ctr: N", text) for text in screens]
     if screens[0] == screens[1]:
         verdict = "same" if screens[0].strip() else "blank"
     else:

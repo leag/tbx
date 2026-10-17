@@ -312,6 +312,11 @@ def _adopt_argument_families(lines, subs, types, notes):
             (family,) = families
             if (family == "$") == (kind == "$"):
                 continue
+            if family != "$" or kind != "!":
+                # String typing comes from descriptor evidence and is reliable;
+                # only an unsuffixed (evidence-free, single by default)
+                # parameter can turn out to be a string.
+                continue
             new_suffix = "$" if family == "$" else "!"
             lines, renamed = _retype_parameter(lines, name, i, new_suffix)
             if renamed:

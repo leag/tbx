@@ -129,6 +129,17 @@ def verify(original: Path, source: Path, recovery, repair: bool = False) -> dict
         a = unpack(a)[0]
     b = rebuilt.read_bytes()
     same = sum(x == y for x, y in zip(a, b))
+    try:
+        from tbx import decode0
+
+        # The user program (from the compiler prologue on) does not depend on
+        # the runtime revision linked in front of it.
+        ua = a[decode0.find_prologue(a)[0] :]
+        ub = b[decode0.find_prologue(b)[0] :]
+        result["user_identical"] = ua == ub
+        result["user_match"] = round(sum(x == y for x, y in zip(ua, ub)) / max(len(ua), len(ub)), 4)
+    except ValueError:
+        pass
     result.update(
         rebuilt=str(rebuilt),
         identical=a == b,

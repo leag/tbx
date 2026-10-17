@@ -101,8 +101,12 @@ def _one(path: Path, output: Path | None, args) -> dict:
                 note += f" ({verdict['compile_error']})"
             if verdict.get("repairs"):
                 note += f" after commenting out {len(verdict['repairs'])} line(s)"
-            if verdict.get("identical") is not None:
-                note += ", identical" if verdict["identical"] else f", {verdict['byte_match']:.1%} bytes match"
+            if verdict.get("identical"):
+                note += ", identical EXE"
+            elif verdict.get("user_identical"):
+                note += ", identical user code (runtime differs)"
+            elif verdict.get("user_match") is not None:
+                note += f", {verdict['user_match']:.1%} of user-code bytes match"
         print(f"tbdc: {path.name}: {note}", file=sys.stderr)
     return report
 

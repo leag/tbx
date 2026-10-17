@@ -40,6 +40,18 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
     # A..Z then AA..AZ, BA.. (Excel order), skipping TB reserved words. Names
     # contribute zero image bytes, so any consistent scheme is byte-safe.
     _RESERVED = {"AS", "AT", "DO", "FN", "GO", "IF", "LN", "ON", "OR", "PI", "TO"}
+    # Three-letter names only appear past 702 variables (wild pw.exe), where
+    # A..ZZ runs out; Turbo Basic keywords cannot name a variable.
+    _RESERVED |= set(
+        """ABS AND ASC ATN BIN CHR COM COS CVD CVI CVL CVS DEF DIM END EOF EQV ERL
+        ERR EXP FIX FOR FRE GET HEX IMP INP INT KEY LEN LET LOC LOF LOG MID MKD
+        MKI MKL MKS MOD NOT OCT OFF OUT PEN POS PUT REG REM RND RUN SEG SGN SIN
+        SPC SQR STR SUB TAB TAN USR VAL XOR CALL CASE CDBL CINT CLNG CLOSE CLS
+        COLOR CSNG DATA DATE DRAW ELSE ERASE EXIT FIELD FILES GOSUB GOTO INPUT
+        KILL LINE LIST LOAD LOCAL LOCATE LOOP LSET NAME NEXT OPEN PAINT PEEK
+        PLAY POKE PRINT PSET READ REST RSET SAVE SHELL SOUND STEP STOP SWAP
+        THEN TIME TRON TROFF UNTIL WAIT WEND WHILE WIDTH WRITE""".split()
+    )
 
     def _letters(i: int) -> str:
         s = ""
@@ -59,7 +71,7 @@ def canonical_rename(stmts: list[Any]) -> list[Any]:
             old = f"V{old[-1] & 0xFFFF:04X}" if isinstance(old, tuple) else f"V{old}"
         if old not in names:
             cand = _letters(counter[0])
-            while cand in _RESERVED:
+            while cand in _RESERVED or cand.startswith("FN"):
                 counter[0] += 1
                 cand = _letters(counter[0])
             counter[0] += 1
