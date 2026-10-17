@@ -622,6 +622,11 @@ _OPEN_MODE_KW = {
 # and q_mode_{OUTPUT,INPUT,APPEND,RANDOM,BINARY})
 
 
+def _filenum(n) -> str:
+    """A file number: a literal, or an expression wild recovery found there."""
+    return str(n) if isinstance(n, int) else unparse(n)
+
+
 def _us_fileio(s) -> str | None:
     """Render file I/O statements; None if `s` is not one of them."""
     if isinstance(s, Open):
@@ -632,11 +637,11 @@ def _us_fileio(s) -> str | None:
             length = (
                 "" if s.reclen is None else f" LEN = {unparse(s.reclen)}"
             )
-            return f"OPEN {unparse(s.file)} FOR {kw} AS #{s.num}{length}"
+            return f"OPEN {unparse(s.file)} FOR {kw} AS #{_filenum(s.num)}{length}"
         rl = "" if s.reclen is None else f",{unparse(s.reclen)}"
-        return f"OPEN {unparse(s.mode)},#{s.num},{unparse(s.file)}{rl}"
+        return f"OPEN {unparse(s.mode)},#{_filenum(s.num)},{unparse(s.file)}{rl}"
     if isinstance(s, InputFile):
-        return f"INPUT #{s.num}, {', '.join(unparse(v) for v in s.vars)}"
+        return f"INPUT #{_filenum(s.num)}, {', '.join(unparse(v) for v in s.vars)}"
     if isinstance(s, Close):
         if s.num is None:
             return "CLOSE"
@@ -649,17 +654,17 @@ def _us_fileio(s) -> str | None:
     if isinstance(s, Name):
         return f"NAME {unparse(s.old)} AS {unparse(s.new)}"
     if isinstance(s, Get):
-        return f"GET #{s.num}" if s.pos is None else f"GET #{s.num}, {unparse(s.pos)}"
+        return f"GET #{_filenum(s.num)}" if s.pos is None else f"GET #{_filenum(s.num)}, {unparse(s.pos)}"
     if isinstance(s, GetString):
-        return f"GET$ #{s.num}, {unparse(s.count)}, {unparse(s.target)}"
+        return f"GET$ #{_filenum(s.num)}, {unparse(s.count)}, {unparse(s.target)}"
     if isinstance(s, Put):
-        return f"PUT #{s.num}" if s.pos is None else f"PUT #{s.num}, {unparse(s.pos)}"
+        return f"PUT #{_filenum(s.num)}" if s.pos is None else f"PUT #{_filenum(s.num)}, {unparse(s.pos)}"
     if isinstance(s, PutString):
-        return f"PUT$ #{s.num}, {unparse(s.text)}"
+        return f"PUT$ #{_filenum(s.num)}, {unparse(s.text)}"
     if isinstance(s, Seek):
-        return f"SEEK #{s.num}, {unparse(s.pos)}"
+        return f"SEEK #{_filenum(s.num)}, {unparse(s.pos)}"
     if isinstance(s, Ioctl):
-        return f"IOCTL #{s.num}, {unparse(s.text)}"
+        return f"IOCTL #{_filenum(s.num)}, {unparse(s.text)}"
     if isinstance(s, Bload):
         off = f", {unparse(s.offset)}" if s.offset is not None else ""
         return f"BLOAD {unparse(s.file)}{off}"
@@ -670,7 +675,7 @@ def _us_fileio(s) -> str | None:
         return f"WRITE {pre}" + ", ".join(unparse(i) for i in s.items)
     if isinstance(s, Field):
         items = ", ".join(f"{unparse(w)} AS {unparse(v)}" for w, v in s.fields)
-        return f"FIELD #{s.num}, {items}"
+        return f"FIELD #{_filenum(s.num)}, {items}"
     if isinstance(s, Lset):
         return f"LSET {unparse(s.target)} = {unparse(s.source)}"
     if isinstance(s, Rset):

@@ -89,6 +89,7 @@ def reconcile_calls(source: str) -> tuple[str, list[str]]:
             subs[m.group(1).upper()] = params
     notes: list[str] = []
     lines, subs = _adopt_argument_families(lines, subs, types, notes)
+    lines, subs = _adopt_forwarded_parameters(lines, subs, types, notes)
     lines = _adopt_parameter_types(lines, subs, types, notes)
     call = re.compile(rf"\bCALL\s+({_NAME})\s*\(", re.IGNORECASE)
     for index, line in enumerate(lines):
@@ -384,3 +385,53 @@ def _retype_parameter(lines, sub, index, suffix):
         return "".join(p if p.startswith('"') else pattern.sub(new, p) for p in parts)
 
     return lines[:start] + [rename(b) for b in body] + lines[end + 1 :], f"{old} as {new}"
+
+
+def _adopt_forwarded_parameters(lines, subs, types, notes):
+    """Retype a parameter its SUB only passes on, to the callee's type.
+
+    Scoped to the SUB: parameter names repeat across procedures.
+    """
+
+    changed = False
+    index = 0
+    while index < len(lines):
+        m = _SUB.match(lines[index])
+        if not m or m.group(3):
+            index += 1
+            continue
+        name = m.group(1).upper()
+        end = next(
+            (i for i in range(index + 1, len(lines)) if re.match(r"^\s*(?:\d+\s+)?END\s+SUB\b", lines[i], re.IGNORECASE)),
+            len(lines) - 1,
+        )
+        body = lines[index : end + 1]
+        uses = _scalar_uses(body)
+        params = [p.strip() for p in _split_top(m.group(2) or "")]
+        for position, param in enumerate(params):
+            pm = re.match(rf"^({_NAME})([%&!#$]?)$", param)
+            if not pm:
+                continue
+            word = (pm.group(1) + pm.group(2)).upper()
+            kinds, passed = set(), 0
+            for line in body[1:]:
+                for callee, _, _, args in _calls(line, subs):
+                    for i, arg in enumerate(args[: len(subs[callee])]):
+                        lv = _LVALUE.match(arg)
+                        if lv and not lv.group(3) and (lv.group(1) + lv.group(2)).upper() == word:
+                            kind, is_array = subs[callee][i]
+                            if not is_array:
+                                kinds.add(kind)
+                                passed += 1
+            actual = types.of(pm.group(1), pm.group(2))
+            if len(kinds) == 1 and passed and uses.get(word, 0) == passed + 1:
+                (kind,) = kinds
+                if kind != actual:
+                    lines, renamed = _retype_parameter(lines, name, position, kind)
+                    if renamed:
+                        notes.append(f"retyped parameter {renamed} of SUB {name}: it is only passed on as {kind}")
+                        changed = True
+        index = end + 1
+    if changed:
+        subs = _parse_subs(lines, types)
+    return lines, subs

@@ -1,5 +1,10 @@
 # tbx — project status
 
+> **2026-10-17: superseded by `tbdc`** (this branch, `final`). The decoder
+> below now runs inside `tbdc`, a single decompiler that adds tbd as a
+> fallback and repairs the source until Turbo Basic compiles it. Start from
+> `README.md`; this page is kept as tbx's history.
+
 **Parked 2026-07-29. Unattended.** Nothing in this file or in `PLAN.md` is a
 commitment to future work. The tree is green and the decoder does what the
 README says; the wild-corpus campaign is stopped mid-tail, deliberately, and
